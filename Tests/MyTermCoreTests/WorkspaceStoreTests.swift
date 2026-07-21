@@ -66,6 +66,37 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(restoredTab.focusedTerminalSessionID, firstSessionID)
     }
 
+    func testTerminalWorkingDirectoryUpdatePersistsBySessionAndPane() throws {
+        let url = temporaryURL()
+        let store = try WorkspaceStore(persistenceURL: url)
+        let workspaceID = store.selectedWorkspaceID
+        let tabID = try XCTUnwrap(store.selectedWorkspace.selectedTabID)
+        let initialSession = try XCTUnwrap(store.selectedWorkspace.selectedTab?.terminalTree?.terminalSessions.first)
+        let firstDirectory = URL(fileURLWithPath: "/tmp/myterm-first")
+        let secondDirectory = URL(fileURLWithPath: "/tmp/myterm-second")
+
+        try store.updateTerminalWorkingDirectory(
+            workspaceID: workspaceID,
+            tabID: tabID,
+            sessionID: initialSession.id,
+            workingDirectory: firstDirectory
+        )
+        try store.updateTerminalWorkingDirectory(
+            workspaceID: workspaceID,
+            tabID: tabID,
+            paneID: initialSession.paneID,
+            workingDirectory: secondDirectory
+        )
+
+        let restored = try WorkspaceStore(persistenceURL: url)
+        let restoredSession = try XCTUnwrap(
+            restored.selectedWorkspace.selectedTab?.terminalTree?.terminalSessions.first
+        )
+        XCTAssertEqual(restoredSession.id, initialSession.id)
+        XCTAssertEqual(restoredSession.paneID, initialSession.paneID)
+        XCTAssertEqual(restoredSession.workingDirectory, secondDirectory)
+    }
+
     func testBrowserURLUpdatePersistsAndTerminalTabsRejectIt() throws {
         let url = temporaryURL()
         let store = try WorkspaceStore(persistenceURL: url)

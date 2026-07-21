@@ -414,6 +414,54 @@ public final class WorkspaceStore {
         }
     }
 
+    public func updateTerminalWorkingDirectory(
+        workspaceID: WorkspaceID,
+        tabID: TabID,
+        sessionID: TerminalSessionID,
+        workingDirectory: URL?
+    ) throws {
+        try mutate { snapshot in
+            let (workspaceIndex, tabIndex) = try tabLocation(
+                workspaceID: workspaceID,
+                tabID: tabID,
+                in: snapshot
+            )
+            var tab = snapshot.workspaces[workspaceIndex].tabs[tabIndex]
+            guard case .terminal(var tree) = tab.content else {
+                throw WorkspaceStoreError.terminalTabRequired(tabID)
+            }
+            guard tree.updateWorkingDirectory(workingDirectory, for: sessionID) else {
+                throw WorkspaceStoreError.terminalSessionNotFound(sessionID)
+            }
+            tab.content = .terminal(tree)
+            snapshot.workspaces[workspaceIndex].tabs[tabIndex] = tab
+        }
+    }
+
+    public func updateTerminalWorkingDirectory(
+        workspaceID: WorkspaceID,
+        tabID: TabID,
+        paneID: PaneID,
+        workingDirectory: URL?
+    ) throws {
+        let currentWorkspace = try workspace(workspaceID)
+        guard let tab = currentWorkspace.tabs.first(where: { $0.id == tabID }) else {
+            throw WorkspaceStoreError.tabNotFound(tabID)
+        }
+        guard case .terminal(let tree) = tab.content else {
+            throw WorkspaceStoreError.terminalTabRequired(tabID)
+        }
+        guard let session = tree.session(for: paneID) else {
+            throw WorkspaceStoreError.paneNotFound(paneID)
+        }
+        try updateTerminalWorkingDirectory(
+            workspaceID: workspaceID,
+            tabID: tabID,
+            sessionID: session.id,
+            workingDirectory: workingDirectory
+        )
+    }
+
     private func mutate(_ body: (inout WorkspaceStoreSnapshot) throws -> Void) throws {
         var next = snapshot
         try body(&next)

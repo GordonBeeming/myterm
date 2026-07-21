@@ -150,6 +150,45 @@ public enum SplitNode: Codable, Equatable, Hashable, Sendable {
         }
     }
 
+    @discardableResult
+    public mutating func updateWorkingDirectory(
+        _ workingDirectory: URL?,
+        for sessionID: TerminalSessionID
+    ) -> Bool {
+        switch self {
+        case .terminal(var session):
+            guard session.id == sessionID else { return false }
+            session.workingDirectory = workingDirectory
+            self = .terminal(session)
+            return true
+        case .horizontal(var children):
+            for index in children.indices {
+                if children[index].updateWorkingDirectory(workingDirectory, for: sessionID) {
+                    self = .horizontal(children)
+                    return true
+                }
+            }
+            return false
+        case .vertical(var children):
+            for index in children.indices {
+                if children[index].updateWorkingDirectory(workingDirectory, for: sessionID) {
+                    self = .vertical(children)
+                    return true
+                }
+            }
+            return false
+        }
+    }
+
+    @discardableResult
+    public mutating func updateWorkingDirectory(
+        _ workingDirectory: URL?,
+        for paneID: PaneID
+    ) -> Bool {
+        guard let session = session(for: paneID) else { return false }
+        return updateWorkingDirectory(workingDirectory, for: session.id)
+    }
+
     public func removingTerminalSession(_ sessionID: TerminalSessionID) -> SplitNode? {
         guard contains(sessionID) else { return self }
 
