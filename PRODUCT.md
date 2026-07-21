@@ -20,13 +20,14 @@ Native, quiet, dependable. The interface should feel dense without becoming cram
 
 ## Anti-references
 
-- Do not copy cmux's notifications, agent status, colored workspace metadata, or other features outside the requested workflow.
+- Do not copy cmux's notifications, agent status, per-workspace status metadata, or other features outside the requested workflow. Folder colors are organizational, not status signals.
 - Do not use decorative terminal chrome, novelty controls, or motion that interrupts focused work.
 - Do not build terminal rendering on web technology when a native implementation is available.
 
 ## Design Principles
 
 - Make workspaces scannable by title alone.
+- Let collapsible, color-coded folders separate work and personal contexts without adding metadata to workspace rows.
 - Keep sessions alive independently of which workspace or tab is visible.
 - Give every frequent action a clear keyboard path and a visible interface path.
 - Prefer native macOS behavior for windows, focus, menus, tabs, accessibility, and appearance.

@@ -477,28 +477,78 @@ public struct Tab: Codable, Equatable, Hashable, Sendable, Identifiable {
     }
 }
 
+public enum WorkspaceFolderColor: String, Codable, CaseIterable, Equatable, Hashable, Sendable {
+    case red
+    case orange
+    case yellow
+    case green
+    case teal
+    case blue
+    case indigo
+    case purple
+    case pink
+    case gray
+}
+
+public struct WorkspaceFolder: Codable, Equatable, Hashable, Sendable, Identifiable {
+    public let id: WorkspaceFolderID
+    public var title: String
+    public var color: WorkspaceFolderColor
+    public var isExpanded: Bool
+
+    public init(
+        id: WorkspaceFolderID = WorkspaceFolderID(),
+        title: String,
+        color: WorkspaceFolderColor = .blue,
+        isExpanded: Bool = true
+    ) {
+        self.id = id
+        self.title = title
+        self.color = color
+        self.isExpanded = isExpanded
+    }
+}
+
 public struct Workspace: Codable, Equatable, Hashable, Sendable, Identifiable {
     public let id: WorkspaceID
     public var title: String
     public var tabs: [Tab]
     public var selectedTabID: TabID?
+    public var folderID: WorkspaceFolderID?
+    public var isPinned: Bool
 
     public init(
         id: WorkspaceID = WorkspaceID(),
         title: String,
         tabs: [Tab] = [],
-        selectedTabID: TabID? = nil
+        selectedTabID: TabID? = nil,
+        folderID: WorkspaceFolderID? = nil,
+        isPinned: Bool = false
     ) {
         self.id = id
         self.title = title
         self.tabs = tabs
         self.selectedTabID = selectedTabID
+        self.folderID = folderID
+        self.isPinned = isPinned
         repair()
     }
 
-    public init(id: WorkspaceID = WorkspaceID(), title: String) {
+    public init(
+        id: WorkspaceID = WorkspaceID(),
+        title: String,
+        folderID: WorkspaceFolderID? = nil,
+        isPinned: Bool = false
+    ) {
         let tab = Tab.terminal()
-        self.init(id: id, title: title, tabs: [tab], selectedTabID: tab.id)
+        self.init(
+            id: id,
+            title: title,
+            tabs: [tab],
+            selectedTabID: tab.id,
+            folderID: folderID,
+            isPinned: isPinned
+        )
     }
 
     public var selectedTab: Tab? {
@@ -526,6 +576,8 @@ public struct Workspace: Codable, Equatable, Hashable, Sendable, Identifiable {
         case title
         case tabs
         case selectedTabID
+        case folderID
+        case isPinned
     }
 
     public init(from decoder: Decoder) throws {
@@ -538,6 +590,8 @@ public struct Workspace: Codable, Equatable, Hashable, Sendable, Identifiable {
         } catch {
             selectedTabID = nil
         }
+        folderID = try? container.decodeIfPresent(WorkspaceFolderID.self, forKey: .folderID)
+        isPinned = (try? container.decodeIfPresent(Bool.self, forKey: .isPinned)) ?? false
         repair()
     }
 }

@@ -25,10 +25,16 @@ public protocol TerminalProcessSession: AnyObject {
 public struct TerminalSessionConfiguration: Equatable, Sendable {
     public let shell: URL
     public let workingDirectory: URL
+    public let initialCommand: String?
 
-    public init(shell: URL = TerminalSessionConfiguration.loginShellURL(), workingDirectory: URL) {
+    public init(
+        shell: URL = TerminalSessionConfiguration.loginShellURL(),
+        workingDirectory: URL,
+        initialCommand: String? = nil
+    ) {
         self.shell = shell
         self.workingDirectory = workingDirectory.standardizedFileURL
+        self.initialCommand = initialCommand
     }
 
     public static func loginShellURL() -> URL {

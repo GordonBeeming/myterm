@@ -6,6 +6,7 @@ import Observation
 @Observable
 final class BrowserSettingsStore {
     private static let browserDataScopeKey = "browserDataScope"
+    private static let compactSidebarKey = "compactSidebar"
 
     private let defaults: UserDefaults
     private let key: String
@@ -13,6 +14,12 @@ final class BrowserSettingsStore {
     var browserDataScope: BrowserDataScope {
         didSet {
             defaults.set(browserDataScope.rawValue, forKey: key)
+        }
+    }
+
+    var compactSidebar: Bool {
+        didSet {
+            defaults.set(compactSidebar, forKey: Self.compactSidebarKey)
         }
     }
 
@@ -25,6 +32,7 @@ final class BrowserSettingsStore {
         self.defaults = defaults ?? UserDefaults(suiteName: suiteName) ?? .standard
         key = Self.browserDataScopeKey
         browserDataScope = BrowserDataScope(rawValue: self.defaults.string(forKey: key) ?? "") ?? .workspace
+        compactSidebar = self.defaults.object(forKey: Self.compactSidebarKey) as? Bool ?? true
     }
 }
 

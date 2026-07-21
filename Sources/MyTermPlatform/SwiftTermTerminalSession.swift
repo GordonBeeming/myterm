@@ -68,6 +68,9 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
             throw failure
         }
         isRunning = true
+        if let command = configuration.initialCommand, !command.isEmpty {
+            terminal.send(txt: command + "\n")
+        }
         workingDirectoryPoller = ProcessWorkingDirectoryPoller(
             processID: terminal.process.shellPid,
             provider: MacOSProcessWorkingDirectoryProvider(),

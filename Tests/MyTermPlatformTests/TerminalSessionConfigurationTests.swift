@@ -2,6 +2,15 @@ import XCTest
 @testable import MyTermPlatform
 
 final class TerminalSessionConfigurationTests: XCTestCase {
+    func testConfigurationCarriesOneShotInitialCommand() {
+        let configuration = TerminalSessionConfiguration(
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            initialCommand: "echo ready"
+        )
+
+        XCTAssertEqual(configuration.initialCommand, "echo ready")
+    }
+
     func testStandardizesWorkingDirectory() {
         let configuration = TerminalSessionConfiguration(
             shell: URL(fileURLWithPath: "/bin/zsh"),

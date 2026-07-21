@@ -7,6 +7,7 @@ public enum WorkspaceStoreError: Error, Equatable, LocalizedError, Sendable {
     case invariantViolation(reason: String)
     case unsupportedVersion(Int)
     case workspaceNotFound(WorkspaceID)
+    case folderNotFound(WorkspaceFolderID)
     case tabNotFound(TabID)
     case paneNotFound(PaneID)
     case terminalSessionNotFound(TerminalSessionID)
@@ -28,6 +29,8 @@ public enum WorkspaceStoreError: Error, Equatable, LocalizedError, Sendable {
             return "Workspace state version \(version) is not supported."
         case .workspaceNotFound(let id):
             return "Workspace \(id) was not found."
+        case .folderNotFound(let id):
+            return "Workspace folder \(id) was not found."
         case .tabNotFound(let id):
             return "Tab \(id) was not found."
         case .paneNotFound(let id):
@@ -48,15 +51,18 @@ public struct WorkspaceStoreSnapshot: Codable, Equatable, Sendable {
     public static let currentVersion = 1
 
     public var version: Int
+    public var folders: [WorkspaceFolder]
     public var workspaces: [Workspace]
     public var selectedWorkspaceID: WorkspaceID
 
     public init(
         version: Int = WorkspaceStoreSnapshot.currentVersion,
+        folders: [WorkspaceFolder] = [],
         workspaces: [Workspace],
         selectedWorkspaceID: WorkspaceID
     ) {
         self.version = version
+        self.folders = folders
         self.workspaces = workspaces
         self.selectedWorkspaceID = selectedWorkspaceID
         repair()
@@ -68,10 +74,17 @@ public struct WorkspaceStoreSnapshot: Codable, Equatable, Sendable {
     }
 
     fileprivate mutating func repair() {
+        var seenFolderIDs = Set<WorkspaceFolderID>()
+        folders = folders.filter { seenFolderIDs.insert($0.id).inserted }
+        let validFolderIDs = Set(folders.map(\.id))
+
         var seenWorkspaceIDs = Set<WorkspaceID>()
         workspaces = workspaces.compactMap { workspace in
             guard seenWorkspaceIDs.insert(workspace.id).inserted else { return nil }
             var repairedWorkspace = workspace
+            if let folderID = repairedWorkspace.folderID, !validFolderIDs.contains(folderID) {
+                repairedWorkspace.folderID = nil
+            }
             repairedWorkspace.repair()
             return repairedWorkspace
         }
@@ -87,6 +100,7 @@ public struct WorkspaceStoreSnapshot: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case version
+        case folders
         case workspaces
         case selectedWorkspaceID
     }
@@ -97,6 +111,7 @@ public struct WorkspaceStoreSnapshot: Codable, Equatable, Sendable {
         guard version == Self.currentVersion else {
             throw WorkspaceStoreError.unsupportedVersion(version)
         }
+        folders = try container.decodeIfPresent(LossyArray<WorkspaceFolder>.self, forKey: .folders)?.elements ?? []
         workspaces = try container.decodeIfPresent(LossyArray<Workspace>.self, forKey: .workspaces)?.elements ?? []
         do {
             selectedWorkspaceID = try container.decode(WorkspaceID.self, forKey: .selectedWorkspaceID)
@@ -112,6 +127,7 @@ public final class WorkspaceStore {
     public private(set) var snapshot: WorkspaceStoreSnapshot
 
     public var workspaces: [Workspace] { snapshot.workspaces }
+    public var folders: [WorkspaceFolder] { snapshot.folders }
     public var selectedWorkspaceID: WorkspaceID { snapshot.selectedWorkspaceID }
     public var selectedWorkspace: Workspace {
         guard let workspace = snapshot.workspaces.first(where: { $0.id == snapshot.selectedWorkspaceID }) else {
@@ -151,13 +167,112 @@ public final class WorkspaceStore {
     }
 
     @discardableResult
-    public func createWorkspace(title: String) throws -> WorkspaceID {
-        let workspace = Workspace(title: title)
+    public func createWorkspace(title: String, folderID: WorkspaceFolderID? = nil) throws -> WorkspaceID {
+        if let folderID, !snapshot.folders.contains(where: { $0.id == folderID }) {
+            throw WorkspaceStoreError.folderNotFound(folderID)
+        }
+        let workspace = Workspace(title: title, folderID: folderID)
         try mutate { snapshot in
             snapshot.workspaces.append(workspace)
             snapshot.selectedWorkspaceID = workspace.id
         }
         return workspace.id
+    }
+
+    @discardableResult
+    public func createFolder(
+        title: String,
+        color: WorkspaceFolderColor = .blue
+    ) throws -> WorkspaceFolderID {
+        let folder = WorkspaceFolder(title: title, color: color)
+        try mutate { snapshot in
+            snapshot.folders.append(folder)
+        }
+        return folder.id
+    }
+
+    public func renameFolder(_ folderID: WorkspaceFolderID, title: String) throws {
+        try mutate { snapshot in
+            let index = try folderIndex(folderID, in: snapshot)
+            snapshot.folders[index].title = title
+        }
+    }
+
+    public func setFolderColor(_ folderID: WorkspaceFolderID, color: WorkspaceFolderColor) throws {
+        try mutate { snapshot in
+            let index = try folderIndex(folderID, in: snapshot)
+            snapshot.folders[index].color = color
+        }
+    }
+
+    public func setFolderExpanded(_ folderID: WorkspaceFolderID, isExpanded: Bool) throws {
+        try mutate { snapshot in
+            let index = try folderIndex(folderID, in: snapshot)
+            snapshot.folders[index].isExpanded = isExpanded
+        }
+    }
+
+    public func removeFolder(_ folderID: WorkspaceFolderID) throws {
+        try mutate { snapshot in
+            let index = try folderIndex(folderID, in: snapshot)
+            snapshot.folders.remove(at: index)
+            for workspaceIndex in snapshot.workspaces.indices where snapshot.workspaces[workspaceIndex].folderID == folderID {
+                snapshot.workspaces[workspaceIndex].folderID = nil
+            }
+        }
+    }
+
+    public func moveWorkspace(_ workspaceID: WorkspaceID, to folderID: WorkspaceFolderID?) throws {
+        try mutate { snapshot in
+            if let folderID {
+                _ = try folderIndex(folderID, in: snapshot)
+            }
+            let index = try workspaceIndex(workspaceID, in: snapshot)
+            snapshot.workspaces[index].folderID = folderID
+        }
+    }
+
+    public func setWorkspacePinned(_ workspaceID: WorkspaceID, isPinned: Bool) throws {
+        try mutate { snapshot in
+            let index = try workspaceIndex(workspaceID, in: snapshot)
+            snapshot.workspaces[index].isPinned = isPinned
+        }
+    }
+
+    public func moveWorkspace(_ workspaceID: WorkspaceID, before targetID: WorkspaceID) throws {
+        guard workspaceID != targetID else { return }
+        try mutate { snapshot in
+            guard let oldIndex = snapshot.workspaces.firstIndex(where: { $0.id == workspaceID }) else {
+                throw WorkspaceStoreError.workspaceNotFound(workspaceID)
+            }
+            guard let targetIndex = snapshot.workspaces.firstIndex(where: { $0.id == targetID }) else {
+                throw WorkspaceStoreError.workspaceNotFound(targetID)
+            }
+            var workspace = snapshot.workspaces.remove(at: oldIndex)
+            let adjustedTarget = oldIndex < targetIndex ? targetIndex - 1 : targetIndex
+            workspace.folderID = snapshot.workspaces[adjustedTarget].folderID
+            snapshot.workspaces.insert(workspace, at: adjustedTarget)
+        }
+    }
+
+    public func moveWorkspace(_ workspaceID: WorkspaceID, offset: Int) throws {
+        guard offset != 0 else { return }
+        try mutate { snapshot in
+            guard let oldIndex = snapshot.workspaces.firstIndex(where: { $0.id == workspaceID }) else {
+                throw WorkspaceStoreError.workspaceNotFound(workspaceID)
+            }
+            let folderID = snapshot.workspaces[oldIndex].folderID
+            let siblingIndices = snapshot.workspaces.indices.filter {
+                snapshot.workspaces[$0].folderID == folderID
+            }
+            guard let siblingPosition = siblingIndices.firstIndex(of: oldIndex) else { return }
+            let newSiblingPosition = min(max(siblingPosition + offset, 0), siblingIndices.count - 1)
+            guard newSiblingPosition != siblingPosition else { return }
+            let targetIndex = siblingIndices[newSiblingPosition]
+            let workspace = snapshot.workspaces.remove(at: oldIndex)
+            let insertionIndex = oldIndex < targetIndex ? targetIndex : targetIndex
+            snapshot.workspaces.insert(workspace, at: insertionIndex)
+        }
     }
 
     public func renameWorkspace(_ workspaceID: WorkspaceID, title: String) throws {
@@ -518,6 +633,16 @@ public final class WorkspaceStore {
     ) throws -> Int {
         guard let index = snapshot.workspaces.firstIndex(where: { $0.id == workspaceID }) else {
             throw WorkspaceStoreError.workspaceNotFound(workspaceID)
+        }
+        return index
+    }
+
+    private func folderIndex(
+        _ folderID: WorkspaceFolderID,
+        in snapshot: WorkspaceStoreSnapshot
+    ) throws -> Int {
+        guard let index = snapshot.folders.firstIndex(where: { $0.id == folderID }) else {
+            throw WorkspaceStoreError.folderNotFound(folderID)
         }
         return index
     }

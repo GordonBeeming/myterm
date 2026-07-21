@@ -18,6 +18,12 @@ final class AppModel {
     private(set) var browserControllers: [BrowserSessionID: BrowserSessionController] = [:]
     var errorDescription: String?
     var isSidebarVisible = true
+    var workspaceBeingRenamedID: WorkspaceID?
+    var workspaceRenameDraft = ""
+    var folderBeingRenamedID: WorkspaceFolderID?
+    var folderRenameDraft = ""
+    var isCreatingFolder = false
+    var newFolderDraft = ""
     private var stateVersion = 0
 
     init(
@@ -44,6 +50,11 @@ final class AppModel {
         return store.workspaces
     }
 
+    var folders: [WorkspaceFolder] {
+        _ = stateVersion
+        return store.folders
+    }
+
     var selectedWorkspace: Workspace {
         _ = stateVersion
         return store.selectedWorkspace
@@ -66,9 +77,13 @@ final class AppModel {
         return directory
     }
 
-    func createWorkspace() {
+    func createWorkspace(in folderID: WorkspaceFolderID? = nil) {
         perform {
-            let workspaceID = try store.createWorkspace(title: "Workspace \(workspaces.count + 1)")
+            let targetFolderID = folderID ?? selectedWorkspace.folderID
+            let workspaceID = try store.createWorkspace(
+                title: "Workspace \(workspaces.count + 1)",
+                folderID: targetFolderID
+            )
             guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
                 throw AppModelError.workspaceUnavailable(workspaceID)
             }
@@ -78,8 +93,84 @@ final class AppModel {
 
     func renameWorkspace(_ workspaceID: WorkspaceID, title: String) {
         perform {
-            try store.renameWorkspace(workspaceID, title: title)
+            let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedTitle.isEmpty else { return }
+            try store.renameWorkspace(workspaceID, title: trimmedTitle)
         }
+    }
+
+    func beginRenamingSelectedWorkspace() {
+        beginRenamingWorkspace(store.selectedWorkspaceID)
+    }
+
+    func beginRenamingWorkspace(_ workspaceID: WorkspaceID) {
+        guard let workspace = workspaces.first(where: { $0.id == workspaceID }) else { return }
+        workspaceRenameDraft = workspace.title
+        workspaceBeingRenamedID = workspaceID
+    }
+
+    func commitWorkspaceRename() {
+        guard let workspaceID = workspaceBeingRenamedID else { return }
+        renameWorkspace(workspaceID, title: workspaceRenameDraft)
+        workspaceBeingRenamedID = nil
+    }
+
+    func beginCreatingFolder() {
+        newFolderDraft = ""
+        isCreatingFolder = true
+    }
+
+    func commitFolderCreation() {
+        let title = newFolderDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else {
+            isCreatingFolder = false
+            return
+        }
+        perform { _ = try store.createFolder(title: title) }
+        isCreatingFolder = false
+    }
+
+    func beginRenamingFolder(_ folderID: WorkspaceFolderID) {
+        guard let folder = folders.first(where: { $0.id == folderID }) else { return }
+        folderRenameDraft = folder.title
+        folderBeingRenamedID = folderID
+    }
+
+    func commitFolderRename() {
+        guard let folderID = folderBeingRenamedID else { return }
+        let title = folderRenameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !title.isEmpty {
+            perform { try store.renameFolder(folderID, title: title) }
+        }
+        folderBeingRenamedID = nil
+    }
+
+    func deleteFolder(_ folderID: WorkspaceFolderID) {
+        perform { try store.removeFolder(folderID) }
+    }
+
+    func setFolderColor(_ folderID: WorkspaceFolderID, color: WorkspaceFolderColor) {
+        perform { try store.setFolderColor(folderID, color: color) }
+    }
+
+    func setFolderExpanded(_ folderID: WorkspaceFolderID, isExpanded: Bool) {
+        perform { try store.setFolderExpanded(folderID, isExpanded: isExpanded) }
+    }
+
+    func setWorkspacePinned(_ workspaceID: WorkspaceID, isPinned: Bool) {
+        perform { try store.setWorkspacePinned(workspaceID, isPinned: isPinned) }
+    }
+
+    func moveWorkspace(_ workspaceID: WorkspaceID, to folderID: WorkspaceFolderID?) {
+        perform { try store.moveWorkspace(workspaceID, to: folderID) }
+    }
+
+    func moveWorkspace(_ workspaceID: WorkspaceID, before targetID: WorkspaceID) {
+        perform { try store.moveWorkspace(workspaceID, before: targetID) }
+    }
+
+    func moveWorkspace(_ workspaceID: WorkspaceID, offset: Int) {
+        perform { try store.moveWorkspace(workspaceID, offset: offset) }
     }
 
     func deleteWorkspace(_ workspaceID: WorkspaceID) {
@@ -98,29 +189,99 @@ final class AppModel {
         }
     }
 
+    func selectWorkspace(at index: Int) {
+        guard workspaces.indices.contains(index) else { return }
+        selectWorkspace(workspaces[index].id)
+    }
+
+    func selectAdjacentWorkspace(offset: Int) {
+        guard let selectedIndex = workspaces.firstIndex(where: { $0.id == store.selectedWorkspaceID }) else { return }
+        let targetIndex = (selectedIndex + offset + workspaces.count) % workspaces.count
+        selectWorkspace(workspaces[targetIndex].id)
+    }
+
     func createTerminalTab() {
+        createTerminalTab(
+            workingDirectory: FileManager.default.homeDirectoryForCurrentUser,
+            initialCommand: nil
+        )
+    }
+
+    func open(_ urls: [URL]) {
+        for url in urls {
+            open(url)
+        }
+    }
+
+    private func open(_ url: URL) {
+        if url.isFileURL {
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
+                errorDescription = "The requested path does not exist: \(url.path)"
+                return
+            }
+            if isDirectory.boolValue {
+                createTerminalTab(workingDirectory: url, initialCommand: nil)
+            } else {
+                createTerminalTab(
+                    workingDirectory: url.deletingLastPathComponent(),
+                    initialCommand: Self.shellQuote(url.path)
+                )
+            }
+            return
+        }
+
+        switch url.scheme?.lowercased() {
+        case "http", "https":
+            createBrowserTab(url: url)
+        case "ssh":
+            createTerminalTab(
+                workingDirectory: FileManager.default.homeDirectoryForCurrentUser,
+                initialCommand: "ssh \(Self.shellQuote(url.absoluteString))"
+            )
+        default:
+            errorDescription = "MyTerm cannot open \(url.absoluteString)."
+        }
+    }
+
+    private func createTerminalTab(workingDirectory: URL, initialCommand: String?) {
         perform {
             let workspaceID = store.selectedWorkspaceID
-            let tabID = try store.addTerminalTab(to: workspaceID, workingDirectory: FileManager.default.homeDirectoryForCurrentUser)
+            let tabID = try store.addTerminalTab(to: workspaceID, workingDirectory: workingDirectory)
             guard let tab = tab(workspaceID: workspaceID, tabID: tabID) else {
                 throw AppModelError.tabUnavailable(tabID)
             }
-            restoreRuntimeObjects(in: tab)
+            guard case .terminal(let tree) = tab.content else {
+                throw AppModelError.tabUnavailable(tabID)
+            }
+            for session in tree.terminalSessions {
+                try restoreTerminalSession(
+                    session,
+                    workspaceID: workspaceID,
+                    tabID: tab.id,
+                    initialCommand: initialCommand
+                )
+            }
         }
     }
 
     func createBrowserTab() {
+        guard let defaultURL = URL(string: "https://www.google.com") else {
+            errorDescription = AppModelError.defaultBrowserURLInvalid.localizedDescription
+            return
+        }
+        createBrowserTab(url: defaultURL)
+    }
+
+    private func createBrowserTab(url: URL) {
         perform {
             let workspaceID = store.selectedWorkspaceID
             let workspace = store.selectedWorkspace
-            guard let defaultURL = URL(string: "https://www.google.com") else {
-                throw AppModelError.defaultBrowserURLInvalid
-            }
             let profile = browserDataProfileResolver.resolve(
                 scope: browserSettings.browserDataScope,
                 workspace: workspace
             )
-            let tabID = try store.addBrowserTab(to: workspaceID, url: defaultURL, profile: profile)
+            let tabID = try store.addBrowserTab(to: workspaceID, url: url, profile: profile)
             guard let tab = tab(workspaceID: workspaceID, tabID: tabID) else {
                 throw AppModelError.tabUnavailable(tabID)
             }
@@ -132,6 +293,20 @@ final class AppModel {
         perform {
             try store.selectTab(workspaceID: store.selectedWorkspaceID, tabID: tabID)
         }
+    }
+
+    func selectTab(at index: Int) {
+        guard selectedWorkspace.tabs.indices.contains(index) else { return }
+        selectTab(selectedWorkspace.tabs[index].id)
+    }
+
+    func selectAdjacentTab(offset: Int) {
+        let tabs = selectedWorkspace.tabs
+        guard !tabs.isEmpty,
+              let selectedTabID = selectedWorkspace.selectedTabID,
+              let selectedIndex = tabs.firstIndex(where: { $0.id == selectedTabID }) else { return }
+        let targetIndex = (selectedIndex + offset + tabs.count) % tabs.count
+        selectTab(tabs[targetIndex].id)
     }
 
     func closeTab(_ tabID: TabID) {
@@ -197,6 +372,21 @@ final class AppModel {
             try store.focusTerminalPane(workspaceID: workspaceID, tabID: tabID, sessionID: sessionID)
             terminalSessions[sessionID]?.focus()
         }
+    }
+
+    func focusAdjacentTerminal(offset: Int) {
+        guard let tab = selectedTab,
+              case .terminal(let tree) = tab.content,
+              !tree.terminalSessionIDs.isEmpty,
+              let focusedID = tab.focusedTerminalSessionID,
+              let focusedIndex = tree.terminalSessionIDs.firstIndex(of: focusedID) else { return }
+        let sessionIDs = tree.terminalSessionIDs
+        let targetIndex = (focusedIndex + offset + sessionIDs.count) % sessionIDs.count
+        focusTerminal(
+            workspaceID: store.selectedWorkspaceID,
+            tabID: tab.id,
+            sessionID: sessionIDs[targetIndex]
+        )
     }
 
     func terminalSession(for sessionID: TerminalSessionID) -> (any TerminalProcessSession)? {
@@ -268,7 +458,12 @@ final class AppModel {
         }
     }
 
-    private func restoreTerminalSession(_ session: TerminalSession, workspaceID: WorkspaceID, tabID: TabID) throws {
+    private func restoreTerminalSession(
+        _ session: TerminalSession,
+        workspaceID: WorkspaceID,
+        tabID: TabID,
+        initialCommand: String? = nil
+    ) throws {
         guard terminalSessions[session.id] == nil, startsTerminalProcesses else { return }
         guard let terminalEngine else {
             throw AppModelError.terminalEngineUnavailable
@@ -276,7 +471,8 @@ final class AppModel {
 
         let process = try terminalEngine.makeSession(
             configuration: TerminalSessionConfiguration(
-                workingDirectory: session.workingDirectory ?? FileManager.default.homeDirectoryForCurrentUser
+                workingDirectory: session.workingDirectory ?? FileManager.default.homeDirectoryForCurrentUser,
+                initialCommand: initialCommand
             )
         )
         process.onEvent = { [weak self] event in
@@ -367,6 +563,10 @@ final class AppModel {
     private func terminalSession(in tab: Tab, matching sessionID: TerminalSessionID) -> TerminalSession? {
         guard case .terminal(let tree) = tab.content else { return nil }
         return tree.terminalSessions.first(where: { $0.id == sessionID })
+    }
+
+    private static func shellQuote(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
     private func perform(_ action: () throws -> Void) {

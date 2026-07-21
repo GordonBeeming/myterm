@@ -13,7 +13,7 @@ components:
   tab:
     width: "112px"
   sidebar:
-    width: "240px"
+    width: "280px"
 ---
 
 # Design System: MyTerm
@@ -67,8 +67,9 @@ MyTerm is flat by default. Depth comes from macOS window materials, source-list 
 
 ### Workspace Sidebar
 
-- **Width:** 220–260 pt, ideally 240 pt.
-- **Rows:** One editable title line only, using native source-list selection.
+- **Width:** 220–480 pt, ideally 280 pt.
+- **Rows:** One title line only, using native source-list selection. Renaming is an explicit command or context-menu action.
+- **Folders:** Native disclosure rows with one semantic folder color. Folders collapse and accept dragged workspaces.
 - **Actions:** Compact plus and minus icons at the bottom, with tooltips and accessibility labels.
 
 ### Tab Strip
@@ -128,7 +129,7 @@ MyTerm is flat by default. Depth comes from macOS window materials, source-list 
 
 ### Don't:
 
-- **Don't** copy cmux's notifications, agent status, colored workspace metadata, or other features outside the requested workflow.
+- **Don't** copy cmux's notifications, agent status, per-workspace status metadata, or other features outside the requested workflow.
 - **Don't** use decorative terminal chrome, novelty controls, or motion that interrupts focused work.
 - **Don't** build terminal rendering on web technology when a native implementation is available.
 - **Don't** turn workspaces, tabs, or terminal panes into floating cards.

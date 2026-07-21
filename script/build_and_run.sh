@@ -5,7 +5,7 @@ CHANNEL="development"
 MODE="run"
 
 usage() {
-  echo "usage: $0 [--prod] [--debug|--logs|--telemetry|--verify]" >&2
+  echo "usage: $0 [--prod] [--bundle|--debug|--logs|--telemetry|--verify]" >&2
 }
 
 while (($#)); do
@@ -13,7 +13,7 @@ while (($#)); do
     --prod)
       CHANNEL="production"
       ;;
-    --debug|--logs|--telemetry|--verify)
+    --bundle|--debug|--logs|--telemetry|--verify)
       if [[ "$MODE" != "run" ]]; then
         usage
         exit 2
@@ -35,6 +35,10 @@ done
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
 MIN_SYSTEM_VERSION="14.0"
+VERSION="${MYTERM_VERSION:-0.1.0}"
+BUILD_NUMBER="${MYTERM_BUILD:-1}"
+DISTRIBUTION="${MYTERM_DISTRIBUTION:-0}"
+ENTITLEMENTS_PATH="${MYTERM_ENTITLEMENTS_PATH:-$ROOT_DIR/Packaging/MyTerm.entitlements}"
 
 if [[ "$CHANNEL" == "production" ]]; then
   APP_NAME="myterm"
@@ -53,7 +57,24 @@ APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$APP_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
 
-pkill -x "$APP_NAME" >/dev/null 2>&1 || true
+if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+  echo "MYTERM_VERSION must use major.minor or major.minor.patch format" >&2
+  exit 2
+fi
+
+if [[ ! "$BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
+  echo "MYTERM_BUILD must be a positive integer" >&2
+  exit 2
+fi
+
+if [[ "$DISTRIBUTION" != "0" && "$DISTRIBUTION" != "1" ]]; then
+  echo "MYTERM_DISTRIBUTION must be 0 or 1" >&2
+  exit 2
+fi
+
+if [[ "$MODE" != "--bundle" ]]; then
+  pkill -x "$APP_NAME" >/dev/null 2>&1 || true
+fi
 
 cd "$ROOT_DIR"
 swift build --product MyTerm "${BUILD_ARGS[@]}"
@@ -65,44 +86,37 @@ cp "$BUILD_BINARY" "$APP_BINARY"
 cp "$ROOT_DIR/Resources/MyTerm.icns" "$APP_RESOURCES/MyTerm.icns"
 chmod +x "$APP_BINARY"
 
-cat >"$INFO_PLIST" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleDisplayName</key>
-  <string>$APP_NAME</string>
-  <key>CFBundleExecutable</key>
-  <string>$APP_NAME</string>
-  <key>CFBundleIdentifier</key>
-  <string>$BUNDLE_ID</string>
-  <key>CFBundleIconFile</key>
-  <string>MyTerm</string>
-  <key>CFBundleName</key>
-  <string>$APP_NAME</string>
-  <key>CFBundlePackageType</key>
-  <string>APPL</string>
-  <key>LSMinimumSystemVersion</key>
-  <string>$MIN_SYSTEM_VERSION</string>
-  <key>CFBundleURLTypes</key>
-  <array>
-    <dict>
-      <key>CFBundleTypeRole</key>
-      <string>Viewer</string>
-      <key>CFBundleURLName</key>
-      <string>$BUNDLE_ID.web</string>
-      <key>CFBundleURLSchemes</key>
-      <array>
-        <string>http</string>
-        <string>https</string>
-      </array>
-    </dict>
-  </array>
-  <key>NSPrincipalClass</key>
-  <string>NSApplication</string>
-</dict>
-</plist>
-PLIST
+cp "$ROOT_DIR/Packaging/Info.plist" "$INFO_PLIST"
+/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" "$INFO_PLIST"
+/usr/libexec/PlistBuddy -c "Set :CFBundleExecutable $APP_NAME" "$INFO_PLIST"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$INFO_PLIST"
+/usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" "$INFO_PLIST"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$INFO_PLIST"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$INFO_PLIST"
+/usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:0:CFBundleURLName $BUNDLE_ID.web" "$INFO_PLIST"
+/usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion $MIN_SYSTEM_VERSION" "$INFO_PLIST"
+
+SIGNING_IDENTITY="${CODESIGN_IDENTITY:-}"
+if [[ -z "$SIGNING_IDENTITY" ]]; then
+  SIGNING_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk -F '"' '/Apple Development/{print $2; exit}')"
+fi
+if [[ -z "$SIGNING_IDENTITY" ]]; then
+  SIGNING_IDENTITY="-"
+fi
+
+if [[ "$DISTRIBUTION" == "1" && "$SIGNING_IDENTITY" == "-" ]]; then
+  echo "Distribution bundling requires a Developer ID Application identity" >&2
+  exit 1
+fi
+
+CODESIGN_ARGS=(--force --sign "$SIGNING_IDENTITY" --identifier "$BUNDLE_ID")
+if [[ "$DISTRIBUTION" == "1" ]]; then
+  CODESIGN_ARGS+=(--options runtime --timestamp)
+fi
+if [[ -f "$ENTITLEMENTS_PATH" ]]; then
+  CODESIGN_ARGS+=(--entitlements "$ENTITLEMENTS_PATH")
+fi
+codesign "${CODESIGN_ARGS[@]}" "$APP_BUNDLE"
 
 open_app() {
   local open_args=(-n)
@@ -116,6 +130,8 @@ open_app() {
 }
 
 case "$MODE" in
+  --bundle)
+    ;;
   run)
     open_app
     ;;

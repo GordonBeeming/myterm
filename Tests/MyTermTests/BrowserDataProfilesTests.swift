@@ -11,14 +11,17 @@ final class BrowserDataProfilesTests: XCTestCase {
 
         let initial = BrowserSettingsStore(channel: .development, defaults: defaults)
         XCTAssertEqual(initial.browserDataScope, .workspace)
+        XCTAssertTrue(initial.compactSidebar)
         XCTAssertEqual(BrowserDataScope.appWide.browserDataScopeLabel, "Across all workspaces")
         XCTAssertEqual(BrowserDataScope.workspace.browserDataScopeLabel, "Per workspace")
         XCTAssertEqual(BrowserDataScope.projectDirectory.browserDataScopeLabel, "Per project folder")
 
         initial.browserDataScope = .projectDirectory
+        initial.compactSidebar = false
 
         let restored = BrowserSettingsStore(channel: .development, defaults: defaults)
         XCTAssertEqual(restored.browserDataScope, .projectDirectory)
+        XCTAssertFalse(restored.compactSidebar)
     }
 
     func testResolverIsStableSeparatesChannelsAndResolvesEveryScope() throws {

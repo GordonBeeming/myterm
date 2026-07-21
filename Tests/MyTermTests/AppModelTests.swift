@@ -1,9 +1,17 @@
 @testable import MyTerm
+import AppKit
 import Foundation
+import MyTermPlatform
 import XCTest
 
 @MainActor
 final class AppModelTests: XCTestCase {
+    func testClosingTheLastWindowTerminatesTheApp() {
+        XCTAssertTrue(
+            MyTermApplicationDelegate().applicationShouldTerminateAfterLastWindowClosed(NSApplication.shared)
+        )
+    }
+
     func testChannelsUseSeparateNamesBundleIdentifiersAndPersistencePaths() {
         let supportDirectory = URL(fileURLWithPath: "/tmp/myterm-tests", isDirectory: true)
 
@@ -88,6 +96,79 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(model.errorDescription)
     }
 
+    func testWorkspaceAndTabKeyboardNavigationWraps() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let firstWorkspaceID = model.store.selectedWorkspaceID
+        model.createWorkspace()
+        let secondWorkspaceID = model.store.selectedWorkspaceID
+
+        model.selectAdjacentWorkspace(offset: 1)
+        XCTAssertEqual(model.store.selectedWorkspaceID, firstWorkspaceID)
+        model.selectAdjacentWorkspace(offset: -1)
+        XCTAssertEqual(model.store.selectedWorkspaceID, secondWorkspaceID)
+
+        let firstTabID = try XCTUnwrap(model.selectedWorkspace.selectedTabID)
+        model.createTerminalTab()
+        let secondTabID = try XCTUnwrap(model.selectedWorkspace.selectedTabID)
+        model.selectAdjacentTab(offset: 1)
+        XCTAssertEqual(model.selectedWorkspace.selectedTabID, firstTabID)
+        model.selectAdjacentTab(offset: -1)
+        XCTAssertEqual(model.selectedWorkspace.selectedTabID, secondTabID)
+    }
+
+    func testWorkspaceFoldersAndRenameFlowUseExplicitActions() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+
+        let model = try makeModel(applicationSupportDirectory: directory)
+        model.newFolderDraft = "Work"
+        model.isCreatingFolder = true
+        model.commitFolderCreation()
+        let folder = try XCTUnwrap(model.folders.first)
+
+        model.moveWorkspace(model.store.selectedWorkspaceID, to: folder.id)
+        model.beginRenamingSelectedWorkspace()
+        model.workspaceRenameDraft = "HubX"
+        model.commitWorkspaceRename()
+
+        XCTAssertEqual(model.selectedWorkspace.title, "HubX")
+        XCTAssertEqual(model.selectedWorkspace.folderID, folder.id)
+        XCTAssertNil(model.workspaceBeingRenamedID)
+    }
+
+    func testOpenRequestsCreateTabsInTheExistingModelAndQuoteScripts() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let projectDirectory = directory.appending(path: "Project", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: projectDirectory, withIntermediateDirectories: true)
+        let scriptURL = projectDirectory.appending(path: "it's ready.command", directoryHint: .notDirectory)
+        try Data("#!/bin/zsh\necho ready\n".utf8).write(to: scriptURL)
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let initialTabCount = model.selectedWorkspace.tabs.count
+
+        model.open([projectDirectory])
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount + 1)
+        XCTAssertEqual(engine.configurations.last?.workingDirectory, projectDirectory.standardizedFileURL)
+        XCTAssertNil(engine.configurations.last?.initialCommand)
+
+        model.open([scriptURL])
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount + 2)
+        XCTAssertEqual(engine.configurations.last?.workingDirectory, projectDirectory.standardizedFileURL)
+        XCTAssertEqual(
+            engine.configurations.last?.initialCommand,
+            "'\(scriptURL.path.replacingOccurrences(of: "'", with: "'\\''"))'"
+        )
+    }
+
     private func makeModel(applicationSupportDirectory: URL) throws -> AppModel {
         try AppModel(
             channel: .development,
@@ -110,4 +191,26 @@ final class AppModelTests: XCTestCase {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
     }
+}
+
+@MainActor
+private final class CapturingTerminalEngine: TerminalEngine {
+    private(set) var configurations: [TerminalSessionConfiguration] = []
+
+    func makeSession(configuration: TerminalSessionConfiguration) throws -> any TerminalProcessSession {
+        configurations.append(configuration)
+        return CapturingTerminalSession()
+    }
+}
+
+@MainActor
+private final class CapturingTerminalSession: TerminalProcessSession {
+    var isRunning = false
+    var onEvent: (@MainActor (TerminalSessionEvent) -> Void)?
+
+    func terminalView() -> NSView { NSView() }
+    func start() throws { isRunning = true }
+    func resize(columns: Int, rows: Int) {}
+    func focus() {}
+    func terminate() { isRunning = false }
 }
