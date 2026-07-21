@@ -250,8 +250,36 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
 
     func renderedText(maximumCharacters: Int) -> String {
         let terminal = getTerminal()
-        let data = terminal.getBufferAsData(kind: .normal)
-        let text = String(data: data, encoding: .utf8) ?? ""
+
+        // SwiftTerm does not expose the inactive normal buffer line-by-line. Keep
+        // the existing behavior while an alternate-screen app is active, but use
+        // a bounded tail walk for the normal buffer so snapshotting does not copy
+        // and decode the full scrollback on every content change.
+        guard !terminal.isCurrentBufferAlternate else {
+            let data = terminal.getBufferAsData(kind: .normal)
+            let text = String(data: data, encoding: .utf8) ?? ""
+            return TerminalOutputSnapshot.plainText(from: text, maximumCharacters: maximumCharacters)
+        }
+
+        let buffer = terminal.buffer
+        let firstRow = buffer.totalLinesTrimmed
+        var rowAfterLast = firstRow + buffer.yDisp + terminal.rows
+        while terminal.getScrollInvariantLine(row: rowAfterLast) != nil {
+            rowAfterLast += 1
+        }
+
+        var lines: [String] = []
+        var collectedCharacters = 0
+        var row = rowAfterLast - 1
+        while row >= firstRow, collectedCharacters < maximumCharacters,
+              let line = terminal.getScrollInvariantLine(row: row) {
+            let text = line.translateToString(trimRight: true)
+            lines.append(text)
+            collectedCharacters += text.count + 1
+            row -= 1
+        }
+
+        let text = lines.reversed().joined(separator: "\n") + (lines.isEmpty ? "" : "\n")
         return TerminalOutputSnapshot.plainText(from: text, maximumCharacters: maximumCharacters)
     }
 
@@ -269,10 +297,11 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
                 charactersIgnoringModifiers: event.charactersIgnoringModifiers ?? "",
                 modifiers: TerminalInputModifiers(event.modifierFlags)
             )
+            let shouldInspectPasteboard = input.keyCode == 9 && input.modifiers.meaningful == [.command]
             guard let sequence = TerminalInputTranslator.sequence(
                 for: input,
                 kittyKeyboardEnabled: !self.getTerminal().keyboardEnhancementFlags.isEmpty,
-                clipboardContainsImage: TerminalPasteboard.containsImage(in: .general)
+                clipboardContainsImage: shouldInspectPasteboard && TerminalPasteboard.containsImage(in: .general)
             ) else {
                 return event
             }

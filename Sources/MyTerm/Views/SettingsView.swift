@@ -624,8 +624,9 @@ private struct WorkingDirectorySettingControl: View {
                 guard case .custom(let directory) = value else { return "" }
                 return directory.path
             },
-            set: {
-                value = .custom(URL(fileURLWithPath: $0, isDirectory: true).standardizedFileURL)
+            set: { path in
+                let expandedPath = (path as NSString).expandingTildeInPath
+                value = .custom(URL(fileURLWithPath: expandedPath, isDirectory: true).standardizedFileURL)
             }
         )
     }

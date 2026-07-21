@@ -75,6 +75,17 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         XCTAssertTrue(view.renderedText(maximumCharacters: 200).contains("first\nsecond"))
     }
 
+    @MainActor
+    func testRenderedTextReturnsOnlyTheRequestedTail() {
+        let view = MyTermLocalProcessTerminalView(frame: .zero)
+        view.feed(text: (1...100).map { "line \($0)" }.joined(separator: "\r\n"))
+
+        let snapshot = view.renderedText(maximumCharacters: 24)
+
+        XCTAssertLessThanOrEqual(snapshot.count, 24)
+        XCTAssertTrue(snapshot.hasSuffix("line 99\nline 100\n"))
+    }
+
     func testInputTranslatorMapsMyTermShortcutsInNonKittyMode() {
         let cases: [(TerminalInputEvent, [UInt8])] = [
             (.init(keyCode: 36, charactersIgnoringModifiers: "\r", modifiers: [.shift]), [0x0A]),
