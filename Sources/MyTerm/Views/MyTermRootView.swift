@@ -1,5 +1,19 @@
+import CoreTransferable
 import MyTermCore
 import SwiftUI
+import UniformTypeIdentifiers
+
+private extension UTType {
+    static let mytermWorkspace = UTType(exportedAs: "com.gordonbeeming.myterm.workspace")
+}
+
+private struct WorkspaceDragItem: Codable, Transferable {
+    let workspaceID: WorkspaceID
+
+    static var transferRepresentation: some TransferRepresentation {
+        CodableRepresentation(contentType: .mytermWorkspace)
+    }
+}
 
 struct MyTermRootView: View {
     let startup: MyTermStartup
@@ -188,10 +202,9 @@ private struct WorkspaceSidebar: View {
         .contentShape(Rectangle())
         .tag(workspace.id)
         .accessibilityLabel(workspace.isPinned ? "Pinned workspace \(workspace.title)" : "Workspace \(workspace.title)")
-        .draggable(workspace.id.description)
-        .dropDestination(for: String.self) { values, _ in
-            guard let value = values.first,
-                  let sourceID = try? WorkspaceID(uuidString: value) else { return false }
+        .draggable(WorkspaceDragItem(workspaceID: workspace.id))
+        .dropDestination(for: WorkspaceDragItem.self) { items, _ in
+            guard let sourceID = items.first?.workspaceID else { return false }
             model.moveWorkspace(sourceID, before: workspace.id)
             return true
         }
@@ -225,9 +238,8 @@ private struct WorkspaceSidebar: View {
                 .foregroundStyle(folder.color.swiftUIColor)
         }
         .contentShape(Rectangle())
-        .dropDestination(for: String.self) { values, _ in
-            guard let value = values.first,
-                  let workspaceID = try? WorkspaceID(uuidString: value) else { return false }
+        .dropDestination(for: WorkspaceDragItem.self) { items, _ in
+            guard let workspaceID = items.first?.workspaceID else { return false }
             model.moveWorkspace(workspaceID, to: folder.id)
             return true
         }
