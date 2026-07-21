@@ -7,6 +7,8 @@ description: Publish and verify a signed MyTerm macOS release. Use only when Gor
 
 Publish a release from `GordonBeeming/myterm` and follow it through app signing, app notarization, DMG signing, DMG notarization, the GitHub asset, and the signed Homebrew tap update. Do not create any release unless Gordon explicitly invokes this skill or clearly asks to publish one.
 
+Use `docs/RELEASING.md` as the repository release reference and keep its trust chain intact.
+
 ## Preconditions
 
 Stop before publishing unless all of these are true:

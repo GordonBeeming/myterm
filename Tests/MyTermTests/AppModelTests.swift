@@ -171,6 +171,10 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount + 3)
         XCTAssertEqual(engine.configurations.last?.workingDirectory, FileManager.default.homeDirectoryForCurrentUser)
         XCTAssertEqual(engine.configurations.last?.initialCommand, "ssh '-p' '2222' 'gordon@example.com'")
+
+        model.open([try XCTUnwrap(URL(string: "ssh://user%25name@example.com"))])
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount + 4)
+        XCTAssertEqual(engine.configurations.last?.initialCommand, "ssh 'user%name@example.com'")
     }
 
     func testTerminalWebLinksOpenInTheirOwningWorkspaceAndInjectBrowserLauncher() throws {

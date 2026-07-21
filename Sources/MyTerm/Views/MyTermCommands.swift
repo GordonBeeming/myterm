@@ -55,13 +55,13 @@ struct MyTermCommands: Commands {
             Button("Close Focused Pane or Tab") { startup.model?.closeFocusedPaneOrTab() }
                 .keyboardShortcut("w", modifiers: [.command])
             Divider()
-            Button("Focus Pane Left") { startup.model?.focusAdjacentTerminal(offset: -1) }
+            Button("Focus Pane Left") { startup.model?.focusTerminal(direction: .left) }
                 .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
-            Button("Focus Pane Up") { startup.model?.focusAdjacentTerminal(offset: -1) }
+            Button("Focus Pane Up") { startup.model?.focusTerminal(direction: .up) }
                 .keyboardShortcut(.upArrow, modifiers: [.command, .option])
-            Button("Focus Pane Right") { startup.model?.focusAdjacentTerminal(offset: 1) }
+            Button("Focus Pane Right") { startup.model?.focusTerminal(direction: .right) }
                 .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
-            Button("Focus Pane Down") { startup.model?.focusAdjacentTerminal(offset: 1) }
+            Button("Focus Pane Down") { startup.model?.focusTerminal(direction: .down) }
                 .keyboardShortcut(.downArrow, modifiers: [.command, .option])
         }
     }

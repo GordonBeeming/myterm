@@ -387,18 +387,15 @@ final class AppModel {
         }
     }
 
-    func focusAdjacentTerminal(offset: Int) {
+    func focusTerminal(direction: PaneFocusDirection) {
         guard let tab = selectedTab,
               case .terminal(let tree) = tab.content,
-              !tree.terminalSessionIDs.isEmpty,
               let focusedID = tab.focusedTerminalSessionID,
-              let focusedIndex = tree.terminalSessionIDs.firstIndex(of: focusedID) else { return }
-        let sessionIDs = tree.terminalSessionIDs
-        let targetIndex = (focusedIndex + offset + sessionIDs.count) % sessionIDs.count
+              let targetID = tree.adjacentTerminalSessionID(to: focusedID, direction: direction) else { return }
         focusTerminal(
             workspaceID: store.selectedWorkspaceID,
             tabID: tab.id,
-            sessionID: sessionIDs[targetIndex]
+            sessionID: targetID
         )
     }
 
@@ -603,7 +600,7 @@ final class AppModel {
     private static func sshCommand(for url: URL) -> String? {
         guard let rawHost = url.host, !rawHost.isEmpty else { return nil }
         let host = rawHost.contains(":") && !rawHost.hasPrefix("[") ? "[\(rawHost)]" : rawHost
-        let decodedUser = url.user?.removingPercentEncoding ?? url.user
+        let decodedUser = url.user
         let target = decodedUser.map { "\($0)@\(host)" } ?? host
         var arguments = [String]()
         if let port = url.port {

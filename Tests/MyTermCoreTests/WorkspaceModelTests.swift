@@ -79,6 +79,34 @@ final class WorkspaceModelTests: XCTestCase {
         XCTAssertNil(afterFirstClose.removingTerminalSession(third.id))
     }
 
+    func testDirectionalPaneFocusUsesSpatialSplitLayout() {
+        let topLeft = TerminalSession()
+        let topRight = TerminalSession()
+        let bottomLeft = TerminalSession()
+        let bottomRight = TerminalSession()
+        let tree: SplitNode = .vertical([
+            .horizontal([.terminal(topLeft), .terminal(topRight)]),
+            .horizontal([.terminal(bottomLeft), .terminal(bottomRight)]),
+        ])
+
+        XCTAssertEqual(tree.adjacentTerminalSessionID(to: topLeft.id, direction: .right), topRight.id)
+        XCTAssertEqual(tree.adjacentTerminalSessionID(to: topLeft.id, direction: .down), bottomLeft.id)
+        XCTAssertEqual(tree.adjacentTerminalSessionID(to: bottomRight.id, direction: .left), bottomLeft.id)
+        XCTAssertEqual(tree.adjacentTerminalSessionID(to: bottomRight.id, direction: .up), topRight.id)
+    }
+
+    func testDirectionalPaneFocusStopsAtLayoutBoundary() {
+        let left = TerminalSession()
+        let right = TerminalSession()
+        let tree: SplitNode = .horizontal([.terminal(left), .terminal(right)])
+
+        XCTAssertNil(tree.adjacentTerminalSessionID(to: left.id, direction: .left))
+        XCTAssertNil(tree.adjacentTerminalSessionID(to: left.id, direction: .up))
+        XCTAssertNil(tree.adjacentTerminalSessionID(to: right.id, direction: .right))
+        XCTAssertNil(tree.adjacentTerminalSessionID(to: right.id, direction: .down))
+        XCTAssertNil(tree.adjacentTerminalSessionID(to: TerminalSessionID(), direction: .right))
+    }
+
     func testRepairDropsDuplicateIDsAndRepairsSelection() throws {
         let workspaceID = WorkspaceID()
         let tabID = TabID()

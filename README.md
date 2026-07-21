@@ -60,13 +60,13 @@ WebAuthn requests are passed to macOS and the user's chosen credential provider,
 | New workspace | <kbd>⇧⌘N</kbd> |
 | Rename workspace | <kbd>⇧⌘R</kbd> |
 | New terminal tab | <kbd>⌘T</kbd> |
-| New browser tab | <kbd>⇧⌘B</kbd> |
+| New browser tab | <kbd>⇧⌘L</kbd> |
 | Split terminal right | <kbd>⌘D</kbd> |
 | Split terminal down | <kbd>⇧⌘D</kbd> |
 | Close focused pane or tab | <kbd>⌘W</kbd> |
 | Toggle workspace sidebar | <kbd>⌘B</kbd> |
 
-[SHORTCUTS.md](SHORTCUTS.md) lists every supported shortcut and its native menu path.
+[docs/SHORTCUTS.md](docs/SHORTCUTS.md) lists every supported shortcut and its native menu path.
 
 ## Default terminal integration
 
@@ -90,7 +90,7 @@ This builds and launches `myterm-dev`. It has its own bundle identifier, browser
 swift test --parallel
 ```
 
-`./run.sh` also supports `--bundle`, `--debug`, `--logs`, and `--telemetry`. The app uses SwiftTerm for native terminal rendering and WebKit for the built-in browser. Chromium is intentionally not bundled; [BROWSER_ENGINES.md](BROWSER_ENGINES.md) describes the boundary for a separately downloaded engine later.
+`./run.sh` also supports `--bundle`, `--debug`, `--logs`, and `--telemetry`. The app uses SwiftTerm for native terminal rendering and WebKit for the built-in browser. Chromium is intentionally not bundled; [docs/BROWSER_ENGINES.md](docs/BROWSER_ENGINES.md) describes the boundary for a separately downloaded engine later.
 
 ## Release trust chain
 
@@ -102,7 +102,7 @@ The source commits for the release are SSH-signed. The GitHub release workflow t
 4. creates the DMG, then signs, notarizes, staples, and validates the DMG separately; and
 5. updates the Homebrew cask with an SSH-signed `myterm-release[bot]` commit.
 
-The app and its disk image therefore each have their own validated distribution signature and notarization ticket. [RELEASING.md](RELEASING.md) documents the checks and required GitHub environment secrets.
+The app and its disk image therefore each have their own validated distribution signature and notarization ticket. [docs/RELEASING.md](docs/RELEASING.md) documents the checks and required GitHub environment secrets.
 
 ## Current boundaries
 
