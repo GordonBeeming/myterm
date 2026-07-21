@@ -3,6 +3,12 @@ import MyTermCore
 import MyTermPlatform
 import Observation
 
+enum TerminalSettingsScope: Equatable, Hashable, Sendable {
+    case global
+    case folder(WorkspaceFolderID)
+    case workspace(WorkspaceID)
+}
+
 @MainActor
 @Observable
 final class AppModel {
@@ -15,16 +21,21 @@ final class AppModel {
     private let browserDataProfileResolver: BrowserDataProfileResolver
     private let browserSessionFactory: any BrowserSessionFactory
     private let browserLauncherURL: URL?
+    private let terminalSnapshotDelayNanoseconds: UInt64
     private(set) var terminalSessions: [TerminalSessionID: any TerminalProcessSession] = [:]
     private(set) var browserControllers: [BrowserSessionID: BrowserSessionController] = [:]
+    @ObservationIgnored private var terminalSnapshotTasks: [TerminalSessionID: Task<Void, Never>] = [:]
     var errorDescription: String?
     var isSidebarVisible = true
     var workspaceBeingRenamedID: WorkspaceID?
     var workspaceRenameDraft = ""
     var folderBeingRenamedID: WorkspaceFolderID?
     var folderRenameDraft = ""
+    var tabBeingRenamedID: TabID?
+    var tabRenameDraft = ""
     var isCreatingFolder = false
     var newFolderDraft = ""
+    var settingsScope = TerminalSettingsScope.global
     private var stateVersion = 0
 
     init(
@@ -34,7 +45,8 @@ final class AppModel {
         startsTerminalProcesses: Bool = true,
         browserSettings: BrowserSettingsStore? = nil,
         browserSessionFactory: any BrowserSessionFactory = WebKitBrowserSessionFactory(),
-        browserLauncherURL: URL? = MyTermBrowserLauncher.executableURL()
+        browserLauncherURL: URL? = MyTermBrowserLauncher.executableURL(),
+        terminalSnapshotDelayNanoseconds: UInt64 = 300_000_000
     ) throws {
         self.channel = channel
         let supportDirectory = try applicationSupportDirectory ?? Self.applicationSupportDirectory()
@@ -44,9 +56,14 @@ final class AppModel {
         self.startsTerminalProcesses = startsTerminalProcesses
         self.browserSessionFactory = browserSessionFactory
         self.browserLauncherURL = browserLauncherURL
+        self.terminalSnapshotDelayNanoseconds = terminalSnapshotDelayNanoseconds
         browserDataProfileResolver = BrowserDataProfileResolver(channel: channel)
+        try migrateLegacySettings()
         try migrateLegacyBrowserDataProfiles()
         restoreRuntimeObjects()
+        if let sessionID = selectedTab?.focusedTerminalSessionID {
+            terminalSessions[sessionID]?.focus()
+        }
     }
 
     var workspaces: [Workspace] {
@@ -68,6 +85,119 @@ final class AppModel {
         selectedWorkspace.selectedTab
     }
 
+    var selectedWorkspaceSettings: TerminalPreferences {
+        resolvedSettings(for: .workspace(store.selectedWorkspaceID)) ?? store.globalSettings
+    }
+
+    func resolvedSettings(for scope: TerminalSettingsScope) -> TerminalPreferences? {
+        _ = stateVersion
+        switch scope {
+        case .global:
+            return store.globalSettings
+        case .folder(let folderID):
+            guard let folder = store.folders.first(where: { $0.id == folderID }) else { return nil }
+            return (folder.settingsOverrides ?? TerminalPreferencesOverrides()).applying(to: store.globalSettings)
+        case .workspace(let workspaceID):
+            return try? store.resolvedSettings(for: workspaceID)
+        }
+    }
+
+    func settingsOverrides(for scope: TerminalSettingsScope) -> TerminalPreferencesOverrides? {
+        _ = stateVersion
+        switch scope {
+        case .global:
+            return nil
+        case .folder(let folderID):
+            return store.folders.first(where: { $0.id == folderID })?.settingsOverrides
+        case .workspace(let workspaceID):
+            return store.workspaces.first(where: { $0.id == workspaceID })?.settingsOverrides
+        }
+    }
+
+    func inheritedSettings(for scope: TerminalSettingsScope) -> TerminalPreferences? {
+        _ = stateVersion
+        switch scope {
+        case .global:
+            return nil
+        case .folder:
+            return store.globalSettings
+        case .workspace(let workspaceID):
+            guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else { return nil }
+            guard let folderID = workspace.folderID,
+                  let folder = store.folders.first(where: { $0.id == folderID }) else {
+                return store.globalSettings
+            }
+            return (folder.settingsOverrides ?? TerminalPreferencesOverrides()).applying(to: store.globalSettings)
+        }
+    }
+
+    func updateGlobalSettings(_ update: @escaping (inout TerminalPreferences) -> Void) {
+        perform {
+            try store.updateGlobalSettings(update)
+            applyResolvedRuntimeSettings(to: Set(store.workspaces.map(\.id)))
+        }
+    }
+
+    func prepareSettings(for scope: TerminalSettingsScope) {
+        settingsScope = scope
+    }
+
+    func updateFolderSettings(
+        _ folderID: WorkspaceFolderID,
+        _ update: @escaping (inout TerminalPreferencesOverrides) -> Void
+    ) {
+        perform {
+            try store.updateFolderSettings(folderID, update)
+            applyResolvedRuntimeSettings(to: workspaceIDs(in: folderID))
+        }
+    }
+
+    func updateWorkspaceSettings(
+        _ workspaceID: WorkspaceID,
+        _ update: @escaping (inout TerminalPreferencesOverrides) -> Void
+    ) {
+        perform {
+            try store.updateWorkspaceSettings(workspaceID, update)
+            applyResolvedRuntimeSettings(to: [workspaceID])
+        }
+    }
+
+    func setSetting<Value>(
+        _ value: Value,
+        at scope: TerminalSettingsScope,
+        global globalKeyPath: WritableKeyPath<TerminalPreferences, Value>,
+        override overrideKeyPath: WritableKeyPath<TerminalPreferencesOverrides, Value?>
+    ) {
+        switch scope {
+        case .global:
+            updateGlobalSettings { $0[keyPath: globalKeyPath] = value }
+        case .folder(let folderID):
+            updateFolderSettings(folderID) { $0[keyPath: overrideKeyPath] = value }
+        case .workspace(let workspaceID):
+            updateWorkspaceSettings(workspaceID) { $0[keyPath: overrideKeyPath] = value }
+        }
+    }
+
+    func clearSettingOverride<Value>(
+        at scope: TerminalSettingsScope,
+        _ keyPath: WritableKeyPath<TerminalPreferencesOverrides, Value?>
+    ) {
+        switch scope {
+        case .global:
+            return
+        case .folder(let folderID):
+            perform {
+                try store.clearFolderSettingsOverride(folderID, keyPath)
+                applyResolvedRuntimeSettings(to: workspaceIDs(in: folderID))
+            }
+        case .workspace(let workspaceID):
+            perform {
+                try store.clearWorkspaceSettingsOverride(workspaceID, keyPath)
+                applyResolvedRuntimeSettings(to: [workspaceID])
+            }
+        }
+    }
+
     static func applicationSupportDirectory(
         fileManager: FileManager = .default,
         environment: [String: String] = ProcessInfo.processInfo.environment
@@ -83,15 +213,37 @@ final class AppModel {
 
     func createWorkspace(in folderID: WorkspaceFolderID? = nil) {
         perform {
+            let inheritedActiveDirectory = activeTerminalDirectory(in: selectedWorkspace)
             let targetFolderID = folderID ?? selectedWorkspace.folderID
             let workspaceID = try store.createWorkspace(
                 title: "Workspace \(workspaces.count + 1)",
                 folderID: targetFolderID
             )
+            guard let createdWorkspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
+                throw AppModelError.workspaceUnavailable(workspaceID)
+            }
+            let workingDirectory = try newSessionWorkingDirectory(
+                for: workspaceID,
+                activePaneFallback: inheritedActiveDirectory
+            )
+            for tab in createdWorkspace.tabs {
+                guard case .terminal(let tree) = tab.content else { continue }
+                for session in tree.terminalSessions where session.workingDirectory == nil {
+                    try store.updateTerminalWorkingDirectory(
+                        workspaceID: workspaceID,
+                        tabID: tab.id,
+                        sessionID: session.id,
+                        workingDirectory: workingDirectory
+                    )
+                }
+            }
             guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
                 throw AppModelError.workspaceUnavailable(workspaceID)
             }
             restoreRuntimeObjects(in: workspace)
+            if let sessionID = workspace.selectedTab?.focusedTerminalSessionID {
+                terminalSessions[sessionID]?.focus()
+            }
         }
     }
 
@@ -117,6 +269,37 @@ final class AppModel {
         guard let workspaceID = workspaceBeingRenamedID else { return }
         renameWorkspace(workspaceID, title: workspaceRenameDraft)
         workspaceBeingRenamedID = nil
+    }
+
+    func beginRenamingSelectedTab() {
+        guard let tabID = selectedWorkspace.selectedTabID else { return }
+        beginRenamingTab(tabID)
+    }
+
+    func beginRenamingTab(_ tabID: TabID) {
+        guard let tab = tab(workspaceID: store.selectedWorkspaceID, tabID: tabID) else { return }
+        tabRenameDraft = tab.customTitle ?? defaultTitle(for: tab)
+        tabBeingRenamedID = tabID
+    }
+
+    func commitTabRename() {
+        guard let tabID = tabBeingRenamedID else { return }
+        renameTab(tabID, title: tabRenameDraft)
+        tabBeingRenamedID = nil
+    }
+
+    func cancelTabRename() {
+        tabBeingRenamedID = nil
+    }
+
+    func renameTab(_ tabID: TabID, title: String?) {
+        perform {
+            try store.renameTab(
+                workspaceID: store.selectedWorkspaceID,
+                tabID: tabID,
+                customTitle: title
+            )
+        }
     }
 
     func beginCreatingFolder() {
@@ -150,7 +333,11 @@ final class AppModel {
     }
 
     func deleteFolder(_ folderID: WorkspaceFolderID) {
-        perform { try store.removeFolder(folderID) }
+        perform {
+            let affectedWorkspaceIDs = workspaceIDs(in: folderID)
+            try store.removeFolder(folderID)
+            applyResolvedRuntimeSettings(to: affectedWorkspaceIDs)
+        }
     }
 
     func setFolderColor(_ folderID: WorkspaceFolderID, color: WorkspaceFolderColor) {
@@ -166,11 +353,17 @@ final class AppModel {
     }
 
     func moveWorkspace(_ workspaceID: WorkspaceID, to folderID: WorkspaceFolderID?) {
-        perform { try store.moveWorkspace(workspaceID, to: folderID) }
+        perform {
+            try store.moveWorkspace(workspaceID, to: folderID)
+            applyResolvedRuntimeSettings(to: [workspaceID])
+        }
     }
 
     func moveWorkspace(_ workspaceID: WorkspaceID, before targetID: WorkspaceID) {
-        perform { try store.moveWorkspace(workspaceID, before: targetID) }
+        perform {
+            try store.moveWorkspace(workspaceID, before: targetID)
+            applyResolvedRuntimeSettings(to: [workspaceID])
+        }
     }
 
     func moveWorkspace(_ workspaceID: WorkspaceID, offset: Int) {
@@ -184,6 +377,7 @@ final class AppModel {
             }
             try store.removeWorkspace(workspaceID)
             cleanUpRuntimeObjects(in: workspace)
+            restoreRuntimeObjects(in: store.selectedWorkspace)
         }
     }
 
@@ -205,10 +399,15 @@ final class AppModel {
     }
 
     func createTerminalTab() {
-        createTerminalTab(
-            workingDirectory: FileManager.default.homeDirectoryForCurrentUser,
-            initialCommand: nil
-        )
+        perform {
+            let workspaceID = store.selectedWorkspaceID
+            let workingDirectory = try newSessionWorkingDirectory(for: workspaceID)
+            try createTerminalTab(
+                workingDirectory: workingDirectory,
+                initialCommand: nil,
+                workspaceID: workspaceID
+            )
+        }
     }
 
     func open(_ urls: [URL]) {
@@ -254,22 +453,33 @@ final class AppModel {
 
     private func createTerminalTab(workingDirectory: URL, initialCommand: String?) {
         perform {
-            let workspaceID = store.selectedWorkspaceID
-            let tabID = try store.addTerminalTab(to: workspaceID, workingDirectory: workingDirectory)
-            guard let tab = tab(workspaceID: workspaceID, tabID: tabID) else {
-                throw AppModelError.tabUnavailable(tabID)
-            }
-            guard case .terminal(let tree) = tab.content else {
-                throw AppModelError.tabUnavailable(tabID)
-            }
-            for session in tree.terminalSessions {
-                try restoreTerminalSession(
-                    session,
-                    workspaceID: workspaceID,
-                    tabID: tab.id,
-                    initialCommand: initialCommand
-                )
-            }
+            try createTerminalTab(
+                workingDirectory: workingDirectory,
+                initialCommand: initialCommand,
+                workspaceID: store.selectedWorkspaceID
+            )
+        }
+    }
+
+    private func createTerminalTab(
+        workingDirectory: URL,
+        initialCommand: String?,
+        workspaceID: WorkspaceID
+    ) throws {
+        let tabID = try store.addTerminalTab(to: workspaceID, workingDirectory: workingDirectory)
+        guard let tab = tab(workspaceID: workspaceID, tabID: tabID) else {
+            throw AppModelError.tabUnavailable(tabID)
+        }
+        guard case .terminal(let tree) = tab.content else {
+            throw AppModelError.tabUnavailable(tabID)
+        }
+        for session in tree.terminalSessions {
+            try restoreTerminalSession(
+                session,
+                workspaceID: workspaceID,
+                tabID: tab.id,
+                initialCommand: initialCommand
+            )
         }
     }
 
@@ -290,8 +500,9 @@ final class AppModel {
             guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
                 throw AppModelError.workspaceUnavailable(workspaceID)
             }
+            let settings = try store.resolvedSettings(for: workspaceID)
             let profile = browserDataProfileResolver.resolve(
-                scope: browserSettings.browserDataScope,
+                scope: settings.browserDataScope,
                 workspace: workspace
             )
             let tabID = try store.addBrowserTab(to: workspaceID, url: url, profile: profile)
@@ -324,12 +535,7 @@ final class AppModel {
 
     func closeTab(_ tabID: TabID) {
         perform {
-            let workspaceID = store.selectedWorkspaceID
-            guard let closingTab = tab(workspaceID: workspaceID, tabID: tabID) else {
-                throw AppModelError.tabUnavailable(tabID)
-            }
-            try store.closeTab(workspaceID: workspaceID, tabID: tabID)
-            cleanUpRuntimeObjects(in: closingTab)
+            try closeTab(workspaceID: store.selectedWorkspaceID, tabID: tabID)
         }
     }
 
@@ -348,8 +554,18 @@ final class AppModel {
                 guard let sessionID = tab.focusedTerminalSessionID else {
                     throw AppModelError.noFocusedTerminal(tab.id)
                 }
-                try store.closeTerminalPane(workspaceID: workspaceID, tabID: tab.id, sessionID: sessionID)
-                terminalSessions.removeValue(forKey: sessionID)?.terminate()
+                persistTerminalSnapshot(
+                    workspaceID: workspaceID,
+                    tabID: tab.id,
+                    sessionID: sessionID
+                )
+                let lifecycle = try store.closeTerminalPane(
+                    workspaceID: workspaceID,
+                    tabID: tab.id,
+                    sessionID: sessionID
+                )
+                removeTerminalRuntime(sessionID)
+                handle(lifecycle)
             }
         }
     }
@@ -377,6 +593,7 @@ final class AppModel {
                 throw AppModelError.terminalUnavailable(newSessionID)
             }
             try restoreTerminalSession(session, workspaceID: workspaceID, tabID: tab.id)
+            terminalSessions[newSessionID]?.focus()
         }
     }
 
@@ -429,17 +646,49 @@ final class AppModel {
         isSidebarVisible.toggle()
     }
 
+    func persistTerminalSnapshots() {
+        let locations = store.workspaces.flatMap { workspace in
+            workspace.tabs.flatMap { tab -> [(WorkspaceID, TabID, TerminalSessionID)] in
+                guard case .terminal(let tree) = tab.content else { return [] }
+                return tree.terminalSessionIDs.map { (workspace.id, tab.id, $0) }
+            }
+        }
+        for (workspaceID, tabID, sessionID) in locations {
+            persistTerminalSnapshot(
+                workspaceID: workspaceID,
+                tabID: tabID,
+                sessionID: sessionID
+            )
+        }
+    }
+
     private func restoreRuntimeObjects() {
         for workspace in store.workspaces {
             restoreRuntimeObjects(in: workspace)
         }
     }
 
+    private func migrateLegacySettings() throws {
+        guard let legacy = browserSettings.unmigratedLegacyPreferences else { return }
+        if legacy.hasValues {
+            try store.updateGlobalSettings { settings in
+                if let browserDataScope = legacy.browserDataScope {
+                    settings.browserDataScope = browserDataScope
+                }
+                if let compactSidebar = legacy.compactSidebar {
+                    settings.compactSidebar = compactSidebar
+                }
+            }
+        }
+        browserSettings.markTerminalPreferencesMigrationComplete()
+    }
+
     private func migrateLegacyBrowserDataProfiles() throws {
         var updates = [(workspaceID: WorkspaceID, tabID: TabID, profile: BrowserDataProfile)]()
         for workspace in store.workspaces {
+            let settings = try store.resolvedSettings(for: workspace.id)
             let profile = browserDataProfileResolver.resolve(
-                scope: browserSettings.browserDataScope,
+                scope: settings.browserDataScope,
                 workspace: workspace
             )
             for tab in workspace.tabs {
@@ -494,15 +743,41 @@ final class AppModel {
             throw AppModelError.terminalEngineUnavailable
         }
 
+        let settings = try store.resolvedSettings(for: workspaceID)
+        let workingDirectory: URL
+        if let persistedWorkingDirectory = session.workingDirectory,
+           let validPersistedDirectory = validDirectory(persistedWorkingDirectory) {
+            workingDirectory = validPersistedDirectory
+        } else {
+            workingDirectory = try newSessionWorkingDirectory(for: workspaceID)
+        }
+        if session.workingDirectory?.standardizedFileURL != workingDirectory {
+            try store.updateTerminalWorkingDirectory(
+                workspaceID: workspaceID,
+                tabID: tabID,
+                sessionID: session.id,
+                workingDirectory: workingDirectory
+            )
+        }
         let process = try terminalEngine.makeSession(
             configuration: TerminalSessionConfiguration(
-                workingDirectory: session.workingDirectory ?? FileManager.default.homeDirectoryForCurrentUser,
+                shell: shellURL(for: settings.shell),
+                workingDirectory: workingDirectory,
                 initialCommand: initialCommand,
-                environment: MyTermBrowserLauncher.environment(executableURL: browserLauncherURL)
+                environment: MyTermBrowserLauncher.environment(executableURL: browserLauncherURL),
+                runtimeConfiguration: runtimeConfiguration(for: settings),
+                restoredOutput: session.recentText
             )
         )
         process.onEvent = { [weak self] event in
             self?.handle(event, workspaceID: workspaceID, tabID: tabID, sessionID: session.id)
+        }
+        process.setContentChangeHandler { [weak self] in
+            self?.scheduleTerminalSnapshot(
+                workspaceID: workspaceID,
+                tabID: tabID,
+                sessionID: session.id
+            )
         }
         try process.start()
         terminalSessions[session.id] = process
@@ -518,8 +793,9 @@ final class AppModel {
             guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
                 throw AppModelError.workspaceUnavailable(workspaceID)
             }
+            let settings = try store.resolvedSettings(for: workspaceID)
             profile = browserDataProfileResolver.resolve(
-                scope: browserSettings.browserDataScope,
+                scope: settings.browserDataScope,
                 workspace: workspace
             )
             try store.updateBrowserDataProfile(workspaceID: workspaceID, tabID: tab.id, profile: profile)
@@ -571,7 +847,7 @@ final class AppModel {
             browserControllers.removeValue(forKey: browser.id)?.webView.stopLoading()
         case .terminal(let tree):
             for sessionID in tree.terminalSessionIDs {
-                terminalSessions.removeValue(forKey: sessionID)?.terminate()
+                removeTerminalRuntime(sessionID)
             }
         }
     }
@@ -580,8 +856,18 @@ final class AppModel {
         guard let closingTab = tab(workspaceID: workspaceID, tabID: tabID) else {
             throw AppModelError.tabUnavailable(tabID)
         }
-        try store.closeTab(workspaceID: workspaceID, tabID: tabID)
+        if case .terminal(let tree) = closingTab.content {
+            for sessionID in tree.terminalSessionIDs {
+                persistTerminalSnapshot(
+                    workspaceID: workspaceID,
+                    tabID: tabID,
+                    sessionID: sessionID
+                )
+            }
+        }
+        let lifecycle = try store.closeTab(workspaceID: workspaceID, tabID: tabID)
         cleanUpRuntimeObjects(in: closingTab)
+        handle(lifecycle)
     }
 
     private func tab(workspaceID: WorkspaceID, tabID: TabID) -> Tab? {
@@ -591,6 +877,218 @@ final class AppModel {
     private func terminalSession(in tab: Tab, matching sessionID: TerminalSessionID) -> TerminalSession? {
         guard case .terminal(let tree) = tab.content else { return nil }
         return tree.terminalSessions.first(where: { $0.id == sessionID })
+    }
+
+    private func handle(_ lifecycle: WorkspaceLifecycleChange) {
+        if let removedWorkspace = lifecycle.removedWorkspace {
+            cleanUpRuntimeObjects(in: removedWorkspace)
+        }
+        if let replacementWorkspace = lifecycle.replacementWorkspace {
+            restoreRuntimeObjects(in: replacementWorkspace)
+        } else if let selectedWorkspace = store.workspaces.first(where: {
+            $0.id == lifecycle.selectedWorkspaceID
+        }) {
+            restoreRuntimeObjects(in: selectedWorkspace)
+        }
+    }
+
+    private func removeTerminalRuntime(_ sessionID: TerminalSessionID) {
+        terminalSnapshotTasks.removeValue(forKey: sessionID)?.cancel()
+        guard let process = terminalSessions.removeValue(forKey: sessionID) else { return }
+        process.setContentChangeHandler(nil)
+        process.terminate()
+    }
+
+    private func scheduleTerminalSnapshot(
+        workspaceID: WorkspaceID,
+        tabID: TabID,
+        sessionID: TerminalSessionID
+    ) {
+        terminalSnapshotTasks.removeValue(forKey: sessionID)?.cancel()
+        let delay = terminalSnapshotDelayNanoseconds
+        terminalSnapshotTasks[sessionID] = Task { @MainActor [weak self] in
+            if delay > 0 {
+                try? await Task.sleep(nanoseconds: delay)
+            }
+            guard !Task.isCancelled else { return }
+            self?.persistTerminalSnapshot(
+                workspaceID: workspaceID,
+                tabID: tabID,
+                sessionID: sessionID
+            )
+        }
+    }
+
+    private func persistTerminalSnapshot(
+        workspaceID: WorkspaceID,
+        tabID: TabID,
+        sessionID: TerminalSessionID
+    ) {
+        terminalSnapshotTasks.removeValue(forKey: sessionID)?.cancel()
+        guard let process = terminalSessions[sessionID] else { return }
+        let output = process.contentSnapshot(maximumCharacters: TerminalSession.maximumRecentTextBytes)
+        perform {
+            try store.updateTerminalRecentText(
+                workspaceID: workspaceID,
+                tabID: tabID,
+                sessionID: sessionID,
+                recentText: output
+            )
+        }
+    }
+
+    private func workspaceIDs(in folderID: WorkspaceFolderID) -> Set<WorkspaceID> {
+        Set(store.workspaces.lazy.filter { $0.folderID == folderID }.map(\.id))
+    }
+
+    private func applyResolvedRuntimeSettings(to workspaceIDs: Set<WorkspaceID>) {
+        for workspaceID in workspaceIDs {
+            guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }),
+                  let settings = try? store.resolvedSettings(for: workspaceID) else { continue }
+            let configuration = runtimeConfiguration(for: settings)
+            for tab in workspace.tabs {
+                guard case .terminal(let tree) = tab.content else { continue }
+                for sessionID in tree.terminalSessionIDs {
+                    terminalSessions[sessionID]?.apply(runtimeConfiguration: configuration)
+                }
+            }
+        }
+    }
+
+    private func newSessionWorkingDirectory(
+        for workspaceID: WorkspaceID,
+        activePaneFallback: URL? = nil
+    ) throws -> URL {
+        let settings = try store.resolvedSettings(for: workspaceID)
+        switch settings.newSessionWorkingDirectory {
+        case .home:
+            return FileManager.default.homeDirectoryForCurrentUser
+        case .custom(let directory):
+            return validDirectory(directory) ?? FileManager.default.homeDirectoryForCurrentUser
+        case .activePane:
+            guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
+                throw AppModelError.workspaceUnavailable(workspaceID)
+            }
+            return activeTerminalDirectory(in: workspace)
+                ?? activePaneFallback.flatMap(validDirectory)
+                ?? FileManager.default.homeDirectoryForCurrentUser
+        }
+    }
+
+    private func activeTerminalDirectory(in workspace: Workspace) -> URL? {
+        if let selectedTab = workspace.selectedTab,
+           case .terminal(let tree) = selectedTab.content {
+            if let focusedID = selectedTab.focusedTerminalSessionID,
+               let focusedDirectory = tree.terminalSessions.first(where: { $0.id == focusedID })?.workingDirectory,
+               let validFocusedDirectory = validDirectory(focusedDirectory) {
+                return validFocusedDirectory
+            }
+            if let selectedTabDirectory = tree.terminalSessions.lazy.compactMap(\.workingDirectory)
+                .compactMap(validDirectory).first {
+                return selectedTabDirectory
+            }
+        }
+
+        return workspace.tabs.lazy.compactMap { tab -> URL? in
+            guard case .terminal(let tree) = tab.content else { return nil }
+            return tree.terminalSessions.lazy.compactMap(\.workingDirectory).compactMap(self.validDirectory).first
+        }.first
+    }
+
+    private func validDirectory(_ directory: URL) -> URL? {
+        let standardizedDirectory = directory.standardizedFileURL
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(
+            atPath: standardizedDirectory.path,
+            isDirectory: &isDirectory
+        ), isDirectory.boolValue else { return nil }
+        return standardizedDirectory
+    }
+
+    private func shellURL(for shell: TerminalShell) -> URL {
+        guard case .custom(let path) = shell else {
+            return TerminalSessionConfiguration.loginShellURL()
+        }
+        let expandedPath = NSString(string: path.trimmingCharacters(in: .whitespacesAndNewlines))
+            .expandingTildeInPath
+        guard expandedPath.hasPrefix("/"),
+              FileManager.default.isExecutableFile(atPath: expandedPath) else {
+            return TerminalSessionConfiguration.loginShellURL()
+        }
+        return URL(fileURLWithPath: expandedPath).standardizedFileURL
+    }
+
+    private func runtimeConfiguration(for settings: TerminalPreferences) -> MyTermPlatform.TerminalRuntimeConfiguration {
+        MyTermPlatform.TerminalRuntimeConfiguration(
+            fontName: settings.fontPostScriptName,
+            fontSize: settings.fontSize,
+            appearance: terminalAppearance(for: settings),
+            scrollbackLines: settings.scrollbackLines,
+            optionAsMeta: settings.optionAsMeta
+        )
+    }
+
+    private func terminalAppearance(for settings: TerminalPreferences) -> MyTermPlatform.TerminalAppearance {
+        let colors: (foreground: MyTermPlatform.TerminalColor?, background: MyTermPlatform.TerminalColor?)
+        switch settings.terminalTheme {
+        case .solarizedLight:
+            colors = (terminalColor(101, 123, 131), terminalColor(253, 246, 227))
+        case .solarizedDark:
+            colors = (terminalColor(131, 148, 150), terminalColor(0, 43, 54))
+        case .basic:
+            colors = basicTerminalColors(for: settings.terminalAppearance)
+        case .system:
+            switch settings.terminalAppearance {
+            case .light, .dark:
+                colors = basicTerminalColors(for: settings.terminalAppearance)
+            case .system:
+                colors = (nil, nil)
+            }
+        }
+        return MyTermPlatform.TerminalAppearance(
+            foreground: colors.foreground,
+            background: colors.background,
+            cursor: MyTermPlatform.TerminalCursorConfiguration(
+                shape: platformCursorShape(settings.cursorShape),
+                blinks: settings.cursorBlink
+            )
+        )
+    }
+
+    private func basicTerminalColors(
+        for appearance: MyTermCore.TerminalAppearance
+    ) -> (foreground: MyTermPlatform.TerminalColor?, background: MyTermPlatform.TerminalColor?) {
+        switch appearance {
+        case .system:
+            return (nil, nil)
+        case .light:
+            return (terminalColor(30, 30, 30), terminalColor(255, 255, 255))
+        case .dark:
+            return (terminalColor(235, 235, 235), terminalColor(20, 20, 20))
+        }
+    }
+
+    private func platformCursorShape(
+        _ shape: MyTermCore.TerminalCursorShape
+    ) -> MyTermPlatform.TerminalCursorShape {
+        switch shape {
+        case .block: .block
+        case .beam: .bar
+        case .underline: .underline
+        }
+    }
+
+    private func terminalColor(_ red: UInt16, _ green: UInt16, _ blue: UInt16) -> MyTermPlatform.TerminalColor {
+        MyTermPlatform.TerminalColor(red: red * 257, green: green * 257, blue: blue * 257)
+    }
+
+    private func defaultTitle(for tab: Tab) -> String {
+        switch tab.content {
+        case .terminal:
+            return "Terminal"
+        case .browser(let browser):
+            return browser.url.host ?? "Browser"
+        }
     }
 
     private static func shellQuote(_ value: String) -> String {

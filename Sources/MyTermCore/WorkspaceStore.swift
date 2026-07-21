@@ -47,22 +47,41 @@ public enum WorkspaceStoreError: Error, Equatable, LocalizedError, Sendable {
     }
 }
 
+public struct WorkspaceLifecycleChange: Equatable, Sendable {
+    public let removedWorkspace: Workspace?
+    public let replacementWorkspace: Workspace?
+    public let selectedWorkspaceID: WorkspaceID
+
+    public init(
+        removedWorkspace: Workspace? = nil,
+        replacementWorkspace: Workspace? = nil,
+        selectedWorkspaceID: WorkspaceID
+    ) {
+        self.removedWorkspace = removedWorkspace
+        self.replacementWorkspace = replacementWorkspace
+        self.selectedWorkspaceID = selectedWorkspaceID
+    }
+}
+
 public struct WorkspaceStoreSnapshot: Codable, Equatable, Sendable {
     public static let currentVersion = 1
 
     public var version: Int
     public var folders: [WorkspaceFolder]
+    public var globalSettings: TerminalPreferences
     public var workspaces: [Workspace]
     public var selectedWorkspaceID: WorkspaceID
 
     public init(
         version: Int = WorkspaceStoreSnapshot.currentVersion,
         folders: [WorkspaceFolder] = [],
+        globalSettings: TerminalPreferences = .default,
         workspaces: [Workspace],
         selectedWorkspaceID: WorkspaceID
     ) {
         self.version = version
         self.folders = folders
+        self.globalSettings = globalSettings
         self.workspaces = workspaces
         self.selectedWorkspaceID = selectedWorkspaceID
         repair()
@@ -74,6 +93,7 @@ public struct WorkspaceStoreSnapshot: Codable, Equatable, Sendable {
     }
 
     fileprivate mutating func repair() {
+        globalSettings = globalSettings.normalized()
         var seenFolderIDs = Set<WorkspaceFolderID>()
         folders = folders.filter { seenFolderIDs.insert($0.id).inserted }
         let validFolderIDs = Set(folders.map(\.id))
@@ -101,6 +121,7 @@ public struct WorkspaceStoreSnapshot: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case version
         case folders
+        case globalSettings
         case workspaces
         case selectedWorkspaceID
     }
@@ -112,6 +133,7 @@ public struct WorkspaceStoreSnapshot: Codable, Equatable, Sendable {
             throw WorkspaceStoreError.unsupportedVersion(version)
         }
         folders = try container.decodeIfPresent(LossyArray<WorkspaceFolder>.self, forKey: .folders)?.elements ?? []
+        globalSettings = (try? container.decode(TerminalPreferences.self, forKey: .globalSettings)) ?? .default
         workspaces = try container.decodeIfPresent(LossyArray<Workspace>.self, forKey: .workspaces)?.elements ?? []
         do {
             selectedWorkspaceID = try container.decode(WorkspaceID.self, forKey: .selectedWorkspaceID)
@@ -136,6 +158,19 @@ public final class WorkspaceStore {
             )
         }
         return workspace
+    }
+
+    public var globalSettings: TerminalPreferences { snapshot.globalSettings }
+
+    public func resolvedSettings(for workspaceID: WorkspaceID) throws -> TerminalPreferences {
+        let workspace = try workspace(workspaceID)
+        let folder = workspace.folderID.flatMap { id in
+            snapshot.folders.first { $0.id == id }
+        }
+        let folderSettings = (folder?.settingsOverrides ?? TerminalPreferencesOverrides())
+            .applying(to: snapshot.globalSettings)
+        return (workspace.settingsOverrides ?? TerminalPreferencesOverrides())
+            .applying(to: folderSettings)
     }
 
     public init(persistenceURL: URL, fileManager: FileManager = .default) throws {
@@ -212,6 +247,50 @@ public final class WorkspaceStore {
         }
     }
 
+    public func updateGlobalSettings(_ update: (inout TerminalPreferences) -> Void) throws {
+        try mutate { snapshot in
+            update(&snapshot.globalSettings)
+        }
+    }
+
+    public func updateFolderSettings(
+        _ folderID: WorkspaceFolderID,
+        _ update: (inout TerminalPreferencesOverrides) -> Void
+    ) throws {
+        try mutate { snapshot in
+            let index = try folderIndex(folderID, in: snapshot)
+            var overrides = snapshot.folders[index].settingsOverrides ?? TerminalPreferencesOverrides()
+            update(&overrides)
+            snapshot.folders[index].settingsOverrides = overrides
+        }
+    }
+
+    public func clearFolderSettingsOverride<Value>(
+        _ folderID: WorkspaceFolderID,
+        _ keyPath: WritableKeyPath<TerminalPreferencesOverrides, Value?>
+    ) throws {
+        try updateFolderSettings(folderID) { $0[keyPath: keyPath] = nil }
+    }
+
+    public func updateWorkspaceSettings(
+        _ workspaceID: WorkspaceID,
+        _ update: (inout TerminalPreferencesOverrides) -> Void
+    ) throws {
+        try mutate { snapshot in
+            let index = try workspaceIndex(workspaceID, in: snapshot)
+            var overrides = snapshot.workspaces[index].settingsOverrides ?? TerminalPreferencesOverrides()
+            update(&overrides)
+            snapshot.workspaces[index].settingsOverrides = overrides
+        }
+    }
+
+    public func clearWorkspaceSettingsOverride<Value>(
+        _ workspaceID: WorkspaceID,
+        _ keyPath: WritableKeyPath<TerminalPreferencesOverrides, Value?>
+    ) throws {
+        try updateWorkspaceSettings(workspaceID) { $0[keyPath: keyPath] = nil }
+    }
+
     public func removeFolder(_ folderID: WorkspaceFolderID) throws {
         try mutate { snapshot in
             let index = try folderIndex(folderID, in: snapshot)
@@ -281,6 +360,18 @@ public final class WorkspaceStore {
         }
     }
 
+    public func renameTab(workspaceID: WorkspaceID, tabID: TabID, customTitle: String?) throws {
+        try mutate { snapshot in
+            let (workspaceIndex, tabIndex) = try tabLocation(
+                workspaceID: workspaceID,
+                tabID: tabID,
+                in: snapshot
+            )
+            let title = customTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+            snapshot.workspaces[workspaceIndex].tabs[tabIndex].customTitle = title?.nilIfEmpty
+        }
+    }
+
     public func removeWorkspace(_ workspaceID: WorkspaceID) throws {
         try mutate { snapshot in
             guard let index = snapshot.workspaces.firstIndex(where: { $0.id == workspaceID }) else {
@@ -339,15 +430,32 @@ public final class WorkspaceStore {
         try addTab(to: workspaceID, content: Tab.browser(url: url, profile: profile).content, at: index)
     }
 
-    public func closeTab(workspaceID: WorkspaceID, tabID: TabID) throws {
+    @discardableResult
+    public func closeTab(workspaceID: WorkspaceID, tabID: TabID) throws -> WorkspaceLifecycleChange {
+        var removedWorkspace: Workspace?
+        var replacementWorkspace: Workspace?
         try mutate { snapshot in
             let workspaceIndex = try workspaceIndex(workspaceID, in: snapshot)
             guard let tabIndex = snapshot.workspaces[workspaceIndex].tabs.firstIndex(where: { $0.id == tabID }) else {
                 throw WorkspaceStoreError.tabNotFound(tabID)
             }
             snapshot.workspaces[workspaceIndex].tabs.remove(at: tabIndex)
-            snapshot.workspaces[workspaceIndex].repair()
+            if snapshot.workspaces[workspaceIndex].tabs.isEmpty {
+                removedWorkspace = snapshot.workspaces.remove(at: workspaceIndex)
+                let wasOnlyWorkspace = snapshot.workspaces.isEmpty
+                snapshot.repair()
+                if wasOnlyWorkspace {
+                    replacementWorkspace = snapshot.workspaces.first
+                }
+            } else {
+                snapshot.workspaces[workspaceIndex].repair()
+            }
         }
+        return WorkspaceLifecycleChange(
+            removedWorkspace: removedWorkspace,
+            replacementWorkspace: replacementWorkspace,
+            selectedWorkspaceID: snapshot.selectedWorkspaceID
+        )
     }
 
     public func selectTab(workspaceID: WorkspaceID, tabID: TabID) throws {
@@ -434,11 +542,14 @@ public final class WorkspaceStore {
         return try terminalPaneID(from: updatedTab, sessionID: sessionID)
     }
 
+    @discardableResult
     public func closeTerminalPane(
         workspaceID: WorkspaceID,
         tabID: TabID,
         sessionID: TerminalSessionID
-    ) throws {
+    ) throws -> WorkspaceLifecycleChange {
+        var removedWorkspace: Workspace?
+        var replacementWorkspace: Workspace?
         try mutate { snapshot in
             let workspaceIndex = try workspaceIndex(workspaceID, in: snapshot)
             guard let tabIndex = snapshot.workspaces[workspaceIndex].tabs.firstIndex(where: { $0.id == tabID }) else {
@@ -452,7 +563,16 @@ public final class WorkspaceStore {
             }
             if tree.terminalSessionIDs.count == 1 {
                 snapshot.workspaces[workspaceIndex].tabs.remove(at: tabIndex)
-                snapshot.workspaces[workspaceIndex].repair()
+                if snapshot.workspaces[workspaceIndex].tabs.isEmpty {
+                    removedWorkspace = snapshot.workspaces.remove(at: workspaceIndex)
+                    let wasOnlyWorkspace = snapshot.workspaces.isEmpty
+                    snapshot.repair()
+                    if wasOnlyWorkspace {
+                        replacementWorkspace = snapshot.workspaces.first
+                    }
+                } else {
+                    snapshot.workspaces[workspaceIndex].repair()
+                }
                 return
             }
             guard let collapsedTree = tree.removingTerminalSession(sessionID) else {
@@ -463,9 +583,19 @@ public final class WorkspaceStore {
             snapshot.workspaces[workspaceIndex].tabs[tabIndex].content = .terminal(collapsedTree)
             snapshot.workspaces[workspaceIndex].tabs[tabIndex].repair()
         }
+        return WorkspaceLifecycleChange(
+            removedWorkspace: removedWorkspace,
+            replacementWorkspace: replacementWorkspace,
+            selectedWorkspaceID: snapshot.selectedWorkspaceID
+        )
     }
 
-    public func closeTerminalPane(workspaceID: WorkspaceID, tabID: TabID, paneID: PaneID) throws {
+    @discardableResult
+    public func closeTerminalPane(
+        workspaceID: WorkspaceID,
+        tabID: TabID,
+        paneID: PaneID
+    ) throws -> WorkspaceLifecycleChange {
         let workspace = try workspace(workspaceID)
         guard let tab = workspace.tabs.first(where: { $0.id == tabID }) else {
             throw WorkspaceStoreError.tabNotFound(tabID)
@@ -476,7 +606,7 @@ public final class WorkspaceStore {
         guard let session = tree.session(for: paneID) else {
             throw WorkspaceStoreError.paneNotFound(paneID)
         }
-        try closeTerminalPane(workspaceID: workspaceID, tabID: tabID, sessionID: session.id)
+        return try closeTerminalPane(workspaceID: workspaceID, tabID: tabID, sessionID: session.id)
     }
 
     public func focusTerminalPane(
@@ -600,6 +730,30 @@ public final class WorkspaceStore {
         }
     }
 
+    public func updateTerminalRecentText(
+        workspaceID: WorkspaceID,
+        tabID: TabID,
+        sessionID: TerminalSessionID,
+        recentText: String?
+    ) throws {
+        try mutate { snapshot in
+            let (workspaceIndex, tabIndex) = try tabLocation(
+                workspaceID: workspaceID,
+                tabID: tabID,
+                in: snapshot
+            )
+            var tab = snapshot.workspaces[workspaceIndex].tabs[tabIndex]
+            guard case .terminal(var tree) = tab.content else {
+                throw WorkspaceStoreError.terminalTabRequired(tabID)
+            }
+            guard tree.updateRecentText(recentText, for: sessionID) else {
+                throw WorkspaceStoreError.terminalSessionNotFound(sessionID)
+            }
+            tab.content = .terminal(tree)
+            snapshot.workspaces[workspaceIndex].tabs[tabIndex] = tab
+        }
+    }
+
     public func updateTerminalWorkingDirectory(
         workspaceID: WorkspaceID,
         tabID: TabID,
@@ -694,4 +848,8 @@ private func terminalPaneID(from tab: Tab?, sessionID: TerminalSessionID) throws
         throw WorkspaceStoreError.terminalSessionNotFound(sessionID)
     }
     return session.paneID
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

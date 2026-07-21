@@ -1,3 +1,4 @@
+import AppKit
 import CoreTransferable
 import MyTermCore
 import SwiftUI
@@ -56,6 +57,13 @@ private struct WorkspaceContentView: View {
         )
     }
 
+    private var isRenamingTab: Binding<Bool> {
+        Binding(
+            get: { model.tabBeingRenamedID != nil },
+            set: { if !$0 { model.cancelTabRename() } }
+        )
+    }
+
     var body: some View {
         NavigationSplitView(columnVisibility: columnVisibility) {
             WorkspaceSidebar(model: model)
@@ -75,10 +83,25 @@ private struct WorkspaceContentView: View {
                 ActiveTabView(model: model)
             }
         }
-        .alert("Rename Workspace", isPresented: isRenamingWorkspace) {
-            TextField("Workspace name", text: $model.workspaceRenameDraft)
-            Button("Cancel", role: .cancel) { model.workspaceBeingRenamedID = nil }
-            Button("Rename") { model.commitWorkspaceRename() }
+        .sheet(isPresented: isRenamingWorkspace) {
+            RenameItemSheet(
+                title: "Rename Workspace",
+                fieldLabel: "Workspace name",
+                text: $model.workspaceRenameDraft,
+                cancel: { model.workspaceBeingRenamedID = nil },
+                commit: model.commitWorkspaceRename
+            )
+        }
+        .sheet(isPresented: isRenamingTab) {
+            RenameItemSheet(
+                title: "Rename Tab",
+                fieldLabel: "Tab name",
+                text: $model.tabRenameDraft,
+                allowsEmpty: true,
+                message: "Leave the name empty to use the automatic title.",
+                cancel: model.cancelTabRename,
+                commit: model.commitTabRename
+            )
         }
         .alert("New Folder", isPresented: $model.isCreatingFolder) {
             TextField("Folder name", text: $model.newFolderDraft)
@@ -87,10 +110,14 @@ private struct WorkspaceContentView: View {
         } message: {
             Text("Folders keep related workspaces together and can be collapsed.")
         }
-        .alert("Rename Folder", isPresented: isRenamingFolder) {
-            TextField("Folder name", text: $model.folderRenameDraft)
-            Button("Cancel", role: .cancel) { model.folderBeingRenamedID = nil }
-            Button("Rename") { model.commitFolderRename() }
+        .sheet(isPresented: isRenamingFolder) {
+            RenameItemSheet(
+                title: "Rename Folder",
+                fieldLabel: "Folder name",
+                text: $model.folderRenameDraft,
+                cancel: { model.folderBeingRenamedID = nil },
+                commit: model.commitFolderRename
+            )
         }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -114,6 +141,7 @@ private struct WorkspaceContentView: View {
 }
 
 private struct WorkspaceSidebar: View {
+    @Environment(\.openSettings) private var openSettings
     @Bindable var model: AppModel
 
     private var ungroupedWorkspaces: [Workspace] {
@@ -149,7 +177,7 @@ private struct WorkspaceSidebar: View {
             }
         }
         .listStyle(.sidebar)
-        .environment(\.defaultMinListRowHeight, model.browserSettings.compactSidebar ? 22 : 30)
+        .environment(\.defaultMinListRowHeight, model.selectedWorkspaceSettings.compactSidebar ? 22 : 30)
         .navigationTitle("Workspaces")
         .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 480)
         .safeAreaInset(edge: .bottom) {
@@ -198,7 +226,7 @@ private struct WorkspaceSidebar: View {
                 .lineLimit(1)
             Spacer(minLength: 0)
         }
-        .padding(.vertical, model.browserSettings.compactSidebar ? 0 : 2)
+        .padding(.vertical, model.selectedWorkspaceSettings.compactSidebar ? 0 : 2)
         .contentShape(Rectangle())
         .tag(workspace.id)
         .accessibilityLabel(workspace.isPinned ? "Pinned workspace \(workspace.title)" : "Workspace \(workspace.title)")
@@ -209,6 +237,11 @@ private struct WorkspaceSidebar: View {
             return true
         }
         .contextMenu {
+            Button("Workspace Settings…", systemImage: "gearshape") {
+                model.prepareSettings(for: .workspace(workspace.id))
+                openSettings()
+            }
+            Divider()
             Button(workspace.isPinned ? "Unpin Workspace" : "Pin Workspace") {
                 model.setWorkspacePinned(workspace.id, isPinned: !workspace.isPinned)
             }
@@ -244,14 +277,29 @@ private struct WorkspaceSidebar: View {
             return true
         }
         .contextMenu {
+            Button("Folder Settings…", systemImage: "gearshape") {
+                model.prepareSettings(for: .folder(folder.id))
+                openSettings()
+            }
+            Divider()
             Button("New Workspace") { model.createWorkspace(in: folder.id) }
             Button("Rename Folder…") { model.beginRenamingFolder(folder.id) }
             Menu("Folder Color") {
                 ForEach(WorkspaceFolderColor.allCases, id: \.self) { color in
-                    Button {
-                        model.setFolderColor(folder.id, color: color)
-                    } label: {
-                        Label(color.displayName, systemImage: folder.color == color ? "checkmark.circle.fill" : "circle.fill")
+                    Toggle(isOn: Binding(
+                        get: { folder.color == color },
+                        set: { isSelected in
+                            if isSelected {
+                                model.setFolderColor(folder.id, color: color)
+                            }
+                        }
+                    )) {
+                        Label {
+                            Text(color.displayName)
+                        } icon: {
+                            Image(nsImage: color.menuSwatchImage)
+                                .renderingMode(.original)
+                        }
                     }
                 }
             }

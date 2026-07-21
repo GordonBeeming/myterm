@@ -20,6 +20,86 @@ public protocol TerminalProcessSession: AnyObject {
     func resize(columns: Int, rows: Int)
     func focus()
     func terminate()
+    func apply(runtimeConfiguration: TerminalRuntimeConfiguration)
+    func contentSnapshot(maximumCharacters: Int) -> String
+    func setContentChangeHandler(_ handler: (@MainActor () -> Void)?)
+    func setPaneActive(_ isActive: Bool)
+}
+
+public extension TerminalProcessSession {
+    func apply(runtimeConfiguration: TerminalRuntimeConfiguration) {}
+
+    func contentSnapshot(maximumCharacters: Int) -> String { "" }
+
+    func setContentChangeHandler(_ handler: (@MainActor () -> Void)?) {}
+
+    func setPaneActive(_ isActive: Bool) {}
+}
+
+public struct TerminalColor: Equatable, Sendable {
+    public let red: UInt16
+    public let green: UInt16
+    public let blue: UInt16
+
+    public init(red: UInt16, green: UInt16, blue: UInt16) {
+        self.red = red
+        self.green = green
+        self.blue = blue
+    }
+}
+
+public enum TerminalCursorShape: Equatable, Sendable {
+    case block
+    case underline
+    case bar
+}
+
+public struct TerminalCursorConfiguration: Equatable, Sendable {
+    public let shape: TerminalCursorShape
+    public let blinks: Bool
+
+    public init(shape: TerminalCursorShape = .block, blinks: Bool = true) {
+        self.shape = shape
+        self.blinks = blinks
+    }
+}
+
+public struct TerminalAppearance: Equatable, Sendable {
+    public let foreground: TerminalColor?
+    public let background: TerminalColor?
+    public let cursor: TerminalCursorConfiguration
+
+    public init(
+        foreground: TerminalColor? = nil,
+        background: TerminalColor? = nil,
+        cursor: TerminalCursorConfiguration = TerminalCursorConfiguration()
+    ) {
+        self.foreground = foreground
+        self.background = background
+        self.cursor = cursor
+    }
+}
+
+public struct TerminalRuntimeConfiguration: Equatable, Sendable {
+    public let fontName: String?
+    public let fontSize: Double
+    public let appearance: TerminalAppearance
+    public let scrollbackLines: Int
+    public let optionAsMeta: Bool
+
+    public init(
+        fontName: String? = nil,
+        fontSize: Double = 13,
+        appearance: TerminalAppearance = TerminalAppearance(),
+        scrollbackLines: Int = 5_000,
+        optionAsMeta: Bool = true
+    ) {
+        self.fontName = fontName
+        self.fontSize = max(fontSize, 1)
+        self.appearance = appearance
+        self.scrollbackLines = max(scrollbackLines, 0)
+        self.optionAsMeta = optionAsMeta
+    }
 }
 
 public struct TerminalSessionConfiguration: Equatable, Sendable {
@@ -27,17 +107,23 @@ public struct TerminalSessionConfiguration: Equatable, Sendable {
     public let workingDirectory: URL
     public let initialCommand: String?
     public let environment: [String: String]
+    public let runtimeConfiguration: TerminalRuntimeConfiguration
+    public let restoredOutput: String?
 
     public init(
         shell: URL = TerminalSessionConfiguration.loginShellURL(),
         workingDirectory: URL,
         initialCommand: String? = nil,
-        environment: [String: String] = [:]
+        environment: [String: String] = [:],
+        runtimeConfiguration: TerminalRuntimeConfiguration = TerminalRuntimeConfiguration(),
+        restoredOutput: String? = nil
     ) {
         self.shell = shell
         self.workingDirectory = workingDirectory.standardizedFileURL
         self.initialCommand = initialCommand
         self.environment = environment
+        self.runtimeConfiguration = runtimeConfiguration
+        self.restoredOutput = restoredOutput
     }
 
     public static func loginShellURL() -> URL {

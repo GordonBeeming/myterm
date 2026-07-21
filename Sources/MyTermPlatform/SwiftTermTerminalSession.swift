@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 @preconcurrency import SwiftTerm
+import UniformTypeIdentifiers
 
 @MainActor
 public final class SwiftTermTerminalEngine: TerminalEngine {
@@ -21,6 +22,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
     private var workingDirectoryPoller: ProcessWorkingDirectoryPoller?
     private var lastReportedWorkingDirectory: URL?
     private var didTerminate = false
+    private var contentChangeHandler: (@MainActor () -> Void)?
 
     public init(configuration: TerminalSessionConfiguration) throws {
         guard configuration.shell.isFileURL,
@@ -40,7 +42,9 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
 
         self.configuration = configuration
         lastReportedWorkingDirectory = configuration.workingDirectory
-        terminal = MyTermLocalProcessTerminalView(frame: .zero)
+        terminal = MyTermLocalProcessTerminalView(
+            frame: NSRect(x: 0, y: 0, width: 640, height: 480)
+        )
         super.init()
 
         terminal.processDelegate = self
@@ -49,7 +53,14 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
                 self?.onEvent?(.openURL(url))
             }
         }
+        terminal.onContentChanged = { [weak self] in
+            self?.contentChangeHandler?()
+        }
         terminal.autoresizingMask = [.width, .height]
+        terminal.apply(runtimeConfiguration: configuration.runtimeConfiguration)
+        if let restoredOutput = configuration.restoredOutput {
+            terminal.presentPersistedOutput(restoredOutput)
+        }
     }
 
     public func terminalView() -> NSView {
@@ -101,14 +112,29 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
     }
 
     public func focus() {
-        guard let window = terminal.window else { return }
-        window.makeFirstResponder(terminal)
+        terminal.focusWhenPossible()
     }
 
     public func terminate() {
         guard isRunning else { return }
         stopWorkingDirectoryPolling()
         terminal.terminate()
+    }
+
+    public func apply(runtimeConfiguration: TerminalRuntimeConfiguration) {
+        terminal.apply(runtimeConfiguration: runtimeConfiguration)
+    }
+
+    public func contentSnapshot(maximumCharacters: Int) -> String {
+        terminal.renderedText(maximumCharacters: maximumCharacters)
+    }
+
+    public func setContentChangeHandler(_ handler: (@MainActor () -> Void)?) {
+        contentChangeHandler = handler
+    }
+
+    public func setPaneActive(_ isActive: Bool) {
+        terminal.setPaneActive(isActive)
     }
 
     private func emitTermination(exitCode: Int32?) {
@@ -147,8 +173,142 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
 }
 
 @MainActor
-private final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
+final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
     var onOpenWebURL: ((URL) -> Void)?
+    var onContentChanged: (() -> Void)?
+    private let contentChangeCoalescer = TerminalContentChangeCoalescer()
+    // AppKit owns local monitor tokens and requires the opaque value again for removal.
+    // The view is main-actor isolated, while Swift 6 treats deinit as nonisolated.
+    nonisolated(unsafe) private var keyEventMonitor: Any?
+    private var shouldFocusWhenAttachedToWindow = false
+    private var paneIsActive = true
+    private var activeCaretColor: NSColor?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        installKeyEventMonitor()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        installKeyEventMonitor()
+    }
+
+    deinit {
+        if let keyEventMonitor {
+            NSEvent.removeMonitor(keyEventMonitor)
+        }
+    }
+
+    override func dataReceived(slice: ArraySlice<UInt8>) {
+        super.dataReceived(slice: slice)
+        contentChangeCoalescer.notify { [weak self] in
+            self?.onContentChanged?()
+        }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil, shouldFocusWhenAttachedToWindow else { return }
+        focusWhenPossible()
+    }
+
+    func focusWhenPossible() {
+        guard let window else {
+            shouldFocusWhenAttachedToWindow = true
+            return
+        }
+        shouldFocusWhenAttachedToWindow = false
+        window.makeFirstResponder(self)
+    }
+
+    func setPaneActive(_ isActive: Bool) {
+        guard paneIsActive != isActive else { return }
+        paneIsActive = isActive
+        if isActive {
+            caretColor = activeCaretColor ?? .selectedControlColor
+            activeCaretColor = nil
+        } else {
+            activeCaretColor = caretColor
+            caretColor = .clear
+        }
+        needsDisplay = true
+    }
+
+    func apply(runtimeConfiguration: TerminalRuntimeConfiguration) {
+        font = MyTermTerminalFontResolver.resolve(
+            named: runtimeConfiguration.fontName,
+            size: runtimeConfiguration.fontSize
+        )
+        optionAsMetaKey = runtimeConfiguration.optionAsMeta
+        changeScrollback(runtimeConfiguration.scrollbackLines)
+        getTerminal().setCursorStyle(runtimeConfiguration.appearance.cursor.swiftTermStyle)
+        nativeForegroundColor = runtimeConfiguration.appearance.foreground?.nsColor ?? .textColor
+        nativeBackgroundColor = runtimeConfiguration.appearance.background?.nsColor ?? .textBackgroundColor
+        needsDisplay = true
+    }
+
+    func renderedText(maximumCharacters: Int) -> String {
+        let terminal = getTerminal()
+
+        // SwiftTerm does not expose the inactive normal buffer line-by-line. Keep
+        // the existing behavior while an alternate-screen app is active, but use
+        // a bounded tail walk for the normal buffer so snapshotting does not copy
+        // and decode the full scrollback on every content change.
+        guard !terminal.isCurrentBufferAlternate else {
+            let data = terminal.getBufferAsData(kind: .normal)
+            let text = String(data: data, encoding: .utf8) ?? ""
+            return TerminalOutputSnapshot.plainText(from: text, maximumCharacters: maximumCharacters)
+        }
+
+        let buffer = terminal.buffer
+        let firstRow = buffer.totalLinesTrimmed
+        var rowAfterLast = firstRow + buffer.yDisp + terminal.rows
+        while terminal.getScrollInvariantLine(row: rowAfterLast) != nil {
+            rowAfterLast += 1
+        }
+
+        var lines: [String] = []
+        var collectedCharacters = 0
+        var row = rowAfterLast - 1
+        while row >= firstRow, collectedCharacters < maximumCharacters,
+              let line = terminal.getScrollInvariantLine(row: row) {
+            let text = line.translateToString(trimRight: true)
+            lines.append(text)
+            collectedCharacters += text.count + 1
+            row -= 1
+        }
+
+        let text = lines.reversed().joined(separator: "\n") + (lines.isEmpty ? "" : "\n")
+        return TerminalOutputSnapshot.plainText(from: text, maximumCharacters: maximumCharacters)
+    }
+
+    func presentPersistedOutput(_ output: String, maximumCharacters: Int = 8_192) {
+        let prelude = TerminalOutputSnapshot.plainText(from: output, maximumCharacters: maximumCharacters)
+        guard !prelude.isEmpty else { return }
+        feed(text: prelude)
+    }
+
+    private func installKeyEventMonitor() {
+        keyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, self.window?.firstResponder === self else { return event }
+            let input = TerminalInputEvent(
+                keyCode: event.keyCode,
+                charactersIgnoringModifiers: event.charactersIgnoringModifiers ?? "",
+                modifiers: TerminalInputModifiers(event.modifierFlags)
+            )
+            let shouldInspectPasteboard = input.keyCode == 9 && input.modifiers.meaningful == [.command]
+            guard let sequence = TerminalInputTranslator.sequence(
+                for: input,
+                kittyKeyboardEnabled: !self.getTerminal().keyboardEnhancementFlags.isEmpty,
+                clipboardContainsImage: shouldInspectPasteboard && TerminalPasteboard.containsImage(in: .general)
+            ) else {
+                return event
+            }
+            self.send(sequence)
+            return nil
+        }
+    }
 
     override func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
         guard let url = TerminalLinkRouter.webURL(from: link) else {
@@ -156,6 +316,70 @@ private final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
             return
         }
         onOpenWebURL?(url)
+    }
+}
+
+enum TerminalPasteboard {
+    static func containsImage(in pasteboard: NSPasteboard) -> Bool {
+        if pasteboard.availableType(from: [.png, .tiff]) != nil {
+            return true
+        }
+
+        let options: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
+        guard let fileURLs = pasteboard.readObjects(forClasses: [NSURL.self], options: options) as? [URL] else {
+            return false
+        }
+        return fileURLs.contains { url in
+            guard let type = UTType(filenameExtension: url.pathExtension) else { return false }
+            return type.conforms(to: .image)
+        }
+    }
+}
+
+private extension TerminalInputModifiers {
+    init(_ flags: NSEvent.ModifierFlags) {
+        var modifiers: TerminalInputModifiers = []
+        if flags.contains(.shift) { modifiers.insert(.shift) }
+        if flags.contains(.control) { modifiers.insert(.control) }
+        if flags.contains(.option) { modifiers.insert(.option) }
+        if flags.contains(.command) { modifiers.insert(.command) }
+        if flags.contains(.capsLock) { modifiers.insert(.capsLock) }
+        if flags.contains(.numericPad) { modifiers.insert(.numericPad) }
+        self = modifiers
+    }
+}
+
+private enum MyTermTerminalFontResolver {
+    static func resolve(named name: String?, size: Double) -> NSFont {
+        let resolvedSize = max(CGFloat(size), 1)
+        if let name, let font = NSFont(name: name, size: resolvedSize) {
+            return font
+        }
+        return NSFont.monospacedSystemFont(ofSize: resolvedSize, weight: .regular)
+    }
+}
+
+private extension TerminalColor {
+    var nsColor: NSColor {
+        NSColor(
+            red: CGFloat(red) / CGFloat(UInt16.max),
+            green: CGFloat(green) / CGFloat(UInt16.max),
+            blue: CGFloat(blue) / CGFloat(UInt16.max),
+            alpha: 1
+        )
+    }
+}
+
+private extension TerminalCursorConfiguration {
+    var swiftTermStyle: CursorStyle {
+        switch (shape, blinks) {
+        case (.block, true): .blinkBlock
+        case (.block, false): .steadyBlock
+        case (.underline, true): .blinkUnderline
+        case (.underline, false): .steadyUnderline
+        case (.bar, true): .blinkBar
+        case (.bar, false): .steadyBar
+        }
     }
 }
 

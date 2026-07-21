@@ -5,7 +5,7 @@ CHANNEL="development"
 MODE="run"
 
 usage() {
-  echo "usage: $0 [--prod] [--bundle|--debug|--logs|--telemetry|--verify]" >&2
+  echo "usage: $0 [--prod] [--bundle|--debug|--logs|--telemetry|--verify|--print-plan]" >&2
 }
 
 while (($#)); do
@@ -13,7 +13,7 @@ while (($#)); do
     --prod)
       CHANNEL="production"
       ;;
-    --bundle|--debug|--logs|--telemetry|--verify)
+    --bundle|--debug|--logs|--telemetry|--verify|--print-plan)
       if [[ "$MODE" != "run" ]]; then
         usage
         exit 2
@@ -43,10 +43,12 @@ ENTITLEMENTS_PATH="${MYTERM_ENTITLEMENTS_PATH:-$ROOT_DIR/Packaging/MyTerm.entitl
 if [[ "$CHANNEL" == "production" ]]; then
   APP_NAME="myterm"
   BUNDLE_ID="com.gordonbeeming.myterm"
+  BUILD_CONFIGURATION="release"
   BUILD_ARGS=(--configuration release -Xswiftc -DMYTERM_PRODUCTION)
 else
   APP_NAME="myterm-dev"
   BUNDLE_ID="com.gordonbeeming.myterm.dev"
+  BUILD_CONFIGURATION="debug"
   BUILD_ARGS=(--configuration debug)
 fi
 
@@ -56,6 +58,8 @@ APP_MACOS="$APP_CONTENTS/MacOS"
 APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$APP_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
+APPLICATION_SUPPORT_DIRECTORY="${MYTERM_APPLICATION_SUPPORT_DIRECTORY:-$HOME/Library/Application Support}"
+WORKSPACE_STATE_PATH="$APPLICATION_SUPPORT_DIRECTORY/$APP_NAME/workspace-state.json"
 
 if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
   echo "MYTERM_VERSION must use major.minor or major.minor.patch format" >&2
@@ -70,6 +74,17 @@ fi
 if [[ "$DISTRIBUTION" != "0" && "$DISTRIBUTION" != "1" ]]; then
   echo "MYTERM_DISTRIBUTION must be 0 or 1" >&2
   exit 2
+fi
+
+if [[ "$MODE" == "--print-plan" ]]; then
+  printf 'channel=%s\n' "$CHANNEL"
+  printf 'app_name=%s\n' "$APP_NAME"
+  printf 'bundle_id=%s\n' "$BUNDLE_ID"
+  printf 'app_bundle=%s\n' "$APP_BUNDLE"
+  printf 'workspace_state_path=%s\n' "$WORKSPACE_STATE_PATH"
+  printf 'process_kill_target=%s\n' "$APP_NAME"
+  printf 'build_configuration=%s\n' "$BUILD_CONFIGURATION"
+  exit 0
 fi
 
 if [[ "$MODE" != "--bundle" ]]; then

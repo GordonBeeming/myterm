@@ -21,6 +21,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let persisted = try JSONDecoder().decode(WorkspaceStoreSnapshot.self, from: Data(contentsOf: url))
         XCTAssertEqual(persisted.version, WorkspaceStoreSnapshot.currentVersion)
+        XCTAssertEqual(store.globalSettings.cursorShape, .beam)
         XCTAssertEqual(persisted, store.snapshot)
     }
 
@@ -292,5 +293,155 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(store.workspaces[0].tabs.count, 1)
         XCTAssertEqual(store.workspaces[0].selectedTabID, store.workspaces[0].tabs[0].id)
         XCTAssertEqual(store.selectedWorkspaceID, store.workspaces[0].id)
+    }
+
+    func testSettingsOverridesClearOnlyTheRequestedFieldAndPersist() throws {
+        let url = temporaryURL()
+        let store = try WorkspaceStore(persistenceURL: url)
+        let workspaceID = store.selectedWorkspaceID
+        try store.updateGlobalSettings { $0.fontSize = 13 }
+        try store.updateWorkspaceSettings(workspaceID) { $0.fontSize = 18; $0.optionAsMeta = false }
+        try store.clearWorkspaceSettingsOverride(workspaceID, \.fontSize)
+
+        XCTAssertEqual(try store.resolvedSettings(for: workspaceID).fontSize, 13)
+        XCTAssertFalse(try store.resolvedSettings(for: workspaceID).optionAsMeta)
+        XCTAssertEqual(try WorkspaceStore(persistenceURL: url).resolvedSettings(for: workspaceID).fontSize, 13)
+    }
+
+    func testFolderAndWorkspaceSettingsOverrideGlobalSettingsInOrder() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let folderID = try store.createFolder(title: "Work")
+        let workspaceID = try store.createWorkspace(title: "API", folderID: folderID)
+        try store.updateGlobalSettings { $0.fontSize = 11; $0.optionAsMeta = true }
+        try store.updateFolderSettings(folderID) { $0.fontSize = 14; $0.optionAsMeta = false }
+        try store.updateWorkspaceSettings(workspaceID) { $0.fontSize = 18 }
+
+        let resolved = try store.resolvedSettings(for: workspaceID)
+        XCTAssertEqual(resolved.fontSize, 18)
+        XCTAssertFalse(resolved.optionAsMeta)
+    }
+
+    func testMovingWorkspaceBetweenFoldersChangesResolvedOverrides() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let firstFolderID = try store.createFolder(title: "First")
+        let secondFolderID = try store.createFolder(title: "Second")
+        let workspaceID = try store.createWorkspace(title: "Workspace", folderID: firstFolderID)
+        try store.updateFolderSettings(firstFolderID) { $0.compactSidebar = false }
+        try store.updateFolderSettings(secondFolderID) { $0.compactSidebar = true }
+
+        XCTAssertFalse(try store.resolvedSettings(for: workspaceID).compactSidebar)
+        try store.moveWorkspace(workspaceID, to: secondFolderID)
+        XCTAssertTrue(try store.resolvedSettings(for: workspaceID).compactSidebar)
+    }
+
+    func testInvalidGlobalSettingsValuesAreClampedOrDefaulted() throws {
+        let workspaceID = UUID().uuidString
+        let json = """
+        {"version":1,"globalSettings":{"fontSize":999,"scrollbackLines":-1,"terminalTheme":"invalid","terminalAppearance":"invalid","shell":{"type":"custom","path":"   "}},"workspaces":[{"id":"\(workspaceID)","title":"Legacy","tabs":[]}],"selectedWorkspaceID":"\(workspaceID)"}
+        """
+
+        let snapshot = try JSONDecoder().decode(WorkspaceStoreSnapshot.self, from: Data(json.utf8))
+        XCTAssertEqual(snapshot.globalSettings.fontSize, TerminalPreferences.fontSizeRange.upperBound)
+        XCTAssertEqual(snapshot.globalSettings.scrollbackLines, TerminalPreferences.scrollbackLinesRange.lowerBound)
+        XCTAssertEqual(snapshot.globalSettings.terminalTheme, .system)
+        XCTAssertEqual(snapshot.globalSettings.terminalAppearance, .system)
+        XCTAssertEqual(snapshot.globalSettings.shell, .loginShell)
+    }
+
+    func testLegacySnapshotDefaultsSettingsOverridesTitlesAndRecentText() throws {
+        let url = temporaryURL()
+        let workspaceID = UUID().uuidString
+        let tabID = UUID().uuidString
+        let sessionID = UUID().uuidString
+        let paneID = UUID().uuidString
+        let json = """
+        {"version":1,"workspaces":[{"id":"\(workspaceID)","title":"Legacy","tabs":[{"id":"\(tabID)","content":{"type":"terminal","splitTree":{"type":"terminal","session":{"id":"\(sessionID)","paneID":"\(paneID)"}}},"focusedTerminalSessionID":"\(sessionID)"}],"selectedTabID":"\(tabID)"}],"selectedWorkspaceID":"\(workspaceID)"}
+        """
+        try Data(json.utf8).write(to: url)
+
+        let store = try WorkspaceStore(persistenceURL: url)
+        XCTAssertEqual(store.globalSettings, .default)
+        XCTAssertNil(store.selectedWorkspace.settingsOverrides)
+        XCTAssertNil(store.selectedWorkspace.selectedTab?.customTitle)
+        XCTAssertNil(store.selectedWorkspace.selectedTab?.terminalTree?.terminalSessions.first?.recentText)
+    }
+
+    func testClosingFinalTabRemovesWorkspaceAndReturnsReplacement() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let workspaceID = store.selectedWorkspaceID
+        let tabID = try XCTUnwrap(store.selectedWorkspace.selectedTabID)
+        let change = try store.closeTab(workspaceID: workspaceID, tabID: tabID)
+
+        XCTAssertEqual(change.removedWorkspace?.id, workspaceID)
+        XCTAssertNotNil(change.replacementWorkspace)
+        XCTAssertEqual(store.workspaces.count, 1)
+        XCTAssertEqual(store.selectedWorkspaceID, change.selectedWorkspaceID)
+    }
+
+    func testClosingFinalTerminalPaneRemovesWorkspaceAndCreatesReplacement() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let workspaceID = store.selectedWorkspaceID
+        let tabID = try XCTUnwrap(store.selectedWorkspace.selectedTabID)
+        let sessionID = try XCTUnwrap(store.selectedWorkspace.selectedTab?.focusedTerminalSessionID)
+
+        let change = try store.closeTerminalPane(
+            workspaceID: workspaceID,
+            tabID: tabID,
+            sessionID: sessionID
+        )
+
+        XCTAssertEqual(change.removedWorkspace?.id, workspaceID)
+        XCTAssertNotNil(change.replacementWorkspace)
+        XCTAssertEqual(store.workspaces.count, 1)
+    }
+
+    func testClosingLastTabFromOneOfSeveralWorkspacesRepairsSelectionAndPersists() throws {
+        let url = temporaryURL()
+        let firstTab = Tab.browser(url: try XCTUnwrap(URL(string: "https://first.example")))
+        let secondTab = Tab.browser(url: try XCTUnwrap(URL(string: "https://second.example")))
+        let firstWorkspace = Workspace(title: "First", tabs: [firstTab], selectedTabID: firstTab.id)
+        let secondWorkspace = Workspace(title: "Second", tabs: [secondTab], selectedTabID: secondTab.id)
+        let snapshot = WorkspaceStoreSnapshot(
+            workspaces: [firstWorkspace, secondWorkspace],
+            selectedWorkspaceID: secondWorkspace.id
+        )
+        try JSONEncoder().encode(snapshot).write(to: url)
+        let store = try WorkspaceStore(persistenceURL: url)
+        let firstWorkspaceID = firstWorkspace.id
+        let secondWorkspaceID = secondWorkspace.id
+        let secondTabID = secondTab.id
+
+        let change = try store.closeTab(workspaceID: secondWorkspaceID, tabID: secondTabID)
+        XCTAssertEqual(change.removedWorkspace?.id, secondWorkspaceID)
+        XCTAssertNil(change.replacementWorkspace)
+        XCTAssertEqual(store.selectedWorkspaceID, firstWorkspaceID)
+
+        let restored = try WorkspaceStore(persistenceURL: url)
+        XCTAssertEqual(restored.workspaces.map(\.id), [firstWorkspaceID])
+        XCTAssertEqual(restored.selectedWorkspaceID, firstWorkspaceID)
+    }
+
+    func testTabRenameAndRecentTextPersist() throws {
+        let url = temporaryURL()
+        let store = try WorkspaceStore(persistenceURL: url)
+        let workspaceID = store.selectedWorkspaceID
+        let tabID = try XCTUnwrap(store.selectedWorkspace.selectedTabID)
+        let sessionID = try XCTUnwrap(store.selectedWorkspace.selectedTab?.focusedTerminalSessionID)
+        try store.renameTab(workspaceID: workspaceID, tabID: tabID, customTitle: "Build")
+        try store.updateTerminalRecentText(workspaceID: workspaceID, tabID: tabID, sessionID: sessionID, recentText: String(repeating: "x", count: 10_000))
+
+        let restored = try WorkspaceStore(persistenceURL: url)
+        XCTAssertEqual(restored.selectedWorkspace.selectedTab?.customTitle, "Build")
+        XCTAssertLessThanOrEqual(restored.selectedWorkspace.selectedTab?.terminalTree?.terminalSessions.first?.recentText?.utf8.count ?? 0, TerminalSession.maximumRecentTextBytes)
+    }
+
+    func testWhitespaceTabRenameClearsCustomTitle() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let workspaceID = store.selectedWorkspaceID
+        let tabID = try XCTUnwrap(store.selectedWorkspace.selectedTabID)
+        try store.renameTab(workspaceID: workspaceID, tabID: tabID, customTitle: "Build")
+        try store.renameTab(workspaceID: workspaceID, tabID: tabID, customTitle: "  \n ")
+
+        XCTAssertNil(store.selectedWorkspace.selectedTab?.customTitle)
     }
 }

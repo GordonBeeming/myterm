@@ -1,24 +1,30 @@
 import Foundation
 
 public struct TerminalSession: Codable, Equatable, Hashable, Sendable, Identifiable {
+    public static let maximumRecentTextLines = 50
+    public static let maximumRecentTextBytes = 8 * 1024
     public let id: TerminalSessionID
     public let paneID: PaneID
     public var workingDirectory: URL?
+    public var recentText: String?
 
     public init(
         id: TerminalSessionID = TerminalSessionID(),
         paneID: PaneID = PaneID(),
-        workingDirectory: URL? = nil
+        workingDirectory: URL? = nil,
+        recentText: String? = nil
     ) {
         self.id = id
         self.paneID = paneID
         self.workingDirectory = workingDirectory
+        self.recentText = Self.boundedRecentText(recentText)
     }
 
     private enum CodingKeys: String, CodingKey {
         case id
         case paneID
         case workingDirectory
+        case recentText
     }
 
     public init(from decoder: Decoder) throws {
@@ -26,6 +32,14 @@ public struct TerminalSession: Codable, Equatable, Hashable, Sendable, Identifia
         id = try container.decode(TerminalSessionID.self, forKey: .id)
         paneID = try container.decodeIfPresent(PaneID.self, forKey: .paneID) ?? PaneID()
         workingDirectory = try container.decodeIfPresent(URL.self, forKey: .workingDirectory)
+        recentText = Self.boundedRecentText(try? container.decodeIfPresent(String.self, forKey: .recentText))
+    }
+
+    public static func boundedRecentText(_ value: String?) -> String? {
+        guard let value, !value.isEmpty else { return nil }
+        var bounded = value.split(separator: "\n", omittingEmptySubsequences: false).suffix(maximumRecentTextLines).joined(separator: "\n")
+        while bounded.lengthOfBytes(using: .utf8) > maximumRecentTextBytes, !bounded.isEmpty { bounded.removeFirst() }
+        return bounded.isEmpty ? nil : bounded
     }
 }
 
@@ -169,6 +183,16 @@ public enum SplitNode: Codable, Equatable, Hashable, Sendable {
         terminalSessions.map(\.paneID)
     }
 
+    public var stableID: SplitNodeID {
+        switch self {
+        case .terminal(let session): return SplitNodeID(rawValue: session.paneID.rawValue)
+        case .horizontal(let children), .vertical(let children):
+            return children.first?.stableID ?? SplitNodeID()
+        }
+    }
+
+    public var splitLayouts: [SplitPaneLayout] { paneLayouts().map(SplitPaneLayout.init) }
+
     public func contains(_ sessionID: TerminalSessionID) -> Bool {
         terminalSessionIDs.contains(sessionID)
     }
@@ -287,6 +311,33 @@ public enum SplitNode: Codable, Equatable, Hashable, Sendable {
     }
 
     @discardableResult
+    public mutating func updateRecentText(_ recentText: String?, for sessionID: TerminalSessionID) -> Bool {
+        switch self {
+        case .terminal(var session):
+            guard session.id == sessionID else { return false }
+            session.recentText = TerminalSession.boundedRecentText(recentText)
+            self = .terminal(session)
+            return true
+        case .horizontal(var children):
+            for index in children.indices {
+                if children[index].updateRecentText(recentText, for: sessionID) {
+                    self = .horizontal(children)
+                    return true
+                }
+            }
+            return false
+        case .vertical(var children):
+            for index in children.indices {
+                if children[index].updateRecentText(recentText, for: sessionID) {
+                    self = .vertical(children)
+                    return true
+                }
+            }
+            return false
+        }
+    }
+
+    @discardableResult
     public mutating func updateWorkingDirectory(
         _ workingDirectory: URL?,
         for paneID: PaneID
@@ -393,7 +444,7 @@ public enum SplitNode: Codable, Equatable, Hashable, Sendable {
     private func paneLayouts(minX: Double, minY: Double, width: Double, height: Double) -> [PaneLayout] {
         switch self {
         case .terminal(let session):
-            return [PaneLayout(sessionID: session.id, minX: minX, minY: minY, width: width, height: height)]
+            return [PaneLayout(sessionID: session.id, paneID: session.paneID, minX: minX, minY: minY, width: width, height: height)]
         case .horizontal(let children):
             guard !children.isEmpty else { return [] }
             let childWidth = width / Double(children.count)
@@ -420,10 +471,31 @@ public enum SplitNode: Codable, Equatable, Hashable, Sendable {
     }
 }
 
-private struct PaneLayout {
+public struct SplitPaneLayout: Equatable, Hashable, Sendable, Identifiable {
+    public let sessionID: TerminalSessionID
+    public let paneID: PaneID
+    public let nodeID: SplitNodeID
+    public let minX: Double
+    public let minY: Double
+    public let width: Double
+    public let height: Double
+    public var id: PaneID { paneID }
+    public var maxX: Double { minX + width }
+    public var maxY: Double { minY + height }
+
+    fileprivate init(_ layout: PaneLayout) {
+        sessionID = layout.sessionID
+        paneID = layout.paneID
+        nodeID = SplitNodeID(rawValue: layout.paneID.rawValue)
+        minX = layout.minX; minY = layout.minY; width = layout.width; height = layout.height
+    }
+}
+
+fileprivate struct PaneLayout {
     static let epsilon = 0.000_001
 
     let sessionID: TerminalSessionID
+    let paneID: PaneID
     let minX: Double
     let minY: Double
     let width: Double
@@ -488,15 +560,18 @@ public struct Tab: Codable, Equatable, Hashable, Sendable, Identifiable {
     public let id: TabID
     public var content: TabContent
     public var focusedTerminalSessionID: TerminalSessionID?
+    public var customTitle: String?
 
     public init(
         id: TabID = TabID(),
         content: TabContent,
-        focusedTerminalSessionID: TerminalSessionID? = nil
+        focusedTerminalSessionID: TerminalSessionID? = nil,
+        customTitle: String? = nil
     ) {
         self.id = id
         self.content = content
         self.focusedTerminalSessionID = focusedTerminalSessionID
+        self.customTitle = customTitle
         repair()
     }
 
@@ -559,6 +634,7 @@ public struct Tab: Codable, Equatable, Hashable, Sendable, Identifiable {
         case id
         case content
         case focusedTerminalSessionID
+        case customTitle
     }
 
     public init(from decoder: Decoder) throws {
@@ -573,6 +649,7 @@ public struct Tab: Codable, Equatable, Hashable, Sendable, Identifiable {
         } catch {
             focusedTerminalSessionID = nil
         }
+        customTitle = try? container.decodeIfPresent(String.self, forKey: .customTitle)
         repair()
     }
 }
@@ -595,17 +672,20 @@ public struct WorkspaceFolder: Codable, Equatable, Hashable, Sendable, Identifia
     public var title: String
     public var color: WorkspaceFolderColor
     public var isExpanded: Bool
+    public var settingsOverrides: TerminalPreferencesOverrides?
 
     public init(
         id: WorkspaceFolderID = WorkspaceFolderID(),
         title: String,
         color: WorkspaceFolderColor = .blue,
-        isExpanded: Bool = true
+        isExpanded: Bool = true,
+        settingsOverrides: TerminalPreferencesOverrides? = nil
     ) {
         self.id = id
         self.title = title
         self.color = color
         self.isExpanded = isExpanded
+        self.settingsOverrides = settingsOverrides
     }
 }
 
@@ -616,6 +696,7 @@ public struct Workspace: Codable, Equatable, Hashable, Sendable, Identifiable {
     public var selectedTabID: TabID?
     public var folderID: WorkspaceFolderID?
     public var isPinned: Bool
+    public var settingsOverrides: TerminalPreferencesOverrides?
 
     public init(
         id: WorkspaceID = WorkspaceID(),
@@ -623,7 +704,8 @@ public struct Workspace: Codable, Equatable, Hashable, Sendable, Identifiable {
         tabs: [Tab] = [],
         selectedTabID: TabID? = nil,
         folderID: WorkspaceFolderID? = nil,
-        isPinned: Bool = false
+        isPinned: Bool = false,
+        settingsOverrides: TerminalPreferencesOverrides? = nil
     ) {
         self.id = id
         self.title = title
@@ -631,6 +713,7 @@ public struct Workspace: Codable, Equatable, Hashable, Sendable, Identifiable {
         self.selectedTabID = selectedTabID
         self.folderID = folderID
         self.isPinned = isPinned
+        self.settingsOverrides = settingsOverrides
         repair()
     }
 
@@ -638,7 +721,8 @@ public struct Workspace: Codable, Equatable, Hashable, Sendable, Identifiable {
         id: WorkspaceID = WorkspaceID(),
         title: String,
         folderID: WorkspaceFolderID? = nil,
-        isPinned: Bool = false
+        isPinned: Bool = false,
+        settingsOverrides: TerminalPreferencesOverrides? = nil
     ) {
         let tab = Tab.terminal()
         self.init(
@@ -647,7 +731,8 @@ public struct Workspace: Codable, Equatable, Hashable, Sendable, Identifiable {
             tabs: [tab],
             selectedTabID: tab.id,
             folderID: folderID,
-            isPinned: isPinned
+            isPinned: isPinned,
+            settingsOverrides: settingsOverrides
         )
     }
 
@@ -678,6 +763,7 @@ public struct Workspace: Codable, Equatable, Hashable, Sendable, Identifiable {
         case selectedTabID
         case folderID
         case isPinned
+        case settingsOverrides
     }
 
     public init(from decoder: Decoder) throws {
@@ -692,6 +778,7 @@ public struct Workspace: Codable, Equatable, Hashable, Sendable, Identifiable {
         }
         folderID = try? container.decodeIfPresent(WorkspaceFolderID.self, forKey: .folderID)
         isPinned = (try? container.decodeIfPresent(Bool.self, forKey: .isPinned)) ?? false
+        settingsOverrides = try? container.decodeIfPresent(TerminalPreferencesOverrides.self, forKey: .settingsOverrides)
         repair()
     }
 }
