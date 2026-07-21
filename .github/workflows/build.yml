@@ -1,0 +1,206 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    name: Build & Test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Print Swift version
+        run: swift --version
+
+      - name: Build all targets
+        run: swift build --build-tests
+
+      - name: Run tests
+        run: swift test --parallel
+
+  release:
+    needs: build-and-test
+    if: github.event_name == 'release'
+    runs-on: macos-15
+    name: Sign, Notarize & Release
+    environment: prod
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set release version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            echo "Release tag must use vMAJOR.MINOR or vMAJOR.MINOR.PATCH, like v0.1.0; got ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+          echo "VERSION=${VERSION}" >> "${GITHUB_ENV}"
+
+      - name: Import signing certificate
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE }}
+          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_PASSWORD }}
+        run: |
+          test -n "${CERTIFICATE_BASE64}" || { echo "DEVELOPER_ID_CERTIFICATE is not set in the prod environment." >&2; exit 1; }
+          test -n "${CERTIFICATE_PASSWORD}" || { echo "DEVELOPER_ID_PASSWORD is not set in the prod environment." >&2; exit 1; }
+
+          echo "${CERTIFICATE_BASE64}" | base64 --decode > certificate.p12
+
+          KEYCHAIN_PATH="${RUNNER_TEMP}/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 16)"
+
+          security create-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
+          security set-keychain-settings -lut 21600 "${KEYCHAIN_PATH}"
+          security default-keychain -s "${KEYCHAIN_PATH}"
+          security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
+
+          security import certificate.p12 \
+            -k "${KEYCHAIN_PATH}" \
+            -P "${CERTIFICATE_PASSWORD}" \
+            -T /usr/bin/codesign
+
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s -k "${KEYCHAIN_PASSWORD}" \
+            "${KEYCHAIN_PATH}"
+
+          rm certificate.p12
+
+          IDENTITY_HASH="$(security find-identity -v -p codesigning "${KEYCHAIN_PATH}" | awk '/Developer ID Application/{print $2; exit}')"
+          if [[ -z "${IDENTITY_HASH}" ]]; then
+            echo "No Developer ID Application identity found in the imported certificate." >&2
+            exit 1
+          fi
+          echo "CODESIGN_IDENTITY=${IDENTITY_HASH}" >> "${GITHUB_ENV}"
+
+      - name: Build signed app bundle
+        run: |
+          make bundle \
+            VERSION="${VERSION}" \
+            BUILD="${{ github.run_number }}" \
+            DISTRIBUTION=1 \
+            CODESIGN_IDENTITY="${CODESIGN_IDENTITY}"
+
+      - name: Verify application signature
+        run: |
+          codesign --verify --deep --strict --verbose=2 dist/myterm.app
+          codesign -dvvv --entitlements :- dist/myterm.app
+          plutil -lint dist/myterm.app/Contents/Info.plist
+
+      - name: Notarize application
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          test -n "${APPLE_ID}" || { echo "APPLE_ID is not set in the prod environment." >&2; exit 1; }
+          test -n "${APPLE_TEAM_ID}" || { echo "APPLE_TEAM_ID is not set in the prod environment." >&2; exit 1; }
+          test -n "${APPLE_APP_PASSWORD}" || { echo "APPLE_APP_PASSWORD is not set in the prod environment." >&2; exit 1; }
+
+          xcrun notarytool store-credentials "notarytool-profile" \
+            --apple-id "${APPLE_ID}" \
+            --team-id "${APPLE_TEAM_ID}" \
+            --password "${APPLE_APP_PASSWORD}"
+
+          ditto -c -k --keepParent dist/myterm.app dist/myterm-notarize.zip
+
+          xcrun notarytool submit dist/myterm-notarize.zip \
+            --keychain-profile "notarytool-profile" \
+            --wait
+
+          rm dist/myterm-notarize.zip
+
+      - name: Staple application ticket
+        run: |
+          xcrun stapler staple dist/myterm.app
+          xcrun stapler validate dist/myterm.app
+
+      - name: Create DMG
+        run: |
+          hdiutil create \
+            -volname "MyTerm" \
+            -srcfolder dist/myterm.app \
+            -ov \
+            -format UDZO \
+            "dist/myterm-${VERSION}-aarch64.dmg"
+
+      - name: Sign, notarize, and validate DMG
+        run: |
+          test -n "${CODESIGN_IDENTITY}" || { echo "CODESIGN_IDENTITY is not set." >&2; exit 1; }
+
+          DMG_PATH="dist/myterm-${VERSION}-aarch64.dmg"
+          codesign --force --sign "${CODESIGN_IDENTITY}" \
+            --identifier com.gordonbeeming.myterm.dmg \
+            --timestamp \
+            "${DMG_PATH}"
+          codesign --verify --strict --verbose=2 "${DMG_PATH}"
+
+          xcrun notarytool submit "${DMG_PATH}" \
+            --keychain-profile "notarytool-profile" \
+            --wait
+
+          xcrun stapler staple "${DMG_PATH}"
+          xcrun stapler validate "${DMG_PATH}"
+          codesign --verify --strict --verbose=2 "${DMG_PATH}"
+          hdiutil verify "${DMG_PATH}"
+          spctl --assess --type open --context context:primary-signature --verbose=2 "${DMG_PATH}"
+
+      - name: Upload release asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${GITHUB_REF_NAME}" \
+            "dist/myterm-${VERSION}-aarch64.dmg" \
+            --clobber
+
+      - name: Update Homebrew tap
+        env:
+          HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+          COMMIT_SIGNING_KEY: ${{ secrets.COMMIT_SIGNING_KEY }}
+        run: |
+          test -n "${HOMEBREW_TAP_DEPLOY_KEY}" || { echo "HOMEBREW_TAP_DEPLOY_KEY is not set in the prod environment." >&2; exit 1; }
+          test -n "${COMMIT_SIGNING_KEY}" || { echo "COMMIT_SIGNING_KEY is not set in the prod environment." >&2; exit 1; }
+
+          DMG_PATH="dist/myterm-${VERSION}-aarch64.dmg"
+          DMG_SHA256="$(shasum -a 256 "${DMG_PATH}" | awk '{print $1}')"
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "${HOMEBREW_TAP_DEPLOY_KEY}" > ~/.ssh/homebrew_tap_key
+          printf '%s\n' "${COMMIT_SIGNING_KEY}" > ~/.ssh/commit_signing_key
+          chmod 600 ~/.ssh/homebrew_tap_key ~/.ssh/commit_signing_key
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/homebrew_tap_key -o IdentitiesOnly=yes"
+
+          git clone git@github.com:GordonBeeming/homebrew-tap.git /tmp/homebrew-tap
+          bash script/render_homebrew_cask.sh \
+            "${VERSION}" \
+            "${DMG_SHA256}" \
+            /tmp/homebrew-tap/Casks/myterm.rb
+
+          cd /tmp/homebrew-tap
+          git config user.name "myterm-release[bot]"
+          git config user.email "myterm-release[bot]@users.noreply.github.com"
+          git config gpg.format ssh
+          git config user.signingkey ~/.ssh/commit_signing_key
+          git config commit.gpgsign true
+          git add Casks/myterm.rb
+          if git diff --cached --quiet; then
+            echo "No Homebrew cask changes to commit"
+          else
+            git commit -S -m "Update myterm to ${VERSION}"
+          fi
+          git push
+
+          rm -f ~/.ssh/homebrew_tap_key ~/.ssh/commit_signing_key

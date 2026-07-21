@@ -17,7 +17,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
     public var onEvent: (@MainActor (TerminalSessionEvent) -> Void)?
 
     private let configuration: TerminalSessionConfiguration
-    private let terminal: LocalProcessTerminalView
+    private let terminal: MyTermLocalProcessTerminalView
     private var workingDirectoryPoller: ProcessWorkingDirectoryPoller?
     private var lastReportedWorkingDirectory: URL?
     private var didTerminate = false
@@ -40,10 +40,15 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
 
         self.configuration = configuration
         lastReportedWorkingDirectory = configuration.workingDirectory
-        terminal = LocalProcessTerminalView(frame: .zero)
+        terminal = MyTermLocalProcessTerminalView(frame: .zero)
         super.init()
 
         terminal.processDelegate = self
+        terminal.onOpenWebURL = { [weak self] url in
+            Task { @MainActor [weak self] in
+                self?.onEvent?(.openURL(url))
+            }
+        }
         terminal.autoresizingMask = [.width, .height]
     }
 
@@ -58,6 +63,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
         terminal.startProcess(
             executable: configuration.shell.path,
             args: ["-l"],
+            environment: Self.processEnvironment(overrides: configuration.environment),
             execName: "-\(configuration.shell.lastPathComponent)",
             currentDirectory: configuration.workingDirectory.path
         )
@@ -68,6 +74,9 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
             throw failure
         }
         isRunning = true
+        if let command = configuration.initialCommand, !command.isEmpty {
+            terminal.send(txt: command + "\n")
+        }
         workingDirectoryPoller = ProcessWorkingDirectoryPoller(
             processID: terminal.process.shellPid,
             provider: MacOSProcessWorkingDirectoryProvider(),
@@ -123,6 +132,30 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
     private func stopWorkingDirectoryPolling() {
         workingDirectoryPoller?.stop()
         workingDirectoryPoller = nil
+    }
+
+    private static func processEnvironment(overrides: [String: String]) -> [String] {
+        var values = [String: String]()
+        for entry in Terminal.getEnvironmentVariables(termName: "xterm-256color") {
+            let pair = entry.split(separator: "=", maxSplits: 1).map(String.init)
+            guard pair.count == 2 else { continue }
+            values[pair[0]] = pair[1]
+        }
+        values.merge(overrides) { _, override in override }
+        return values.keys.sorted().compactMap { key in values[key].map { "\(key)=\($0)" } }
+    }
+}
+
+@MainActor
+private final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
+    var onOpenWebURL: ((URL) -> Void)?
+
+    override func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
+        guard let url = TerminalLinkRouter.webURL(from: link) else {
+            super.requestOpenLink(source: source, link: link, params: params)
+            return
+        }
+        onOpenWebURL?(url)
     }
 }
 

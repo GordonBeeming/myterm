@@ -43,6 +43,84 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(store.selectedWorkspaceID, firstWorkspace)
     }
 
+    func testFoldersPinningAndWorkspaceOrderingPersist() throws {
+        let url = temporaryURL()
+        let store = try WorkspaceStore(persistenceURL: url)
+        let unfiledWorkspaceID = store.selectedWorkspaceID
+        let workFolderID = try store.createFolder(title: "Work", color: .teal)
+        let firstWorkID = try store.createWorkspace(title: "API", folderID: workFolderID)
+        let secondWorkID = try store.createWorkspace(title: "Web", folderID: workFolderID)
+
+        try store.setWorkspacePinned(secondWorkID, isPinned: true)
+        try store.moveWorkspace(secondWorkID, before: firstWorkID)
+        try store.setFolderExpanded(workFolderID, isExpanded: false)
+
+        let restored = try WorkspaceStore(persistenceURL: url)
+        XCTAssertEqual(restored.folders, [
+            WorkspaceFolder(id: workFolderID, title: "Work", color: .teal, isExpanded: false),
+        ])
+        XCTAssertEqual(restored.workspaces.map(\.id), [unfiledWorkspaceID, secondWorkID, firstWorkID])
+        XCTAssertTrue(try XCTUnwrap(restored.workspaces.first { $0.id == secondWorkID }).isPinned)
+        XCTAssertEqual(restored.workspaces.first { $0.id == firstWorkID }?.folderID, workFolderID)
+    }
+
+    func testWorkspaceOffsetMovesUseSiblingPositionsInBothDirections() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let unfiledWorkspaceID = store.selectedWorkspaceID
+        let folderID = try store.createFolder(title: "Work")
+        let firstID = try store.createWorkspace(title: "First", folderID: folderID)
+        let secondID = try store.createWorkspace(title: "Second", folderID: folderID)
+        let thirdID = try store.createWorkspace(title: "Third", folderID: folderID)
+
+        try store.moveWorkspace(firstID, offset: 1)
+        XCTAssertEqual(store.workspaces.map(\.id), [unfiledWorkspaceID, secondID, firstID, thirdID])
+
+        try store.moveWorkspace(thirdID, offset: -1)
+        XCTAssertEqual(store.workspaces.map(\.id), [unfiledWorkspaceID, secondID, thirdID, firstID])
+    }
+
+    func testRemovingFolderKeepsItsWorkspacesAndMovesThemToUnfiled() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let folderID = try store.createFolder(title: "Personal")
+        let workspaceID = try store.createWorkspace(title: "Xylem", folderID: folderID)
+
+        try store.removeFolder(folderID)
+
+        XCTAssertTrue(store.folders.isEmpty)
+        XCTAssertNil(store.workspaces.first { $0.id == workspaceID }?.folderID)
+    }
+
+    func testLegacySnapshotDefaultsNewWorkspaceOrganizationFields() throws {
+        let url = temporaryURL()
+        let workspaceID = UUID().uuidString
+        let tabID = UUID().uuidString
+        let sessionID = UUID().uuidString
+        let paneID = UUID().uuidString
+        let json = """
+        {
+          "version": 1,
+          "workspaces": [{
+            "id": "\(workspaceID)",
+            "title": "Legacy",
+            "tabs": [{
+              "id": "\(tabID)",
+              "content": {"type": "terminal", "splitTree": {"type": "terminal", "session": {"id": "\(sessionID)", "paneID": "\(paneID)"}}},
+              "focusedTerminalSessionID": "\(sessionID)"
+            }],
+            "selectedTabID": "\(tabID)"
+          }],
+          "selectedWorkspaceID": "\(workspaceID)"
+        }
+        """
+        try Data(json.utf8).write(to: url)
+
+        let store = try WorkspaceStore(persistenceURL: url)
+
+        XCTAssertTrue(store.folders.isEmpty)
+        XCTAssertNil(store.selectedWorkspace.folderID)
+        XCTAssertFalse(store.selectedWorkspace.isPinned)
+    }
+
     func testTerminalSplittingClosingAndFocusPersist() throws {
         let url = temporaryURL()
         let store = try WorkspaceStore(persistenceURL: url)

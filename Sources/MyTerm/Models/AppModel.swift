@@ -8,32 +8,55 @@ import Observation
 final class AppModel {
     let channel: MyTermChannel
     let store: WorkspaceStore
+    let browserSettings: BrowserSettingsStore
 
     private let terminalEngine: (any TerminalEngine)?
     private let startsTerminalProcesses: Bool
+    private let browserDataProfileResolver: BrowserDataProfileResolver
+    private let browserSessionFactory: any BrowserSessionFactory
+    private let browserLauncherURL: URL?
     private(set) var terminalSessions: [TerminalSessionID: any TerminalProcessSession] = [:]
     private(set) var browserControllers: [BrowserSessionID: BrowserSessionController] = [:]
     var errorDescription: String?
     var isSidebarVisible = true
+    var workspaceBeingRenamedID: WorkspaceID?
+    var workspaceRenameDraft = ""
+    var folderBeingRenamedID: WorkspaceFolderID?
+    var folderRenameDraft = ""
+    var isCreatingFolder = false
+    var newFolderDraft = ""
     private var stateVersion = 0
 
     init(
         channel: MyTermChannel = .active,
         applicationSupportDirectory: URL? = nil,
         terminalEngine: (any TerminalEngine)? = SwiftTermTerminalEngine(),
-        startsTerminalProcesses: Bool = true
+        startsTerminalProcesses: Bool = true,
+        browserSettings: BrowserSettingsStore? = nil,
+        browserSessionFactory: any BrowserSessionFactory = WebKitBrowserSessionFactory(),
+        browserLauncherURL: URL? = MyTermBrowserLauncher.executableURL()
     ) throws {
         self.channel = channel
         let supportDirectory = try applicationSupportDirectory ?? Self.applicationSupportDirectory()
         store = try WorkspaceStore(persistenceURL: channel.persistenceURL(applicationSupportDirectory: supportDirectory))
+        self.browserSettings = browserSettings ?? BrowserSettingsStore(channel: channel)
         self.terminalEngine = terminalEngine
         self.startsTerminalProcesses = startsTerminalProcesses
+        self.browserSessionFactory = browserSessionFactory
+        self.browserLauncherURL = browserLauncherURL
+        browserDataProfileResolver = BrowserDataProfileResolver(channel: channel)
+        try migrateLegacyBrowserDataProfiles()
         restoreRuntimeObjects()
     }
 
     var workspaces: [Workspace] {
         _ = stateVersion
         return store.workspaces
+    }
+
+    var folders: [WorkspaceFolder] {
+        _ = stateVersion
+        return store.folders
     }
 
     var selectedWorkspace: Workspace {
@@ -45,16 +68,26 @@ final class AppModel {
         selectedWorkspace.selectedTab
     }
 
-    static func applicationSupportDirectory(fileManager: FileManager = .default) throws -> URL {
+    static func applicationSupportDirectory(
+        fileManager: FileManager = .default,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) throws -> URL {
+        if let override = environment["MYTERM_APPLICATION_SUPPORT_DIRECTORY"], !override.isEmpty {
+            return URL(fileURLWithPath: override, isDirectory: true).standardizedFileURL
+        }
         guard let directory = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
             throw AppModelError.applicationSupportUnavailable
         }
         return directory
     }
 
-    func createWorkspace() {
+    func createWorkspace(in folderID: WorkspaceFolderID? = nil) {
         perform {
-            let workspaceID = try store.createWorkspace(title: "Workspace \(workspaces.count + 1)")
+            let targetFolderID = folderID ?? selectedWorkspace.folderID
+            let workspaceID = try store.createWorkspace(
+                title: "Workspace \(workspaces.count + 1)",
+                folderID: targetFolderID
+            )
             guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
                 throw AppModelError.workspaceUnavailable(workspaceID)
             }
@@ -64,8 +97,84 @@ final class AppModel {
 
     func renameWorkspace(_ workspaceID: WorkspaceID, title: String) {
         perform {
-            try store.renameWorkspace(workspaceID, title: title)
+            let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedTitle.isEmpty else { return }
+            try store.renameWorkspace(workspaceID, title: trimmedTitle)
         }
+    }
+
+    func beginRenamingSelectedWorkspace() {
+        beginRenamingWorkspace(store.selectedWorkspaceID)
+    }
+
+    func beginRenamingWorkspace(_ workspaceID: WorkspaceID) {
+        guard let workspace = workspaces.first(where: { $0.id == workspaceID }) else { return }
+        workspaceRenameDraft = workspace.title
+        workspaceBeingRenamedID = workspaceID
+    }
+
+    func commitWorkspaceRename() {
+        guard let workspaceID = workspaceBeingRenamedID else { return }
+        renameWorkspace(workspaceID, title: workspaceRenameDraft)
+        workspaceBeingRenamedID = nil
+    }
+
+    func beginCreatingFolder() {
+        newFolderDraft = ""
+        isCreatingFolder = true
+    }
+
+    func commitFolderCreation() {
+        let title = newFolderDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else {
+            isCreatingFolder = false
+            return
+        }
+        perform { _ = try store.createFolder(title: title) }
+        isCreatingFolder = false
+    }
+
+    func beginRenamingFolder(_ folderID: WorkspaceFolderID) {
+        guard let folder = folders.first(where: { $0.id == folderID }) else { return }
+        folderRenameDraft = folder.title
+        folderBeingRenamedID = folderID
+    }
+
+    func commitFolderRename() {
+        guard let folderID = folderBeingRenamedID else { return }
+        let title = folderRenameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !title.isEmpty {
+            perform { try store.renameFolder(folderID, title: title) }
+        }
+        folderBeingRenamedID = nil
+    }
+
+    func deleteFolder(_ folderID: WorkspaceFolderID) {
+        perform { try store.removeFolder(folderID) }
+    }
+
+    func setFolderColor(_ folderID: WorkspaceFolderID, color: WorkspaceFolderColor) {
+        perform { try store.setFolderColor(folderID, color: color) }
+    }
+
+    func setFolderExpanded(_ folderID: WorkspaceFolderID, isExpanded: Bool) {
+        perform { try store.setFolderExpanded(folderID, isExpanded: isExpanded) }
+    }
+
+    func setWorkspacePinned(_ workspaceID: WorkspaceID, isPinned: Bool) {
+        perform { try store.setWorkspacePinned(workspaceID, isPinned: isPinned) }
+    }
+
+    func moveWorkspace(_ workspaceID: WorkspaceID, to folderID: WorkspaceFolderID?) {
+        perform { try store.moveWorkspace(workspaceID, to: folderID) }
+    }
+
+    func moveWorkspace(_ workspaceID: WorkspaceID, before targetID: WorkspaceID) {
+        perform { try store.moveWorkspace(workspaceID, before: targetID) }
+    }
+
+    func moveWorkspace(_ workspaceID: WorkspaceID, offset: Int) {
+        perform { try store.moveWorkspace(workspaceID, offset: offset) }
     }
 
     func deleteWorkspace(_ workspaceID: WorkspaceID) {
@@ -84,28 +193,112 @@ final class AppModel {
         }
     }
 
+    func selectWorkspace(at index: Int) {
+        guard workspaces.indices.contains(index) else { return }
+        selectWorkspace(workspaces[index].id)
+    }
+
+    func selectAdjacentWorkspace(offset: Int) {
+        guard let selectedIndex = workspaces.firstIndex(where: { $0.id == store.selectedWorkspaceID }) else { return }
+        let targetIndex = (selectedIndex + offset + workspaces.count) % workspaces.count
+        selectWorkspace(workspaces[targetIndex].id)
+    }
+
     func createTerminalTab() {
+        createTerminalTab(
+            workingDirectory: FileManager.default.homeDirectoryForCurrentUser,
+            initialCommand: nil
+        )
+    }
+
+    func open(_ urls: [URL]) {
+        for url in urls {
+            open(url)
+        }
+    }
+
+    private func open(_ url: URL) {
+        if url.isFileURL {
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
+                errorDescription = "The requested path does not exist: \(url.path)"
+                return
+            }
+            if isDirectory.boolValue {
+                createTerminalTab(workingDirectory: url, initialCommand: nil)
+            } else {
+                createTerminalTab(
+                    workingDirectory: url.deletingLastPathComponent(),
+                    initialCommand: Self.shellQuote(url.path)
+                )
+            }
+            return
+        }
+
+        switch url.scheme?.lowercased() {
+        case "http", "https":
+            createBrowserTab(url: url)
+        case "ssh":
+            guard let command = Self.sshCommand(for: url) else {
+                errorDescription = "The SSH URL does not include a host: \(url.absoluteString)"
+                return
+            }
+            createTerminalTab(
+                workingDirectory: FileManager.default.homeDirectoryForCurrentUser,
+                initialCommand: command
+            )
+        default:
+            errorDescription = "MyTerm cannot open \(url.absoluteString)."
+        }
+    }
+
+    private func createTerminalTab(workingDirectory: URL, initialCommand: String?) {
         perform {
             let workspaceID = store.selectedWorkspaceID
-            let tabID = try store.addTerminalTab(to: workspaceID, workingDirectory: FileManager.default.homeDirectoryForCurrentUser)
+            let tabID = try store.addTerminalTab(to: workspaceID, workingDirectory: workingDirectory)
             guard let tab = tab(workspaceID: workspaceID, tabID: tabID) else {
                 throw AppModelError.tabUnavailable(tabID)
             }
-            restoreRuntimeObjects(in: tab)
+            guard case .terminal(let tree) = tab.content else {
+                throw AppModelError.tabUnavailable(tabID)
+            }
+            for session in tree.terminalSessions {
+                try restoreTerminalSession(
+                    session,
+                    workspaceID: workspaceID,
+                    tabID: tab.id,
+                    initialCommand: initialCommand
+                )
+            }
         }
     }
 
     func createBrowserTab() {
+        guard let defaultURL = URL(string: "https://www.google.com") else {
+            errorDescription = AppModelError.defaultBrowserURLInvalid.localizedDescription
+            return
+        }
+        createBrowserTab(url: defaultURL)
+    }
+
+    private func createBrowserTab(url: URL) {
+        createBrowserTab(url: url, in: store.selectedWorkspaceID)
+    }
+
+    private func createBrowserTab(url: URL, in workspaceID: WorkspaceID) {
         perform {
-            let workspaceID = store.selectedWorkspaceID
-            guard let defaultURL = URL(string: "https://www.google.com") else {
-                throw AppModelError.defaultBrowserURLInvalid
+            guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
+                throw AppModelError.workspaceUnavailable(workspaceID)
             }
-            let tabID = try store.addBrowserTab(to: workspaceID, url: defaultURL)
+            let profile = browserDataProfileResolver.resolve(
+                scope: browserSettings.browserDataScope,
+                workspace: workspace
+            )
+            let tabID = try store.addBrowserTab(to: workspaceID, url: url, profile: profile)
             guard let tab = tab(workspaceID: workspaceID, tabID: tabID) else {
                 throw AppModelError.tabUnavailable(tabID)
             }
-            try restoreBrowserController(for: tab)
+            try restoreBrowserController(for: tab, workspaceID: workspaceID)
         }
     }
 
@@ -113,6 +306,20 @@ final class AppModel {
         perform {
             try store.selectTab(workspaceID: store.selectedWorkspaceID, tabID: tabID)
         }
+    }
+
+    func selectTab(at index: Int) {
+        guard selectedWorkspace.tabs.indices.contains(index) else { return }
+        selectTab(selectedWorkspace.tabs[index].id)
+    }
+
+    func selectAdjacentTab(offset: Int) {
+        let tabs = selectedWorkspace.tabs
+        guard !tabs.isEmpty,
+              let selectedTabID = selectedWorkspace.selectedTabID,
+              let selectedIndex = tabs.firstIndex(where: { $0.id == selectedTabID }) else { return }
+        let targetIndex = (selectedIndex + offset + tabs.count) % tabs.count
+        selectTab(tabs[targetIndex].id)
     }
 
     func closeTab(_ tabID: TabID) {
@@ -180,6 +387,18 @@ final class AppModel {
         }
     }
 
+    func focusTerminal(direction: PaneFocusDirection) {
+        guard let tab = selectedTab,
+              case .terminal(let tree) = tab.content,
+              let focusedID = tab.focusedTerminalSessionID,
+              let targetID = tree.adjacentTerminalSessionID(to: focusedID, direction: direction) else { return }
+        focusTerminal(
+            workspaceID: store.selectedWorkspaceID,
+            tabID: tab.id,
+            sessionID: targetID
+        )
+    }
+
     func terminalSession(for sessionID: TerminalSessionID) -> (any TerminalProcessSession)? {
         terminalSessions[sessionID]
     }
@@ -216,12 +435,27 @@ final class AppModel {
         }
     }
 
+    private func migrateLegacyBrowserDataProfiles() throws {
+        var updates = [(workspaceID: WorkspaceID, tabID: TabID, profile: BrowserDataProfile)]()
+        for workspace in store.workspaces {
+            let profile = browserDataProfileResolver.resolve(
+                scope: browserSettings.browserDataScope,
+                workspace: workspace
+            )
+            for tab in workspace.tabs {
+                guard case .browser(let browser) = tab.content, browser.profile == nil else { continue }
+                updates.append((workspace.id, tab.id, profile))
+            }
+        }
+        try store.updateBrowserDataProfiles(updates)
+    }
+
     private func restoreRuntimeObjects(in workspace: Workspace) {
         for tab in workspace.tabs {
             switch tab.content {
             case .browser:
                 do {
-                    try restoreBrowserController(for: tab)
+                    try restoreBrowserController(for: tab, workspaceID: workspace.id)
                 } catch {
                     present(error)
                 }
@@ -249,7 +483,12 @@ final class AppModel {
         }
     }
 
-    private func restoreTerminalSession(_ session: TerminalSession, workspaceID: WorkspaceID, tabID: TabID) throws {
+    private func restoreTerminalSession(
+        _ session: TerminalSession,
+        workspaceID: WorkspaceID,
+        tabID: TabID,
+        initialCommand: String? = nil
+    ) throws {
         guard terminalSessions[session.id] == nil, startsTerminalProcesses else { return }
         guard let terminalEngine else {
             throw AppModelError.terminalEngineUnavailable
@@ -257,7 +496,9 @@ final class AppModel {
 
         let process = try terminalEngine.makeSession(
             configuration: TerminalSessionConfiguration(
-                workingDirectory: session.workingDirectory ?? FileManager.default.homeDirectoryForCurrentUser
+                workingDirectory: session.workingDirectory ?? FileManager.default.homeDirectoryForCurrentUser,
+                initialCommand: initialCommand,
+                environment: MyTermBrowserLauncher.environment(executableURL: browserLauncherURL)
             )
         )
         process.onEvent = { [weak self] event in
@@ -267,10 +508,24 @@ final class AppModel {
         terminalSessions[session.id] = process
     }
 
-    private func restoreBrowserController(for tab: Tab) throws {
+    private func restoreBrowserController(for tab: Tab, workspaceID: WorkspaceID) throws {
         guard case .browser(let browser) = tab.content else { throw AppModelError.browserTabRequired(tab.id) }
         guard browserControllers[browser.id] == nil else { return }
-        let controller = BrowserSessionController()
+        let profile: BrowserDataProfile
+        if let existingProfile = browser.profile {
+            profile = existingProfile
+        } else {
+            guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
+                throw AppModelError.workspaceUnavailable(workspaceID)
+            }
+            profile = browserDataProfileResolver.resolve(
+                scope: browserSettings.browserDataScope,
+                workspace: workspace
+            )
+            try store.updateBrowserDataProfile(workspaceID: workspaceID, tabID: tab.id, profile: profile)
+        }
+
+        let controller = browserSessionFactory.makeSession(profile: profile)
         try controller.load(url: browser.url)
         browserControllers[browser.id] = controller
     }
@@ -291,6 +546,8 @@ final class AppModel {
                     workingDirectory: directory
                 )
             }
+        case .openURL(let url):
+            createBrowserTab(url: url, in: workspaceID)
         case .failed(let error):
             present(error)
         case .processTerminated(let exitCode):
@@ -334,6 +591,23 @@ final class AppModel {
     private func terminalSession(in tab: Tab, matching sessionID: TerminalSessionID) -> TerminalSession? {
         guard case .terminal(let tree) = tab.content else { return nil }
         return tree.terminalSessions.first(where: { $0.id == sessionID })
+    }
+
+    private static func shellQuote(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    private static func sshCommand(for url: URL) -> String? {
+        guard let rawHost = url.host, !rawHost.isEmpty else { return nil }
+        let host = rawHost.contains(":") && !rawHost.hasPrefix("[") ? "[\(rawHost)]" : rawHost
+        let decodedUser = url.user
+        let target = decodedUser.map { "\($0)@\(host)" } ?? host
+        var arguments = [String]()
+        if let port = url.port {
+            arguments.append(contentsOf: ["-p", String(port)])
+        }
+        arguments.append(target)
+        return "ssh " + arguments.map(shellQuote).joined(separator: " ")
     }
 
     private func perform(_ action: () throws -> Void) {

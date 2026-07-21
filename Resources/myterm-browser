@@ -1,0 +1,21 @@
+#!/bin/sh
+set -eu
+
+if [ "$#" -eq 0 ]; then
+  echo "usage: myterm-browser <http-or-https-url> [...]" >&2
+  exit 2
+fi
+
+for argument in "$@"; do
+  case "$argument" in
+    [Hh][Tt][Tt][Pp]://*|[Hh][Tt][Tt][Pp][Ss]://*)
+      ;;
+    *)
+      exec "${MYTERM_OPEN_COMMAND:-/usr/bin/open}" "$@"
+      ;;
+  esac
+done
+
+resource_directory=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+app_bundle=$(dirname "$(dirname "$resource_directory")")
+exec "${MYTERM_OPEN_COMMAND:-/usr/bin/open}" -a "$app_bundle" "$@"

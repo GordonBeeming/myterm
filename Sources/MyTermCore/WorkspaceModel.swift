@@ -98,6 +98,13 @@ public enum SplitOrientation: String, Codable, Equatable, Sendable {
     case vertical
 }
 
+public enum PaneFocusDirection: Equatable, Sendable {
+    case left
+    case up
+    case right
+    case down
+}
+
 public enum SplitNode: Codable, Equatable, Hashable, Sendable {
     case terminal(TerminalSession)
     case horizontal([SplitNode])
@@ -172,6 +179,51 @@ public enum SplitNode: Codable, Equatable, Hashable, Sendable {
 
     public func session(for paneID: PaneID) -> TerminalSession? {
         terminalSessions.first { $0.paneID == paneID }
+    }
+
+    public func adjacentTerminalSessionID(
+        to sessionID: TerminalSessionID,
+        direction: PaneFocusDirection
+    ) -> TerminalSessionID? {
+        let panes = paneLayouts()
+        guard let source = panes.first(where: { $0.sessionID == sessionID }) else { return nil }
+
+        return panes
+            .filter { $0.sessionID != sessionID }
+            .compactMap { candidate -> (layout: PaneLayout, primary: Double, secondary: Double)? in
+                let primary: Double
+                let overlap: Double
+                let secondary: Double
+
+                switch direction {
+                case .left:
+                    primary = source.minX - candidate.maxX
+                    overlap = min(source.maxY, candidate.maxY) - max(source.minY, candidate.minY)
+                    secondary = abs(source.centerY - candidate.centerY)
+                case .up:
+                    primary = source.minY - candidate.maxY
+                    overlap = min(source.maxX, candidate.maxX) - max(source.minX, candidate.minX)
+                    secondary = abs(source.centerX - candidate.centerX)
+                case .right:
+                    primary = candidate.minX - source.maxX
+                    overlap = min(source.maxY, candidate.maxY) - max(source.minY, candidate.minY)
+                    secondary = abs(source.centerY - candidate.centerY)
+                case .down:
+                    primary = candidate.minY - source.maxY
+                    overlap = min(source.maxX, candidate.maxX) - max(source.minX, candidate.minX)
+                    secondary = abs(source.centerX - candidate.centerX)
+                }
+
+                guard primary >= -PaneLayout.epsilon, overlap > PaneLayout.epsilon else { return nil }
+                return (candidate, max(primary, 0), secondary)
+            }
+            .min {
+                if abs($0.primary - $1.primary) > PaneLayout.epsilon {
+                    return $0.primary < $1.primary
+                }
+                return $0.secondary < $1.secondary
+            }?
+            .layout.sessionID
     }
 
     @discardableResult
@@ -333,6 +385,54 @@ public enum SplitNode: Codable, Equatable, Hashable, Sendable {
             return SplitOrientation.vertical.node(children: repairedChildren).collapsed
         }
     }
+
+    private func paneLayouts() -> [PaneLayout] {
+        paneLayouts(minX: 0, minY: 0, width: 1, height: 1)
+    }
+
+    private func paneLayouts(minX: Double, minY: Double, width: Double, height: Double) -> [PaneLayout] {
+        switch self {
+        case .terminal(let session):
+            return [PaneLayout(sessionID: session.id, minX: minX, minY: minY, width: width, height: height)]
+        case .horizontal(let children):
+            guard !children.isEmpty else { return [] }
+            let childWidth = width / Double(children.count)
+            return children.enumerated().flatMap { index, child in
+                child.paneLayouts(
+                    minX: minX + (Double(index) * childWidth),
+                    minY: minY,
+                    width: childWidth,
+                    height: height
+                )
+            }
+        case .vertical(let children):
+            guard !children.isEmpty else { return [] }
+            let childHeight = height / Double(children.count)
+            return children.enumerated().flatMap { index, child in
+                child.paneLayouts(
+                    minX: minX,
+                    minY: minY + (Double(index) * childHeight),
+                    width: width,
+                    height: childHeight
+                )
+            }
+        }
+    }
+}
+
+private struct PaneLayout {
+    static let epsilon = 0.000_001
+
+    let sessionID: TerminalSessionID
+    let minX: Double
+    let minY: Double
+    let width: Double
+    let height: Double
+
+    var maxX: Double { minX + width }
+    var maxY: Double { minY + height }
+    var centerX: Double { minX + (width / 2) }
+    var centerY: Double { minY + (height / 2) }
 }
 
 private extension SplitOrientation {
@@ -477,28 +577,78 @@ public struct Tab: Codable, Equatable, Hashable, Sendable, Identifiable {
     }
 }
 
+public enum WorkspaceFolderColor: String, Codable, CaseIterable, Equatable, Hashable, Sendable {
+    case red
+    case orange
+    case yellow
+    case green
+    case teal
+    case blue
+    case indigo
+    case purple
+    case pink
+    case gray
+}
+
+public struct WorkspaceFolder: Codable, Equatable, Hashable, Sendable, Identifiable {
+    public let id: WorkspaceFolderID
+    public var title: String
+    public var color: WorkspaceFolderColor
+    public var isExpanded: Bool
+
+    public init(
+        id: WorkspaceFolderID = WorkspaceFolderID(),
+        title: String,
+        color: WorkspaceFolderColor = .blue,
+        isExpanded: Bool = true
+    ) {
+        self.id = id
+        self.title = title
+        self.color = color
+        self.isExpanded = isExpanded
+    }
+}
+
 public struct Workspace: Codable, Equatable, Hashable, Sendable, Identifiable {
     public let id: WorkspaceID
     public var title: String
     public var tabs: [Tab]
     public var selectedTabID: TabID?
+    public var folderID: WorkspaceFolderID?
+    public var isPinned: Bool
 
     public init(
         id: WorkspaceID = WorkspaceID(),
         title: String,
         tabs: [Tab] = [],
-        selectedTabID: TabID? = nil
+        selectedTabID: TabID? = nil,
+        folderID: WorkspaceFolderID? = nil,
+        isPinned: Bool = false
     ) {
         self.id = id
         self.title = title
         self.tabs = tabs
         self.selectedTabID = selectedTabID
+        self.folderID = folderID
+        self.isPinned = isPinned
         repair()
     }
 
-    public init(id: WorkspaceID = WorkspaceID(), title: String) {
+    public init(
+        id: WorkspaceID = WorkspaceID(),
+        title: String,
+        folderID: WorkspaceFolderID? = nil,
+        isPinned: Bool = false
+    ) {
         let tab = Tab.terminal()
-        self.init(id: id, title: title, tabs: [tab], selectedTabID: tab.id)
+        self.init(
+            id: id,
+            title: title,
+            tabs: [tab],
+            selectedTabID: tab.id,
+            folderID: folderID,
+            isPinned: isPinned
+        )
     }
 
     public var selectedTab: Tab? {
@@ -526,6 +676,8 @@ public struct Workspace: Codable, Equatable, Hashable, Sendable, Identifiable {
         case title
         case tabs
         case selectedTabID
+        case folderID
+        case isPinned
     }
 
     public init(from decoder: Decoder) throws {
@@ -538,6 +690,8 @@ public struct Workspace: Codable, Equatable, Hashable, Sendable, Identifiable {
         } catch {
             selectedTabID = nil
         }
+        folderID = try? container.decodeIfPresent(WorkspaceFolderID.self, forKey: .folderID)
+        isPinned = (try? container.decodeIfPresent(Bool.self, forKey: .isPinned)) ?? false
         repair()
     }
 }

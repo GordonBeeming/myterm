@@ -13,7 +13,7 @@ components:
   tab:
     width: "112px"
   sidebar:
-    width: "240px"
+    width: "280px"
 ---
 
 # Design System: MyTerm
@@ -67,8 +67,9 @@ MyTerm is flat by default. Depth comes from macOS window materials, source-list 
 
 ### Workspace Sidebar
 
-- **Width:** 220–260 pt, ideally 240 pt.
-- **Rows:** One editable title line only, using native source-list selection.
+- **Width:** 220–480 pt, ideally 280 pt.
+- **Rows:** One title line only, using native source-list selection. Renaming is an explicit command or context-menu action.
+- **Folders:** Native disclosure rows with one semantic folder color. Folders collapse and accept dragged workspaces.
 - **Actions:** Compact plus and minus icons at the bottom, with tooltips and accessibility labels.
 
 ### Tab Strip
@@ -89,6 +90,27 @@ MyTerm is flat by default. Depth comes from macOS window materials, source-list 
 - **Surface:** WKWebView fills the remaining content area.
 - **Behavior:** Browser tabs do not split in the first release.
 
+### Settings
+
+- **Scene:** A native macOS Settings window, separate from the workspace window.
+- **Browser data:** One picker with three plain-language choices: Across all workspaces, Per workspace, and Per project folder.
+- **Expectation:** Say that the choice affects new tabs and that existing tabs keep their current profile.
+- **Passkeys:** Show whether the signed build has Apple's managed browser entitlement and browser access. Request access from a clear button, never on launch. State that MyTerm passes requests to macOS, does not store passkeys, and leaves the choice of credential provider to the user.
+
+### App Icon
+
+- **Shape:** A standalone macOS icon, not a copy of another terminal's mark.
+- **Motif:** A terminal prompt combined with a branching signal that hints at projects, panes, and Xylem.
+- **Palette:** Xylem slate neutrals with the cyan and teal accents. Keep enough contrast to read at Dock and Spotlight sizes.
+- **Rule:** No product name, letters, traffic-light controls, or borrowed terminal-brand shapes inside the icon.
+
+### Browser engine boundary
+
+- **Built in:** WebKit is the only engine in the main app and remains the default.
+- **Boundary:** The app asks a browser-session factory to create a session for a named data profile.
+- **Later:** Chromium is a separate signed and notarized download with its own helper processes, not payload carried by every MyTerm install.
+- **Security:** Keep library validation enabled and require the engine package to be signed by the same developer team as the host app.
+
 ### Commands
 
 - **Visible path:** Toolbar, contextual menu, or local action button for every frequent task.
@@ -107,7 +129,7 @@ MyTerm is flat by default. Depth comes from macOS window materials, source-list 
 
 ### Don't:
 
-- **Don't** copy cmux's notifications, agent status, colored workspace metadata, or other features outside the requested workflow.
+- **Don't** copy cmux's notifications, agent status, per-workspace status metadata, or other features outside the requested workflow.
 - **Don't** use decorative terminal chrome, novelty controls, or motion that interrupts focused work.
 - **Don't** build terminal rendering on web technology when a native implementation is available.
 - **Don't** turn workspaces, tabs, or terminal panes into floating cards.

@@ -1,5 +1,6 @@
 @preconcurrency import WebKit
 import Foundation
+import MyTermCore
 import SwiftUI
 
 public struct BrowserSessionState: Equatable, Sendable {
@@ -36,6 +37,12 @@ public final class BrowserSessionController: NSObject, ObservableObject {
 
     public convenience override init() {
         self.init(configuration: WKWebViewConfiguration())
+    }
+
+    public convenience init(profile: BrowserDataProfile) {
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: profile.persistentStoreID)
+        self.init(configuration: configuration)
     }
 
     public init(configuration: WKWebViewConfiguration) {
