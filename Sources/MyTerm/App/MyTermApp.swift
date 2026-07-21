@@ -21,8 +21,8 @@ struct MyTermApp: App {
         }
 
         Settings {
-            if let settings = startup.model?.browserSettings {
-                BrowserSettingsView(settings: settings)
+            if let model = startup.model {
+                SettingsView(model: model)
             } else {
                 ContentUnavailableView("Settings unavailable", systemImage: "exclamationmark.triangle")
             }
@@ -33,8 +33,10 @@ struct MyTermApp: App {
 @MainActor
 final class MyTermApplicationDelegate: NSObject, NSApplicationDelegate {
     private let urlDispatcher = MyTermURLDispatcher()
+    private weak var model: AppModel?
 
     func connect(model: AppModel?) {
+        self.model = model
         urlDispatcher.connect(handler: model)
     }
 
@@ -48,6 +50,10 @@ final class MyTermApplicationDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        model?.persistTerminalSnapshots()
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {

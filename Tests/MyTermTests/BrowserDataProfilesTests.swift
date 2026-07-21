@@ -142,6 +142,45 @@ final class BrowserDataProfilesTests: XCTestCase {
         XCTAssertEqual(restored.browserDataScope, .projectDirectory)
     }
 
+    func testLegacyBrowserPreferencesMigrateIntoGlobalSettingsOnlyOnce() throws {
+        let directory = try makeTemporaryDirectory()
+        let (defaults, suiteName) = makeDefaults()
+        defer {
+            removeTemporaryDirectory(directory)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let legacy = BrowserSettingsStore(channel: .development, defaults: defaults)
+        legacy.browserDataScope = .appWide
+        legacy.compactSidebar = false
+
+        let first = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: nil,
+            startsTerminalProcesses: false,
+            browserSettings: legacy
+        )
+        XCTAssertEqual(first.store.globalSettings.browserDataScope, .appWide)
+        XCTAssertFalse(first.store.globalSettings.compactSidebar)
+
+        first.updateGlobalSettings {
+            $0.browserDataScope = .workspace
+            $0.compactSidebar = true
+        }
+        legacy.browserDataScope = .projectDirectory
+        legacy.compactSidebar = false
+        let restored = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: nil,
+            startsTerminalProcesses: false,
+            browserSettings: BrowserSettingsStore(channel: .development, defaults: defaults)
+        )
+
+        XCTAssertEqual(restored.store.globalSettings.browserDataScope, .workspace)
+        XCTAssertTrue(restored.store.globalSettings.compactSidebar)
+    }
+
     func testNewTabsUseTheCurrentSettingAndLegacyTabsAreMigratedOnce() throws {
         let directory = try makeTemporaryDirectory()
         let (defaults, suiteName) = makeDefaults()
@@ -165,7 +204,7 @@ final class BrowserDataProfilesTests: XCTestCase {
         let firstProfile = try XCTUnwrap(firstBrowser.profile)
         XCTAssertEqual(firstProfile.scope, .appWide)
 
-        settings.browserDataScope = .workspace
+        initial.updateGlobalSettings { $0.browserDataScope = .workspace }
         initial.createBrowserTab()
         let secondBrowser = try browser(in: XCTUnwrap(initial.selectedTab))
         XCTAssertEqual(secondBrowser.profile?.scope, .workspace)

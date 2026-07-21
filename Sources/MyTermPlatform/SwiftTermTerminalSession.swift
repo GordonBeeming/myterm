@@ -206,23 +206,16 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
         optionAsMetaKey = runtimeConfiguration.optionAsMeta
         changeScrollback(runtimeConfiguration.scrollbackLines)
         getTerminal().setCursorStyle(runtimeConfiguration.appearance.cursor.swiftTermStyle)
-        if let foreground = runtimeConfiguration.appearance.foreground {
-            nativeForegroundColor = foreground.nsColor
-        }
-        if let background = runtimeConfiguration.appearance.background {
-            nativeBackgroundColor = background.nsColor
-        }
+        nativeForegroundColor = runtimeConfiguration.appearance.foreground?.nsColor ?? .textColor
+        nativeBackgroundColor = runtimeConfiguration.appearance.background?.nsColor ?? .textBackgroundColor
         needsDisplay = true
     }
 
     func renderedText(maximumCharacters: Int) -> String {
         let terminal = getTerminal()
-        let lines = (0..<terminal.rows).map { row in
-            (0..<terminal.cols).map { column in
-                terminal.buffer.getChar(at: Position(col: column, row: row)).getCharacter()
-            }.reduce(into: "") { $0.append($1) }
-        }.joined(separator: "\n")
-        return TerminalOutputSnapshot.plainText(from: lines, maximumCharacters: maximumCharacters)
+        let data = terminal.getBufferAsData(kind: .normal)
+        let text = String(data: data, encoding: .utf8) ?? ""
+        return TerminalOutputSnapshot.plainText(from: text, maximumCharacters: maximumCharacters)
     }
 
     func presentPersistedOutput(_ output: String, maximumCharacters: Int = 8_192) {

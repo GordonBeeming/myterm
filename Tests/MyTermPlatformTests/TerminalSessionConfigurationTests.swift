@@ -60,6 +60,10 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         default:
             XCTFail("Expected the configured steady bar cursor.")
         }
+
+        view.apply(runtimeConfiguration: TerminalRuntimeConfiguration())
+        XCTAssertEqual(view.nativeForegroundColor, .textColor)
+        XCTAssertEqual(view.nativeBackgroundColor, .textBackgroundColor)
     }
 
     @MainActor

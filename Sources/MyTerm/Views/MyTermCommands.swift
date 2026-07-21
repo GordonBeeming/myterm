@@ -7,7 +7,7 @@ struct MyTermCommands: Commands {
     var body: some Commands {
         CommandMenu("Workspace") {
             Button("New Workspace") { startup.model?.createWorkspace() }
-                .keyboardShortcut("n", modifiers: [.command, .shift])
+                .keyboardShortcut("n", modifiers: [.command])
             Button("New Folder…") { startup.model?.beginCreatingFolder() }
                 .keyboardShortcut("g", modifiers: [.command, .control])
             Button("Rename Workspace…") { startup.model?.beginRenamingSelectedWorkspace() }
@@ -36,6 +36,8 @@ struct MyTermCommands: Commands {
                 .keyboardShortcut("t", modifiers: [.command])
             Button("New Browser Tab") { startup.model?.createBrowserTab() }
                 .keyboardShortcut("l", modifiers: [.command, .shift])
+            Button("Rename Tab…") { startup.model?.beginRenamingSelectedTab() }
+                .keyboardShortcut("r", modifiers: [.command, .option])
             Divider()
             Button("Previous Tab") { startup.model?.selectAdjacentTab(offset: -1) }
                 .keyboardShortcut("[", modifiers: [.command, .shift])

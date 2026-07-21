@@ -366,14 +366,9 @@ final class WorkspaceStoreTests: XCTestCase {
     }
 
     func testClosingFinalTabRemovesWorkspaceAndReturnsReplacement() throws {
-        let url = temporaryURL()
-        let tab = Tab.browser(url: try XCTUnwrap(URL(string: "https://example.com")))
-        let workspace = Workspace(title: "Browser", tabs: [tab], selectedTabID: tab.id)
-        let snapshot = WorkspaceStoreSnapshot(workspaces: [workspace], selectedWorkspaceID: workspace.id)
-        try JSONEncoder().encode(snapshot).write(to: url)
-        let store = try WorkspaceStore(persistenceURL: url)
-        let workspaceID = workspace.id
-        let tabID = tab.id
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let workspaceID = store.selectedWorkspaceID
+        let tabID = try XCTUnwrap(store.selectedWorkspace.selectedTabID)
         let change = try store.closeTab(workspaceID: workspaceID, tabID: tabID)
 
         XCTAssertEqual(change.removedWorkspace?.id, workspaceID)

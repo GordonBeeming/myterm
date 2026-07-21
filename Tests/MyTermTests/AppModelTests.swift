@@ -1,6 +1,7 @@
 @testable import MyTerm
 import AppKit
 import Foundation
+import MyTermCore
 import MyTermPlatform
 import XCTest
 
@@ -9,6 +10,33 @@ final class AppModelTests: XCTestCase {
     func testClosingTheLastWindowTerminatesTheApp() {
         XCTAssertTrue(
             MyTermApplicationDelegate().applicationShouldTerminateAfterLastWindowClosed(NSApplication.shared)
+        )
+    }
+
+    func testApplicationTerminationFlushesTerminalSnapshots() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true,
+            terminalSnapshotDelayNanoseconds: 60_000_000_000
+        )
+        let session = try XCTUnwrap(engine.sessions.first)
+        session.snapshotText = "last session id: delegate-flush"
+        session.emitContentChanged()
+        let delegate = MyTermApplicationDelegate()
+        delegate.connect(model: model)
+
+        delegate.applicationWillTerminate(
+            Notification(name: NSApplication.willTerminateNotification)
+        )
+
+        XCTAssertEqual(
+            model.selectedWorkspace.selectedTab?.terminalTree?.terminalSessions.first?.recentText,
+            "last session id: delegate-flush"
         )
     }
 
@@ -74,8 +102,10 @@ final class AppModelTests: XCTestCase {
 
         model.closeTab(tab.id)
 
-        let workspace = try XCTUnwrap(model.workspaces.first(where: { $0.id == workspaceID }))
-        XCTAssertFalse(workspace.tabs.contains(where: { $0.id == tab.id }))
+        XCTAssertFalse(model.workspaces.contains(where: { $0.id == workspaceID }))
+        XCTAssertEqual(model.workspaces.count, 1)
+        XCTAssertNotEqual(model.store.selectedWorkspaceID, workspaceID)
+        XCTAssertNotNil(model.selectedTab)
         XCTAssertTrue(splitSessionIDs.allSatisfy { model.terminalSession(for: $0) == nil })
         XCTAssertNil(model.errorDescription)
     }
@@ -139,6 +169,357 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(model.workspaceBeingRenamedID)
     }
 
+    func testSettingsResolveGlobalFolderAndWorkspaceOverridesAndCanClearOneField() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+
+        model.updateGlobalSettings {
+            $0.fontSize = 15
+            $0.optionAsMeta = false
+        }
+        model.beginCreatingFolder()
+        model.newFolderDraft = "Work"
+        model.commitFolderCreation()
+        let folderID = try XCTUnwrap(model.folders.first?.id)
+        model.moveWorkspace(workspaceID, to: folderID)
+        model.setSetting(
+            17.0,
+            at: .folder(folderID),
+            global: \TerminalPreferences.fontSize,
+            override: \TerminalPreferencesOverrides.fontSize
+        )
+        model.setSetting(
+            true,
+            at: .workspace(workspaceID),
+            global: \TerminalPreferences.optionAsMeta,
+            override: \TerminalPreferencesOverrides.optionAsMeta
+        )
+
+        XCTAssertEqual(model.inheritedSettings(for: .folder(folderID))?.fontSize, 15)
+        XCTAssertEqual(model.inheritedSettings(for: .workspace(workspaceID))?.fontSize, 17)
+        XCTAssertEqual(model.resolvedSettings(for: .workspace(workspaceID))?.fontSize, 17)
+        XCTAssertEqual(model.resolvedSettings(for: .workspace(workspaceID))?.optionAsMeta, true)
+        XCTAssertEqual(model.settingsOverrides(for: .folder(folderID))?.fontSize, 17)
+        XCTAssertEqual(model.settingsOverrides(for: .workspace(workspaceID))?.optionAsMeta, true)
+
+        model.clearSettingOverride(at: .workspace(workspaceID), \TerminalPreferencesOverrides.optionAsMeta)
+        XCTAssertEqual(model.resolvedSettings(for: .workspace(workspaceID))?.optionAsMeta, false)
+        XCTAssertNil(model.settingsOverrides(for: .workspace(workspaceID))?.optionAsMeta)
+    }
+
+    func testSettingsChangesApplyResolvedRuntimeConfigurationToLiveSessions() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let session = try XCTUnwrap(engine.sessions.first)
+        let workspaceID = model.store.selectedWorkspaceID
+
+        model.updateGlobalSettings {
+            $0.fontPostScriptName = "SFMono-Regular"
+            $0.fontSize = 18
+            $0.scrollbackLines = 42_000
+            $0.cursorShape = .beam
+            $0.cursorBlink = false
+            $0.optionAsMeta = false
+            $0.terminalAppearance = .dark
+        }
+
+        let runtime = try XCTUnwrap(session.appliedRuntimeConfigurations.last)
+        XCTAssertEqual(runtime.fontName, "SFMono-Regular")
+        XCTAssertEqual(runtime.fontSize, 18)
+        XCTAssertEqual(runtime.scrollbackLines, 42_000)
+        XCTAssertEqual(runtime.appearance.cursor, TerminalCursorConfiguration(shape: .bar, blinks: false))
+        XCTAssertFalse(runtime.optionAsMeta)
+        XCTAssertNotNil(runtime.appearance.foreground)
+        XCTAssertNotNil(runtime.appearance.background)
+
+        model.updateWorkspaceSettings(workspaceID) { $0.fontSize = 22 }
+        XCTAssertEqual(session.appliedRuntimeConfigurations.last?.fontSize, 22)
+        model.clearSettingOverride(at: .workspace(workspaceID), \TerminalPreferencesOverrides.fontSize)
+        XCTAssertEqual(session.appliedRuntimeConfigurations.last?.fontSize, 18)
+    }
+
+    func testMovingWorkspaceBeforeWorkspaceInAnotherFolderReappliesInheritedSettings() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let movedWorkspaceID = model.store.selectedWorkspaceID
+        let movedSession = try XCTUnwrap(engine.sessions.first)
+        let firstFolderID = try model.store.createFolder(title: "First")
+        let secondFolderID = try model.store.createFolder(title: "Second")
+        model.moveWorkspace(movedWorkspaceID, to: firstFolderID)
+        model.updateFolderSettings(firstFolderID) { $0.fontSize = 15 }
+        model.createWorkspace(in: secondFolderID)
+        let targetWorkspaceID = model.store.selectedWorkspaceID
+        model.updateFolderSettings(secondFolderID) { $0.fontSize = 23 }
+
+        model.moveWorkspace(movedWorkspaceID, before: targetWorkspaceID)
+
+        XCTAssertEqual(
+            model.workspaces.first(where: { $0.id == movedWorkspaceID })?.folderID,
+            secondFolderID
+        )
+        XCTAssertEqual(movedSession.appliedRuntimeConfigurations.last?.fontSize, 23)
+    }
+
+    func testNewSessionsResolveActivePaneCustomDirectoryAndNewWorkspaceInheritance() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let activeDirectory = directory.appending(path: "active", directoryHint: .isDirectory)
+        let customDirectory = directory.appending(path: "custom", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: activeDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: customDirectory, withIntermediateDirectories: true)
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let initialSession = try XCTUnwrap(engine.sessions.first)
+        initialSession.onEvent?(.workingDirectoryChanged(activeDirectory))
+        model.updateGlobalSettings { $0.newSessionWorkingDirectory = .activePane }
+
+        model.createBrowserTab()
+        model.createTerminalTab()
+        XCTAssertEqual(engine.configurations.last?.workingDirectory, activeDirectory.standardizedFileURL)
+
+        model.createWorkspace()
+        XCTAssertEqual(engine.configurations.last?.workingDirectory, activeDirectory.standardizedFileURL)
+
+        model.updateGlobalSettings { $0.newSessionWorkingDirectory = .custom(customDirectory) }
+        model.createTerminalTab()
+        XCTAssertEqual(engine.configurations.last?.workingDirectory, customDirectory.standardizedFileURL)
+    }
+
+    func testTerminalRestoreUsesConfiguredShellRuntimeAndRecentText() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let workingDirectory = directory.appending(path: "project", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: workingDirectory, withIntermediateDirectories: true)
+        let persistenceURL = MyTermChannel.development.persistenceURL(applicationSupportDirectory: directory)
+        let store = try WorkspaceStore(persistenceURL: persistenceURL)
+        let workspaceID = store.selectedWorkspaceID
+        let tab = try XCTUnwrap(store.selectedWorkspace.selectedTab)
+        let sessionID = try XCTUnwrap(tab.focusedTerminalSessionID)
+        try store.updateGlobalSettings {
+            $0.shell = .custom(path: "/bin/sh")
+            $0.fontPostScriptName = "Menlo-Bold"
+            $0.fontSize = 16
+            $0.terminalTheme = .solarizedDark
+            $0.scrollbackLines = 12_345
+            $0.cursorShape = .underline
+            $0.cursorBlink = false
+            $0.optionAsMeta = false
+        }
+        try store.updateTerminalWorkingDirectory(
+            workspaceID: workspaceID,
+            tabID: tab.id,
+            sessionID: sessionID,
+            workingDirectory: workingDirectory
+        )
+        try store.updateTerminalRecentText(
+            workspaceID: workspaceID,
+            tabID: tab.id,
+            sessionID: sessionID,
+            recentText: "session id: 1234"
+        )
+        let engine = CapturingTerminalEngine()
+
+        _ = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+
+        let configuration = try XCTUnwrap(engine.configurations.first)
+        XCTAssertEqual(configuration.shell.path, "/bin/sh")
+        XCTAssertEqual(configuration.workingDirectory, workingDirectory.standardizedFileURL)
+        XCTAssertEqual(configuration.restoredOutput, "session id: 1234")
+        XCTAssertEqual(configuration.runtimeConfiguration.fontName, "Menlo-Bold")
+        XCTAssertEqual(configuration.runtimeConfiguration.fontSize, 16)
+        XCTAssertEqual(configuration.runtimeConfiguration.scrollbackLines, 12_345)
+        XCTAssertEqual(
+            configuration.runtimeConfiguration.appearance.cursor,
+            TerminalCursorConfiguration(shape: .underline, blinks: false)
+        )
+        XCTAssertFalse(configuration.runtimeConfiguration.optionAsMeta)
+        XCTAssertNotNil(configuration.runtimeConfiguration.appearance.foreground)
+        XCTAssertNotNil(configuration.runtimeConfiguration.appearance.background)
+    }
+
+    func testUnavailableCustomShellFallsBackToTheLoginShellBeforeCreatingSession() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let nonExecutableShell = directory.appending(path: "not-a-shell")
+        try Data("echo nope\n".utf8).write(to: nonExecutableShell)
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        model.updateGlobalSettings { $0.shell = .custom(path: nonExecutableShell.path) }
+
+        model.createTerminalTab()
+
+        XCTAssertEqual(engine.configurations.last?.shell, TerminalSessionConfiguration.loginShellURL())
+        XCTAssertNil(model.errorDescription)
+    }
+
+    func testTerminalContentChangesAreCoalescedAndPersisted() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true,
+            terminalSnapshotDelayNanoseconds: 10_000_000
+        )
+        let session = try XCTUnwrap(engine.sessions.first)
+        session.snapshotText = "first\nlast session id: abc"
+
+        session.emitContentChanged()
+        session.emitContentChanged()
+        session.emitContentChanged()
+        try await Task.sleep(nanoseconds: 80_000_000)
+
+        XCTAssertEqual(session.snapshotCallCount, 1)
+        let persistedTab = try XCTUnwrap(model.selectedWorkspace.selectedTab)
+        let persistedSession = try XCTUnwrap(persistedTab.terminalTree?.terminalSessions.first)
+        XCTAssertEqual(persistedSession.recentText, "first\nlast session id: abc")
+    }
+
+    func testTerminalSnapshotsCanBeFlushedBeforeApplicationTermination() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true,
+            terminalSnapshotDelayNanoseconds: 10_000_000
+        )
+        let session = try XCTUnwrap(engine.sessions.first)
+        session.snapshotText = "last session id: before-quit"
+
+        session.emitContentChanged()
+        model.persistTerminalSnapshots()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(session.snapshotCallCount, 1)
+        let persistedSession = try XCTUnwrap(
+            model.selectedWorkspace.selectedTab?.terminalTree?.terminalSessions.first
+        )
+        XCTAssertEqual(persistedSession.recentText, "last session id: before-quit")
+    }
+
+    func testTabRenameActionsPersistCustomTitlesAndWhitespaceClearsThem() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let tabID = try XCTUnwrap(model.selectedWorkspace.selectedTabID)
+
+        model.beginRenamingSelectedTab()
+        XCTAssertEqual(model.tabRenameDraft, "Terminal")
+        XCTAssertEqual(model.tabBeingRenamedID, tabID)
+        model.tabRenameDraft = "Agent Work"
+        model.commitTabRename()
+        XCTAssertEqual(model.selectedTab?.customTitle, "Agent Work")
+        XCTAssertNil(model.tabBeingRenamedID)
+
+        model.renameTab(tabID, title: "  \n ")
+        XCTAssertNil(model.selectedTab?.customTitle)
+    }
+
+    func testClosingFinalTabTerminatesItsSessionAndStartsTheReplacementWorkspace() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let removedWorkspaceID = model.store.selectedWorkspaceID
+        let removedTabID = try XCTUnwrap(model.selectedWorkspace.selectedTabID)
+        let removedSession = try XCTUnwrap(engine.sessions.first)
+
+        model.closeTab(removedTabID)
+
+        XCTAssertFalse(model.workspaces.contains(where: { $0.id == removedWorkspaceID }))
+        XCTAssertEqual(model.workspaces.count, 1)
+        XCTAssertNotNil(model.selectedTab)
+        XCTAssertEqual(removedSession.terminateCallCount, 1)
+        XCTAssertEqual(engine.sessions.count, 2)
+        XCTAssertTrue(engine.sessions[1].isRunning)
+        XCTAssertNil(model.errorDescription)
+    }
+
+    func testClosingFinalFocusedPaneUsesTheSameWorkspaceLifecycle() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let removedWorkspaceID = model.store.selectedWorkspaceID
+        let removedSession = try XCTUnwrap(engine.sessions.first)
+
+        model.closeFocusedPaneOrTab()
+
+        XCTAssertFalse(model.workspaces.contains(where: { $0.id == removedWorkspaceID }))
+        XCTAssertEqual(removedSession.terminateCallCount, 1)
+        XCTAssertEqual(engine.sessions.count, 2)
+        XCTAssertTrue(engine.sessions[1].isRunning)
+        XCTAssertNil(model.errorDescription)
+    }
+
+    func testClosingFinalBrowserTabCleansUpControllerAndStartsReplacementWorkspace() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let initialTerminalTabID = try XCTUnwrap(model.selectedWorkspace.selectedTabID)
+        model.createBrowserTab()
+        guard case .browser(let browser) = try XCTUnwrap(model.selectedTab?.content) else {
+            return XCTFail("Expected selected browser tab")
+        }
+        let browserTabID = try XCTUnwrap(model.selectedWorkspace.selectedTabID)
+        let removedWorkspaceID = model.store.selectedWorkspaceID
+        XCTAssertNotNil(model.browserController(for: browser.id))
+        model.closeTab(initialTerminalTabID)
+
+        model.closeTab(browserTabID)
+
+        XCTAssertFalse(model.workspaces.contains(where: { $0.id == removedWorkspaceID }))
+        XCTAssertNil(model.browserController(for: browser.id))
+        XCTAssertNotNil(model.selectedWorkspace.selectedTab)
+        XCTAssertNil(model.errorDescription)
+    }
+
     func testOpenRequestsCreateTabsInTheExistingModelAndQuoteScripts() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
@@ -191,6 +572,7 @@ final class AppModelTests: XCTestCase {
         )
         let firstWorkspaceID = model.store.selectedWorkspaceID
         let firstWorkspaceTabCount = model.selectedWorkspace.tabs.count
+        model.updateWorkspaceSettings(firstWorkspaceID) { $0.browserDataScope = .appWide }
         XCTAssertEqual(engine.configurations.first?.environment["BROWSER"], launcherURL.path)
 
         model.createWorkspace()
@@ -211,6 +593,7 @@ final class AppModelTests: XCTestCase {
             return XCTFail("Expected the terminal link to create a browser tab")
         }
         XCTAssertEqual(browser.url.absoluteString, "https://example.com/docs")
+        XCTAssertEqual(browser.profile?.scope, .appWide)
     }
 
     private func makeModel(applicationSupportDirectory: URL) throws -> AppModel {
@@ -254,10 +637,31 @@ private final class CapturingTerminalEngine: TerminalEngine {
 private final class CapturingTerminalSession: TerminalProcessSession {
     var isRunning = false
     var onEvent: (@MainActor (TerminalSessionEvent) -> Void)?
+    private(set) var appliedRuntimeConfigurations: [TerminalRuntimeConfiguration] = []
+    private(set) var snapshotCallCount = 0
+    private(set) var terminateCallCount = 0
+    var snapshotText = ""
+    private var contentChangeHandler: (@MainActor () -> Void)?
 
     func terminalView() -> NSView { NSView() }
     func start() throws { isRunning = true }
     func resize(columns: Int, rows: Int) {}
     func focus() {}
-    func terminate() { isRunning = false }
+    func terminate() {
+        terminateCallCount += 1
+        isRunning = false
+    }
+    func apply(runtimeConfiguration: TerminalRuntimeConfiguration) {
+        appliedRuntimeConfigurations.append(runtimeConfiguration)
+    }
+    func contentSnapshot(maximumCharacters: Int) -> String {
+        snapshotCallCount += 1
+        return String(snapshotText.suffix(maximumCharacters))
+    }
+    func setContentChangeHandler(_ handler: (@MainActor () -> Void)?) {
+        contentChangeHandler = handler
+    }
+    func emitContentChanged() {
+        contentChangeHandler?()
+    }
 }

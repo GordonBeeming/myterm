@@ -47,13 +47,13 @@ private struct TerminalSplitTreeView: View {
                 .id(session.id)
         case .horizontal(let children):
             HSplitView {
-                ForEach(children, id: \.self) { child in
+                ForEach(children, id: \.stableID) { child in
                     TerminalSplitTreeView(model: model, workspaceID: workspaceID, tabID: tabID, tree: child)
                 }
             }
         case .vertical(let children):
             VSplitView {
-                ForEach(children, id: \.self) { child in
+                ForEach(children, id: \.stableID) { child in
                     TerminalSplitTreeView(model: model, workspaceID: workspaceID, tabID: tabID, tree: child)
                 }
             }

@@ -439,8 +439,8 @@ public final class WorkspaceStore {
             guard let tabIndex = snapshot.workspaces[workspaceIndex].tabs.firstIndex(where: { $0.id == tabID }) else {
                 throw WorkspaceStoreError.tabNotFound(tabID)
             }
-            let closingTab = snapshot.workspaces[workspaceIndex].tabs.remove(at: tabIndex)
-            if closingTab.isBrowser, snapshot.workspaces[workspaceIndex].tabs.isEmpty {
+            snapshot.workspaces[workspaceIndex].tabs.remove(at: tabIndex)
+            if snapshot.workspaces[workspaceIndex].tabs.isEmpty {
                 removedWorkspace = snapshot.workspaces.remove(at: workspaceIndex)
                 let wasOnlyWorkspace = snapshot.workspaces.isEmpty
                 snapshot.repair()
