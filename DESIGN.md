@@ -94,7 +94,7 @@ MyTerm is flat by default. Depth comes from macOS window materials, source-list 
 - **Scene:** A native macOS Settings window, separate from the workspace window.
 - **Browser data:** One picker with three plain-language choices: Across all workspaces, Per workspace, and Per project folder.
 - **Expectation:** Say that the choice affects new tabs and that existing tabs keep their current profile.
-- **Passkeys:** Show whether the signed build has Apple's managed browser entitlement. State clearly that MyTerm passes requests to macOS, does not store passkeys, and leaves the choice of credential provider to the user.
+- **Passkeys:** Show whether the signed build has Apple's managed browser entitlement and browser access. Request access from a clear button, never on launch. State that MyTerm passes requests to macOS, does not store passkeys, and leaves the choice of credential provider to the user.
 
 ### App Icon
 

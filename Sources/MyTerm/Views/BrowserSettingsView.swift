@@ -4,6 +4,7 @@ import SwiftUI
 
 struct BrowserSettingsView: View {
     @Bindable var settings: BrowserSettingsStore
+    @State private var passkeyAccess = PasskeyAccessController()
 
     var body: some View {
         Form {
@@ -18,15 +19,32 @@ struct BrowserSettingsView: View {
                 .foregroundStyle(.secondary)
 
             Section("Passkeys") {
-                Text(PasskeyCapability.isEnabled
-                    ? "Enabled. MyTerm passes requests to macOS and never stores passkeys; your chosen credential provider handles them."
-                    : "Not enabled in this build. MyTerm never stores passkeys; a signed build needs Apple's browser entitlement to pass requests to your credential provider.")
+                Text(passkeyDescription)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+
+                if passkeyAccess.state == .notDetermined {
+                    Button("Allow passkey access") {
+                        passkeyAccess.requestAccess()
+                    }
+                }
             }
         }
         .formStyle(.grouped)
         .padding()
         .frame(width: 440)
+    }
+
+    private var passkeyDescription: String {
+        switch passkeyAccess.state {
+        case .unavailable:
+            "Not enabled in this build. MyTerm never stores passkeys; a signed build needs Apple's browser entitlement to pass requests to your credential provider."
+        case .notDetermined:
+            "MyTerm never stores passkeys. Allow access so WebKit can pass website requests to your chosen credential provider."
+        case .denied:
+            "Passkey access is denied. MyTerm never stores passkeys; macOS and your chosen credential provider handle them."
+        case .authorized:
+            "Enabled. MyTerm passes website requests to macOS and never stores passkeys; your chosen credential provider handles them."
+        }
     }
 }

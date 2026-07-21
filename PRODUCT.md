@@ -41,7 +41,7 @@ The browser-data setting applies when a new browser tab is created. Existing tab
 - **Per workspace** keeps each workspace separate and is the default.
 - **Per project folder** shares website data between browser tabs working from the same Git repository or folder.
 
-WebKit stores cookies and local website data on disk for each profile. MyTerm never stores passkeys. It passes each request to macOS, where the user's chosen credential provider, such as Apple Passwords or 1Password, handles it. Arbitrary-website passkeys also require Apple's managed browser entitlement in the signed build; the Settings window shows whether that capability is present.
+WebKit stores cookies and local website data on disk for each profile. MyTerm never stores passkeys. It passes each request to macOS, where the user's chosen credential provider, such as Apple Passwords or 1Password, handles it. Arbitrary-website passkeys also require Apple's managed browser entitlement in the signed build and the user's permission. The Settings window shows that state and requests access only after the user asks it to.
 
 The main app ships with WebKit only, keeping the download and runtime footprint light. Chromium can arrive later as an optional, separately signed engine package rather than increasing the size and process count for everyone.
 
