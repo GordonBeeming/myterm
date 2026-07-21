@@ -21,6 +21,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let persisted = try JSONDecoder().decode(WorkspaceStoreSnapshot.self, from: Data(contentsOf: url))
         XCTAssertEqual(persisted.version, WorkspaceStoreSnapshot.currentVersion)
+        XCTAssertEqual(store.globalSettings.cursorShape, .beam)
         XCTAssertEqual(persisted, store.snapshot)
     }
 

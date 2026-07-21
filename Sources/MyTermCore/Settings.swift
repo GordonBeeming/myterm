@@ -136,7 +136,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         shell: TerminalShell = .loginShell,
         newSessionWorkingDirectory: NewSessionWorkingDirectoryPolicy = .home,
         scrollbackLines: Int = TerminalPreferences.defaultScrollbackLines,
-        cursorShape: TerminalCursorShape = .block,
+        cursorShape: TerminalCursorShape = .beam,
         cursorBlink: Bool = true,
         optionAsMeta: Bool = true
     ) {
@@ -200,7 +200,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
             shell: (try? container.decode(TerminalShell.self, forKey: .shell)) ?? .loginShell,
             newSessionWorkingDirectory: (try? container.decode(NewSessionWorkingDirectoryPolicy.self, forKey: .newSessionWorkingDirectory)) ?? .home,
             scrollbackLines: (try? container.decode(Int.self, forKey: .scrollbackLines)) ?? Self.defaultScrollbackLines,
-            cursorShape: (try? container.decode(TerminalCursorShape.self, forKey: .cursorShape)) ?? .block,
+            cursorShape: (try? container.decode(TerminalCursorShape.self, forKey: .cursorShape)) ?? .beam,
             cursorBlink: (try? container.decode(Bool.self, forKey: .cursorBlink)) ?? true,
             optionAsMeta: (try? container.decode(Bool.self, forKey: .optionAsMeta)) ?? true
         )

@@ -60,6 +60,9 @@ final class AppModel {
         try migrateLegacySettings()
         try migrateLegacyBrowserDataProfiles()
         restoreRuntimeObjects()
+        if let sessionID = selectedTab?.focusedTerminalSessionID {
+            terminalSessions[sessionID]?.focus()
+        }
     }
 
     var workspaces: [Workspace] {
@@ -233,6 +236,9 @@ final class AppModel {
                 throw AppModelError.workspaceUnavailable(workspaceID)
             }
             restoreRuntimeObjects(in: workspace)
+            if let sessionID = workspace.selectedTab?.focusedTerminalSessionID {
+                terminalSessions[sessionID]?.focus()
+            }
         }
     }
 
@@ -582,6 +588,7 @@ final class AppModel {
                 throw AppModelError.terminalUnavailable(newSessionID)
             }
             try restoreTerminalSession(session, workspaceID: workspaceID, tabID: tab.id)
+            terminalSessions[newSessionID]?.focus()
         }
     }
 

@@ -110,6 +110,59 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(model.errorDescription)
     }
 
+    func testSplitFocusesTheNewTerminalRuntime() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+
+        model.splitFocusedTerminal(orientation: .horizontal)
+
+        XCTAssertEqual(engine.sessions.count, 2)
+        XCTAssertEqual(engine.sessions[0].focusCallCount, 1)
+        XCTAssertEqual(engine.sessions[1].focusCallCount, 1)
+    }
+
+    func testNewWorkspaceInheritsCurrentFolderAppendsAndFocusesItsTerminal() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let folderID = try model.store.createFolder(title: "Projects")
+        let originalWorkspaceID = model.store.selectedWorkspaceID
+        model.moveWorkspace(originalWorkspaceID, to: folderID)
+
+        model.createWorkspace()
+
+        let folderWorkspaceIDs = model.workspaces
+            .filter { $0.folderID == folderID }
+            .map(\.id)
+        XCTAssertEqual(folderWorkspaceIDs.last, model.store.selectedWorkspaceID)
+        XCTAssertEqual(engine.sessions.count, 2)
+        XCTAssertEqual(engine.sessions[0].focusCallCount, 1)
+        XCTAssertEqual(engine.sessions[1].focusCallCount, 1)
+    }
+
+    func testTerminalSplitGeometryKeepsEachRecursiveBranchAtEqualHalves() {
+        let rootLengths = TerminalSplitGeometry.childLengths(totalLength: 1_001, childCount: 2)
+        XCTAssertEqual(rootLengths[0], 500, accuracy: 0.001)
+        XCTAssertEqual(rootLengths[1], 500, accuracy: 0.001)
+
+        let nestedLengths = TerminalSplitGeometry.childLengths(totalLength: rootLengths[0], childCount: 2)
+        XCTAssertEqual(nestedLengths[0], 249.5, accuracy: 0.001)
+        XCTAssertEqual(nestedLengths[1], 249.5, accuracy: 0.001)
+    }
+
     func testCloseFocusedPaneCollapsesOnlyOnePaneInSplitTerminalTab() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
@@ -640,13 +693,14 @@ private final class CapturingTerminalSession: TerminalProcessSession {
     private(set) var appliedRuntimeConfigurations: [TerminalRuntimeConfiguration] = []
     private(set) var snapshotCallCount = 0
     private(set) var terminateCallCount = 0
+    private(set) var focusCallCount = 0
     var snapshotText = ""
     private var contentChangeHandler: (@MainActor () -> Void)?
 
     func terminalView() -> NSView { NSView() }
     func start() throws { isRunning = true }
     func resize(columns: Int, rows: Int) {}
-    func focus() {}
+    func focus() { focusCallCount += 1 }
     func terminate() {
         terminateCallCount += 1
         isRunning = false

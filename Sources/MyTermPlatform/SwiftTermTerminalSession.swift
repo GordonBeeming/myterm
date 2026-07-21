@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 @preconcurrency import SwiftTerm
+import UniformTypeIdentifiers
 
 @MainActor
 public final class SwiftTermTerminalEngine: TerminalEngine {
@@ -41,7 +42,9 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
 
         self.configuration = configuration
         lastReportedWorkingDirectory = configuration.workingDirectory
-        terminal = MyTermLocalProcessTerminalView(frame: .zero)
+        terminal = MyTermLocalProcessTerminalView(
+            frame: NSRect(x: 0, y: 0, width: 640, height: 480)
+        )
         super.init()
 
         terminal.processDelegate = self
@@ -109,8 +112,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
     }
 
     public func focus() {
-        guard let window = terminal.window else { return }
-        window.makeFirstResponder(terminal)
+        terminal.focusWhenPossible()
     }
 
     public func terminate() {
@@ -129,6 +131,10 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
 
     public func setContentChangeHandler(_ handler: (@MainActor () -> Void)?) {
         contentChangeHandler = handler
+    }
+
+    public func setPaneActive(_ isActive: Bool) {
+        terminal.setPaneActive(isActive)
     }
 
     private func emitTermination(exitCode: Int32?) {
@@ -174,6 +180,9 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
     // AppKit owns local monitor tokens and requires the opaque value again for removal.
     // The view is main-actor isolated, while Swift 6 treats deinit as nonisolated.
     nonisolated(unsafe) private var keyEventMonitor: Any?
+    private var shouldFocusWhenAttachedToWindow = false
+    private var paneIsActive = true
+    private var activeCaretColor: NSColor?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -196,6 +205,34 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
         contentChangeCoalescer.notify { [weak self] in
             self?.onContentChanged?()
         }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil, shouldFocusWhenAttachedToWindow else { return }
+        focusWhenPossible()
+    }
+
+    func focusWhenPossible() {
+        guard let window else {
+            shouldFocusWhenAttachedToWindow = true
+            return
+        }
+        shouldFocusWhenAttachedToWindow = false
+        window.makeFirstResponder(self)
+    }
+
+    func setPaneActive(_ isActive: Bool) {
+        guard paneIsActive != isActive else { return }
+        paneIsActive = isActive
+        if isActive {
+            caretColor = activeCaretColor ?? .selectedControlColor
+            activeCaretColor = nil
+        } else {
+            activeCaretColor = caretColor
+            caretColor = .clear
+        }
+        needsDisplay = true
     }
 
     func apply(runtimeConfiguration: TerminalRuntimeConfiguration) {
@@ -234,7 +271,8 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
             )
             guard let sequence = TerminalInputTranslator.sequence(
                 for: input,
-                kittyKeyboardEnabled: !self.getTerminal().keyboardEnhancementFlags.isEmpty
+                kittyKeyboardEnabled: !self.getTerminal().keyboardEnhancementFlags.isEmpty,
+                clipboardContainsImage: TerminalPasteboard.containsImage(in: .general)
             ) else {
                 return event
             }
@@ -249,6 +287,23 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
             return
         }
         onOpenWebURL?(url)
+    }
+}
+
+enum TerminalPasteboard {
+    static func containsImage(in pasteboard: NSPasteboard) -> Bool {
+        if pasteboard.availableType(from: [.png, .tiff]) != nil {
+            return true
+        }
+
+        let options: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
+        guard let fileURLs = pasteboard.readObjects(forClasses: [NSURL.self], options: options) as? [URL] else {
+            return false
+        }
+        return fileURLs.contains { url in
+            guard let type = UTType(filenameExtension: url.pathExtension) else { return false }
+            return type.conforms(to: .image)
+        }
     }
 }
 

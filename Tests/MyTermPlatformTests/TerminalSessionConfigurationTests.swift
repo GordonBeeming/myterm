@@ -103,6 +103,50 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         XCTAssertNil(TerminalInputTranslator.sequence(for: unrelatedShortcut, kittyKeyboardEnabled: false))
     }
 
+    func testCommandVOnlyBecomesControlVForImageClipboardContent() {
+        let commandV = TerminalInputEvent(keyCode: 9, charactersIgnoringModifiers: "v", modifiers: [.command])
+
+        XCTAssertEqual(
+            TerminalInputTranslator.sequence(
+                for: commandV,
+                kittyKeyboardEnabled: true,
+                clipboardContainsImage: true
+            ),
+            [0x16]
+        )
+        XCTAssertNil(
+            TerminalInputTranslator.sequence(
+                for: commandV,
+                kittyKeyboardEnabled: false,
+                clipboardContainsImage: false
+            )
+        )
+    }
+
+    func testTerminalPasteboardDistinguishesImagesFromText() {
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("myterm-image-paste-test"))
+        pasteboard.clearContents()
+        pasteboard.setString("plain text", forType: .string)
+        XCTAssertFalse(TerminalPasteboard.containsImage(in: pasteboard))
+
+        pasteboard.clearContents()
+        let image = NSImage(size: NSSize(width: 2, height: 2))
+        XCTAssertTrue(pasteboard.writeObjects([image]))
+        XCTAssertTrue(TerminalPasteboard.containsImage(in: pasteboard))
+    }
+
+    @MainActor
+    func testInactivePaneHidesAndRestoresItsCaret() {
+        let terminal = MyTermLocalProcessTerminalView(frame: .zero)
+        let activeColor = terminal.caretColor
+
+        terminal.setPaneActive(false)
+        XCTAssertEqual(terminal.caretColor, .clear)
+
+        terminal.setPaneActive(true)
+        XCTAssertEqual(terminal.caretColor, activeColor)
+    }
+
     func testRenderedOutputSanitizesControlsAndKeepsABoundedTail() {
         let output = TerminalOutputSnapshot.plainText(
             from: "first\u{1B}[31m\r\nsecond\u{0007}\tthird",

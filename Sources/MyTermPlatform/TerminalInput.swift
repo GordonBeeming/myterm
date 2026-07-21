@@ -34,8 +34,15 @@ public struct TerminalInputEvent: Equatable, Sendable {
 public enum TerminalInputTranslator {
     public static func sequence(
         for event: TerminalInputEvent,
-        kittyKeyboardEnabled: Bool
+        kittyKeyboardEnabled: Bool,
+        clipboardContainsImage: Bool = false
     ) -> [UInt8]? {
+        if event.keyCode == 9,
+           event.modifiers.meaningful == [.command],
+           clipboardContainsImage {
+            return [0x16]
+        }
+
         guard !kittyKeyboardEnabled else { return nil }
 
         switch (event.keyCode, event.modifiers.meaningful) {

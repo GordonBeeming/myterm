@@ -23,6 +23,7 @@ public protocol TerminalProcessSession: AnyObject {
     func apply(runtimeConfiguration: TerminalRuntimeConfiguration)
     func contentSnapshot(maximumCharacters: Int) -> String
     func setContentChangeHandler(_ handler: (@MainActor () -> Void)?)
+    func setPaneActive(_ isActive: Bool)
 }
 
 public extension TerminalProcessSession {
@@ -31,6 +32,8 @@ public extension TerminalProcessSession {
     func contentSnapshot(maximumCharacters: Int) -> String { "" }
 
     func setContentChangeHandler(_ handler: (@MainActor () -> Void)?) {}
+
+    func setPaneActive(_ isActive: Bool) {}
 }
 
 public struct TerminalColor: Equatable, Sendable {

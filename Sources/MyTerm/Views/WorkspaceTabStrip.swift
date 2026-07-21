@@ -42,6 +42,7 @@ struct WorkspaceTabStrip: View {
                     Image(systemName: "plus")
                 }
                 .menuStyle(.borderlessButton)
+                .focusable(false)
                 .accessibilityLabel("Add tab")
                 .help("Add Tab")
             }
@@ -108,6 +109,7 @@ private struct WorkspaceTabItem: View {
                 }
             }
             .buttonStyle(.plain)
+            .focusable(false)
             .accessibilityLabel(title)
             .accessibilityValue(isSelected ? "Selected tab" : "Tab")
             .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -120,6 +122,7 @@ private struct WorkspaceTabItem: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .focusable(false)
             .opacity(isSelected || isHovering ? 1 : 0)
             .allowsHitTesting(isSelected || isHovering)
             .accessibilityHidden(!(isSelected || isHovering))

@@ -46,19 +46,95 @@ private struct TerminalSplitTreeView: View {
             TerminalPaneView(model: model, workspaceID: workspaceID, tabID: tabID, session: session)
                 .id(session.id)
         case .horizontal(let children):
-            HSplitView {
-                ForEach(children, id: \.stableID) { child in
-                    TerminalSplitTreeView(model: model, workspaceID: workspaceID, tabID: tabID, tree: child)
-                }
-            }
+            StableTerminalSplitGroup(
+                model: model,
+                workspaceID: workspaceID,
+                tabID: tabID,
+                children: children,
+                orientation: .horizontal
+            )
         case .vertical(let children):
-            VSplitView {
-                ForEach(children, id: \.stableID) { child in
-                    TerminalSplitTreeView(model: model, workspaceID: workspaceID, tabID: tabID, tree: child)
+            StableTerminalSplitGroup(
+                model: model,
+                workspaceID: workspaceID,
+                tabID: tabID,
+                children: children,
+                orientation: .vertical
+            )
+        }
+    }
+}
+
+private struct StableTerminalSplitGroup: View {
+    let model: AppModel
+    let workspaceID: WorkspaceID
+    let tabID: TabID
+    let children: [SplitNode]
+    let orientation: SplitOrientation
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = max(0, proxy.size.width)
+            let height = max(0, proxy.size.height)
+            let primaryLength = orientation == .horizontal ? width : height
+            let lengths = TerminalSplitGeometry.childLengths(
+                totalLength: primaryLength,
+                childCount: children.count
+            )
+
+            if orientation == .horizontal {
+                HStack(spacing: 0) {
+                    ForEach(Array(children.enumerated()), id: \.element.stableID) { index, child in
+                        splitChild(child, width: lengths[index], height: height)
+                        if index < children.count - 1 {
+                            divider(width: TerminalSplitGeometry.dividerThickness, height: height)
+                        }
+                    }
                 }
+                .frame(width: width, height: height, alignment: .topLeading)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(children.enumerated()), id: \.element.stableID) { index, child in
+                        splitChild(child, width: width, height: lengths[index])
+                        if index < children.count - 1 {
+                            divider(width: width, height: TerminalSplitGeometry.dividerThickness)
+                        }
+                    }
+                }
+                .frame(width: width, height: height, alignment: .topLeading)
             }
         }
     }
+
+    private func splitChild(_ child: SplitNode, width: CGFloat, height: CGFloat) -> some View {
+        TerminalSplitTreeView(
+            model: model,
+            workspaceID: workspaceID,
+            tabID: tabID,
+            tree: child
+        )
+        .frame(width: width, height: height)
+        .clipped()
+    }
+
+    private func divider(width: CGFloat, height: CGFloat) -> some View {
+        Rectangle()
+            .fill(Color(nsColor: .separatorColor))
+            .frame(width: width, height: height)
+            .accessibilityHidden(true)
+    }
+}
+
+enum TerminalSplitGeometry {
+    static let dividerThickness: CGFloat = 1
+
+    static func childLengths(totalLength: CGFloat, childCount: Int) -> [CGFloat] {
+        guard childCount > 0 else { return [] }
+        let dividerLength = dividerThickness * CGFloat(max(0, childCount - 1))
+        let childLength = max(0, totalLength - dividerLength) / CGFloat(childCount)
+        return Array(repeating: childLength, count: childCount)
+    }
+
 }
 
 private struct TerminalPaneView: View {
@@ -70,7 +146,9 @@ private struct TerminalPaneView: View {
     var body: some View {
         ZStack(alignment: .topTrailing) {
             if let process = model.terminalSession(for: session.id) {
-                TerminalSessionView(session: process)
+                TerminalSessionView(session: process, isActive: isFocused)
+                    .opacity(isFocused ? 1 : 0.7)
+                    .animation(.easeOut(duration: 0.12), value: isFocused)
                     .onTapGesture {
                         model.focusTerminal(workspaceID: workspaceID, tabID: tabID, sessionID: session.id)
                     }
@@ -90,6 +168,10 @@ private struct TerminalPaneView: View {
             .padding(6)
             .accessibilityLabel("Terminal pane actions")
         }
+    }
+
+    private var isFocused: Bool {
+        model.selectedTab?.focusedTerminalSessionID == session.id
     }
 }
 
