@@ -89,6 +89,27 @@ MyTerm is flat by default. Depth comes from macOS window materials, source-list 
 - **Surface:** WKWebView fills the remaining content area.
 - **Behavior:** Browser tabs do not split in the first release.
 
+### Settings
+
+- **Scene:** A native macOS Settings window, separate from the workspace window.
+- **Browser data:** One picker with three plain-language choices: Across all workspaces, Per workspace, and Per project folder.
+- **Expectation:** Say that the choice affects new tabs and that existing tabs keep their current profile.
+- **Passkeys:** Show whether the signed build has Apple's managed browser entitlement. State clearly that MyTerm passes requests to macOS, does not store passkeys, and leaves the choice of credential provider to the user.
+
+### App Icon
+
+- **Shape:** A standalone macOS icon, not a copy of another terminal's mark.
+- **Motif:** A terminal prompt combined with a branching signal that hints at projects, panes, and Xylem.
+- **Palette:** Xylem slate neutrals with the cyan and teal accents. Keep enough contrast to read at Dock and Spotlight sizes.
+- **Rule:** No product name, letters, traffic-light controls, or borrowed terminal-brand shapes inside the icon.
+
+### Browser engine boundary
+
+- **Built in:** WebKit is the only engine in the main app and remains the default.
+- **Boundary:** The app asks a browser-session factory to create a session for a named data profile.
+- **Later:** Chromium is a separate signed and notarized download with its own helper processes, not payload carried by every MyTerm install.
+- **Security:** Keep library validation enabled and require the engine package to be signed by the same developer team as the host app.
+
 ### Commands
 
 - **Visible path:** Toolbar, contextual menu, or local action button for every frequent task.

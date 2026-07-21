@@ -16,6 +16,14 @@ struct MyTermApp: App {
         .commands {
             MyTermCommands(startup: startup)
         }
+
+        Settings {
+            if let settings = startup.model?.browserSettings {
+                BrowserSettingsView(settings: settings)
+            } else {
+                ContentUnavailableView("Settings unavailable", systemImage: "exclamationmark.triangle")
+            }
+        }
     }
 }
 

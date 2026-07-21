@@ -49,6 +49,7 @@ fi
 APP_BUNDLE="$DIST_DIR/$APP_NAME.app"
 APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
+APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$APP_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
 
@@ -59,8 +60,9 @@ swift build --product MyTerm "${BUILD_ARGS[@]}"
 BUILD_BINARY="$(swift build --show-bin-path "${BUILD_ARGS[@]}")/MyTerm"
 
 rm -rf "$APP_BUNDLE"
-mkdir -p "$APP_MACOS"
+mkdir -p "$APP_MACOS" "$APP_RESOURCES"
 cp "$BUILD_BINARY" "$APP_BINARY"
+cp "$ROOT_DIR/Resources/MyTerm.icns" "$APP_RESOURCES/MyTerm.icns"
 chmod +x "$APP_BINARY"
 
 cat >"$INFO_PLIST" <<PLIST
@@ -74,12 +76,28 @@ cat >"$INFO_PLIST" <<PLIST
   <string>$APP_NAME</string>
   <key>CFBundleIdentifier</key>
   <string>$BUNDLE_ID</string>
+  <key>CFBundleIconFile</key>
+  <string>MyTerm</string>
   <key>CFBundleName</key>
   <string>$APP_NAME</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>LSMinimumSystemVersion</key>
   <string>$MIN_SYSTEM_VERSION</string>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeRole</key>
+      <string>Viewer</string>
+      <key>CFBundleURLName</key>
+      <string>$BUNDLE_ID.web</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>http</string>
+        <string>https</string>
+      </array>
+    </dict>
+  </array>
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
 </dict>
@@ -87,7 +105,14 @@ cat >"$INFO_PLIST" <<PLIST
 PLIST
 
 open_app() {
-  /usr/bin/open -n "$APP_BUNDLE"
+  local open_args=(-n)
+  if [[ -n "${MYTERM_APPLICATION_SUPPORT_DIRECTORY:-}" ]]; then
+    open_args+=(--env "MYTERM_APPLICATION_SUPPORT_DIRECTORY=$MYTERM_APPLICATION_SUPPORT_DIRECTORY")
+  fi
+  if [[ -n "${MYTERM_USER_DEFAULTS_SUITE:-}" ]]; then
+    open_args+=(--env "MYTERM_USER_DEFAULTS_SUITE=$MYTERM_USER_DEFAULTS_SUITE")
+  fi
+  /usr/bin/open "${open_args[@]}" "$APP_BUNDLE"
 }
 
 case "$MODE" in

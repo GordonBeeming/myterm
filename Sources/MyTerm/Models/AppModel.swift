@@ -8,9 +8,12 @@ import Observation
 final class AppModel {
     let channel: MyTermChannel
     let store: WorkspaceStore
+    let browserSettings: BrowserSettingsStore
 
     private let terminalEngine: (any TerminalEngine)?
     private let startsTerminalProcesses: Bool
+    private let browserDataProfileResolver: BrowserDataProfileResolver
+    private let browserSessionFactory: any BrowserSessionFactory
     private(set) var terminalSessions: [TerminalSessionID: any TerminalProcessSession] = [:]
     private(set) var browserControllers: [BrowserSessionID: BrowserSessionController] = [:]
     var errorDescription: String?
@@ -21,13 +24,18 @@ final class AppModel {
         channel: MyTermChannel = .active,
         applicationSupportDirectory: URL? = nil,
         terminalEngine: (any TerminalEngine)? = SwiftTermTerminalEngine(),
-        startsTerminalProcesses: Bool = true
+        startsTerminalProcesses: Bool = true,
+        browserSettings: BrowserSettingsStore? = nil,
+        browserSessionFactory: any BrowserSessionFactory = WebKitBrowserSessionFactory()
     ) throws {
         self.channel = channel
         let supportDirectory = try applicationSupportDirectory ?? Self.applicationSupportDirectory()
         store = try WorkspaceStore(persistenceURL: channel.persistenceURL(applicationSupportDirectory: supportDirectory))
+        self.browserSettings = browserSettings ?? BrowserSettingsStore(channel: channel)
         self.terminalEngine = terminalEngine
         self.startsTerminalProcesses = startsTerminalProcesses
+        self.browserSessionFactory = browserSessionFactory
+        browserDataProfileResolver = BrowserDataProfileResolver(channel: channel)
         restoreRuntimeObjects()
     }
 
@@ -45,7 +53,13 @@ final class AppModel {
         selectedWorkspace.selectedTab
     }
 
-    static func applicationSupportDirectory(fileManager: FileManager = .default) throws -> URL {
+    static func applicationSupportDirectory(
+        fileManager: FileManager = .default,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) throws -> URL {
+        if let override = environment["MYTERM_APPLICATION_SUPPORT_DIRECTORY"], !override.isEmpty {
+            return URL(fileURLWithPath: override, isDirectory: true).standardizedFileURL
+        }
         guard let directory = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
             throw AppModelError.applicationSupportUnavailable
         }
@@ -98,14 +112,19 @@ final class AppModel {
     func createBrowserTab() {
         perform {
             let workspaceID = store.selectedWorkspaceID
+            let workspace = store.selectedWorkspace
             guard let defaultURL = URL(string: "https://www.google.com") else {
                 throw AppModelError.defaultBrowserURLInvalid
             }
-            let tabID = try store.addBrowserTab(to: workspaceID, url: defaultURL)
+            let profile = browserDataProfileResolver.resolve(
+                scope: browserSettings.browserDataScope,
+                workspace: workspace
+            )
+            let tabID = try store.addBrowserTab(to: workspaceID, url: defaultURL, profile: profile)
             guard let tab = tab(workspaceID: workspaceID, tabID: tabID) else {
                 throw AppModelError.tabUnavailable(tabID)
             }
-            try restoreBrowserController(for: tab)
+            try restoreBrowserController(for: tab, workspaceID: workspaceID)
         }
     }
 
@@ -221,7 +240,7 @@ final class AppModel {
             switch tab.content {
             case .browser:
                 do {
-                    try restoreBrowserController(for: tab)
+                    try restoreBrowserController(for: tab, workspaceID: workspace.id)
                 } catch {
                     present(error)
                 }
@@ -267,10 +286,24 @@ final class AppModel {
         terminalSessions[session.id] = process
     }
 
-    private func restoreBrowserController(for tab: Tab) throws {
+    private func restoreBrowserController(for tab: Tab, workspaceID: WorkspaceID) throws {
         guard case .browser(let browser) = tab.content else { throw AppModelError.browserTabRequired(tab.id) }
         guard browserControllers[browser.id] == nil else { return }
-        let controller = BrowserSessionController()
+        let profile: BrowserDataProfile
+        if let existingProfile = browser.profile {
+            profile = existingProfile
+        } else {
+            guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
+                throw AppModelError.workspaceUnavailable(workspaceID)
+            }
+            profile = browserDataProfileResolver.resolve(
+                scope: browserSettings.browserDataScope,
+                workspace: workspace
+            )
+            try store.updateBrowserDataProfile(workspaceID: workspaceID, tabID: tab.id, profile: profile)
+        }
+
+        let controller = browserSessionFactory.makeSession(profile: profile)
         try controller.load(url: browser.url)
         browserControllers[browser.id] = controller
     }
