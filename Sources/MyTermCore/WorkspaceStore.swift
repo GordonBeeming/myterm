@@ -216,8 +216,13 @@ public final class WorkspaceStore {
     }
 
     @discardableResult
-    public func addBrowserTab(to workspaceID: WorkspaceID, url: URL, at index: Int? = nil) throws -> TabID {
-        try addTab(to: workspaceID, content: Tab.browser(url: url).content, at: index)
+    public func addBrowserTab(
+        to workspaceID: WorkspaceID,
+        url: URL,
+        profile: BrowserDataProfile? = nil,
+        at index: Int? = nil
+    ) throws -> TabID {
+        try addTab(to: workspaceID, content: Tab.browser(url: url, profile: profile).content, at: index)
     }
 
     public func closeTab(workspaceID: WorkspaceID, tabID: TabID) throws {
@@ -409,6 +414,27 @@ public final class WorkspaceStore {
                 throw WorkspaceStoreError.browserTabRequired(tabID)
             }
             session.url = url
+            tab.content = .browser(session)
+            snapshot.workspaces[workspaceIndex].tabs[tabIndex] = tab
+        }
+    }
+
+    public func updateBrowserDataProfile(
+        workspaceID: WorkspaceID,
+        tabID: TabID,
+        profile: BrowserDataProfile?
+    ) throws {
+        try mutate { snapshot in
+            let (workspaceIndex, tabIndex) = try tabLocation(
+                workspaceID: workspaceID,
+                tabID: tabID,
+                in: snapshot
+            )
+            var tab = snapshot.workspaces[workspaceIndex].tabs[tabIndex]
+            guard case .browser(var session) = tab.content else {
+                throw WorkspaceStoreError.browserTabRequired(tabID)
+            }
+            session.profile = profile
             tab.content = .browser(session)
             snapshot.workspaces[workspaceIndex].tabs[tabIndex] = tab
         }

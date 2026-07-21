@@ -29,13 +29,67 @@ public struct TerminalSession: Codable, Equatable, Hashable, Sendable, Identifia
     }
 }
 
+public enum BrowserDataScope: String, Codable, Equatable, Hashable, Sendable {
+    case appWide = "app-wide"
+    case workspace
+    case projectDirectory = "project-directory"
+}
+
+public struct BrowserDataProfile: Codable, Equatable, Hashable, Sendable {
+    public let scope: BrowserDataScope
+    public let persistentStoreID: UUID
+    public let projectDirectory: URL?
+
+    public init(
+        scope: BrowserDataScope,
+        persistentStoreID: UUID,
+        projectDirectory: URL? = nil
+    ) {
+        self.scope = scope
+        self.persistentStoreID = persistentStoreID
+        self.projectDirectory = projectDirectory?.standardizedFileURL
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case scope
+        case persistentStoreID
+        case projectDirectory
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        scope = try container.decode(BrowserDataScope.self, forKey: .scope)
+        persistentStoreID = try container.decode(UUID.self, forKey: .persistentStoreID)
+        projectDirectory = try container.decodeIfPresent(URL.self, forKey: .projectDirectory)?.standardizedFileURL
+    }
+}
+
 public struct BrowserSession: Codable, Equatable, Hashable, Sendable, Identifiable {
     public let id: BrowserSessionID
     public var url: URL
+    public var profile: BrowserDataProfile?
 
-    public init(id: BrowserSessionID = BrowserSessionID(), url: URL) {
+    public init(
+        id: BrowserSessionID = BrowserSessionID(),
+        url: URL,
+        profile: BrowserDataProfile? = nil
+    ) {
         self.id = id
         self.url = url
+        self.profile = profile
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case url
+        case profile
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(BrowserSessionID.self, forKey: .id)
+        url = try container.decode(URL.self, forKey: .url)
+        profile = try container.decodeIfPresent(BrowserDataProfile.self, forKey: .profile)
     }
 }
 
@@ -354,8 +408,12 @@ public struct Tab: Codable, Equatable, Hashable, Sendable, Identifiable {
         return Tab(id: id, content: .terminal(.terminal(session)), focusedTerminalSessionID: session.id)
     }
 
-    public static func browser(id: TabID = TabID(), url: URL) -> Tab {
-        Tab(id: id, content: .browser(BrowserSession(url: url)))
+    public static func browser(
+        id: TabID = TabID(),
+        url: URL,
+        profile: BrowserDataProfile? = nil
+    ) -> Tab {
+        Tab(id: id, content: .browser(BrowserSession(url: url, profile: profile)))
     }
 
     public var isBrowser: Bool {

@@ -18,6 +18,8 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
 
     private let configuration: TerminalSessionConfiguration
     private let terminal: LocalProcessTerminalView
+    private var workingDirectoryPoller: ProcessWorkingDirectoryPoller?
+    private var lastReportedWorkingDirectory: URL?
     private var didTerminate = false
 
     public init(configuration: TerminalSessionConfiguration) throws {
@@ -37,6 +39,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
         }
 
         self.configuration = configuration
+        lastReportedWorkingDirectory = configuration.workingDirectory
         terminal = LocalProcessTerminalView(frame: .zero)
         super.init()
 
@@ -65,6 +68,16 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
             throw failure
         }
         isRunning = true
+        workingDirectoryPoller = ProcessWorkingDirectoryPoller(
+            processID: terminal.process.shellPid,
+            provider: MacOSProcessWorkingDirectoryProvider(),
+            onDirectoryChanged: { [weak self] directory in
+                Task { @MainActor [weak self] in
+                    self?.emitWorkingDirectoryChanged(directory)
+                }
+            }
+        )
+        workingDirectoryPoller?.start(initialDirectory: configuration.workingDirectory)
     }
 
     public func resize(columns: Int, rows: Int) {
@@ -85,17 +98,31 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
 
     public func terminate() {
         guard isRunning else { return }
+        stopWorkingDirectoryPolling()
         terminal.terminate()
     }
 
     private func emitTermination(exitCode: Int32?) {
         guard !didTerminate else { return }
         didTerminate = true
+        stopWorkingDirectoryPolling()
         isRunning = false
         if exitCode == nil {
             onEvent?(.failed(TerminalSessionFailure(message: "The terminal process ended before reporting an exit code.")))
         }
         onEvent?(.processTerminated(exitCode: exitCode))
+    }
+
+    private func emitWorkingDirectoryChanged(_ directory: URL) {
+        guard isRunning, directory != lastReportedWorkingDirectory else { return }
+        lastReportedWorkingDirectory = directory
+        workingDirectoryPoller?.updateCurrentDirectory(directory)
+        onEvent?(.workingDirectoryChanged(directory))
+    }
+
+    private func stopWorkingDirectoryPolling() {
+        workingDirectoryPoller?.stop()
+        workingDirectoryPoller = nil
     }
 }
 
@@ -108,7 +135,7 @@ extension SwiftTermTerminalSession: @preconcurrency LocalProcessTerminalViewDele
 
     public func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {
         guard let workingDirectory = TerminalWorkingDirectoryNormalizer.normalize(directory) else { return }
-        onEvent?(.workingDirectoryChanged(workingDirectory))
+        emitWorkingDirectoryChanged(workingDirectory)
     }
 
     public func processTerminated(source: TerminalView, exitCode: Int32?) {

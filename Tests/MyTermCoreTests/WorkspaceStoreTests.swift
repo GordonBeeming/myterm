@@ -127,6 +127,45 @@ final class WorkspaceStoreTests: XCTestCase {
         }
     }
 
+    func testBrowserDataProfilePersistsAndTerminalTabsRejectUpdates() throws {
+        let url = temporaryURL()
+        let store = try WorkspaceStore(persistenceURL: url)
+        let workspaceID = store.selectedWorkspaceID
+        let profile = BrowserDataProfile(
+            scope: .projectDirectory,
+            persistentStoreID: UUID(),
+            projectDirectory: URL(fileURLWithPath: "/tmp/myterm-project")
+        )
+        let browserTabID = try store.addBrowserTab(
+            to: workspaceID,
+            url: try XCTUnwrap(URL(string: "https://example.com"))
+        )
+
+        try store.updateBrowserDataProfile(
+            workspaceID: workspaceID,
+            tabID: browserTabID,
+            profile: profile
+        )
+
+        let restored = try WorkspaceStore(persistenceURL: url)
+        let browserTab = try XCTUnwrap(restored.workspaces[0].tabs.first { $0.id == browserTabID })
+        guard case .browser(let session) = browserTab.content else {
+            return XCTFail("Expected a browser tab")
+        }
+        XCTAssertEqual(session.profile, profile)
+
+        let terminalTabID = try XCTUnwrap(restored.workspaces[0].tabs.first { !$0.isBrowser }?.id)
+        XCTAssertThrowsError(
+            try restored.updateBrowserDataProfile(
+                workspaceID: workspaceID,
+                tabID: terminalTabID,
+                profile: profile
+            )
+        ) { error in
+            XCTAssertEqual(error as? WorkspaceStoreError, .browserTabRequired(terminalTabID))
+        }
+    }
+
     func testCorruptAndUnsupportedPersistenceIsSurfaced() throws {
         let corruptURL = temporaryURL()
         try Data("not json".utf8).write(to: corruptURL)

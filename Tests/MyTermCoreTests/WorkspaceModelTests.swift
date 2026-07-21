@@ -3,6 +3,38 @@ import XCTest
 @testable import MyTermCore
 
 final class WorkspaceModelTests: XCTestCase {
+    func testBrowserDataProfilesRoundTripThroughCodable() throws {
+        let projectDirectory = URL(fileURLWithPath: "/tmp/myterm-project/../myterm-project")
+        let profiles = [
+            BrowserDataProfile(scope: .appWide, persistentStoreID: UUID()),
+            BrowserDataProfile(scope: .workspace, persistentStoreID: UUID()),
+            BrowserDataProfile(
+                scope: .projectDirectory,
+                persistentStoreID: UUID(),
+                projectDirectory: projectDirectory
+            ),
+        ]
+
+        let data = try JSONEncoder().encode(profiles)
+        let decoded = try JSONDecoder().decode([BrowserDataProfile].self, from: data)
+
+        XCTAssertEqual(decoded, profiles)
+        XCTAssertEqual(decoded[2].projectDirectory, projectDirectory.standardizedFileURL)
+    }
+
+    func testOldBrowserSessionJSONDecodesWithoutProfile() throws {
+        let id = BrowserSessionID()
+        let json = """
+        {"id":"\(id)","url":"https://example.com"}
+        """
+
+        let decoded = try JSONDecoder().decode(BrowserSession.self, from: Data(json.utf8))
+
+        XCTAssertEqual(decoded.id, id)
+        XCTAssertEqual(decoded.url, try XCTUnwrap(URL(string: "https://example.com")))
+        XCTAssertNil(decoded.profile)
+    }
+
     func testIdentifiersAndModelRoundTripThroughCodable() throws {
         let workingDirectory = URL(fileURLWithPath: "/Users/gordon/projects")
         let first = TerminalSession(workingDirectory: workingDirectory)
