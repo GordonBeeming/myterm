@@ -101,11 +101,11 @@ cp "$ROOT_DIR/Packaging/Info.plist" "$INFO_PLIST"
 
 SIGNING_IDENTITY="${CODESIGN_IDENTITY:-}"
 if [[ -z "$SIGNING_IDENTITY" ]]; then
+  SIGNING_PATTERN="Apple Development"
   if [[ "$DISTRIBUTION" == "1" ]]; then
-    SIGNING_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk -F '"' '/Developer ID Application/{print $2; exit}')"
-  else
-    SIGNING_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk -F '"' '/Apple Development/{print $2; exit}')"
+    SIGNING_PATTERN="Developer ID Application"
   fi
+  SIGNING_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk -F '"' -v pattern="$SIGNING_PATTERN" '$0 ~ pattern {print $2; exit}')"
 fi
 if [[ -z "$SIGNING_IDENTITY" ]]; then
   SIGNING_IDENTITY="-"
