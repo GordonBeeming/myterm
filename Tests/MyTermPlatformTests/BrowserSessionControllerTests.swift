@@ -17,8 +17,6 @@ final class BrowserSessionControllerTests: XCTestCase {
     func testNamedStoresShareCookiesOnlyWithTheSameIdentifier() async throws {
         let sharedIdentifier = UUID()
         let isolatedIdentifier = UUID()
-        await removeStore(sharedIdentifier)
-        await removeStore(isolatedIdentifier)
         let cookieName = "myterm-profile-test"
         let cookieValue = UUID().uuidString
 
@@ -41,8 +39,8 @@ final class BrowserSessionControllerTests: XCTestCase {
             )
         }()
 
-        WKWebsiteDataStore.remove(forIdentifier: sharedIdentifier) { _ in }
-        WKWebsiteDataStore.remove(forIdentifier: isolatedIdentifier) { _ in }
+        await removeStore(sharedIdentifier)
+        await removeStore(isolatedIdentifier)
 
         XCTAssertTrue(results.matching.contains("\(cookieName)=\(cookieValue)"))
         XCTAssertFalse(results.isolated.contains("\(cookieName)=\(cookieValue)"))
