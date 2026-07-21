@@ -1,0 +1,77 @@
+import Foundation
+import XCTest
+@testable import MyTermCore
+
+final class WorkspaceModelTests: XCTestCase {
+    func testIdentifiersAndModelRoundTripThroughCodable() throws {
+        let workingDirectory = URL(fileURLWithPath: "/Users/gordon/projects")
+        let first = TerminalSession(workingDirectory: workingDirectory)
+        let second = TerminalSession(workingDirectory: URL(fileURLWithPath: "/tmp"))
+        let tree: SplitNode = .horizontal([.terminal(first), .terminal(second)])
+        let workspace = Workspace(
+            title: "Development",
+            tabs: [
+                Tab(content: .terminal(tree), focusedTerminalSessionID: second.id),
+                Tab.browser(url: try XCTUnwrap(URL(string: "https://example.com/docs")))
+            ]
+        )
+
+        let data = try JSONEncoder().encode(workspace)
+        let decoded = try JSONDecoder().decode(Workspace.self, from: data)
+
+        XCTAssertEqual(decoded, workspace)
+        XCTAssertEqual(decoded.tabs[0].terminalTree?.paneIDs, [first.paneID, second.paneID])
+        XCTAssertEqual(decoded.tabs[0].terminalTree?.terminalSessions[0].workingDirectory, workingDirectory)
+        XCTAssertEqual(decoded.tabs[1].isBrowser, true)
+        XCTAssertTrue(String(decoding: data, as: UTF8.self).contains("Development"))
+    }
+
+    func testSplitInsertionAndParentCollapse() throws {
+        let first = TerminalSession()
+        let second = TerminalSession()
+        let third = TerminalSession()
+        var tree: SplitNode = .terminal(first)
+
+        XCTAssertTrue(tree.insert(second, beside: first.id, orientation: .horizontal))
+        XCTAssertTrue(tree.insert(third, beside: second.id, orientation: .vertical))
+        XCTAssertEqual(tree.terminalSessionIDs, [first.id, second.id, third.id])
+
+        let afterSecondClose = try XCTUnwrap(tree.removingTerminalSession(second.id))
+        XCTAssertEqual(afterSecondClose.terminalSessionIDs, [first.id, third.id])
+        XCTAssertTrue(afterSecondClose.contains(first.id))
+        XCTAssertTrue(afterSecondClose.contains(third.id))
+
+        let afterFirstClose = try XCTUnwrap(afterSecondClose.removingTerminalSession(first.id))
+        XCTAssertEqual(afterFirstClose.terminalSessionIDs, [third.id])
+        XCTAssertEqual(afterFirstClose, .terminal(third))
+        XCTAssertNil(afterFirstClose.removingTerminalSession(third.id))
+    }
+
+    func testRepairDropsDuplicateIDsAndRepairsSelection() throws {
+        let workspaceID = WorkspaceID()
+        let tabID = TabID()
+        let duplicateTab = Tab.browser(
+            id: tabID,
+            url: try XCTUnwrap(URL(string: "https://one.example"))
+        )
+        let anotherTab = Tab.browser(
+            id: TabID(),
+            url: try XCTUnwrap(URL(string: "https://two.example"))
+        )
+        let workspace = Workspace(
+            id: workspaceID,
+            title: "Workspace",
+            tabs: [duplicateTab, duplicateTab, anotherTab],
+            selectedTabID: TabID()
+        )
+
+        XCTAssertEqual(workspace.tabs.map(\.id), [tabID, anotherTab.id])
+        XCTAssertEqual(workspace.selectedTabID, tabID)
+
+        let snapshot = WorkspaceStoreSnapshot(
+            workspaces: [workspace],
+            selectedWorkspaceID: WorkspaceID()
+        )
+        XCTAssertEqual(snapshot.selectedWorkspaceID, workspaceID)
+    }
+}
