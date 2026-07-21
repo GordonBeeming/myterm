@@ -1,82 +1,113 @@
 # MyTerm
 
-MyTerm is a lightweight native macOS workspace for long-lived terminal sessions and WebKit browser tabs. It keeps the first release deliberately small: SwiftTerm renders terminals, WebKit renders websites, and Chromium is not bundled.
+<p align="center">
+  <img src="Resources/MyTermIcon.png" width="144" alt="MyTerm app icon">
+</p>
 
-It includes collapsible, color-coded workspace folders; pinned and draggable workspaces; terminal and browser tabs; native horizontal and vertical splits; persistent sessions; and cmux-compatible shortcuts for the core workflow.
+MyTerm is an opinionated native macOS terminal for people who keep several projects open all day. It puts long-lived terminal sessions and WebKit browser tabs inside named workspaces, with fast pane splitting and very little surrounding UI.
 
-## Install with Homebrew
+It is not a terminal framework, an agent dashboard, a cross-platform Electron app, or a browser with a terminal bolted on. The first release deliberately focuses on the small part of cmux that its author uses every day.
+
+## Requirements
+
+- macOS 14 or later
+- Apple silicon for the current downloadable release
+- Xcode's Swift toolchain when building from source
+
+## Install
+
+Homebrew is the primary installation path:
 
 ```bash
 brew install --cask gordonbeeming/tap/myterm
 open -a myterm
 ```
 
-The cask installs the signed and notarized Apple silicon app from the matching GitHub release. See [RELEASING.md](RELEASING.md) for the publishing workflow.
+The cask installs the signed, notarized, and stapled Apple silicon release. MyTerm quits when its last window closes; launching it again restores the saved workspace layout.
 
-## Run locally
+## The workflow
 
-MyTerm requires macOS 14 or later and the Swift toolchain included with Xcode.
+- **Workspaces** have a title, can be pinned and reordered, and live inside collapsible color-coded folders.
+- **Tabs** can be terminals or a native WebKit browser. Browser tabs keep their URL, cookies, and website data across app restarts.
+- **Terminal panes** split right with <kbd>⌘D</kbd> and down with <kbd>⇧⌘D</kbd>. Splits are native, draggable, and backed by independent SwiftTerm sessions.
+- **One app instance** handles launch requests. Opening a folder, script, SSH link, or web URL reuses the existing window instead of creating another app process.
+- **Compact native UI** keeps workspace and tab chrome out of the way. There is no agent-status layer or ornamental terminal dashboard.
+
+### Terminal links stay with the work
+
+Command-click any valid HTTP or HTTPS link in a terminal and MyTerm opens it as a browser tab in that terminal's workspace. This works for localhost and remote sites alike.
+
+Every terminal process also receives a `BROWSER` launcher inside the app bundle. Tools such as Codex, Claude, and Plannotator that honor `BROWSER` send their HTTP and HTTPS links back to the running MyTerm instance. MyTerm does not become the macOS default browser.
+
+A tool that explicitly invokes the system default browser bypasses `BROWSER` and can still open externally. Non-web links retain their normal system handling.
+
+## Browser sessions and passkeys
+
+New browser tabs can remember cookies and website data at one of three scopes, selected in Settings:
+
+- **Across all workspaces** uses one profile for the active app channel.
+- **Per workspace** isolates each workspace and is the default.
+- **Per project folder** shares a profile for terminals rooted in the same Git repository or folder.
+
+Existing tabs keep their assigned profile when this setting changes. MyTerm stores browser profile identifiers and WebKit stores the website data; MyTerm never stores passkeys.
+
+WebAuthn requests are passed to macOS and the user's chosen credential provider, such as Apple Passwords or 1Password. Apple's managed browser passkey entitlement is intentionally absent until Apple approves it for the signing team, so local and current distribution builds report that capability as unavailable.
+
+## Everyday shortcuts
+
+| Action | Shortcut |
+| --- | --- |
+| New workspace | <kbd>⇧⌘N</kbd> |
+| Rename workspace | <kbd>⇧⌘R</kbd> |
+| New terminal tab | <kbd>⌘T</kbd> |
+| New browser tab | <kbd>⇧⌘B</kbd> |
+| Split terminal right | <kbd>⌘D</kbd> |
+| Split terminal down | <kbd>⇧⌘D</kbd> |
+| Close focused pane or tab | <kbd>⌘W</kbd> |
+| Toggle workspace sidebar | <kbd>⌘B</kbd> |
+
+[SHORTCUTS.md](SHORTCUTS.md) lists every supported shortcut and its native menu path.
+
+## Default terminal integration
+
+In Settings, choose **Make MyTerm the Default** to register MyTerm for `.command` and `.tool` scripts, UNIX executables, and `ssh://` links. It does not register MyTerm as the default HTTP or HTTPS browser.
+
+Folders open a terminal tab in that folder. Scripts and executables run from their containing folder. SSH URLs are parsed into a normal `ssh` command with user and port support.
+
+## Development channels
+
+Run the development channel from the repository:
 
 ```bash
 ./run.sh
 ```
 
-That command builds the development app, closes an existing `myterm-dev` process, installs the fresh bundle under `dist/`, and launches it.
+This builds and launches `myterm-dev`. It has its own bundle identifier, browser settings, website-data profiles, and workspace state, so it can live beside production `myterm`.
 
 ```bash
 ./run.sh --prod
+./run.sh --verify
+swift test --parallel
 ```
 
-The production channel is named `myterm`. It uses a release build, a separate bundle identifier, and separate persisted workspace and browser settings from `myterm-dev`.
+`./run.sh` also supports `--bundle`, `--debug`, `--logs`, and `--telemetry`. The app uses SwiftTerm for native terminal rendering and WebKit for the built-in browser. Chromium is intentionally not bundled; [BROWSER_ENGINES.md](BROWSER_ENGINES.md) describes the boundary for a separately downloaded engine later.
 
-Use `./run.sh --verify` or `./run.sh --prod --verify` for a build-and-launch smoke test. The script also supports `--debug`, `--logs`, and `--telemetry`.
+## Release trust chain
 
-Closing the last MyTerm window quits the app. Opening MyTerm again restores the persisted workspace layout.
+The source commits for the release are SSH-signed. The GitHub release workflow then:
 
-## Default terminal
+1. builds the arm64 application;
+2. signs `myterm.app` with a Developer ID Application certificate, hardened runtime, and secure timestamp;
+3. notarizes and staples the app;
+4. creates the DMG, then signs, notarizes, staples, and validates the DMG separately; and
+5. updates the Homebrew cask with an SSH-signed `myterm-release[bot]` commit.
 
-Open MyTerm Settings with <kbd>⌘</kbd><kbd>,</kbd>, then choose **Make MyTerm the Default**. macOS may ask for confirmation. This registers MyTerm for `.command` and `.tool` shell scripts, UNIX executables, and SSH links.
+The app and its disk image therefore each have their own validated distribution signature and notarization ticket. [RELEASING.md](RELEASING.md) documents the checks and required GitHub environment secrets.
 
-Launch requests reuse the existing MyTerm window and create a terminal tab there. Opening a folder starts the tab in that folder; opening a script or executable runs it from its containing folder.
+## Current boundaries
 
-## Keyboard shortcuts
-
-The everyday shortcuts match the requested cmux workflow: <kbd>⇧⌘N</kbd> creates a workspace, <kbd>⌘D</kbd> splits right, <kbd>⇧⌘D</kbd> splits below, <kbd>⌘W</kbd> closes the focused pane or tab, and <kbd>⇧⌘R</kbd> opens the rename sheet.
-
-[SHORTCUTS.md](SHORTCUTS.md) lists the complete supported set. Every shortcut is also visible in the native Workspace, Tabs, or Pane menu.
-
-## Browser profiles
-
-Open MyTerm Settings with <kbd>⌘</kbd><kbd>,</kbd> and choose how new browser tabs remember cookies and website data:
-
-- **Across all workspaces** shares one profile throughout that app channel.
-- **Per workspace** isolates each workspace and is the default.
-- **Per project folder** shares a profile for terminals inside the same Git repository or folder.
-
-Existing browser tabs keep their assigned profile when the setting changes. Website data and the last URL survive app restarts.
-
-## Passkeys
-
-MyTerm never stores passkeys. `WKWebView` passes WebAuthn requests to macOS, which uses the credential provider selected by the user, such as Apple Passwords or 1Password.
-
-Local builds correctly report passkeys as unavailable. To enable passkeys for arbitrary websites in a distributed build:
-
-1. The Account Holder for an organization Apple Developer account requests the managed `com.apple.developer.web-browser.public-key-credential` capability from Apple.
-2. After Apple approves it, add that entitlement with a Boolean value of `true` to the distribution entitlements file.
-3. Sign the complete app bundle with the approved Developer Team, hardened runtime, and a provisioning profile containing the capability.
-4. Notarize and staple the app before distribution.
-5. Open MyTerm Settings and choose **Allow passkey access** when macOS reports the authorization state as not determined.
-
-The generated `Info.plist` already declares HTTP and HTTPS handling, and the app provides a URL field as required for Apple's browser review. Do not add the managed entitlement to local or distribution signing until Apple grants it to the Developer Team.
-
-## Optional Chromium engine
-
-The main app remains WebKit-only and was measured at roughly 5 MB as a release bundle during the MVP audit. [BROWSER_ENGINES.md](BROWSER_ENGINES.md) records the boundary and security requirements for a separately downloaded, same-team-signed Chromium engine later.
-
-## Test
-
-```bash
-swift test
-```
-
-The test suite covers persistent workspaces and layouts, split behavior, channel isolation, browser profile resolution, real WebKit cookie isolation, terminal working-directory tracking, and URL normalization.
+- macOS only; downloadable builds are Apple silicon only.
+- One main window and one built-in WebKit engine.
+- Browser tabs do not split in the first release.
+- Chromium remains an optional future download so the main app stays small.
+- Passkey pass-through requires Apple's managed entitlement before it can be enabled in distribution.

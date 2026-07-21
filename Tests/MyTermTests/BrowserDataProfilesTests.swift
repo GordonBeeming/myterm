@@ -174,9 +174,14 @@ final class BrowserDataProfilesTests: XCTestCase {
         ))
         XCTAssertEqual(persistedFirstBrowser.profile, firstProfile)
 
-        let legacyTabID = try initial.store.addBrowserTab(
+        let firstLegacyTabID = try initial.store.addBrowserTab(
             to: initial.store.selectedWorkspaceID,
             url: try XCTUnwrap(URL(string: "https://example.com")),
+            profile: nil
+        )
+        let secondLegacyTabID = try initial.store.addBrowserTab(
+            to: initial.store.selectedWorkspaceID,
+            url: try XCTUnwrap(URL(string: "https://example.org")),
             profile: nil
         )
         let restored = try AppModel(
@@ -186,13 +191,20 @@ final class BrowserDataProfilesTests: XCTestCase {
             startsTerminalProcesses: false,
             browserSettings: settings
         )
-        let legacyTab = try XCTUnwrap(restored.selectedWorkspace.tabs.first(where: { $0.id == legacyTabID }))
-        let legacyBrowser = try browser(in: legacyTab)
-        let migratedProfile = try XCTUnwrap(legacyBrowser.profile)
+        let firstLegacyTab = try XCTUnwrap(
+            restored.selectedWorkspace.tabs.first(where: { $0.id == firstLegacyTabID })
+        )
+        let secondLegacyTab = try XCTUnwrap(
+            restored.selectedWorkspace.tabs.first(where: { $0.id == secondLegacyTabID })
+        )
+        let firstLegacyBrowser = try browser(in: firstLegacyTab)
+        let secondLegacyBrowser = try browser(in: secondLegacyTab)
+        let migratedProfile = try XCTUnwrap(firstLegacyBrowser.profile)
 
         XCTAssertEqual(migratedProfile.scope, .workspace)
+        XCTAssertEqual(secondLegacyBrowser.profile, migratedProfile)
         XCTAssertEqual(
-            restored.browserController(for: legacyBrowser.id)?.webView.configuration.websiteDataStore.identifier,
+            restored.browserController(for: firstLegacyBrowser.id)?.webView.configuration.websiteDataStore.identifier,
             migratedProfile.persistentStoreID
         )
     }

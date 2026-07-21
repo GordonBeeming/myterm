@@ -270,8 +270,7 @@ public final class WorkspaceStore {
             guard newSiblingPosition != siblingPosition else { return }
             let targetIndex = siblingIndices[newSiblingPosition]
             let workspace = snapshot.workspaces.remove(at: oldIndex)
-            let insertionIndex = oldIndex < targetIndex ? targetIndex : targetIndex
-            snapshot.workspaces.insert(workspace, at: insertionIndex)
+            snapshot.workspaces.insert(workspace, at: targetIndex)
         }
     }
 
@@ -552,6 +551,28 @@ public final class WorkspaceStore {
             session.profile = profile
             tab.content = .browser(session)
             snapshot.workspaces[workspaceIndex].tabs[tabIndex] = tab
+        }
+    }
+
+    public func updateBrowserDataProfiles(
+        _ updates: [(workspaceID: WorkspaceID, tabID: TabID, profile: BrowserDataProfile)]
+    ) throws {
+        guard !updates.isEmpty else { return }
+        try mutate { snapshot in
+            for update in updates {
+                let (workspaceIndex, tabIndex) = try tabLocation(
+                    workspaceID: update.workspaceID,
+                    tabID: update.tabID,
+                    in: snapshot
+                )
+                var tab = snapshot.workspaces[workspaceIndex].tabs[tabIndex]
+                guard case .browser(var session) = tab.content else {
+                    throw WorkspaceStoreError.browserTabRequired(update.tabID)
+                }
+                session.profile = update.profile
+                tab.content = .browser(session)
+                snapshot.workspaces[workspaceIndex].tabs[tabIndex] = tab
+            }
         }
     }
 

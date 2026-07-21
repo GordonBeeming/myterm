@@ -64,6 +64,21 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(restored.workspaces.first { $0.id == firstWorkID }?.folderID, workFolderID)
     }
 
+    func testWorkspaceOffsetMovesUseSiblingPositionsInBothDirections() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let unfiledWorkspaceID = store.selectedWorkspaceID
+        let folderID = try store.createFolder(title: "Work")
+        let firstID = try store.createWorkspace(title: "First", folderID: folderID)
+        let secondID = try store.createWorkspace(title: "Second", folderID: folderID)
+        let thirdID = try store.createWorkspace(title: "Third", folderID: folderID)
+
+        try store.moveWorkspace(firstID, offset: 1)
+        XCTAssertEqual(store.workspaces.map(\.id), [unfiledWorkspaceID, secondID, firstID, thirdID])
+
+        try store.moveWorkspace(thirdID, offset: -1)
+        XCTAssertEqual(store.workspaces.map(\.id), [unfiledWorkspaceID, secondID, thirdID, firstID])
+    }
+
     func testRemovingFolderKeepsItsWorkspacesAndMovesThemToUnfiled() throws {
         let store = try WorkspaceStore(persistenceURL: temporaryURL())
         let folderID = try store.createFolder(title: "Personal")

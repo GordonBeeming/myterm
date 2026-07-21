@@ -5,10 +5,15 @@ final class TerminalSessionConfigurationTests: XCTestCase {
     func testConfigurationCarriesOneShotInitialCommand() {
         let configuration = TerminalSessionConfiguration(
             workingDirectory: URL(fileURLWithPath: "/tmp"),
-            initialCommand: "echo ready"
+            initialCommand: "echo ready",
+            environment: ["BROWSER": "/Applications/myterm.app/Contents/Resources/myterm-browser"]
         )
 
         XCTAssertEqual(configuration.initialCommand, "echo ready")
+        XCTAssertEqual(
+            configuration.environment["BROWSER"],
+            "/Applications/myterm.app/Contents/Resources/myterm-browser"
+        )
     }
 
     func testStandardizesWorkingDirectory() {
@@ -36,5 +41,16 @@ final class TerminalSessionConfigurationTests: XCTestCase {
 
     func testRejectsNonFileOSC7Value() {
         XCTAssertNil(TerminalWorkingDirectoryNormalizer.normalize("https://example.com/workspace"))
+    }
+
+    func testTerminalLinkRouterAcceptsEveryValidWebHostAndRejectsOtherSchemes() {
+        XCTAssertEqual(
+            TerminalLinkRouter.webURL(from: "https://example.com/path?query=yes#result")?.absoluteString,
+            "https://example.com/path?query=yes#result"
+        )
+        XCTAssertEqual(TerminalLinkRouter.webURL(from: "http://localhost:3000")?.host, "localhost")
+        XCTAssertNil(TerminalLinkRouter.webURL(from: "file:///tmp/report.html"))
+        XCTAssertNil(TerminalLinkRouter.webURL(from: "ssh://example.com"))
+        XCTAssertNil(TerminalLinkRouter.webURL(from: "https:///missing-host"))
     }
 }

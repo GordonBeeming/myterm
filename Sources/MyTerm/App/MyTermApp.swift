@@ -32,14 +32,10 @@ struct MyTermApp: App {
 
 @MainActor
 final class MyTermApplicationDelegate: NSObject, NSApplicationDelegate {
-    private weak var model: AppModel?
-    private var pendingURLs: [URL] = []
+    private let urlDispatcher = MyTermURLDispatcher()
 
     func connect(model: AppModel?) {
-        self.model = model
-        guard let model, !pendingURLs.isEmpty else { return }
-        model.open(pendingURLs)
-        pendingURLs.removeAll()
+        urlDispatcher.connect(handler: model)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -55,12 +51,36 @@ final class MyTermApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        if let model {
-            model.open(urls)
-        } else {
-            pendingURLs.append(contentsOf: urls)
-        }
+        urlDispatcher.dispatch(urls)
         application.activate(ignoringOtherApps: true)
+    }
+}
+
+@MainActor
+protocol MyTermURLHandling: AnyObject {
+    func open(_ urls: [URL])
+}
+
+extension AppModel: MyTermURLHandling {}
+
+@MainActor
+final class MyTermURLDispatcher {
+    private weak var handler: (any MyTermURLHandling)?
+    private var pendingURLs = [URL]()
+
+    func connect(handler: (any MyTermURLHandling)?) {
+        self.handler = handler
+        guard let handler, !pendingURLs.isEmpty else { return }
+        handler.open(pendingURLs)
+        pendingURLs.removeAll()
+    }
+
+    func dispatch(_ urls: [URL]) {
+        guard let handler else {
+            pendingURLs.append(contentsOf: urls)
+            return
+        }
+        handler.open(urls)
     }
 }
 

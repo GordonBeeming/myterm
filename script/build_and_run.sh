@@ -84,7 +84,9 @@ rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_MACOS" "$APP_RESOURCES"
 cp "$BUILD_BINARY" "$APP_BINARY"
 cp "$ROOT_DIR/Resources/MyTerm.icns" "$APP_RESOURCES/MyTerm.icns"
+cp "$ROOT_DIR/Resources/myterm-browser" "$APP_RESOURCES/myterm-browser"
 chmod +x "$APP_BINARY"
+chmod +x "$APP_RESOURCES/myterm-browser"
 
 cp "$ROOT_DIR/Packaging/Info.plist" "$INFO_PLIST"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" "$INFO_PLIST"
@@ -98,7 +100,11 @@ cp "$ROOT_DIR/Packaging/Info.plist" "$INFO_PLIST"
 
 SIGNING_IDENTITY="${CODESIGN_IDENTITY:-}"
 if [[ -z "$SIGNING_IDENTITY" ]]; then
-  SIGNING_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk -F '"' '/Apple Development/{print $2; exit}')"
+  if [[ "$DISTRIBUTION" == "1" ]]; then
+    SIGNING_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk -F '"' '/Developer ID Application/{print $2; exit}')"
+  else
+    SIGNING_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk -F '"' '/Apple Development/{print $2; exit}')"
+  fi
 fi
 if [[ -z "$SIGNING_IDENTITY" ]]; then
   SIGNING_IDENTITY="-"

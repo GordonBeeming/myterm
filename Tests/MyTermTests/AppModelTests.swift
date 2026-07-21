@@ -167,6 +167,46 @@ final class AppModelTests: XCTestCase {
             engine.configurations.last?.initialCommand,
             "'\(scriptURL.path.replacingOccurrences(of: "'", with: "'\\''"))'"
         )
+        model.open([try XCTUnwrap(URL(string: "ssh://gordon@example.com:2222"))])
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount + 3)
+        XCTAssertEqual(engine.configurations.last?.workingDirectory, FileManager.default.homeDirectoryForCurrentUser)
+        XCTAssertEqual(engine.configurations.last?.initialCommand, "ssh '-p' '2222' 'gordon@example.com'")
+    }
+
+    func testTerminalWebLinksOpenInTheirOwningWorkspaceAndInjectBrowserLauncher() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let launcherURL = directory.appending(path: "myterm-browser", directoryHint: .notDirectory)
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true,
+            browserLauncherURL: launcherURL
+        )
+        let firstWorkspaceID = model.store.selectedWorkspaceID
+        let firstWorkspaceTabCount = model.selectedWorkspace.tabs.count
+        XCTAssertEqual(engine.configurations.first?.environment["BROWSER"], launcherURL.path)
+
+        model.createWorkspace()
+        let secondWorkspaceID = model.store.selectedWorkspaceID
+        let secondWorkspaceTabCount = model.selectedWorkspace.tabs.count
+        engine.sessions.first?.onEvent?(.openURL(try XCTUnwrap(URL(string: "https://example.com/docs"))))
+
+        XCTAssertEqual(model.store.selectedWorkspaceID, secondWorkspaceID)
+        XCTAssertEqual(
+            model.workspaces.first(where: { $0.id == firstWorkspaceID })?.tabs.count,
+            firstWorkspaceTabCount + 1
+        )
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, secondWorkspaceTabCount)
+        let openedTab = try XCTUnwrap(
+            model.workspaces.first(where: { $0.id == firstWorkspaceID })?.tabs.last
+        )
+        guard case .browser(let browser) = openedTab.content else {
+            return XCTFail("Expected the terminal link to create a browser tab")
+        }
+        XCTAssertEqual(browser.url.absoluteString, "https://example.com/docs")
     }
 
     private func makeModel(applicationSupportDirectory: URL) throws -> AppModel {
@@ -196,10 +236,13 @@ final class AppModelTests: XCTestCase {
 @MainActor
 private final class CapturingTerminalEngine: TerminalEngine {
     private(set) var configurations: [TerminalSessionConfiguration] = []
+    private(set) var sessions: [CapturingTerminalSession] = []
 
     func makeSession(configuration: TerminalSessionConfiguration) throws -> any TerminalProcessSession {
         configurations.append(configuration)
-        return CapturingTerminalSession()
+        let session = CapturingTerminalSession()
+        sessions.append(session)
+        return session
     }
 }
 

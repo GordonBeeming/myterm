@@ -14,6 +14,7 @@ final class AppModel {
     private let startsTerminalProcesses: Bool
     private let browserDataProfileResolver: BrowserDataProfileResolver
     private let browserSessionFactory: any BrowserSessionFactory
+    private let browserLauncherURL: URL?
     private(set) var terminalSessions: [TerminalSessionID: any TerminalProcessSession] = [:]
     private(set) var browserControllers: [BrowserSessionID: BrowserSessionController] = [:]
     var errorDescription: String?
@@ -32,7 +33,8 @@ final class AppModel {
         terminalEngine: (any TerminalEngine)? = SwiftTermTerminalEngine(),
         startsTerminalProcesses: Bool = true,
         browserSettings: BrowserSettingsStore? = nil,
-        browserSessionFactory: any BrowserSessionFactory = WebKitBrowserSessionFactory()
+        browserSessionFactory: any BrowserSessionFactory = WebKitBrowserSessionFactory(),
+        browserLauncherURL: URL? = MyTermBrowserLauncher.executableURL()
     ) throws {
         self.channel = channel
         let supportDirectory = try applicationSupportDirectory ?? Self.applicationSupportDirectory()
@@ -41,7 +43,9 @@ final class AppModel {
         self.terminalEngine = terminalEngine
         self.startsTerminalProcesses = startsTerminalProcesses
         self.browserSessionFactory = browserSessionFactory
+        self.browserLauncherURL = browserLauncherURL
         browserDataProfileResolver = BrowserDataProfileResolver(channel: channel)
+        try migrateLegacyBrowserDataProfiles()
         restoreRuntimeObjects()
     }
 
@@ -235,9 +239,13 @@ final class AppModel {
         case "http", "https":
             createBrowserTab(url: url)
         case "ssh":
+            guard let command = Self.sshCommand(for: url) else {
+                errorDescription = "The SSH URL does not include a host: \(url.absoluteString)"
+                return
+            }
             createTerminalTab(
                 workingDirectory: FileManager.default.homeDirectoryForCurrentUser,
-                initialCommand: "ssh \(Self.shellQuote(url.absoluteString))"
+                initialCommand: command
             )
         default:
             errorDescription = "MyTerm cannot open \(url.absoluteString)."
@@ -274,9 +282,14 @@ final class AppModel {
     }
 
     private func createBrowserTab(url: URL) {
+        createBrowserTab(url: url, in: store.selectedWorkspaceID)
+    }
+
+    private func createBrowserTab(url: URL, in workspaceID: WorkspaceID) {
         perform {
-            let workspaceID = store.selectedWorkspaceID
-            let workspace = store.selectedWorkspace
+            guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
+                throw AppModelError.workspaceUnavailable(workspaceID)
+            }
             let profile = browserDataProfileResolver.resolve(
                 scope: browserSettings.browserDataScope,
                 workspace: workspace
@@ -425,6 +438,21 @@ final class AppModel {
         }
     }
 
+    private func migrateLegacyBrowserDataProfiles() throws {
+        var updates = [(workspaceID: WorkspaceID, tabID: TabID, profile: BrowserDataProfile)]()
+        for workspace in store.workspaces {
+            let profile = browserDataProfileResolver.resolve(
+                scope: browserSettings.browserDataScope,
+                workspace: workspace
+            )
+            for tab in workspace.tabs {
+                guard case .browser(let browser) = tab.content, browser.profile == nil else { continue }
+                updates.append((workspace.id, tab.id, profile))
+            }
+        }
+        try store.updateBrowserDataProfiles(updates)
+    }
+
     private func restoreRuntimeObjects(in workspace: Workspace) {
         for tab in workspace.tabs {
             switch tab.content {
@@ -472,7 +500,8 @@ final class AppModel {
         let process = try terminalEngine.makeSession(
             configuration: TerminalSessionConfiguration(
                 workingDirectory: session.workingDirectory ?? FileManager.default.homeDirectoryForCurrentUser,
-                initialCommand: initialCommand
+                initialCommand: initialCommand,
+                environment: MyTermBrowserLauncher.environment(executableURL: browserLauncherURL)
             )
         )
         process.onEvent = { [weak self] event in
@@ -520,6 +549,8 @@ final class AppModel {
                     workingDirectory: directory
                 )
             }
+        case .openURL(let url):
+            createBrowserTab(url: url, in: workspaceID)
         case .failed(let error):
             present(error)
         case .processTerminated(let exitCode):
@@ -567,6 +598,19 @@ final class AppModel {
 
     private static func shellQuote(_ value: String) -> String {
         "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    private static func sshCommand(for url: URL) -> String? {
+        guard let rawHost = url.host, !rawHost.isEmpty else { return nil }
+        let host = rawHost.contains(":") && !rawHost.hasPrefix("[") ? "[\(rawHost)]" : rawHost
+        let decodedUser = url.user?.removingPercentEncoding ?? url.user
+        let target = decodedUser.map { "\($0)@\(host)" } ?? host
+        var arguments = [String]()
+        if let port = url.port {
+            arguments.append(contentsOf: ["-p", String(port)])
+        }
+        arguments.append(target)
+        return "ssh " + arguments.map(shellQuote).joined(separator: " ")
     }
 
     private func perform(_ action: () throws -> Void) {

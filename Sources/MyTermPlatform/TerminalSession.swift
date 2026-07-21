@@ -26,15 +26,18 @@ public struct TerminalSessionConfiguration: Equatable, Sendable {
     public let shell: URL
     public let workingDirectory: URL
     public let initialCommand: String?
+    public let environment: [String: String]
 
     public init(
         shell: URL = TerminalSessionConfiguration.loginShellURL(),
         workingDirectory: URL,
-        initialCommand: String? = nil
+        initialCommand: String? = nil,
+        environment: [String: String] = [:]
     ) {
         self.shell = shell
         self.workingDirectory = workingDirectory.standardizedFileURL
         self.initialCommand = initialCommand
+        self.environment = environment
     }
 
     public static func loginShellURL() -> URL {
@@ -48,8 +51,21 @@ public struct TerminalSessionConfiguration: Equatable, Sendable {
 public enum TerminalSessionEvent: Equatable, Sendable {
     case titleChanged(String)
     case workingDirectoryChanged(URL)
+    case openURL(URL)
     case processTerminated(exitCode: Int32?)
     case failed(TerminalSessionFailure)
+}
+
+public enum TerminalLinkRouter {
+    public static func webURL(from link: String) -> URL? {
+        guard let url = URL(string: link),
+              ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+              url.host != nil
+        else {
+            return nil
+        }
+        return url
+    }
 }
 
 public struct TerminalSessionFailure: Error, Equatable, Sendable {

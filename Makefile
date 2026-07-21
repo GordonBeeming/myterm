@@ -1,9 +1,9 @@
 .PHONY: build test bundle verify install clean
 
-CODESIGN_IDENTITY ?= $(shell security find-identity -v -p codesigning 2>/dev/null | awk -F '"' '/Apple Development/{print $$2; exit}')
 VERSION ?= 0.1.0
 BUILD ?= 1
 DISTRIBUTION ?= 0
+CODESIGN_IDENTITY ?= $(shell if [ "$(DISTRIBUTION)" = "1" ]; then pattern='Developer ID Application'; else pattern='Apple Development'; fi; security find-identity -v -p codesigning 2>/dev/null | awk -F '"' -v pattern="$$pattern" '$$0 ~ pattern {print $$2; exit}')
 APP_BUNDLE := dist/myterm.app
 INSTALL_BUNDLE := $(HOME)/Applications/myterm.app
 
