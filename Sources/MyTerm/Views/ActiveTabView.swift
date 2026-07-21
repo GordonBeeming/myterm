@@ -80,8 +80,8 @@ private struct TerminalPaneView: View {
             }
 
             Menu {
-                Button("Split Horizontally") { model.focusTerminal(workspaceID: workspaceID, tabID: tabID, sessionID: session.id); model.splitFocusedTerminal(orientation: .horizontal) }
-                Button("Split Vertically") { model.focusTerminal(workspaceID: workspaceID, tabID: tabID, sessionID: session.id); model.splitFocusedTerminal(orientation: .vertical) }
+                Button("Split Right") { model.focusTerminal(workspaceID: workspaceID, tabID: tabID, sessionID: session.id); model.splitFocusedTerminal(orientation: .horizontal) }
+                Button("Split Below") { model.focusTerminal(workspaceID: workspaceID, tabID: tabID, sessionID: session.id); model.splitFocusedTerminal(orientation: .vertical) }
                 Button("Close Pane") { model.focusTerminal(workspaceID: workspaceID, tabID: tabID, sessionID: session.id); model.closeFocusedPaneOrTab() }
             } label: {
                 Image(systemName: "ellipsis.circle")
