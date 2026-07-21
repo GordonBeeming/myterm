@@ -34,15 +34,15 @@ struct BrowserSettingsView: View {
             }
 
             Section("Browser sessions") {
-            Picker("Browser data", selection: $settings.browserDataScope) {
-                ForEach([BrowserDataScope.appWide, .workspace, .projectDirectory], id: \.self) { scope in
-                    Text(scope.browserDataScopeLabel).tag(scope)
+                Picker("Browser data", selection: $settings.browserDataScope) {
+                    ForEach([BrowserDataScope.appWide, .workspace, .projectDirectory], id: \.self) { scope in
+                        Text(scope.browserDataScopeLabel).tag(scope)
+                    }
                 }
-            }
 
-            Text("New browser tabs use this profile. Existing tabs keep their current profile.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+                Text("New browser tabs use this profile. Existing tabs keep their current profile.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Passkeys") {

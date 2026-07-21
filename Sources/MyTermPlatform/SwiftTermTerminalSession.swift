@@ -45,7 +45,9 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
 
         terminal.processDelegate = self
         terminal.onOpenWebURL = { [weak self] url in
-            self?.onEvent?(.openURL(url))
+            Task { @MainActor [weak self] in
+                self?.onEvent?(.openURL(url))
+            }
         }
         terminal.autoresizingMask = [.width, .height]
     }
