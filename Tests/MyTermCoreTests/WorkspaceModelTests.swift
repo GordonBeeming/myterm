@@ -134,4 +134,81 @@ final class WorkspaceModelTests: XCTestCase {
         )
         XCTAssertEqual(snapshot.selectedWorkspaceID, workspaceID)
     }
+
+    func testTerminalPreferencesApplyEachOverrideByScope() {
+        var folder = TerminalPreferencesOverrides()
+        folder.fontSize = 15
+        folder.compactSidebar = false
+        var workspace = TerminalPreferencesOverrides()
+        workspace.fontSize = 20
+        workspace.optionAsMeta = false
+
+        let resolved = workspace.applying(to: folder.applying(to: .default))
+        XCTAssertEqual(resolved.fontSize, 20)
+        XCTAssertFalse(resolved.compactSidebar)
+        XCTAssertFalse(resolved.optionAsMeta)
+    }
+
+    func testTerminalSessionBoundsRecentTextAndMigratesMissingField() throws {
+        let lines = (0..<60).map { "line-\($0)" }.joined(separator: "\n")
+        let session = TerminalSession(recentText: lines)
+        XCTAssertEqual(session.recentText?.split(separator: "\n").count, 50)
+        XCTAssertLessThanOrEqual(session.recentText?.lengthOfBytes(using: .utf8) ?? 0, TerminalSession.maximumRecentTextBytes)
+
+        let json = "{\"id\":\"\(TerminalSessionID())\",\"paneID\":\"\(PaneID())\"}"
+        XCTAssertNil(try JSONDecoder().decode(TerminalSession.self, from: Data(json.utf8)).recentText)
+    }
+
+    func testTerminalSessionBoundsRecentTextByLines() {
+        let value = (0..<60).map { "line-\($0)" }.joined(separator: "\n")
+        let session = TerminalSession(recentText: value)
+
+        XCTAssertEqual(session.recentText?.split(separator: "\n").count, 50)
+        XCTAssertTrue(session.recentText?.contains("line-10") == true)
+        XCTAssertFalse(session.recentText?.contains("line-9\n") == true)
+    }
+
+    func testTerminalSessionBoundsRecentTextByUTF8Bytes() {
+        let session = TerminalSession(recentText: String(repeating: "😀", count: 3_000))
+
+        XCTAssertLessThanOrEqual(
+            session.recentText?.utf8.count ?? 0,
+            TerminalSession.maximumRecentTextBytes
+        )
+    }
+
+    func testSplitLayoutsExposeStableLeafIdentity() {
+        let left = TerminalSession()
+        let right = TerminalSession()
+        let tree: SplitNode = .horizontal([.terminal(left), .terminal(right)])
+        XCTAssertEqual(tree.splitLayouts.map(\.nodeID), [SplitNodeID(rawValue: left.paneID.rawValue), SplitNodeID(rawValue: right.paneID.rawValue)])
+    }
+
+    func testFocusedLeafStableIDSurvivesNestedSplitAndSiblingClose() throws {
+        let first = TerminalSession()
+        let focused = TerminalSession()
+        let nestedSibling = TerminalSession()
+        var tree: SplitNode = .horizontal([.terminal(first), .terminal(focused)])
+        let focusedID = try XCTUnwrap(tree.terminalSessions.first { $0.id == focused.id }).paneID
+
+        XCTAssertTrue(tree.insert(nestedSibling, beside: focused.id, orientation: .vertical))
+        let nestedBranch = try XCTUnwrap(branch(containing: focused.id, in: tree))
+        XCTAssertEqual(nestedBranch.stableID, SplitNodeID(rawValue: focusedID.rawValue))
+
+        tree = try XCTUnwrap(tree.removingTerminalSession(nestedSibling.id))
+        let restoredLeaf = try XCTUnwrap(tree.terminalSessions.first { $0.id == focused.id })
+        XCTAssertEqual(SplitNode.terminal(restoredLeaf).stableID, SplitNodeID(rawValue: focusedID.rawValue))
+    }
+
+    private func branch(containing sessionID: TerminalSessionID, in tree: SplitNode) -> SplitNode? {
+        switch tree {
+        case .terminal:
+            return nil
+        case .horizontal(let children), .vertical(let children):
+            if children.contains(where: { $0.contains(sessionID) }) {
+                return children.first { $0.contains(sessionID) }
+            }
+            return nil
+        }
+    }
 }

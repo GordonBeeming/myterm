@@ -21,6 +21,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
     private var workingDirectoryPoller: ProcessWorkingDirectoryPoller?
     private var lastReportedWorkingDirectory: URL?
     private var didTerminate = false
+    private var contentChangeHandler: (@MainActor () -> Void)?
 
     public init(configuration: TerminalSessionConfiguration) throws {
         guard configuration.shell.isFileURL,
@@ -49,7 +50,14 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
                 self?.onEvent?(.openURL(url))
             }
         }
+        terminal.onContentChanged = { [weak self] in
+            self?.contentChangeHandler?()
+        }
         terminal.autoresizingMask = [.width, .height]
+        terminal.apply(runtimeConfiguration: configuration.runtimeConfiguration)
+        if let restoredOutput = configuration.restoredOutput {
+            terminal.presentPersistedOutput(restoredOutput)
+        }
     }
 
     public func terminalView() -> NSView {
@@ -111,6 +119,18 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
         terminal.terminate()
     }
 
+    public func apply(runtimeConfiguration: TerminalRuntimeConfiguration) {
+        terminal.apply(runtimeConfiguration: runtimeConfiguration)
+    }
+
+    public func contentSnapshot(maximumCharacters: Int) -> String {
+        terminal.renderedText(maximumCharacters: maximumCharacters)
+    }
+
+    public func setContentChangeHandler(_ handler: (@MainActor () -> Void)?) {
+        contentChangeHandler = handler
+    }
+
     private func emitTermination(exitCode: Int32?) {
         guard !didTerminate else { return }
         didTerminate = true
@@ -147,8 +167,88 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
 }
 
 @MainActor
-private final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
+final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
     var onOpenWebURL: ((URL) -> Void)?
+    var onContentChanged: (() -> Void)?
+    private let contentChangeCoalescer = TerminalContentChangeCoalescer()
+    // AppKit owns local monitor tokens and requires the opaque value again for removal.
+    // The view is main-actor isolated, while Swift 6 treats deinit as nonisolated.
+    nonisolated(unsafe) private var keyEventMonitor: Any?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        installKeyEventMonitor()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        installKeyEventMonitor()
+    }
+
+    deinit {
+        if let keyEventMonitor {
+            NSEvent.removeMonitor(keyEventMonitor)
+        }
+    }
+
+    override func dataReceived(slice: ArraySlice<UInt8>) {
+        super.dataReceived(slice: slice)
+        contentChangeCoalescer.notify { [weak self] in
+            self?.onContentChanged?()
+        }
+    }
+
+    func apply(runtimeConfiguration: TerminalRuntimeConfiguration) {
+        font = MyTermTerminalFontResolver.resolve(
+            named: runtimeConfiguration.fontName,
+            size: runtimeConfiguration.fontSize
+        )
+        optionAsMetaKey = runtimeConfiguration.optionAsMeta
+        changeScrollback(runtimeConfiguration.scrollbackLines)
+        getTerminal().setCursorStyle(runtimeConfiguration.appearance.cursor.swiftTermStyle)
+        if let foreground = runtimeConfiguration.appearance.foreground {
+            nativeForegroundColor = foreground.nsColor
+        }
+        if let background = runtimeConfiguration.appearance.background {
+            nativeBackgroundColor = background.nsColor
+        }
+        needsDisplay = true
+    }
+
+    func renderedText(maximumCharacters: Int) -> String {
+        let terminal = getTerminal()
+        let lines = (0..<terminal.rows).map { row in
+            (0..<terminal.cols).map { column in
+                terminal.buffer.getChar(at: Position(col: column, row: row)).getCharacter()
+            }.reduce(into: "") { $0.append($1) }
+        }.joined(separator: "\n")
+        return TerminalOutputSnapshot.plainText(from: lines, maximumCharacters: maximumCharacters)
+    }
+
+    func presentPersistedOutput(_ output: String, maximumCharacters: Int = 8_192) {
+        let prelude = TerminalOutputSnapshot.plainText(from: output, maximumCharacters: maximumCharacters)
+        guard !prelude.isEmpty else { return }
+        feed(text: prelude)
+    }
+
+    private func installKeyEventMonitor() {
+        keyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, self.window?.firstResponder === self else { return event }
+            let input = TerminalInputEvent(
+                keyCode: event.keyCode,
+                charactersIgnoringModifiers: event.charactersIgnoringModifiers ?? "",
+                modifiers: TerminalInputModifiers(event.modifierFlags)
+            )
+            guard let sequence = TerminalInputTranslator.sequence(
+                for: input,
+                kittyKeyboardEnabled: !self.getTerminal().keyboardEnhancementFlags.isEmpty
+            ) else {
+                return event
+            }
+            self.send(sequence)
+            return nil
+        }
+    }
 
     override func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
         guard let url = TerminalLinkRouter.webURL(from: link) else {
@@ -156,6 +256,53 @@ private final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
             return
         }
         onOpenWebURL?(url)
+    }
+}
+
+private extension TerminalInputModifiers {
+    init(_ flags: NSEvent.ModifierFlags) {
+        var modifiers: TerminalInputModifiers = []
+        if flags.contains(.shift) { modifiers.insert(.shift) }
+        if flags.contains(.control) { modifiers.insert(.control) }
+        if flags.contains(.option) { modifiers.insert(.option) }
+        if flags.contains(.command) { modifiers.insert(.command) }
+        if flags.contains(.capsLock) { modifiers.insert(.capsLock) }
+        if flags.contains(.numericPad) { modifiers.insert(.numericPad) }
+        self = modifiers
+    }
+}
+
+private enum MyTermTerminalFontResolver {
+    static func resolve(named name: String?, size: Double) -> NSFont {
+        let resolvedSize = max(CGFloat(size), 1)
+        if let name, let font = NSFont(name: name, size: resolvedSize) {
+            return font
+        }
+        return NSFont.monospacedSystemFont(ofSize: resolvedSize, weight: .regular)
+    }
+}
+
+private extension TerminalColor {
+    var nsColor: NSColor {
+        NSColor(
+            red: CGFloat(red) / CGFloat(UInt16.max),
+            green: CGFloat(green) / CGFloat(UInt16.max),
+            blue: CGFloat(blue) / CGFloat(UInt16.max),
+            alpha: 1
+        )
+    }
+}
+
+private extension TerminalCursorConfiguration {
+    var swiftTermStyle: CursorStyle {
+        switch (shape, blinks) {
+        case (.block, true): .blinkBlock
+        case (.block, false): .steadyBlock
+        case (.underline, true): .blinkUnderline
+        case (.underline, false): .steadyUnderline
+        case (.bar, true): .blinkBar
+        case (.bar, false): .steadyBar
+        }
     }
 }
 

@@ -1,4 +1,4 @@
-.PHONY: build test bundle verify install clean
+.PHONY: build test bundle verify install clean channel-isolation-test
 
 VERSION ?= 0.1.0
 BUILD ?= 1
@@ -12,6 +12,9 @@ build:
 
 test:
 	swift test --parallel
+
+channel-isolation-test:
+	bash script/channel_isolation_test.sh
 
 bundle:
 	MYTERM_VERSION="$(VERSION)" \

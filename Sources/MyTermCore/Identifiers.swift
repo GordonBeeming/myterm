@@ -177,6 +177,36 @@ public struct PaneID: Codable, Hashable, Sendable, CustomStringConvertible, Iden
     }
 }
 
+public struct SplitNodeID: Codable, Hashable, Sendable, CustomStringConvertible, Identifiable {
+    public let rawValue: UUID
+
+    public init() {
+        rawValue = UUID()
+    }
+
+    public init(rawValue: UUID) {
+        self.rawValue = rawValue
+    }
+
+    public init(uuidString: String) throws {
+        guard let uuid = UUID(uuidString: uuidString) else {
+            throw StableIdentifierError.invalidUUID(uuidString)
+        }
+        rawValue = uuid
+    }
+
+    public var id: SplitNodeID { self }
+    public var description: String { rawValue.uuidString.lowercased() }
+
+    public init(from decoder: Decoder) throws {
+        rawValue = try IdentifierCoding.decodeUUID(from: decoder)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        try IdentifierCoding.encodeUUID(rawValue, to: encoder)
+    }
+}
+
 public struct BrowserSessionID: Codable, Hashable, Sendable, CustomStringConvertible, Identifiable {
     public let rawValue: UUID
 
