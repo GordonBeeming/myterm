@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-21T11:43:27Z",
+  "title": "Design System: MyTerm",
+  "extensions": {
+    "motion": [],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Workspace Row",
+      "kind": "nav",
+      "description": "A single title-only source-list row using system selection.",
+      "html": "<button class=\"ds-workspace-row\">Workspace title</button>",
+      "css": ".ds-workspace-row { width: 240px; padding: 6px 8px; border: 0; border-radius: 6px; background: Highlight; color: HighlightText; font: 13px system-ui; text-align: left; } .ds-workspace-row:focus-visible { outline: 2px solid -webkit-focus-ring-color; outline-offset: 1px; }"
+    },
+    {
+      "name": "Selected Tab",
+      "kind": "nav",
+      "refersTo": "tab",
+      "description": "A compact native-looking selected tab with an adjacent close action.",
+      "html": "<div class=\"ds-tab-wrap\"><button class=\"ds-tab\">Terminal</button><button class=\"ds-tab-close\" aria-label=\"Close tab\">×</button></div>",
+      "css": ".ds-tab-wrap { display: inline-flex; align-items: center; gap: 5px; font: 12px system-ui; } .ds-tab { min-width: 112px; max-width: 160px; padding: 3px 8px; border: 1px solid GrayText; border-radius: 5px; background: ButtonFace; color: ButtonText; text-align: left; } .ds-tab:hover { filter: brightness(1.08); } .ds-tab:focus-visible, .ds-tab-close:focus-visible { outline: 2px solid -webkit-focus-ring-color; outline-offset: 1px; } .ds-tab-close { border: 0; background: transparent; color: CanvasText; font: 14px system-ui; }"
+    },
+    {
+      "name": "Browser Address",
+      "kind": "input",
+      "description": "A single compact address field beside native browser actions.",
+      "html": "<input class=\"ds-address\" aria-label=\"Browser address\" value=\"https://example.com\">",
+      "css": ".ds-address { width: 420px; padding: 4px 8px; border: 1px solid GrayText; border-radius: 6px; background: Field; color: FieldText; font: 13px system-ui; } .ds-address:focus-visible { outline: 2px solid -webkit-focus-ring-color; outline-offset: 1px; } .ds-address:disabled { opacity: 0.55; }"
+    },
+    {
+      "name": "Terminal Pane",
+      "kind": "custom",
+      "description": "An edge-to-edge terminal surface with one quiet pane-actions control.",
+      "html": "<section class=\"ds-terminal\"><code>~ %</code><button class=\"ds-pane-menu\" aria-label=\"Terminal pane actions\">•••</button></section>",
+      "css": ".ds-terminal { position: relative; min-width: 420px; min-height: 220px; padding: 8px; background: #000; color: #f5f5f5; font: 13px ui-monospace, monospace; } .ds-pane-menu { position: absolute; top: 6px; right: 6px; border: 0; background: transparent; color: #d0d0d0; } .ds-pane-menu:hover { color: #fff; } .ds-pane-menu:focus-visible { outline: 2px solid -webkit-focus-ring-color; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Native Workbench",
+    "overview": "MyTerm should feel like a dependable part of macOS: dense, direct, and quiet enough to disappear while work is happening. The hierarchy comes from familiar system structure, not decoration.",
+    "keyCharacteristics": [
+      "Native system controls and behavior",
+      "Compact, readable density",
+      "Large uninterrupted terminal and browser surfaces",
+      "Clear focus and keyboard paths",
+      "No ornamental status or motion"
+    ],
+    "rules": [
+      {
+        "name": "System Owns the Palette",
+        "body": "Do not freeze native backgrounds, labels, separators, focus rings, or selection colors into custom hex values.",
+        "section": "colors"
+      },
+      {
+        "name": "Terminal Owns Mono",
+        "body": "Do not spread monospaced type into navigation or general controls to make the app look more technical.",
+        "section": "typography"
+      },
+      {
+        "name": "Working Surface",
+        "body": "Terminal and browser content should remain visually dominant, with chrome separated by structure rather than floating cards.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep workspaces scannable by title alone.",
+      "Do use native macOS controls, semantic appearance, focus, menus, accessibility, and splitters.",
+      "Do keep the tab row compact at 26 pt and scroll it when tabs exceed the available width.",
+      "Do preserve a large, uninterrupted content surface.",
+      "Do provide both a visible route and a keyboard route for frequent actions.",
+      "Do make visible focus and VoiceOver labels part of the component contract."
+    ],
+    "donts": [
+      "Don't copy cmux's notifications, agent status, colored workspace metadata, or other features outside the requested workflow.",
+      "Don't use decorative terminal chrome, novelty controls, or motion that interrupts focused work.",
+      "Don't build terminal rendering on web technology when a native implementation is available.",
+      "Don't turn workspaces, tabs, or terminal panes into floating cards.",
+      "Don't use custom fixed colors where macOS already provides an adaptive semantic role.",
+      "Don't let browser controls or navigation chrome compete with the active terminal or page."
+    ]
+  }
+}

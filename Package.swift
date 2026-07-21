@@ -10,6 +10,7 @@ let package = Package(
     products: [
         .library(name: "MyTermCore", targets: ["MyTermCore"]),
         .library(name: "MyTermPlatform", targets: ["MyTermPlatform"]),
+        .executable(name: "MyTerm", targets: ["MyTerm"]),
     ],
     dependencies: [
         .package(
@@ -26,10 +27,18 @@ let package = Package(
                 .product(name: "SwiftTerm", package: "SwiftTerm"),
             ]
         ),
+        .executableTarget(
+            name: "MyTerm",
+            dependencies: ["MyTermCore", "MyTermPlatform"]
+        ),
         .testTarget(name: "MyTermCoreTests", dependencies: ["MyTermCore"]),
         .testTarget(
             name: "MyTermPlatformTests",
             dependencies: ["MyTermPlatform"]
+        ),
+        .testTarget(
+            name: "MyTermTests",
+            dependencies: ["MyTerm"]
         ),
     ]
 )
