@@ -141,6 +141,7 @@ private struct WorkspaceContentView: View {
 }
 
 private struct WorkspaceSidebar: View {
+    @Environment(\.openSettings) private var openSettings
     @Bindable var model: AppModel
 
     private var ungroupedWorkspaces: [Workspace] {
@@ -236,6 +237,11 @@ private struct WorkspaceSidebar: View {
             return true
         }
         .contextMenu {
+            Button("Workspace Settings…", systemImage: "gearshape") {
+                model.prepareSettings(for: .workspace(workspace.id))
+                openSettings()
+            }
+            Divider()
             Button(workspace.isPinned ? "Unpin Workspace" : "Pin Workspace") {
                 model.setWorkspacePinned(workspace.id, isPinned: !workspace.isPinned)
             }
@@ -271,6 +277,11 @@ private struct WorkspaceSidebar: View {
             return true
         }
         .contextMenu {
+            Button("Folder Settings…", systemImage: "gearshape") {
+                model.prepareSettings(for: .folder(folder.id))
+                openSettings()
+            }
+            Divider()
             Button("New Workspace") { model.createWorkspace(in: folder.id) }
             Button("Rename Folder…") { model.beginRenamingFolder(folder.id) }
             Menu("Folder Color") {

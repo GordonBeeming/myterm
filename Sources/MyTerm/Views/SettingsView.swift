@@ -8,13 +8,12 @@ import SwiftUI
 struct SettingsView: View {
     @Bindable var model: AppModel
 
-    @State private var scope = TerminalSettingsScope.global
     @State private var passkeyAccess = PasskeyAccessController()
     @State private var defaultTerminal = DefaultTerminalController()
 
     var body: some View {
         VStack(spacing: 0) {
-            scopePicker
+            settingsHeader
                 .padding(.horizontal, 20)
                 .padding(.vertical, 14)
 
@@ -38,28 +37,59 @@ struct SettingsView: View {
         .onChange(of: model.workspaces.map(\.id)) { _, _ in repairScope() }
     }
 
-    private var scopePicker: some View {
-        LabeledContent("Settings for") {
-            Picker("Settings for", selection: $scope) {
-                Text("Global").tag(TerminalSettingsScope.global)
+    private var scope: TerminalSettingsScope {
+        model.settingsScope
+    }
 
-                if !model.folders.isEmpty {
-                    Section("Folders") {
-                        ForEach(model.folders) { folder in
-                            Text(folder.title).tag(TerminalSettingsScope.folder(folder.id))
-                        }
-                    }
-                }
+    private var settingsHeader: some View {
+        HStack(spacing: 12) {
+            Image(systemName: settingsHeaderIcon)
+                .font(.title2)
+                .foregroundStyle(.secondary)
+                .frame(width: 28)
+                .accessibilityHidden(true)
 
-                Section("Workspaces") {
-                    ForEach(model.workspaces) { workspace in
-                        Text(workspace.title).tag(TerminalSettingsScope.workspace(workspace.id))
-                    }
-                }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(settingsHeaderTitle)
+                    .font(.headline)
+                Text(settingsHeaderDescription)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
-            .labelsHidden()
-            .frame(width: 280)
-            .accessibilityLabel("Settings scope")
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var settingsHeaderIcon: String {
+        switch scope {
+        case .global: "globe"
+        case .folder: "folder"
+        case .workspace: "rectangle.stack"
+        }
+    }
+
+    private var settingsHeaderTitle: String {
+        switch scope {
+        case .global:
+            "Global Settings"
+        case .folder(let folderID):
+            "Folder Settings — \(model.folders.first(where: { $0.id == folderID })?.title ?? "Unknown Folder")"
+        case .workspace(let workspaceID):
+            "Workspace Settings — \(model.workspaces.first(where: { $0.id == workspaceID })?.title ?? "Unknown Workspace")"
+        }
+    }
+
+    private var settingsHeaderDescription: String {
+        switch scope {
+        case .global:
+            "Defaults used across MyTerm unless a folder or workspace overrides them."
+        case .folder:
+            "Overrides for workspaces in this folder. Settings without an override inherit from Global Settings."
+        case .workspace:
+            "Overrides for this workspace. Settings without an override inherit from its folder or Global Settings."
         }
     }
 
@@ -365,11 +395,11 @@ struct SettingsView: View {
             break
         case .folder(let folderID):
             if !model.folders.contains(where: { $0.id == folderID }) {
-                scope = .global
+                model.prepareSettings(for: .global)
             }
         case .workspace(let workspaceID):
             if !model.workspaces.contains(where: { $0.id == workspaceID }) {
-                scope = .global
+                model.prepareSettings(for: .global)
             }
         }
     }

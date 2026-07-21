@@ -2,9 +2,18 @@ import MyTermCore
 import SwiftUI
 
 struct MyTermCommands: Commands {
+    @Environment(\.openSettings) private var openSettings
     let startup: MyTermStartup
 
     var body: some Commands {
+        CommandGroup(replacing: .appSettings) {
+            Button("Global Settings…") {
+                startup.model?.prepareSettings(for: .global)
+                openSettings()
+            }
+            .keyboardShortcut(",", modifiers: [.command])
+        }
+
         CommandMenu("Workspace") {
             Button("New Workspace") { startup.model?.createWorkspace() }
                 .keyboardShortcut("n", modifiers: [.command])

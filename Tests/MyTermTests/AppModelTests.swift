@@ -262,6 +262,25 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(model.settingsOverrides(for: .workspace(workspaceID))?.optionAsMeta)
     }
 
+    func testSettingsPresentationTargetsGlobalFolderAndWorkspaceContexts() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let folderID = try model.store.createFolder(title: "Projects")
+
+        XCTAssertEqual(model.settingsScope, .global)
+
+        model.prepareSettings(for: .workspace(workspaceID))
+        XCTAssertEqual(model.settingsScope, .workspace(workspaceID))
+
+        model.prepareSettings(for: .folder(folderID))
+        XCTAssertEqual(model.settingsScope, .folder(folderID))
+
+        model.prepareSettings(for: .global)
+        XCTAssertEqual(model.settingsScope, .global)
+    }
+
     func testSettingsChangesApplyResolvedRuntimeConfigurationToLiveSessions() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }

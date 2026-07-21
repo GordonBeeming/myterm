@@ -35,6 +35,7 @@ final class AppModel {
     var tabRenameDraft = ""
     var isCreatingFolder = false
     var newFolderDraft = ""
+    var settingsScope = TerminalSettingsScope.global
     private var stateVersion = 0
 
     init(
@@ -135,6 +136,10 @@ final class AppModel {
             try store.updateGlobalSettings(update)
             applyResolvedRuntimeSettings(to: Set(store.workspaces.map(\.id)))
         }
+    }
+
+    func prepareSettings(for scope: TerminalSettingsScope) {
+        settingsScope = scope
     }
 
     func updateFolderSettings(
