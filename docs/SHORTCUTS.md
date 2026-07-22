@@ -23,10 +23,10 @@ MyTerm exposes its shortcuts through native macOS menus. Pane and navigation key
 | New terminal tab | <kbd>⌘T</kbd> |
 | New browser tab | <kbd>⇧⌘L</kbd> |
 | Rename selected tab | <kbd>⌥⌘R</kbd> |
-| Previous / next tab | <kbd>⇧⌘[</kbd> / <kbd>⇧⌘]</kbd> |
+| Previous / next tab | <kbd>⌃⇧Tab</kbd> / <kbd>⌃Tab</kbd> |
 | Select tab 1–9 | <kbd>⌃1</kbd> … <kbd>⌃9</kbd> |
 
-## Terminal panes
+## Panes
 
 | Action | Shortcut |
 | --- | --- |

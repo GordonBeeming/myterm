@@ -615,4 +615,50 @@ final class WorkspaceStoreTests: XCTestCase {
 
         XCTAssertNil(store.selectedWorkspace.selectedTab?.customTitle)
     }
+
+    func testBrowserAndTerminalPanesShareOnePersistentSplitTree() throws {
+        let url = temporaryURL()
+        let store = try WorkspaceStore(persistenceURL: url)
+        let workspaceID = store.selectedWorkspaceID
+        let tabID = try XCTUnwrap(store.selectedWorkspace.selectedTabID)
+        let terminalPaneID = try XCTUnwrap(store.selectedWorkspace.selectedTab?.focusedPaneID)
+        let browserURL = try XCTUnwrap(URL(string: "https://example.com/first"))
+
+        let browserID = try store.insertBrowserPane(
+            workspaceID: workspaceID,
+            tabID: tabID,
+            beside: terminalPaneID,
+            url: browserURL
+        )
+        let browserPaneID = try XCTUnwrap(store.selectedWorkspace.selectedTab?.splitTree.browser(id: browserID)?.paneID)
+        XCTAssertEqual(store.selectedWorkspace.tabs.count, 1)
+        XCTAssertEqual(store.selectedWorkspace.selectedTab?.splitTree.paneIDs.count, 2)
+        XCTAssertEqual(store.selectedWorkspace.selectedTab?.focusedPaneID, browserPaneID)
+
+        let newTerminalPaneID = try store.splitTerminalPane(
+            workspaceID: workspaceID,
+            tabID: tabID,
+            paneID: browserPaneID,
+            orientation: .vertical
+        )
+        XCTAssertEqual(store.selectedWorkspace.selectedTab?.splitTree.paneIDs.count, 3)
+        XCTAssertNotNil(store.selectedWorkspace.selectedTab?.splitTree.session(for: newTerminalPaneID))
+
+        let updatedURL = try XCTUnwrap(URL(string: "https://example.com/updated"))
+        try store.updateBrowserURL(
+            workspaceID: workspaceID,
+            tabID: tabID,
+            browserID: browserID,
+            url: updatedURL
+        )
+        XCTAssertEqual(store.selectedWorkspace.selectedTab?.splitTree.browser(id: browserID)?.url, updatedURL)
+
+        _ = try store.closePane(workspaceID: workspaceID, tabID: tabID, paneID: browserPaneID)
+        XCTAssertEqual(store.selectedWorkspace.selectedTab?.splitTree.paneIDs.count, 2)
+        XCTAssertNil(store.selectedWorkspace.selectedTab?.splitTree.browser(id: browserID))
+
+        let restored = try WorkspaceStore(persistenceURL: url)
+        XCTAssertEqual(restored.selectedWorkspace.selectedTab?.splitTree.paneIDs.count, 2)
+        XCTAssertTrue(restored.selectedWorkspace.selectedTab?.splitTree.browserSessions.isEmpty == true)
+    }
 }

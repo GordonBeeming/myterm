@@ -10,7 +10,7 @@ MyTerm is built first for Gordon, who works across many software repositories an
 
 ## Product Purpose
 
-MyTerm is a fast, dependable macOS workspace for terminals and browser tabs. It keeps workspace navigation simple, supports horizontal and vertical terminal splits, restores the working layout after a restart, and remains responsive with dozens of live sessions. Browser tabs also keep their website data, so signing in does not become a daily ritual.
+MyTerm is a fast, dependable macOS workspace for terminal and browser panes. It keeps workspace navigation simple, supports horizontal and vertical mixed-pane splits, restores the working layout after a restart, and remains responsive with dozens of live sessions. Browser panes also keep their website data, so signing in does not become a daily ritual.
 
 The first release succeeds when it can replace Gordon's daily cmux workflow without bringing across cmux's unrelated features or instability.
 
@@ -33,6 +33,7 @@ Native, quiet, dependable. The interface should feel dense without becoming cram
 - Prefer native macOS behavior for windows, focus, menus, tabs, accessibility, and appearance.
 - Treat responsiveness under many live sessions as product behavior, not a later optimization.
 - Make browser-data boundaries explicit. Gordon can share website sessions across the app, isolate them by workspace, or tie them to a project folder.
+- Keep browser launches attached to the terminal pane that requested them, regardless of which workspace is active when the request arrives.
 
 ## Browser sessions and privacy
 

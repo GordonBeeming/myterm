@@ -128,6 +128,39 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(engine.sessions[1].focusCallCount, 1)
     }
 
+    func testBrowserPaneCanSplitToTerminalAndCloseWithoutRemovingItsTab() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        model.createBrowserTab()
+        let tabID = try XCTUnwrap(model.selectedTab?.id)
+        let browser = try XCTUnwrap(model.selectedTab?.focusedBrowserSession)
+        let controller = try XCTUnwrap(model.browserController(for: browser.id))
+
+        model.splitFocusedTerminal(orientation: .horizontal)
+
+        XCTAssertEqual(model.selectedTab?.id, tabID)
+        XCTAssertEqual(model.selectedTab?.splitTree.browserSessions.map(\.id), [browser.id])
+        XCTAssertEqual(model.selectedTab?.splitTree.terminalSessions.count, 1)
+        XCTAssertEqual(model.selectedTab?.splitTree.paneIDs.count, 2)
+        XCTAssertEqual(engine.sessions.count, 2)
+
+        controller.webViewDidClose(controller.webView)
+
+        XCTAssertEqual(model.selectedTab?.id, tabID)
+        XCTAssertTrue(model.selectedTab?.splitTree.browserSessions.isEmpty == true)
+        XCTAssertEqual(model.selectedTab?.splitTree.terminalSessions.count, 1)
+        XCTAssertEqual(model.selectedTab?.splitTree.paneIDs.count, 1)
+        XCTAssertNil(model.browserController(for: browser.id))
+        XCTAssertNil(model.errorDescription)
+    }
+
     func testNewWorkspaceInheritsCurrentFolderAppendsAndFocusesItsTerminal() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
@@ -775,6 +808,7 @@ final class AppModelTests: XCTestCase {
             startsTerminalProcesses: true
         )
         let originatingWorkspaceID = model.store.selectedWorkspaceID
+        let originatingTabID = try XCTUnwrap(model.selectedWorkspace.selectedTabID)
         let originatingTabCount = model.selectedWorkspace.tabs.count
 
         model.createWorkspace()
@@ -786,14 +820,15 @@ final class AppModelTests: XCTestCase {
 
         XCTAssertEqual(model.store.selectedWorkspaceID, selectedWorkspaceID)
         XCTAssertEqual(model.selectedWorkspace.tabs.count, selectedTabCount)
-        guard let browserTab = model.workspaces.first(where: { $0.id == originatingWorkspaceID })?.tabs.last,
-              case .browser(let browser) = browserTab.content else {
-            return XCTFail("Expected the local file to open in the originating workspace browser")
+        guard let originTab = model.workspaces.first(where: { $0.id == originatingWorkspaceID })?
+            .tabs.first(where: { $0.id == originatingTabID }),
+              let browser = originTab.splitTree.browserSessions.first else {
+            return XCTFail("Expected the local file to open beside its originating terminal pane")
         }
         XCTAssertEqual(browser.url, fileURL.standardizedFileURL)
         XCTAssertEqual(
             model.workspaces.first(where: { $0.id == originatingWorkspaceID })?.tabs.count,
-            originatingTabCount + 1
+            originatingTabCount
         )
 
         originatingSession.onEvent?(.openURL(projectDirectory))
@@ -816,12 +851,22 @@ final class AppModelTests: XCTestCase {
             browserLauncherURL: launcherURL
         )
         let firstWorkspaceID = model.store.selectedWorkspaceID
+        let firstTabID = try XCTUnwrap(model.selectedWorkspace.selectedTabID)
+        let firstPaneID = try XCTUnwrap(model.selectedTab?.focusedPaneID)
         let firstWorkspaceTabCount = model.selectedWorkspace.tabs.count
         model.updateWorkspaceSettings(firstWorkspaceID) { $0.browserDataScope = .appWide }
         XCTAssertEqual(engine.configurations.first?.environment["BROWSER"], launcherURL.path)
         XCTAssertEqual(
             engine.configurations.first?.environment[MyTermBrowserLauncher.workspaceIDEnvironmentKey],
             firstWorkspaceID.description
+        )
+        XCTAssertEqual(
+            engine.configurations.first?.environment[MyTermBrowserLauncher.tabIDEnvironmentKey],
+            firstTabID.description
+        )
+        XCTAssertEqual(
+            engine.configurations.first?.environment[MyTermBrowserLauncher.paneIDEnvironmentKey],
+            firstPaneID.description
         )
 
         model.createWorkspace()
@@ -832,14 +877,15 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.store.selectedWorkspaceID, secondWorkspaceID)
         XCTAssertEqual(
             model.workspaces.first(where: { $0.id == firstWorkspaceID })?.tabs.count,
-            firstWorkspaceTabCount + 1
+            firstWorkspaceTabCount
         )
         XCTAssertEqual(model.selectedWorkspace.tabs.count, secondWorkspaceTabCount)
         let openedTab = try XCTUnwrap(
-            model.workspaces.first(where: { $0.id == firstWorkspaceID })?.tabs.last
+            model.workspaces.first(where: { $0.id == firstWorkspaceID })?
+                .tabs.first(where: { $0.id == firstTabID })
         )
-        guard case .browser(let browser) = openedTab.content else {
-            return XCTFail("Expected the terminal link to create a browser tab")
+        guard let browser = openedTab.splitTree.browserSessions.first else {
+            return XCTFail("Expected the terminal link to create a browser pane")
         }
         XCTAssertEqual(browser.url.absoluteString, "https://example.com/docs")
         XCTAssertEqual(browser.profile?.scope, .appWide)
@@ -856,11 +902,21 @@ final class AppModelTests: XCTestCase {
             startsTerminalProcesses: true
         )
         let originatingWorkspaceID = model.store.selectedWorkspaceID
+        let originatingTabID = try XCTUnwrap(model.selectedWorkspace.selectedTabID)
+        let originatingPaneID = try XCTUnwrap(model.selectedTab?.focusedPaneID)
         let originatingTabCount = model.selectedWorkspace.tabs.count
 
         model.createWorkspace()
         let selectedWorkspaceID = model.store.selectedWorkspaceID
         let selectedTabCount = model.selectedWorkspace.tabs.count
+        let exactPaneRoute = try XCTUnwrap(
+            MyTermBrowserLauncher.browserRoute(
+                for: originatingWorkspaceID,
+                tabID: originatingTabID,
+                paneID: originatingPaneID,
+                url: try XCTUnwrap(URL(string: "https://example.com/beside-origin"))
+            )
+        )
         let firstRoute = try XCTUnwrap(
             MyTermBrowserLauncher.browserRoute(
                 for: originatingWorkspaceID,
@@ -873,6 +929,15 @@ final class AppModelTests: XCTestCase {
                 url: try XCTUnwrap(URL(string: "http://example.com/two?value=%25"))
             )
         )
+
+        model.open([exactPaneRoute])
+        let originatingTab = try XCTUnwrap(
+            model.workspaces.first { $0.id == originatingWorkspaceID }?
+                .tabs.first { $0.id == originatingTabID }
+        )
+        XCTAssertEqual(originatingTab.splitTree.paneIDs.count, 2)
+        XCTAssertEqual(originatingTab.splitTree.browserSessions.first?.url.absoluteString, "https://example.com/beside-origin")
+        XCTAssertEqual(model.workspaces.first { $0.id == originatingWorkspaceID }?.tabs.count, originatingTabCount)
 
         model.open([firstRoute])
         model.open([secondRoute])

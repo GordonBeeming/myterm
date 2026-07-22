@@ -202,7 +202,7 @@ final class WorkspaceModelTests: XCTestCase {
 
     private func branch(containing sessionID: TerminalSessionID, in tree: SplitNode) -> SplitNode? {
         switch tree {
-        case .terminal:
+        case .terminal, .browser:
             return nil
         case .horizontal(let children), .vertical(let children):
             if children.contains(where: { $0.contains(sessionID) }) {

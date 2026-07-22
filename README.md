@@ -28,16 +28,16 @@ The cask installs the signed, notarized, and stapled Apple silicon release. MyTe
 ## The workflow
 
 - **Workspaces** have a title, can be pinned and reordered, and live inside collapsible color-coded folders.
-- **Tabs** can be terminals or a native WebKit browser. Browser tabs keep their URL, cookies, and website data across app restarts.
-- **Terminal panes** split right with <kbd>⌘D</kbd> and down with <kbd>⇧⌘D</kbd>. Splits are native, draggable, and backed by independent SwiftTerm sessions.
+- **Tabs** contain terminal and native WebKit browser panes. Browser panes keep their URL, cookies, and website data across app restarts.
+- **Panes** split right with <kbd>⌘D</kbd> and down with <kbd>⇧⌘D</kbd>. Terminal and browser panes share the same persistent split layout.
 - **One app instance** handles launch requests. Opening a folder, script, SSH link, or web URL reuses the existing window instead of creating another app process.
 - **Compact native UI** keeps workspace and tab chrome out of the way. There is no agent-status layer or ornamental terminal dashboard.
 
 ### Terminal links stay with the work
 
-Command-click any valid HTTP or HTTPS link in a terminal and MyTerm opens it as a browser tab in that terminal's workspace. This works for localhost and remote sites alike.
+Command-click any valid HTTP or HTTPS link in a terminal and MyTerm opens it as a browser pane beside that exact terminal. This works for localhost and remote sites alike.
 
-Every terminal process also receives a `BROWSER` launcher inside the app bundle. Tools such as Codex, Claude, and Plannotator that honor `BROWSER` send their HTTP and HTTPS links back to the running MyTerm instance. MyTerm does not become the macOS default browser.
+Every terminal process also receives a `BROWSER` launcher inside the app bundle. Tools such as Codex, Claude, and Plannotator that honor `BROWSER` send their HTTP and HTTPS links back beside the originating pane, even if another workspace has since become active. MyTerm does not become the macOS default browser.
 
 A tool that explicitly invokes the system default browser bypasses `BROWSER` and can still open externally. Non-web links retain their normal system handling.
 
@@ -64,8 +64,8 @@ WebAuthn requests are passed to macOS and the user's chosen credential provider,
 | Increase active-workspace font size | <kbd>⌘=</kbd> |
 | New terminal tab | <kbd>⌘T</kbd> |
 | New browser tab | <kbd>⇧⌘L</kbd> |
-| Split terminal right | <kbd>⌘D</kbd> |
-| Split terminal down | <kbd>⇧⌘D</kbd> |
+| Split focused pane right | <kbd>⌘D</kbd> |
+| Split focused pane down | <kbd>⇧⌘D</kbd> |
 | Close focused pane or tab | <kbd>⌘W</kbd> |
 | Toggle workspace sidebar | <kbd>⌘B</kbd> |
 
