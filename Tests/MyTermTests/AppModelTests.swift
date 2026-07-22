@@ -891,6 +891,49 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(browser.profile?.scope, .appWide)
     }
 
+    func testProjectScopedBrowserPaneUsesItsOriginatingTerminalDirectory() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let originDirectory = directory.appending(path: "origin-project", directoryHint: .isDirectory)
+        let focusedDirectory = directory.appending(path: "focused-project", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: originDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: focusedDirectory, withIntermediateDirectories: true)
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let workspaceID = model.store.selectedWorkspaceID
+        let tabID = try XCTUnwrap(model.selectedTab?.id)
+        let originSession = try XCTUnwrap(model.selectedTab?.splitTree.terminalSessions.first)
+        model.updateWorkspaceSettings(workspaceID) { $0.browserDataScope = .projectDirectory }
+        model.splitFocusedTerminal(orientation: .horizontal)
+        let focusedSession = try XCTUnwrap(
+            model.selectedTab?.splitTree.terminalSessions.first { $0.id != originSession.id }
+        )
+        try model.store.updateTerminalWorkingDirectory(
+            workspaceID: workspaceID,
+            tabID: tabID,
+            sessionID: originSession.id,
+            workingDirectory: originDirectory
+        )
+        try model.store.updateTerminalWorkingDirectory(
+            workspaceID: workspaceID,
+            tabID: tabID,
+            sessionID: focusedSession.id,
+            workingDirectory: focusedDirectory
+        )
+        model.focusPane(workspaceID: workspaceID, tabID: tabID, paneID: focusedSession.paneID)
+
+        engine.sessions.first?.onEvent?(.openURL(try XCTUnwrap(URL(string: "https://example.com"))))
+
+        let browser = try XCTUnwrap(model.selectedTab?.splitTree.browserSessions.first)
+        XCTAssertEqual(browser.profile?.scope, .projectDirectory)
+        XCTAssertEqual(browser.profile?.projectDirectory, originDirectory.standardizedFileURL)
+    }
+
     func testRoutedBrowserURLsStayInTheirWorkspaceAcrossSplitCallbacksAndInvalidRoutesAreIgnored() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }

@@ -582,15 +582,20 @@ final class AppModel {
         beside paneID: PaneID
     ) {
         perform {
-            guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }),
-                  let sourceTab = workspace.tabs.first(where: { $0.id == tabID }),
-                  sourceTab.splitTree.contains(paneID: paneID) else {
+            guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
                 throw AppModelError.workspaceUnavailable(workspaceID)
+            }
+            guard let sourceTab = workspace.tabs.first(where: { $0.id == tabID }) else {
+                throw AppModelError.tabUnavailable(tabID)
+            }
+            guard sourceTab.splitTree.contains(paneID: paneID) else {
+                throw WorkspaceStoreError.paneNotFound(paneID)
             }
             let settings = try store.resolvedSettings(for: workspaceID)
             let profile = browserDataProfileResolver.resolve(
                 scope: settings.browserDataScope,
-                workspace: workspace
+                workspace: workspace,
+                sourceWorkingDirectory: sourceTab.splitTree.session(for: paneID)?.workingDirectory
             )
             let browserID = try store.insertBrowserPane(
                 workspaceID: workspaceID,

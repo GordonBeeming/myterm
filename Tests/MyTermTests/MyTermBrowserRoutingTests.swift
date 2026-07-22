@@ -203,6 +203,9 @@ final class MyTermBrowserRoutingTests: XCTestCase {
             "MYTERM_OPEN_COMMAND": recorder.path,
             "MYTERM_CAPTURE_PATH": capture.path,
         ]) { _, override in override }
+        environment.removeValue(forKey: MyTermBrowserLauncher.workspaceIDEnvironmentKey)
+        environment.removeValue(forKey: MyTermBrowserLauncher.tabIDEnvironmentKey)
+        environment.removeValue(forKey: MyTermBrowserLauncher.paneIDEnvironmentKey)
         if let workspaceID {
             environment[MyTermBrowserLauncher.workspaceIDEnvironmentKey] = workspaceID
         }

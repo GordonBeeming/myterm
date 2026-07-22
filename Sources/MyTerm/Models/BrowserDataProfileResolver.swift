@@ -42,7 +42,11 @@ struct BrowserDataProfileResolver {
         self.homeDirectory = homeDirectory.standardizedFileURL
     }
 
-    func resolve(scope: BrowserDataScope, workspace: Workspace) -> BrowserDataProfile {
+    func resolve(
+        scope: BrowserDataScope,
+        workspace: Workspace,
+        sourceWorkingDirectory: URL? = nil
+    ) -> BrowserDataProfile {
         switch scope {
         case .appWide:
             return BrowserDataProfile(
@@ -55,7 +59,9 @@ struct BrowserDataProfileResolver {
                 persistentStoreID: persistentStoreID(for: "workspace|\(workspace.id)")
             )
         case .projectDirectory:
-            let directory = projectDirectoryResolver.resolve(from: workingDirectory(in: workspace))
+            let workingDirectory = sourceWorkingDirectory?.standardizedFileURL
+                ?? workingDirectory(in: workspace)
+            let directory = projectDirectoryResolver.resolve(from: workingDirectory)
             return BrowserDataProfile(
                 scope: scope,
                 persistentStoreID: persistentStoreID(for: "project-directory|\(directory.path)"),
