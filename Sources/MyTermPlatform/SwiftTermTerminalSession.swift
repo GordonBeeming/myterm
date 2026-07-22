@@ -32,7 +32,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
         let length = name.withUnsafeMutableBytes { buffer in
             proc_name(foregroundProcessGroup, buffer.baseAddress, UInt32(buffer.count))
         }
-        guard length > 0 else { return "another process" }
+        guard length > 0 else { return "Unknown foreground process" }
         return String(
             decoding: name.prefix(Int(length)).map { UInt8(bitPattern: $0) },
             as: UTF8.self

@@ -16,6 +16,12 @@ struct ActiveProcessClosePrompt: Equatable {
     let processNames: [String]
 }
 
+typealias MarkdownOpenCommandRunner = @MainActor (
+    _ command: String,
+    _ environment: [String: String],
+    _ currentDirectory: URL
+) throws -> Void
+
 @MainActor
 @Observable
 final class AppModel {
@@ -30,6 +36,7 @@ final class AppModel {
     private let browserLauncherURL: URL?
     private let terminalSnapshotDelayNanoseconds: UInt64
     private let confirmClosingActiveProcesses: @MainActor (ActiveProcessClosePrompt) -> Bool
+    private let markdownOpenCommandRunner: MarkdownOpenCommandRunner
     private(set) var terminalSessions: [TerminalSessionID: any TerminalProcessSession] = [:]
     private(set) var browserControllers: [BrowserSessionID: BrowserSessionController] = [:]
     @ObservationIgnored private var terminalSnapshotTasks: [TerminalSessionID: Task<Void, Never>] = [:]
@@ -57,7 +64,8 @@ final class AppModel {
         browserSessionFactory: any BrowserSessionFactory = WebKitBrowserSessionFactory(),
         browserLauncherURL: URL? = MyTermBrowserLauncher.executableURL(),
         terminalSnapshotDelayNanoseconds: UInt64 = 300_000_000,
-        confirmClosingActiveProcesses: @escaping @MainActor (ActiveProcessClosePrompt) -> Bool = AppModel.presentActiveProcessClosePrompt
+        confirmClosingActiveProcesses: @escaping @MainActor (ActiveProcessClosePrompt) -> Bool = AppModel.presentActiveProcessClosePrompt,
+        markdownOpenCommandRunner: @escaping MarkdownOpenCommandRunner = AppModel.runMarkdownOpenCommand
     ) throws {
         self.channel = channel
         let supportDirectory = try applicationSupportDirectory ?? Self.applicationSupportDirectory()
@@ -69,6 +77,7 @@ final class AppModel {
         self.browserLauncherURL = browserLauncherURL
         self.terminalSnapshotDelayNanoseconds = terminalSnapshotDelayNanoseconds
         self.confirmClosingActiveProcesses = confirmClosingActiveProcesses
+        self.markdownOpenCommandRunner = markdownOpenCommandRunner
         browserDataProfileResolver = BrowserDataProfileResolver(channel: channel)
         try migrateLegacySettings()
         try migrateLegacyBrowserDataProfiles()
@@ -595,18 +604,31 @@ final class AppModel {
                 pathPrefix = ""
             }
 
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-            process.arguments = ["-lc", "\(pathPrefix)exec \(command)"]
-            process.environment = environment
-            process.currentDirectoryURL = url.deletingLastPathComponent()
-            process.standardOutput = FileHandle.nullDevice
-            process.standardError = FileHandle.nullDevice
-            try process.run()
+            try markdownOpenCommandRunner(
+                "\(pathPrefix)exec \(command)",
+                environment,
+                url.deletingLastPathComponent()
+            )
         } catch {
             present(error)
+            return false
         }
         return true
+    }
+
+    private static func runMarkdownOpenCommand(
+        _ command: String,
+        environment: [String: String],
+        currentDirectory: URL
+    ) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = ["-lc", command]
+        process.environment = environment
+        process.currentDirectoryURL = currentDirectory
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
     }
 
     private static let markdownFileExtensions: Set<String> = [

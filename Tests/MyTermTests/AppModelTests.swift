@@ -910,6 +910,34 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount)
     }
 
+    func testMarkdownLauncherFailureFallsBackToMyTermBrowser() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let markdownURL = directory.appending(path: "README.md", directoryHint: .notDirectory)
+        try Data("# Read me\n".utf8).write(to: markdownURL)
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true,
+            markdownOpenCommandRunner: { _, _, _ in
+                throw MarkdownLauncherTestError.launchFailed
+            }
+        )
+        let initialTabCount = model.selectedWorkspace.tabs.count
+        let originatingSession = try XCTUnwrap(engine.sessions.first)
+
+        originatingSession.onEvent?(.openURL(markdownURL))
+
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount)
+        guard let browser = model.selectedTab?.splitTree.browserSessions.first else {
+            return XCTFail("Expected MyTerm browser fallback")
+        }
+        XCTAssertEqual(browser.url, markdownURL)
+        XCTAssertNotNil(model.errorDescription)
+    }
+
     func testTerminalLocalFilesOpenInTheirOriginatingWorkspaceWhileDirectoriesStayTerminalTabs() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
@@ -1152,6 +1180,10 @@ final class AppModelTests: XCTestCase {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
     }
+}
+
+private enum MarkdownLauncherTestError: Error {
+    case launchFailed
 }
 
 @MainActor
