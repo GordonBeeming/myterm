@@ -1,6 +1,19 @@
 import MyTermCore
 import SwiftUI
 
+struct MyTermShortcutDeclaration: Equatable {
+    let key: Character
+    let modifiers: EventModifiers
+
+    var keyEquivalent: KeyEquivalent { KeyEquivalent(key) }
+}
+
+enum MyTermCommandShortcuts {
+    static let newFolder = MyTermShortcutDeclaration(key: "n", modifiers: [.command, .shift])
+    static let decreaseWorkspaceFontSize = MyTermShortcutDeclaration(key: "-", modifiers: [.command])
+    static let increaseWorkspaceFontSize = MyTermShortcutDeclaration(key: "=", modifiers: [.command])
+}
+
 struct MyTermCommands: Commands {
     @Environment(\.openSettings) private var openSettings
     let startup: MyTermStartup
@@ -18,9 +31,22 @@ struct MyTermCommands: Commands {
             Button("New Workspace") { startup.model?.createWorkspace() }
                 .keyboardShortcut("n", modifiers: [.command])
             Button("New Folder…") { startup.model?.beginCreatingFolder() }
-                .keyboardShortcut("g", modifiers: [.command, .control])
+                .keyboardShortcut(
+                    MyTermCommandShortcuts.newFolder.keyEquivalent,
+                    modifiers: MyTermCommandShortcuts.newFolder.modifiers
+                )
             Button("Rename Workspace…") { startup.model?.beginRenamingSelectedWorkspace() }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
+            Button("Decrease Workspace Font Size") { startup.model?.adjustSelectedWorkspaceFontSize(by: -1) }
+                .keyboardShortcut(
+                    MyTermCommandShortcuts.decreaseWorkspaceFontSize.keyEquivalent,
+                    modifiers: MyTermCommandShortcuts.decreaseWorkspaceFontSize.modifiers
+                )
+            Button("Increase Workspace Font Size") { startup.model?.adjustSelectedWorkspaceFontSize(by: 1) }
+                .keyboardShortcut(
+                    MyTermCommandShortcuts.increaseWorkspaceFontSize.keyEquivalent,
+                    modifiers: MyTermCommandShortcuts.increaseWorkspaceFontSize.modifiers
+                )
             Button("Close Workspace") {
                 guard let model = startup.model else { return }
                 model.deleteWorkspace(model.store.selectedWorkspaceID)

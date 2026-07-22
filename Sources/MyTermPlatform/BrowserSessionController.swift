@@ -33,6 +33,7 @@ public final class BrowserSessionController: NSObject, ObservableObject {
     @Published public private(set) var state = BrowserSessionState()
 
     public let webView: WKWebView
+    public var onCloseRequest: (() -> Void)?
     private var observations = [NSKeyValueObservation]()
 
     public convenience override init() {
@@ -50,6 +51,7 @@ public final class BrowserSessionController: NSObject, ObservableObject {
         super.init()
 
         webView.navigationDelegate = self
+        webView.uiDelegate = self
         observations = [
             webView.observe(\.url, options: [.initial, .new]) { [weak self] _, _ in
                 Task { @MainActor [weak self] in self?.refreshState() }
@@ -78,12 +80,29 @@ public final class BrowserSessionController: NSObject, ObservableObject {
         try load(url: BrowserURLNormalizer.normalize(address))
     }
 
+    static func fileReadAccessBoundary(for url: URL) -> URL {
+        url.deletingLastPathComponent()
+    }
+
     public func load(url: URL) throws {
-        guard ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
+        switch url.scheme?.lowercased() {
+        case "http", "https":
+            state.errorDescription = nil
+            webView.load(URLRequest(url: url))
+        case "file":
+            guard url.isFileURL,
+                  !url.path.isEmpty,
+                  FileManager.default.fileExists(atPath: url.path) else {
+                throw BrowserURLNormalizationError.invalidAddress(url.absoluteString)
+            }
+            state.errorDescription = nil
+            webView.loadFileURL(
+                url,
+                allowingReadAccessTo: Self.fileReadAccessBoundary(for: url)
+            )
+        default:
             throw BrowserURLNormalizationError.invalidAddress(url.absoluteString)
         }
-        state.errorDescription = nil
-        webView.load(URLRequest(url: url))
     }
 
     public func goBack() {
@@ -100,6 +119,29 @@ public final class BrowserSessionController: NSObject, ObservableObject {
         webView.reload()
     }
 
+    public func stopLoading() {
+        webView.stopLoading()
+    }
+
+    static func configureNavigationPreferences(
+        _ preferences: WKWebpagePreferences,
+        for url: URL?
+    ) {
+        preferences.allowsContentJavaScript = url?.isFileURL != true
+    }
+
+    func decideNavigationPolicy(
+        for url: URL?,
+        preferences: WKWebpagePreferences,
+        decisionHandler: @escaping @MainActor @Sendable (
+            WKNavigationActionPolicy,
+            WKWebpagePreferences
+        ) -> Void
+    ) {
+        Self.configureNavigationPreferences(preferences, for: url)
+        decisionHandler(.allow, preferences)
+    }
+
     private func refreshState() {
         state.url = webView.url
         state.title = webView.title
@@ -114,7 +156,29 @@ public final class BrowserSessionController: NSObject, ObservableObject {
     }
 }
 
+extension BrowserSessionController: WKUIDelegate {
+    public func webViewDidClose(_ webView: WKWebView) {
+        onCloseRequest?()
+    }
+}
+
 extension BrowserSessionController: WKNavigationDelegate {
+    public func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        preferences: WKWebpagePreferences,
+        decisionHandler: @escaping @MainActor @Sendable (
+            WKNavigationActionPolicy,
+            WKWebpagePreferences
+        ) -> Void
+    ) {
+        decideNavigationPolicy(
+            for: navigationAction.request.url,
+            preferences: preferences,
+            decisionHandler: decisionHandler
+        )
+    }
+
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         state.errorDescription = nil
         refreshState()

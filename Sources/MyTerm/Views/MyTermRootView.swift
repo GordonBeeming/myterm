@@ -5,14 +5,70 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 private extension UTType {
-    static let mytermWorkspace = UTType(exportedAs: "com.gordonbeeming.myterm.workspace")
+    static let mytermSidebarItem = UTType(exportedAs: "com.gordonbeeming.myterm.sidebar-item")
 }
 
-private struct WorkspaceDragItem: Codable, Transferable {
-    let workspaceID: WorkspaceID
+private enum SidebarDragItem: Codable, Transferable {
+    case folder(WorkspaceFolderID)
+    case workspace(WorkspaceID)
 
     static var transferRepresentation: some TransferRepresentation {
-        CodableRepresentation(contentType: .mytermWorkspace)
+        CodableRepresentation(contentType: .mytermSidebarItem)
+    }
+}
+
+enum SidebarDropCalculations {
+    static func renderedHeight(measured: CGFloat, minimum: CGFloat) -> CGFloat {
+        measured > 0 ? measured : minimum
+    }
+
+    static func folderTarget(
+        folderID: WorkspaceFolderID,
+        nextFolderID: WorkspaceFolderID?,
+        locationY: CGFloat,
+        renderedHeight: CGFloat
+    ) -> WorkspaceFolderID? {
+        locationY <= renderedHeight / 2 ? folderID : nextFolderID
+    }
+
+    static func workspaceTarget(
+        for target: Workspace,
+        locationY: CGFloat,
+        renderedHeight: CGFloat,
+        in workspaces: [Workspace]
+    ) -> WorkspaceID? {
+        let siblings = workspaces.filter {
+            $0.folderID == target.folderID && $0.isPinned == target.isPinned
+        }
+        guard let targetIndex = siblings.firstIndex(where: { $0.id == target.id }) else {
+            return target.id
+        }
+        guard locationY > renderedHeight / 2 else { return target.id }
+        return siblings.dropFirst(targetIndex + 1).first?.id
+    }
+}
+
+private struct SidebarRenderedHeightPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private extension View {
+    func captureSidebarRenderedHeight(_ height: Binding<CGFloat>) -> some View {
+        background {
+            GeometryReader { geometry in
+                Color.clear.preference(
+                    key: SidebarRenderedHeightPreferenceKey.self,
+                    value: geometry.size.height
+                )
+            }
+        }
+        .onPreferenceChange(SidebarRenderedHeightPreferenceKey.self) {
+            height.wrappedValue = $0
+        }
     }
 }
 
@@ -103,12 +159,16 @@ private struct WorkspaceContentView: View {
                 commit: model.commitTabRename
             )
         }
-        .alert("New Folder", isPresented: $model.isCreatingFolder) {
-            TextField("Folder name", text: $model.newFolderDraft)
-            Button("Cancel", role: .cancel) { model.isCreatingFolder = false }
-            Button("Create") { model.commitFolderCreation() }
-        } message: {
-            Text("Folders keep related workspaces together and can be collapsed.")
+        .sheet(isPresented: $model.isCreatingFolder) {
+            RenameItemSheet(
+                title: "New Folder",
+                fieldLabel: "Folder name",
+                text: $model.newFolderDraft,
+                primaryActionLabel: "Create",
+                message: "Folders keep related workspaces together and can be collapsed.",
+                cancel: { model.isCreatingFolder = false },
+                commit: model.commitFolderCreation
+            )
         }
         .sheet(isPresented: isRenamingFolder) {
             RenameItemSheet(
@@ -141,7 +201,6 @@ private struct WorkspaceContentView: View {
 }
 
 private struct WorkspaceSidebar: View {
-    @Environment(\.openSettings) private var openSettings
     @Bindable var model: AppModel
 
     private var ungroupedWorkspaces: [Workspace] {
@@ -161,19 +220,32 @@ private struct WorkspaceSidebar: View {
                     )
                 ) {
                     ForEach(workspaces(in: folder.id)) { workspace in
-                        workspaceRow(workspace)
+                        WorkspaceSidebarRow(
+                            model: model,
+                            workspace: workspace,
+                            rowHeight: sidebarRowHeight
+                        )
                     }
+                    WorkspaceEndDropTarget(model: model, folderID: folder.id, label: "End of \(folder.title)")
                 } label: {
-                    folderLabel(folder)
+                    WorkspaceFolderRow(
+                        model: model,
+                        folder: folder,
+                        nextFolderID: nextFolderID(after: folder.id),
+                        rowHeight: sidebarRowHeight
+                    )
                 }
             }
 
-            if !ungroupedWorkspaces.isEmpty {
-                Section("Unfiled") {
-                    ForEach(ungroupedWorkspaces) { workspace in
-                        workspaceRow(workspace)
-                    }
+            Section("Unfiled") {
+                ForEach(ungroupedWorkspaces) { workspace in
+                    WorkspaceSidebarRow(
+                        model: model,
+                        workspace: workspace,
+                        rowHeight: sidebarRowHeight
+                    )
                 }
+                WorkspaceEndDropTarget(model: model, folderID: nil, label: "End of Unfiled")
             }
         }
         .listStyle(.sidebar)
@@ -213,8 +285,34 @@ private struct WorkspaceSidebar: View {
         }
     }
 
-    @ViewBuilder
-    private func workspaceRow(_ workspace: Workspace) -> some View {
+    private func workspaces(in folderID: WorkspaceFolderID) -> [Workspace] {
+        ordered(model.workspaces.filter { $0.folderID == folderID })
+    }
+
+    private var sidebarRowHeight: CGFloat {
+        model.selectedWorkspaceSettings.compactSidebar ? 22 : 30
+    }
+
+    private func nextFolderID(after folderID: WorkspaceFolderID) -> WorkspaceFolderID? {
+        guard let index = model.folders.firstIndex(where: { $0.id == folderID }) else { return nil }
+        return model.folders.dropFirst(index + 1).first?.id
+    }
+
+    private func ordered(_ workspaces: [Workspace]) -> [Workspace] {
+        workspaces.filter(\.isPinned) + workspaces.filter { !$0.isPinned }
+    }
+}
+
+private struct WorkspaceSidebarRow: View {
+    let model: AppModel
+    let workspace: Workspace
+    let rowHeight: CGFloat
+
+    @Environment(\.openSettings) private var openSettings
+    @State private var isDropTargeted = false
+    @State private var renderedRowHeight: CGFloat = 0
+
+    var body: some View {
         HStack(spacing: 6) {
             if workspace.isPinned {
                 Image(systemName: "pin.fill")
@@ -227,15 +325,42 @@ private struct WorkspaceSidebar: View {
             Spacer(minLength: 0)
         }
         .padding(.vertical, model.selectedWorkspaceSettings.compactSidebar ? 0 : 2)
+        .frame(minHeight: rowHeight)
         .contentShape(Rectangle())
         .tag(workspace.id)
         .accessibilityLabel(workspace.isPinned ? "Pinned workspace \(workspace.title)" : "Workspace \(workspace.title)")
-        .draggable(WorkspaceDragItem(workspaceID: workspace.id))
-        .dropDestination(for: WorkspaceDragItem.self) { items, _ in
-            guard let sourceID = items.first?.workspaceID else { return false }
-            model.moveWorkspace(sourceID, before: workspace.id)
+        .draggable(SidebarDragItem.workspace(workspace.id))
+        .dropDestination(for: SidebarDragItem.self) { items, location in
+            guard let sourceID = workspaceID(from: items),
+                  let source = model.workspaces.first(where: { $0.id == sourceID }),
+                  sourceID != workspace.id,
+                  source.isPinned == workspace.isPinned else {
+                return false
+            }
+
+            let targetID = workspaceBeforeTarget(
+                for: workspace,
+                locationY: location.y,
+                renderedHeight: SidebarDropCalculations.renderedHeight(
+                    measured: renderedRowHeight,
+                    minimum: rowHeight
+                ),
+                in: model.workspaces
+            )
+            model.moveWorkspace(sourceID, to: workspace.folderID, before: targetID)
             return true
+        } isTargeted: {
+            isDropTargeted = $0
         }
+        .background(
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(isDropTargeted ? Color.accentColor.opacity(0.12) : .clear)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .stroke(isDropTargeted ? Color.accentColor : .clear, lineWidth: 2)
+        }
+        .captureSidebarRenderedHeight($renderedRowHeight)
         .contextMenu {
             Button("Workspace Settings…", systemImage: "gearshape") {
                 model.prepareSettings(for: .workspace(workspace.id))
@@ -248,21 +373,50 @@ private struct WorkspaceSidebar: View {
             Button("Rename Workspace…") { model.beginRenamingWorkspace(workspace.id) }
             Divider()
             Menu("Move to Folder") {
-                Button("Unfiled") { model.moveWorkspace(workspace.id, to: nil) }
+                Button("Unfiled") { model.moveWorkspace(workspace.id, to: nil, before: nil) }
                 Divider()
                 ForEach(model.folders) { folder in
-                    Button(folder.title) { model.moveWorkspace(workspace.id, to: folder.id) }
+                    Button(folder.title) { model.moveWorkspace(workspace.id, to: folder.id, before: nil) }
                 }
             }
             Button("Move Up") { model.moveWorkspace(workspace.id, offset: -1) }
+                .disabled(!canMoveWorkspace(by: -1))
             Button("Move Down") { model.moveWorkspace(workspace.id, offset: 1) }
+                .disabled(!canMoveWorkspace(by: 1))
             Divider()
             Button("Close Workspace", role: .destructive) { model.deleteWorkspace(workspace.id) }
         }
+        .accessibilityAction(named: "Move Workspace Up") {
+            guard canMoveWorkspace(by: -1) else { return }
+            model.moveWorkspace(workspace.id, offset: -1)
+        }
+        .accessibilityAction(named: "Move Workspace Down") {
+            guard canMoveWorkspace(by: 1) else { return }
+            model.moveWorkspace(workspace.id, offset: 1)
+        }
     }
 
-    @ViewBuilder
-    private func folderLabel(_ folder: WorkspaceFolder) -> some View {
+    private func canMoveWorkspace(by offset: Int) -> Bool {
+        guard offset != 0 else { return false }
+        let siblings = model.workspaces.filter {
+            $0.folderID == workspace.folderID && $0.isPinned == workspace.isPinned
+        }
+        guard let index = siblings.firstIndex(where: { $0.id == workspace.id }) else { return false }
+        return siblings.indices.contains(index + offset)
+    }
+}
+
+private struct WorkspaceFolderRow: View {
+    let model: AppModel
+    let folder: WorkspaceFolder
+    let nextFolderID: WorkspaceFolderID?
+    let rowHeight: CGFloat
+
+    @Environment(\.openSettings) private var openSettings
+    @State private var isDropTargeted = false
+    @State private var renderedRowHeight: CGFloat = 0
+
+    var body: some View {
         Label {
             Text(folder.title)
                 .lineLimit(1)
@@ -270,12 +424,42 @@ private struct WorkspaceSidebar: View {
             Image(systemName: "folder.fill")
                 .foregroundStyle(folder.color.swiftUIColor)
         }
+        .frame(minHeight: rowHeight)
         .contentShape(Rectangle())
-        .dropDestination(for: WorkspaceDragItem.self) { items, _ in
-            guard let workspaceID = items.first?.workspaceID else { return false }
-            model.moveWorkspace(workspaceID, to: folder.id)
+        .draggable(SidebarDragItem.folder(folder.id))
+        .dropDestination(for: SidebarDragItem.self) { items, location in
+            guard let item = items.first else { return false }
+
+            switch item {
+            case .folder(let sourceID):
+                guard sourceID != folder.id else { return false }
+                let targetID = SidebarDropCalculations.folderTarget(
+                    folderID: folder.id,
+                    nextFolderID: nextFolderID,
+                    locationY: location.y,
+                    renderedHeight: SidebarDropCalculations.renderedHeight(
+                        measured: renderedRowHeight,
+                        minimum: rowHeight
+                    )
+                )
+                model.moveFolder(sourceID, before: targetID)
+            case .workspace(let sourceID):
+                guard model.workspaces.contains(where: { $0.id == sourceID }) else { return false }
+                model.moveWorkspace(sourceID, to: folder.id, before: nil)
+            }
             return true
+        } isTargeted: {
+            isDropTargeted = $0
         }
+        .background(
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(isDropTargeted ? Color.accentColor.opacity(0.12) : .clear)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .stroke(isDropTargeted ? Color.accentColor : .clear, lineWidth: 2)
+        }
+        .captureSidebarRenderedHeight($renderedRowHeight)
         .contextMenu {
             Button("Folder Settings…", systemImage: "gearshape") {
                 model.prepareSettings(for: .folder(folder.id))
@@ -304,17 +488,98 @@ private struct WorkspaceSidebar: View {
                 }
             }
             Divider()
+            Button("Move Folder Up") { moveFolder(by: -1) }
+                .disabled(!canMoveFolder(by: -1))
+            Button("Move Folder Down") { moveFolder(by: 1) }
+                .disabled(!canMoveFolder(by: 1))
+            Divider()
             Button("Remove Folder", role: .destructive) { model.deleteFolder(folder.id) }
+        }
+        .accessibilityAction(named: "Move Folder Up") {
+            moveFolder(by: -1)
+        }
+        .accessibilityAction(named: "Move Folder Down") {
+            moveFolder(by: 1)
         }
     }
 
-    private func workspaces(in folderID: WorkspaceFolderID) -> [Workspace] {
-        ordered(model.workspaces.filter { $0.folderID == folderID })
+    private func canMoveFolder(by offset: Int) -> Bool {
+        guard offset != 0,
+              let index = model.folders.firstIndex(where: { $0.id == folder.id }) else {
+            return false
+        }
+        return model.folders.indices.contains(index + offset)
     }
 
-    private func ordered(_ workspaces: [Workspace]) -> [Workspace] {
-        workspaces.filter(\.isPinned) + workspaces.filter { !$0.isPinned }
+    private func moveFolder(by offset: Int) {
+        guard canMoveFolder(by: offset),
+              let index = model.folders.firstIndex(where: { $0.id == folder.id }) else {
+            return
+        }
+
+        let destinationIndex = index + offset
+        let targetID: WorkspaceFolderID?
+        if offset < 0 {
+            targetID = model.folders[destinationIndex].id
+        } else {
+            let afterDestinationIndex = destinationIndex + 1
+            targetID = model.folders.indices.contains(afterDestinationIndex)
+                ? model.folders[afterDestinationIndex].id
+                : nil
+        }
+        model.moveFolder(folder.id, before: targetID)
     }
+}
+
+private struct WorkspaceEndDropTarget: View {
+    let model: AppModel
+    let folderID: WorkspaceFolderID?
+    let label: String
+
+    @State private var isDropTargeted = false
+
+    var body: some View {
+        Color.clear
+            .frame(height: 8)
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(Color.accentColor)
+                    .frame(height: 2)
+                    .padding(.horizontal, 8)
+                    .opacity(isDropTargeted ? 1 : 0)
+            }
+            .accessibilityHidden(true)
+            .dropDestination(for: SidebarDragItem.self) { items, _ in
+                guard let sourceID = workspaceID(from: items),
+                      model.workspaces.contains(where: { $0.id == sourceID }) else {
+                    return false
+                }
+                model.moveWorkspace(sourceID, to: folderID, before: nil)
+                return true
+            } isTargeted: {
+                isDropTargeted = $0
+            }
+            .help(label)
+    }
+}
+
+private func workspaceID(from items: [SidebarDragItem]) -> WorkspaceID? {
+    guard let item = items.first, case .workspace(let workspaceID) = item else { return nil }
+    return workspaceID
+}
+
+private func workspaceBeforeTarget(
+    for target: Workspace,
+    locationY: CGFloat,
+    renderedHeight: CGFloat,
+    in workspaces: [Workspace]
+) -> WorkspaceID? {
+    SidebarDropCalculations.workspaceTarget(
+        for: target,
+        locationY: locationY,
+        renderedHeight: renderedHeight,
+        in: workspaces
+    )
 }
 
 private extension WorkspaceFolderColor {

@@ -201,6 +201,12 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
     }
 
     override func dataReceived(slice: ArraySlice<UInt8>) {
+        let originalMouseReporting = allowMouseReporting
+        if selectionActive {
+            allowMouseReporting = false
+        }
+        defer { allowMouseReporting = originalMouseReporting }
+
         super.dataReceived(slice: slice)
         contentChangeCoalescer.notify { [weak self] in
             self?.onContentChanged?()
@@ -311,7 +317,7 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
     }
 
     override func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
-        guard let url = TerminalLinkRouter.webURL(from: link) else {
+        guard let url = TerminalLinkRouter.url(from: link) else {
             super.requestOpenLink(source: source, link: link, params: params)
             return
         }

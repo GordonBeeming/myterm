@@ -301,13 +301,89 @@ public final class WorkspaceStore {
         }
     }
 
-    public func moveWorkspace(_ workspaceID: WorkspaceID, to folderID: WorkspaceFolderID?) throws {
+    public func moveFolder(_ folderID: WorkspaceFolderID, before targetID: WorkspaceFolderID?) throws {
+        _ = try folderIndex(folderID, in: snapshot)
+        if let targetID {
+            _ = try folderIndex(targetID, in: snapshot)
+        }
+        guard folderID != targetID else { return }
+
         try mutate { snapshot in
-            if let folderID {
-                _ = try folderIndex(folderID, in: snapshot)
+            let sourceIndex = try folderIndex(folderID, in: snapshot)
+            let folder = snapshot.folders.remove(at: sourceIndex)
+            if let targetID {
+                let targetIndex = try folderIndex(targetID, in: snapshot)
+                snapshot.folders.insert(folder, at: targetIndex)
+            } else {
+                snapshot.folders.append(folder)
             }
-            let index = try workspaceIndex(workspaceID, in: snapshot)
-            snapshot.workspaces[index].folderID = folderID
+        }
+    }
+
+    public func moveWorkspace(_ workspaceID: WorkspaceID, to folderID: WorkspaceFolderID?) throws {
+        let source = try workspace(workspaceID)
+        if let folderID {
+            _ = try folderIndex(folderID, in: snapshot)
+        }
+        guard source.folderID != folderID else { return }
+        try moveWorkspace(workspaceID, to: folderID, before: nil)
+    }
+
+    public func moveWorkspace(
+        _ workspaceID: WorkspaceID,
+        to folderID: WorkspaceFolderID?,
+        before targetID: WorkspaceID?
+    ) throws {
+        let source = try workspace(workspaceID)
+        if let folderID {
+            _ = try folderIndex(folderID, in: snapshot)
+        }
+        guard workspaceID != targetID else { return }
+
+        if let targetID {
+            let target = try workspace(targetID)
+            guard target.folderID == folderID, target.isPinned == source.isPinned else {
+                throw WorkspaceStoreError.invariantViolation(
+                    reason: "Workspace \(targetID) is not in the requested destination and pinned band."
+                )
+            }
+        }
+
+        try mutate { snapshot in
+            let sourceIndex = try workspaceIndex(workspaceID, in: snapshot)
+            let source = snapshot.workspaces.remove(at: sourceIndex)
+
+            let insertionIndex: Int
+            if let targetID {
+                guard let targetIndex = snapshot.workspaces.firstIndex(where: { $0.id == targetID }) else {
+                    throw WorkspaceStoreError.workspaceNotFound(targetID)
+                }
+                insertionIndex = targetIndex
+            } else {
+                let destinationBand = snapshot.workspaces.indices.filter {
+                    snapshot.workspaces[$0].folderID == folderID
+                        && snapshot.workspaces[$0].isPinned == source.isPinned
+                }
+                if let lastBandIndex = destinationBand.last {
+                    insertionIndex = lastBandIndex + 1
+                } else {
+                    let destination = snapshot.workspaces.indices.filter {
+                        snapshot.workspaces[$0].folderID == folderID
+                    }
+                    if let firstDestinationIndex = destination.first,
+                       source.isPinned {
+                        insertionIndex = firstDestinationIndex
+                    } else if let lastDestinationIndex = destination.last {
+                        insertionIndex = lastDestinationIndex + 1
+                    } else {
+                        insertionIndex = snapshot.workspaces.count
+                    }
+                }
+            }
+
+            var moved = source
+            moved.folderID = folderID
+            snapshot.workspaces.insert(moved, at: insertionIndex)
         }
     }
 
@@ -319,19 +395,8 @@ public final class WorkspaceStore {
     }
 
     public func moveWorkspace(_ workspaceID: WorkspaceID, before targetID: WorkspaceID) throws {
-        guard workspaceID != targetID else { return }
-        try mutate { snapshot in
-            guard let oldIndex = snapshot.workspaces.firstIndex(where: { $0.id == workspaceID }) else {
-                throw WorkspaceStoreError.workspaceNotFound(workspaceID)
-            }
-            guard let targetIndex = snapshot.workspaces.firstIndex(where: { $0.id == targetID }) else {
-                throw WorkspaceStoreError.workspaceNotFound(targetID)
-            }
-            var workspace = snapshot.workspaces.remove(at: oldIndex)
-            let adjustedTarget = oldIndex < targetIndex ? targetIndex - 1 : targetIndex
-            workspace.folderID = snapshot.workspaces[adjustedTarget].folderID
-            snapshot.workspaces.insert(workspace, at: adjustedTarget)
-        }
+        let folderID = try workspace(targetID).folderID
+        try moveWorkspace(workspaceID, to: folderID, before: targetID)
     }
 
     public func moveWorkspace(_ workspaceID: WorkspaceID, offset: Int) throws {
@@ -341,8 +406,10 @@ public final class WorkspaceStore {
                 throw WorkspaceStoreError.workspaceNotFound(workspaceID)
             }
             let folderID = snapshot.workspaces[oldIndex].folderID
+            let isPinned = snapshot.workspaces[oldIndex].isPinned
             let siblingIndices = snapshot.workspaces.indices.filter {
                 snapshot.workspaces[$0].folderID == folderID
+                    && snapshot.workspaces[$0].isPinned == isPinned
             }
             guard let siblingPosition = siblingIndices.firstIndex(of: oldIndex) else { return }
             let newSiblingPosition = min(max(siblingPosition + offset, 0), siblingIndices.count - 1)

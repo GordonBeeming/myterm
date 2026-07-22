@@ -1,10 +1,22 @@
 import AppKit
 import SwiftUI
 
+@MainActor
+final class InitialFirstResponderRequest {
+    private(set) var didRequest = false
+
+    func requestIfNeeded(isAttachedToWindow: Bool, request: () -> Void) {
+        guard isAttachedToWindow, !didRequest else { return }
+        didRequest = true
+        request()
+    }
+}
+
 struct RenameItemSheet: View {
     let title: String
     let fieldLabel: String
     @Binding var text: String
+    var primaryActionLabel = "Rename"
     var allowsEmpty = false
     var message: String?
     let cancel: () -> Void
@@ -35,7 +47,7 @@ struct RenameItemSheet: View {
                 Spacer()
                 Button("Cancel", action: cancelAndDismiss)
                     .keyboardShortcut(.cancelAction)
-                Button("Rename", action: commitAndDismiss)
+                Button(primaryActionLabel, action: commitAndDismiss)
                     .keyboardShortcut(.defaultAction)
                     .disabled(!allowsEmpty && trimmedText.isEmpty)
             }
@@ -125,16 +137,16 @@ private struct AutoSelectingTextField: NSViewRepresentable {
 }
 
 private final class SelectingTextField: NSTextField {
-    private var didSelectInitialText = false
+    private let initialFirstResponderRequest = InitialFirstResponderRequest()
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        guard window != nil, !didSelectInitialText else { return }
-        didSelectInitialText = true
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            window?.makeFirstResponder(self)
-            selectText(nil)
+        initialFirstResponderRequest.requestIfNeeded(isAttachedToWindow: window != nil) { [weak self] in
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                window?.makeFirstResponder(self)
+                selectText(nil)
+            }
         }
     }
 }

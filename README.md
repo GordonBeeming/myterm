@@ -57,8 +57,11 @@ WebAuthn requests are passed to macOS and the user's chosen credential provider,
 
 | Action | Shortcut |
 | --- | --- |
-| New workspace | <kbd>⇧⌘N</kbd> |
+| New workspace | <kbd>⌘N</kbd> |
+| New folder | <kbd>⇧⌘N</kbd> |
 | Rename workspace | <kbd>⇧⌘R</kbd> |
+| Decrease active-workspace font size | <kbd>⌘-</kbd> |
+| Increase active-workspace font size | <kbd>⌘=</kbd> |
 | New terminal tab | <kbd>⌘T</kbd> |
 | New browser tab | <kbd>⇧⌘L</kbd> |
 | Split terminal right | <kbd>⌘D</kbd> |

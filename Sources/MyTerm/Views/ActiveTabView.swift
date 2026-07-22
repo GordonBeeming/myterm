@@ -1,6 +1,40 @@
+import AppKit
 import MyTermCore
 import MyTermPlatform
 import SwiftUI
+
+struct BrowserAddressFieldState {
+    private(set) var text = ""
+    private(set) var isEditing = false
+
+    mutating func beginEditing() -> Bool {
+        guard !isEditing else { return false }
+        isEditing = true
+        return true
+    }
+
+    mutating func updateFromUser(_ text: String) {
+        self.text = text
+    }
+
+    mutating func synchronizeNavigationText(_ text: String) {
+        guard !isEditing else { return }
+        self.text = text
+    }
+
+    mutating func endEditing(navigationText: String?) {
+        isEditing = false
+        if let navigationText {
+            text = navigationText
+        }
+    }
+
+    mutating func prepareSubmission(fieldText: String) -> String {
+        text = fieldText
+        isEditing = false
+        return fieldText
+    }
+}
 
 struct ActiveTabView: View {
     let model: AppModel
@@ -165,8 +199,11 @@ private struct TerminalPaneView: View {
                 Image(systemName: "ellipsis.circle")
             }
             .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
             .padding(6)
             .accessibilityLabel("Terminal pane actions")
+            .help("Terminal Pane Actions")
         }
     }
 
@@ -181,30 +218,83 @@ private struct BrowserTabView: View {
     let tabID: TabID
     let browserID: BrowserSessionID
     @ObservedObject var controller: BrowserSessionController
-    @State private var address = ""
+    @State private var addressState = BrowserAddressFieldState()
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 6) {
+            HStack(spacing: 4) {
                 Button(action: controller.goBack) {
-                    Label("Back", systemImage: "chevron.left")
+                    Image(systemName: "chevron.left")
                 }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
                 .disabled(!controller.state.canGoBack)
+                .accessibilityLabel("Back")
+                .help("Back")
                 Button(action: controller.goForward) {
-                    Label("Forward", systemImage: "chevron.right")
+                    Image(systemName: "chevron.right")
                 }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
                 .disabled(!controller.state.canGoForward)
-                Button(action: controller.reload) {
-                    Label("Reload", systemImage: "arrow.clockwise")
-                }
-                TextField("Address", text: $address)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit {
-                        model.loadBrowserAddress(address, workspaceID: workspaceID, tabID: tabID, browserID: browserID)
+                .accessibilityLabel("Forward")
+                .help("Forward")
+
+                HStack(spacing: 2) {
+                    BrowserAddressTextField(
+                        text: Binding(
+                            get: { addressState.text },
+                            set: { addressState.updateFromUser($0) }
+                        ),
+                        beginEditing: {
+                            addressState.beginEditing()
+                        },
+                        endEditing: {
+                            addressState.endEditing(
+                                navigationText: controller.state.url?.absoluteString
+                            )
+                        },
+                        submit: { fieldText in
+                            let submittedAddress = addressState.prepareSubmission(fieldText: fieldText)
+                            model.loadBrowserAddress(
+                                submittedAddress,
+                                workspaceID: workspaceID,
+                                tabID: tabID,
+                                browserID: browserID
+                            )
+                        }
+                    )
+                    .frame(minHeight: 18)
+
+                    Button {
+                        if controller.state.isLoading {
+                            controller.stopLoading()
+                        } else {
+                            controller.reload()
+                        }
+                    } label: {
+                        Image(systemName: controller.state.isLoading ? "stop.fill" : "arrow.clockwise")
                     }
-                    .accessibilityLabel("Browser address")
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                    .frame(width: 20, height: 18)
+                    .accessibilityLabel(controller.state.isLoading ? "Stop loading" : "Reload")
+                    .help(controller.state.isLoading ? "Stop Loading" : "Reload")
+                }
+                .padding(.leading, 6)
+                .padding(.trailing, 3)
+                .frame(maxWidth: .infinity, minHeight: 22)
+                .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 5))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 5)
+                        .stroke(
+                            addressState.isEditing ? Color.accentColor : Color(nsColor: .separatorColor),
+                            lineWidth: addressState.isEditing ? 2 : 1
+                        )
+                }
             }
-            .padding(8)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
             if let error = controller.state.errorDescription {
                 Text(error)
                     .font(.callout)
@@ -216,12 +306,103 @@ private struct BrowserTabView: View {
             }
             BrowserSessionView(session: controller)
         }
-        .onAppear { address = controller.state.url?.absoluteString ?? "" }
+        .onAppear {
+            addressState.synchronizeNavigationText(controller.state.url?.absoluteString ?? "")
+        }
         .onChange(of: controller.state.url) { _, url in
             guard let url else { return }
-            address = url.absoluteString
+            addressState.synchronizeNavigationText(url.absoluteString)
             model.persistBrowserURL(url, workspaceID: workspaceID, tabID: tabID)
         }
     }
 
+}
+
+private struct BrowserAddressTextField: NSViewRepresentable {
+    @Binding var text: String
+    let beginEditing: () -> Bool
+    let endEditing: () -> Void
+    let submit: (String) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(
+            text: $text,
+            beginEditing: beginEditing,
+            endEditing: endEditing,
+            submit: submit
+        )
+    }
+
+    func makeNSView(context: Context) -> NSTextField {
+        let textField = NSTextField(string: text)
+        textField.delegate = context.coordinator
+        textField.isBezeled = false
+        textField.drawsBackground = false
+        textField.focusRingType = .none
+        textField.placeholderString = "Address"
+        textField.lineBreakMode = .byTruncatingTail
+        textField.usesSingleLineMode = true
+        textField.toolTip = "Browser Address"
+        textField.setAccessibilityLabel("Browser address")
+        textField.setAccessibilityHelp("Enter a web or file address")
+        return textField
+    }
+
+    func updateNSView(_ textField: NSTextField, context: Context) {
+        context.coordinator.text = $text
+        context.coordinator.beginEditing = beginEditing
+        context.coordinator.endEditing = endEditing
+        context.coordinator.submit = submit
+        if textField.currentEditor() == nil, textField.stringValue != text {
+            textField.stringValue = text
+        }
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        var text: Binding<String>
+        var beginEditing: () -> Bool
+        var endEditing: () -> Void
+        var submit: (String) -> Void
+
+        init(
+            text: Binding<String>,
+            beginEditing: @escaping () -> Bool,
+            endEditing: @escaping () -> Void,
+            submit: @escaping (String) -> Void
+        ) {
+            self.text = text
+            self.beginEditing = beginEditing
+            self.endEditing = endEditing
+            self.submit = submit
+        }
+
+        func controlTextDidBeginEditing(_ notification: Notification) {
+            guard beginEditing() else { return }
+            (notification.object as? NSTextField)?.currentEditor()?.selectAll(nil)
+        }
+
+        func controlTextDidEndEditing(_ notification: Notification) {
+            endEditing()
+        }
+
+        func controlTextDidChange(_ notification: Notification) {
+            guard let textField = notification.object as? NSTextField else { return }
+            text.wrappedValue = textField.stringValue
+        }
+
+        func control(
+            _ control: NSControl,
+            textView: NSTextView,
+            doCommandBy commandSelector: Selector
+        ) -> Bool {
+            guard commandSelector == #selector(NSResponder.insertNewline(_:)) else { return false }
+            let fieldText = (control as? NSTextField)?.stringValue ?? textView.string
+            text.wrappedValue = fieldText
+            _ = control.window?.makeFirstResponder(nil)
+            endEditing()
+            submit(fieldText)
+            return true
+        }
+    }
 }

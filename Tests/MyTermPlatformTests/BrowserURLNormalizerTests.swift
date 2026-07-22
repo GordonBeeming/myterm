@@ -24,12 +24,18 @@ final class BrowserURLNormalizerTests: XCTestCase {
         }
     }
 
+    func testAllowsExplicitFileURLs() throws {
+        for address in ["file:/tmp/example.html", "file:///tmp/example.html"] {
+            let url = try BrowserURLNormalizer.normalize(address)
+
+            XCTAssertTrue(url.isFileURL)
+            XCTAssertEqual(url.path, "/tmp/example.html")
+        }
+    }
+
     func testRejectsUnsupportedScheme() {
-        XCTAssertThrowsError(try BrowserURLNormalizer.normalize("file:///tmp/example.html")) { error in
-            XCTAssertEqual(
-                error as? BrowserURLNormalizationError,
-                .invalidAddress("file:///tmp/example.html")
-            )
+        XCTAssertThrowsError(try BrowserURLNormalizer.normalize("ssh://example.com")) { error in
+            XCTAssertEqual(error as? BrowserURLNormalizationError, .invalidAddress("ssh://example.com"))
         }
     }
 }

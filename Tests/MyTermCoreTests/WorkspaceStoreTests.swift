@@ -52,8 +52,9 @@ final class WorkspaceStoreTests: XCTestCase {
         let firstWorkID = try store.createWorkspace(title: "API", folderID: workFolderID)
         let secondWorkID = try store.createWorkspace(title: "Web", folderID: workFolderID)
 
+        try store.setWorkspacePinned(firstWorkID, isPinned: true)
         try store.setWorkspacePinned(secondWorkID, isPinned: true)
-        try store.moveWorkspace(secondWorkID, before: firstWorkID)
+        try store.moveWorkspace(secondWorkID, to: workFolderID, before: firstWorkID)
         try store.setFolderExpanded(workFolderID, isExpanded: false)
 
         let restored = try WorkspaceStore(persistenceURL: url)
@@ -65,19 +66,189 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(restored.workspaces.first { $0.id == firstWorkID }?.folderID, workFolderID)
     }
 
-    func testWorkspaceOffsetMovesUseSiblingPositionsInBothDirections() throws {
+    func testFolderMovesBeforeAndToEndPersistAfterReload() throws {
+        let url = temporaryURL()
+        let store = try WorkspaceStore(persistenceURL: url)
+        let firstID = try store.createFolder(title: "First")
+        let secondID = try store.createFolder(title: "Second")
+        let thirdID = try store.createFolder(title: "Third")
+
+        try store.moveFolder(thirdID, before: firstID)
+        XCTAssertEqual(store.folders.map(\.id), [thirdID, firstID, secondID])
+
+        try store.moveFolder(thirdID, before: nil)
+        XCTAssertEqual(store.folders.map(\.id), [firstID, secondID, thirdID])
+
+        let restored = try WorkspaceStore(persistenceURL: url)
+        XCTAssertEqual(restored.folders.map(\.id), [firstID, secondID, thirdID])
+    }
+
+    func testFolderMoveSelfIsNoOpAndInvalidIDsAreRejected() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let folderID = try store.createFolder(title: "Work")
+        let snapshot = store.snapshot
+        let missingID = WorkspaceFolderID()
+
+        try store.moveFolder(folderID, before: folderID)
+        XCTAssertEqual(store.snapshot, snapshot)
+        XCTAssertThrowsError(try store.moveFolder(missingID, before: folderID))
+        XCTAssertThrowsError(try store.moveFolder(folderID, before: missingID))
+    }
+
+    func testWorkspaceMovesUseDestinationFolderAndPinnedBands() throws {
+        let url = temporaryURL()
+        let store = try WorkspaceStore(persistenceURL: url)
+        let folderID = try store.createFolder(title: "Work")
+        let pinnedFirstID = try store.createWorkspace(title: "Pinned First", folderID: folderID)
+        let pinnedSecondID = try store.createWorkspace(title: "Pinned Second", folderID: folderID)
+        let unpinnedFirstID = try store.createWorkspace(title: "Unpinned First", folderID: folderID)
+        let unpinnedSecondID = try store.createWorkspace(title: "Unpinned Second", folderID: folderID)
+        try store.setWorkspacePinned(pinnedFirstID, isPinned: true)
+        try store.setWorkspacePinned(pinnedSecondID, isPinned: true)
+
+        try store.moveWorkspace(unpinnedSecondID, to: folderID, before: unpinnedFirstID)
+        XCTAssertEqual(
+            store.workspaces.filter { $0.folderID == folderID && !$0.isPinned }.map(\.id),
+            [unpinnedSecondID, unpinnedFirstID]
+        )
+
+        try store.moveWorkspace(pinnedSecondID, to: folderID, before: pinnedFirstID)
+        XCTAssertEqual(
+            store.workspaces.filter { $0.folderID == folderID && $0.isPinned }.map(\.id),
+            [pinnedSecondID, pinnedFirstID]
+        )
+
+        try store.moveWorkspace(pinnedSecondID, to: folderID, before: nil)
+        XCTAssertEqual(
+            store.workspaces.filter { $0.folderID == folderID && $0.isPinned }.map(\.id),
+            [pinnedFirstID, pinnedSecondID]
+        )
+
+        try store.moveWorkspace(unpinnedSecondID, to: folderID, before: nil)
+        XCTAssertEqual(
+            store.workspaces.filter { $0.folderID == folderID && !$0.isPinned }.map(\.id),
+            [unpinnedFirstID, unpinnedSecondID]
+        )
+        XCTAssertTrue(try XCTUnwrap(store.workspaces.first { $0.id == pinnedFirstID }).isPinned)
+
+        let restored = try WorkspaceStore(persistenceURL: url)
+        XCTAssertEqual(
+            restored.workspaces.filter { $0.folderID == folderID && $0.isPinned }.map(\.id),
+            [pinnedFirstID, pinnedSecondID]
+        )
+        XCTAssertEqual(
+            restored.workspaces.filter { $0.folderID == folderID && !$0.isPinned }.map(\.id),
+            [unpinnedFirstID, unpinnedSecondID]
+        )
+    }
+
+    func testExplicitWorkspaceMoveAppendsWithinCurrentUnfiledBand() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let firstID = store.selectedWorkspaceID
+        let secondID = try store.createWorkspace(title: "Second")
+
+        try store.moveWorkspace(firstID, to: nil, before: nil)
+
+        XCTAssertEqual(
+            store.workspaces.filter { $0.folderID == nil }.map(\.id),
+            [secondID, firstID]
+        )
+    }
+
+    func testWorkspaceMoveToCurrentFolderWithoutPositionIsNoOp() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let folderID = try store.createFolder(title: "Work")
+        let firstID = try store.createWorkspace(title: "First", folderID: folderID)
+        let secondID = try store.createWorkspace(title: "Second", folderID: folderID)
+        let snapshot = store.snapshot
+
+        try store.moveWorkspace(secondID, to: folderID)
+
+        XCTAssertEqual(store.snapshot, snapshot)
+        XCTAssertEqual(store.workspaces.filter { $0.folderID == folderID }.map(\.id), [firstID, secondID])
+    }
+
+    func testWorkspaceMovesAcrossFoldersAndIntoEmptyOrUnfiledDestinations() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let initialUnfiledWorkspaceID = store.selectedWorkspaceID
+        let firstFolderID = try store.createFolder(title: "First")
+        let secondFolderID = try store.createFolder(title: "Second")
+        let workspaceID = try store.createWorkspace(title: "Workspace", folderID: firstFolderID)
+        let targetID = try store.createWorkspace(title: "Target", folderID: secondFolderID)
+
+        try store.moveWorkspace(workspaceID, to: secondFolderID, before: targetID)
+        XCTAssertEqual(store.workspaces.first { $0.id == workspaceID }?.folderID, secondFolderID)
+        XCTAssertEqual(
+            store.workspaces.filter { $0.folderID == secondFolderID }.map(\.id),
+            [workspaceID, targetID]
+        )
+
+        try store.moveWorkspace(workspaceID, to: nil, before: nil)
+        XCTAssertNil(store.workspaces.first { $0.id == workspaceID }?.folderID)
+        XCTAssertEqual(
+            store.workspaces.filter { $0.folderID == nil }.map(\.id),
+            [initialUnfiledWorkspaceID, workspaceID]
+        )
+
+        let emptyFolderID = try store.createFolder(title: "Empty")
+        try store.moveWorkspace(workspaceID, to: emptyFolderID, before: nil)
+        XCTAssertEqual(store.workspaces.first { $0.id == workspaceID }?.folderID, emptyFolderID)
+    }
+
+    func testWorkspaceMoveRejectsInvalidDestinationAndTargetIDs() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let firstFolderID = try store.createFolder(title: "First")
+        let secondFolderID = try store.createFolder(title: "Second")
+        let workspaceID = try store.createWorkspace(title: "Workspace", folderID: firstFolderID)
+        let targetID = try store.createWorkspace(title: "Target", folderID: secondFolderID)
+        let pinnedTargetID = try store.createWorkspace(title: "Pinned Target", folderID: firstFolderID)
+        try store.setWorkspacePinned(pinnedTargetID, isPinned: true)
+        let missingWorkspaceID = WorkspaceID()
+        let missingFolderID = WorkspaceFolderID()
+
+        XCTAssertThrowsError(try store.moveWorkspace(workspaceID, to: missingFolderID, before: nil))
+        XCTAssertThrowsError(try store.moveWorkspace(missingWorkspaceID, to: firstFolderID, before: nil))
+        XCTAssertThrowsError(try store.moveWorkspace(workspaceID, to: firstFolderID, before: missingWorkspaceID))
+        XCTAssertThrowsError(try store.moveWorkspace(workspaceID, to: firstFolderID, before: targetID)) { error in
+            guard case .invariantViolation(let reason) = error as? WorkspaceStoreError else {
+                return XCTFail("Expected an invariant violation, got \(error)")
+            }
+            XCTAssertTrue(reason.contains("requested destination and pinned band"))
+        }
+        XCTAssertThrowsError(try store.moveWorkspace(workspaceID, before: pinnedTargetID)) { error in
+            guard case .invariantViolation(let reason) = error as? WorkspaceStoreError else {
+                return XCTFail("Expected an invariant violation, got \(error)")
+            }
+            XCTAssertTrue(reason.contains("requested destination and pinned band"))
+        }
+        try store.moveWorkspace(workspaceID, to: firstFolderID, before: workspaceID)
+    }
+
+    func testWorkspaceOffsetMovesUseSiblingPositionsInBothDirectionsAndStayInBand() throws {
         let store = try WorkspaceStore(persistenceURL: temporaryURL())
         let unfiledWorkspaceID = store.selectedWorkspaceID
         let folderID = try store.createFolder(title: "Work")
         let firstID = try store.createWorkspace(title: "First", folderID: folderID)
         let secondID = try store.createWorkspace(title: "Second", folderID: folderID)
         let thirdID = try store.createWorkspace(title: "Third", folderID: folderID)
+        let pinnedID = try store.createWorkspace(title: "Pinned", folderID: folderID)
+        try store.setWorkspacePinned(pinnedID, isPinned: true)
 
         try store.moveWorkspace(firstID, offset: 1)
-        XCTAssertEqual(store.workspaces.map(\.id), [unfiledWorkspaceID, secondID, firstID, thirdID])
+        XCTAssertEqual(
+            store.workspaces.map(\.id),
+            [unfiledWorkspaceID, secondID, firstID, thirdID, pinnedID]
+        )
 
         try store.moveWorkspace(thirdID, offset: -1)
-        XCTAssertEqual(store.workspaces.map(\.id), [unfiledWorkspaceID, secondID, thirdID, firstID])
+        XCTAssertEqual(
+            store.workspaces.map(\.id),
+            [unfiledWorkspaceID, secondID, thirdID, firstID, pinnedID]
+        )
+
+        let snapshot = store.snapshot
+        try store.moveWorkspace(pinnedID, offset: -1)
+        XCTAssertEqual(store.snapshot, snapshot)
     }
 
     func testRemovingFolderKeepsItsWorkspacesAndMovesThemToUnfiled() throws {
