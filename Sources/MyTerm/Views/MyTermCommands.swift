@@ -12,6 +12,8 @@ enum MyTermCommandShortcuts {
     static let newFolder = MyTermShortcutDeclaration(key: "n", modifiers: [.command, .shift])
     static let decreaseWorkspaceFontSize = MyTermShortcutDeclaration(key: "-", modifiers: [.command])
     static let increaseWorkspaceFontSize = MyTermShortcutDeclaration(key: "=", modifiers: [.command])
+    static let previousTab = MyTermShortcutDeclaration(key: "\t", modifiers: [.control, .shift])
+    static let nextTab = MyTermShortcutDeclaration(key: "\t", modifiers: [.control])
 }
 
 struct MyTermCommands: Commands {
@@ -75,9 +77,15 @@ struct MyTermCommands: Commands {
                 .keyboardShortcut("r", modifiers: [.command, .option])
             Divider()
             Button("Previous Tab") { startup.model?.selectAdjacentTab(offset: -1) }
-                .keyboardShortcut("[", modifiers: [.command, .shift])
+                .keyboardShortcut(
+                    MyTermCommandShortcuts.previousTab.keyEquivalent,
+                    modifiers: MyTermCommandShortcuts.previousTab.modifiers
+                )
             Button("Next Tab") { startup.model?.selectAdjacentTab(offset: 1) }
-                .keyboardShortcut("]", modifiers: [.command, .shift])
+                .keyboardShortcut(
+                    MyTermCommandShortcuts.nextTab.keyEquivalent,
+                    modifiers: MyTermCommandShortcuts.nextTab.modifiers
+                )
             ForEach(1...9, id: \.self) { number in
                 Button("Tab \(number)") { startup.model?.selectTab(at: number - 1) }
                     .keyboardShortcut(KeyEquivalent(Character(String(number))), modifiers: [.control])

@@ -192,5 +192,13 @@ final class InteractionBehaviorTests: XCTestCase {
             MyTermCommandShortcuts.increaseWorkspaceFontSize,
             MyTermShortcutDeclaration(key: "=", modifiers: [.command])
         )
+        XCTAssertEqual(
+            MyTermCommandShortcuts.previousTab,
+            MyTermShortcutDeclaration(key: "\t", modifiers: [.control, .shift])
+        )
+        XCTAssertEqual(
+            MyTermCommandShortcuts.nextTab,
+            MyTermShortcutDeclaration(key: "\t", modifiers: [.control])
+        )
     }
 }
