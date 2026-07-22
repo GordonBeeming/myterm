@@ -279,6 +279,12 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         XCTAssertEqual(TerminalLinkRouter.url(from: "http://localhost:3000")?.host, "localhost")
         XCTAssertEqual(TerminalLinkRouter.url(from: "file:///tmp/report.html")?.path, "/tmp/report.html")
         XCTAssertEqual(TerminalLinkRouter.url(from: "file:/tmp/report.html")?.path, "/tmp/report.html")
+        let deepFileLink = TerminalLinkRouter.url(
+            from: "file:///tmp/../tmp/report.html?theme=dark#section"
+        )
+        XCTAssertEqual(deepFileLink?.path, "/tmp/report.html")
+        XCTAssertEqual(deepFileLink?.query, "theme=dark")
+        XCTAssertEqual(deepFileLink?.fragment, "section")
         XCTAssertEqual(
             TerminalLinkRouter.url(from: "/Users/gordon beeming/report.html")?.path,
             "/Users/gordon beeming/report.html"

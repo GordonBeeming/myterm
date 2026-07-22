@@ -153,6 +153,26 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(engine.sessions[1].focusCallCount, 1)
     }
 
+    func testMovingWorkspaceToItsCurrentFolderDoesNotReorderIt() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let folderID = try model.store.createFolder(title: "Projects")
+        let firstWorkspaceID = model.store.selectedWorkspaceID
+        model.moveWorkspace(firstWorkspaceID, to: folderID)
+        model.createWorkspace(in: folderID)
+        let originalOrder = model.workspaces
+            .filter { $0.folderID == folderID }
+            .map(\.id)
+
+        model.moveWorkspace(firstWorkspaceID, to: folderID)
+
+        XCTAssertEqual(
+            model.workspaces.filter { $0.folderID == folderID }.map(\.id),
+            originalOrder
+        )
+    }
+
     func testTerminalSplitGeometryKeepsEachRecursiveBranchAtEqualHalves() {
         let rootLengths = TerminalSplitGeometry.childLengths(totalLength: 1_001, childCount: 2)
         XCTAssertEqual(rootLengths[0], 500, accuracy: 0.001)

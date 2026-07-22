@@ -400,7 +400,6 @@ private struct BrowserAddressTextField: NSViewRepresentable {
             let fieldText = (control as? NSTextField)?.stringValue ?? textView.string
             text.wrappedValue = fieldText
             _ = control.window?.makeFirstResponder(nil)
-            endEditing()
             submit(fieldText)
             return true
         }

@@ -373,10 +373,10 @@ private struct WorkspaceSidebarRow: View {
             Button("Rename Workspace…") { model.beginRenamingWorkspace(workspace.id) }
             Divider()
             Menu("Move to Folder") {
-                Button("Unfiled") { model.moveWorkspace(workspace.id, to: nil, before: nil) }
+                Button("Unfiled") { model.moveWorkspace(workspace.id, to: nil) }
                 Divider()
                 ForEach(model.folders) { folder in
-                    Button(folder.title) { model.moveWorkspace(workspace.id, to: folder.id, before: nil) }
+                    Button(folder.title) { model.moveWorkspace(workspace.id, to: folder.id) }
                 }
             }
             Button("Move Up") { model.moveWorkspace(workspace.id, offset: -1) }
@@ -445,7 +445,7 @@ private struct WorkspaceFolderRow: View {
                 model.moveFolder(sourceID, before: targetID)
             case .workspace(let sourceID):
                 guard model.workspaces.contains(where: { $0.id == sourceID }) else { return false }
-                model.moveWorkspace(sourceID, to: folder.id, before: nil)
+                model.moveWorkspace(sourceID, to: folder.id)
             }
             return true
         } isTargeted: {

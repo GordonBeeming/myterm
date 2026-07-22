@@ -370,7 +370,7 @@ final class AppModel {
 
     func moveWorkspace(_ workspaceID: WorkspaceID, to folderID: WorkspaceFolderID?) {
         perform {
-            try store.moveWorkspace(workspaceID, to: folderID, before: nil)
+            try store.moveWorkspace(workspaceID, to: folderID)
             applyResolvedRuntimeSettings(to: [workspaceID])
         }
     }

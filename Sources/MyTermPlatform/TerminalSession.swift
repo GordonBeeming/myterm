@@ -155,7 +155,11 @@ public enum TerminalLinkRouter {
             guard let url = URL(string: candidate), url.isFileURL, !url.path.isEmpty else {
                 return nil
             }
-            return URL(fileURLWithPath: url.path).standardizedFileURL
+            guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+                return nil
+            }
+            components.path = URL(fileURLWithPath: url.path).standardizedFileURL.path
+            return components.url
         }
 
         return webURL(from: candidate)

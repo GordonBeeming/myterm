@@ -1,6 +1,6 @@
 # Keyboard shortcuts
 
-MyTerm exposes its shortcuts through native macOS menus. Pane and navigation keys follow cmux where that makes sense. Workspace font-size zoom applies only to the active workspace and persists a one-point override.
+MyTerm exposes its shortcuts through native macOS menus. Pane and navigation keys follow cmux where that makes sense. Workspace font-size zoom applies only to the active workspace and persists a workspace-level override.
 
 ## Workspaces
 
