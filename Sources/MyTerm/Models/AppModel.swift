@@ -22,6 +22,8 @@ typealias MarkdownOpenCommandRunner = @MainActor (
     _ currentDirectory: URL
 ) throws -> Void
 
+typealias MarkdownOpenCommandAvailabilityChecker = @MainActor (_ executable: String) -> Bool
+
 @MainActor
 @Observable
 final class AppModel {
@@ -37,6 +39,7 @@ final class AppModel {
     private let terminalSnapshotDelayNanoseconds: UInt64
     private let confirmClosingActiveProcesses: @MainActor (ActiveProcessClosePrompt) -> Bool
     private let markdownOpenCommandRunner: MarkdownOpenCommandRunner
+    private let markdownOpenCommandAvailabilityChecker: MarkdownOpenCommandAvailabilityChecker
     private(set) var terminalSessions: [TerminalSessionID: any TerminalProcessSession] = [:]
     private(set) var browserControllers: [BrowserSessionID: BrowserSessionController] = [:]
     @ObservationIgnored private var terminalSnapshotTasks: [TerminalSessionID: Task<Void, Never>] = [:]
@@ -65,7 +68,8 @@ final class AppModel {
         browserLauncherURL: URL? = MyTermBrowserLauncher.executableURL(),
         terminalSnapshotDelayNanoseconds: UInt64 = 300_000_000,
         confirmClosingActiveProcesses: @escaping @MainActor (ActiveProcessClosePrompt) -> Bool = AppModel.presentActiveProcessClosePrompt,
-        markdownOpenCommandRunner: @escaping MarkdownOpenCommandRunner = AppModel.runMarkdownOpenCommand
+        markdownOpenCommandRunner: @escaping MarkdownOpenCommandRunner = AppModel.runMarkdownOpenCommand,
+        markdownOpenCommandAvailabilityChecker: @escaping MarkdownOpenCommandAvailabilityChecker = AppModel.isExecutableAvailable
     ) throws {
         self.channel = channel
         let supportDirectory = try applicationSupportDirectory ?? Self.applicationSupportDirectory()
@@ -78,6 +82,7 @@ final class AppModel {
         self.terminalSnapshotDelayNanoseconds = terminalSnapshotDelayNanoseconds
         self.confirmClosingActiveProcesses = confirmClosingActiveProcesses
         self.markdownOpenCommandRunner = markdownOpenCommandRunner
+        self.markdownOpenCommandAvailabilityChecker = markdownOpenCommandAvailabilityChecker
         browserDataProfileResolver = BrowserDataProfileResolver(channel: channel)
         try migrateLegacySettings()
         try migrateLegacyBrowserDataProfiles()
@@ -581,6 +586,10 @@ final class AppModel {
             let settings = try store.resolvedSettings(for: workspaceID)
             let template = settings.markdownOpenCommand.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !template.isEmpty else { return false }
+            if template == TerminalPreferences.defaultMarkdownOpenCommand,
+               !markdownOpenCommandAvailabilityChecker("ide") {
+                return false
+            }
 
             let quotedPath = Self.shellQuote(url.path)
             let command = template.contains("{file}")
@@ -629,6 +638,21 @@ final class AppModel {
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         try process.run()
+    }
+
+    private static func isExecutableAvailable(_ executable: String) -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = ["-lc", "command -v \(shellQuote(executable)) >/dev/null 2>&1"]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            process.waitUntilExit()
+            return process.terminationStatus == 0
+        } catch {
+            return false
+        }
     }
 
     private static let markdownFileExtensions: Set<String> = [

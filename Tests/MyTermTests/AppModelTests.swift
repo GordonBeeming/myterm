@@ -938,6 +938,34 @@ final class AppModelTests: XCTestCase {
         XCTAssertNotNil(model.errorDescription)
     }
 
+    func testMissingDefaultMarkdownLauncherFallsBackToMyTermBrowser() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let markdownURL = directory.appending(path: "README.md", directoryHint: .notDirectory)
+        try Data("# Read me\n".utf8).write(to: markdownURL)
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true,
+            markdownOpenCommandRunner: { _, _, _ in
+                XCTFail("The unavailable default launcher must not run")
+            },
+            markdownOpenCommandAvailabilityChecker: { executable in
+                XCTAssertEqual(executable, "ide")
+                return false
+            }
+        )
+        let originatingSession = try XCTUnwrap(engine.sessions.first)
+
+        originatingSession.onEvent?(.openURL(markdownURL))
+
+        let browser = try XCTUnwrap(model.selectedTab?.splitTree.browserSessions.first)
+        XCTAssertEqual(browser.url, markdownURL)
+        XCTAssertNil(model.errorDescription)
+    }
+
     func testTerminalLocalFilesOpenInTheirOriginatingWorkspaceWhileDirectoriesStayTerminalTabs() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
