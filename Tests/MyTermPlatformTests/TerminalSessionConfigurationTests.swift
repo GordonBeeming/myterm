@@ -3,6 +3,27 @@ import XCTest
 @testable import MyTermPlatform
 
 final class TerminalSessionConfigurationTests: XCTestCase {
+    @MainActor
+    func testForegroundProcessDetectionIgnoresIdleShellAndFindsActiveJob() async throws {
+        let session = try SwiftTermTerminalSession(
+            configuration: TerminalSessionConfiguration(
+                workingDirectory: FileManager.default.temporaryDirectory,
+                initialCommand: "sleep 5"
+            )
+        )
+        defer { session.terminate() }
+
+        try session.start()
+        var activeProcessName: String?
+        for _ in 0..<100 {
+            activeProcessName = session.activeForegroundProcessName
+            if activeProcessName == "sleep" { break }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+
+        XCTAssertEqual(activeProcessName, "sleep")
+    }
+
     func testRuntimeConfigurationClampsInvalidFontAndScrollbackValues() {
         let configuration = TerminalRuntimeConfiguration(fontSize: 0, scrollbackLines: -1)
 
@@ -138,6 +159,7 @@ final class TerminalSessionConfigurationTests: XCTestCase {
     func testInputTranslatorLeavesKittyAndUnownedKeysForSwiftTerm() {
         let commandLeft = TerminalInputEvent(keyCode: 123, charactersIgnoringModifiers: "", modifiers: [.command])
         let commandRight = TerminalInputEvent(keyCode: 124, charactersIgnoringModifiers: "", modifiers: [.command])
+        let commandDelete = TerminalInputEvent(keyCode: 51, charactersIgnoringModifiers: "", modifiers: [.command])
         let plainReturn = TerminalInputEvent(keyCode: 36, charactersIgnoringModifiers: "\r", modifiers: [])
         let plainArrow = TerminalInputEvent(keyCode: 126, charactersIgnoringModifiers: "", modifiers: [])
         let unrelatedShortcut = TerminalInputEvent(keyCode: 8, charactersIgnoringModifiers: "c", modifiers: [.command])
@@ -150,6 +172,10 @@ final class TerminalSessionConfigurationTests: XCTestCase {
             XCTAssertEqual(
                 TerminalInputTranslator.sequence(for: commandRight, kittyKeyboardEnabled: kittyKeyboardEnabled),
                 [0x05]
+            )
+            XCTAssertEqual(
+                TerminalInputTranslator.sequence(for: commandDelete, kittyKeyboardEnabled: kittyKeyboardEnabled),
+                [0x15]
             )
         }
         XCTAssertNil(TerminalInputTranslator.sequence(for: plainReturn, kittyKeyboardEnabled: false))

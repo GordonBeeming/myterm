@@ -1,0 +1,12 @@
+# shellcheck shell=bash
+
+if [ -n "${MYTERM_ORIGINAL_BASH_ENV:-}" ] \
+  && [ "$MYTERM_ORIGINAL_BASH_ENV" != "${BASH_ENV:-}" ] \
+  && [ -r "$MYTERM_ORIGINAL_BASH_ENV" ]; then
+  # shellcheck disable=SC1090
+  . "$MYTERM_ORIGINAL_BASH_ENV"
+fi
+
+open() {
+  "${MYTERM_OPEN_SHIM:-/usr/bin/open}" "$@"
+}

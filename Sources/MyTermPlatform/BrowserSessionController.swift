@@ -165,6 +165,17 @@ public final class BrowserSessionController: NSObject, ObservableObject {
 }
 
 extension BrowserSessionController: WKUIDelegate {
+    public func webView(
+        _ webView: WKWebView,
+        createWebViewWith configuration: WKWebViewConfiguration,
+        for navigationAction: WKNavigationAction,
+        windowFeatures: WKWindowFeatures
+    ) -> WKWebView? {
+        guard navigationAction.targetFrame == nil else { return nil }
+        webView.load(navigationAction.request)
+        return nil
+    }
+
     public func webViewDidClose(_ webView: WKWebView) {
         onCloseRequest?()
     }

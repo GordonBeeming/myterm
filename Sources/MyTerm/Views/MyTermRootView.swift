@@ -121,6 +121,13 @@ private struct WorkspaceContentView: View {
         )
     }
 
+    private var isEditingWorkspaceEmoji: Binding<Bool> {
+        Binding(
+            get: { model.workspaceEmojiBeingEditedID != nil },
+            set: { if !$0 { model.workspaceEmojiBeingEditedID = nil } }
+        )
+    }
+
     private var isRenamingTab: Binding<Bool> {
         Binding(
             get: { model.tabBeingRenamedID != nil },
@@ -146,7 +153,7 @@ private struct WorkspaceContentView: View {
                 Divider()
                 ActiveTabView(model: model)
             }
-            .navigationTitle(model.selectedWorkspace.title)
+            .navigationTitle(model.selectedWorkspace.displayTitle)
         }
         .sheet(isPresented: isRenamingWorkspace) {
             RenameItemSheet(
@@ -166,6 +173,17 @@ private struct WorkspaceContentView: View {
                 message: "Leave the name empty to use the automatic title.",
                 cancel: model.cancelTabRename,
                 commit: model.commitTabRename
+            )
+        }
+        .sheet(isPresented: isEditingWorkspaceEmoji) {
+            RenameItemSheet(
+                title: "Workspace Emoji",
+                fieldLabel: "Emoji prefix",
+                text: $model.workspaceEmojiDraft,
+                allowsEmpty: true,
+                message: "Add an emoji before the workspace name, or leave this empty to remove it.",
+                cancel: { model.workspaceEmojiBeingEditedID = nil },
+                commit: model.commitWorkspaceEmoji
             )
         }
         .sheet(isPresented: $model.isCreatingFolder) {
@@ -347,7 +365,7 @@ private struct WorkspaceSidebarRow: View {
                     .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
             }
-            Text(workspace.title)
+            Text(workspace.displayTitle)
                 .lineLimit(1)
             Spacer(minLength: 0)
         }
@@ -355,7 +373,7 @@ private struct WorkspaceSidebarRow: View {
         .frame(minHeight: rowHeight)
         .contentShape(Rectangle())
         .tag(workspace.id)
-        .accessibilityLabel(workspace.isPinned ? "Pinned workspace \(workspace.title)" : "Workspace \(workspace.title)")
+        .accessibilityLabel(workspace.isPinned ? "Pinned workspace \(workspace.displayTitle)" : "Workspace \(workspace.displayTitle)")
         .draggable(WorkspaceSidebarDragItem(id: workspace.id))
         .dropDestination(for: WorkspaceSidebarDragItem.self) { items, location in
             guard let sourceID = items.first?.id,
@@ -381,7 +399,7 @@ private struct WorkspaceSidebarRow: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(isDropTargeted ? Color.accentColor.opacity(0.12) : .clear)
+                .fill(workspaceBackgroundColor)
         )
         .overlay {
             RoundedRectangle(cornerRadius: 4, style: .continuous)
@@ -398,6 +416,44 @@ private struct WorkspaceSidebarRow: View {
                 model.setWorkspacePinned(workspace.id, isPinned: !workspace.isPinned)
             }
             Button("Rename Workspace…") { model.beginRenamingWorkspace(workspace.id) }
+            Button(workspace.emoji == nil ? "Add Emoji Prefix…" : "Change Emoji Prefix…") {
+                model.beginEditingWorkspaceEmoji(workspace.id)
+            }
+            if workspace.emoji != nil {
+                Button("Remove Emoji Prefix") {
+                    model.setWorkspaceEmoji(workspace.id, emoji: nil)
+                }
+            }
+            Menu("Workspace Color") {
+                Toggle(isOn: Binding(
+                    get: { workspace.color == nil },
+                    set: { isSelected in
+                        if isSelected {
+                            model.setWorkspaceColor(workspace.id, color: nil)
+                        }
+                    }
+                )) {
+                    Text("None")
+                }
+                Divider()
+                ForEach(WorkspaceColor.allCases, id: \.self) { color in
+                    Toggle(isOn: Binding(
+                        get: { workspace.color == color },
+                        set: { isSelected in
+                            if isSelected {
+                                model.setWorkspaceColor(workspace.id, color: color)
+                            }
+                        }
+                    )) {
+                        Label {
+                            Text(color.displayName)
+                        } icon: {
+                            Image(nsImage: color.menuSwatchImage)
+                                .renderingMode(.original)
+                        }
+                    }
+                }
+            }
             Divider()
             Menu("Move to Folder") {
                 Button("Unfiled") { model.moveWorkspace(workspace.id, to: nil) }
@@ -421,6 +477,15 @@ private struct WorkspaceSidebarRow: View {
             guard canMoveWorkspace(by: 1) else { return }
             model.moveWorkspace(workspace.id, offset: 1)
         }
+    }
+
+    private var workspaceBackgroundColor: Color {
+        if isDropTargeted {
+            return Color.accentColor.opacity(0.12)
+        }
+        guard let color = workspace.color else { return .clear }
+        let isSelected = model.store.selectedWorkspaceID == workspace.id
+        return color.swiftUIColor.opacity(isSelected ? 0.30 : 0.18)
     }
 
     private func canMoveWorkspace(by offset: Int) -> Bool {

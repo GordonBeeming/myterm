@@ -40,6 +40,32 @@ final class AppModelTests: XCTestCase {
         )
     }
 
+    func testCancelledApplicationTerminationRestoresTheMainWindow() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let confirmation = CloseConfirmationRecorder()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true,
+            confirmClosingActiveProcesses: confirmation.confirm
+        )
+        try XCTUnwrap(engine.sessions.first).activeForegroundProcessName = "claude"
+        var restoredApplication: NSApplication?
+        let delegate = MyTermApplicationDelegate { application in
+            restoredApplication = application
+        }
+        delegate.connect(model: model)
+
+        let reply = delegate.applicationShouldTerminate(NSApplication.shared)
+
+        XCTAssertEqual(reply, .terminateCancel)
+        XCTAssertTrue(restoredApplication === NSApplication.shared)
+        XCTAssertEqual(confirmation.prompts.last?.confirmButtonTitle, "Quit")
+    }
+
     func testChannelsUseSeparateNamesBundleIdentifiersAndPersistencePaths() {
         let supportDirectory = URL(fileURLWithPath: "/tmp/myterm-tests", isDirectory: true)
 
@@ -108,6 +134,38 @@ final class AppModelTests: XCTestCase {
         XCTAssertNotNil(model.selectedTab)
         XCTAssertTrue(splitSessionIDs.allSatisfy { model.terminalSession(for: $0) == nil })
         XCTAssertNil(model.errorDescription)
+    }
+
+    func testClosePaneAndQuitRequireConfirmationForForegroundProcesses() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let confirmation = CloseConfirmationRecorder()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true,
+            confirmClosingActiveProcesses: confirmation.confirm
+        )
+        let originalWorkspaceID = model.store.selectedWorkspaceID
+        let session = try XCTUnwrap(engine.sessions.first)
+        session.activeForegroundProcessName = "codex"
+
+        model.closeFocusedPaneOrTab()
+
+        XCTAssertEqual(model.store.selectedWorkspaceID, originalWorkspaceID)
+        XCTAssertEqual(session.terminateCallCount, 0)
+        XCTAssertEqual(confirmation.prompts.last?.confirmButtonTitle, "Close Pane")
+        XCTAssertEqual(confirmation.prompts.last?.processNames, ["codex"])
+        XCTAssertFalse(model.shouldTerminateApplication())
+        XCTAssertEqual(confirmation.prompts.last?.confirmButtonTitle, "Quit")
+
+        confirmation.allowsClose = true
+        model.closeFocusedPaneOrTab()
+
+        XCTAssertFalse(model.workspaces.contains(where: { $0.id == originalWorkspaceID }))
+        XCTAssertEqual(session.terminateCallCount, 1)
     }
 
     func testSplitFocusesTheNewTerminalRuntime() throws {
@@ -266,6 +324,28 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.selectedWorkspace.selectedTabID, secondTabID)
     }
 
+    func testSelectingWorkspaceRestoresItsLastFocusedTerminalPane() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let firstWorkspaceID = model.store.selectedWorkspaceID
+        model.splitFocusedTerminal(orientation: .horizontal)
+        let focusedSession = try XCTUnwrap(engine.sessions.last)
+        let focusCountBeforeWorkspaceSwitch = focusedSession.focusCallCount
+
+        model.createWorkspace()
+        model.selectWorkspace(firstWorkspaceID)
+
+        XCTAssertEqual(model.store.selectedWorkspaceID, firstWorkspaceID)
+        XCTAssertEqual(focusedSession.focusCallCount, focusCountBeforeWorkspaceSwitch + 1)
+    }
+
     func testWorkspaceFoldersAndRenameFlowUseExplicitActions() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
@@ -284,6 +364,16 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.selectedWorkspace.title, "HubX")
         XCTAssertEqual(model.selectedWorkspace.folderID, folder.id)
         XCTAssertNil(model.workspaceBeingRenamedID)
+
+        model.beginEditingWorkspaceEmoji(model.store.selectedWorkspaceID)
+        model.workspaceEmojiDraft = "  🚨  "
+        model.commitWorkspaceEmoji()
+        model.setWorkspaceColor(model.store.selectedWorkspaceID, color: .red)
+
+        XCTAssertEqual(model.selectedWorkspace.emoji, "🚨")
+        XCTAssertEqual(model.selectedWorkspace.color, .red)
+        XCTAssertEqual(model.selectedWorkspace.displayTitle, "🚨 HubX")
+        XCTAssertNil(model.workspaceEmojiBeingEditedID)
     }
 
     func testSettingsResolveGlobalFolderAndWorkspaceOverridesAndCanClearOneField() throws {
@@ -820,6 +910,147 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(engine.configurations.last?.initialCommand, "ssh 'user%name@example.com'")
     }
 
+    func testMarkdownFilesUseTheConfiguredOpenCommand() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let markdownURL = directory.appending(path: "release notes.md", directoryHint: .notDirectory)
+        try Data("# Release notes\n".utf8).write(to: markdownURL)
+        let captureURL = directory.appending(path: "opened-path.txt", directoryHint: .notDirectory)
+        let recorderURL = directory.appending(path: "record-markdown", directoryHint: .notDirectory)
+        try Data("#!/bin/sh\nprintf '%s' \"$1\" > \"$MYTERM_MARKDOWN_CAPTURE\"\n".utf8).write(to: recorderURL)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: recorderURL.path)
+        let model = try makeModel(applicationSupportDirectory: directory)
+        model.updateGlobalSettings {
+            $0.markdownOpenCommand = "'\(recorderURL.path)' {file}"
+        }
+        setenv("MYTERM_MARKDOWN_CAPTURE", captureURL.path, 1)
+        defer { unsetenv("MYTERM_MARKDOWN_CAPTURE") }
+        let initialTabCount = model.selectedWorkspace.tabs.count
+
+        model.open([markdownURL])
+
+        for _ in 0..<50 where !FileManager.default.fileExists(atPath: captureURL.path) {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertEqual(try String(contentsOf: captureURL, encoding: .utf8), markdownURL.path)
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount)
+    }
+
+    func testMarkdownLauncherFailureFallsBackToMyTermBrowser() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let markdownURL = directory.appending(path: "README.md", directoryHint: .notDirectory)
+        try Data("# Read me\n".utf8).write(to: markdownURL)
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true,
+            markdownOpenCommandRunner: { _, _, _, _ in
+                throw MarkdownLauncherTestError.launchFailed
+            },
+            markdownOpenCommandAvailabilityChecker: { executable in
+                XCTAssertEqual(executable, "ide")
+                return true
+            }
+        )
+        let initialTabCount = model.selectedWorkspace.tabs.count
+        let originatingSession = try XCTUnwrap(engine.sessions.first)
+
+        originatingSession.onEvent?(.openURL(markdownURL))
+
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount)
+        guard let browser = model.selectedTab?.splitTree.browserSessions.first else {
+            return XCTFail("Expected MyTerm browser fallback")
+        }
+        XCTAssertEqual(browser.url, markdownURL)
+        XCTAssertNotNil(model.errorDescription)
+    }
+
+    func testMissingDefaultMarkdownLauncherFallsBackToMyTermBrowser() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let markdownURL = directory.appending(path: "README.md", directoryHint: .notDirectory)
+        try Data("# Read me\n".utf8).write(to: markdownURL)
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true,
+            markdownOpenCommandRunner: { _, _, _, _ in
+                XCTFail("The unavailable default launcher must not run")
+            },
+            markdownOpenCommandAvailabilityChecker: { executable in
+                XCTAssertEqual(executable, "ide")
+                return false
+            }
+        )
+        let originatingSession = try XCTUnwrap(engine.sessions.first)
+
+        originatingSession.onEvent?(.openURL(markdownURL))
+
+        let browser = try XCTUnwrap(model.selectedTab?.splitTree.browserSessions.first)
+        XCTAssertEqual(browser.url, markdownURL)
+        XCTAssertNil(model.errorDescription)
+    }
+
+    func testDirectMarkdownOpenWithoutLauncherCreatesBrowserTab() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let markdownURL = directory.appending(path: "README.md", directoryHint: .notDirectory)
+        try Data("# Read me\n".utf8).write(to: markdownURL)
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: nil,
+            startsTerminalProcesses: false,
+            markdownOpenCommandAvailabilityChecker: { _ in false }
+        )
+        let initialTabCount = model.selectedWorkspace.tabs.count
+
+        model.open([markdownURL])
+
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount + 1)
+        guard case .browser(let browser) = try XCTUnwrap(model.selectedTab?.content) else {
+            return XCTFail("Expected a browser tab for direct Markdown fallback")
+        }
+        XCTAssertEqual(browser.url, markdownURL)
+        XCTAssertNil(model.errorDescription)
+    }
+
+    func testMarkdownOpenerNonzeroExitFallsBackToMyTermBrowser() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let markdownURL = directory.appending(path: "README.md", directoryHint: .notDirectory)
+        try Data("# Read me\n".utf8).write(to: markdownURL)
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: nil,
+            startsTerminalProcesses: false,
+            markdownOpenCommandRunner: { _, _, _, completion in
+                completion(127)
+            },
+            markdownOpenCommandAvailabilityChecker: { _ in true }
+        )
+        let initialTabCount = model.selectedWorkspace.tabs.count
+
+        model.open([markdownURL])
+        await Task.yield()
+
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount + 1)
+        guard case .browser(let browser) = try XCTUnwrap(model.selectedTab?.content) else {
+            return XCTFail("Expected browser fallback after opener failure")
+        }
+        XCTAssertEqual(browser.url, markdownURL)
+        XCTAssertEqual(
+            model.errorDescription,
+            "The Markdown opener exited with status 127. The file was opened in MyTerm instead."
+        )
+    }
+
     func testTerminalLocalFilesOpenInTheirOriginatingWorkspaceWhileDirectoriesStayTerminalTabs() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
@@ -1064,6 +1295,21 @@ final class AppModelTests: XCTestCase {
     }
 }
 
+private enum MarkdownLauncherTestError: Error {
+    case launchFailed
+}
+
+@MainActor
+private final class CloseConfirmationRecorder {
+    var allowsClose = false
+    private(set) var prompts = [ActiveProcessClosePrompt]()
+
+    func confirm(_ prompt: ActiveProcessClosePrompt) -> Bool {
+        prompts.append(prompt)
+        return allowsClose
+    }
+}
+
 @MainActor
 private final class CapturingTerminalEngine: TerminalEngine {
     private(set) var configurations: [TerminalSessionConfiguration] = []
@@ -1080,6 +1326,7 @@ private final class CapturingTerminalEngine: TerminalEngine {
 @MainActor
 private final class CapturingTerminalSession: TerminalProcessSession {
     var isRunning = false
+    var activeForegroundProcessName: String?
     var onEvent: (@MainActor (TerminalSessionEvent) -> Void)?
     private(set) var appliedRuntimeConfigurations: [TerminalRuntimeConfiguration] = []
     private(set) var snapshotCallCount = 0

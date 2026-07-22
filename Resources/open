@@ -1,0 +1,21 @@
+#!/bin/sh
+set -eu
+
+system_open=${MYTERM_SYSTEM_OPEN_COMMAND:-/usr/bin/open}
+
+if [ "$#" -eq 0 ]; then
+  exec "$system_open"
+fi
+
+for argument in "$@"; do
+  case "$argument" in
+    [Hh][Tt][Tt][Pp]://*|[Hh][Tt][Tt][Pp][Ss]://*)
+      ;;
+    *)
+      exec "$system_open" "$@"
+      ;;
+  esac
+done
+
+resource_directory=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+exec "$resource_directory/myterm-browser" "$@"

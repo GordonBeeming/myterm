@@ -38,10 +38,21 @@ enum MyTermBrowserLauncher {
         executableURL: URL?,
         workspaceID: WorkspaceID? = nil,
         tabID: TabID? = nil,
-        paneID: PaneID? = nil
+        paneID: PaneID? = nil,
+        baseEnvironment: [String: String] = ProcessInfo.processInfo.environment
     ) -> [String: String] {
         guard let executableURL else { return [:] }
-        var environment = ["BROWSER": executableURL.path]
+        let resourceDirectory = executableURL.deletingLastPathComponent().path
+        let basePath = baseEnvironment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+        var environment = [
+            "BASH_ENV": "\(resourceDirectory)/myterm-bash-env",
+            "BROWSER": executableURL.path,
+            "MYTERM_OPEN_SHIM": "\(resourceDirectory)/open",
+            "PATH": "\(resourceDirectory):\(basePath)",
+        ]
+        if let originalBashEnvironment = baseEnvironment["BASH_ENV"], !originalBashEnvironment.isEmpty {
+            environment["MYTERM_ORIGINAL_BASH_ENV"] = originalBashEnvironment
+        }
         if let workspaceID {
             environment[workspaceIDEnvironmentKey] = workspaceID.description
         }

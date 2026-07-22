@@ -394,6 +394,21 @@ public final class WorkspaceStore {
         }
     }
 
+    public func setWorkspaceEmoji(_ workspaceID: WorkspaceID, emoji: String?) throws {
+        try mutate { snapshot in
+            let index = try workspaceIndex(workspaceID, in: snapshot)
+            let trimmedEmoji = emoji?.trimmingCharacters(in: .whitespacesAndNewlines)
+            snapshot.workspaces[index].emoji = trimmedEmoji?.isEmpty == false ? trimmedEmoji : nil
+        }
+    }
+
+    public func setWorkspaceColor(_ workspaceID: WorkspaceID, color: WorkspaceColor?) throws {
+        try mutate { snapshot in
+            let index = try workspaceIndex(workspaceID, in: snapshot)
+            snapshot.workspaces[index].color = color
+        }
+    }
+
     public func moveWorkspace(_ workspaceID: WorkspaceID, before targetID: WorkspaceID) throws {
         let folderID = try workspace(targetID).folderID
         try moveWorkspace(workspaceID, to: folderID, before: targetID)

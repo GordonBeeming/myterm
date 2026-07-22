@@ -42,6 +42,8 @@ final class WorkspaceModelTests: XCTestCase {
         let tree: SplitNode = .horizontal([.terminal(first), .terminal(second)])
         let workspace = Workspace(
             title: "Development",
+            emoji: "🟢",
+            color: .green,
             tabs: [
                 Tab(content: .terminal(tree), focusedTerminalSessionID: second.id),
                 Tab.browser(url: try XCTUnwrap(URL(string: "https://example.com/docs")))
@@ -55,6 +57,7 @@ final class WorkspaceModelTests: XCTestCase {
         XCTAssertEqual(decoded.tabs[0].terminalTree?.paneIDs, [first.paneID, second.paneID])
         XCTAssertEqual(decoded.tabs[0].terminalTree?.terminalSessions[0].workingDirectory, workingDirectory)
         XCTAssertEqual(decoded.tabs[1].isBrowser, true)
+        XCTAssertEqual(decoded.displayTitle, "🟢 Development")
         XCTAssertTrue(String(decoding: data, as: UTF8.self).contains("Development"))
     }
 
@@ -139,6 +142,7 @@ final class WorkspaceModelTests: XCTestCase {
         var folder = TerminalPreferencesOverrides()
         folder.fontSize = 15
         folder.compactSidebar = false
+        folder.markdownOpenCommand = "code {file}"
         var workspace = TerminalPreferencesOverrides()
         workspace.fontSize = 20
         workspace.optionAsMeta = false
@@ -147,6 +151,7 @@ final class WorkspaceModelTests: XCTestCase {
         XCTAssertEqual(resolved.fontSize, 20)
         XCTAssertFalse(resolved.compactSidebar)
         XCTAssertFalse(resolved.optionAsMeta)
+        XCTAssertEqual(resolved.markdownOpenCommand, "code {file}")
     }
 
     func testTerminalSessionBoundsRecentTextAndMigratesMissingField() throws {

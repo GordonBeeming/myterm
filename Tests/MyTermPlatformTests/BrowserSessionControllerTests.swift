@@ -6,6 +6,29 @@ import XCTest
 
 @MainActor
 final class BrowserSessionControllerTests: XCTestCase {
+    @MainActor
+    func testActiveBrowserHostFocusesOnAttachmentWithoutStealingToolbarFocus() {
+        let browserView = FocusableBrowserTestView()
+        let host = BrowserSessionHostView(contentView: browserView, isActive: true)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 240),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = host
+
+        XCTAssertTrue(window.firstResponder === browserView)
+
+        let otherView = FocusableBrowserTestView()
+        host.addSubview(otherView)
+        host.setPaneActive(false)
+        window.makeFirstResponder(otherView)
+        host.setPaneActive(true)
+
+        XCTAssertTrue(window.firstResponder === otherView)
+    }
+
     func testWritingToolsOverlayIsDisabled() {
         let controller = BrowserSessionController()
 
@@ -52,6 +75,28 @@ final class BrowserSessionControllerTests: XCTestCase {
         controller.webViewDidClose(controller.webView)
 
         XCTAssertEqual(callbackCount, 1)
+    }
+
+    func testTargetBlankNavigationLoadsInTheExistingWebView() async {
+        let controller = BrowserSessionController()
+        let initialWaiter = NavigationWaiter()
+        controller.webView.navigationDelegate = initialWaiter
+        await withCheckedContinuation { continuation in
+            initialWaiter.continuation = continuation
+            controller.webView.loadHTMLString(
+                "<a id='next' target='_blank' href='data:text/html,%3Ctitle%3ENext%20Page%3C%2Ftitle%3E'>Next</a>",
+                baseURL: URL(string: "https://myterm.test")
+            )
+        }
+
+        let nextWaiter = NavigationWaiter()
+        controller.webView.navigationDelegate = nextWaiter
+        await withCheckedContinuation { continuation in
+            nextWaiter.continuation = continuation
+            controller.webView.evaluateJavaScript("document.getElementById('next').click()")
+        }
+
+        XCTAssertEqual(controller.webView.url?.scheme, "data")
     }
 
     func testLocalFileNavigationsDisableJavaScriptWhileWebNavigationsKeepItEnabled() throws {
@@ -136,6 +181,10 @@ final class BrowserSessionControllerTests: XCTestCase {
             }
         }
     }
+}
+
+private final class FocusableBrowserTestView: NSView {
+    override var acceptsFirstResponder: Bool { true }
 }
 
 @MainActor

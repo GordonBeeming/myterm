@@ -48,6 +48,8 @@ public enum TerminalInputTranslator {
             return [0x01]
         case (124, [.command]):
             return [0x05]
+        case (51, [.command]):
+            return [0x15]
         default:
             break
         }
@@ -57,8 +59,6 @@ public enum TerminalInputTranslator {
         switch (event.keyCode, event.modifiers.meaningful) {
         case (36, [.shift]), (76, [.shift]):
             return [0x0A]
-        case (51, [.command]):
-            return [0x15]
         case (126, [.command]):
             return Array("\u{1B}[1;9A".utf8)
         case (125, [.command]):

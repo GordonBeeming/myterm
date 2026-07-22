@@ -12,6 +12,7 @@ public protocol TerminalEngine: AnyObject {
 @MainActor
 public protocol TerminalProcessSession: AnyObject {
     var isRunning: Bool { get }
+    var activeForegroundProcessName: String? { get }
     var onEvent: (@MainActor (TerminalSessionEvent) -> Void)? { get set }
 
     /// Returns the stable native view for this session. Calling this must never create a process.
@@ -27,6 +28,8 @@ public protocol TerminalProcessSession: AnyObject {
 }
 
 public extension TerminalProcessSession {
+    var activeForegroundProcessName: String? { nil }
+
     func apply(runtimeConfiguration: TerminalRuntimeConfiguration) {}
 
     func contentSnapshot(maximumCharacters: Int) -> String { "" }

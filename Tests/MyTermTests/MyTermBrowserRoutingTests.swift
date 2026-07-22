@@ -17,15 +17,34 @@ final class MyTermBrowserRoutingTests: XCTestCase {
             launcher
         )
         XCTAssertEqual(
-            MyTermBrowserLauncher.environment(executableURL: launcher),
-            ["BROWSER": launcher.path]
+            MyTermBrowserLauncher.environment(
+                executableURL: launcher,
+                baseEnvironment: [
+                    "BASH_ENV": "/tmp/original-bash-env",
+                    "PATH": "/usr/local/bin:/usr/bin",
+                ]
+            ),
+            [
+                "BASH_ENV": "\(directory.path)/myterm-bash-env",
+                "BROWSER": launcher.path,
+                "MYTERM_OPEN_SHIM": "\(directory.path)/open",
+                "MYTERM_ORIGINAL_BASH_ENV": "/tmp/original-bash-env",
+                "PATH": "\(directory.path):/usr/local/bin:/usr/bin",
+            ]
         )
 
         let workspaceID = WorkspaceID()
         XCTAssertEqual(
-            MyTermBrowserLauncher.environment(executableURL: launcher, workspaceID: workspaceID),
+            MyTermBrowserLauncher.environment(
+                executableURL: launcher,
+                workspaceID: workspaceID,
+                baseEnvironment: ["PATH": "/usr/bin"]
+            ),
             [
+                "BASH_ENV": "\(directory.path)/myterm-bash-env",
                 "BROWSER": launcher.path,
+                "MYTERM_OPEN_SHIM": "\(directory.path)/open",
+                "PATH": "\(directory.path):/usr/bin",
                 MyTermBrowserLauncher.workspaceIDEnvironmentKey: workspaceID.description,
             ]
         )
@@ -37,10 +56,14 @@ final class MyTermBrowserRoutingTests: XCTestCase {
                 executableURL: launcher,
                 workspaceID: workspaceID,
                 tabID: tabID,
-                paneID: paneID
+                paneID: paneID,
+                baseEnvironment: ["PATH": "/usr/bin"]
             ),
             [
+                "BASH_ENV": "\(directory.path)/myterm-bash-env",
                 "BROWSER": launcher.path,
+                "MYTERM_OPEN_SHIM": "\(directory.path)/open",
+                "PATH": "\(directory.path):/usr/bin",
                 MyTermBrowserLauncher.workspaceIDEnvironmentKey: workspaceID.description,
                 MyTermBrowserLauncher.tabIDEnvironmentKey: tabID.description,
                 MyTermBrowserLauncher.paneIDEnvironmentKey: paneID.description,
@@ -160,6 +183,77 @@ final class MyTermBrowserRoutingTests: XCTestCase {
         XCTAssertEqual(try capturedBatches(at: systemCapture), [["file:///tmp/report.html"]])
     }
 
+    func testOpenShimCapturesWebURLsAndPreservesNonWebOpenBehavior() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let appBundle = directory.appending(path: "myterm-dev.app", directoryHint: .isDirectory)
+        let resources = appBundle.appending(path: "Contents/Resources", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+        for name in ["myterm-browser", "open", "myterm-bash-env"] {
+            let destination = resources.appending(path: name, directoryHint: .notDirectory)
+            try FileManager.default.copyItem(at: repositoryRoot.appending(path: "Resources/\(name)"), to: destination)
+            if name != "myterm-bash-env" {
+                try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: destination.path)
+            }
+        }
+
+        let recorder = directory.appending(path: "record-open", directoryHint: .notDirectory)
+        try Data(
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" >> \"$MYTERM_CAPTURE_PATH\"\nprintf '%s\\n' '--MYTERM-END--' >> \"$MYTERM_CAPTURE_PATH\"\n".utf8
+        ).write(to: recorder)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: recorder.path)
+
+        let workspaceID = WorkspaceID()
+        let tabID = TabID()
+        let paneID = PaneID()
+        let webURL = try XCTUnwrap(URL(string: "http://localhost:17877/browse?path=%2Ftmp%2FREADME.md"))
+        let webCapture = directory.appending(path: "open-web.txt", directoryHint: .notDirectory)
+        try runLauncher(
+            resources.appending(path: "open", directoryHint: .notDirectory),
+            arguments: [webURL.absoluteString],
+            recorder: recorder,
+            capture: webCapture,
+            workspaceID: workspaceID.description,
+            tabID: tabID.description,
+            paneID: paneID.description
+        )
+        XCTAssertEqual(try capturedBatches(at: webCapture), [[
+            "-a",
+            appBundle.path,
+            try XCTUnwrap(
+                MyTermBrowserLauncher.browserRoute(
+                    for: workspaceID,
+                    tabID: tabID,
+                    paneID: paneID,
+                    url: webURL
+                )
+            ).absoluteString,
+        ]])
+
+        let bashCapture = directory.appending(path: "bash-env-web.txt", directoryHint: .notDirectory)
+        try runLauncher(
+            URL(fileURLWithPath: "/bin/bash"),
+            arguments: ["-c", "open \"$1\"", "myterm-bash-env-test", webURL.absoluteString],
+            recorder: recorder,
+            capture: bashCapture,
+            workspaceID: workspaceID.description,
+            tabID: tabID.description,
+            paneID: paneID.description,
+            bashEnvironmentURL: resources.appending(path: "myterm-bash-env", directoryHint: .notDirectory),
+            openShimURL: resources.appending(path: "open", directoryHint: .notDirectory)
+        )
+        XCTAssertEqual(try capturedBatches(at: bashCapture), try capturedBatches(at: webCapture))
+
+        let fileCapture = directory.appending(path: "open-file.txt", directoryHint: .notDirectory)
+        try runLauncher(
+            resources.appending(path: "open", directoryHint: .notDirectory),
+            arguments: ["file:///tmp/report.html"],
+            recorder: recorder,
+            capture: fileCapture
+        )
+        XCTAssertEqual(try capturedBatches(at: fileCapture), [["file:///tmp/report.html"]])
+    }
+
     func testURLDispatcherQueuesLaunchURLsThenReusesTheConnectedHandler() throws {
         let dispatcher = MyTermURLDispatcher()
         let handler = CapturingURLHandler()
@@ -194,13 +288,16 @@ final class MyTermBrowserRoutingTests: XCTestCase {
         capture: URL,
         workspaceID: String? = nil,
         tabID: String? = nil,
-        paneID: String? = nil
+        paneID: String? = nil,
+        bashEnvironmentURL: URL? = nil,
+        openShimURL: URL? = nil
     ) throws {
         let process = Process()
         process.executableURL = launcher
         process.arguments = arguments
         var environment = ProcessInfo.processInfo.environment.merging([
             "MYTERM_OPEN_COMMAND": recorder.path,
+            "MYTERM_SYSTEM_OPEN_COMMAND": recorder.path,
             "MYTERM_CAPTURE_PATH": capture.path,
         ]) { _, override in override }
         environment.removeValue(forKey: MyTermBrowserLauncher.workspaceIDEnvironmentKey)
@@ -214,6 +311,12 @@ final class MyTermBrowserRoutingTests: XCTestCase {
         }
         if let paneID {
             environment[MyTermBrowserLauncher.paneIDEnvironmentKey] = paneID
+        }
+        if let bashEnvironmentURL {
+            environment["BASH_ENV"] = bashEnvironmentURL.path
+        }
+        if let openShimURL {
+            environment["MYTERM_OPEN_SHIM"] = openShimURL.path
         }
         process.environment = environment
         try process.run()

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import MyTermCore
 import MyTermPlatform
@@ -8,6 +9,21 @@ enum TerminalSettingsScope: Equatable, Hashable, Sendable {
     case folder(WorkspaceFolderID)
     case workspace(WorkspaceID)
 }
+
+struct ActiveProcessClosePrompt: Equatable {
+    let title: String
+    let confirmButtonTitle: String
+    let processNames: [String]
+}
+
+typealias MarkdownOpenCommandRunner = @MainActor (
+    _ command: String,
+    _ environment: [String: String],
+    _ currentDirectory: URL,
+    _ completion: @escaping @Sendable (_ terminationStatus: Int32) -> Void
+) throws -> Void
+
+typealias MarkdownOpenCommandAvailabilityChecker = @MainActor (_ executable: String) -> Bool
 
 @MainActor
 @Observable
@@ -22,6 +38,9 @@ final class AppModel {
     private let browserSessionFactory: any BrowserSessionFactory
     private let browserLauncherURL: URL?
     private let terminalSnapshotDelayNanoseconds: UInt64
+    private let confirmClosingActiveProcesses: @MainActor (ActiveProcessClosePrompt) -> Bool
+    private let markdownOpenCommandRunner: MarkdownOpenCommandRunner
+    private let markdownOpenCommandAvailabilityChecker: MarkdownOpenCommandAvailabilityChecker
     private(set) var terminalSessions: [TerminalSessionID: any TerminalProcessSession] = [:]
     private(set) var browserControllers: [BrowserSessionID: BrowserSessionController] = [:]
     @ObservationIgnored private var terminalSnapshotTasks: [TerminalSessionID: Task<Void, Never>] = [:]
@@ -29,6 +48,8 @@ final class AppModel {
     var isSidebarVisible = true
     var workspaceBeingRenamedID: WorkspaceID?
     var workspaceRenameDraft = ""
+    var workspaceEmojiBeingEditedID: WorkspaceID?
+    var workspaceEmojiDraft = ""
     var folderBeingRenamedID: WorkspaceFolderID?
     var folderRenameDraft = ""
     var tabBeingRenamedID: TabID?
@@ -46,7 +67,10 @@ final class AppModel {
         browserSettings: BrowserSettingsStore? = nil,
         browserSessionFactory: any BrowserSessionFactory = WebKitBrowserSessionFactory(),
         browserLauncherURL: URL? = MyTermBrowserLauncher.executableURL(),
-        terminalSnapshotDelayNanoseconds: UInt64 = 300_000_000
+        terminalSnapshotDelayNanoseconds: UInt64 = 300_000_000,
+        confirmClosingActiveProcesses: @escaping @MainActor (ActiveProcessClosePrompt) -> Bool = AppModel.presentActiveProcessClosePrompt,
+        markdownOpenCommandRunner: @escaping MarkdownOpenCommandRunner = AppModel.runMarkdownOpenCommand,
+        markdownOpenCommandAvailabilityChecker: @escaping MarkdownOpenCommandAvailabilityChecker = AppModel.isExecutableAvailable
     ) throws {
         self.channel = channel
         let supportDirectory = try applicationSupportDirectory ?? Self.applicationSupportDirectory()
@@ -57,6 +81,9 @@ final class AppModel {
         self.browserSessionFactory = browserSessionFactory
         self.browserLauncherURL = browserLauncherURL
         self.terminalSnapshotDelayNanoseconds = terminalSnapshotDelayNanoseconds
+        self.confirmClosingActiveProcesses = confirmClosingActiveProcesses
+        self.markdownOpenCommandRunner = markdownOpenCommandRunner
+        self.markdownOpenCommandAvailabilityChecker = markdownOpenCommandAvailabilityChecker
         browserDataProfileResolver = BrowserDataProfileResolver(channel: channel)
         try migrateLegacySettings()
         try migrateLegacyBrowserDataProfiles()
@@ -283,6 +310,22 @@ final class AppModel {
         workspaceBeingRenamedID = nil
     }
 
+    func beginEditingWorkspaceEmoji(_ workspaceID: WorkspaceID) {
+        guard let workspace = workspaces.first(where: { $0.id == workspaceID }) else { return }
+        workspaceEmojiDraft = workspace.emoji ?? ""
+        workspaceEmojiBeingEditedID = workspaceID
+    }
+
+    func commitWorkspaceEmoji() {
+        guard let workspaceID = workspaceEmojiBeingEditedID else { return }
+        setWorkspaceEmoji(workspaceID, emoji: workspaceEmojiDraft)
+        workspaceEmojiBeingEditedID = nil
+    }
+
+    func setWorkspaceEmoji(_ workspaceID: WorkspaceID, emoji: String?) {
+        perform { try store.setWorkspaceEmoji(workspaceID, emoji: emoji) }
+    }
+
     func beginRenamingSelectedTab() {
         guard let tabID = selectedWorkspace.selectedTabID else { return }
         beginRenamingTab(tabID)
@@ -364,6 +407,10 @@ final class AppModel {
         perform { try store.setWorkspacePinned(workspaceID, isPinned: isPinned) }
     }
 
+    func setWorkspaceColor(_ workspaceID: WorkspaceID, color: WorkspaceColor?) {
+        perform { try store.setWorkspaceColor(workspaceID, color: color) }
+    }
+
     func moveFolder(_ folderID: WorkspaceFolderID, before targetID: WorkspaceFolderID?) {
         perform { try store.moveFolder(folderID, before: targetID) }
     }
@@ -391,10 +438,17 @@ final class AppModel {
     }
 
     func deleteWorkspace(_ workspaceID: WorkspaceID) {
+        guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
+            errorDescription = AppModelError.workspaceUnavailable(workspaceID).localizedDescription
+            return
+        }
+        guard confirmClose(
+            processNames: activeProcessNames(in: workspace),
+            title: "Close \(workspace.displayTitle)?",
+            confirmButtonTitle: "Close Workspace"
+        ) else { return }
+
         perform {
-            guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
-                throw AppModelError.workspaceUnavailable(workspaceID)
-            }
             try store.removeWorkspace(workspaceID)
             cleanUpRuntimeObjects(in: workspace)
             restoreRuntimeObjects(in: store.selectedWorkspace)
@@ -404,6 +458,7 @@ final class AppModel {
     func selectWorkspace(_ workspaceID: WorkspaceID) {
         perform {
             try store.selectWorkspace(workspaceID)
+            restoreFocusedPane(in: workspaceID)
         }
     }
 
@@ -477,6 +532,20 @@ final class AppModel {
                         workspaceID: workspaceID ?? store.selectedWorkspaceID
                     )
                 }
+            } else if openMarkdownFile(
+                url,
+                in: workspaceID ?? store.selectedWorkspaceID,
+                tabID: hasExactOrigin ? besideTabID : nil,
+                paneID: hasExactOrigin ? paneID : nil
+            ) {
+                return
+            } else if Self.markdownFileExtensions.contains(url.pathExtension.lowercased()) {
+                openMarkdownInBrowser(
+                    url,
+                    in: workspaceID ?? store.selectedWorkspaceID,
+                    tabID: hasExactOrigin ? besideTabID : nil,
+                    paneID: hasExactOrigin ? paneID : nil
+                )
             } else if hasExactOrigin, let workspaceID, let besideTabID, let paneID {
                 createBrowserPane(url: url, in: workspaceID, tabID: besideTabID, beside: paneID)
             } else if let workspaceID {
@@ -512,6 +581,121 @@ final class AppModel {
             errorDescription = "MyTerm cannot open \(url.absoluteString)."
         }
     }
+
+    private func openMarkdownFile(
+        _ url: URL,
+        in workspaceID: WorkspaceID,
+        tabID: TabID?,
+        paneID: PaneID?
+    ) -> Bool {
+        guard Self.markdownFileExtensions.contains(url.pathExtension.lowercased()) else { return false }
+
+        do {
+            let settings = try store.resolvedSettings(for: workspaceID)
+            let template = settings.markdownOpenCommand.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !template.isEmpty else { return false }
+            if template == TerminalPreferences.defaultMarkdownOpenCommand,
+               !markdownOpenCommandAvailabilityChecker("ide") {
+                return false
+            }
+
+            let quotedPath = Self.shellQuote(url.path)
+            let command = template.contains("{file}")
+                ? template.replacingOccurrences(of: "{file}", with: quotedPath)
+                : "\(template) \(quotedPath)"
+            var environment = ProcessInfo.processInfo.environment
+            environment.merge(
+                MyTermBrowserLauncher.environment(
+                    executableURL: browserLauncherURL,
+                    workspaceID: workspaceID,
+                    tabID: tabID,
+                    paneID: paneID,
+                    baseEnvironment: environment
+                )
+            ) { _, override in override }
+
+            let pathPrefix: String
+            if let resourceDirectory = browserLauncherURL?.deletingLastPathComponent().path {
+                pathPrefix = "PATH=\(Self.shellQuote(resourceDirectory)):$PATH; "
+            } else {
+                pathPrefix = ""
+            }
+
+            try markdownOpenCommandRunner(
+                "\(pathPrefix)exec \(command)",
+                environment,
+                url.deletingLastPathComponent()
+            ) { [weak self] terminationStatus in
+                guard terminationStatus != 0 else { return }
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.errorDescription = "The Markdown opener exited with status \(terminationStatus). The file was opened in MyTerm instead."
+                    self.openMarkdownInBrowser(url, in: workspaceID, tabID: tabID, paneID: paneID)
+                }
+            }
+        } catch {
+            present(error)
+            return false
+        }
+        return true
+    }
+
+    private func openMarkdownInBrowser(
+        _ url: URL,
+        in workspaceID: WorkspaceID,
+        tabID: TabID?,
+        paneID: PaneID?
+    ) {
+        if let tabID,
+           let paneID,
+           let workspace = store.workspaces.first(where: { $0.id == workspaceID }),
+           let tab = workspace.tabs.first(where: { $0.id == tabID }),
+           tab.splitTree.contains(paneID: paneID) {
+            createBrowserPane(url: url, in: workspaceID, tabID: tabID, beside: paneID)
+        } else if store.workspaces.contains(where: { $0.id == workspaceID }) {
+            createBrowserTab(url: url, in: workspaceID)
+        } else {
+            createBrowserTab(url: url, in: store.selectedWorkspaceID)
+        }
+    }
+
+    private static func runMarkdownOpenCommand(
+        _ command: String,
+        environment: [String: String],
+        currentDirectory: URL,
+        completion: @escaping @Sendable (Int32) -> Void
+    ) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = ["-lc", command]
+        process.environment = environment
+        process.currentDirectoryURL = currentDirectory
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        process.terminationHandler = { process in
+            completion(process.terminationStatus)
+        }
+        try process.run()
+    }
+
+    private static func isExecutableAvailable(_ executable: String) -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = ["-lc", "command -v \(shellQuote(executable)) >/dev/null 2>&1"]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            process.waitUntilExit()
+            return process.terminationStatus == 0
+        } catch {
+            return false
+        }
+    }
+
+    private static let markdownFileExtensions: Set<String> = [
+        "markdown", "md", "mdown", "mdx", "mkd", "mkdn",
+    ]
 
     private func createTerminalTab(workingDirectory: URL, initialCommand: String?) {
         perform {
@@ -633,6 +817,16 @@ final class AppModel {
     }
 
     func closeTab(_ tabID: TabID) {
+        guard let tab = tab(workspaceID: store.selectedWorkspaceID, tabID: tabID) else {
+            errorDescription = AppModelError.tabUnavailable(tabID).localizedDescription
+            return
+        }
+        guard confirmClose(
+            processNames: activeProcessNames(in: tab),
+            title: "Close \(tab.customTitle ?? tab.automaticDisplayTitle)?",
+            confirmButtonTitle: "Close Tab"
+        ) else { return }
+
         perform {
             try closeTab(workspaceID: store.selectedWorkspaceID, tabID: tabID)
         }
@@ -643,12 +837,18 @@ final class AppModel {
             errorDescription = AppModelError.noSelectedTab.localizedDescription
             return
         }
+        guard let paneID = tab.focusedPaneID else {
+            errorDescription = AppModelError.noFocusedTerminal(tab.id).localizedDescription
+            return
+        }
+        guard confirmClose(
+            processNames: activeProcessNames(for: paneID, in: tab),
+            title: "Close this pane?",
+            confirmButtonTitle: "Close Pane"
+        ) else { return }
 
         perform {
             let workspaceID = store.selectedWorkspaceID
-            guard let paneID = tab.focusedPaneID else {
-                throw AppModelError.noFocusedTerminal(tab.id)
-            }
             let tree = tab.splitTree
             let terminalSession = tree.session(for: paneID)
             let browserSession = tree.browser(for: paneID)
@@ -722,6 +922,20 @@ final class AppModel {
                       let webView = browserControllers[browser.id]?.webView {
                 webView.window?.makeFirstResponder(webView)
             }
+        }
+    }
+
+    private func restoreFocusedPane(in workspaceID: WorkspaceID) {
+        guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }),
+              let tab = workspace.selectedTab,
+              let paneID = tab.focusedPaneID else {
+            return
+        }
+        if let session = tab.splitTree.session(for: paneID) {
+            terminalSessions[session.id]?.focus()
+        } else if let browser = tab.splitTree.browser(for: paneID),
+                  let webView = browserControllers[browser.id]?.webView {
+            webView.window?.makeFirstResponder(webView)
         }
     }
 
@@ -1298,6 +1512,63 @@ final class AppModel {
         }
         arguments.append(target)
         return "ssh " + arguments.map(shellQuote).joined(separator: " ")
+    }
+
+    func shouldTerminateApplication() -> Bool {
+        confirmClose(
+            processNames: store.workspaces.flatMap(activeProcessNames(in:)),
+            title: "Quit MyTerm?",
+            confirmButtonTitle: "Quit"
+        )
+    }
+
+    private func activeProcessNames(for paneID: PaneID, in tab: Tab) -> [String] {
+        guard let session = tab.splitTree.session(for: paneID),
+              let processName = terminalSessions[session.id]?.activeForegroundProcessName else {
+            return []
+        }
+        return [processName]
+    }
+
+    private func activeProcessNames(in tab: Tab) -> [String] {
+        tab.splitTree.terminalSessionIDs.compactMap {
+            terminalSessions[$0]?.activeForegroundProcessName
+        }
+    }
+
+    private func activeProcessNames(in workspace: Workspace) -> [String] {
+        workspace.tabs.flatMap(activeProcessNames(in:))
+    }
+
+    private func confirmClose(
+        processNames: [String],
+        title: String,
+        confirmButtonTitle: String
+    ) -> Bool {
+        guard !processNames.isEmpty else { return true }
+        return confirmClosingActiveProcesses(
+            ActiveProcessClosePrompt(
+                title: title,
+                confirmButtonTitle: confirmButtonTitle,
+                processNames: processNames
+            )
+        )
+    }
+
+    private static func presentActiveProcessClosePrompt(_ prompt: ActiveProcessClosePrompt) -> Bool {
+        let groupedNames = Dictionary(grouping: prompt.processNames, by: { $0 })
+            .map { name, occurrences in
+                occurrences.count == 1 ? name : "\(name) (\(occurrences.count))"
+            }
+            .sorted()
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = prompt.title
+        alert.informativeText = "The following process\(prompt.processNames.count == 1 ? " is" : "es are") still running: \(groupedNames.joined(separator: ", ")). Closing will terminate \(prompt.processNames.count == 1 ? "it" : "them")."
+        alert.addButton(withTitle: prompt.confirmButtonTitle)
+        alert.buttons.first?.hasDestructiveAction = true
+        alert.addButton(withTitle: "Cancel")
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     private func perform(_ action: () throws -> Void) {
