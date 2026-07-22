@@ -970,6 +970,30 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(model.errorDescription)
     }
 
+    func testDirectMarkdownOpenWithoutLauncherCreatesBrowserTab() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let markdownURL = directory.appending(path: "README.md", directoryHint: .notDirectory)
+        try Data("# Read me\n".utf8).write(to: markdownURL)
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: nil,
+            startsTerminalProcesses: false,
+            markdownOpenCommandAvailabilityChecker: { _ in false }
+        )
+        let initialTabCount = model.selectedWorkspace.tabs.count
+
+        model.open([markdownURL])
+
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount + 1)
+        guard case .browser(let browser) = try XCTUnwrap(model.selectedTab?.content) else {
+            return XCTFail("Expected a browser tab for direct Markdown fallback")
+        }
+        XCTAssertEqual(browser.url, markdownURL)
+        XCTAssertNil(model.errorDescription)
+    }
+
     func testTerminalLocalFilesOpenInTheirOriginatingWorkspaceWhileDirectoriesStayTerminalTabs() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }

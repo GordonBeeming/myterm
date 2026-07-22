@@ -538,6 +538,12 @@ final class AppModel {
                 paneID: hasExactOrigin ? paneID : nil
             ) {
                 return
+            } else if Self.markdownFileExtensions.contains(url.pathExtension.lowercased()) {
+                if hasExactOrigin, let workspaceID, let besideTabID, let paneID {
+                    createBrowserPane(url: url, in: workspaceID, tabID: besideTabID, beside: paneID)
+                } else {
+                    createBrowserTab(url: url, in: workspaceID ?? store.selectedWorkspaceID)
+                }
             } else if hasExactOrigin, let workspaceID, let besideTabID, let paneID {
                 createBrowserPane(url: url, in: workspaceID, tabID: besideTabID, beside: paneID)
             } else if let workspaceID {
