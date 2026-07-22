@@ -921,7 +921,7 @@ final class AppModelTests: XCTestCase {
             applicationSupportDirectory: directory,
             terminalEngine: engine,
             startsTerminalProcesses: true,
-            markdownOpenCommandRunner: { _, _, _ in
+            markdownOpenCommandRunner: { _, _, _, _ in
                 throw MarkdownLauncherTestError.launchFailed
             },
             markdownOpenCommandAvailabilityChecker: { executable in
@@ -953,7 +953,7 @@ final class AppModelTests: XCTestCase {
             applicationSupportDirectory: directory,
             terminalEngine: engine,
             startsTerminalProcesses: true,
-            markdownOpenCommandRunner: { _, _, _ in
+            markdownOpenCommandRunner: { _, _, _, _ in
                 XCTFail("The unavailable default launcher must not run")
             },
             markdownOpenCommandAvailabilityChecker: { executable in
@@ -992,6 +992,37 @@ final class AppModelTests: XCTestCase {
         }
         XCTAssertEqual(browser.url, markdownURL)
         XCTAssertNil(model.errorDescription)
+    }
+
+    func testMarkdownOpenerNonzeroExitFallsBackToMyTermBrowser() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let markdownURL = directory.appending(path: "README.md", directoryHint: .notDirectory)
+        try Data("# Read me\n".utf8).write(to: markdownURL)
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: nil,
+            startsTerminalProcesses: false,
+            markdownOpenCommandRunner: { _, _, _, completion in
+                completion(127)
+            },
+            markdownOpenCommandAvailabilityChecker: { _ in true }
+        )
+        let initialTabCount = model.selectedWorkspace.tabs.count
+
+        model.open([markdownURL])
+        await Task.yield()
+
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount + 1)
+        guard case .browser(let browser) = try XCTUnwrap(model.selectedTab?.content) else {
+            return XCTFail("Expected browser fallback after opener failure")
+        }
+        XCTAssertEqual(browser.url, markdownURL)
+        XCTAssertEqual(
+            model.errorDescription,
+            "The Markdown opener exited with status 127. The file was opened in MyTerm instead."
+        )
     }
 
     func testTerminalLocalFilesOpenInTheirOriginatingWorkspaceWhileDirectoriesStayTerminalTabs() throws {

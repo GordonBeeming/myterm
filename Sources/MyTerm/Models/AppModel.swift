@@ -19,7 +19,8 @@ struct ActiveProcessClosePrompt: Equatable {
 typealias MarkdownOpenCommandRunner = @MainActor (
     _ command: String,
     _ environment: [String: String],
-    _ currentDirectory: URL
+    _ currentDirectory: URL,
+    _ completion: @escaping @Sendable (_ terminationStatus: Int32) -> Void
 ) throws -> Void
 
 typealias MarkdownOpenCommandAvailabilityChecker = @MainActor (_ executable: String) -> Bool
@@ -539,11 +540,12 @@ final class AppModel {
             ) {
                 return
             } else if Self.markdownFileExtensions.contains(url.pathExtension.lowercased()) {
-                if hasExactOrigin, let workspaceID, let besideTabID, let paneID {
-                    createBrowserPane(url: url, in: workspaceID, tabID: besideTabID, beside: paneID)
-                } else {
-                    createBrowserTab(url: url, in: workspaceID ?? store.selectedWorkspaceID)
-                }
+                openMarkdownInBrowser(
+                    url,
+                    in: workspaceID ?? store.selectedWorkspaceID,
+                    tabID: hasExactOrigin ? besideTabID : nil,
+                    paneID: hasExactOrigin ? paneID : nil
+                )
             } else if hasExactOrigin, let workspaceID, let besideTabID, let paneID {
                 createBrowserPane(url: url, in: workspaceID, tabID: besideTabID, beside: paneID)
             } else if let workspaceID {
@@ -623,7 +625,14 @@ final class AppModel {
                 "\(pathPrefix)exec \(command)",
                 environment,
                 url.deletingLastPathComponent()
-            )
+            ) { [weak self] terminationStatus in
+                guard terminationStatus != 0 else { return }
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.errorDescription = "The Markdown opener exited with status \(terminationStatus). The file was opened in MyTerm instead."
+                    self.openMarkdownInBrowser(url, in: workspaceID, tabID: tabID, paneID: paneID)
+                }
+            }
         } catch {
             present(error)
             return false
@@ -631,10 +640,30 @@ final class AppModel {
         return true
     }
 
+    private func openMarkdownInBrowser(
+        _ url: URL,
+        in workspaceID: WorkspaceID,
+        tabID: TabID?,
+        paneID: PaneID?
+    ) {
+        if let tabID,
+           let paneID,
+           let workspace = store.workspaces.first(where: { $0.id == workspaceID }),
+           let tab = workspace.tabs.first(where: { $0.id == tabID }),
+           tab.splitTree.contains(paneID: paneID) {
+            createBrowserPane(url: url, in: workspaceID, tabID: tabID, beside: paneID)
+        } else if store.workspaces.contains(where: { $0.id == workspaceID }) {
+            createBrowserTab(url: url, in: workspaceID)
+        } else {
+            createBrowserTab(url: url, in: store.selectedWorkspaceID)
+        }
+    }
+
     private static func runMarkdownOpenCommand(
         _ command: String,
         environment: [String: String],
-        currentDirectory: URL
+        currentDirectory: URL,
+        completion: @escaping @Sendable (Int32) -> Void
     ) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
@@ -643,6 +672,9 @@ final class AppModel {
         process.currentDirectoryURL = currentDirectory
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
+        process.terminationHandler = { process in
+            completion(process.terminationStatus)
+        }
         try process.run()
     }
 
