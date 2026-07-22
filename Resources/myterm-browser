@@ -18,4 +18,14 @@ done
 
 resource_directory=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 app_bundle=$(dirname "$(dirname "$resource_directory")")
-exec "${MYTERM_OPEN_COMMAND:-/usr/bin/open}" -a "$app_bundle" "$@"
+open_command=${MYTERM_OPEN_COMMAND:-/usr/bin/open}
+
+if [ -z "${MYTERM_WORKSPACE_ID:-}" ]; then
+  exec "$open_command" -a "$app_bundle" "$@"
+fi
+
+for argument in "$@"; do
+  payload=$(printf '%s' "$argument" | /usr/bin/base64 | tr -d '\n' | tr '+/' '-_' | tr -d '=')
+  "$open_command" -a "$app_bundle" \
+    "myterm://browser/${MYTERM_WORKSPACE_ID}?url=${payload}"
+done

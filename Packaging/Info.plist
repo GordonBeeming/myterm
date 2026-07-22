@@ -37,6 +37,19 @@
     </array>
     <key>CFBundleShortVersionString</key>
     <string>0.1.0</string>
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.gordonbeeming.myterm.sidebar-item</string>
+            <key>UTTypeDescription</key>
+            <string>MyTerm sidebar item</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.data</string>
+            </array>
+        </dict>
+    </array>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>CFBundleURLTypes</key>
@@ -60,6 +73,16 @@
             <key>CFBundleURLSchemes</key>
             <array>
                 <string>ssh</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>CFBundleURLName</key>
+            <string>com.gordonbeeming.myterm.workspace</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>myterm</string>
             </array>
         </dict>
     </array>

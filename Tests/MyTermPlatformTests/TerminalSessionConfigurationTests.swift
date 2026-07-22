@@ -76,6 +76,39 @@ final class TerminalSessionConfigurationTests: XCTestCase {
     }
 
     @MainActor
+    func testSelectedTerminalTextSurvivesLinefeedWithMouseReportingEnabled() {
+        let view = MyTermLocalProcessTerminalView(frame: .zero)
+        view.allowMouseReporting = true
+        view.feed(text: "selected text")
+        view.selectAll()
+
+        view.dataReceived(slice: ArraySlice("\nnew output".utf8))
+
+        XCTAssertTrue(view.allowMouseReporting)
+        XCTAssertTrue(view.selectionActive)
+        XCTAssertTrue(view.getSelection()?.contains("selected text") == true)
+        XCTAssertTrue(view.renderedText(maximumCharacters: 200).contains("new output"))
+
+        view.selectNone()
+        XCTAssertFalse(view.selectionActive)
+    }
+
+    @MainActor
+    func testSelectedTerminalTextPreservesDisabledMouseReporting() {
+        let view = MyTermLocalProcessTerminalView(frame: .zero)
+        view.allowMouseReporting = false
+        view.feed(text: "selected text")
+        view.selectAll()
+
+        view.dataReceived(slice: ArraySlice("\nnew output".utf8))
+
+        XCTAssertFalse(view.allowMouseReporting)
+        XCTAssertTrue(view.selectionActive)
+        XCTAssertTrue(view.getSelection()?.contains("selected text") == true)
+        XCTAssertTrue(view.renderedText(maximumCharacters: 200).contains("new output"))
+    }
+
+    @MainActor
     func testRenderedTextReturnsOnlyTheRequestedTail() {
         let view = MyTermLocalProcessTerminalView(frame: .zero)
         view.feed(text: (1...100).map { "line \($0)" }.joined(separator: "\r\n"))
@@ -104,11 +137,21 @@ final class TerminalSessionConfigurationTests: XCTestCase {
 
     func testInputTranslatorLeavesKittyAndUnownedKeysForSwiftTerm() {
         let commandLeft = TerminalInputEvent(keyCode: 123, charactersIgnoringModifiers: "", modifiers: [.command])
+        let commandRight = TerminalInputEvent(keyCode: 124, charactersIgnoringModifiers: "", modifiers: [.command])
         let plainReturn = TerminalInputEvent(keyCode: 36, charactersIgnoringModifiers: "\r", modifiers: [])
         let plainArrow = TerminalInputEvent(keyCode: 126, charactersIgnoringModifiers: "", modifiers: [])
         let unrelatedShortcut = TerminalInputEvent(keyCode: 8, charactersIgnoringModifiers: "c", modifiers: [.command])
 
-        XCTAssertNil(TerminalInputTranslator.sequence(for: commandLeft, kittyKeyboardEnabled: true))
+        for kittyKeyboardEnabled in [false, true] {
+            XCTAssertEqual(
+                TerminalInputTranslator.sequence(for: commandLeft, kittyKeyboardEnabled: kittyKeyboardEnabled),
+                [0x01]
+            )
+            XCTAssertEqual(
+                TerminalInputTranslator.sequence(for: commandRight, kittyKeyboardEnabled: kittyKeyboardEnabled),
+                [0x05]
+            )
+        }
         XCTAssertNil(TerminalInputTranslator.sequence(for: plainReturn, kittyKeyboardEnabled: false))
         XCTAssertNil(TerminalInputTranslator.sequence(for: plainArrow, kittyKeyboardEnabled: false))
         XCTAssertNil(TerminalInputTranslator.sequence(for: unrelatedShortcut, kittyKeyboardEnabled: false))
@@ -228,14 +271,25 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         XCTAssertNil(TerminalWorkingDirectoryNormalizer.normalize("https://example.com/workspace"))
     }
 
-    func testTerminalLinkRouterAcceptsEveryValidWebHostAndRejectsOtherSchemes() {
+    func testTerminalLinkRouterAcceptsWebURLsLocalFileURLsAndAbsolutePaths() {
         XCTAssertEqual(
-            TerminalLinkRouter.webURL(from: "https://example.com/path?query=yes#result")?.absoluteString,
+            TerminalLinkRouter.url(from: "https://example.com/path?query=yes#result")?.absoluteString,
             "https://example.com/path?query=yes#result"
         )
-        XCTAssertEqual(TerminalLinkRouter.webURL(from: "http://localhost:3000")?.host, "localhost")
-        XCTAssertNil(TerminalLinkRouter.webURL(from: "file:///tmp/report.html"))
-        XCTAssertNil(TerminalLinkRouter.webURL(from: "ssh://example.com"))
-        XCTAssertNil(TerminalLinkRouter.webURL(from: "https:///missing-host"))
+        XCTAssertEqual(TerminalLinkRouter.url(from: "http://localhost:3000")?.host, "localhost")
+        XCTAssertEqual(TerminalLinkRouter.url(from: "file:///tmp/report.html")?.path, "/tmp/report.html")
+        XCTAssertEqual(TerminalLinkRouter.url(from: "file:/tmp/report.html")?.path, "/tmp/report.html")
+        let deepFileLink = TerminalLinkRouter.url(
+            from: "file:///tmp/../tmp/report.html?theme=dark#section"
+        )
+        XCTAssertEqual(deepFileLink?.path, "/tmp/report.html")
+        XCTAssertEqual(deepFileLink?.query, "theme=dark")
+        XCTAssertEqual(deepFileLink?.fragment, "section")
+        XCTAssertEqual(
+            TerminalLinkRouter.url(from: "/Users/gordon beeming/report.html")?.path,
+            "/Users/gordon beeming/report.html"
+        )
+        XCTAssertNil(TerminalLinkRouter.url(from: "ssh://example.com"))
+        XCTAssertNil(TerminalLinkRouter.url(from: "https:///missing-host"))
     }
 }

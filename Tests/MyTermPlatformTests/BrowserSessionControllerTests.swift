@@ -14,6 +14,60 @@ final class BrowserSessionControllerTests: XCTestCase {
         XCTAssertEqual(controller.webView.configuration.websiteDataStore.identifier, identifier)
     }
 
+    func testFileLoadsUseTheContainingDirectoryAsTheReadBoundary() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(
+            path: "myterm-browser-test-\(UUID().uuidString)",
+            directoryHint: .isDirectory
+        )
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let fileURL = directory.appending(path: "index.html", directoryHint: .notDirectory)
+        try Data("<html><body>MyTerm</body></html>".utf8).write(to: fileURL)
+        let controller = BrowserSessionController()
+
+        XCTAssertEqual(
+            BrowserSessionController.fileReadAccessBoundary(for: fileURL),
+            directory
+        )
+        XCTAssertNoThrow(try controller.load(url: fileURL))
+    }
+
+    func testUIDelegateCloseRequestsUseTheNarrowCallback() {
+        let controller = BrowserSessionController()
+        var callbackCount = 0
+        controller.onCloseRequest = { callbackCount += 1 }
+
+        controller.webViewDidClose(controller.webView)
+
+        XCTAssertEqual(callbackCount, 1)
+    }
+
+    func testLocalFileNavigationsDisableJavaScriptWhileWebNavigationsKeepItEnabled() throws {
+        let controller = BrowserSessionController()
+        let localPreferences = WKWebpagePreferences()
+        var localDecision: WKNavigationActionPolicy?
+        controller.decideNavigationPolicy(
+            for: URL(fileURLWithPath: "/tmp/local.html"),
+            preferences: localPreferences
+        ) { policy, preferences in
+            localDecision = policy
+            XCTAssertFalse(preferences.allowsContentJavaScript)
+        }
+        XCTAssertEqual(localDecision, .allow)
+
+        let webPreferences = WKWebpagePreferences()
+        webPreferences.allowsContentJavaScript = false
+        var webDecision: WKNavigationActionPolicy?
+        controller.decideNavigationPolicy(
+            for: try XCTUnwrap(URL(string: "https://example.com")),
+            preferences: webPreferences
+        ) { policy, preferences in
+            webDecision = policy
+            XCTAssertTrue(preferences.allowsContentJavaScript)
+        }
+        XCTAssertEqual(webDecision, .allow)
+    }
+
     func testNamedStoresShareCookiesOnlyWithTheSameIdentifier() async throws {
         let sharedIdentifier = UUID()
         let isolatedIdentifier = UUID()

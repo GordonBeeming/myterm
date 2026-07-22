@@ -143,6 +143,28 @@ public enum TerminalSessionEvent: Equatable, Sendable {
 }
 
 public enum TerminalLinkRouter {
+    public static func url(from link: String) -> URL? {
+        let candidate = link.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !candidate.isEmpty else { return nil }
+
+        if candidate.hasPrefix("/") {
+            return URL(fileURLWithPath: candidate).standardizedFileURL
+        }
+
+        if candidate.lowercased().hasPrefix("file:") {
+            guard let url = URL(string: candidate), url.isFileURL, !url.path.isEmpty else {
+                return nil
+            }
+            guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+                return nil
+            }
+            components.path = URL(fileURLWithPath: url.path).standardizedFileURL.path
+            return components.url
+        }
+
+        return webURL(from: candidate)
+    }
+
     public static func webURL(from link: String) -> URL? {
         guard let url = URL(string: link),
               ["http", "https"].contains(url.scheme?.lowercased() ?? ""),

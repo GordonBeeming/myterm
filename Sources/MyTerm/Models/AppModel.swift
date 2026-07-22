@@ -162,6 +162,18 @@ final class AppModel {
         }
     }
 
+    func adjustSelectedWorkspaceFontSize(by delta: Double) {
+        guard delta.isFinite else { return }
+        perform {
+            let workspaceID = store.selectedWorkspaceID
+            let currentSettings = try store.resolvedSettings(for: workspaceID)
+            let range = TerminalPreferences.fontSizeRange
+            let fontSize = min(max(currentSettings.fontSize + delta, range.lowerBound), range.upperBound)
+            try store.updateWorkspaceSettings(workspaceID) { $0.fontSize = fontSize }
+            applyResolvedRuntimeSettings(to: [workspaceID])
+        }
+    }
+
     func setSetting<Value>(
         _ value: Value,
         at scope: TerminalSettingsScope,
@@ -352,6 +364,10 @@ final class AppModel {
         perform { try store.setWorkspacePinned(workspaceID, isPinned: isPinned) }
     }
 
+    func moveFolder(_ folderID: WorkspaceFolderID, before targetID: WorkspaceFolderID?) {
+        perform { try store.moveFolder(folderID, before: targetID) }
+    }
+
     func moveWorkspace(_ workspaceID: WorkspaceID, to folderID: WorkspaceFolderID?) {
         perform {
             try store.moveWorkspace(workspaceID, to: folderID)
@@ -359,9 +375,13 @@ final class AppModel {
         }
     }
 
-    func moveWorkspace(_ workspaceID: WorkspaceID, before targetID: WorkspaceID) {
+    func moveWorkspace(
+        _ workspaceID: WorkspaceID,
+        to folderID: WorkspaceFolderID?,
+        before targetID: WorkspaceID?
+    ) {
         perform {
-            try store.moveWorkspace(workspaceID, before: targetID)
+            try store.moveWorkspace(workspaceID, to: folderID, before: targetID)
             applyResolvedRuntimeSettings(to: [workspaceID])
         }
     }
@@ -412,11 +432,19 @@ final class AppModel {
 
     func open(_ urls: [URL]) {
         for url in urls {
+            if url.scheme?.lowercased() == MyTermBrowserLauncher.workspaceRouteScheme {
+                guard let destination = MyTermBrowserLauncher.browserDestination(from: url),
+                      store.workspaces.contains(where: { $0.id == destination.workspaceID }) else {
+                    continue
+                }
+                open(destination.url, in: destination.workspaceID)
+                continue
+            }
             open(url)
         }
     }
 
-    private func open(_ url: URL) {
+    private func open(_ url: URL, in workspaceID: WorkspaceID? = nil) {
         if url.isFileURL {
             var isDirectory: ObjCBool = false
             guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
@@ -424,7 +452,15 @@ final class AppModel {
                 return
             }
             if isDirectory.boolValue {
-                createTerminalTab(workingDirectory: url, initialCommand: nil)
+                perform {
+                    try createTerminalTab(
+                        workingDirectory: url,
+                        initialCommand: nil,
+                        workspaceID: workspaceID ?? store.selectedWorkspaceID
+                    )
+                }
+            } else if let workspaceID {
+                createBrowserTab(url: url, in: workspaceID)
             } else {
                 createTerminalTab(
                     workingDirectory: url.deletingLastPathComponent(),
@@ -436,7 +472,11 @@ final class AppModel {
 
         switch url.scheme?.lowercased() {
         case "http", "https":
-            createBrowserTab(url: url)
+            if let workspaceID {
+                createBrowserTab(url: url, in: workspaceID)
+            } else {
+                createBrowserTab(url: url)
+            }
         case "ssh":
             guard let command = Self.sshCommand(for: url) else {
                 errorDescription = "The SSH URL does not include a host: \(url.absoluteString)"
@@ -629,10 +669,9 @@ final class AppModel {
             guard let controller = browserControllers[browserID] else {
                 throw AppModelError.browserUnavailable(browserID)
             }
-            try controller.load(address: address)
-            if let url = controller.state.url {
-                try store.updateBrowserURL(workspaceID: workspaceID, tabID: tabID, url: url)
-            }
+            let url = try BrowserURLNormalizer.normalize(address)
+            try controller.load(url: url)
+            try store.updateBrowserURL(workspaceID: workspaceID, tabID: tabID, url: url)
         }
     }
 
@@ -764,7 +803,10 @@ final class AppModel {
                 shell: shellURL(for: settings.shell),
                 workingDirectory: workingDirectory,
                 initialCommand: initialCommand,
-                environment: MyTermBrowserLauncher.environment(executableURL: browserLauncherURL),
+                environment: MyTermBrowserLauncher.environment(
+                    executableURL: browserLauncherURL,
+                    workspaceID: workspaceID
+                ),
                 runtimeConfiguration: runtimeConfiguration(for: settings),
                 restoredOutput: session.recentText
             )
@@ -802,8 +844,44 @@ final class AppModel {
         }
 
         let controller = browserSessionFactory.makeSession(profile: profile)
+        controller.onCloseRequest = { [weak self, weak controller] in
+            guard let controller else { return }
+            self?.requestBrowserClose(
+                workspaceID: workspaceID,
+                tabID: tab.id,
+                browserID: browser.id,
+                controller: controller
+            )
+        }
         try controller.load(url: browser.url)
         browserControllers[browser.id] = controller
+    }
+
+    private func requestBrowserClose(
+        workspaceID: WorkspaceID,
+        tabID: TabID,
+        browserID: BrowserSessionID,
+        controller: BrowserSessionController
+    ) {
+        guard browserControllers[browserID] === controller,
+              let tab = tab(workspaceID: workspaceID, tabID: tabID),
+              case .browser(let browser) = tab.content,
+              browser.id == browserID else {
+            return
+        }
+        perform {
+            guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
+                throw AppModelError.workspaceUnavailable(workspaceID)
+            }
+            if workspace.tabs.count == 1 {
+                try createTerminalTab(
+                    workingDirectory: newSessionWorkingDirectory(for: workspaceID),
+                    initialCommand: nil,
+                    workspaceID: workspaceID
+                )
+            }
+            try closeTab(workspaceID: workspaceID, tabID: tabID)
+        }
     }
 
     private func handle(
@@ -823,7 +901,7 @@ final class AppModel {
                 )
             }
         case .openURL(let url):
-            createBrowserTab(url: url, in: workspaceID)
+            open(url, in: workspaceID)
         case .failed(let error):
             present(error)
         case .processTerminated(let exitCode):

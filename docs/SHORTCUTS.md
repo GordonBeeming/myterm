@@ -1,14 +1,16 @@
 # Keyboard shortcuts
 
-MyTerm exposes its shortcuts through native macOS menus. Pane and navigation keys follow cmux where that makes sense; creating a workspace uses the standard <kbd>⌘N</kbd> shortcut.
+MyTerm exposes its shortcuts through native macOS menus. Pane and navigation keys follow cmux where that makes sense. Workspace font-size zoom applies only to the active workspace and persists a workspace-level override.
 
 ## Workspaces
 
 | Action | Shortcut |
 | --- | --- |
 | New workspace | <kbd>⌘N</kbd> |
-| New folder | <kbd>⌃⌘G</kbd> |
+| New folder | <kbd>⇧⌘N</kbd> |
 | Rename workspace | <kbd>⇧⌘R</kbd> |
+| Decrease active-workspace font size | <kbd>⌘-</kbd> |
+| Increase active-workspace font size | <kbd>⌘=</kbd> |
 | Close workspace | <kbd>⇧⌘W</kbd> |
 | Previous / next workspace | <kbd>⌃⌘[</kbd> / <kbd>⌃⌘]</kbd> |
 | Select workspace 1–9 | <kbd>⌘1</kbd> … <kbd>⌘9</kbd> |

@@ -1,5 +1,38 @@
+import AppKit
 import MyTermCore
 import SwiftUI
+
+enum MiddleClickTabInteraction {
+    static func shouldClose(
+        buttonNumber: Int,
+        eventWindowNumber: Int,
+        viewWindowNumber: Int?,
+        locationInView: NSPoint,
+        viewBounds: NSRect
+    ) -> Bool {
+        buttonNumber == 2
+            && viewWindowNumber == eventWindowNumber
+            && viewBounds.contains(locationInView)
+    }
+}
+
+@MainActor
+final class MiddleClickMonitorLifecycle {
+    private var monitor: Any?
+
+    var isMonitoring: Bool { monitor != nil }
+
+    func start(install: () -> Any?) {
+        guard monitor == nil else { return }
+        monitor = install()
+    }
+
+    func stop(remove: (Any) -> Void) {
+        guard let monitor else { return }
+        self.monitor = nil
+        remove(monitor)
+    }
+}
 
 struct WorkspaceTabStrip: View {
     let model: AppModel
@@ -42,6 +75,8 @@ struct WorkspaceTabStrip: View {
                     Image(systemName: "plus")
                 }
                 .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
                 .focusable(false)
                 .accessibilityLabel("Add tab")
                 .help("Add Tab")
@@ -131,6 +166,10 @@ private struct WorkspaceTabItem: View {
             .padding(.trailing, 4)
         }
         .frame(width: 136, height: 26)
+        .overlay {
+            MiddleClickTabHandler(close: close)
+                .allowsHitTesting(false)
+        }
         .onHover { isHovering = $0 }
         .contextMenu {
             Button("Rename Tab…", action: rename)
@@ -151,5 +190,75 @@ private struct WorkspaceTabItem: View {
 
     private var borderStyle: Color {
         isSelected ? Color.accentColor.opacity(0.6) : Color.secondary.opacity(0.2)
+    }
+}
+
+private struct MiddleClickTabHandler: NSViewRepresentable {
+    let close: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(close: close)
+    }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        context.coordinator.startMonitoring(view: view)
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.close = close
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.stopMonitoring()
+    }
+
+    @MainActor
+    final class Coordinator {
+        var close: () -> Void
+
+        private weak var view: NSView?
+        private let monitorLifecycle = MiddleClickMonitorLifecycle()
+
+        init(close: @escaping () -> Void) {
+            self.close = close
+        }
+
+        func startMonitoring(view: NSView) {
+            self.view = view
+            monitorLifecycle.start {
+                NSEvent.addLocalMonitorForEvents(matching: .otherMouseDown) { [weak self] event in
+                    let shouldClose = MainActor.assumeIsolated {
+                        guard let self,
+                              let view = self.view else {
+                            return false
+                        }
+
+                        let location = view.convert(event.locationInWindow, from: nil)
+                        guard MiddleClickTabInteraction.shouldClose(
+                            buttonNumber: event.buttonNumber,
+                            eventWindowNumber: event.windowNumber,
+                            viewWindowNumber: view.window?.windowNumber,
+                            locationInView: location,
+                            viewBounds: view.bounds
+                        ) else {
+                            return false
+                        }
+
+                        self.close()
+                        return true
+                    }
+                    return shouldClose ? nil : event
+                }
+            }
+        }
+
+        func stopMonitoring() {
+            monitorLifecycle.stop { monitor in
+                NSEvent.removeMonitor(monitor)
+            }
+            view = nil
+        }
     }
 }

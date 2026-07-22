@@ -153,6 +153,26 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(engine.sessions[1].focusCallCount, 1)
     }
 
+    func testMovingWorkspaceToItsCurrentFolderDoesNotReorderIt() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let folderID = try model.store.createFolder(title: "Projects")
+        let firstWorkspaceID = model.store.selectedWorkspaceID
+        model.moveWorkspace(firstWorkspaceID, to: folderID)
+        model.createWorkspace(in: folderID)
+        let originalOrder = model.workspaces
+            .filter { $0.folderID == folderID }
+            .map(\.id)
+
+        model.moveWorkspace(firstWorkspaceID, to: folderID)
+
+        XCTAssertEqual(
+            model.workspaces.filter { $0.folderID == folderID }.map(\.id),
+            originalOrder
+        )
+    }
+
     func testTerminalSplitGeometryKeepsEachRecursiveBranchAtEqualHalves() {
         let rootLengths = TerminalSplitGeometry.childLengths(totalLength: 1_001, childCount: 2)
         XCTAssertEqual(rootLengths[0], 500, accuracy: 0.001)
@@ -319,6 +339,49 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(session.appliedRuntimeConfigurations.last?.fontSize, 18)
     }
 
+    func testSelectedWorkspaceFontSizeAdjustmentsClampPersistAndLeaveOtherWorkspacesAlone() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        model.updateGlobalSettings { $0.fontSize = 10 }
+        let firstSession = try XCTUnwrap(engine.sessions.first)
+        let firstWorkspaceID = model.store.selectedWorkspaceID
+
+        model.createWorkspace()
+        let secondWorkspaceID = model.store.selectedWorkspaceID
+        let secondSession = try XCTUnwrap(engine.sessions.last)
+
+        model.adjustSelectedWorkspaceFontSize(by: 1)
+        XCTAssertEqual(secondSession.appliedRuntimeConfigurations.last?.fontSize, 11)
+        XCTAssertEqual(firstSession.appliedRuntimeConfigurations.last?.fontSize, 10)
+        XCTAssertEqual(
+            model.store.workspaces.first { $0.id == secondWorkspaceID }?.settingsOverrides?.fontSize,
+            11
+        )
+
+        model.updateWorkspaceSettings(secondWorkspaceID) { $0.fontSize = TerminalPreferences.fontSizeRange.lowerBound }
+        model.adjustSelectedWorkspaceFontSize(by: -1)
+        XCTAssertEqual(secondSession.appliedRuntimeConfigurations.last?.fontSize, 6)
+
+        model.updateWorkspaceSettings(secondWorkspaceID) { $0.fontSize = TerminalPreferences.fontSizeRange.upperBound }
+        model.adjustSelectedWorkspaceFontSize(by: 1)
+        XCTAssertEqual(secondSession.appliedRuntimeConfigurations.last?.fontSize, 72)
+
+        let persistenceURL = MyTermChannel.development.persistenceURL(applicationSupportDirectory: directory)
+        let restored = try WorkspaceStore(persistenceURL: persistenceURL)
+        XCTAssertEqual(
+            restored.workspaces.first { $0.id == secondWorkspaceID }?.settingsOverrides?.fontSize,
+            72
+        )
+        XCTAssertNil(restored.workspaces.first { $0.id == firstWorkspaceID }?.settingsOverrides?.fontSize)
+    }
+
     func testMovingWorkspaceBeforeWorkspaceInAnotherFolderReappliesInheritedSettings() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
@@ -339,7 +402,7 @@ final class AppModelTests: XCTestCase {
         let targetWorkspaceID = model.store.selectedWorkspaceID
         model.updateFolderSettings(secondFolderID) { $0.fontSize = 23 }
 
-        model.moveWorkspace(movedWorkspaceID, before: targetWorkspaceID)
+        model.moveWorkspace(movedWorkspaceID, to: secondFolderID, before: targetWorkspaceID)
 
         XCTAssertEqual(
             model.workspaces.first(where: { $0.id == movedWorkspaceID })?.folderID,
@@ -592,6 +655,72 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(model.errorDescription)
     }
 
+    func testBrowserCloseCallbackClosesOnlyExactTabAndIgnoresStaleCallbacks() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let terminalTabID = try XCTUnwrap(model.selectedWorkspace.selectedTabID)
+        model.createBrowserTab()
+        let originalTabID = try XCTUnwrap(model.selectedWorkspace.selectedTabID)
+        guard case .browser(let originalBrowser) = try XCTUnwrap(model.selectedTab?.content),
+              let originalController = model.browserController(for: originalBrowser.id) else {
+            return XCTFail("Expected a browser tab and controller")
+        }
+        model.createBrowserTab()
+        let survivingBrowserTabID = try XCTUnwrap(model.selectedWorkspace.selectedTabID)
+        guard case .browser(let survivingBrowser) = try XCTUnwrap(model.selectedTab?.content),
+              let survivingController = model.browserController(for: survivingBrowser.id) else {
+            return XCTFail("Expected a second browser tab and controller")
+        }
+
+        originalController.webViewDidClose(originalController.webView)
+
+        XCTAssertNil(model.browserController(for: originalBrowser.id))
+        XCTAssertFalse(model.selectedWorkspace.tabs.contains(where: { $0.id == originalTabID }))
+        XCTAssertTrue(model.selectedWorkspace.tabs.contains(where: { $0.id == terminalTabID }))
+        XCTAssertTrue(model.selectedWorkspace.tabs.contains(where: { $0.id == survivingBrowserTabID }))
+        XCTAssertTrue(model.browserController(for: survivingBrowser.id) === survivingController)
+
+        originalController.webViewDidClose(originalController.webView)
+        originalController.webViewDidClose(originalController.webView)
+
+        XCTAssertEqual(model.selectedWorkspace.selectedTabID, survivingBrowserTabID)
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, 2)
+        XCTAssertTrue(model.browserController(for: survivingBrowser.id) === survivingController)
+        XCTAssertNil(model.errorDescription)
+    }
+
+    func testFinalBrowserSelfClosePreservesWorkspaceWithReplacementTerminal() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let initialTerminalTabID = try XCTUnwrap(model.selectedWorkspace.selectedTabID)
+        let workspaceID = model.store.selectedWorkspaceID
+        model.createBrowserTab()
+        let browserTabID = try XCTUnwrap(model.selectedWorkspace.selectedTabID)
+        guard case .browser(let browser) = try XCTUnwrap(model.selectedTab?.content),
+              let controller = model.browserController(for: browser.id) else {
+            return XCTFail("Expected a browser tab and controller")
+        }
+        model.closeTab(initialTerminalTabID)
+        XCTAssertEqual(model.selectedWorkspace.tabs.map(\.id), [browserTabID])
+
+        controller.webViewDidClose(controller.webView)
+
+        XCTAssertEqual(model.store.selectedWorkspaceID, workspaceID)
+        XCTAssertTrue(model.workspaces.contains(where: { $0.id == workspaceID }))
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, 1)
+        guard case .terminal = try XCTUnwrap(model.selectedTab?.content) else {
+            return XCTFail("Expected a replacement terminal tab")
+        }
+        XCTAssertNil(model.browserController(for: browser.id))
+
+        controller.webViewDidClose(controller.webView)
+        XCTAssertEqual(model.store.selectedWorkspaceID, workspaceID)
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, 1)
+        XCTAssertNil(model.errorDescription)
+    }
+
     func testOpenRequestsCreateTabsInTheExistingModelAndQuoteScripts() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
@@ -615,6 +744,7 @@ final class AppModelTests: XCTestCase {
 
         model.open([scriptURL])
         XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount + 2)
+        XCTAssertEqual(engine.configurations.count, 3)
         XCTAssertEqual(engine.configurations.last?.workingDirectory, projectDirectory.standardizedFileURL)
         XCTAssertEqual(
             engine.configurations.last?.initialCommand,
@@ -628,6 +758,49 @@ final class AppModelTests: XCTestCase {
         model.open([try XCTUnwrap(URL(string: "ssh://user%25name@example.com"))])
         XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount + 4)
         XCTAssertEqual(engine.configurations.last?.initialCommand, "ssh 'user%name@example.com'")
+    }
+
+    func testTerminalLocalFilesOpenInTheirOriginatingWorkspaceWhileDirectoriesStayTerminalTabs() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let projectDirectory = directory.appending(path: "Project", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: projectDirectory, withIntermediateDirectories: true)
+        let fileURL = projectDirectory.appending(path: "report.html", directoryHint: .notDirectory)
+        try Data("<html><body>Report</body></html>".utf8).write(to: fileURL)
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let originatingWorkspaceID = model.store.selectedWorkspaceID
+        let originatingTabCount = model.selectedWorkspace.tabs.count
+
+        model.createWorkspace()
+        let selectedWorkspaceID = model.store.selectedWorkspaceID
+        let selectedTabCount = model.selectedWorkspace.tabs.count
+        let originatingSession = try XCTUnwrap(engine.sessions.first)
+
+        originatingSession.onEvent?(.openURL(fileURL))
+
+        XCTAssertEqual(model.store.selectedWorkspaceID, selectedWorkspaceID)
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, selectedTabCount)
+        guard let browserTab = model.workspaces.first(where: { $0.id == originatingWorkspaceID })?.tabs.last,
+              case .browser(let browser) = browserTab.content else {
+            return XCTFail("Expected the local file to open in the originating workspace browser")
+        }
+        XCTAssertEqual(browser.url, fileURL.standardizedFileURL)
+        XCTAssertEqual(
+            model.workspaces.first(where: { $0.id == originatingWorkspaceID })?.tabs.count,
+            originatingTabCount + 1
+        )
+
+        originatingSession.onEvent?(.openURL(projectDirectory))
+
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, selectedTabCount)
+        XCTAssertEqual(engine.configurations.last?.workingDirectory, projectDirectory.standardizedFileURL)
+        XCTAssertNil(engine.configurations.last?.initialCommand)
     }
 
     func testTerminalWebLinksOpenInTheirOwningWorkspaceAndInjectBrowserLauncher() throws {
@@ -646,6 +819,10 @@ final class AppModelTests: XCTestCase {
         let firstWorkspaceTabCount = model.selectedWorkspace.tabs.count
         model.updateWorkspaceSettings(firstWorkspaceID) { $0.browserDataScope = .appWide }
         XCTAssertEqual(engine.configurations.first?.environment["BROWSER"], launcherURL.path)
+        XCTAssertEqual(
+            engine.configurations.first?.environment[MyTermBrowserLauncher.workspaceIDEnvironmentKey],
+            firstWorkspaceID.description
+        )
 
         model.createWorkspace()
         let secondWorkspaceID = model.store.selectedWorkspaceID
@@ -666,6 +843,66 @@ final class AppModelTests: XCTestCase {
         }
         XCTAssertEqual(browser.url.absoluteString, "https://example.com/docs")
         XCTAssertEqual(browser.profile?.scope, .appWide)
+    }
+
+    func testRoutedBrowserURLsStayInTheirWorkspaceAcrossSplitCallbacksAndInvalidRoutesAreIgnored() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let originatingWorkspaceID = model.store.selectedWorkspaceID
+        let originatingTabCount = model.selectedWorkspace.tabs.count
+
+        model.createWorkspace()
+        let selectedWorkspaceID = model.store.selectedWorkspaceID
+        let selectedTabCount = model.selectedWorkspace.tabs.count
+        let firstRoute = try XCTUnwrap(
+            MyTermBrowserLauncher.browserRoute(
+                for: originatingWorkspaceID,
+                url: try XCTUnwrap(URL(string: "https://example.com/one?q=one%20two#fragment"))
+            )
+        )
+        let secondRoute = try XCTUnwrap(
+            MyTermBrowserLauncher.browserRoute(
+                for: originatingWorkspaceID,
+                url: try XCTUnwrap(URL(string: "http://example.com/two?value=%25"))
+            )
+        )
+
+        model.open([firstRoute])
+        model.open([secondRoute])
+
+        XCTAssertEqual(model.store.selectedWorkspaceID, selectedWorkspaceID)
+        XCTAssertEqual(
+            model.workspaces.first { $0.id == originatingWorkspaceID }?.tabs.count,
+            originatingTabCount + 2
+        )
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, selectedTabCount)
+
+        model.open([try XCTUnwrap(URL(string: "https://example.com/ordinary"))])
+        XCTAssertEqual(model.store.selectedWorkspaceID, selectedWorkspaceID)
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, selectedTabCount + 1)
+
+        let staleRoute = try XCTUnwrap(
+            MyTermBrowserLauncher.browserRoute(
+                for: WorkspaceID(),
+                url: try XCTUnwrap(URL(string: "https://example.com/stale"))
+            )
+        )
+        model.open([staleRoute])
+        XCTAssertEqual(model.store.selectedWorkspaceID, selectedWorkspaceID)
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, selectedTabCount + 1)
+
+        let malformedRoute = try XCTUnwrap(URL(string: "myterm://browser/not-a-uuid?url=not-base64"))
+        model.open([malformedRoute])
+        XCTAssertEqual(model.store.selectedWorkspaceID, selectedWorkspaceID)
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, selectedTabCount + 1)
+        XCTAssertNil(model.errorDescription)
     }
 
     private func makeModel(applicationSupportDirectory: URL) throws -> AppModel {

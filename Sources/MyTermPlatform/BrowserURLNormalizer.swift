@@ -7,18 +7,34 @@ public enum BrowserURLNormalizer {
             throw BrowserURLNormalizationError.emptyAddress
         }
 
-        let candidate = trimmed.contains("://") ? trimmed : "https://\(trimmed)"
+        let candidate = trimmed.lowercased().hasPrefix("file:") || trimmed.contains("://")
+            ? trimmed
+            : "https://\(trimmed)"
         guard var components = URLComponents(string: candidate),
-              let scheme = components.scheme?.lowercased(),
-              ["http", "https"].contains(scheme),
-              let host = components.host,
-              !host.isEmpty
+              let scheme = components.scheme?.lowercased()
         else {
             throw BrowserURLNormalizationError.invalidAddress(address)
         }
 
         components.scheme = scheme
-        components.host = host.lowercased()
+        switch scheme {
+        case "http", "https":
+            guard let host = components.host, !host.isEmpty else {
+                throw BrowserURLNormalizationError.invalidAddress(address)
+            }
+            components.host = host.lowercased()
+        case "file":
+            guard let url = components.url,
+                  url.isFileURL,
+                  !url.path.isEmpty,
+                  url.path.hasPrefix("/") else {
+                throw BrowserURLNormalizationError.invalidAddress(address)
+            }
+            return url
+        default:
+            throw BrowserURLNormalizationError.invalidAddress(address)
+        }
+
         guard let url = components.url else {
             throw BrowserURLNormalizationError.invalidAddress(address)
         }

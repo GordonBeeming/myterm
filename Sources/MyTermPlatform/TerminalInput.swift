@@ -43,6 +43,15 @@ public enum TerminalInputTranslator {
             return [0x16]
         }
 
+        switch (event.keyCode, event.modifiers.meaningful) {
+        case (123, [.command]):
+            return [0x01]
+        case (124, [.command]):
+            return [0x05]
+        default:
+            break
+        }
+
         guard !kittyKeyboardEnabled else { return nil }
 
         switch (event.keyCode, event.modifiers.meaningful) {
@@ -50,10 +59,6 @@ public enum TerminalInputTranslator {
             return [0x0A]
         case (51, [.command]):
             return [0x15]
-        case (123, [.command]):
-            return [0x01]
-        case (124, [.command]):
-            return [0x05]
         case (126, [.command]):
             return Array("\u{1B}[1;9A".utf8)
         case (125, [.command]):
