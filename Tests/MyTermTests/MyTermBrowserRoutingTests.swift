@@ -29,10 +29,29 @@ final class MyTermBrowserRoutingTests: XCTestCase {
                 MyTermBrowserLauncher.workspaceIDEnvironmentKey: workspaceID.description,
             ]
         )
+
+        let tabID = TabID()
+        let paneID = PaneID()
+        XCTAssertEqual(
+            MyTermBrowserLauncher.environment(
+                executableURL: launcher,
+                workspaceID: workspaceID,
+                tabID: tabID,
+                paneID: paneID
+            ),
+            [
+                "BROWSER": launcher.path,
+                MyTermBrowserLauncher.workspaceIDEnvironmentKey: workspaceID.description,
+                MyTermBrowserLauncher.tabIDEnvironmentKey: tabID.description,
+                MyTermBrowserLauncher.paneIDEnvironmentKey: paneID.description,
+            ]
+        )
     }
 
     func testBrowserRoutesRoundTripCompleteURLsIndependently() throws {
         let workspaceID = WorkspaceID()
+        let tabID = TabID()
+        let paneID = PaneID()
         let urls = [
             try XCTUnwrap(URL(string: "https://example.com/a%2Fb?q=one%20two&emoji=%F0%9F%9A%80#fragment%2Fvalue")),
             try XCTUnwrap(URL(string: "http://localhost:3000/über?value=%25&other=two")),
@@ -43,6 +62,18 @@ final class MyTermBrowserRoutingTests: XCTestCase {
             XCTAssertEqual(
                 MyTermBrowserLauncher.browserDestination(from: route),
                 .init(workspaceID: workspaceID, url: url)
+            )
+            let paneRoute = try XCTUnwrap(
+                MyTermBrowserLauncher.browserRoute(
+                    for: workspaceID,
+                    tabID: tabID,
+                    paneID: paneID,
+                    url: url
+                )
+            )
+            XCTAssertEqual(
+                MyTermBrowserLauncher.browserDestination(from: paneRoute),
+                .init(workspaceID: workspaceID, tabID: tabID, paneID: paneID, url: url)
             )
         }
     }
@@ -65,6 +96,8 @@ final class MyTermBrowserRoutingTests: XCTestCase {
 
         let webCapture = directory.appending(path: "web.txt", directoryHint: .notDirectory)
         let workspaceID = WorkspaceID()
+        let tabID = TabID()
+        let paneID = PaneID()
         let firstURL = try XCTUnwrap(URL(string: "https://example.com/docs?q=one%20two#fragment"))
         let secondURL = try XCTUnwrap(URL(string: "http://localhost:3000/über?value=%25"))
         try runLauncher(
@@ -72,19 +105,35 @@ final class MyTermBrowserRoutingTests: XCTestCase {
             arguments: [firstURL.absoluteString, secondURL.absoluteString],
             recorder: recorder,
             capture: webCapture,
-            workspaceID: workspaceID.description
+            workspaceID: workspaceID.description,
+            tabID: tabID.description,
+            paneID: paneID.description
         )
         let webBatches = try capturedBatches(at: webCapture)
         XCTAssertEqual(webBatches.count, 2)
         XCTAssertEqual(webBatches[0], [
             "-a",
             appBundle.path,
-            try XCTUnwrap(MyTermBrowserLauncher.browserRoute(for: workspaceID, url: firstURL)).absoluteString,
+            try XCTUnwrap(
+                MyTermBrowserLauncher.browserRoute(
+                    for: workspaceID,
+                    tabID: tabID,
+                    paneID: paneID,
+                    url: firstURL
+                )
+            ).absoluteString,
         ])
         XCTAssertEqual(webBatches[1], [
             "-a",
             appBundle.path,
-            try XCTUnwrap(MyTermBrowserLauncher.browserRoute(for: workspaceID, url: secondURL)).absoluteString,
+            try XCTUnwrap(
+                MyTermBrowserLauncher.browserRoute(
+                    for: workspaceID,
+                    tabID: tabID,
+                    paneID: paneID,
+                    url: secondURL
+                )
+            ).absoluteString,
         ])
 
         let directCapture = directory.appending(path: "direct.txt", directoryHint: .notDirectory)
@@ -143,7 +192,9 @@ final class MyTermBrowserRoutingTests: XCTestCase {
         arguments: [String],
         recorder: URL,
         capture: URL,
-        workspaceID: String? = nil
+        workspaceID: String? = nil,
+        tabID: String? = nil,
+        paneID: String? = nil
     ) throws {
         let process = Process()
         process.executableURL = launcher
@@ -152,8 +203,17 @@ final class MyTermBrowserRoutingTests: XCTestCase {
             "MYTERM_OPEN_COMMAND": recorder.path,
             "MYTERM_CAPTURE_PATH": capture.path,
         ]) { _, override in override }
+        environment.removeValue(forKey: MyTermBrowserLauncher.workspaceIDEnvironmentKey)
+        environment.removeValue(forKey: MyTermBrowserLauncher.tabIDEnvironmentKey)
+        environment.removeValue(forKey: MyTermBrowserLauncher.paneIDEnvironmentKey)
         if let workspaceID {
             environment[MyTermBrowserLauncher.workspaceIDEnvironmentKey] = workspaceID
+        }
+        if let tabID {
+            environment[MyTermBrowserLauncher.tabIDEnvironmentKey] = tabID
+        }
+        if let paneID {
+            environment[MyTermBrowserLauncher.paneIDEnvironmentKey] = paneID
         }
         process.environment = environment
         try process.run()

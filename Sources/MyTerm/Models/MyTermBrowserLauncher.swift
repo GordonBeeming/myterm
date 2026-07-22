@@ -3,12 +3,23 @@ import MyTermCore
 
 enum MyTermBrowserLauncher {
     static let workspaceIDEnvironmentKey = "MYTERM_WORKSPACE_ID"
+    static let tabIDEnvironmentKey = "MYTERM_TAB_ID"
+    static let paneIDEnvironmentKey = "MYTERM_PANE_ID"
     static let workspaceRouteScheme = "myterm"
     static let workspaceRouteHost = "browser"
 
     struct BrowserDestination: Equatable {
         let workspaceID: WorkspaceID
+        let tabID: TabID?
+        let paneID: PaneID?
         let url: URL
+
+        init(workspaceID: WorkspaceID, tabID: TabID? = nil, paneID: PaneID? = nil, url: URL) {
+            self.workspaceID = workspaceID
+            self.tabID = tabID
+            self.paneID = paneID
+            self.url = url
+        }
     }
 
     static func executableURL(
@@ -25,17 +36,30 @@ enum MyTermBrowserLauncher {
 
     static func environment(
         executableURL: URL?,
-        workspaceID: WorkspaceID? = nil
+        workspaceID: WorkspaceID? = nil,
+        tabID: TabID? = nil,
+        paneID: PaneID? = nil
     ) -> [String: String] {
         guard let executableURL else { return [:] }
         var environment = ["BROWSER": executableURL.path]
         if let workspaceID {
             environment[workspaceIDEnvironmentKey] = workspaceID.description
         }
+        if let tabID {
+            environment[tabIDEnvironmentKey] = tabID.description
+        }
+        if let paneID {
+            environment[paneIDEnvironmentKey] = paneID.description
+        }
         return environment
     }
 
-    static func browserRoute(for workspaceID: WorkspaceID, url: URL) -> URL? {
+    static func browserRoute(
+        for workspaceID: WorkspaceID,
+        tabID: TabID? = nil,
+        paneID: PaneID? = nil,
+        url: URL
+    ) -> URL? {
         guard isWebURL(url) else { return nil }
         let payload = Data(url.absoluteString.utf8)
             .base64EncodedString()
@@ -45,7 +69,11 @@ enum MyTermBrowserLauncher {
         var components = URLComponents()
         components.scheme = workspaceRouteScheme
         components.host = workspaceRouteHost
-        components.path = "/\(workspaceID.description)"
+        if let tabID, let paneID {
+            components.path = "/\(workspaceID.description)/\(tabID.description)/\(paneID.description)"
+        } else {
+            components.path = "/\(workspaceID.description)"
+        }
         components.queryItems = [URLQueryItem(name: "url", value: payload)]
         return components.url
     }
@@ -58,12 +86,10 @@ enum MyTermBrowserLauncher {
               components.user == nil,
               components.password == nil,
               components.fragment == nil,
-              let pathComponent = components.path.split(
-                  separator: "/",
-                  omittingEmptySubsequences: true
-              ).first,
-              components.path == "/\(pathComponent)",
-              let workspaceID = try? WorkspaceID(uuidString: String(pathComponent)),
+              case let pathComponents = components.path.split(separator: "/", omittingEmptySubsequences: true),
+              pathComponents.count == 1 || pathComponents.count == 3,
+              components.path == "/" + pathComponents.joined(separator: "/"),
+              let workspaceID = try? WorkspaceID(uuidString: String(pathComponents[0])),
               let queryItems = components.queryItems,
               queryItems.count == 1,
               queryItems[0].name == "url",
@@ -74,7 +100,10 @@ enum MyTermBrowserLauncher {
               isWebURL(url) else {
             return nil
         }
-        return BrowserDestination(workspaceID: workspaceID, url: url)
+        let tabID = pathComponents.count == 3 ? try? TabID(uuidString: String(pathComponents[1])) : nil
+        let paneID = pathComponents.count == 3 ? try? PaneID(uuidString: String(pathComponents[2])) : nil
+        guard pathComponents.count == 1 || (tabID != nil && paneID != nil) else { return nil }
+        return BrowserDestination(workspaceID: workspaceID, tabID: tabID, paneID: paneID, url: url)
     }
 
     private static func isWebURL(_ url: URL) -> Bool {

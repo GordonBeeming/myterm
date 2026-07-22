@@ -41,27 +41,12 @@ struct ActiveTabView: View {
 
     var body: some View {
         if let tab = model.selectedTab {
-            switch tab.content {
-            case .terminal(let tree):
-                TerminalSplitTreeView(
-                    model: model,
-                    workspaceID: model.store.selectedWorkspaceID,
-                    tabID: tab.id,
-                    tree: tree
-                )
-            case .browser(let browser):
-                if let controller = model.browserController(for: browser.id) {
-                    BrowserTabView(
-                        model: model,
-                        workspaceID: model.store.selectedWorkspaceID,
-                        tabID: tab.id,
-                        browserID: browser.id,
-                        controller: controller
-                    )
-                } else {
-                    ContentUnavailableView("Browser unavailable", systemImage: "exclamationmark.triangle")
-                }
-            }
+            TerminalSplitTreeView(
+                model: model,
+                workspaceID: model.store.selectedWorkspaceID,
+                tabID: tab.id,
+                tree: tab.splitTree
+            )
         } else {
             ContentUnavailableView("No tab selected", systemImage: "rectangle.on.rectangle")
         }
@@ -79,6 +64,20 @@ private struct TerminalSplitTreeView: View {
         case .terminal(let session):
             TerminalPaneView(model: model, workspaceID: workspaceID, tabID: tabID, session: session)
                 .id(session.id)
+        case .browser(let browser):
+            if let controller = model.browserController(for: browser.id) {
+                BrowserTabView(
+                    model: model,
+                    workspaceID: workspaceID,
+                    tabID: tabID,
+                    browserID: browser.id,
+                    paneID: browser.paneID,
+                    controller: controller
+                )
+                .id(browser.id)
+            } else {
+                ContentUnavailableView("Browser unavailable", systemImage: "exclamationmark.triangle")
+            }
         case .horizontal(let children):
             StableTerminalSplitGroup(
                 model: model,
@@ -217,13 +216,17 @@ private struct BrowserTabView: View {
     let workspaceID: WorkspaceID
     let tabID: TabID
     let browserID: BrowserSessionID
+    let paneID: PaneID
     @ObservedObject var controller: BrowserSessionController
     @State private var addressState = BrowserAddressFieldState()
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 4) {
-                Button(action: controller.goBack) {
+                Button {
+                    model.focusPane(workspaceID: workspaceID, tabID: tabID, paneID: paneID)
+                    controller.goBack()
+                } label: {
                     Image(systemName: "chevron.left")
                 }
                 .buttonStyle(.borderless)
@@ -231,7 +234,10 @@ private struct BrowserTabView: View {
                 .disabled(!controller.state.canGoBack)
                 .accessibilityLabel("Back")
                 .help("Back")
-                Button(action: controller.goForward) {
+                Button {
+                    model.focusPane(workspaceID: workspaceID, tabID: tabID, paneID: paneID)
+                    controller.goForward()
+                } label: {
                     Image(systemName: "chevron.right")
                 }
                 .buttonStyle(.borderless)
@@ -247,7 +253,8 @@ private struct BrowserTabView: View {
                             set: { addressState.updateFromUser($0) }
                         ),
                         beginEditing: {
-                            addressState.beginEditing()
+                            model.focusPane(workspaceID: workspaceID, tabID: tabID, paneID: paneID)
+                            return addressState.beginEditing()
                         },
                         endEditing: {
                             addressState.endEditing(
@@ -267,6 +274,7 @@ private struct BrowserTabView: View {
                     .frame(minHeight: 18)
 
                     Button {
+                        model.focusPane(workspaceID: workspaceID, tabID: tabID, paneID: paneID)
                         if controller.state.isLoading {
                             controller.stopLoading()
                         } else {
@@ -292,6 +300,28 @@ private struct BrowserTabView: View {
                             lineWidth: addressState.isEditing ? 2 : 1
                         )
                 }
+
+                Menu {
+                    Button("Split Right") {
+                        model.focusPane(workspaceID: workspaceID, tabID: tabID, paneID: paneID)
+                        model.splitFocusedTerminal(orientation: .horizontal)
+                    }
+                    Button("Split Below") {
+                        model.focusPane(workspaceID: workspaceID, tabID: tabID, paneID: paneID)
+                        model.splitFocusedTerminal(orientation: .vertical)
+                    }
+                    Button("Close Pane") {
+                        model.focusPane(workspaceID: workspaceID, tabID: tabID, paneID: paneID)
+                        model.closeFocusedPaneOrTab()
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .accessibilityLabel("Browser pane actions")
+                .help("Browser Pane Actions")
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
@@ -305,6 +335,11 @@ private struct BrowserTabView: View {
                     .accessibilityLabel("Browser error: \(error)")
             }
             BrowserSessionView(session: controller)
+                .simultaneousGesture(
+                    TapGesture().onEnded {
+                        model.focusPane(workspaceID: workspaceID, tabID: tabID, paneID: paneID)
+                    }
+                )
         }
         .onAppear {
             addressState.synchronizeNavigationText(controller.state.url?.absoluteString ?? "")
@@ -312,7 +347,12 @@ private struct BrowserTabView: View {
         .onChange(of: controller.state.url) { _, url in
             guard let url else { return }
             addressState.synchronizeNavigationText(url.absoluteString)
-            model.persistBrowserURL(url, workspaceID: workspaceID, tabID: tabID)
+            model.persistBrowserURL(
+                url,
+                workspaceID: workspaceID,
+                tabID: tabID,
+                browserID: browserID
+            )
         }
     }
 

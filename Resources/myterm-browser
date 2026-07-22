@@ -26,6 +26,10 @@ fi
 
 for argument in "$@"; do
   payload=$(printf '%s' "$argument" | /usr/bin/base64 | tr -d '\n' | tr '+/' '-_' | tr -d '=')
+  route="myterm://browser/${MYTERM_WORKSPACE_ID}"
+  if [ -n "${MYTERM_TAB_ID:-}" ] && [ -n "${MYTERM_PANE_ID:-}" ]; then
+    route="${route}/${MYTERM_TAB_ID}/${MYTERM_PANE_ID}"
+  fi
   "$open_command" -a "$app_bundle" \
-    "myterm://browser/${MYTERM_WORKSPACE_ID}?url=${payload}"
+    "${route}?url=${payload}"
 done

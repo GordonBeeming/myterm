@@ -84,17 +84,17 @@ MyTerm is flat by default. Depth comes from macOS window materials, source-list 
 - **Splits:** Native draggable splitters. Each pane has one quiet overflow menu for split and close actions.
 - **Focus:** Clicking a pane makes it the target for split and close commands.
 
-### Browser Tab
+### Browser Pane
 
 - **Toolbar:** Back, forward, reload, and one rounded address field in a compact horizontal row.
 - **Surface:** WKWebView fills the remaining content area.
-- **Behavior:** Browser tabs do not split in the first release.
+- **Behavior:** Browser and terminal panes can share horizontal and vertical split groups.
 
 ### Settings
 
 - **Scene:** A native macOS Settings window, separate from the workspace window.
 - **Browser data:** One picker with three plain-language choices: Across all workspaces, Per workspace, and Per project folder.
-- **Expectation:** Say that the choice affects new tabs and that existing tabs keep their current profile.
+- **Expectation:** Say that the choice affects new browser panes and that existing panes keep their current profile.
 - **Passkeys:** Show whether the signed build has Apple's managed browser entitlement and browser access. Request access from a clear button, never on launch. State that MyTerm passes requests to macOS, does not store passkeys, and leaves the choice of credential provider to the user.
 
 ### App Icon

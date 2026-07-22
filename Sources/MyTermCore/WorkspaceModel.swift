@@ -80,21 +80,25 @@ public struct BrowserDataProfile: Codable, Equatable, Hashable, Sendable {
 
 public struct BrowserSession: Codable, Equatable, Hashable, Sendable, Identifiable {
     public let id: BrowserSessionID
+    public let paneID: PaneID
     public var url: URL
     public var profile: BrowserDataProfile?
 
     public init(
         id: BrowserSessionID = BrowserSessionID(),
+        paneID: PaneID = PaneID(),
         url: URL,
         profile: BrowserDataProfile? = nil
     ) {
         self.id = id
+        self.paneID = paneID
         self.url = url
         self.profile = profile
     }
 
     private enum CodingKeys: String, CodingKey {
         case id
+        case paneID
         case url
         case profile
     }
@@ -102,6 +106,7 @@ public struct BrowserSession: Codable, Equatable, Hashable, Sendable, Identifiab
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(BrowserSessionID.self, forKey: .id)
+        paneID = try container.decodeIfPresent(PaneID.self, forKey: .paneID) ?? PaneID()
         url = try container.decode(URL.self, forKey: .url)
         profile = try container.decodeIfPresent(BrowserDataProfile.self, forKey: .profile)
     }
@@ -121,6 +126,7 @@ public enum PaneFocusDirection: Equatable, Sendable {
 
 public enum SplitNode: Codable, Equatable, Hashable, Sendable {
     case terminal(TerminalSession)
+    case browser(BrowserSession)
     case horizontal([SplitNode])
     case vertical([SplitNode])
 
@@ -132,6 +138,7 @@ public enum SplitNode: Codable, Equatable, Hashable, Sendable {
 
     private enum NodeType: String, Codable {
         case terminal
+        case browser
         case horizontal
         case vertical
     }
@@ -143,6 +150,8 @@ public enum SplitNode: Codable, Equatable, Hashable, Sendable {
         switch type {
         case .terminal:
             self = .terminal(try container.decode(TerminalSession.self, forKey: .session))
+        case .browser:
+            self = .browser(try container.decode(BrowserSession.self, forKey: .session))
         case .horizontal:
             self = .horizontal(try container.decodeIfPresent(LossyArray<SplitNode>.self, forKey: .children)?.elements ?? [])
         case .vertical:
@@ -157,6 +166,9 @@ public enum SplitNode: Codable, Equatable, Hashable, Sendable {
         case .terminal(let session):
             try container.encode(NodeType.terminal, forKey: .type)
             try container.encode(session, forKey: .session)
+        case .browser(let session):
+            try container.encode(NodeType.browser, forKey: .type)
+            try container.encode(session, forKey: .session)
         case .horizontal(let children):
             try container.encode(NodeType.horizontal, forKey: .type)
             try container.encode(children, forKey: .children)
@@ -170,6 +182,8 @@ public enum SplitNode: Codable, Equatable, Hashable, Sendable {
         switch self {
         case .terminal(let session):
             return [session]
+        case .browser:
+            return []
         case .horizontal(let children), .vertical(let children):
             return children.flatMap(\.terminalSessions)
         }
@@ -179,19 +193,42 @@ public enum SplitNode: Codable, Equatable, Hashable, Sendable {
         terminalSessions.map(\.id)
     }
 
+    public var browserSessions: [BrowserSession] {
+        switch self {
+        case .browser(let session):
+            return [session]
+        case .terminal:
+            return []
+        case .horizontal(let children), .vertical(let children):
+            return children.flatMap(\.browserSessions)
+        }
+    }
+
+    public var browserSessionIDs: [BrowserSessionID] {
+        browserSessions.map(\.id)
+    }
+
     public var paneIDs: [PaneID] {
-        terminalSessions.map(\.paneID)
+        switch self {
+        case .terminal(let session):
+            return [session.paneID]
+        case .browser(let session):
+            return [session.paneID]
+        case .horizontal(let children), .vertical(let children):
+            return children.flatMap(\.paneIDs)
+        }
     }
 
     public var stableID: SplitNodeID {
         switch self {
         case .terminal(let session): return SplitNodeID(rawValue: session.paneID.rawValue)
+        case .browser(let session): return SplitNodeID(rawValue: session.paneID.rawValue)
         case .horizontal(let children), .vertical(let children):
             return children.first?.stableID ?? SplitNodeID()
         }
     }
 
-    public var splitLayouts: [SplitPaneLayout] { paneLayouts().map(SplitPaneLayout.init) }
+    public var splitLayouts: [SplitPaneLayout] { paneLayouts().compactMap(SplitPaneLayout.init) }
 
     public func contains(_ sessionID: TerminalSessionID) -> Bool {
         terminalSessionIDs.contains(sessionID)
@@ -205,15 +242,20 @@ public enum SplitNode: Codable, Equatable, Hashable, Sendable {
         terminalSessions.first { $0.paneID == paneID }
     }
 
-    public func adjacentTerminalSessionID(
-        to sessionID: TerminalSessionID,
-        direction: PaneFocusDirection
-    ) -> TerminalSessionID? {
+    public func browser(for paneID: PaneID) -> BrowserSession? {
+        browserSessions.first { $0.paneID == paneID }
+    }
+
+    public func browser(id: BrowserSessionID) -> BrowserSession? {
+        browserSessions.first { $0.id == id }
+    }
+
+    public func adjacentPaneID(to paneID: PaneID, direction: PaneFocusDirection) -> PaneID? {
         let panes = paneLayouts()
-        guard let source = panes.first(where: { $0.sessionID == sessionID }) else { return nil }
+        guard let source = panes.first(where: { $0.paneID == paneID }) else { return nil }
 
         return panes
-            .filter { $0.sessionID != sessionID }
+            .filter { $0.paneID != paneID }
             .compactMap { candidate -> (layout: PaneLayout, primary: Double, secondary: Double)? in
                 let primary: Double
                 let overlap: Double
@@ -247,7 +289,46 @@ public enum SplitNode: Codable, Equatable, Hashable, Sendable {
                 }
                 return $0.secondary < $1.secondary
             }?
-            .layout.sessionID
+            .layout.paneID
+    }
+
+    public func adjacentTerminalSessionID(
+        to sessionID: TerminalSessionID,
+        direction: PaneFocusDirection
+    ) -> TerminalSessionID? {
+        guard let source = terminalSessions.first(where: { $0.id == sessionID }),
+              let targetPaneID = adjacentPaneID(to: source.paneID, direction: direction) else { return nil }
+        return session(for: targetPaneID)?.id
+    }
+
+    @discardableResult
+    public mutating func insert(
+        _ node: SplitNode,
+        beside paneID: PaneID,
+        orientation: SplitOrientation
+    ) -> Bool {
+        switch self {
+        case .terminal(let existing):
+            guard existing.paneID == paneID else { return false }
+            self = orientation.node(children: [.terminal(existing), node])
+            return true
+        case .browser(let existing):
+            guard existing.paneID == paneID else { return false }
+            self = orientation.node(children: [.browser(existing), node])
+            return true
+        case .horizontal(var children):
+            for index in children.indices where children[index].insert(node, beside: paneID, orientation: orientation) {
+                self = .horizontal(children)
+                return true
+            }
+            return false
+        case .vertical(var children):
+            for index in children.indices where children[index].insert(node, beside: paneID, orientation: orientation) {
+                self = .vertical(children)
+                return true
+            }
+            return false
+        }
     }
 
     @discardableResult
@@ -261,6 +342,8 @@ public enum SplitNode: Codable, Equatable, Hashable, Sendable {
             guard existing.id == existingSessionID else { return false }
             self = orientation.node(children: [.terminal(existing), .terminal(session)])
             return true
+        case .browser:
+            return false
         case .horizontal(var children):
             for index in children.indices {
                 if children[index].insert(session, beside: existingSessionID, orientation: orientation) {
@@ -291,6 +374,8 @@ public enum SplitNode: Codable, Equatable, Hashable, Sendable {
             session.workingDirectory = workingDirectory
             self = .terminal(session)
             return true
+        case .browser:
+            return false
         case .horizontal(var children):
             for index in children.indices {
                 if children[index].updateWorkingDirectory(workingDirectory, for: sessionID) {
@@ -318,6 +403,8 @@ public enum SplitNode: Codable, Equatable, Hashable, Sendable {
             session.recentText = TerminalSession.boundedRecentText(recentText)
             self = .terminal(session)
             return true
+        case .browser:
+            return false
         case .horizontal(var children):
             for index in children.indices {
                 if children[index].updateRecentText(recentText, for: sessionID) {
@@ -332,6 +419,59 @@ public enum SplitNode: Codable, Equatable, Hashable, Sendable {
                     self = .vertical(children)
                     return true
                 }
+            }
+            return false
+        }
+    }
+
+    @discardableResult
+    public mutating func updateBrowserURL(_ url: URL, for browserID: BrowserSessionID) -> Bool {
+        switch self {
+        case .browser(var session):
+            guard session.id == browserID else { return false }
+            session.url = url
+            self = .browser(session)
+            return true
+        case .terminal:
+            return false
+        case .horizontal(var children):
+            for index in children.indices where children[index].updateBrowserURL(url, for: browserID) {
+                self = .horizontal(children)
+                return true
+            }
+            return false
+        case .vertical(var children):
+            for index in children.indices where children[index].updateBrowserURL(url, for: browserID) {
+                self = .vertical(children)
+                return true
+            }
+            return false
+        }
+    }
+
+    @discardableResult
+    public mutating func updateBrowserDataProfile(
+        _ profile: BrowserDataProfile?,
+        for browserID: BrowserSessionID
+    ) -> Bool {
+        switch self {
+        case .browser(var session):
+            guard session.id == browserID else { return false }
+            session.profile = profile
+            self = .browser(session)
+            return true
+        case .terminal:
+            return false
+        case .horizontal(var children):
+            for index in children.indices where children[index].updateBrowserDataProfile(profile, for: browserID) {
+                self = .horizontal(children)
+                return true
+            }
+            return false
+        case .vertical(var children):
+            for index in children.indices where children[index].updateBrowserDataProfile(profile, for: browserID) {
+                self = .vertical(children)
+                return true
             }
             return false
         }
@@ -358,8 +498,11 @@ public enum SplitNode: Codable, Equatable, Hashable, Sendable {
     }
 
     public func removingPane(_ paneID: PaneID) -> SplitNode? {
-        guard let session = session(for: paneID) else { return self }
-        return removingTerminalSession(session.id)
+        guard contains(paneID: paneID) else { return self }
+        switch removing(paneID: paneID) {
+        case .notFound: return self
+        case .removed(let node): return node
+        }
     }
 
     private enum RemovalResult {
@@ -371,11 +514,45 @@ public enum SplitNode: Codable, Equatable, Hashable, Sendable {
         switch self {
         case .terminal(let session):
             return session.id == sessionID ? .removed(nil) : .notFound
+        case .browser:
+            return .notFound
         case .horizontal(let children):
             return removingFromBranch(children, orientation: .horizontal, sessionID: sessionID)
         case .vertical(let children):
             return removingFromBranch(children, orientation: .vertical, sessionID: sessionID)
         }
+    }
+
+    private func removing(paneID: PaneID) -> RemovalResult {
+        switch self {
+        case .terminal(let session):
+            return session.paneID == paneID ? .removed(nil) : .notFound
+        case .browser(let session):
+            return session.paneID == paneID ? .removed(nil) : .notFound
+        case .horizontal(let children):
+            return removingFromBranch(children, orientation: .horizontal, paneID: paneID)
+        case .vertical(let children):
+            return removingFromBranch(children, orientation: .vertical, paneID: paneID)
+        }
+    }
+
+    private func removingFromBranch(
+        _ children: [SplitNode],
+        orientation: SplitOrientation,
+        paneID: PaneID
+    ) -> RemovalResult {
+        for index in children.indices {
+            switch children[index].removing(paneID: paneID) {
+            case .notFound:
+                continue
+            case .removed(let replacement):
+                var remaining = children
+                remaining.remove(at: index)
+                if let replacement { remaining.insert(replacement, at: index) }
+                return .removed(orientation.node(children: remaining).collapsed)
+            }
+        }
+        return .notFound
     }
 
     private func removingFromBranch(
@@ -401,7 +578,7 @@ public enum SplitNode: Codable, Equatable, Hashable, Sendable {
 
     private var collapsed: SplitNode? {
         switch self {
-        case .terminal:
+        case .terminal, .browser:
             return self
         case .horizontal(let children), .vertical(let children):
             switch children.count {
@@ -417,6 +594,7 @@ public enum SplitNode: Codable, Equatable, Hashable, Sendable {
 
     fileprivate func repaired(
         usedSessionIDs: inout Set<TerminalSessionID>,
+        usedBrowserIDs: inout Set<BrowserSessionID>,
         usedPaneIDs: inout Set<PaneID>
     ) -> SplitNode? {
         switch self {
@@ -424,14 +602,18 @@ public enum SplitNode: Codable, Equatable, Hashable, Sendable {
             guard usedSessionIDs.insert(session.id).inserted,
                   usedPaneIDs.insert(session.paneID).inserted else { return nil }
             return self
+        case .browser(let session):
+            guard usedBrowserIDs.insert(session.id).inserted,
+                  usedPaneIDs.insert(session.paneID).inserted else { return nil }
+            return self
         case .horizontal(let children):
             let repairedChildren = children.compactMap {
-                $0.repaired(usedSessionIDs: &usedSessionIDs, usedPaneIDs: &usedPaneIDs)
+                $0.repaired(usedSessionIDs: &usedSessionIDs, usedBrowserIDs: &usedBrowserIDs, usedPaneIDs: &usedPaneIDs)
             }
             return SplitOrientation.horizontal.node(children: repairedChildren).collapsed
         case .vertical(let children):
             let repairedChildren = children.compactMap {
-                $0.repaired(usedSessionIDs: &usedSessionIDs, usedPaneIDs: &usedPaneIDs)
+                $0.repaired(usedSessionIDs: &usedSessionIDs, usedBrowserIDs: &usedBrowserIDs, usedPaneIDs: &usedPaneIDs)
             }
             return SplitOrientation.vertical.node(children: repairedChildren).collapsed
         }
@@ -445,6 +627,8 @@ public enum SplitNode: Codable, Equatable, Hashable, Sendable {
         switch self {
         case .terminal(let session):
             return [PaneLayout(sessionID: session.id, paneID: session.paneID, minX: minX, minY: minY, width: width, height: height)]
+        case .browser(let session):
+            return [PaneLayout(sessionID: nil, paneID: session.paneID, minX: minX, minY: minY, width: width, height: height)]
         case .horizontal(let children):
             guard !children.isEmpty else { return [] }
             let childWidth = width / Double(children.count)
@@ -483,8 +667,9 @@ public struct SplitPaneLayout: Equatable, Hashable, Sendable, Identifiable {
     public var maxX: Double { minX + width }
     public var maxY: Double { minY + height }
 
-    fileprivate init(_ layout: PaneLayout) {
-        sessionID = layout.sessionID
+    fileprivate init?(_ layout: PaneLayout) {
+        guard let sessionID = layout.sessionID else { return nil }
+        self.sessionID = sessionID
         paneID = layout.paneID
         nodeID = SplitNodeID(rawValue: layout.paneID.rawValue)
         minX = layout.minX; minY = layout.minY; width = layout.width; height = layout.height
@@ -494,7 +679,7 @@ public struct SplitPaneLayout: Equatable, Hashable, Sendable, Identifiable {
 fileprivate struct PaneLayout {
     static let epsilon = 0.000_001
 
-    let sessionID: TerminalSessionID
+    let sessionID: TerminalSessionID?
     let paneID: PaneID
     let minX: Double
     let minY: Double
@@ -560,17 +745,20 @@ public struct Tab: Codable, Equatable, Hashable, Sendable, Identifiable {
     public let id: TabID
     public var content: TabContent
     public var focusedTerminalSessionID: TerminalSessionID?
+    public var focusedPaneID: PaneID?
     public var customTitle: String?
 
     public init(
         id: TabID = TabID(),
         content: TabContent,
         focusedTerminalSessionID: TerminalSessionID? = nil,
+        focusedPaneID: PaneID? = nil,
         customTitle: String? = nil
     ) {
         self.id = id
         self.content = content
         self.focusedTerminalSessionID = focusedTerminalSessionID
+        self.focusedPaneID = focusedPaneID
         self.customTitle = customTitle
         repair()
     }
@@ -580,7 +768,12 @@ public struct Tab: Codable, Equatable, Hashable, Sendable, Identifiable {
         workingDirectory: URL? = nil
     ) -> Tab {
         let session = TerminalSession(workingDirectory: workingDirectory)
-        return Tab(id: id, content: .terminal(.terminal(session)), focusedTerminalSessionID: session.id)
+        return Tab(
+            id: id,
+            content: .terminal(.terminal(session)),
+            focusedTerminalSessionID: session.id,
+            focusedPaneID: session.paneID
+        )
     }
 
     public static func browser(
@@ -588,12 +781,24 @@ public struct Tab: Codable, Equatable, Hashable, Sendable, Identifiable {
         url: URL,
         profile: BrowserDataProfile? = nil
     ) -> Tab {
-        Tab(id: id, content: .browser(BrowserSession(url: url, profile: profile)))
+        let session = BrowserSession(url: url, profile: profile)
+        return Tab(id: id, content: .browser(session), focusedPaneID: session.paneID)
     }
 
     public var isBrowser: Bool {
-        if case .browser = content { return true }
-        return false
+        focusedBrowserSession != nil
+    }
+
+    public var splitTree: SplitNode {
+        switch content {
+        case .terminal(let tree): return tree
+        case .browser(let session): return .browser(session)
+        }
+    }
+
+    public var focusedBrowserSession: BrowserSession? {
+        guard let focusedPaneID else { return nil }
+        return splitTree.browser(for: focusedPaneID)
     }
 
     public var terminalTree: SplitNode? {
@@ -611,29 +816,42 @@ public struct Tab: Codable, Equatable, Hashable, Sendable, Identifiable {
     internal mutating func repair() {
         guard case .terminal(let tree) = content else {
             focusedTerminalSessionID = nil
+            if case .browser(let browser) = content {
+                focusedPaneID = browser.paneID
+            }
             return
         }
 
         var usedIDs = Set<TerminalSessionID>()
+        var usedBrowserIDs = Set<BrowserSessionID>()
         var usedPaneIDs = Set<PaneID>()
         guard let repairedTree = tree.repaired(
             usedSessionIDs: &usedIDs,
+            usedBrowserIDs: &usedBrowserIDs,
             usedPaneIDs: &usedPaneIDs
         ) else {
             content = .terminal(.terminal(TerminalSession()))
             focusedTerminalSessionID = terminalTree?.terminalSessionIDs.first
+            focusedPaneID = terminalTree?.paneIDs.first
             return
         }
         content = .terminal(repairedTree)
-        if focusedTerminalSessionID.map({ repairedTree.contains($0) }) != true {
-            focusedTerminalSessionID = repairedTree.terminalSessionIDs.first
+        if focusedPaneID.map({ repairedTree.contains(paneID: $0) }) != true {
+            if let focusedTerminalSessionID,
+               let session = repairedTree.terminalSessions.first(where: { $0.id == focusedTerminalSessionID }) {
+                focusedPaneID = session.paneID
+            } else {
+                focusedPaneID = repairedTree.paneIDs.first
+            }
         }
+        focusedTerminalSessionID = focusedPaneID.flatMap { repairedTree.session(for: $0)?.id }
     }
 
     private enum CodingKeys: String, CodingKey {
         case id
         case content
         case focusedTerminalSessionID
+        case focusedPaneID
         case customTitle
     }
 
@@ -649,6 +867,7 @@ public struct Tab: Codable, Equatable, Hashable, Sendable, Identifiable {
         } catch {
             focusedTerminalSessionID = nil
         }
+        focusedPaneID = try? container.decodeIfPresent(PaneID.self, forKey: .focusedPaneID)
         customTitle = try? container.decodeIfPresent(String.self, forKey: .customTitle)
         repair()
     }

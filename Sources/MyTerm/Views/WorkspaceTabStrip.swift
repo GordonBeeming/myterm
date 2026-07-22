@@ -96,12 +96,7 @@ struct WorkspaceTabStrip: View {
             return customTitle
         }
 
-        switch tab.content {
-        case .terminal:
-            return "Terminal"
-        case .browser(let browser):
-            return browser.url.host ?? "Browser"
-        }
+        return tab.automaticDisplayTitle
     }
 }
 

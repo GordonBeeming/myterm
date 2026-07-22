@@ -498,6 +498,35 @@ public final class WorkspaceStore {
     }
 
     @discardableResult
+    public func insertBrowserPane(
+        workspaceID: WorkspaceID,
+        tabID: TabID,
+        beside paneID: PaneID,
+        url: URL,
+        profile: BrowserDataProfile? = nil,
+        orientation: SplitOrientation = .horizontal
+    ) throws -> BrowserSessionID {
+        let browser = BrowserSession(url: url, profile: profile)
+        try mutate { snapshot in
+            let (workspaceIndex, tabIndex) = try tabLocation(
+                workspaceID: workspaceID,
+                tabID: tabID,
+                in: snapshot
+            )
+            var tab = snapshot.workspaces[workspaceIndex].tabs[tabIndex]
+            var tree = tab.splitTree
+            guard tree.insert(.browser(browser), beside: paneID, orientation: orientation) else {
+                throw WorkspaceStoreError.paneNotFound(paneID)
+            }
+            tab.content = .terminal(tree)
+            tab.focusedPaneID = browser.paneID
+            tab.focusedTerminalSessionID = nil
+            snapshot.workspaces[workspaceIndex].tabs[tabIndex] = tab
+        }
+        return browser.id
+    }
+
+    @discardableResult
     public func closeTab(workspaceID: WorkspaceID, tabID: TabID) throws -> WorkspaceLifecycleChange {
         var removedWorkspace: Workspace?
         var replacementWorkspace: Workspace?
@@ -575,6 +604,7 @@ public final class WorkspaceStore {
             }
             tab.content = .terminal(tree)
             tab.focusedTerminalSessionID = newSession.id
+            tab.focusedPaneID = newSession.paneID
             snapshot.workspaces[workspaceIndex].tabs[tabIndex] = tab
         }
         return newSession.id
@@ -588,25 +618,24 @@ public final class WorkspaceStore {
         orientation: SplitOrientation,
         workingDirectory: URL? = nil
     ) throws -> PaneID {
-        let currentWorkspace = try workspace(workspaceID)
-        guard let tab = currentWorkspace.tabs.first(where: { $0.id == tabID }) else {
-            throw WorkspaceStoreError.tabNotFound(tabID)
+        let newSession = TerminalSession(workingDirectory: workingDirectory)
+        try mutate { snapshot in
+            let (workspaceIndex, tabIndex) = try tabLocation(
+                workspaceID: workspaceID,
+                tabID: tabID,
+                in: snapshot
+            )
+            var tab = snapshot.workspaces[workspaceIndex].tabs[tabIndex]
+            var tree = tab.splitTree
+            guard tree.insert(.terminal(newSession), beside: paneID, orientation: orientation) else {
+                throw WorkspaceStoreError.paneNotFound(paneID)
+            }
+            tab.content = .terminal(tree)
+            tab.focusedPaneID = newSession.paneID
+            tab.focusedTerminalSessionID = newSession.id
+            snapshot.workspaces[workspaceIndex].tabs[tabIndex] = tab
         }
-        guard case .terminal(let tree) = tab.content else {
-            throw WorkspaceStoreError.terminalTabRequired(tabID)
-        }
-        guard let session = tree.session(for: paneID) else {
-            throw WorkspaceStoreError.paneNotFound(paneID)
-        }
-        let sessionID = try splitTerminalPane(
-            workspaceID: workspaceID,
-            tabID: tabID,
-            sessionID: session.id,
-            orientation: orientation,
-            workingDirectory: workingDirectory
-        )
-        let updatedTab = try workspace(workspaceID).tabs.first { $0.id == tabID }
-        return try terminalPaneID(from: updatedTab, sessionID: sessionID)
+        return newSession.paneID
     }
 
     @discardableResult
@@ -615,46 +644,14 @@ public final class WorkspaceStore {
         tabID: TabID,
         sessionID: TerminalSessionID
     ) throws -> WorkspaceLifecycleChange {
-        var removedWorkspace: Workspace?
-        var replacementWorkspace: Workspace?
-        try mutate { snapshot in
-            let workspaceIndex = try workspaceIndex(workspaceID, in: snapshot)
-            guard let tabIndex = snapshot.workspaces[workspaceIndex].tabs.firstIndex(where: { $0.id == tabID }) else {
-                throw WorkspaceStoreError.tabNotFound(tabID)
-            }
-            guard case .terminal(let tree) = snapshot.workspaces[workspaceIndex].tabs[tabIndex].content else {
-                throw WorkspaceStoreError.terminalTabRequired(tabID)
-            }
-            guard tree.contains(sessionID) else {
-                throw WorkspaceStoreError.terminalSessionNotFound(sessionID)
-            }
-            if tree.terminalSessionIDs.count == 1 {
-                snapshot.workspaces[workspaceIndex].tabs.remove(at: tabIndex)
-                if snapshot.workspaces[workspaceIndex].tabs.isEmpty {
-                    removedWorkspace = snapshot.workspaces.remove(at: workspaceIndex)
-                    let wasOnlyWorkspace = snapshot.workspaces.isEmpty
-                    snapshot.repair()
-                    if wasOnlyWorkspace {
-                        replacementWorkspace = snapshot.workspaces.first
-                    }
-                } else {
-                    snapshot.workspaces[workspaceIndex].repair()
-                }
-                return
-            }
-            guard let collapsedTree = tree.removingTerminalSession(sessionID) else {
-                throw WorkspaceStoreError.invariantViolation(
-                    reason: "Terminal tree became empty while closing a non-final session."
-                )
-            }
-            snapshot.workspaces[workspaceIndex].tabs[tabIndex].content = .terminal(collapsedTree)
-            snapshot.workspaces[workspaceIndex].tabs[tabIndex].repair()
+        let workspace = try workspace(workspaceID)
+        guard let tab = workspace.tabs.first(where: { $0.id == tabID }) else {
+            throw WorkspaceStoreError.tabNotFound(tabID)
         }
-        return WorkspaceLifecycleChange(
-            removedWorkspace: removedWorkspace,
-            replacementWorkspace: replacementWorkspace,
-            selectedWorkspaceID: snapshot.selectedWorkspaceID
-        )
+        guard let session = tab.splitTree.terminalSessions.first(where: { $0.id == sessionID }) else {
+            throw WorkspaceStoreError.terminalSessionNotFound(sessionID)
+        }
+        return try closePane(workspaceID: workspaceID, tabID: tabID, paneID: session.paneID)
     }
 
     @discardableResult
@@ -667,13 +664,58 @@ public final class WorkspaceStore {
         guard let tab = workspace.tabs.first(where: { $0.id == tabID }) else {
             throw WorkspaceStoreError.tabNotFound(tabID)
         }
-        guard case .terminal(let tree) = tab.content else {
-            throw WorkspaceStoreError.terminalTabRequired(tabID)
-        }
+        let tree = tab.splitTree
         guard let session = tree.session(for: paneID) else {
             throw WorkspaceStoreError.paneNotFound(paneID)
         }
         return try closeTerminalPane(workspaceID: workspaceID, tabID: tabID, sessionID: session.id)
+    }
+
+    @discardableResult
+    public func closePane(
+        workspaceID: WorkspaceID,
+        tabID: TabID,
+        paneID: PaneID
+    ) throws -> WorkspaceLifecycleChange {
+        var removedWorkspace: Workspace?
+        var replacementWorkspace: Workspace?
+        try mutate { snapshot in
+            let workspaceIndex = try workspaceIndex(workspaceID, in: snapshot)
+            guard let tabIndex = snapshot.workspaces[workspaceIndex].tabs.firstIndex(where: { $0.id == tabID }) else {
+                throw WorkspaceStoreError.tabNotFound(tabID)
+            }
+            let tab = snapshot.workspaces[workspaceIndex].tabs[tabIndex]
+            let tree = tab.splitTree
+            guard tree.contains(paneID: paneID) else {
+                throw WorkspaceStoreError.paneNotFound(paneID)
+            }
+            if tree.paneIDs.count == 1 {
+                snapshot.workspaces[workspaceIndex].tabs.remove(at: tabIndex)
+                if snapshot.workspaces[workspaceIndex].tabs.isEmpty {
+                    removedWorkspace = snapshot.workspaces.remove(at: workspaceIndex)
+                    let wasOnlyWorkspace = snapshot.workspaces.isEmpty
+                    snapshot.repair()
+                    if wasOnlyWorkspace { replacementWorkspace = snapshot.workspaces.first }
+                } else {
+                    snapshot.workspaces[workspaceIndex].repair()
+                }
+                return
+            }
+            guard let collapsedTree = tree.removingPane(paneID) else {
+                throw WorkspaceStoreError.invariantViolation(
+                    reason: "Pane tree became empty while closing a non-final pane."
+                )
+            }
+            var updatedTab = tab
+            updatedTab.content = .terminal(collapsedTree)
+            updatedTab.repair()
+            snapshot.workspaces[workspaceIndex].tabs[tabIndex] = updatedTab
+        }
+        return WorkspaceLifecycleChange(
+            removedWorkspace: removedWorkspace,
+            replacementWorkspace: replacementWorkspace,
+            selectedWorkspaceID: snapshot.selectedWorkspaceID
+        )
     }
 
     public func focusTerminalPane(
@@ -695,6 +737,7 @@ public final class WorkspaceStore {
                 throw WorkspaceStoreError.terminalSessionNotFound(sessionID)
             }
             tab.focusedTerminalSessionID = sessionID
+            tab.focusedPaneID = tree.terminalSessions.first(where: { $0.id == sessionID })?.paneID
             snapshot.workspaces[workspaceIndex].tabs[tabIndex] = tab
         }
     }
@@ -713,7 +756,7 @@ public final class WorkspaceStore {
         try focusTerminalPane(workspaceID: workspaceID, tabID: tabID, sessionID: session.id)
     }
 
-    public func updateBrowserURL(workspaceID: WorkspaceID, tabID: TabID, url: URL) throws {
+    public func focusPane(workspaceID: WorkspaceID, tabID: TabID, paneID: PaneID) throws {
         try mutate { snapshot in
             let (workspaceIndex, tabIndex) = try tabLocation(
                 workspaceID: workspaceID,
@@ -721,11 +764,39 @@ public final class WorkspaceStore {
                 in: snapshot
             )
             var tab = snapshot.workspaces[workspaceIndex].tabs[tabIndex]
-            guard case .browser(var session) = tab.content else {
+            let tree = tab.splitTree
+            guard tree.contains(paneID: paneID) else {
+                throw WorkspaceStoreError.paneNotFound(paneID)
+            }
+            tab.focusedPaneID = paneID
+            tab.focusedTerminalSessionID = tree.session(for: paneID)?.id
+            snapshot.workspaces[workspaceIndex].tabs[tabIndex] = tab
+        }
+    }
+
+    public func updateBrowserURL(
+        workspaceID: WorkspaceID,
+        tabID: TabID,
+        browserID: BrowserSessionID? = nil,
+        url: URL
+    ) throws {
+        try mutate { snapshot in
+            let (workspaceIndex, tabIndex) = try tabLocation(
+                workspaceID: workspaceID,
+                tabID: tabID,
+                in: snapshot
+            )
+            var tab = snapshot.workspaces[workspaceIndex].tabs[tabIndex]
+            var tree = tab.splitTree
+            guard let targetID = browserID ?? tree.browserSessionIDs.first,
+                  tree.updateBrowserURL(url, for: targetID) else {
                 throw WorkspaceStoreError.browserTabRequired(tabID)
             }
-            session.url = url
-            tab.content = .browser(session)
+            if case .browser = tab.content, let browser = tree.browser(id: targetID) {
+                tab.content = .browser(browser)
+            } else {
+                tab.content = .terminal(tree)
+            }
             snapshot.workspaces[workspaceIndex].tabs[tabIndex] = tab
         }
     }
@@ -733,6 +804,7 @@ public final class WorkspaceStore {
     public func updateBrowserDataProfile(
         workspaceID: WorkspaceID,
         tabID: TabID,
+        browserID: BrowserSessionID? = nil,
         profile: BrowserDataProfile?
     ) throws {
         try mutate { snapshot in
@@ -742,17 +814,27 @@ public final class WorkspaceStore {
                 in: snapshot
             )
             var tab = snapshot.workspaces[workspaceIndex].tabs[tabIndex]
-            guard case .browser(var session) = tab.content else {
+            var tree = tab.splitTree
+            guard let targetID = browserID ?? tree.browserSessionIDs.first,
+                  tree.updateBrowserDataProfile(profile, for: targetID) else {
                 throw WorkspaceStoreError.browserTabRequired(tabID)
             }
-            session.profile = profile
-            tab.content = .browser(session)
+            if case .browser = tab.content, let browser = tree.browser(id: targetID) {
+                tab.content = .browser(browser)
+            } else {
+                tab.content = .terminal(tree)
+            }
             snapshot.workspaces[workspaceIndex].tabs[tabIndex] = tab
         }
     }
 
     public func updateBrowserDataProfiles(
-        _ updates: [(workspaceID: WorkspaceID, tabID: TabID, profile: BrowserDataProfile)]
+        _ updates: [(
+            workspaceID: WorkspaceID,
+            tabID: TabID,
+            browserID: BrowserSessionID,
+            profile: BrowserDataProfile
+        )]
     ) throws {
         guard !updates.isEmpty else { return }
         try mutate { snapshot in
@@ -763,11 +845,15 @@ public final class WorkspaceStore {
                     in: snapshot
                 )
                 var tab = snapshot.workspaces[workspaceIndex].tabs[tabIndex]
-                guard case .browser(var session) = tab.content else {
+                var tree = tab.splitTree
+                guard tree.updateBrowserDataProfile(update.profile, for: update.browserID) else {
                     throw WorkspaceStoreError.browserTabRequired(update.tabID)
                 }
-                session.profile = update.profile
-                tab.content = .browser(session)
+                if case .browser = tab.content, let browser = tree.browser(id: update.browserID) {
+                    tab.content = .browser(browser)
+                } else {
+                    tab.content = .terminal(tree)
+                }
                 snapshot.workspaces[workspaceIndex].tabs[tabIndex] = tab
             }
         }
