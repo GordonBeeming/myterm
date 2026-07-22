@@ -334,7 +334,7 @@ private struct BrowserTabView: View {
                     .padding(.bottom, 6)
                     .accessibilityLabel("Browser error: \(error)")
             }
-            BrowserSessionView(session: controller)
+            BrowserSessionView(session: controller, isActive: isFocused)
                 .simultaneousGesture(
                     TapGesture().onEnded {
                         model.focusPane(workspaceID: workspaceID, tabID: tabID, paneID: paneID)
@@ -354,6 +354,10 @@ private struct BrowserTabView: View {
                 browserID: browserID
             )
         }
+    }
+
+    private var isFocused: Bool {
+        model.selectedTab?.focusedPaneID == paneID
     }
 
 }

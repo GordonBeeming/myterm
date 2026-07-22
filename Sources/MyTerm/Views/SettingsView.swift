@@ -349,6 +349,24 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("File links") {
+                ScopedSettingRow(
+                    model: model,
+                    scope: scope,
+                    title: "Open Markdown files with",
+                    global: \TerminalPreferences.markdownOpenCommand,
+                    override: \TerminalPreferencesOverrides.markdownOpenCommand
+                ) { value in
+                    TextField("Command", text: value)
+                        .frame(width: 260)
+                        .accessibilityLabel("Command for opening Markdown files")
+                }
+
+                Text("Use {file} where the quoted file path should be inserted. If it is omitted, MyTerm appends the file path. Leave the command empty to open Markdown directly in MyTerm's browser.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Passkeys") {
                 Text(passkeyDescription)
                     .font(.footnote)

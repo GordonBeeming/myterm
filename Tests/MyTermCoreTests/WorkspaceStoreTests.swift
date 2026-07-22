@@ -54,6 +54,8 @@ final class WorkspaceStoreTests: XCTestCase {
 
         try store.setWorkspacePinned(firstWorkID, isPinned: true)
         try store.setWorkspacePinned(secondWorkID, isPinned: true)
+        try store.setWorkspaceEmoji(firstWorkID, emoji: "  🚨  ")
+        try store.setWorkspaceColor(firstWorkID, color: .orange)
         try store.moveWorkspace(secondWorkID, to: workFolderID, before: firstWorkID)
         try store.setFolderExpanded(workFolderID, isExpanded: false)
 
@@ -64,6 +66,14 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(restored.workspaces.map(\.id), [unfiledWorkspaceID, secondWorkID, firstWorkID])
         XCTAssertTrue(try XCTUnwrap(restored.workspaces.first { $0.id == secondWorkID }).isPinned)
         XCTAssertEqual(restored.workspaces.first { $0.id == firstWorkID }?.folderID, workFolderID)
+        XCTAssertEqual(restored.workspaces.first { $0.id == firstWorkID }?.emoji, "🚨")
+        XCTAssertEqual(restored.workspaces.first { $0.id == firstWorkID }?.color, .orange)
+
+        try restored.setWorkspaceEmoji(firstWorkID, emoji: "  ")
+        try restored.setWorkspaceColor(firstWorkID, color: nil)
+        let cleared = try WorkspaceStore(persistenceURL: url)
+        XCTAssertNil(cleared.workspaces.first { $0.id == firstWorkID }?.emoji)
+        XCTAssertNil(cleared.workspaces.first { $0.id == firstWorkID }?.color)
     }
 
     func testFolderMovesBeforeAndToEndPersistAfterReload() throws {
@@ -291,6 +301,8 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertTrue(store.folders.isEmpty)
         XCTAssertNil(store.selectedWorkspace.folderID)
         XCTAssertFalse(store.selectedWorkspace.isPinned)
+        XCTAssertNil(store.selectedWorkspace.emoji)
+        XCTAssertNil(store.selectedWorkspace.color)
     }
 
     func testTerminalSplittingClosingAndFocusPersist() throws {
@@ -517,6 +529,7 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(snapshot.globalSettings.terminalTheme, .system)
         XCTAssertEqual(snapshot.globalSettings.terminalAppearance, .system)
         XCTAssertEqual(snapshot.globalSettings.shell, .loginShell)
+        XCTAssertEqual(snapshot.globalSettings.markdownOpenCommand, TerminalPreferences.defaultMarkdownOpenCommand)
     }
 
     func testLegacySnapshotDefaultsSettingsOverridesTitlesAndRecentText() throws {

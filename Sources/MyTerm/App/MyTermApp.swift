@@ -52,6 +52,10 @@ final class MyTermApplicationDelegate: NSObject, NSApplicationDelegate {
         true
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        model?.shouldTerminateApplication() == false ? .terminateCancel : .terminateNow
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         model?.persistTerminalSnapshots()
     }

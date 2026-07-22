@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import Foundation
 @preconcurrency import SwiftTerm
 import UniformTypeIdentifiers
@@ -16,6 +17,27 @@ public final class SwiftTermTerminalEngine: TerminalEngine {
 public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
     public private(set) var isRunning = false
     public var onEvent: (@MainActor (TerminalSessionEvent) -> Void)?
+
+    public var activeForegroundProcessName: String? {
+        guard isRunning,
+              terminal.process.childfd >= 0,
+              terminal.process.shellPid > 0 else { return nil }
+        let foregroundProcessGroup = tcgetpgrp(terminal.process.childfd)
+        let shellProcessGroup = getpgid(terminal.process.shellPid)
+        guard foregroundProcessGroup > 0,
+              shellProcessGroup > 0,
+              foregroundProcessGroup != shellProcessGroup else { return nil }
+
+        var name = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+        let length = name.withUnsafeMutableBytes { buffer in
+            proc_name(foregroundProcessGroup, buffer.baseAddress, UInt32(buffer.count))
+        }
+        guard length > 0 else { return "another process" }
+        return String(
+            decoding: name.prefix(Int(length)).map { UInt8(bitPattern: $0) },
+            as: UTF8.self
+        )
+    }
 
     private let configuration: TerminalSessionConfiguration
     private let terminal: MyTermLocalProcessTerminalView
@@ -118,6 +140,13 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
     public func terminate() {
         guard isRunning else { return }
         stopWorkingDirectoryPolling()
+        let foregroundProcessGroup = tcgetpgrp(terminal.process.childfd)
+        let shellProcessGroup = getpgid(terminal.process.shellPid)
+        if foregroundProcessGroup > 0,
+           shellProcessGroup > 0,
+           foregroundProcessGroup != shellProcessGroup {
+            _ = kill(-foregroundProcessGroup, SIGHUP)
+        }
         terminal.terminate()
     }
 

@@ -36,6 +36,8 @@ MyTerm exposes its shortcuts through native macOS menus. Pane and navigation key
 | Focus pane left / right | <kbd>⌥⌘←</kbd> / <kbd>⌥⌘→</kbd> |
 | Focus pane up / down | <kbd>⌥⌘↑</kbd> / <kbd>⌥⌘↓</kbd> |
 
+Closing a pane, tab, or workspace asks for confirmation when it would terminate a foreground process. Quitting with <kbd>⌘Q</kbd> checks every terminal in the app; idle shells do not trigger the warning.
+
 When a terminal pane has focus, MyTerm also handles the text-editing keys below. Apps that enable the Kitty keyboard protocol keep their enhanced key reporting.
 
 | Action | Shortcut |
@@ -45,4 +47,4 @@ When a terminal pane has focus, MyTerm also handles the text-editing keys below.
 | Move to the start / end of the line | <kbd>⌘←</kbd> / <kbd>⌘→</kbd> |
 | Move to the start / end of the editable text | <kbd>⌘↑</kbd> / <kbd>⌘↓</kbd> |
 
-Folder colors, pinning, moving, renaming, and closing are also available from each folder or workspace context menu.
+Folder colors and workspace emoji prefixes, background colors, pinning, moving, renaming, and closing are available from the relevant sidebar context menu. Returning to a workspace restores keyboard focus to the pane that was focused there most recently.

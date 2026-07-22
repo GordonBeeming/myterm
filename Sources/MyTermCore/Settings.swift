@@ -110,10 +110,12 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
     public static let defaultFontPostScriptName = "Menlo-Regular"
     public static let defaultFontSize = 12.0
     public static let defaultScrollbackLines = 10_000
+    public static let defaultMarkdownOpenCommand = "ide browse {file}"
     public static let fontSizeRange = 6.0...72.0
     public static let scrollbackLinesRange = 100...100_000
 
     public var browserDataScope: BrowserDataScope
+    public var markdownOpenCommand: String
     public var compactSidebar: Bool
     public var fontPostScriptName: String
     public var fontSize: Double
@@ -128,6 +130,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
 
     public init(
         browserDataScope: BrowserDataScope = .workspace,
+        markdownOpenCommand: String = TerminalPreferences.defaultMarkdownOpenCommand,
         compactSidebar: Bool = true,
         fontPostScriptName: String = TerminalPreferences.defaultFontPostScriptName,
         fontSize: Double = TerminalPreferences.defaultFontSize,
@@ -141,6 +144,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         optionAsMeta: Bool = true
     ) {
         self.browserDataScope = browserDataScope
+        self.markdownOpenCommand = markdownOpenCommand.trimmingCharacters(in: .whitespacesAndNewlines)
         self.compactSidebar = compactSidebar
         self.fontPostScriptName = Self.validatedFontName(fontPostScriptName)
         self.fontSize = Self.clampedFontSize(fontSize)
@@ -159,6 +163,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
     public func normalized() -> TerminalPreferences {
         TerminalPreferences(
             browserDataScope: browserDataScope,
+            markdownOpenCommand: markdownOpenCommand,
             compactSidebar: compactSidebar,
             fontPostScriptName: fontPostScriptName,
             fontSize: fontSize,
@@ -175,6 +180,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case browserDataScope
+        case markdownOpenCommand
         case compactSidebar
         case fontPostScriptName
         case fontSize
@@ -192,6 +198,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
             browserDataScope: (try? container.decode(BrowserDataScope.self, forKey: .browserDataScope)) ?? .workspace,
+            markdownOpenCommand: (try? container.decode(String.self, forKey: .markdownOpenCommand)) ?? Self.defaultMarkdownOpenCommand,
             compactSidebar: (try? container.decode(Bool.self, forKey: .compactSidebar)) ?? true,
             fontPostScriptName: (try? container.decode(String.self, forKey: .fontPostScriptName)) ?? Self.defaultFontPostScriptName,
             fontSize: (try? container.decode(Double.self, forKey: .fontSize)) ?? Self.defaultFontSize,
@@ -223,6 +230,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
 
 public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendable {
     public var browserDataScope: BrowserDataScope?
+    public var markdownOpenCommand: String?
     public var compactSidebar: Bool?
     public var fontPostScriptName: String?
     public var fontSize: Double?
@@ -239,6 +247,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
 
     private enum CodingKeys: String, CodingKey {
         case browserDataScope
+        case markdownOpenCommand
         case compactSidebar
         case fontPostScriptName
         case fontSize
@@ -256,6 +265,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         self.init()
         let container = try decoder.container(keyedBy: CodingKeys.self)
         browserDataScope = try? container.decodeIfPresent(BrowserDataScope.self, forKey: .browserDataScope)
+        markdownOpenCommand = try? container.decodeIfPresent(String.self, forKey: .markdownOpenCommand)
         compactSidebar = try? container.decodeIfPresent(Bool.self, forKey: .compactSidebar)
         fontPostScriptName = try? container.decodeIfPresent(String.self, forKey: .fontPostScriptName)
         fontSize = try? container.decodeIfPresent(Double.self, forKey: .fontSize)
@@ -272,6 +282,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
     public func applying(to base: TerminalPreferences) -> TerminalPreferences {
         TerminalPreferences(
             browserDataScope: browserDataScope ?? base.browserDataScope,
+            markdownOpenCommand: markdownOpenCommand ?? base.markdownOpenCommand,
             compactSidebar: compactSidebar ?? base.compactSidebar,
             fontPostScriptName: fontPostScriptName ?? base.fontPostScriptName,
             fontSize: fontSize ?? base.fontSize,

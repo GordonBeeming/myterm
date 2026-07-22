@@ -873,7 +873,7 @@ public struct Tab: Codable, Equatable, Hashable, Sendable, Identifiable {
     }
 }
 
-public enum WorkspaceFolderColor: String, Codable, CaseIterable, Equatable, Hashable, Sendable {
+public enum WorkspaceColor: String, Codable, CaseIterable, Equatable, Hashable, Sendable {
     case red
     case orange
     case yellow
@@ -885,6 +885,8 @@ public enum WorkspaceFolderColor: String, Codable, CaseIterable, Equatable, Hash
     case pink
     case gray
 }
+
+public typealias WorkspaceFolderColor = WorkspaceColor
 
 public struct WorkspaceFolder: Codable, Equatable, Hashable, Sendable, Identifiable {
     public let id: WorkspaceFolderID
@@ -911,6 +913,8 @@ public struct WorkspaceFolder: Codable, Equatable, Hashable, Sendable, Identifia
 public struct Workspace: Codable, Equatable, Hashable, Sendable, Identifiable {
     public let id: WorkspaceID
     public var title: String
+    public var emoji: String?
+    public var color: WorkspaceColor?
     public var tabs: [Tab]
     public var selectedTabID: TabID?
     public var folderID: WorkspaceFolderID?
@@ -920,6 +924,8 @@ public struct Workspace: Codable, Equatable, Hashable, Sendable, Identifiable {
     public init(
         id: WorkspaceID = WorkspaceID(),
         title: String,
+        emoji: String? = nil,
+        color: WorkspaceColor? = nil,
         tabs: [Tab] = [],
         selectedTabID: TabID? = nil,
         folderID: WorkspaceFolderID? = nil,
@@ -928,6 +934,8 @@ public struct Workspace: Codable, Equatable, Hashable, Sendable, Identifiable {
     ) {
         self.id = id
         self.title = title
+        self.emoji = emoji
+        self.color = color
         self.tabs = tabs
         self.selectedTabID = selectedTabID
         self.folderID = folderID
@@ -939,6 +947,8 @@ public struct Workspace: Codable, Equatable, Hashable, Sendable, Identifiable {
     public init(
         id: WorkspaceID = WorkspaceID(),
         title: String,
+        emoji: String? = nil,
+        color: WorkspaceColor? = nil,
         folderID: WorkspaceFolderID? = nil,
         isPinned: Bool = false,
         settingsOverrides: TerminalPreferencesOverrides? = nil
@@ -947,6 +957,8 @@ public struct Workspace: Codable, Equatable, Hashable, Sendable, Identifiable {
         self.init(
             id: id,
             title: title,
+            emoji: emoji,
+            color: color,
             tabs: [tab],
             selectedTabID: tab.id,
             folderID: folderID,
@@ -958,6 +970,11 @@ public struct Workspace: Codable, Equatable, Hashable, Sendable, Identifiable {
     public var selectedTab: Tab? {
         guard let selectedTabID else { return nil }
         return tabs.first { $0.id == selectedTabID }
+    }
+
+    public var displayTitle: String {
+        guard let emoji, !emoji.isEmpty else { return title }
+        return "\(emoji) \(title)"
     }
 
     internal mutating func repair() {
@@ -978,6 +995,8 @@ public struct Workspace: Codable, Equatable, Hashable, Sendable, Identifiable {
     private enum CodingKeys: String, CodingKey {
         case id
         case title
+        case emoji
+        case color
         case tabs
         case selectedTabID
         case folderID
@@ -989,6 +1008,8 @@ public struct Workspace: Codable, Equatable, Hashable, Sendable, Identifiable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(WorkspaceID.self, forKey: .id)
         title = try container.decode(String.self, forKey: .title)
+        emoji = try? container.decodeIfPresent(String.self, forKey: .emoji)
+        color = try? container.decodeIfPresent(WorkspaceColor.self, forKey: .color)
         tabs = try container.decodeIfPresent(LossyArray<Tab>.self, forKey: .tabs)?.elements ?? []
         do {
             selectedTabID = try container.decodeIfPresent(TabID.self, forKey: .selectedTabID)
