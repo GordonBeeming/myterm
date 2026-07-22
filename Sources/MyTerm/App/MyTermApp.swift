@@ -33,7 +33,18 @@ struct MyTermApp: App {
 @MainActor
 final class MyTermApplicationDelegate: NSObject, NSApplicationDelegate {
     private let urlDispatcher = MyTermURLDispatcher()
+    private let restoreWindowAfterCancelledTermination: @MainActor (NSApplication) -> Void
     private weak var model: AppModel?
+
+    override init() {
+        restoreWindowAfterCancelledTermination = Self.restoreMainWindow
+        super.init()
+    }
+
+    init(restoreWindowAfterCancelledTermination: @escaping @MainActor (NSApplication) -> Void) {
+        self.restoreWindowAfterCancelledTermination = restoreWindowAfterCancelledTermination
+        super.init()
+    }
 
     func connect(model: AppModel?) {
         self.model = model
@@ -53,7 +64,11 @@ final class MyTermApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        model?.shouldTerminateApplication() == false ? .terminateCancel : .terminateNow
+        guard model?.shouldTerminateApplication() != false else {
+            restoreWindowAfterCancelledTermination(sender)
+            return .terminateCancel
+        }
+        return .terminateNow
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -63,6 +78,16 @@ final class MyTermApplicationDelegate: NSObject, NSApplicationDelegate {
     func application(_ application: NSApplication, open urls: [URL]) {
         urlDispatcher.dispatch(urls)
         application.activate(ignoringOtherApps: true)
+    }
+
+    private static func restoreMainWindow(_ application: NSApplication) {
+        Task { @MainActor in
+            guard let window = application.windows.first(where: { $0.canBecomeMain && !($0 is NSPanel) }) else {
+                return
+            }
+            window.makeKeyAndOrderFront(nil)
+            application.activate(ignoringOtherApps: true)
+        }
     }
 }
 

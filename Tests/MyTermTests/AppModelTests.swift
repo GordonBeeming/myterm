@@ -40,6 +40,32 @@ final class AppModelTests: XCTestCase {
         )
     }
 
+    func testCancelledApplicationTerminationRestoresTheMainWindow() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let confirmation = CloseConfirmationRecorder()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true,
+            confirmClosingActiveProcesses: confirmation.confirm
+        )
+        try XCTUnwrap(engine.sessions.first).activeForegroundProcessName = "claude"
+        var restoredApplication: NSApplication?
+        let delegate = MyTermApplicationDelegate { application in
+            restoredApplication = application
+        }
+        delegate.connect(model: model)
+
+        let reply = delegate.applicationShouldTerminate(NSApplication.shared)
+
+        XCTAssertEqual(reply, .terminateCancel)
+        XCTAssertTrue(restoredApplication === NSApplication.shared)
+        XCTAssertEqual(confirmation.prompts.last?.confirmButtonTitle, "Quit")
+    }
+
     func testChannelsUseSeparateNamesBundleIdentifiersAndPersistencePaths() {
         let supportDirectory = URL(fileURLWithPath: "/tmp/myterm-tests", isDirectory: true)
 
