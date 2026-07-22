@@ -1,3 +1,4 @@
+import AppKit
 @preconcurrency import WebKit
 import Foundation
 import MyTermCore
@@ -47,6 +48,13 @@ public final class BrowserSessionController: NSObject, ObservableObject {
     }
 
     public init(configuration: WKWebViewConfiguration) {
+        if #available(macOS 15.0, *) {
+            // WebKit's macOS header hides this public property when the deployment target is below 15.
+            configuration.setValue(
+                NSWritingToolsBehavior.none.rawValue,
+                forKey: "writingToolsBehavior"
+            )
+        }
         webView = WKWebView(frame: .zero, configuration: configuration)
         super.init()
 

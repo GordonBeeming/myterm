@@ -32,7 +32,7 @@ cask "myterm" do
   desc "Native macOS workspaces for terminal and browser tabs"
   homepage "https://github.com/GordonBeeming/myterm"
 
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
   depends_on arch: :arm64
 
   app "myterm.app"

@@ -1,3 +1,4 @@
+import AppKit
 @preconcurrency import WebKit
 import MyTermCore
 @testable import MyTermPlatform
@@ -5,6 +6,17 @@ import XCTest
 
 @MainActor
 final class BrowserSessionControllerTests: XCTestCase {
+    func testWritingToolsOverlayIsDisabled() {
+        let controller = BrowserSessionController()
+
+        if #available(macOS 15.0, *) {
+            XCTAssertEqual(
+                controller.webView.configuration.value(forKey: "writingToolsBehavior") as? Int,
+                NSWritingToolsBehavior.none.rawValue
+            )
+        }
+    }
+
     func testProfileIdentifierIsInstalledOnWebViewConfiguration() {
         let identifier = UUID()
         let controller = BrowserSessionController(
