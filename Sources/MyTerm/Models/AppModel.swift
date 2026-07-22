@@ -1280,7 +1280,7 @@ final class AppModel {
     }
 
     private func defaultTitle(for tab: Tab) -> String {
-        tab.focusedBrowserSession?.url.host ?? "Terminal"
+        tab.automaticDisplayTitle
     }
 
     private static func shellQuote(_ value: String) -> String {

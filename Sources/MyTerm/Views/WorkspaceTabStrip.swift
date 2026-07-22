@@ -96,7 +96,7 @@ struct WorkspaceTabStrip: View {
             return customTitle
         }
 
-        return tab.focusedBrowserSession?.url.host ?? "Terminal"
+        return tab.automaticDisplayTitle
     }
 }
 

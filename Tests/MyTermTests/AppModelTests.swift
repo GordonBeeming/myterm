@@ -630,6 +630,22 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(model.selectedTab?.customTitle)
     }
 
+    func testHostlessBrowserPaneUsesBrowserAsItsAutomaticTitle() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let fileURL = directory.appending(path: "review.html")
+        let tabID = try model.store.addBrowserTab(
+            to: model.store.selectedWorkspaceID,
+            url: fileURL
+        )
+
+        XCTAssertEqual(model.selectedTab?.automaticDisplayTitle, "Browser")
+        model.beginRenamingSelectedTab()
+        XCTAssertEqual(model.tabBeingRenamedID, tabID)
+        XCTAssertEqual(model.tabRenameDraft, "Browser")
+    }
+
     func testClosingFinalTabTerminatesItsSessionAndStartsTheReplacementWorkspace() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
