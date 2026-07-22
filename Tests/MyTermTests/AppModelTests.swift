@@ -923,6 +923,10 @@ final class AppModelTests: XCTestCase {
             startsTerminalProcesses: true,
             markdownOpenCommandRunner: { _, _, _ in
                 throw MarkdownLauncherTestError.launchFailed
+            },
+            markdownOpenCommandAvailabilityChecker: { executable in
+                XCTAssertEqual(executable, "ide")
+                return true
             }
         )
         let initialTabCount = model.selectedWorkspace.tabs.count
