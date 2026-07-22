@@ -144,8 +144,8 @@ private final class SelectingTextField: NSTextField {
         initialFirstResponderRequest.requestIfNeeded(isAttachedToWindow: window != nil) { [weak self] in
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                window?.makeFirstResponder(self)
-                selectText(nil)
+                self.window?.makeFirstResponder(self)
+                self.selectText(nil)
             }
         }
     }
