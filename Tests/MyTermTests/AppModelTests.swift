@@ -151,6 +151,17 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.selectedTab?.splitTree.paneIDs.count, 2)
         XCTAssertEqual(engine.sessions.count, 2)
 
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 200),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = controller.webView
+        window.makeFirstResponder(nil)
+        model.focusPane(workspaceID: model.store.selectedWorkspaceID, tabID: tabID, paneID: browser.paneID)
+        XCTAssertTrue(window.firstResponder === controller.webView)
+
         controller.webViewDidClose(controller.webView)
 
         XCTAssertEqual(model.selectedTab?.id, tabID)

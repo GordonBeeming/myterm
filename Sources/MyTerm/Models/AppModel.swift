@@ -717,6 +717,10 @@ final class AppModel {
             if let tab = tab(workspaceID: workspaceID, tabID: tabID),
                let session = tab.splitTree.session(for: paneID) {
                 terminalSessions[session.id]?.focus()
+            } else if let tab = tab(workspaceID: workspaceID, tabID: tabID),
+                      let browser = tab.splitTree.browser(for: paneID),
+                      let webView = browserControllers[browser.id]?.webView {
+                webView.window?.makeFirstResponder(webView)
             }
         }
     }
