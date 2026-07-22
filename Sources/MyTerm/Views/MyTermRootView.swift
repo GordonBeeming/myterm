@@ -211,6 +211,7 @@ private struct WorkspaceContentView: View {
 
 private struct WorkspaceSidebar: View {
     @Bindable var model: AppModel
+    @State private var isUnfiledDropTargeted = false
 
     private var ungroupedWorkspaces: [Workspace] {
         ordered(model.workspaces.filter { $0.folderID == nil })
@@ -291,6 +292,23 @@ private struct WorkspaceSidebar: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
             .background(.bar)
+            .overlay {
+                if isUnfiledDropTargeted {
+                    Label("Move to Unfiled", systemImage: "tray")
+                        .font(.callout)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(.regularMaterial, in: Capsule())
+                }
+            }
+            .dropDestination(for: WorkspaceSidebarDragItem.self) { items, _ in
+                guard let sourceID = items.first?.id,
+                      model.workspaces.contains(where: { $0.id == sourceID }) else { return false }
+                model.moveWorkspace(sourceID, to: nil)
+                return true
+            } isTargeted: {
+                isUnfiledDropTargeted = $0
+            }
         }
     }
 
