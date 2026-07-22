@@ -111,6 +111,6 @@ The app and its disk image therefore each have their own validated distribution 
 
 - macOS only; downloadable builds are Apple silicon only.
 - One main window and one built-in WebKit engine.
-- Browser tabs do not split in the first release.
+- Terminal and browser panes share the same persistent split layout.
 - Chromium remains an optional future download so the main app stays small.
 - Passkey pass-through requires Apple's managed entitlement before it can be enabled in distribution.
