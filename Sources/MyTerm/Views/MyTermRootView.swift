@@ -226,7 +226,6 @@ private struct WorkspaceSidebar: View {
                             rowHeight: sidebarRowHeight
                         )
                     }
-                    WorkspaceEndDropTarget(model: model, folderID: folder.id, label: "End of \(folder.title)")
                 } label: {
                     WorkspaceFolderRow(
                         model: model,
@@ -237,15 +236,16 @@ private struct WorkspaceSidebar: View {
                 }
             }
 
-            Section("Unfiled") {
-                ForEach(ungroupedWorkspaces) { workspace in
-                    WorkspaceSidebarRow(
-                        model: model,
-                        workspace: workspace,
-                        rowHeight: sidebarRowHeight
-                    )
+            if !ungroupedWorkspaces.isEmpty {
+                Section("Unfiled") {
+                    ForEach(ungroupedWorkspaces) { workspace in
+                        WorkspaceSidebarRow(
+                            model: model,
+                            workspace: workspace,
+                            rowHeight: sidebarRowHeight
+                        )
+                    }
                 }
-                WorkspaceEndDropTarget(model: model, folderID: nil, label: "End of Unfiled")
             }
         }
         .listStyle(.sidebar)
@@ -528,38 +528,6 @@ private struct WorkspaceFolderRow: View {
                 : nil
         }
         model.moveFolder(folder.id, before: targetID)
-    }
-}
-
-private struct WorkspaceEndDropTarget: View {
-    let model: AppModel
-    let folderID: WorkspaceFolderID?
-    let label: String
-
-    @State private var isDropTargeted = false
-
-    var body: some View {
-        Color.clear
-            .frame(height: 8)
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(Color.accentColor)
-                    .frame(height: 2)
-                    .padding(.horizontal, 8)
-                    .opacity(isDropTargeted ? 1 : 0)
-            }
-            .accessibilityHidden(true)
-            .dropDestination(for: SidebarDragItem.self) { items, _ in
-                guard let sourceID = workspaceID(from: items),
-                      model.workspaces.contains(where: { $0.id == sourceID }) else {
-                    return false
-                }
-                model.moveWorkspace(sourceID, to: folderID, before: nil)
-                return true
-            } isTargeted: {
-                isDropTargeted = $0
-            }
-            .help(label)
     }
 }
 
