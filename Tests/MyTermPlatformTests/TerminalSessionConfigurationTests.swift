@@ -2,6 +2,10 @@ import AppKit
 import XCTest
 @testable import MyTermPlatform
 
+private final class FocusableTerminalTestView: NSView {
+    override var acceptsFirstResponder: Bool { true }
+}
+
 final class TerminalSessionConfigurationTests: XCTestCase {
     @MainActor
     func testForegroundProcessDetectionIgnoresIdleShellAndFindsActiveJob() async throws {
@@ -282,8 +286,8 @@ final class TerminalSessionConfigurationTests: XCTestCase {
             backing: .buffered,
             defer: false
         )
-        let originalTerminal = NSView(frame: .zero)
-        let replacementTerminal = NSView(frame: .zero)
+        let originalTerminal = FocusableTerminalTestView(frame: .zero)
+        let replacementTerminal = FocusableTerminalTestView(frame: .zero)
         let host = TerminalSessionHostView(contentView: originalTerminal)
         window.contentView = host
 
