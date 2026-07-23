@@ -22,9 +22,8 @@ struct PaneGroupView: View {
                 )
             }
             .overlay {
-                if let dropEdge {
-                    let previewFrame = PaneTabDropPreviewFrame.frame(for: dropEdge, in: proxy.size)
-                    edgePreview
+                if let previewFrame = dropPreviewFrame(in: proxy.size) {
+                    dropPreview
                         .frame(width: previewFrame.width, height: previewFrame.height)
                         .position(x: previewFrame.midX, y: previewFrame.midY)
                 }
@@ -66,13 +65,18 @@ struct PaneGroupView: View {
         return workspace.id == workspaceID && workspace.focusedTabGroupID == group.id
     }
 
-    private var dropEdge: PaneEdge? {
-        guard case .paneBody(let tabGroupID, let edge) = model.paneTabDragPreviewTarget,
-              tabGroupID == group.id else { return nil }
-        return edge
+    private func dropPreviewFrame(in size: CGSize) -> CGRect? {
+        switch model.paneTabDragPreviewTarget {
+        case .paneCenter(let tabGroupID) where tabGroupID == group.id:
+            PaneTabDropPreviewFrame.centerFrame(in: size)
+        case .paneBody(let tabGroupID, let edge) where tabGroupID == group.id:
+            PaneTabDropPreviewFrame.frame(for: edge, in: size)
+        default:
+            nil
+        }
     }
 
-    private var edgePreview: some View {
+    private var dropPreview: some View {
         RoundedRectangle(cornerRadius: 5, style: .continuous)
             .fill(Color.accentColor.opacity(0.18))
             .overlay {

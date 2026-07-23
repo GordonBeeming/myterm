@@ -385,6 +385,90 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.selectedWorkspace.color, .red)
         XCTAssertEqual(model.selectedWorkspace.displayTitle, "🚨 HubX")
         XCTAssertNil(model.workspaceEmojiBeingEditedID)
+        XCTAssertEqual(model.recentWorkspaceEmojis, ["🚨"])
+
+        model.setWorkspaceEmoji(model.store.selectedWorkspaceID, emoji: "🚀")
+        model.setWorkspaceEmoji(model.store.selectedWorkspaceID, emoji: "🚨")
+        XCTAssertEqual(model.recentWorkspaceEmojis, ["🚨", "🚀"])
+    }
+
+    func testFocusedPaneFullScreenTogglesAndResetsWhenChangingWorkspace() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let firstWorkspaceID = model.store.selectedWorkspaceID
+        let firstGroupID = model.selectedWorkspace.focusedTabGroupID
+
+        XCTAssertNil(model.maximizedTabGroup)
+        XCTAssertEqual(model.paneFullScreenCommandTitle, "Make Pane Full Screen")
+
+        model.toggleFocusedPaneFullScreen()
+        XCTAssertEqual(model.maximizedTabGroup?.id, firstGroupID)
+        XCTAssertEqual(model.paneFullScreenCommandTitle, "Exit Pane Full Screen")
+
+        model.toggleFocusedPaneFullScreen()
+        XCTAssertNil(model.maximizedTabGroup)
+
+        model.toggleFocusedPaneFullScreen()
+        model.createWorkspace()
+        XCTAssertNotEqual(model.store.selectedWorkspaceID, firstWorkspaceID)
+        XCTAssertNil(model.maximizedTabGroup)
+        XCTAssertEqual(model.paneFullScreenCommandTitle, "Make Pane Full Screen")
+    }
+
+    func testPaneFocusShortcutExitsFullScreenBeforeFocusingAnotherPane() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let leftGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.createTerminalTab(in: leftGroupID)
+        model.routeSelectedTabMovement(.newPane(.right))
+        let rightGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.focusTabGroup(workspaceID: model.store.selectedWorkspaceID, tabGroupID: leftGroupID)
+        model.toggleFocusedPaneFullScreen()
+
+        model.focusTerminal(direction: .right)
+
+        XCTAssertNil(model.maximizedTabGroup)
+        XCTAssertEqual(model.selectedWorkspace.focusedTabGroupID, rightGroupID)
+    }
+
+    func testFullScreenToggleMaximizesFocusedPaneAfterMaximizedPaneCloses() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let remainingGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.createTerminalTab(in: remainingGroupID)
+        guard case .moved(let maximizedGroupID) = model.routeSelectedTabMovement(.newPane(.right)) else {
+            return XCTFail("Expected movement to a new pane.")
+        }
+        model.toggleFocusedPaneFullScreen()
+        XCTAssertEqual(model.maximizedTabGroup?.id, maximizedGroupID)
+
+        model.closeFocusedPaneOrTab()
+        XCTAssertNil(model.maximizedTabGroup)
+        XCTAssertEqual(model.selectedWorkspace.focusedTabGroupID, remainingGroupID)
+
+        model.toggleFocusedPaneFullScreen()
+
+        XCTAssertEqual(model.maximizedTabGroup?.id, remainingGroupID)
+        XCTAssertEqual(model.paneFullScreenCommandTitle, "Exit Pane Full Screen")
+    }
+
+    func testSplittingFullScreenPaneRestoresLayoutAndFocusesNewPane() throws {
+        for orientation in [SplitOrientation.horizontal, .vertical] {
+            let directory = try makeTemporaryDirectory()
+            defer { removeTemporaryDirectory(directory) }
+            let model = try makeModel(applicationSupportDirectory: directory)
+            let originalGroupID = model.selectedWorkspace.focusedTabGroupID
+            model.toggleFocusedPaneFullScreen()
+
+            model.splitFocusedTerminal(orientation: orientation)
+
+            XCTAssertNil(model.maximizedTabGroup)
+            XCTAssertNotEqual(model.selectedWorkspace.focusedTabGroupID, originalGroupID)
+            XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 2)
+        }
     }
 
     func testSettingsResolveGlobalFolderAndWorkspaceOverridesAndCanClearOneField() throws {
@@ -1435,8 +1519,10 @@ final class AppModelTests: XCTestCase {
         let sourceGroupID = model.selectedWorkspace.focusedTabGroupID
         let sourceSession = try XCTUnwrap(engine.sessions.first)
 
+        model.toggleFocusedPaneFullScreen()
         sourceSession.onEvent?(.openURL(try XCTUnwrap(URL(string: "https://example.com/one"))))
         let rightGroupID = model.selectedWorkspace.focusedTabGroupID
+        XCTAssertNil(model.maximizedTabGroup)
         XCTAssertNotEqual(rightGroupID, sourceGroupID)
         XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 2)
         guard case .split(_, .horizontal, _, let weights) = model.selectedWorkspace.layout else {
@@ -1444,7 +1530,10 @@ final class AppModelTests: XCTestCase {
         }
         XCTAssertEqual(weights, [0.5, 0.5])
 
+        model.focusTabGroup(workspaceID: model.store.selectedWorkspaceID, tabGroupID: sourceGroupID)
+        model.toggleFocusedPaneFullScreen()
         sourceSession.onEvent?(.openURL(try XCTUnwrap(URL(string: "https://example.com/two"))))
+        XCTAssertNil(model.maximizedTabGroup)
         XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 2)
         XCTAssertEqual(model.selectedWorkspace.focusedTabGroupID, rightGroupID)
         XCTAssertEqual(
@@ -1691,6 +1780,29 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.selectedWorkspace.group(id: sourceGroupID)?.tabs.first?.id, movedTabID)
     }
 
+    func testPaneTabDragCenterDropWithinSourcePaneDoesNotReorderTabs() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let sourceGroupID = model.selectedWorkspace.focusedTabGroupID
+        let firstTabID = try XCTUnwrap(model.selectedTab?.id)
+        model.createTerminalTab(in: sourceGroupID)
+        let secondTabID = try XCTUnwrap(model.selectedTab?.id)
+        let source = PaneTabDragSource(
+            workspaceID: workspaceID,
+            tabGroupID: sourceGroupID,
+            tabID: firstTabID
+        )
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: sourceGroupID, origin: .zero)
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
+        let result = model.finishPaneTabDrag(source: source, finalLocation: CGPoint(x: 60, y: 60))
+
+        XCTAssertNil(result)
+        XCTAssertEqual(model.selectedWorkspace.group(id: sourceGroupID)?.tabs.map(\.id), [firstTabID, secondTabID])
+    }
+
     func testPaneTabDragReordersForwardUsingThePostRemovalIndex() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
@@ -1794,6 +1906,33 @@ final class AppModelTests: XCTestCase {
 
         guard case .moved(let movedGroupID) = result else {
             return XCTFail("Expected a tab-strip drop to move the tab.")
+        }
+        XCTAssertEqual(movedGroupID, destinationGroupID)
+        XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 1)
+        XCTAssertEqual(model.selectedWorkspace.group(id: destinationGroupID)?.tabs.last?.id, sourceTabID)
+    }
+
+    func testPaneTabDragCenterDropMovesIntoExistingPaneWithoutCreatingAnotherSplit() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let sourceGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.createTerminalTab(in: sourceGroupID)
+        let destinationTabID = try XCTUnwrap(model.selectedTab?.id)
+        let destinationGroupID = try createPaneBesideSource(model, sourceGroupID: sourceGroupID, tabID: destinationTabID)
+        let sourceTabID = try XCTUnwrap(model.selectedWorkspace.group(id: sourceGroupID)?.selectedTabID)
+        let source = PaneTabDragSource(workspaceID: workspaceID, tabGroupID: sourceGroupID, tabID: sourceTabID)
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: sourceGroupID, origin: .zero)
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: destinationGroupID, origin: CGPoint(x: 200, y: 0))
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 260, y: 60))
+        XCTAssertEqual(model.paneTabDragPreviewTarget, .paneCenter(tabGroupID: destinationGroupID))
+        let result = model.finishPaneTabDrag(source: source, finalLocation: CGPoint(x: 260, y: 60))
+
+        guard case .moved(let movedGroupID) = result else {
+            return XCTFail("Expected a center drop to move the tab into the destination pane.")
         }
         XCTAssertEqual(movedGroupID, destinationGroupID)
         XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 1)
@@ -1943,6 +2082,30 @@ final class AppModelTests: XCTestCase {
         }
     }
 
+    func testTabMovementCommandsExitFullScreenWhenFocusMovesToAnotherPane() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let sourceGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.createTerminalTab(in: sourceGroupID)
+        model.toggleFocusedPaneFullScreen()
+
+        guard case .moved(let destinationGroupID) = model.routeSelectedTabMovement(.newPane(.right)) else {
+            return XCTFail("Expected movement to a new pane.")
+        }
+        XCTAssertNil(model.maximizedTabGroup)
+        XCTAssertEqual(model.selectedWorkspace.focusedTabGroupID, destinationGroupID)
+
+        model.focusTabGroup(workspaceID: model.store.selectedWorkspaceID, tabGroupID: sourceGroupID)
+        model.toggleFocusedPaneFullScreen()
+        guard case .moved(let existingGroupID) = model.routeSelectedTabMovement(.nextPane) else {
+            return XCTFail("Expected movement to the existing pane.")
+        }
+        XCTAssertNil(model.maximizedTabGroup)
+        XCTAssertEqual(existingGroupID, destinationGroupID)
+        XCTAssertEqual(model.selectedWorkspace.focusedTabGroupID, destinationGroupID)
+    }
+
     func testPreviousPaneMovementCommandUsesOrderedGroupsAcrossVerticalSplit() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
@@ -2083,15 +2246,21 @@ final class AppModelTests: XCTestCase {
     }
 
     private func makeModel(applicationSupportDirectory: URL) throws -> AppModel {
-        try AppModel(
+        let suiteName = "MyTermTests.\(applicationSupportDirectory.lastPathComponent)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            throw NSError(domain: "MyTermTests", code: 1)
+        }
+        return try AppModel(
             channel: .development,
             applicationSupportDirectory: applicationSupportDirectory,
             terminalEngine: nil,
-            startsTerminalProcesses: false
+            startsTerminalProcesses: false,
+            browserSettings: BrowserSettingsStore(channel: .development, defaults: defaults)
         )
     }
 
     private func removeTemporaryDirectory(_ directory: URL) {
+        UserDefaults.standard.removePersistentDomain(forName: "MyTermTests.\(directory.lastPathComponent)")
         do {
             try FileManager.default.removeItem(at: directory)
         } catch {

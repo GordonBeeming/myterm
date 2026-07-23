@@ -14,6 +14,7 @@ enum MyTermCommandShortcuts {
     static let increaseWorkspaceFontSize = MyTermShortcutDeclaration(key: "=", modifiers: [.command])
     static let previousTab = MyTermShortcutDeclaration(key: "\t", modifiers: [.control, .shift])
     static let nextTab = MyTermShortcutDeclaration(key: "\t", modifiers: [.control])
+    static let togglePaneFullScreen = MyTermShortcutDeclaration(key: "\r", modifiers: [.command, .shift])
     static let reloadBrowser = MyTermShortcutDeclaration(key: "r", modifiers: [.command])
     static let focusBrowserAddress = MyTermShortcutDeclaration(key: "l", modifiers: [.command])
     static let browserBack = MyTermShortcutDeclaration(key: "[", modifiers: [.command])
@@ -111,6 +112,14 @@ struct MyTermCommands: Commands {
         }
 
         CommandMenu("Pane") {
+            Button(startup.model?.paneFullScreenCommandTitle ?? "Make Pane Full Screen") {
+                startup.model?.toggleFocusedPaneFullScreen()
+            }
+                .keyboardShortcut(
+                    MyTermCommandShortcuts.togglePaneFullScreen.keyEquivalent,
+                    modifiers: MyTermCommandShortcuts.togglePaneFullScreen.modifiers
+                )
+            Divider()
             Button("Split Right") { startup.model?.splitFocusedTerminal(orientation: .horizontal) }
                 .keyboardShortcut("d", modifiers: [.command])
             Button("Split Below") { startup.model?.splitFocusedTerminal(orientation: .vertical) }

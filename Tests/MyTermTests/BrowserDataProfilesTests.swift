@@ -24,6 +24,21 @@ final class BrowserDataProfilesTests: XCTestCase {
         XCTAssertFalse(restored.compactSidebar)
     }
 
+    func testRecentWorkspaceEmojisPersistNewestFirstAndKeepTenUniqueValues() {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let settings = BrowserSettingsStore(channel: .development, defaults: defaults)
+
+        ["😀", "🚀", "🧪", "🛠️", "📦", "🔥", "✅", "🐛", "💡", "🎯", "📚"].forEach {
+            settings.recordWorkspaceEmoji($0)
+        }
+        settings.recordWorkspaceEmoji("  🔥  ")
+
+        XCTAssertEqual(settings.recentWorkspaceEmojis, ["🔥", "📚", "🎯", "💡", "🐛", "✅", "📦", "🛠️", "🧪", "🚀"])
+        let restored = BrowserSettingsStore(channel: .development, defaults: defaults)
+        XCTAssertEqual(restored.recentWorkspaceEmojis, settings.recentWorkspaceEmojis)
+    }
+
     func testResolverIsStableSeparatesChannelsAndResolvesEveryScope() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }

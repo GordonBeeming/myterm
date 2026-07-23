@@ -58,6 +58,8 @@ final class AppModel {
     var workspaceRenameDraft = ""
     var workspaceEmojiBeingEditedID: WorkspaceID?
     var workspaceEmojiDraft = ""
+    private(set) var recentWorkspaceEmojis: [String] = []
+    var maximizedTabGroupID: TabGroupID?
     var folderBeingRenamedID: WorkspaceFolderID?
     var folderRenameDraft = ""
     var tabBeingRenamedID: TabID?
@@ -86,6 +88,7 @@ final class AppModel {
         store = try WorkspaceStore(persistenceURL: channel.persistenceURL(applicationSupportDirectory: supportDirectory))
         recoveryNotice = WorkspaceRecoveryNotice(loadReport: store.loadReport)
         self.browserSettings = browserSettings ?? BrowserSettingsStore(channel: channel)
+        recentWorkspaceEmojis = self.browserSettings.recentWorkspaceEmojis
         self.terminalEngine = terminalEngine
         self.startsTerminalProcesses = startsTerminalProcesses
         self.browserSessionFactory = browserSessionFactory
@@ -121,6 +124,15 @@ final class AppModel {
     var selectedWorkspace: Workspace {
         _ = stateVersion
         return store.selectedWorkspace
+    }
+
+    var maximizedTabGroup: TabGroup? {
+        guard let maximizedTabGroupID else { return nil }
+        return selectedWorkspace.group(id: maximizedTabGroupID)
+    }
+
+    var paneFullScreenCommandTitle: String {
+        maximizedTabGroup == nil ? "Make Pane Full Screen" : "Exit Pane Full Screen"
     }
 
     var selectedTab: Tab? {
@@ -278,6 +290,7 @@ final class AppModel {
                 title: "Workspace \(workspaces.count + 1)",
                 folderID: targetFolderID
             )
+            maximizedTabGroupID = nil
             guard let createdWorkspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
                 throw AppModelError.workspaceUnavailable(workspaceID)
             }
@@ -344,7 +357,21 @@ final class AppModel {
     }
 
     func setWorkspaceEmoji(_ workspaceID: WorkspaceID, emoji: String?) {
-        perform { try store.setWorkspaceEmoji(workspaceID, emoji: emoji) }
+        perform {
+            let trimmed = emoji?.trimmingCharacters(in: .whitespacesAndNewlines)
+            try store.setWorkspaceEmoji(workspaceID, emoji: trimmed)
+            browserSettings.recordWorkspaceEmoji(trimmed)
+            recentWorkspaceEmojis = browserSettings.recentWorkspaceEmojis
+        }
+    }
+
+    func toggleFocusedPaneFullScreen() {
+        guard maximizedTabGroup == nil else {
+            maximizedTabGroupID = nil
+            return
+        }
+        let focusedTabGroupID = selectedWorkspace.focusedTabGroupID
+        maximizedTabGroupID = focusedTabGroupID
     }
 
     func beginRenamingSelectedTab() {
@@ -501,6 +528,9 @@ final class AppModel {
 
     func selectWorkspace(_ workspaceID: WorkspaceID) {
         cancelPaneTabDrag()
+        if workspaceID != store.selectedWorkspaceID {
+            maximizedTabGroupID = nil
+        }
         perform {
             try store.selectWorkspace(workspaceID)
             restoreFocusedPane(in: workspaceID)
@@ -767,6 +797,7 @@ final class AppModel {
             tabGroupID: targetGroupID,
             workingDirectory: workingDirectory
         )
+        restoreSplitLayoutIfFocusing(workspaceID: workspaceID, tabGroupID: targetGroupID)
         guard let tab = tab(workspaceID: workspaceID, tabGroupID: targetGroupID, tabID: tabID),
               let session = tab.terminalSession else {
             throw AppModelError.tabUnavailable(tabID)
@@ -836,6 +867,7 @@ final class AppModel {
                 url: url,
                 profile: profile
             )
+            restoreSplitLayoutIfFocusing(workspaceID: workspaceID, tabGroupID: targetGroupID)
             guard let tab = tab(workspaceID: workspaceID, tabGroupID: targetGroupID, tabID: tabID) else {
                 throw AppModelError.tabUnavailable(tabID)
             }
@@ -881,6 +913,7 @@ final class AppModel {
                 destinationGroupID = split.tabGroupID
                 placeholderTabID = split.tabID
             }
+            restoreSplitLayoutIfFocusing(workspaceID: workspaceID, tabGroupID: destinationGroupID)
 
             if let existingTab = store.workspaces.first(where: { $0.id == workspaceID })?
                 .group(id: destinationGroupID)?
@@ -936,6 +969,7 @@ final class AppModel {
         perform {
             let workspaceID = store.selectedWorkspaceID
             try store.selectTab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)
+            restoreSplitLayoutIfFocusing(workspaceID: workspaceID, tabGroupID: tabGroupID)
             guard let tab = tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID) else {
                 throw AppModelError.tabUnavailable(tabID)
             }
@@ -1038,6 +1072,7 @@ final class AppModel {
                 edge: orientation == .horizontal ? .right : .bottom,
                 workingDirectory: workingDirectory
             )
+            restoreSplitLayoutIfFocusing(workspaceID: workspaceID, tabGroupID: split.tabGroupID)
             guard let tab = self.tab(
                 workspaceID: workspaceID,
                 tabGroupID: split.tabGroupID,
@@ -1075,6 +1110,7 @@ final class AppModel {
                 tabID: tabID,
                 paneID: tab.paneID
             )
+            restoreSplitLayoutIfFocusing(workspaceID: workspaceID, tabGroupID: tabGroupID)
             terminalSessions[sessionID]?.focus()
         }
     }
@@ -1087,6 +1123,7 @@ final class AppModel {
             }
             if workspace.focusedTabGroupID != tabGroupID {
                 try store.focusTabGroup(workspaceID: workspaceID, tabGroupID: tabGroupID)
+                restoreSplitLayoutIfFocusing(workspaceID: workspaceID, tabGroupID: tabGroupID)
             }
             if focusContent { self.focusContent(of: group.selectedTab) }
         }
@@ -1119,6 +1156,7 @@ final class AppModel {
                 tabID: tabID,
                 paneID: paneID
             )
+            restoreSplitLayoutIfFocusing(workspaceID: workspaceID, tabGroupID: tabGroupID)
             if focusContent,
                let tab = tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID) {
                 self.focusContent(of: tab)
@@ -1150,6 +1188,13 @@ final class AppModel {
             return
         }
         focusContent(of: tab)
+    }
+
+    private func restoreSplitLayoutIfFocusing(workspaceID: WorkspaceID, tabGroupID: TabGroupID) {
+        guard store.selectedWorkspaceID == workspaceID,
+              maximizedTabGroupID != nil,
+              maximizedTabGroupID != tabGroupID else { return }
+        maximizedTabGroupID = nil
     }
 
     func focusTerminal(direction: PaneFocusDirection) {
@@ -1197,6 +1242,7 @@ final class AppModel {
                 to: destinationTabGroupID,
                 at: index
             )
+            restoreSplitLayoutIfFocusing(workspaceID: workspaceID, tabGroupID: destinationTabGroupID)
             if let movedTab = tab(
                 workspaceID: workspaceID,
                 tabGroupID: destinationTabGroupID,
@@ -1255,6 +1301,7 @@ final class AppModel {
                 errorDescription = message
                 return .failed(message: message)
             }
+            restoreSplitLayoutIfFocusing(workspaceID: workspaceID, tabGroupID: createdGroupID)
             if let movedTab = tab(
                 workspaceID: workspaceID,
                 tabGroupID: createdGroupID,

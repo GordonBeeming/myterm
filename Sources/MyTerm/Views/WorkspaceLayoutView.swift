@@ -7,7 +7,14 @@ struct WorkspaceTabContentView: View {
 
     var body: some View {
         let workspace = model.selectedWorkspace
-        WorkspaceLayoutView(model: model, workspaceID: workspace.id, layout: workspace.layout)
+        Group {
+            if let group = model.maximizedTabGroup {
+                PaneGroupView(model: model, workspaceID: workspace.id, group: group)
+                    .id(group.id)
+            } else {
+                WorkspaceLayoutView(model: model, workspaceID: workspace.id, layout: workspace.layout)
+            }
+        }
             .id(workspace.id)
     }
 }

@@ -7,7 +7,9 @@ import Observation
 final class BrowserSettingsStore {
     private static let browserDataScopeKey = "browserDataScope"
     private static let compactSidebarKey = "compactSidebar"
+    private static let recentWorkspaceEmojisKey = "recentWorkspaceEmojis"
     private static let terminalPreferencesMigrationKey = "terminalPreferencesMigration.v1"
+    private static let recentWorkspaceEmojiLimit = 10
 
     private let defaults: UserDefaults
     private let key: String
@@ -24,6 +26,8 @@ final class BrowserSettingsStore {
         }
     }
 
+    private(set) var recentWorkspaceEmojis: [String]
+
     init(
         channel: MyTermChannel,
         defaults: UserDefaults? = nil,
@@ -34,6 +38,17 @@ final class BrowserSettingsStore {
         key = Self.browserDataScopeKey
         browserDataScope = BrowserDataScope(rawValue: self.defaults.string(forKey: key) ?? "") ?? .workspace
         compactSidebar = self.defaults.object(forKey: Self.compactSidebarKey) as? Bool ?? true
+        recentWorkspaceEmojis = Self.normalizedRecentWorkspaceEmojis(
+            self.defaults.stringArray(forKey: Self.recentWorkspaceEmojisKey) ?? []
+        )
+    }
+
+    func recordWorkspaceEmoji(_ emoji: String?) {
+        guard let emoji else { return }
+        let trimmed = emoji.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        recentWorkspaceEmojis = Self.normalizedRecentWorkspaceEmojis([trimmed] + recentWorkspaceEmojis)
+        defaults.set(recentWorkspaceEmojis, forKey: Self.recentWorkspaceEmojisKey)
     }
 
     var unmigratedLegacyPreferences: LegacyBrowserPreferences? {
@@ -46,6 +61,17 @@ final class BrowserSettingsStore {
 
     func markTerminalPreferencesMigrationComplete() {
         defaults.set(true, forKey: Self.terminalPreferencesMigrationKey)
+    }
+
+    private static func normalizedRecentWorkspaceEmojis(_ emojis: [String]) -> [String] {
+        var seen = Set<String>()
+        return emojis.compactMap { emoji in
+            let trimmed = emoji.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, seen.insert(trimmed).inserted else { return nil }
+            return trimmed
+        }
+        .prefix(Self.recentWorkspaceEmojiLimit)
+        .map { $0 }
     }
 }
 
