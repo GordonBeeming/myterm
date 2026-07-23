@@ -1,15 +1,19 @@
+import CoreFoundation
 import Foundation
 
 public enum WorkspaceStoreError: Error, Equatable, LocalizedError, Sendable {
     case readFailed(path: String, reason: String)
     case saveFailed(path: String, reason: String)
+    case backupFailed(path: String, reason: String)
     case invalidPersistence(reason: String)
     case invariantViolation(reason: String)
     case unsupportedVersion(Int)
     case workspaceNotFound(WorkspaceID)
     case folderNotFound(WorkspaceFolderID)
+    case tabGroupNotFound(TabGroupID)
     case tabNotFound(TabID)
     case paneNotFound(PaneID)
+    case splitNodeNotFound(SplitNodeID)
     case terminalSessionNotFound(TerminalSessionID)
     case browserTabRequired(TabID)
     case terminalTabRequired(TabID)
@@ -17,34 +21,58 @@ public enum WorkspaceStoreError: Error, Equatable, LocalizedError, Sendable {
 
     public var errorDescription: String? {
         switch self {
-        case .readFailed(let path, let reason):
-            return "Could not read workspace state at \(path): \(reason)"
-        case .saveFailed(let path, let reason):
-            return "Could not save workspace state at \(path): \(reason)"
-        case .invalidPersistence(let reason):
-            return "Workspace state is invalid: \(reason)"
-        case .invariantViolation(let reason):
-            return "Workspace store invariant violated: \(reason)"
-        case .unsupportedVersion(let version):
-            return "Workspace state version \(version) is not supported."
-        case .workspaceNotFound(let id):
-            return "Workspace \(id) was not found."
-        case .folderNotFound(let id):
-            return "Workspace folder \(id) was not found."
-        case .tabNotFound(let id):
-            return "Tab \(id) was not found."
-        case .paneNotFound(let id):
-            return "Pane \(id) was not found."
-        case .terminalSessionNotFound(let id):
-            return "Terminal session \(id) was not found."
-        case .browserTabRequired(let id):
-            return "Tab \(id) is not a browser tab."
-        case .terminalTabRequired(let id):
-            return "Tab \(id) is not a terminal tab."
-        case .invalidTabIndex(let index):
-            return "Tab index \(index) is invalid."
+        case .readFailed(let path, let reason): "Could not read workspace state at \(path): \(reason)"
+        case .saveFailed(let path, let reason): "Could not save workspace state at \(path): \(reason)"
+        case .backupFailed(let path, let reason): "Could not preserve workspace state at \(path): \(reason)"
+        case .invalidPersistence(let reason): "Workspace state is invalid: \(reason)"
+        case .invariantViolation(let reason): "Workspace store invariant violated: \(reason)"
+        case .unsupportedVersion(let version): "Workspace state version \(version) is not supported."
+        case .workspaceNotFound(let id): "Workspace \(id) was not found."
+        case .folderNotFound(let id): "Workspace folder \(id) was not found."
+        case .tabGroupNotFound(let id): "Tab group \(id) was not found."
+        case .tabNotFound(let id): "Tab \(id) was not found."
+        case .paneNotFound(let id): "Pane \(id) was not found."
+        case .splitNodeNotFound(let id): "Split node \(id) was not found."
+        case .terminalSessionNotFound(let id): "Terminal session \(id) was not found."
+        case .browserTabRequired(let id): "Tab \(id) is not a browser tab."
+        case .terminalTabRequired(let id): "Tab \(id) is not a terminal tab."
+        case .invalidTabIndex(let index): "Tab index \(index) is invalid."
         }
     }
+}
+
+public struct WorkspaceStoreLoadReport: Equatable, Sendable {
+    public let sourceVersion: Int?
+    public let didMigrate: Bool
+    public let droppedElementCount: Int
+    public let identifierRepairCount: Int
+    public let structuralRepairCount: Int
+    public let backupURLs: [URL]
+
+    public init(
+        sourceVersion: Int?,
+        didMigrate: Bool,
+        droppedElementCount: Int,
+        identifierRepairCount: Int,
+        structuralRepairCount: Int,
+        backupURLs: [URL]
+    ) {
+        self.sourceVersion = sourceVersion
+        self.didMigrate = didMigrate
+        self.droppedElementCount = droppedElementCount
+        self.identifierRepairCount = identifierRepairCount
+        self.structuralRepairCount = structuralRepairCount
+        self.backupURLs = backupURLs
+    }
+
+    public static let newStore = WorkspaceStoreLoadReport(
+        sourceVersion: nil,
+        didMigrate: false,
+        droppedElementCount: 0,
+        identifierRepairCount: 0,
+        structuralRepairCount: 0,
+        backupURLs: []
+    )
 }
 
 public struct WorkspaceLifecycleChange: Equatable, Sendable {
@@ -63,8 +91,18 @@ public struct WorkspaceLifecycleChange: Equatable, Sendable {
     }
 }
 
+public struct TabGroupSplitResult: Equatable, Sendable {
+    public let tabGroupID: TabGroupID
+    public let tabID: TabID
+
+    public init(tabGroupID: TabGroupID, tabID: TabID) {
+        self.tabGroupID = tabGroupID
+        self.tabID = tabID
+    }
+}
+
 public struct WorkspaceStoreSnapshot: Codable, Equatable, Sendable {
-    public static let currentVersion = 1
+    public static let currentVersion = 2
 
     public var version: Int
     public var folders: [WorkspaceFolder]
@@ -73,13 +111,12 @@ public struct WorkspaceStoreSnapshot: Codable, Equatable, Sendable {
     public var selectedWorkspaceID: WorkspaceID
 
     public init(
-        version: Int = WorkspaceStoreSnapshot.currentVersion,
         folders: [WorkspaceFolder] = [],
         globalSettings: TerminalPreferences = .default,
         workspaces: [Workspace],
         selectedWorkspaceID: WorkspaceID
     ) {
-        self.version = version
+        self.version = Self.currentVersion
         self.folders = folders
         self.globalSettings = globalSettings
         self.workspaces = workspaces
@@ -92,25 +129,80 @@ public struct WorkspaceStoreSnapshot: Codable, Equatable, Sendable {
         return WorkspaceStoreSnapshot(workspaces: [workspace], selectedWorkspaceID: workspace.id)
     }
 
-    fileprivate mutating func repair() {
+    fileprivate mutating func repair(tracker: RecoveryDecodingTracker? = nil) {
+        version = Self.currentVersion
         globalSettings = globalSettings.normalized()
-        var seenFolderIDs = Set<WorkspaceFolderID>()
-        folders = folders.filter { seenFolderIDs.insert($0.id).inserted }
+
+        var usedFolderIDs = Set<WorkspaceFolderID>()
+        folders = folders.enumerated().map { index, folder in
+            guard !usedFolderIDs.insert(folder.id).inserted else { return folder }
+            let id = uniqueIdentifier(
+                folder.id,
+                used: &usedFolderIDs,
+                seed: "snapshot:folder:\(index)",
+                make: WorkspaceFolderID.init(rawValue:),
+                tracker: tracker
+            )
+            return WorkspaceFolder(
+                id: id,
+                title: folder.title,
+                color: folder.color,
+                isExpanded: folder.isExpanded,
+                settingsOverrides: folder.settingsOverrides
+            )
+        }
         let validFolderIDs = Set(folders.map(\.id))
 
-        var seenWorkspaceIDs = Set<WorkspaceID>()
-        workspaces = workspaces.compactMap { workspace in
-            guard seenWorkspaceIDs.insert(workspace.id).inserted else { return nil }
-            var repairedWorkspace = workspace
-            if let folderID = repairedWorkspace.folderID, !validFolderIDs.contains(folderID) {
-                repairedWorkspace.folderID = nil
+        var usedWorkspaceIDs = Set<WorkspaceID>()
+        var usedGroupIDs = Set<TabGroupID>()
+        var usedTabIDs = Set<TabID>()
+        var usedTerminalIDs = Set<TerminalSessionID>()
+        var usedBrowserIDs = Set<BrowserSessionID>()
+        var usedPaneIDs = Set<PaneID>()
+        var usedSplitIDs = Set<SplitNodeID>()
+        workspaces = workspaces.enumerated().map { index, workspace in
+            var repaired = workspace
+            if !usedWorkspaceIDs.insert(workspace.id).inserted {
+                let id = uniqueIdentifier(
+                    workspace.id,
+                    used: &usedWorkspaceIDs,
+                    seed: "snapshot:workspace:\(index)",
+                    make: WorkspaceID.init(rawValue:),
+                    tracker: tracker
+                )
+                repaired = workspace.replacingID(id)
             }
-            repairedWorkspace.repair()
-            return repairedWorkspace
+            if let folderID = repaired.folderID, !validFolderIDs.contains(folderID) {
+                repaired.folderID = nil
+            }
+            repaired.repair(
+                usedGroupIDs: &usedGroupIDs,
+                usedTabIDs: &usedTabIDs,
+                usedTerminalIDs: &usedTerminalIDs,
+                usedBrowserIDs: &usedBrowserIDs,
+                usedPaneIDs: &usedPaneIDs,
+                usedSplitIDs: &usedSplitIDs,
+                tracker: tracker
+            )
+            return repaired
         }
 
         if workspaces.isEmpty {
-            let workspace = Workspace(title: "Workspace")
+            let workspaceID = WorkspaceID(rawValue: repairedUUID(seed: "snapshot:fallback-workspace"))
+            let groupID = TabGroupID(rawValue: repairedUUID(seed: "snapshot:fallback-group"))
+            let tab = Tab(
+                id: TabID(rawValue: repairedUUID(seed: "snapshot:fallback-tab")),
+                content: .terminal(TerminalSession(
+                    id: TerminalSessionID(rawValue: repairedUUID(seed: "snapshot:fallback-terminal")),
+                    paneID: PaneID(rawValue: repairedUUID(seed: "snapshot:fallback-pane"))
+                ))
+            )
+            let workspace = Workspace(
+                id: workspaceID,
+                title: "Workspace",
+                layout: .group(TabGroup(id: groupID, tab: tab)),
+                focusedTabGroupID: groupID
+            )
             workspaces = [workspace]
             selectedWorkspaceID = workspace.id
         } else if !workspaces.contains(where: { $0.id == selectedWorkspaceID }) {
@@ -128,129 +220,151 @@ public struct WorkspaceStoreSnapshot: Codable, Equatable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        version = try container.decode(Int.self, forKey: .version)
-        guard version == Self.currentVersion else {
-            throw WorkspaceStoreError.unsupportedVersion(version)
+        let decodedVersion = try container.decode(Int.self, forKey: .version)
+        switch decodedVersion {
+        case Self.currentVersion:
+            version = decodedVersion
+            folders = try container.decodeIfPresent(LossyArray<WorkspaceFolder>.self, forKey: .folders)?.elements ?? []
+            globalSettings = (try? container.decode(TerminalPreferences.self, forKey: .globalSettings)) ?? .default
+            workspaces = try container.decodeIfPresent(LossyArray<Workspace>.self, forKey: .workspaces)?.elements ?? []
+            selectedWorkspaceID = (try? container.decode(WorkspaceID.self, forKey: .selectedWorkspaceID))
+                ?? workspaces.first?.id
+                ?? WorkspaceID(rawValue: repairedUUID(seed: "snapshot:missing-selected-workspace"))
+            repair(tracker: decoder.userInfo[.recoveryDecodingTracker] as? RecoveryDecodingTracker)
+        case 1:
+            self = try LegacySnapshot(from: decoder).migrated()
+        default:
+            throw WorkspaceStoreError.unsupportedVersion(decodedVersion)
         }
-        folders = try container.decodeIfPresent(LossyArray<WorkspaceFolder>.self, forKey: .folders)?.elements ?? []
-        globalSettings = (try? container.decode(TerminalPreferences.self, forKey: .globalSettings)) ?? .default
-        workspaces = try container.decodeIfPresent(LossyArray<Workspace>.self, forKey: .workspaces)?.elements ?? []
-        do {
-            selectedWorkspaceID = try container.decode(WorkspaceID.self, forKey: .selectedWorkspaceID)
-        } catch {
-            selectedWorkspaceID = workspaces.first?.id ?? WorkspaceID()
-        }
-        repair()
     }
 }
 
 public final class WorkspaceStore {
     public let persistenceURL: URL
     public private(set) var snapshot: WorkspaceStoreSnapshot
+    public private(set) var loadReport: WorkspaceStoreLoadReport
+
+    public var migrationBackupURL: URL { persistenceURL.appendingPathExtension("v1-backup") }
+    public var recoveryBackupURL: URL { persistenceURL.appendingPathExtension("recovery-backup") }
 
     public var workspaces: [Workspace] { snapshot.workspaces }
     public var folders: [WorkspaceFolder] { snapshot.folders }
     public var selectedWorkspaceID: WorkspaceID { snapshot.selectedWorkspaceID }
     public var selectedWorkspace: Workspace {
         guard let workspace = snapshot.workspaces.first(where: { $0.id == snapshot.selectedWorkspaceID }) else {
-            preconditionFailure(
-                "WorkspaceStore invariant violated: selected workspace \(snapshot.selectedWorkspaceID) is missing."
-            )
+            preconditionFailure("WorkspaceStore invariant violated: selected workspace is missing.")
         }
         return workspace
     }
-
     public var globalSettings: TerminalPreferences { snapshot.globalSettings }
-
-    public func resolvedSettings(for workspaceID: WorkspaceID) throws -> TerminalPreferences {
-        let workspace = try workspace(workspaceID)
-        let folder = workspace.folderID.flatMap { id in
-            snapshot.folders.first { $0.id == id }
-        }
-        let folderSettings = (folder?.settingsOverrides ?? TerminalPreferencesOverrides())
-            .applying(to: snapshot.globalSettings)
-        return (workspace.settingsOverrides ?? TerminalPreferencesOverrides())
-            .applying(to: folderSettings)
-    }
 
     public init(persistenceURL: URL, fileManager: FileManager = .default) throws {
         self.persistenceURL = persistenceURL
+        let migrationBackupURL = persistenceURL.appendingPathExtension("v1-backup")
+        let recoveryBackupURL = persistenceURL.appendingPathExtension("recovery-backup")
         if fileManager.fileExists(atPath: persistenceURL.path) {
-            let data: Data
             do {
-                data = try Data(contentsOf: persistenceURL)
-            } catch {
-                throw WorkspaceStoreError.readFailed(path: persistenceURL.path, reason: error.localizedDescription)
-            }
+                let originalData = try Data(contentsOf: persistenceURL)
+                let sourceVersion = Self.persistedVersion(in: originalData)
+                let tracker = RecoveryDecodingTracker()
+                let decoder = JSONDecoder()
+                decoder.userInfo[.recoveryDecodingTracker] = tracker
+                snapshot = try decoder.decode(WorkspaceStoreSnapshot.self, from: originalData)
 
-            do {
-                snapshot = try JSONDecoder().decode(WorkspaceStoreSnapshot.self, from: data)
+                if sourceVersion == WorkspaceStoreSnapshot.currentVersion {
+                    let mutationCount = try Self.persistedMutationCount(
+                        from: originalData,
+                        to: snapshot
+                    )
+                    tracker.recordStructuralRepairs(max(
+                        mutationCount - tracker.droppedElementCount - tracker.identifierRepairCount,
+                        0
+                    ))
+                }
+
+                var backupURLs: [URL] = []
+                if sourceVersion == 1 {
+                    try Self.preserveOriginal(
+                        originalData,
+                        at: migrationBackupURL,
+                        fileManager: fileManager
+                    )
+                    backupURLs.append(migrationBackupURL)
+                }
+                if tracker.droppedElementCount > 0
+                    || tracker.identifierRepairCount > 0
+                    || tracker.structuralRepairCount > 0 {
+                    try Self.preserveOriginal(
+                        originalData,
+                        at: recoveryBackupURL,
+                        fileManager: fileManager
+                    )
+                    backupURLs.append(recoveryBackupURL)
+                }
+                loadReport = WorkspaceStoreLoadReport(
+                    sourceVersion: sourceVersion,
+                    didMigrate: sourceVersion == 1,
+                    droppedElementCount: tracker.droppedElementCount,
+                    identifierRepairCount: tracker.identifierRepairCount,
+                    structuralRepairCount: tracker.structuralRepairCount,
+                    backupURLs: backupURLs
+                )
             } catch let error as WorkspaceStoreError {
                 throw error
+            } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+                throw WorkspaceStoreError.readFailed(path: persistenceURL.path, reason: error.localizedDescription)
             } catch {
                 throw WorkspaceStoreError.invalidPersistence(reason: error.localizedDescription)
             }
         } else {
             snapshot = .initial()
+            loadReport = .newStore
         }
-
         try write(snapshot, fileManager: fileManager)
     }
 
-    public func save() throws {
-        try write(snapshot, fileManager: .default)
+    public func save() throws { try write(snapshot, fileManager: .default) }
+
+    public func resolvedSettings(for workspaceID: WorkspaceID) throws -> TerminalPreferences {
+        let workspace = try workspace(workspaceID)
+        let folder = workspace.folderID.flatMap { id in snapshot.folders.first { $0.id == id } }
+        let folderSettings = (folder?.settingsOverrides ?? TerminalPreferencesOverrides())
+            .applying(to: snapshot.globalSettings)
+        return (workspace.settingsOverrides ?? TerminalPreferencesOverrides()).applying(to: folderSettings)
     }
 
     @discardableResult
     public func createWorkspace(title: String, folderID: WorkspaceFolderID? = nil) throws -> WorkspaceID {
-        if let folderID, !snapshot.folders.contains(where: { $0.id == folderID }) {
-            throw WorkspaceStoreError.folderNotFound(folderID)
-        }
+        if let folderID { _ = try folderIndex(folderID, in: snapshot) }
         let workspace = Workspace(title: title, folderID: folderID)
-        try mutate { snapshot in
-            snapshot.workspaces.append(workspace)
-            snapshot.selectedWorkspaceID = workspace.id
+        try mutate {
+            $0.workspaces.append(workspace)
+            $0.selectedWorkspaceID = workspace.id
         }
         return workspace.id
     }
 
     @discardableResult
-    public func createFolder(
-        title: String,
-        color: WorkspaceFolderColor = .blue
-    ) throws -> WorkspaceFolderID {
+    public func createFolder(title: String, color: WorkspaceFolderColor = .blue) throws -> WorkspaceFolderID {
         let folder = WorkspaceFolder(title: title, color: color)
-        try mutate { snapshot in
-            snapshot.folders.append(folder)
-        }
+        try mutate { $0.folders.append(folder) }
         return folder.id
     }
 
     public func renameFolder(_ folderID: WorkspaceFolderID, title: String) throws {
-        try mutate { snapshot in
-            let index = try folderIndex(folderID, in: snapshot)
-            snapshot.folders[index].title = title
-        }
+        try mutate { $0.folders[try folderIndex(folderID, in: $0)].title = title }
     }
 
     public func setFolderColor(_ folderID: WorkspaceFolderID, color: WorkspaceFolderColor) throws {
-        try mutate { snapshot in
-            let index = try folderIndex(folderID, in: snapshot)
-            snapshot.folders[index].color = color
-        }
+        try mutate { $0.folders[try folderIndex(folderID, in: $0)].color = color }
     }
 
     public func setFolderExpanded(_ folderID: WorkspaceFolderID, isExpanded: Bool) throws {
-        try mutate { snapshot in
-            let index = try folderIndex(folderID, in: snapshot)
-            snapshot.folders[index].isExpanded = isExpanded
-        }
+        try mutate { $0.folders[try folderIndex(folderID, in: $0)].isExpanded = isExpanded }
     }
 
     public func updateGlobalSettings(_ update: (inout TerminalPreferences) -> Void) throws {
-        try mutate { snapshot in
-            update(&snapshot.globalSettings)
-        }
+        try mutate { update(&$0.globalSettings) }
     }
 
     public func updateFolderSettings(
@@ -293,27 +407,21 @@ public final class WorkspaceStore {
 
     public func removeFolder(_ folderID: WorkspaceFolderID) throws {
         try mutate { snapshot in
-            let index = try folderIndex(folderID, in: snapshot)
-            snapshot.folders.remove(at: index)
-            for workspaceIndex in snapshot.workspaces.indices where snapshot.workspaces[workspaceIndex].folderID == folderID {
-                snapshot.workspaces[workspaceIndex].folderID = nil
+            snapshot.folders.remove(at: try folderIndex(folderID, in: snapshot))
+            for index in snapshot.workspaces.indices where snapshot.workspaces[index].folderID == folderID {
+                snapshot.workspaces[index].folderID = nil
             }
         }
     }
 
     public func moveFolder(_ folderID: WorkspaceFolderID, before targetID: WorkspaceFolderID?) throws {
         _ = try folderIndex(folderID, in: snapshot)
-        if let targetID {
-            _ = try folderIndex(targetID, in: snapshot)
-        }
+        if let targetID { _ = try folderIndex(targetID, in: snapshot) }
         guard folderID != targetID else { return }
-
         try mutate { snapshot in
-            let sourceIndex = try folderIndex(folderID, in: snapshot)
-            let folder = snapshot.folders.remove(at: sourceIndex)
+            let folder = snapshot.folders.remove(at: try folderIndex(folderID, in: snapshot))
             if let targetID {
-                let targetIndex = try folderIndex(targetID, in: snapshot)
-                snapshot.folders.insert(folder, at: targetIndex)
+                snapshot.folders.insert(folder, at: try folderIndex(targetID, in: snapshot))
             } else {
                 snapshot.folders.append(folder)
             }
@@ -322,9 +430,7 @@ public final class WorkspaceStore {
 
     public func moveWorkspace(_ workspaceID: WorkspaceID, to folderID: WorkspaceFolderID?) throws {
         let source = try workspace(workspaceID)
-        if let folderID {
-            _ = try folderIndex(folderID, in: snapshot)
-        }
+        if let folderID { _ = try folderIndex(folderID, in: snapshot) }
         guard source.folderID != folderID else { return }
         try moveWorkspace(workspaceID, to: folderID, before: nil)
     }
@@ -335,11 +441,8 @@ public final class WorkspaceStore {
         before targetID: WorkspaceID?
     ) throws {
         let source = try workspace(workspaceID)
-        if let folderID {
-            _ = try folderIndex(folderID, in: snapshot)
-        }
+        if let folderID { _ = try folderIndex(folderID, in: snapshot) }
         guard workspaceID != targetID else { return }
-
         if let targetID {
             let target = try workspace(targetID)
             guard target.folderID == folderID, target.isPinned == source.isPinned else {
@@ -348,147 +451,117 @@ public final class WorkspaceStore {
                 )
             }
         }
-
         try mutate { snapshot in
             let sourceIndex = try workspaceIndex(workspaceID, in: snapshot)
             let source = snapshot.workspaces.remove(at: sourceIndex)
-
             let insertionIndex: Int
             if let targetID {
-                guard let targetIndex = snapshot.workspaces.firstIndex(where: { $0.id == targetID }) else {
-                    throw WorkspaceStoreError.workspaceNotFound(targetID)
-                }
-                insertionIndex = targetIndex
+                insertionIndex = try workspaceIndex(targetID, in: snapshot)
             } else {
-                let destinationBand = snapshot.workspaces.indices.filter {
-                    snapshot.workspaces[$0].folderID == folderID
-                        && snapshot.workspaces[$0].isPinned == source.isPinned
+                let band = snapshot.workspaces.indices.filter {
+                    snapshot.workspaces[$0].folderID == folderID && snapshot.workspaces[$0].isPinned == source.isPinned
                 }
-                if let lastBandIndex = destinationBand.last {
-                    insertionIndex = lastBandIndex + 1
+                if let last = band.last {
+                    insertionIndex = last + 1
                 } else {
-                    let destination = snapshot.workspaces.indices.filter {
-                        snapshot.workspaces[$0].folderID == folderID
-                    }
-                    if let firstDestinationIndex = destination.first,
-                       source.isPinned {
-                        insertionIndex = firstDestinationIndex
-                    } else if let lastDestinationIndex = destination.last {
-                        insertionIndex = lastDestinationIndex + 1
+                    let destination = snapshot.workspaces.indices.filter { snapshot.workspaces[$0].folderID == folderID }
+                    if let first = destination.first, source.isPinned {
+                        insertionIndex = first
+                    } else if let last = destination.last {
+                        insertionIndex = last + 1
                     } else {
                         insertionIndex = snapshot.workspaces.count
                     }
                 }
             }
-
             var moved = source
             moved.folderID = folderID
             snapshot.workspaces.insert(moved, at: insertionIndex)
         }
     }
 
-    public func setWorkspacePinned(_ workspaceID: WorkspaceID, isPinned: Bool) throws {
-        try mutate { snapshot in
-            let index = try workspaceIndex(workspaceID, in: snapshot)
-            snapshot.workspaces[index].isPinned = isPinned
-        }
-    }
-
-    public func setWorkspaceEmoji(_ workspaceID: WorkspaceID, emoji: String?) throws {
-        try mutate { snapshot in
-            let index = try workspaceIndex(workspaceID, in: snapshot)
-            let trimmedEmoji = emoji?.trimmingCharacters(in: .whitespacesAndNewlines)
-            snapshot.workspaces[index].emoji = trimmedEmoji?.isEmpty == false ? trimmedEmoji : nil
-        }
-    }
-
-    public func setWorkspaceColor(_ workspaceID: WorkspaceID, color: WorkspaceColor?) throws {
-        try mutate { snapshot in
-            let index = try workspaceIndex(workspaceID, in: snapshot)
-            snapshot.workspaces[index].color = color
-        }
-    }
-
     public func moveWorkspace(_ workspaceID: WorkspaceID, before targetID: WorkspaceID) throws {
-        let folderID = try workspace(targetID).folderID
-        try moveWorkspace(workspaceID, to: folderID, before: targetID)
+        try moveWorkspace(workspaceID, to: workspace(targetID).folderID, before: targetID)
     }
 
     public func moveWorkspace(_ workspaceID: WorkspaceID, offset: Int) throws {
         guard offset != 0 else { return }
         try mutate { snapshot in
-            guard let oldIndex = snapshot.workspaces.firstIndex(where: { $0.id == workspaceID }) else {
-                throw WorkspaceStoreError.workspaceNotFound(workspaceID)
-            }
-            let folderID = snapshot.workspaces[oldIndex].folderID
-            let isPinned = snapshot.workspaces[oldIndex].isPinned
+            let oldIndex = try workspaceIndex(workspaceID, in: snapshot)
+            let source = snapshot.workspaces[oldIndex]
             let siblingIndices = snapshot.workspaces.indices.filter {
-                snapshot.workspaces[$0].folderID == folderID
-                    && snapshot.workspaces[$0].isPinned == isPinned
+                snapshot.workspaces[$0].folderID == source.folderID && snapshot.workspaces[$0].isPinned == source.isPinned
             }
-            guard let siblingPosition = siblingIndices.firstIndex(of: oldIndex) else { return }
-            let newSiblingPosition = min(max(siblingPosition + offset, 0), siblingIndices.count - 1)
-            guard newSiblingPosition != siblingPosition else { return }
-            let targetIndex = siblingIndices[newSiblingPosition]
+            guard let position = siblingIndices.firstIndex(of: oldIndex) else { return }
+            let newPosition = min(max(position + offset, 0), siblingIndices.count - 1)
+            guard position != newPosition else { return }
             let workspace = snapshot.workspaces.remove(at: oldIndex)
-            snapshot.workspaces.insert(workspace, at: targetIndex)
+            snapshot.workspaces.insert(workspace, at: siblingIndices[newPosition])
         }
+    }
+
+    public func setWorkspacePinned(_ workspaceID: WorkspaceID, isPinned: Bool) throws {
+        try mutate { $0.workspaces[try workspaceIndex(workspaceID, in: $0)].isPinned = isPinned }
+    }
+
+    public func setWorkspaceEmoji(_ workspaceID: WorkspaceID, emoji: String?) throws {
+        try mutate { snapshot in
+            let trimmed = emoji?.trimmingCharacters(in: .whitespacesAndNewlines)
+            snapshot.workspaces[try workspaceIndex(workspaceID, in: snapshot)].emoji = trimmed?.nilIfEmpty
+        }
+    }
+
+    public func setWorkspaceColor(_ workspaceID: WorkspaceID, color: WorkspaceColor?) throws {
+        try mutate { $0.workspaces[try workspaceIndex(workspaceID, in: $0)].color = color }
     }
 
     public func renameWorkspace(_ workspaceID: WorkspaceID, title: String) throws {
-        try mutate { snapshot in
-            let index = try workspaceIndex(workspaceID, in: snapshot)
-            snapshot.workspaces[index].title = title
-        }
-    }
-
-    public func renameTab(workspaceID: WorkspaceID, tabID: TabID, customTitle: String?) throws {
-        try mutate { snapshot in
-            let (workspaceIndex, tabIndex) = try tabLocation(
-                workspaceID: workspaceID,
-                tabID: tabID,
-                in: snapshot
-            )
-            let title = customTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
-            snapshot.workspaces[workspaceIndex].tabs[tabIndex].customTitle = title?.nilIfEmpty
-        }
+        try mutate { $0.workspaces[try workspaceIndex(workspaceID, in: $0)].title = title }
     }
 
     public func removeWorkspace(_ workspaceID: WorkspaceID) throws {
-        try mutate { snapshot in
-            guard let index = snapshot.workspaces.firstIndex(where: { $0.id == workspaceID }) else {
-                throw WorkspaceStoreError.workspaceNotFound(workspaceID)
-            }
-            snapshot.workspaces.remove(at: index)
-            snapshot.repair()
-        }
+        try mutate { $0.workspaces.remove(at: try workspaceIndex(workspaceID, in: $0)) }
     }
 
     public func selectWorkspace(_ workspaceID: WorkspaceID) throws {
+        _ = try workspace(workspaceID)
+        try mutate { $0.selectedWorkspaceID = workspaceID }
+    }
+
+    public func focusTabGroup(workspaceID: WorkspaceID, tabGroupID: TabGroupID) throws {
         try mutate { snapshot in
-            guard snapshot.workspaces.contains(where: { $0.id == workspaceID }) else {
-                throw WorkspaceStoreError.workspaceNotFound(workspaceID)
+            let index = try workspaceIndex(workspaceID, in: snapshot)
+            guard snapshot.workspaces[index].group(id: tabGroupID) != nil else {
+                throw WorkspaceStoreError.tabGroupNotFound(tabGroupID)
             }
-            snapshot.selectedWorkspaceID = workspaceID
+            snapshot.workspaces[index].focusedTabGroupID = tabGroupID
         }
     }
 
     @discardableResult
-    public func addTab(to workspaceID: WorkspaceID, content: TabContent, at index: Int? = nil) throws -> TabID {
+    public func addTab(
+        to workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
+        content: TabContent,
+        at index: Int? = nil
+    ) throws -> TabID {
         let tab = Tab(content: content)
         try mutate { snapshot in
             let workspaceIndex = try workspaceIndex(workspaceID, in: snapshot)
-            var tabs = snapshot.workspaces[workspaceIndex].tabs
+            var workspace = snapshot.workspaces[workspaceIndex]
+            var group = try tabGroup(tabGroupID, in: workspace)
             if let index {
-                guard (0...tabs.count).contains(index) else {
-                    throw WorkspaceStoreError.invalidTabIndex(index)
-                }
-                tabs.insert(tab, at: index)
+                guard (0...group.tabs.count).contains(index) else { throw WorkspaceStoreError.invalidTabIndex(index) }
+                group.tabs.insert(tab, at: index)
             } else {
-                tabs.append(tab)
+                group.tabs.append(tab)
             }
-            snapshot.workspaces[workspaceIndex].tabs = tabs
-            snapshot.workspaces[workspaceIndex].selectedTabID = tab.id
+            group.selectedTabID = tab.id
+            workspace.focusedTabGroupID = group.id
+            guard workspace.layout.replaceGroup(id: group.id, with: group) else {
+                throw WorkspaceStoreError.tabGroupNotFound(group.id)
+            }
+            snapshot.workspaces[workspaceIndex] = workspace
         }
         return tab.id
     }
@@ -496,70 +569,254 @@ public final class WorkspaceStore {
     @discardableResult
     public func addTerminalTab(
         to workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
         workingDirectory: URL? = nil,
         at index: Int? = nil
     ) throws -> TabID {
-        try addTab(to: workspaceID, content: Tab.terminal(workingDirectory: workingDirectory).content, at: index)
+        try addTab(
+            to: workspaceID,
+            tabGroupID: tabGroupID,
+            content: Tab.terminal(workingDirectory: workingDirectory).content,
+            at: index
+        )
     }
 
     @discardableResult
     public func addBrowserTab(
         to workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
         url: URL,
         profile: BrowserDataProfile? = nil,
         at index: Int? = nil
     ) throws -> TabID {
-        try addTab(to: workspaceID, content: Tab.browser(url: url, profile: profile).content, at: index)
+        try addTab(
+            to: workspaceID,
+            tabGroupID: tabGroupID,
+            content: Tab.browser(url: url, profile: profile).content,
+            at: index
+        )
     }
 
-    @discardableResult
-    public func insertBrowserPane(
-        workspaceID: WorkspaceID,
-        tabID: TabID,
-        beside paneID: PaneID,
-        url: URL,
-        profile: BrowserDataProfile? = nil,
-        orientation: SplitOrientation = .horizontal
-    ) throws -> BrowserSessionID {
-        let browser = BrowserSession(url: url, profile: profile)
+    public func selectTab(workspaceID: WorkspaceID, tabGroupID: TabGroupID, tabID: TabID) throws {
         try mutate { snapshot in
-            let (workspaceIndex, tabIndex) = try tabLocation(
-                workspaceID: workspaceID,
-                tabID: tabID,
-                in: snapshot
-            )
-            var tab = snapshot.workspaces[workspaceIndex].tabs[tabIndex]
-            var tree = tab.splitTree
-            guard tree.insert(.browser(browser), beside: paneID, orientation: orientation) else {
-                throw WorkspaceStoreError.paneNotFound(paneID)
-            }
-            tab.content = .terminal(tree)
-            tab.focusedPaneID = browser.paneID
-            tab.focusedTerminalSessionID = nil
-            snapshot.workspaces[workspaceIndex].tabs[tabIndex] = tab
+            let workspaceIndex = try workspaceIndex(workspaceID, in: snapshot)
+            var workspace = snapshot.workspaces[workspaceIndex]
+            var group = try tabGroup(tabGroupID, in: workspace)
+            guard group.tabs.contains(where: { $0.id == tabID }) else { throw WorkspaceStoreError.tabNotFound(tabID) }
+            group.selectedTabID = tabID
+            workspace.focusedTabGroupID = group.id
+            _ = workspace.layout.replaceGroup(id: group.id, with: group)
+            snapshot.workspaces[workspaceIndex] = workspace
         }
-        return browser.id
+    }
+
+    public func renameTab(
+        workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
+        tabID: TabID,
+        customTitle: String?
+    ) throws {
+        try updateTab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID) {
+            $0.customTitle = customTitle?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        }
+    }
+
+    public func reorderTab(
+        workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
+        tabID: TabID,
+        to index: Int
+    ) throws {
+        try mutate { snapshot in
+            let workspaceIndex = try workspaceIndex(workspaceID, in: snapshot)
+            var workspace = snapshot.workspaces[workspaceIndex]
+            var group = try tabGroup(tabGroupID, in: workspace)
+            guard let oldIndex = group.tabs.firstIndex(where: { $0.id == tabID }) else {
+                throw WorkspaceStoreError.tabNotFound(tabID)
+            }
+            guard group.tabs.indices.contains(index) else { throw WorkspaceStoreError.invalidTabIndex(index) }
+            guard oldIndex != index else { return }
+            let tab = group.tabs.remove(at: oldIndex)
+            group.tabs.insert(tab, at: index)
+            _ = workspace.layout.replaceGroup(id: group.id, with: group)
+            snapshot.workspaces[workspaceIndex] = workspace
+        }
     }
 
     @discardableResult
-    public func closeTab(workspaceID: WorkspaceID, tabID: TabID) throws -> WorkspaceLifecycleChange {
+    public func splitTabGroup(
+        workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
+        edge: PaneEdge,
+        workingDirectory: URL? = nil
+    ) throws -> TabGroupSplitResult {
+        let tab = Tab.terminal(workingDirectory: workingDirectory)
+        let group = TabGroup(tab: tab)
+        try mutate { snapshot in
+            let index = try workspaceIndex(workspaceID, in: snapshot)
+            var workspace = snapshot.workspaces[index]
+            guard workspace.layout.insertGroup(group, beside: tabGroupID, edge: edge) else {
+                throw WorkspaceStoreError.tabGroupNotFound(tabGroupID)
+            }
+            workspace.focusedTabGroupID = group.id
+            snapshot.workspaces[index] = workspace
+        }
+        return TabGroupSplitResult(tabGroupID: group.id, tabID: tab.id)
+    }
+
+    @discardableResult
+    public func moveTab(
+        workspaceID: WorkspaceID,
+        sourceTabGroupID: TabGroupID,
+        tabID: TabID,
+        to destinationTabGroupID: TabGroupID,
+        at index: Int? = nil
+    ) throws -> Bool {
+        if sourceTabGroupID == destinationTabGroupID {
+            let group = try tabGroup(sourceTabGroupID, in: workspace(workspaceID))
+            guard let oldIndex = group.tabs.firstIndex(where: { $0.id == tabID }) else {
+                throw WorkspaceStoreError.tabNotFound(tabID)
+            }
+            let targetIndex = index ?? (group.tabs.count - 1)
+            guard group.tabs.indices.contains(targetIndex) else { throw WorkspaceStoreError.invalidTabIndex(targetIndex) }
+            guard oldIndex != targetIndex else { return false }
+            try reorderTab(workspaceID: workspaceID, tabGroupID: sourceTabGroupID, tabID: tabID, to: targetIndex)
+            return true
+        }
+
+        var didMove = false
+        try mutate { snapshot in
+            let workspaceIndex = try workspaceIndex(workspaceID, in: snapshot)
+            var workspace = snapshot.workspaces[workspaceIndex]
+            var source = try tabGroup(sourceTabGroupID, in: workspace)
+            var destination = try tabGroup(destinationTabGroupID, in: workspace)
+            guard let sourceIndex = source.tabs.firstIndex(where: { $0.id == tabID }) else {
+                throw WorkspaceStoreError.tabNotFound(tabID)
+            }
+            let destinationIndex = index ?? destination.tabs.count
+            guard (0...destination.tabs.count).contains(destinationIndex) else {
+                throw WorkspaceStoreError.invalidTabIndex(destinationIndex)
+            }
+            let tab = source.tabs.remove(at: sourceIndex)
+            destination.tabs.insert(tab, at: destinationIndex)
+            destination.selectedTabID = tab.id
+
+            if source.tabs.isEmpty {
+                guard let collapsed = workspace.layout.removingGroup(id: source.id) else {
+                    throw WorkspaceStoreError.invariantViolation(reason: "Moving a tab removed the final tab group.")
+                }
+                workspace.layout = collapsed
+            } else {
+                if source.selectedTabID == tab.id {
+                    source.selectedTabID = source.tabs[min(sourceIndex, source.tabs.count - 1)].id
+                }
+                _ = workspace.layout.replaceGroup(id: source.id, with: source)
+            }
+            guard workspace.layout.replaceGroup(id: destination.id, with: destination) else {
+                throw WorkspaceStoreError.tabGroupNotFound(destination.id)
+            }
+            workspace.focusedTabGroupID = destination.id
+            snapshot.workspaces[workspaceIndex] = workspace
+            didMove = true
+        }
+        return didMove
+    }
+
+    @discardableResult
+    public func moveTabToNewGroup(
+        workspaceID: WorkspaceID,
+        sourceTabGroupID: TabGroupID,
+        tabID: TabID,
+        beside targetTabGroupID: TabGroupID,
+        edge: PaneEdge
+    ) throws -> TabGroupID? {
+        var createdGroupID: TabGroupID?
+        try mutate { snapshot in
+            let workspaceIndex = try workspaceIndex(workspaceID, in: snapshot)
+            var workspace = snapshot.workspaces[workspaceIndex]
+            var source = try tabGroup(sourceTabGroupID, in: workspace)
+            _ = try tabGroup(targetTabGroupID, in: workspace)
+            guard let sourceIndex = source.tabs.firstIndex(where: { $0.id == tabID }) else {
+                throw WorkspaceStoreError.tabNotFound(tabID)
+            }
+            guard source.tabs.count > 1 || sourceTabGroupID != targetTabGroupID else { return }
+
+            let tab = source.tabs.remove(at: sourceIndex)
+            if source.tabs.isEmpty {
+                guard let collapsed = workspace.layout.removingGroup(id: source.id) else {
+                    throw WorkspaceStoreError.invariantViolation(reason: "Moving a tab removed the final tab group.")
+                }
+                workspace.layout = collapsed
+            } else {
+                if source.selectedTabID == tab.id {
+                    source.selectedTabID = source.tabs[min(sourceIndex, source.tabs.count - 1)].id
+                }
+                _ = workspace.layout.replaceGroup(id: source.id, with: source)
+            }
+
+            let group = TabGroup(tab: tab)
+            guard workspace.layout.insertGroup(group, beside: targetTabGroupID, edge: edge) else {
+                throw WorkspaceStoreError.tabGroupNotFound(targetTabGroupID)
+            }
+            workspace.focusedTabGroupID = group.id
+            snapshot.workspaces[workspaceIndex] = workspace
+            createdGroupID = group.id
+        }
+        return createdGroupID
+    }
+
+    public func updateSplitWeights(
+        workspaceID: WorkspaceID,
+        splitID: SplitNodeID,
+        weights: [Double]
+    ) throws {
+        try mutate { snapshot in
+            let index = try workspaceIndex(workspaceID, in: snapshot)
+            guard snapshot.workspaces[index].layout.updateWeights(splitID: splitID, weights: weights) else {
+                throw WorkspaceStoreError.splitNodeNotFound(splitID)
+            }
+        }
+    }
+
+    @discardableResult
+    public func closeTab(
+        workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
+        tabID: TabID
+    ) throws -> WorkspaceLifecycleChange {
         var removedWorkspace: Workspace?
         var replacementWorkspace: Workspace?
         try mutate { snapshot in
             let workspaceIndex = try workspaceIndex(workspaceID, in: snapshot)
-            guard let tabIndex = snapshot.workspaces[workspaceIndex].tabs.firstIndex(where: { $0.id == tabID }) else {
+            var workspace = snapshot.workspaces[workspaceIndex]
+            var group = try tabGroup(tabGroupID, in: workspace)
+            guard let tabIndex = group.tabs.firstIndex(where: { $0.id == tabID }) else {
                 throw WorkspaceStoreError.tabNotFound(tabID)
             }
-            snapshot.workspaces[workspaceIndex].tabs.remove(at: tabIndex)
-            if snapshot.workspaces[workspaceIndex].tabs.isEmpty {
-                removedWorkspace = snapshot.workspaces.remove(at: workspaceIndex)
-                let wasOnlyWorkspace = snapshot.workspaces.isEmpty
-                snapshot.repair()
-                if wasOnlyWorkspace {
-                    replacementWorkspace = snapshot.workspaces.first
+            if group.tabs.count > 1 {
+                group.tabs.remove(at: tabIndex)
+                if group.selectedTabID == tabID {
+                    group.selectedTabID = group.tabs[min(tabIndex, group.tabs.count - 1)].id
                 }
+                _ = workspace.layout.replaceGroup(id: group.id, with: group)
+                snapshot.workspaces[workspaceIndex] = workspace
+            } else if workspace.orderedGroups.count > 1 {
+                guard let remainingLayout = workspace.layout.removingGroup(id: group.id) else {
+                    throw WorkspaceStoreError.invariantViolation(
+                        reason: "Closing group \(group.id) unexpectedly removed the entire workspace layout."
+                    )
+                }
+                workspace.layout = remainingLayout
+                workspace.repair()
+                snapshot.workspaces[workspaceIndex] = workspace
             } else {
-                snapshot.workspaces[workspaceIndex].repair()
+                removedWorkspace = snapshot.workspaces.remove(at: workspaceIndex)
+                if snapshot.workspaces.isEmpty {
+                    let replacement = Workspace(title: "Workspace")
+                    snapshot.workspaces = [replacement]
+                    snapshot.selectedWorkspaceID = replacement.id
+                    replacementWorkspace = replacement
+                }
             }
         }
         return WorkspaceLifecycleChange(
@@ -567,383 +824,136 @@ public final class WorkspaceStore {
             replacementWorkspace: replacementWorkspace,
             selectedWorkspaceID: snapshot.selectedWorkspaceID
         )
-    }
-
-    public func selectTab(workspaceID: WorkspaceID, tabID: TabID) throws {
-        try mutate { snapshot in
-            let workspaceIndex = try workspaceIndex(workspaceID, in: snapshot)
-            guard snapshot.workspaces[workspaceIndex].tabs.contains(where: { $0.id == tabID }) else {
-                throw WorkspaceStoreError.tabNotFound(tabID)
-            }
-            snapshot.workspaces[workspaceIndex].selectedTabID = tabID
-        }
-    }
-
-    public func reorderTab(workspaceID: WorkspaceID, tabID: TabID, to index: Int) throws {
-        try mutate { snapshot in
-            let workspaceIndex = try workspaceIndex(workspaceID, in: snapshot)
-            var tabs = snapshot.workspaces[workspaceIndex].tabs
-            guard let oldIndex = tabs.firstIndex(where: { $0.id == tabID }) else {
-                throw WorkspaceStoreError.tabNotFound(tabID)
-            }
-            guard tabs.indices.contains(index) else {
-                throw WorkspaceStoreError.invalidTabIndex(index)
-            }
-            let tab = tabs.remove(at: oldIndex)
-            tabs.insert(tab, at: index)
-            snapshot.workspaces[workspaceIndex].tabs = tabs
-        }
-    }
-
-    @discardableResult
-    public func splitTerminalPane(
-        workspaceID: WorkspaceID,
-        tabID: TabID,
-        sessionID: TerminalSessionID,
-        orientation: SplitOrientation,
-        workingDirectory: URL? = nil
-    ) throws -> TerminalSessionID {
-        let newSession = TerminalSession(workingDirectory: workingDirectory)
-        try mutate { snapshot in
-            let (workspaceIndex, tabIndex) = try tabLocation(
-                workspaceID: workspaceID,
-                tabID: tabID,
-                in: snapshot
-            )
-            var tab = snapshot.workspaces[workspaceIndex].tabs[tabIndex]
-            guard case .terminal(var tree) = tab.content else {
-                throw WorkspaceStoreError.terminalTabRequired(tabID)
-            }
-            guard tree.insert(newSession, beside: sessionID, orientation: orientation) else {
-                throw WorkspaceStoreError.terminalSessionNotFound(sessionID)
-            }
-            tab.content = .terminal(tree)
-            tab.focusedTerminalSessionID = newSession.id
-            tab.focusedPaneID = newSession.paneID
-            snapshot.workspaces[workspaceIndex].tabs[tabIndex] = tab
-        }
-        return newSession.id
-    }
-
-    @discardableResult
-    public func splitTerminalPane(
-        workspaceID: WorkspaceID,
-        tabID: TabID,
-        paneID: PaneID,
-        orientation: SplitOrientation,
-        workingDirectory: URL? = nil
-    ) throws -> PaneID {
-        let newSession = TerminalSession(workingDirectory: workingDirectory)
-        try mutate { snapshot in
-            let (workspaceIndex, tabIndex) = try tabLocation(
-                workspaceID: workspaceID,
-                tabID: tabID,
-                in: snapshot
-            )
-            var tab = snapshot.workspaces[workspaceIndex].tabs[tabIndex]
-            var tree = tab.splitTree
-            guard tree.insert(.terminal(newSession), beside: paneID, orientation: orientation) else {
-                throw WorkspaceStoreError.paneNotFound(paneID)
-            }
-            tab.content = .terminal(tree)
-            tab.focusedPaneID = newSession.paneID
-            tab.focusedTerminalSessionID = newSession.id
-            snapshot.workspaces[workspaceIndex].tabs[tabIndex] = tab
-        }
-        return newSession.paneID
-    }
-
-    @discardableResult
-    public func closeTerminalPane(
-        workspaceID: WorkspaceID,
-        tabID: TabID,
-        sessionID: TerminalSessionID
-    ) throws -> WorkspaceLifecycleChange {
-        let workspace = try workspace(workspaceID)
-        guard let tab = workspace.tabs.first(where: { $0.id == tabID }) else {
-            throw WorkspaceStoreError.tabNotFound(tabID)
-        }
-        guard let session = tab.splitTree.terminalSessions.first(where: { $0.id == sessionID }) else {
-            throw WorkspaceStoreError.terminalSessionNotFound(sessionID)
-        }
-        return try closePane(workspaceID: workspaceID, tabID: tabID, paneID: session.paneID)
-    }
-
-    @discardableResult
-    public func closeTerminalPane(
-        workspaceID: WorkspaceID,
-        tabID: TabID,
-        paneID: PaneID
-    ) throws -> WorkspaceLifecycleChange {
-        let workspace = try workspace(workspaceID)
-        guard let tab = workspace.tabs.first(where: { $0.id == tabID }) else {
-            throw WorkspaceStoreError.tabNotFound(tabID)
-        }
-        let tree = tab.splitTree
-        guard let session = tree.session(for: paneID) else {
-            throw WorkspaceStoreError.paneNotFound(paneID)
-        }
-        return try closeTerminalPane(workspaceID: workspaceID, tabID: tabID, sessionID: session.id)
     }
 
     @discardableResult
     public func closePane(
         workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
         tabID: TabID,
         paneID: PaneID
     ) throws -> WorkspaceLifecycleChange {
-        var removedWorkspace: Workspace?
-        var replacementWorkspace: Workspace?
-        try mutate { snapshot in
-            let workspaceIndex = try workspaceIndex(workspaceID, in: snapshot)
-            guard let tabIndex = snapshot.workspaces[workspaceIndex].tabs.firstIndex(where: { $0.id == tabID }) else {
-                throw WorkspaceStoreError.tabNotFound(tabID)
-            }
-            let tab = snapshot.workspaces[workspaceIndex].tabs[tabIndex]
-            let tree = tab.splitTree
-            guard tree.contains(paneID: paneID) else {
-                throw WorkspaceStoreError.paneNotFound(paneID)
-            }
-            if tree.paneIDs.count == 1 {
-                snapshot.workspaces[workspaceIndex].tabs.remove(at: tabIndex)
-                if snapshot.workspaces[workspaceIndex].tabs.isEmpty {
-                    removedWorkspace = snapshot.workspaces.remove(at: workspaceIndex)
-                    let wasOnlyWorkspace = snapshot.workspaces.isEmpty
-                    snapshot.repair()
-                    if wasOnlyWorkspace { replacementWorkspace = snapshot.workspaces.first }
-                } else {
-                    snapshot.workspaces[workspaceIndex].repair()
-                }
-                return
-            }
-            guard let collapsedTree = tree.removingPane(paneID) else {
-                throw WorkspaceStoreError.invariantViolation(
-                    reason: "Pane tree became empty while closing a non-final pane."
-                )
-            }
-            var updatedTab = tab
-            updatedTab.content = .terminal(collapsedTree)
-            updatedTab.repair()
-            snapshot.workspaces[workspaceIndex].tabs[tabIndex] = updatedTab
-        }
-        return WorkspaceLifecycleChange(
-            removedWorkspace: removedWorkspace,
-            replacementWorkspace: replacementWorkspace,
-            selectedWorkspaceID: snapshot.selectedWorkspaceID
-        )
+        let tab = try tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)
+        guard tab.paneID == paneID else { throw WorkspaceStoreError.paneNotFound(paneID) }
+        return try closeTab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)
     }
 
-    public func focusTerminalPane(
+    public func focusPane(
         workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
         tabID: TabID,
-        sessionID: TerminalSessionID
+        paneID: PaneID
     ) throws {
-        try mutate { snapshot in
-            let (workspaceIndex, tabIndex) = try tabLocation(
-                workspaceID: workspaceID,
-                tabID: tabID,
-                in: snapshot
-            )
-            var tab = snapshot.workspaces[workspaceIndex].tabs[tabIndex]
-            guard case .terminal(let tree) = tab.content else {
+        let tab = try tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)
+        guard tab.paneID == paneID else { throw WorkspaceStoreError.paneNotFound(paneID) }
+        try selectTab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)
+    }
+
+    public func updateTerminalWorkingDirectory(
+        workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
+        tabID: TabID,
+        workingDirectory: URL?
+    ) throws {
+        try updateTab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID) { tab in
+            guard case .terminal(var session) = tab.content else {
                 throw WorkspaceStoreError.terminalTabRequired(tabID)
             }
-            guard tree.contains(sessionID) else {
-                throw WorkspaceStoreError.terminalSessionNotFound(sessionID)
-            }
-            tab.focusedTerminalSessionID = sessionID
-            tab.focusedPaneID = tree.terminalSessions.first(where: { $0.id == sessionID })?.paneID
-            snapshot.workspaces[workspaceIndex].tabs[tabIndex] = tab
+            session.workingDirectory = workingDirectory
+            tab.content = .terminal(session)
         }
     }
 
-    public func focusTerminalPane(workspaceID: WorkspaceID, tabID: TabID, paneID: PaneID) throws {
-        let workspace = try workspace(workspaceID)
-        guard let tab = workspace.tabs.first(where: { $0.id == tabID }) else {
-            throw WorkspaceStoreError.tabNotFound(tabID)
-        }
-        guard case .terminal(let tree) = tab.content else {
-            throw WorkspaceStoreError.terminalTabRequired(tabID)
-        }
-        guard let session = tree.session(for: paneID) else {
-            throw WorkspaceStoreError.paneNotFound(paneID)
-        }
-        try focusTerminalPane(workspaceID: workspaceID, tabID: tabID, sessionID: session.id)
-    }
-
-    public func focusPane(workspaceID: WorkspaceID, tabID: TabID, paneID: PaneID) throws {
-        try mutate { snapshot in
-            let (workspaceIndex, tabIndex) = try tabLocation(
-                workspaceID: workspaceID,
-                tabID: tabID,
-                in: snapshot
-            )
-            var tab = snapshot.workspaces[workspaceIndex].tabs[tabIndex]
-            let tree = tab.splitTree
-            guard tree.contains(paneID: paneID) else {
-                throw WorkspaceStoreError.paneNotFound(paneID)
+    public func updateTerminalRecentText(
+        workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
+        tabID: TabID,
+        recentText: String?
+    ) throws {
+        try updateTab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID) { tab in
+            guard case .terminal(var session) = tab.content else {
+                throw WorkspaceStoreError.terminalTabRequired(tabID)
             }
-            tab.focusedPaneID = paneID
-            tab.focusedTerminalSessionID = tree.session(for: paneID)?.id
-            snapshot.workspaces[workspaceIndex].tabs[tabIndex] = tab
+            session.recentText = TerminalSession.boundedRecentText(recentText)
+            tab.content = .terminal(session)
         }
     }
 
     public func updateBrowserURL(
         workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
         tabID: TabID,
-        browserID: BrowserSessionID? = nil,
         url: URL
     ) throws {
-        try mutate { snapshot in
-            let (workspaceIndex, tabIndex) = try tabLocation(
-                workspaceID: workspaceID,
-                tabID: tabID,
-                in: snapshot
-            )
-            var tab = snapshot.workspaces[workspaceIndex].tabs[tabIndex]
-            var tree = tab.splitTree
-            guard let targetID = browserID ?? tree.browserSessionIDs.first,
-                  tree.updateBrowserURL(url, for: targetID) else {
+        try updateTab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID) { tab in
+            guard case .browser(var session) = tab.content else {
                 throw WorkspaceStoreError.browserTabRequired(tabID)
             }
-            if case .browser = tab.content, let browser = tree.browser(id: targetID) {
-                tab.content = .browser(browser)
-            } else {
-                tab.content = .terminal(tree)
-            }
-            snapshot.workspaces[workspaceIndex].tabs[tabIndex] = tab
+            session.url = url
+            tab.content = .browser(session)
         }
     }
 
     public func updateBrowserDataProfile(
         workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
         tabID: TabID,
-        browserID: BrowserSessionID? = nil,
         profile: BrowserDataProfile?
     ) throws {
-        try mutate { snapshot in
-            let (workspaceIndex, tabIndex) = try tabLocation(
-                workspaceID: workspaceID,
-                tabID: tabID,
-                in: snapshot
-            )
-            var tab = snapshot.workspaces[workspaceIndex].tabs[tabIndex]
-            var tree = tab.splitTree
-            guard let targetID = browserID ?? tree.browserSessionIDs.first,
-                  tree.updateBrowserDataProfile(profile, for: targetID) else {
+        try updateTab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID) { tab in
+            guard case .browser(var session) = tab.content else {
                 throw WorkspaceStoreError.browserTabRequired(tabID)
             }
-            if case .browser = tab.content, let browser = tree.browser(id: targetID) {
-                tab.content = .browser(browser)
-            } else {
-                tab.content = .terminal(tree)
-            }
-            snapshot.workspaces[workspaceIndex].tabs[tabIndex] = tab
+            session.profile = profile
+            tab.content = .browser(session)
         }
     }
 
     public func updateBrowserDataProfiles(
         _ updates: [(
             workspaceID: WorkspaceID,
+            tabGroupID: TabGroupID,
             tabID: TabID,
-            browserID: BrowserSessionID,
             profile: BrowserDataProfile
         )]
     ) throws {
         guard !updates.isEmpty else { return }
         try mutate { snapshot in
             for update in updates {
-                let (workspaceIndex, tabIndex) = try tabLocation(
-                    workspaceID: update.workspaceID,
-                    tabID: update.tabID,
-                    in: snapshot
-                )
-                var tab = snapshot.workspaces[workspaceIndex].tabs[tabIndex]
-                var tree = tab.splitTree
-                guard tree.updateBrowserDataProfile(update.profile, for: update.browserID) else {
+                let workspaceIndex = try workspaceIndex(update.workspaceID, in: snapshot)
+                var workspace = snapshot.workspaces[workspaceIndex]
+                var group = try tabGroup(update.tabGroupID, in: workspace)
+                guard let tabIndex = group.tabs.firstIndex(where: { $0.id == update.tabID }) else {
+                    throw WorkspaceStoreError.tabNotFound(update.tabID)
+                }
+                guard case .browser(var session) = group.tabs[tabIndex].content else {
                     throw WorkspaceStoreError.browserTabRequired(update.tabID)
                 }
-                if case .browser = tab.content, let browser = tree.browser(id: update.browserID) {
-                    tab.content = .browser(browser)
-                } else {
-                    tab.content = .terminal(tree)
-                }
-                snapshot.workspaces[workspaceIndex].tabs[tabIndex] = tab
+                session.profile = update.profile
+                group.tabs[tabIndex].content = .browser(session)
+                _ = workspace.layout.replaceGroup(id: group.id, with: group)
+                snapshot.workspaces[workspaceIndex] = workspace
             }
         }
     }
 
-    public func updateTerminalWorkingDirectory(
+    private func updateTab(
         workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
         tabID: TabID,
-        sessionID: TerminalSessionID,
-        workingDirectory: URL?
+        update: (inout Tab) throws -> Void
     ) throws {
         try mutate { snapshot in
-            let (workspaceIndex, tabIndex) = try tabLocation(
-                workspaceID: workspaceID,
-                tabID: tabID,
-                in: snapshot
-            )
-            var tab = snapshot.workspaces[workspaceIndex].tabs[tabIndex]
-            guard case .terminal(var tree) = tab.content else {
-                throw WorkspaceStoreError.terminalTabRequired(tabID)
+            let workspaceIndex = try workspaceIndex(workspaceID, in: snapshot)
+            var workspace = snapshot.workspaces[workspaceIndex]
+            var group = try tabGroup(tabGroupID, in: workspace)
+            guard let tabIndex = group.tabs.firstIndex(where: { $0.id == tabID }) else {
+                throw WorkspaceStoreError.tabNotFound(tabID)
             }
-            guard tree.updateWorkingDirectory(workingDirectory, for: sessionID) else {
-                throw WorkspaceStoreError.terminalSessionNotFound(sessionID)
-            }
-            tab.content = .terminal(tree)
-            snapshot.workspaces[workspaceIndex].tabs[tabIndex] = tab
+            try update(&group.tabs[tabIndex])
+            _ = workspace.layout.replaceGroup(id: group.id, with: group)
+            snapshot.workspaces[workspaceIndex] = workspace
         }
-    }
-
-    public func updateTerminalRecentText(
-        workspaceID: WorkspaceID,
-        tabID: TabID,
-        sessionID: TerminalSessionID,
-        recentText: String?
-    ) throws {
-        try mutate { snapshot in
-            let (workspaceIndex, tabIndex) = try tabLocation(
-                workspaceID: workspaceID,
-                tabID: tabID,
-                in: snapshot
-            )
-            var tab = snapshot.workspaces[workspaceIndex].tabs[tabIndex]
-            guard case .terminal(var tree) = tab.content else {
-                throw WorkspaceStoreError.terminalTabRequired(tabID)
-            }
-            guard tree.updateRecentText(recentText, for: sessionID) else {
-                throw WorkspaceStoreError.terminalSessionNotFound(sessionID)
-            }
-            tab.content = .terminal(tree)
-            snapshot.workspaces[workspaceIndex].tabs[tabIndex] = tab
-        }
-    }
-
-    public func updateTerminalWorkingDirectory(
-        workspaceID: WorkspaceID,
-        tabID: TabID,
-        paneID: PaneID,
-        workingDirectory: URL?
-    ) throws {
-        let currentWorkspace = try workspace(workspaceID)
-        guard let tab = currentWorkspace.tabs.first(where: { $0.id == tabID }) else {
-            throw WorkspaceStoreError.tabNotFound(tabID)
-        }
-        guard case .terminal(let tree) = tab.content else {
-            throw WorkspaceStoreError.terminalTabRequired(tabID)
-        }
-        guard let session = tree.session(for: paneID) else {
-            throw WorkspaceStoreError.paneNotFound(paneID)
-        }
-        try updateTerminalWorkingDirectory(
-            workspaceID: workspaceID,
-            tabID: tabID,
-            sessionID: session.id,
-            workingDirectory: workingDirectory
-        )
     }
 
     private func mutate(_ body: (inout WorkspaceStoreSnapshot) throws -> Void) throws {
@@ -962,28 +972,100 @@ public final class WorkspaceStore {
             )
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            let data = try encoder.encode(snapshot)
-            try data.write(to: persistenceURL, options: .atomic)
+            try encoder.encode(snapshot).write(to: persistenceURL, options: .atomic)
         } catch {
             if let error = error as? WorkspaceStoreError { throw error }
             throw WorkspaceStoreError.saveFailed(path: persistenceURL.path, reason: error.localizedDescription)
         }
     }
 
-    private func workspaceIndex(
-        _ workspaceID: WorkspaceID,
-        in snapshot: WorkspaceStoreSnapshot
+    private static func persistedVersion(in data: Data) -> Int? {
+        (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["version"] as? Int
+    }
+
+    private static func persistedMutationCount(
+        from originalData: Data,
+        to snapshot: WorkspaceStoreSnapshot
     ) throws -> Int {
+        do {
+            let encodedData = try JSONEncoder().encode(snapshot)
+            let original = try JSONSerialization.jsonObject(with: originalData)
+            let repaired = try JSONSerialization.jsonObject(with: encodedData)
+            return jsonDifferenceCount(original, repaired)
+        } catch {
+            throw WorkspaceStoreError.invalidPersistence(
+                reason: "Could not compare repaired workspace state: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    private static func jsonDifferenceCount(_ lhs: Any, _ rhs: Any) -> Int {
+        if let lhs = lhs as? [String: Any], let rhs = rhs as? [String: Any] {
+            return Set(lhs.keys).union(rhs.keys).reduce(into: 0) { count, key in
+                guard let left = lhs[key], let right = rhs[key] else {
+                    count += 1
+                    return
+                }
+                count += jsonDifferenceCount(left, right)
+            }
+        }
+        if let lhs = lhs as? [Any], let rhs = rhs as? [Any] {
+            let sharedCount = min(lhs.count, rhs.count)
+            let changed = (0..<sharedCount).reduce(into: 0) { count, index in
+                count += jsonDifferenceCount(lhs[index], rhs[index])
+            }
+            return changed + abs(lhs.count - rhs.count)
+        }
+        if let lhs = lhs as? NSNumber, let rhs = rhs as? NSNumber {
+            let lhsIsBoolean = CFGetTypeID(lhs) == CFBooleanGetTypeID()
+            let rhsIsBoolean = CFGetTypeID(rhs) == CFBooleanGetTypeID()
+            guard lhsIsBoolean == rhsIsBoolean else { return 1 }
+            if lhsIsBoolean {
+                return lhs.boolValue == rhs.boolValue ? 0 : 1
+            }
+            return lhs.compare(rhs) == .orderedSame ? 0 : 1
+        }
+        if lhs is NSNull, rhs is NSNull { return 0 }
+        if let lhs = lhs as? String, let rhs = rhs as? String {
+            return lhs == rhs ? 0 : 1
+        }
+        return 1
+    }
+
+    private static func preserveOriginal(
+        _ data: Data,
+        at backupURL: URL,
+        fileManager: FileManager
+    ) throws {
+        do {
+            try fileManager.createDirectory(
+                at: backupURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            if fileManager.fileExists(atPath: backupURL.path) {
+                let existing = try Data(contentsOf: backupURL)
+                if existing == data { return }
+                throw WorkspaceStoreError.backupFailed(
+                    path: backupURL.path,
+                    reason: "A different backup already exists; the current source was not overwritten."
+                )
+            }
+            try data.write(to: backupURL, options: .atomic)
+        } catch let error as WorkspaceStoreError {
+            throw error
+        } catch {
+            throw WorkspaceStoreError.backupFailed(path: backupURL.path, reason: error.localizedDescription)
+        }
+    }
+
+    private func workspaceIndex(_ workspaceID: WorkspaceID, in snapshot: WorkspaceStoreSnapshot) throws -> Int {
         guard let index = snapshot.workspaces.firstIndex(where: { $0.id == workspaceID }) else {
             throw WorkspaceStoreError.workspaceNotFound(workspaceID)
         }
         return index
     }
 
-    private func folderIndex(
-        _ folderID: WorkspaceFolderID,
-        in snapshot: WorkspaceStoreSnapshot
-    ) throws -> Int {
+    private func folderIndex(_ folderID: WorkspaceFolderID, in snapshot: WorkspaceStoreSnapshot) throws -> Int {
         guard let index = snapshot.folders.firstIndex(where: { $0.id == folderID }) else {
             throw WorkspaceStoreError.folderNotFound(folderID)
         }
@@ -997,27 +1079,529 @@ public final class WorkspaceStore {
         return workspace
     }
 
-    private func tabLocation(
-        workspaceID: WorkspaceID,
-        tabID: TabID,
-        in snapshot: WorkspaceStoreSnapshot
-    ) throws -> (workspaceIndex: Int, tabIndex: Int) {
-        let workspaceIndex = try workspaceIndex(workspaceID, in: snapshot)
-        guard let tabIndex = snapshot.workspaces[workspaceIndex].tabs.firstIndex(where: { $0.id == tabID }) else {
+    private func tabGroup(_ tabGroupID: TabGroupID, in workspace: Workspace) throws -> TabGroup {
+        guard let group = workspace.group(id: tabGroupID) else {
+            throw WorkspaceStoreError.tabGroupNotFound(tabGroupID)
+        }
+        return group
+    }
+
+    private func tab(workspaceID: WorkspaceID, tabGroupID: TabGroupID, tabID: TabID) throws -> Tab {
+        let group = try tabGroup(tabGroupID, in: workspace(workspaceID))
+        guard let tab = group.tabs.first(where: { $0.id == tabID }) else {
             throw WorkspaceStoreError.tabNotFound(tabID)
         }
-        return (workspaceIndex, tabIndex)
+        return tab
     }
 }
 
-private func terminalPaneID(from tab: Tab?, sessionID: TerminalSessionID) throws -> PaneID {
-    guard let tab, case .terminal(let tree) = tab.content,
-          let session = tree.terminalSessions.first(where: { $0.id == sessionID }) else {
-        throw WorkspaceStoreError.terminalSessionNotFound(sessionID)
+private extension Workspace {
+    func replacingID(_ id: WorkspaceID) -> Workspace {
+        Workspace(
+            id: id,
+            title: title,
+            emoji: emoji,
+            color: color,
+            layout: layout,
+            focusedTabGroupID: focusedTabGroupID,
+            folderID: folderID,
+            isPinned: isPinned,
+            settingsOverrides: settingsOverrides
+        )
     }
-    return session.paneID
 }
 
 private extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
+}
+
+// MARK: - Version 1 migration
+
+private struct LegacySnapshot: Decodable {
+    let folders: [WorkspaceFolder]
+    let globalSettings: TerminalPreferences
+    let workspaces: [LegacyWorkspace]
+    let selectedWorkspaceID: WorkspaceID?
+
+    private enum CodingKeys: String, CodingKey {
+        case folders
+        case globalSettings
+        case workspaces
+        case selectedWorkspaceID
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        folders = try container.decodeIfPresent(LossyArray<WorkspaceFolder>.self, forKey: .folders)?.elements ?? []
+        globalSettings = (try? container.decode(TerminalPreferences.self, forKey: .globalSettings)) ?? .default
+        workspaces = try container.decodeIfPresent(LossyArray<LegacyWorkspace>.self, forKey: .workspaces)?.elements ?? []
+        selectedWorkspaceID = try? container.decodeIfPresent(WorkspaceID.self, forKey: .selectedWorkspaceID)
+    }
+
+    func migrated() throws -> WorkspaceStoreSnapshot {
+        let migratedWorkspaces = try workspaces.map { try $0.migrated() }
+        return WorkspaceStoreSnapshot(
+            folders: folders,
+            globalSettings: globalSettings,
+            workspaces: migratedWorkspaces,
+            selectedWorkspaceID: selectedWorkspaceID ?? migratedWorkspaces.first?.id ?? WorkspaceID()
+        )
+    }
+}
+
+private struct LegacyWorkspace: Decodable {
+    let id: WorkspaceID
+    let title: String
+    let emoji: String?
+    let color: WorkspaceColor?
+    let tabs: [LegacyTab]
+    let selectedTabID: TabID?
+    let folderID: WorkspaceFolderID?
+    let isPinned: Bool
+    let settingsOverrides: TerminalPreferencesOverrides?
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case emoji
+        case color
+        case tabs
+        case selectedTabID
+        case folderID
+        case isPinned
+        case settingsOverrides
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(WorkspaceID.self, forKey: .id)
+        title = (try? container.decode(String.self, forKey: .title)) ?? "Workspace"
+        emoji = try? container.decodeIfPresent(String.self, forKey: .emoji)
+        color = try? container.decodeIfPresent(WorkspaceColor.self, forKey: .color)
+        tabs = try container.decodeIfPresent(LossyArray<LegacyTab>.self, forKey: .tabs)?.elements ?? []
+        selectedTabID = try? container.decodeIfPresent(TabID.self, forKey: .selectedTabID)
+        folderID = try? container.decodeIfPresent(WorkspaceFolderID.self, forKey: .folderID)
+        isPinned = (try? container.decodeIfPresent(Bool.self, forKey: .isPinned)) ?? false
+        settingsOverrides = try? container.decodeIfPresent(TerminalPreferencesOverrides.self, forKey: .settingsOverrides)
+    }
+
+    func migrated() throws -> Workspace {
+        guard !tabs.isEmpty else {
+            return Workspace(
+                id: id,
+                title: title,
+                emoji: emoji,
+                color: color,
+                folderID: folderID,
+                isPinned: isPinned,
+                settingsOverrides: settingsOverrides
+            )
+        }
+
+        let selectedIndex = selectedTabID.flatMap { selected in tabs.firstIndex(where: { $0.id == selected }) } ?? 0
+        let selectedLegacyTab = tabs[selectedIndex]
+        var accumulator = LegacyLayoutAccumulator()
+        let resolvedLayout = selectedLegacyTab.migratedLayout(
+            workspaceID: id,
+            path: "selected",
+            accumulator: &accumulator
+        )
+
+        let initialLayout: WorkspaceLayout
+        if let resolvedLayout {
+            initialLayout = resolvedLayout
+        } else {
+            let fallback = TabGroup(tab: .terminal(id: selectedLegacyTab.id, customTitle: selectedLegacyTab.customTitle))
+            initialLayout = .group(fallback)
+            accumulator.firstGroupID = fallback.id
+        }
+        var migratedLayout = initialLayout
+
+        let focusedGroupID = selectedLegacyTab.focusedPaneID.flatMap { accumulator.groupByPaneID[$0] }
+            ?? selectedLegacyTab.focusedTerminalSessionID
+                .flatMap { selectedLegacyTab.paneID(for: $0) }
+                .flatMap { accumulator.groupByPaneID[$0] }
+            ?? accumulator.firstGroupID
+            ?? migratedLayout.orderedGroups[0].id
+
+        if let originalRepresentativeGroupID = accumulator.representativeGroupID,
+           originalRepresentativeGroupID != focusedGroupID,
+           var originalGroup = migratedLayout.group(id: originalRepresentativeGroupID),
+           let originalTab = originalGroup.tabs.first {
+            originalGroup.tabs[0] = Tab(
+                id: TabID(rawValue: repairedUUID(seed: "v1:\(id):tab:\(selectedLegacyTab.id):leaf:0")),
+                content: originalTab.content
+            )
+            originalGroup.selectedTabID = originalGroup.tabs[0].id
+            _ = migratedLayout.replaceGroup(id: originalGroup.id, with: originalGroup)
+        }
+
+        guard var focusedGroup = migratedLayout.group(id: focusedGroupID) else {
+            throw WorkspaceStoreError.invariantViolation(
+                reason: "Version 1 migration could not resolve focused group \(focusedGroupID)."
+            )
+        }
+        if let representative = focusedGroup.tabs.first {
+            focusedGroup.tabs[0] = Tab(
+                id: selectedLegacyTab.id,
+                content: representative.content,
+                customTitle: selectedLegacyTab.customTitle
+            )
+            focusedGroup.selectedTabID = selectedLegacyTab.id
+        }
+        for (tabIndex, legacyTab) in tabs.enumerated() where tabIndex != selectedIndex {
+            let leaves = legacyTab.leafContents
+            let representativeLeafIndex = legacyTab.representativeLeafIndex(in: leaves) ?? 0
+            for (leafIndex, content) in leaves.enumerated() {
+                let tabID = leafIndex == representativeLeafIndex
+                    ? legacyTab.id
+                    : TabID(rawValue: repairedUUID(seed: "v1:\(id):tab:\(legacyTab.id):leaf:\(leafIndex)"))
+                focusedGroup.tabs.append(Tab(
+                    id: tabID,
+                    content: content,
+                    customTitle: leafIndex == representativeLeafIndex ? legacyTab.customTitle : nil
+                ))
+            }
+        }
+        _ = migratedLayout.replaceGroup(id: focusedGroup.id, with: focusedGroup)
+
+        return Workspace(
+            id: id,
+            title: title,
+            emoji: emoji,
+            color: color,
+            layout: migratedLayout,
+            focusedTabGroupID: focusedGroupID,
+            folderID: folderID,
+            isPinned: isPinned,
+            settingsOverrides: settingsOverrides
+        )
+    }
+}
+
+private struct LegacyLayoutAccumulator {
+    var leafIndex = 0
+    var firstGroupID: TabGroupID?
+    var representativeGroupID: TabGroupID?
+    var groupByPaneID: [PaneID: TabGroupID] = [:]
+}
+
+private struct LegacyTab: Decodable {
+    let id: TabID
+    let content: LegacyTabContent
+    let focusedTerminalSessionID: TerminalSessionID?
+    let focusedPaneID: PaneID?
+    let customTitle: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case content
+        case focusedTerminalSessionID
+        case focusedPaneID
+        case customTitle
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(TabID.self, forKey: .id)
+        content = try container.decode(LegacyTabContent.self, forKey: .content)
+        focusedTerminalSessionID = try? container.decodeIfPresent(TerminalSessionID.self, forKey: .focusedTerminalSessionID)
+        focusedPaneID = try? container.decodeIfPresent(PaneID.self, forKey: .focusedPaneID)
+        customTitle = try? container.decodeIfPresent(String.self, forKey: .customTitle)
+    }
+
+    var leafContents: [TabContent] { content.leafContents }
+
+    func paneID(for sessionID: TerminalSessionID) -> PaneID? {
+        content.terminalSessions.first(where: { $0.id == sessionID })?.paneID
+    }
+
+    func representativeLeafIndex(in leaves: [TabContent]) -> Int? {
+        if let focusedPaneID,
+           let index = leaves.firstIndex(where: { leaf in
+               switch leaf {
+               case .terminal(let session): session.paneID == focusedPaneID
+               case .browser(let session): session.paneID == focusedPaneID
+               }
+           }) {
+            return index
+        }
+        if let focusedTerminalSessionID,
+           let index = leaves.firstIndex(where: { leaf in
+               guard case .terminal(let session) = leaf else { return false }
+               return session.id == focusedTerminalSessionID
+           }) {
+            return index
+        }
+        return leaves.indices.first
+    }
+
+    func migratedLayout(
+        workspaceID: WorkspaceID,
+        path: String,
+        accumulator: inout LegacyLayoutAccumulator
+    ) -> WorkspaceLayout? {
+        content.migratedLayout(
+            workspaceID: workspaceID,
+            legacyTabID: id,
+            customTitle: customTitle,
+            path: path,
+            accumulator: &accumulator
+        )
+    }
+}
+
+private enum LegacyTabContent: Decodable {
+    case terminal(LegacySplitNode)
+    case browser(LegacyBrowserSession)
+
+    private enum CodingKeys: String, CodingKey {
+        case type
+        case splitTree
+        case session
+    }
+
+    private enum ContentType: String, Decodable {
+        case terminal
+        case browser
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        switch try container.decode(ContentType.self, forKey: .type) {
+        case .terminal: self = .terminal(try container.decode(LegacySplitNode.self, forKey: .splitTree))
+        case .browser: self = .browser(try container.decode(LegacyBrowserSession.self, forKey: .session))
+        }
+    }
+
+    var leafContents: [TabContent] {
+        switch self {
+        case .terminal(let tree): tree.leafContents
+        case .browser(let session): [.browser(session.current)]
+        }
+    }
+
+    var terminalSessions: [TerminalSession] {
+        switch self {
+        case .terminal(let tree): tree.terminalSessions
+        case .browser: []
+        }
+    }
+
+    func migratedLayout(
+        workspaceID: WorkspaceID,
+        legacyTabID: TabID,
+        customTitle: String?,
+        path: String,
+        accumulator: inout LegacyLayoutAccumulator
+    ) -> WorkspaceLayout? {
+        switch self {
+        case .terminal(let tree):
+            return tree.migratedLayout(
+                workspaceID: workspaceID,
+                legacyTabID: legacyTabID,
+                customTitle: customTitle,
+                path: path,
+                accumulator: &accumulator
+            )
+        case .browser(let session):
+            return migratedLeaf(
+                content: .browser(session.current),
+                workspaceID: workspaceID,
+                legacyTabID: legacyTabID,
+                customTitle: customTitle,
+                path: path,
+                accumulator: &accumulator
+            )
+        }
+    }
+}
+
+private indirect enum LegacySplitNode: Decodable {
+    case terminal(LegacyTerminalSession)
+    case browser(LegacyBrowserSession)
+    case horizontal([LegacySplitNode])
+    case vertical([LegacySplitNode])
+
+    private enum CodingKeys: String, CodingKey {
+        case type
+        case session
+        case children
+    }
+
+    private enum NodeType: String, Decodable {
+        case terminal
+        case browser
+        case horizontal
+        case vertical
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        switch try container.decode(NodeType.self, forKey: .type) {
+        case .terminal: self = .terminal(try container.decode(LegacyTerminalSession.self, forKey: .session))
+        case .browser: self = .browser(try container.decode(LegacyBrowserSession.self, forKey: .session))
+        case .horizontal:
+            self = .horizontal(try container.decodeIfPresent(LossyArray<LegacySplitNode>.self, forKey: .children)?.elements ?? [])
+        case .vertical:
+            self = .vertical(try container.decodeIfPresent(LossyArray<LegacySplitNode>.self, forKey: .children)?.elements ?? [])
+        }
+    }
+
+    var leafContents: [TabContent] {
+        switch self {
+        case .terminal(let session): [.terminal(session.current)]
+        case .browser(let session): [.browser(session.current)]
+        case .horizontal(let children), .vertical(let children): children.flatMap(\.leafContents)
+        }
+    }
+
+    var terminalSessions: [TerminalSession] {
+        switch self {
+        case .terminal(let session): [session.current]
+        case .browser: []
+        case .horizontal(let children), .vertical(let children): children.flatMap(\.terminalSessions)
+        }
+    }
+
+    func migratedLayout(
+        workspaceID: WorkspaceID,
+        legacyTabID: TabID,
+        customTitle: String?,
+        path: String,
+        accumulator: inout LegacyLayoutAccumulator
+    ) -> WorkspaceLayout? {
+        switch self {
+        case .terminal(let session):
+            return migratedLeaf(
+                content: .terminal(session.current),
+                workspaceID: workspaceID,
+                legacyTabID: legacyTabID,
+                customTitle: customTitle,
+                path: path,
+                accumulator: &accumulator
+            )
+        case .browser(let session):
+            return migratedLeaf(
+                content: .browser(session.current),
+                workspaceID: workspaceID,
+                legacyTabID: legacyTabID,
+                customTitle: customTitle,
+                path: path,
+                accumulator: &accumulator
+            )
+        case .horizontal(let children), .vertical(let children):
+            let orientation: SplitOrientation
+            switch self {
+            case .horizontal: orientation = .horizontal
+            default: orientation = .vertical
+            }
+            let migratedChildren = children.enumerated().compactMap { index, child in
+                child.migratedLayout(
+                    workspaceID: workspaceID,
+                    legacyTabID: legacyTabID,
+                    customTitle: customTitle,
+                    path: "\(path):\(index)",
+                    accumulator: &accumulator
+                )
+            }
+            switch migratedChildren.count {
+            case 0: return nil
+            case 1: return migratedChildren[0]
+            default:
+                return .split(
+                    id: SplitNodeID(rawValue: repairedUUID(seed: "v1:\(workspaceID):\(legacyTabID):split:\(path)")),
+                    orientation: orientation,
+                    children: migratedChildren,
+                    weights: WorkspaceLayout.normalizedWeights([], count: migratedChildren.count)
+                )
+            }
+        }
+    }
+}
+
+private func migratedLeaf(
+    content: TabContent,
+    workspaceID: WorkspaceID,
+    legacyTabID: TabID,
+    customTitle: String?,
+    path: String,
+    accumulator: inout LegacyLayoutAccumulator
+) -> WorkspaceLayout {
+    let leafIndex = accumulator.leafIndex
+    accumulator.leafIndex += 1
+    let tabID = leafIndex == 0
+        ? legacyTabID
+        : TabID(rawValue: repairedUUID(seed: "v1:\(workspaceID):\(legacyTabID):leaf:\(leafIndex)"))
+    let groupID = TabGroupID(rawValue: repairedUUID(seed: "v1:\(workspaceID):\(legacyTabID):group:\(path)"))
+    let tab = Tab(id: tabID, content: content, customTitle: leafIndex == 0 ? customTitle : nil)
+    let group = TabGroup(id: groupID, tab: tab)
+    accumulator.firstGroupID = accumulator.firstGroupID ?? groupID
+    if leafIndex == 0 {
+        accumulator.representativeGroupID = groupID
+    }
+    accumulator.groupByPaneID[tab.paneID] = groupID
+    return .group(group)
+}
+
+private struct LegacyTerminalSession: Decodable {
+    let id: TerminalSessionID
+    let paneID: PaneID?
+    let workingDirectory: URL?
+    let recentText: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case paneID
+        case workingDirectory
+        case recentText
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(TerminalSessionID.self, forKey: .id)
+        paneID = try? container.decodeIfPresent(PaneID.self, forKey: .paneID)
+        workingDirectory = try? container.decodeIfPresent(URL.self, forKey: .workingDirectory)
+        recentText = try? container.decodeIfPresent(String.self, forKey: .recentText)
+    }
+
+    var current: TerminalSession {
+        TerminalSession(
+            id: id,
+            paneID: paneID ?? PaneID(rawValue: repairedUUID(seed: "v1:terminal-pane:\(id)")),
+            workingDirectory: workingDirectory,
+            recentText: recentText
+        )
+    }
+}
+
+private struct LegacyBrowserSession: Decodable {
+    let id: BrowserSessionID
+    let paneID: PaneID?
+    let url: URL
+    let profile: BrowserDataProfile?
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case paneID
+        case url
+        case profile
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(BrowserSessionID.self, forKey: .id)
+        paneID = try? container.decodeIfPresent(PaneID.self, forKey: .paneID)
+        url = try container.decode(URL.self, forKey: .url)
+        profile = try? container.decodeIfPresent(BrowserDataProfile.self, forKey: .profile)
+    }
+
+    var current: BrowserSession {
+        BrowserSession(
+            id: id,
+            paneID: paneID ?? PaneID(rawValue: repairedUUID(seed: "v1:browser-pane:\(id)")),
+            url: url,
+            profile: profile
+        )
+    }
 }

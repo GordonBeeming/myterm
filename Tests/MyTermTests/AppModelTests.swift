@@ -35,7 +35,7 @@ final class AppModelTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            model.selectedWorkspace.selectedTab?.terminalTree?.terminalSessions.first?.recentText,
+            model.selectedWorkspace.selectedTab?.terminalSession?.recentText,
             "last session id: delegate-flush"
         )
     }
@@ -100,8 +100,8 @@ final class AppModelTests: XCTestCase {
         let initialTab = try XCTUnwrap(model.selectedTab)
         model.splitFocusedTerminal(orientation: .horizontal)
 
-        let splitTab = try XCTUnwrap(model.selectedTab)
-        XCTAssertEqual(splitTab.terminalTree?.terminalSessions.count, 2)
+        XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 2)
+        XCTAssertEqual(model.selectedWorkspace.terminalSessions.count, 2)
 
         model.createWorkspace()
         XCTAssertEqual(model.workspaces.count, 2)
@@ -110,7 +110,7 @@ final class AppModelTests: XCTestCase {
         model.selectWorkspace(initialWorkspaceID)
         model.selectTab(initialTab.id)
         model.closeFocusedPaneOrTab()
-        XCTAssertEqual(model.workspaces.first(where: { $0.id == initialWorkspaceID })?.tabs.count, 1)
+        XCTAssertEqual(model.workspaces.first(where: { $0.id == initialWorkspaceID })?.orderedGroups.count, 1)
     }
 
     func testCloseTabRemovesAnEntireSplitTerminalTabWithoutStartingProcesses() throws {
@@ -122,15 +122,14 @@ final class AppModelTests: XCTestCase {
         let tab = try XCTUnwrap(model.selectedTab)
         model.splitFocusedTerminal(orientation: .horizontal)
 
-        let splitSessionIDs = try XCTUnwrap(model.selectedTab?.terminalTree?.terminalSessionIDs)
+        let splitSessionIDs = model.selectedWorkspace.terminalSessions.map(\.id)
         XCTAssertEqual(splitSessionIDs.count, 2)
         XCTAssertTrue(splitSessionIDs.allSatisfy { model.terminalSession(for: $0) == nil })
 
         model.closeTab(tab.id)
 
-        XCTAssertFalse(model.workspaces.contains(where: { $0.id == workspaceID }))
-        XCTAssertEqual(model.workspaces.count, 1)
-        XCTAssertNotEqual(model.store.selectedWorkspaceID, workspaceID)
+        XCTAssertTrue(model.workspaces.contains(where: { $0.id == workspaceID }))
+        XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 1)
         XCTAssertNotNil(model.selectedTab)
         XCTAssertTrue(splitSessionIDs.allSatisfy { model.terminalSession(for: $0) == nil })
         XCTAssertNil(model.errorDescription)
@@ -199,14 +198,14 @@ final class AppModelTests: XCTestCase {
         model.createBrowserTab()
         let tabID = try XCTUnwrap(model.selectedTab?.id)
         let browser = try XCTUnwrap(model.selectedTab?.focusedBrowserSession)
+        let browserGroupID = model.selectedWorkspace.focusedTabGroupID
         let controller = try XCTUnwrap(model.browserController(for: browser.id))
 
         model.splitFocusedTerminal(orientation: .horizontal)
 
-        XCTAssertEqual(model.selectedTab?.id, tabID)
-        XCTAssertEqual(model.selectedTab?.splitTree.browserSessions.map(\.id), [browser.id])
-        XCTAssertEqual(model.selectedTab?.splitTree.terminalSessions.count, 1)
-        XCTAssertEqual(model.selectedTab?.splitTree.paneIDs.count, 2)
+        XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 2)
+        XCTAssertEqual(model.selectedWorkspace.browserSessions.map(\.id), [browser.id])
+        XCTAssertEqual(model.selectedWorkspace.terminalSessions.count, 2)
         XCTAssertEqual(engine.sessions.count, 2)
 
         let window = NSWindow(
@@ -217,15 +216,18 @@ final class AppModelTests: XCTestCase {
         )
         window.contentView = controller.webView
         window.makeFirstResponder(nil)
-        model.focusPane(workspaceID: model.store.selectedWorkspaceID, tabID: tabID, paneID: browser.paneID)
+        model.focusPane(
+            workspaceID: model.store.selectedWorkspaceID,
+            tabGroupID: browserGroupID,
+            tabID: tabID,
+            paneID: browser.paneID
+        )
         XCTAssertTrue(window.firstResponder === controller.webView)
 
         controller.webViewDidClose(controller.webView)
 
-        XCTAssertEqual(model.selectedTab?.id, tabID)
-        XCTAssertTrue(model.selectedTab?.splitTree.browserSessions.isEmpty == true)
-        XCTAssertEqual(model.selectedTab?.splitTree.terminalSessions.count, 1)
-        XCTAssertEqual(model.selectedTab?.splitTree.paneIDs.count, 1)
+        XCTAssertTrue(model.selectedWorkspace.browserSessions.isEmpty)
+        XCTAssertEqual(model.selectedWorkspace.terminalSessions.count, 2)
         XCTAssertNil(model.browserController(for: browser.id))
         XCTAssertNil(model.errorDescription)
     }
@@ -275,14 +277,23 @@ final class AppModelTests: XCTestCase {
         )
     }
 
-    func testTerminalSplitGeometryKeepsEachRecursiveBranchAtEqualHalves() {
-        let rootLengths = TerminalSplitGeometry.childLengths(totalLength: 1_001, childCount: 2)
-        XCTAssertEqual(rootLengths[0], 500, accuracy: 0.001)
-        XCTAssertEqual(rootLengths[1], 500, accuracy: 0.001)
+    func testSplitWeightsStartEqualAndPersistUpdates() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
 
-        let nestedLengths = TerminalSplitGeometry.childLengths(totalLength: rootLengths[0], childCount: 2)
-        XCTAssertEqual(nestedLengths[0], 249.5, accuracy: 0.001)
-        XCTAssertEqual(nestedLengths[1], 249.5, accuracy: 0.001)
+        model.splitFocusedTerminal(orientation: .horizontal)
+        guard case .split(let splitID, .horizontal, _, let initialWeights) = model.selectedWorkspace.layout else {
+            return XCTFail("Expected a horizontal workspace split")
+        }
+        XCTAssertEqual(initialWeights, [0.5, 0.5])
+
+        model.updateSplitWeights(splitID: splitID, weights: [3, 1])
+
+        guard case .split(_, .horizontal, _, let updatedWeights) = model.selectedWorkspace.layout else {
+            return XCTFail("Expected the workspace split to remain horizontal")
+        }
+        XCTAssertEqual(updatedWeights, [0.75, 0.25])
     }
 
     func testCloseFocusedPaneCollapsesOnlyOnePaneInSplitTerminalTab() throws {
@@ -297,7 +308,7 @@ final class AppModelTests: XCTestCase {
 
         let remainingTab = try XCTUnwrap(model.selectedTab)
         XCTAssertEqual(remainingTab.id, tab.id)
-        XCTAssertEqual(remainingTab.terminalTree?.terminalSessions.count, 1)
+        XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 1)
         XCTAssertNil(model.errorDescription)
     }
 
@@ -583,8 +594,8 @@ final class AppModelTests: XCTestCase {
         let persistenceURL = MyTermChannel.development.persistenceURL(applicationSupportDirectory: directory)
         let store = try WorkspaceStore(persistenceURL: persistenceURL)
         let workspaceID = store.selectedWorkspaceID
+        let tabGroupID = store.selectedWorkspace.focusedTabGroupID
         let tab = try XCTUnwrap(store.selectedWorkspace.selectedTab)
-        let sessionID = try XCTUnwrap(tab.focusedTerminalSessionID)
         try store.updateGlobalSettings {
             $0.shell = .custom(path: "/bin/sh")
             $0.fontPostScriptName = "Menlo-Bold"
@@ -597,14 +608,14 @@ final class AppModelTests: XCTestCase {
         }
         try store.updateTerminalWorkingDirectory(
             workspaceID: workspaceID,
+            tabGroupID: tabGroupID,
             tabID: tab.id,
-            sessionID: sessionID,
             workingDirectory: workingDirectory
         )
         try store.updateTerminalRecentText(
             workspaceID: workspaceID,
+            tabGroupID: tabGroupID,
             tabID: tab.id,
-            sessionID: sessionID,
             recentText: "session id: 1234"
         )
         let engine = CapturingTerminalEngine()
@@ -673,7 +684,7 @@ final class AppModelTests: XCTestCase {
 
         XCTAssertEqual(session.snapshotCallCount, 1)
         let persistedTab = try XCTUnwrap(model.selectedWorkspace.selectedTab)
-        let persistedSession = try XCTUnwrap(persistedTab.terminalTree?.terminalSessions.first)
+        let persistedSession = try XCTUnwrap(persistedTab.terminalSession)
         XCTAssertEqual(persistedSession.recentText, "first\nlast session id: abc")
     }
 
@@ -697,7 +708,7 @@ final class AppModelTests: XCTestCase {
 
         XCTAssertEqual(session.snapshotCallCount, 1)
         let persistedSession = try XCTUnwrap(
-            model.selectedWorkspace.selectedTab?.terminalTree?.terminalSessions.first
+            model.selectedWorkspace.selectedTab?.terminalSession
         )
         XCTAssertEqual(persistedSession.recentText, "last session id: before-quit")
     }
@@ -727,6 +738,7 @@ final class AppModelTests: XCTestCase {
         let fileURL = directory.appending(path: "review.html")
         let tabID = try model.store.addBrowserTab(
             to: model.store.selectedWorkspaceID,
+            tabGroupID: model.selectedWorkspace.focusedTabGroupID,
             url: fileURL
         )
 
@@ -780,6 +792,33 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(removedSession.terminateCallCount, 1)
         XCTAssertEqual(engine.sessions.count, 2)
         XCTAssertTrue(engine.sessions[1].isRunning)
+        XCTAssertNil(model.errorDescription)
+    }
+
+    func testClosingOneOfSeveralPanesTerminatesOnlyThatPanesProcess() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let originalSession = try XCTUnwrap(engine.sessions.first)
+
+        model.splitFocusedTerminal(orientation: .horizontal)
+
+        let closingSession = try XCTUnwrap(engine.sessions.last)
+        let closingSessionID = try XCTUnwrap(model.selectedTab?.terminalSession?.id)
+        XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 2)
+
+        model.closeFocusedPaneOrTab()
+
+        XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 1)
+        XCTAssertEqual(closingSession.terminateCallCount, 1)
+        XCTAssertEqual(originalSession.terminateCallCount, 0)
+        XCTAssertNil(model.terminalSession(for: closingSessionID))
         XCTAssertNil(model.errorDescription)
     }
 
@@ -960,8 +999,8 @@ final class AppModelTests: XCTestCase {
 
         originatingSession.onEvent?(.openURL(markdownURL))
 
-        XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount)
-        guard let browser = model.selectedTab?.splitTree.browserSessions.first else {
+        XCTAssertEqual(model.selectedWorkspace.allTabs.count, initialTabCount + 1)
+        guard let browser = model.selectedTab?.browserSession else {
             return XCTFail("Expected MyTerm browser fallback")
         }
         XCTAssertEqual(browser.url, markdownURL)
@@ -991,7 +1030,7 @@ final class AppModelTests: XCTestCase {
 
         originatingSession.onEvent?(.openURL(markdownURL))
 
-        let browser = try XCTUnwrap(model.selectedTab?.splitTree.browserSessions.first)
+        let browser = try XCTUnwrap(model.selectedTab?.browserSession)
         XCTAssertEqual(browser.url, markdownURL)
         XCTAssertNil(model.errorDescription)
     }
@@ -1066,8 +1105,7 @@ final class AppModelTests: XCTestCase {
             startsTerminalProcesses: true
         )
         let originatingWorkspaceID = model.store.selectedWorkspaceID
-        let originatingTabID = try XCTUnwrap(model.selectedWorkspace.selectedTabID)
-        let originatingTabCount = model.selectedWorkspace.tabs.count
+        let originatingTabCount = model.selectedWorkspace.allTabs.count
 
         model.createWorkspace()
         let selectedWorkspaceID = model.store.selectedWorkspaceID
@@ -1078,15 +1116,14 @@ final class AppModelTests: XCTestCase {
 
         XCTAssertEqual(model.store.selectedWorkspaceID, selectedWorkspaceID)
         XCTAssertEqual(model.selectedWorkspace.tabs.count, selectedTabCount)
-        guard let originTab = model.workspaces.first(where: { $0.id == originatingWorkspaceID })?
-            .tabs.first(where: { $0.id == originatingTabID }),
-              let browser = originTab.splitTree.browserSessions.first else {
+        guard let originWorkspace = model.workspaces.first(where: { $0.id == originatingWorkspaceID }),
+              let browser = originWorkspace.browserSessions.first else {
             return XCTFail("Expected the local file to open beside its originating terminal pane")
         }
         XCTAssertEqual(browser.url, fileURL.standardizedFileURL)
         XCTAssertEqual(
-            model.workspaces.first(where: { $0.id == originatingWorkspaceID })?.tabs.count,
-            originatingTabCount
+            model.workspaces.first(where: { $0.id == originatingWorkspaceID })?.allTabs.count,
+            originatingTabCount + 1
         )
 
         originatingSession.onEvent?(.openURL(projectDirectory))
@@ -1111,7 +1148,7 @@ final class AppModelTests: XCTestCase {
         let firstWorkspaceID = model.store.selectedWorkspaceID
         let firstTabID = try XCTUnwrap(model.selectedWorkspace.selectedTabID)
         let firstPaneID = try XCTUnwrap(model.selectedTab?.focusedPaneID)
-        let firstWorkspaceTabCount = model.selectedWorkspace.tabs.count
+        let firstWorkspaceTabCount = model.selectedWorkspace.allTabs.count
         model.updateWorkspaceSettings(firstWorkspaceID) { $0.browserDataScope = .appWide }
         XCTAssertEqual(engine.configurations.first?.environment["BROWSER"], launcherURL.path)
         XCTAssertEqual(
@@ -1134,15 +1171,12 @@ final class AppModelTests: XCTestCase {
 
         XCTAssertEqual(model.store.selectedWorkspaceID, secondWorkspaceID)
         XCTAssertEqual(
-            model.workspaces.first(where: { $0.id == firstWorkspaceID })?.tabs.count,
-            firstWorkspaceTabCount
+            model.workspaces.first(where: { $0.id == firstWorkspaceID })?.allTabs.count,
+            firstWorkspaceTabCount + 1
         )
         XCTAssertEqual(model.selectedWorkspace.tabs.count, secondWorkspaceTabCount)
-        let openedTab = try XCTUnwrap(
-            model.workspaces.first(where: { $0.id == firstWorkspaceID })?
-                .tabs.first(where: { $0.id == firstTabID })
-        )
-        guard let browser = openedTab.splitTree.browserSessions.first else {
+        let originWorkspace = try XCTUnwrap(model.workspaces.first(where: { $0.id == firstWorkspaceID }))
+        guard let browser = originWorkspace.browserSessions.first else {
             return XCTFail("Expected the terminal link to create a browser pane")
         }
         XCTAssertEqual(browser.url.absoluteString, "https://example.com/docs")
@@ -1164,30 +1198,29 @@ final class AppModelTests: XCTestCase {
             startsTerminalProcesses: true
         )
         let workspaceID = model.store.selectedWorkspaceID
+        let originGroupID = model.selectedWorkspace.focusedTabGroupID
         let tabID = try XCTUnwrap(model.selectedTab?.id)
-        let originSession = try XCTUnwrap(model.selectedTab?.splitTree.terminalSessions.first)
+        _ = try XCTUnwrap(model.selectedTab?.terminalSession)
         model.updateWorkspaceSettings(workspaceID) { $0.browserDataScope = .projectDirectory }
         model.splitFocusedTerminal(orientation: .horizontal)
-        let focusedSession = try XCTUnwrap(
-            model.selectedTab?.splitTree.terminalSessions.first { $0.id != originSession.id }
-        )
+        let focusedGroupID = model.selectedWorkspace.focusedTabGroupID
+        let focusedTabID = try XCTUnwrap(model.selectedTab?.id)
         try model.store.updateTerminalWorkingDirectory(
             workspaceID: workspaceID,
+            tabGroupID: originGroupID,
             tabID: tabID,
-            sessionID: originSession.id,
             workingDirectory: originDirectory
         )
         try model.store.updateTerminalWorkingDirectory(
             workspaceID: workspaceID,
-            tabID: tabID,
-            sessionID: focusedSession.id,
+            tabGroupID: focusedGroupID,
+            tabID: focusedTabID,
             workingDirectory: focusedDirectory
         )
-        model.focusPane(workspaceID: workspaceID, tabID: tabID, paneID: focusedSession.paneID)
 
         engine.sessions.first?.onEvent?(.openURL(try XCTUnwrap(URL(string: "https://example.com"))))
 
-        let browser = try XCTUnwrap(model.selectedTab?.splitTree.browserSessions.first)
+        let browser = try XCTUnwrap(model.selectedTab?.browserSession)
         XCTAssertEqual(browser.profile?.scope, .projectDirectory)
         XCTAssertEqual(browser.profile?.projectDirectory, originDirectory.standardizedFileURL)
     }
@@ -1205,7 +1238,7 @@ final class AppModelTests: XCTestCase {
         let originatingWorkspaceID = model.store.selectedWorkspaceID
         let originatingTabID = try XCTUnwrap(model.selectedWorkspace.selectedTabID)
         let originatingPaneID = try XCTUnwrap(model.selectedTab?.focusedPaneID)
-        let originatingTabCount = model.selectedWorkspace.tabs.count
+        let originatingTabCount = model.selectedWorkspace.allTabs.count
 
         model.createWorkspace()
         let selectedWorkspaceID = model.store.selectedWorkspaceID
@@ -1232,21 +1265,20 @@ final class AppModelTests: XCTestCase {
         )
 
         model.open([exactPaneRoute])
-        let originatingTab = try XCTUnwrap(
-            model.workspaces.first { $0.id == originatingWorkspaceID }?
-                .tabs.first { $0.id == originatingTabID }
+        let originatingWorkspace = try XCTUnwrap(
+            model.workspaces.first { $0.id == originatingWorkspaceID }
         )
-        XCTAssertEqual(originatingTab.splitTree.paneIDs.count, 2)
-        XCTAssertEqual(originatingTab.splitTree.browserSessions.first?.url.absoluteString, "https://example.com/beside-origin")
-        XCTAssertEqual(model.workspaces.first { $0.id == originatingWorkspaceID }?.tabs.count, originatingTabCount)
+        XCTAssertEqual(originatingWorkspace.orderedGroups.count, 2)
+        XCTAssertEqual(originatingWorkspace.browserSessions.first?.url.absoluteString, "https://example.com/beside-origin")
+        XCTAssertEqual(originatingWorkspace.allTabs.count, originatingTabCount + 1)
 
         model.open([firstRoute])
         model.open([secondRoute])
 
         XCTAssertEqual(model.store.selectedWorkspaceID, selectedWorkspaceID)
         XCTAssertEqual(
-            model.workspaces.first { $0.id == originatingWorkspaceID }?.tabs.count,
-            originatingTabCount + 2
+            model.workspaces.first { $0.id == originatingWorkspaceID }?.allTabs.count,
+            originatingTabCount + 3
         )
         XCTAssertEqual(model.selectedWorkspace.tabs.count, selectedTabCount)
 
@@ -1269,6 +1301,785 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.store.selectedWorkspaceID, selectedWorkspaceID)
         XCTAssertEqual(model.selectedWorkspace.tabs.count, selectedTabCount + 1)
         XCTAssertNil(model.errorDescription)
+    }
+
+    func testDirectSelectionAndWrappedCyclingFocusOnlyTheFocusedGroup() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let firstGroupID = model.selectedWorkspace.focusedTabGroupID
+        let firstTabID = try XCTUnwrap(model.selectedTab?.id)
+        model.createTerminalTab(in: firstGroupID)
+        let secondTabID = try XCTUnwrap(model.selectedTab?.id)
+        model.splitFocusedTerminal(orientation: .horizontal)
+        let secondGroupID = model.selectedWorkspace.focusedTabGroupID
+        let secondGroupTabID = try XCTUnwrap(model.selectedTab?.id)
+
+        model.selectTab(firstTabID, in: firstGroupID)
+        XCTAssertEqual(model.selectedWorkspace.focusedTabGroupID, firstGroupID)
+        XCTAssertEqual(model.selectedTab?.id, firstTabID)
+        XCTAssertEqual(engine.sessions[0].focusCallCount, 2)
+
+        model.selectAdjacentTab(offset: -1)
+        XCTAssertEqual(model.selectedWorkspace.focusedTabGroupID, firstGroupID)
+        XCTAssertEqual(model.selectedTab?.id, secondTabID)
+        XCTAssertEqual(engine.sessions[1].focusCallCount, 2)
+
+        model.selectAdjacentTab(offset: 1)
+        XCTAssertEqual(model.selectedWorkspace.focusedTabGroupID, firstGroupID)
+        XCTAssertEqual(model.selectedTab?.id, firstTabID)
+        XCTAssertEqual(model.selectedWorkspace.group(id: secondGroupID)?.selectedTabID, secondGroupTabID)
+    }
+
+    func testTerminalFirstResponderCallbacksAreIdempotentAndCanReturnToOlderPanes() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let firstGroupID = model.selectedWorkspace.focusedTabGroupID
+        let firstTab = try XCTUnwrap(model.selectedTab)
+        let firstSessionID = try XCTUnwrap(firstTab.terminalSession?.id)
+        model.splitFocusedTerminal(orientation: .horizontal)
+        let secondGroupID = model.selectedWorkspace.focusedTabGroupID
+        let secondTab = try XCTUnwrap(model.selectedTab)
+        let secondSessionID = try XCTUnwrap(secondTab.terminalSession?.id)
+        model.splitFocusedTerminal(orientation: .horizontal)
+        let thirdGroupID = model.selectedWorkspace.focusedTabGroupID
+
+        model.terminalDidBecomeFirstResponder(
+            workspaceID: model.store.selectedWorkspaceID,
+            tabGroupID: firstGroupID,
+            tabID: firstTab.id,
+            sessionID: firstSessionID
+        )
+        XCTAssertEqual(model.selectedWorkspace.focusedTabGroupID, firstGroupID)
+        let versionAfterFirstCallback = model.stateVersion
+
+        model.terminalDidBecomeFirstResponder(
+            workspaceID: model.store.selectedWorkspaceID,
+            tabGroupID: firstGroupID,
+            tabID: firstTab.id,
+            sessionID: firstSessionID
+        )
+        XCTAssertEqual(model.stateVersion, versionAfterFirstCallback)
+
+        model.terminalDidBecomeFirstResponder(
+            workspaceID: model.store.selectedWorkspaceID,
+            tabGroupID: secondGroupID,
+            tabID: secondTab.id,
+            sessionID: secondSessionID
+        )
+        XCTAssertEqual(model.selectedWorkspace.focusedTabGroupID, secondGroupID)
+        XCTAssertNotEqual(model.selectedWorkspace.focusedTabGroupID, thirdGroupID)
+    }
+
+    func testMovingTabsAcrossGroupsPreservesRuntimeIdentityAndCollapsesEmptySource() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let sourceGroupID = model.selectedWorkspace.focusedTabGroupID
+        let terminalTab = try XCTUnwrap(model.selectedTab)
+        let terminalSessionID = try XCTUnwrap(terminalTab.terminalSession?.id)
+        let terminalRuntime = try XCTUnwrap(model.terminalSession(for: terminalSessionID))
+        model.createBrowserTab(in: sourceGroupID)
+        let browserTab = try XCTUnwrap(model.selectedTab)
+        let browserID = try XCTUnwrap(browserTab.browserSession?.id)
+        let browserController = try XCTUnwrap(model.browserController(for: browserID))
+        model.splitFocusedTerminal(orientation: .horizontal)
+        let destinationGroupID = model.selectedWorkspace.focusedTabGroupID
+
+        model.moveTab(
+            sourceTabGroupID: sourceGroupID,
+            tabID: terminalTab.id,
+            to: destinationGroupID
+        )
+        XCTAssertTrue(model.terminalSession(for: terminalSessionID) === terminalRuntime)
+
+        model.moveTab(
+            sourceTabGroupID: sourceGroupID,
+            tabID: browserTab.id,
+            to: destinationGroupID
+        )
+        XCTAssertTrue(model.browserController(for: browserID) === browserController)
+        XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 1)
+        XCTAssertEqual(model.selectedWorkspace.focusedTabGroupID, destinationGroupID)
+    }
+
+    func testTerminalLinksReuseTheAdjacentRightGroup() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let sourceGroupID = model.selectedWorkspace.focusedTabGroupID
+        let sourceSession = try XCTUnwrap(engine.sessions.first)
+
+        sourceSession.onEvent?(.openURL(try XCTUnwrap(URL(string: "https://example.com/one"))))
+        let rightGroupID = model.selectedWorkspace.focusedTabGroupID
+        XCTAssertNotEqual(rightGroupID, sourceGroupID)
+        XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 2)
+        guard case .split(_, .horizontal, _, let weights) = model.selectedWorkspace.layout else {
+            return XCTFail("Expected a horizontal 50/50 split")
+        }
+        XCTAssertEqual(weights, [0.5, 0.5])
+
+        sourceSession.onEvent?(.openURL(try XCTUnwrap(URL(string: "https://example.com/two"))))
+        XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 2)
+        XCTAssertEqual(model.selectedWorkspace.focusedTabGroupID, rightGroupID)
+        XCTAssertEqual(
+            model.selectedWorkspace.group(id: rightGroupID)?.tabs.compactMap(\.browserSession?.url.absoluteString),
+            ["https://example.com/one", "https://example.com/two"]
+        )
+    }
+
+    func testTerminalLinksWithTheSameURLButDifferentProjectProfilesCreateDistinctBrowsers() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let firstProject = directory.appending(path: "first", directoryHint: .isDirectory)
+        let secondProject = directory.appending(path: "second", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: firstProject.appending(path: ".git"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: secondProject.appending(path: ".git"), withIntermediateDirectories: true)
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let workspaceID = model.store.selectedWorkspaceID
+        model.updateWorkspaceSettings(workspaceID) { $0.browserDataScope = .projectDirectory }
+        let sourceSession = try XCTUnwrap(engine.sessions.first)
+        let url = try XCTUnwrap(URL(string: "https://example.com/shared"))
+
+        sourceSession.onEvent?(.workingDirectoryChanged(firstProject))
+        sourceSession.onEvent?(.openURL(url))
+        sourceSession.onEvent?(.workingDirectoryChanged(secondProject))
+        sourceSession.onEvent?(.openURL(url))
+
+        let browsers = model.selectedWorkspace.browserSessions
+        XCTAssertEqual(browsers.count, 2)
+        XCTAssertEqual(Set(browsers.compactMap(\.profile?.projectDirectory)), [firstProject, secondProject])
+        XCTAssertEqual(Set(browsers.compactMap(\.profile?.persistentStoreID)).count, 2)
+        XCTAssertEqual(model.browserControllers.count, 2)
+    }
+
+    func testBrowserActionsAndAddressFocusRouteOnlyToFocusedSelectedBrowser() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: nil,
+            startsTerminalProcesses: false
+        )
+        let firstGroupID = model.selectedWorkspace.focusedTabGroupID
+        let terminalTabID = try XCTUnwrap(model.selectedTab?.id)
+        model.createBrowserTab(in: firstGroupID)
+        let firstTab = try XCTUnwrap(model.selectedTab)
+        let firstBrowserID = try XCTUnwrap(firstTab.browserSession?.id)
+        let firstController = try XCTUnwrap(model.browserController(for: firstBrowserID))
+        model.splitFocusedTerminal(orientation: .horizontal)
+        let secondGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.createBrowserTab(in: secondGroupID)
+        let secondBrowserID = try XCTUnwrap(model.selectedTab?.browserSession?.id)
+        let secondController = try XCTUnwrap(model.browserController(for: secondBrowserID))
+
+        model.selectTab(firstTab.id, in: firstGroupID)
+        XCTAssertTrue(model.hasSelectedBrowserTab)
+        model.reloadSelectedBrowser()
+        model.reloadSelectedBrowserFromOrigin()
+        model.findInSelectedBrowser("MyTerm")
+        model.zoomInSelectedBrowser()
+        model.requestSelectedBrowserAddressFocus()
+
+        XCTAssertEqual(firstController.webView.pageZoom, 1.1, accuracy: 0.0001)
+        XCTAssertEqual(secondController.webView.pageZoom, 1, accuracy: 0.0001)
+        let request = try XCTUnwrap(model.browserAddressFocusRequest)
+        XCTAssertEqual(request.sessionID, firstBrowserID)
+        model.acknowledgeBrowserAddressFocus(sessionID: secondBrowserID, token: request.token)
+        XCTAssertNotNil(model.browserAddressFocusRequest)
+        model.acknowledgeBrowserAddressFocus(sessionID: firstBrowserID, token: request.token)
+        XCTAssertNil(model.browserAddressFocusRequest)
+
+        model.requestSelectedBrowserFind()
+        let findRequest = try XCTUnwrap(model.browserFindRequest)
+        XCTAssertEqual(findRequest.sessionID, firstBrowserID)
+        model.acknowledgeBrowserFind(sessionID: firstBrowserID, token: findRequest.token)
+        XCTAssertNil(model.browserFindRequest)
+
+        let secondTabID = try XCTUnwrap(model.selectedWorkspace.group(id: secondGroupID)?.selectedTabID)
+        model.selectTab(secondTabID, in: secondGroupID)
+        model.reloadSelectedBrowser()
+
+        secondController.webView.pageZoom = 1
+        model.increaseZoomOrFontSize()
+        XCTAssertEqual(secondController.webView.pageZoom, 1.1, accuracy: 0.0001)
+        XCTAssertEqual(firstController.webView.pageZoom, 1.1, accuracy: 0.0001)
+        XCTAssertEqual(model.increaseZoomOrFontCommandTitle, "Zoom In")
+
+        model.selectTab(terminalTabID, in: firstGroupID)
+        let originalFontSize = model.selectedWorkspaceSettings.fontSize
+        model.increaseZoomOrFontSize()
+        XCTAssertEqual(model.selectedWorkspaceSettings.fontSize, originalFontSize + 1)
+        XCTAssertEqual(model.increaseZoomOrFontCommandTitle, "Increase Workspace Font Size")
+        XCTAssertEqual(secondController.webView.pageZoom, 1.1, accuracy: 0.0001)
+    }
+
+    func testSelectingBrowserWithoutFocusingContentPreservesToolbarFirstResponder() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: nil,
+            startsTerminalProcesses: false
+        )
+        let groupID = model.selectedWorkspace.focusedTabGroupID
+        model.createBrowserTab(in: groupID)
+        let browserTab = try XCTUnwrap(model.selectedTab)
+        let browserID = try XCTUnwrap(browserTab.browserSession?.id)
+        let controller = try XCTUnwrap(model.browserController(for: browserID))
+        let terminalTabID = try XCTUnwrap(
+            model.selectedWorkspace.group(id: groupID)?.tabs.first(where: { $0.terminalSession != nil })?.id
+        )
+        model.selectTab(terminalTabID, in: groupID)
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 200),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let contentView = try XCTUnwrap(window.contentView)
+        let container = NSView(frame: contentView.bounds)
+        let addressField = NSTextField(frame: NSRect(x: 0, y: 160, width: 300, height: 24))
+        controller.webView.frame = NSRect(x: 0, y: 0, width: 320, height: 150)
+        container.addSubview(controller.webView)
+        container.addSubview(addressField)
+        window.contentView = container
+        window.makeFirstResponder(addressField)
+
+        model.selectTab(browserTab.id, in: groupID, focusContent: false)
+
+        XCTAssertEqual(model.selectedTab?.id, browserTab.id)
+        XCTAssertTrue(window.firstResponder === addressField.currentEditor() || window.firstResponder === addressField)
+    }
+
+    func testSelectedTabMovementActionsPreserveRuntimeAndCollapseEmptySource() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let sourceGroupID = model.selectedWorkspace.focusedTabGroupID
+        let firstTabID = try XCTUnwrap(model.selectedTab?.id)
+        model.createTerminalTab(in: sourceGroupID)
+        let movedTabID = try XCTUnwrap(model.selectedTab?.id)
+        let movedSessionID = try XCTUnwrap(model.selectedTab?.terminalSession?.id)
+        let movedRuntime = try XCTUnwrap(model.terminalSession(for: movedSessionID))
+
+        model.reorderSelectedTab(to: 0)
+        XCTAssertEqual(model.selectedWorkspace.group(id: sourceGroupID)?.tabs.first?.id, movedTabID)
+        model.moveSelectedTabToNewGroup(edge: .right)
+        let destinationGroupID = model.selectedWorkspace.focusedTabGroupID
+        XCTAssertNotEqual(destinationGroupID, sourceGroupID)
+        XCTAssertTrue(model.terminalSession(for: movedSessionID) === movedRuntime)
+
+        model.selectTab(firstTabID, in: sourceGroupID)
+        model.moveSelectedTab(direction: .right)
+        XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 1)
+        XCTAssertEqual(model.selectedWorkspace.focusedTabGroupID, destinationGroupID)
+        XCTAssertTrue(model.terminalSession(for: movedSessionID) === movedRuntime)
+    }
+
+    func testPaneTabDragIgnoresClickJitter() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let sourceGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.createTerminalTab(in: sourceGroupID)
+        let tabID = try XCTUnwrap(model.selectedTab?.id)
+        let source = PaneTabDragSource(
+            workspaceID: workspaceID,
+            tabGroupID: sourceGroupID,
+            tabID: tabID
+        )
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: sourceGroupID, origin: .zero)
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
+        let result = model.finishPaneTabDrag(source: source, finalLocation: CGPoint(x: 44, y: 10))
+
+        XCTAssertNil(result)
+        XCTAssertNil(model.paneTabDragSession)
+        XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 1)
+        XCTAssertEqual(model.selectedWorkspace.groupID(containing: tabID), sourceGroupID)
+        XCTAssertNil(model.errorDescription)
+    }
+
+    func testPaneTabDragUsesFinalLocationInsteadOfStaleHover() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let sourceGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.createTerminalTab(in: sourceGroupID)
+        let movedTabID = try XCTUnwrap(model.selectedTab?.id)
+        let destinationGroupID = try createPaneBesideSource(model, sourceGroupID: sourceGroupID, tabID: movedTabID)
+        let sourceTabID = try XCTUnwrap(model.selectedWorkspace.group(id: sourceGroupID)?.selectedTabID)
+        let source = PaneTabDragSource(workspaceID: workspaceID, tabGroupID: sourceGroupID, tabID: sourceTabID)
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: sourceGroupID, origin: .zero)
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: destinationGroupID, origin: CGPoint(x: 200, y: 0))
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 260, y: 60))
+        let result = model.finishPaneTabDrag(source: source, finalLocation: CGPoint(x: 500, y: 500))
+
+        XCTAssertNil(result)
+        XCTAssertEqual(model.selectedWorkspace.groupID(containing: sourceTabID), sourceGroupID)
+        XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 2)
+    }
+
+    func testPaneTabDragReordersWithinItsSourceStripWithoutCreatingAPane() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let sourceGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.createTerminalTab(in: sourceGroupID)
+        let movedTabID = try XCTUnwrap(model.selectedTab?.id)
+        let source = PaneTabDragSource(
+            workspaceID: workspaceID,
+            tabGroupID: sourceGroupID,
+            tabID: movedTabID
+        )
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: sourceGroupID, origin: .zero)
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 140, y: 10))
+        let result = model.finishPaneTabDrag(source: source, finalLocation: CGPoint(x: 10, y: 10))
+
+        guard case .moved(let destinationGroupID) = result else {
+            return XCTFail("Expected a same-strip drag to reorder the tab.")
+        }
+        XCTAssertEqual(destinationGroupID, sourceGroupID)
+        XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 1)
+        XCTAssertEqual(model.selectedWorkspace.group(id: sourceGroupID)?.tabs.first?.id, movedTabID)
+    }
+
+    func testPaneTabDragReordersForwardUsingThePostRemovalIndex() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let sourceGroupID = model.selectedWorkspace.focusedTabGroupID
+        let firstTabID = try XCTUnwrap(model.selectedTab?.id)
+        model.createTerminalTab(in: sourceGroupID)
+        let secondTabID = try XCTUnwrap(model.selectedTab?.id)
+        model.createTerminalTab(in: sourceGroupID)
+        let thirdTabID = try XCTUnwrap(model.selectedTab?.id)
+        let source = PaneTabDragSource(
+            workspaceID: workspaceID,
+            tabGroupID: sourceGroupID,
+            tabID: firstTabID
+        )
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: sourceGroupID, origin: .zero)
+        model.registerPaneTabDragTabStrip(
+            workspaceID: workspaceID,
+            tabGroupID: sourceGroupID,
+            frame: CGRect(x: 0, y: 0, width: 300, height: 20)
+        )
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
+        let result = model.finishPaneTabDrag(source: source, finalLocation: CGPoint(x: 210, y: 10))
+
+        guard case .moved = result else {
+            return XCTFail("Expected a forward same-strip drag to reorder the tab.")
+        }
+        XCTAssertEqual(
+            model.selectedWorkspace.group(id: sourceGroupID)?.tabs.map(\.id),
+            [secondTabID, firstTabID, thirdTabID]
+        )
+    }
+
+    func testPaneTabDragUsesGlobalTabIndexWhenDestinationFramesAreLazy() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let sourceGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.createTerminalTab(in: sourceGroupID)
+        let destinationFirstTabID = try XCTUnwrap(model.selectedTab?.id)
+        let destinationGroupID = try createPaneBesideSource(
+            model,
+            sourceGroupID: sourceGroupID,
+            tabID: destinationFirstTabID
+        )
+        model.createTerminalTab(in: destinationGroupID)
+        let destinationSecondTabID = try XCTUnwrap(model.selectedWorkspace.group(id: destinationGroupID)?.selectedTabID)
+        model.createTerminalTab(in: destinationGroupID)
+        let sourceTabID = try XCTUnwrap(model.selectedWorkspace.group(id: sourceGroupID)?.selectedTabID)
+        let source = PaneTabDragSource(
+            workspaceID: workspaceID,
+            tabGroupID: sourceGroupID,
+            tabID: sourceTabID
+        )
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: sourceGroupID, origin: .zero)
+        registerPaneDragFrames(
+            model,
+            workspaceID: workspaceID,
+            tabGroupID: destinationGroupID,
+            origin: CGPoint(x: 200, y: 0)
+        )
+        model.unregisterPaneTabDragTab(
+            workspaceID: workspaceID,
+            tabGroupID: destinationGroupID,
+            tabID: destinationFirstTabID
+        )
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
+        let result = model.finishPaneTabDrag(source: source, finalLocation: CGPoint(x: 310, y: 10))
+
+        guard case .moved = result else {
+            return XCTFail("Expected a lazy destination-strip drag to move the tab.")
+        }
+        let destinationTabIDs = try XCTUnwrap(
+            model.selectedWorkspace.group(id: destinationGroupID)?.tabs.map(\.id)
+        )
+        XCTAssertEqual(destinationTabIDs[0], destinationFirstTabID)
+        XCTAssertEqual(destinationTabIDs[1], sourceTabID)
+        XCTAssertEqual(destinationTabIDs[2], destinationSecondTabID)
+    }
+
+    func testPaneTabDragMovesIntoExistingTabStripAndCollapsesSourceGroup() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let sourceGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.createTerminalTab(in: sourceGroupID)
+        let destinationTabID = try XCTUnwrap(model.selectedTab?.id)
+        let destinationGroupID = try createPaneBesideSource(model, sourceGroupID: sourceGroupID, tabID: destinationTabID)
+        let sourceTabID = try XCTUnwrap(model.selectedWorkspace.group(id: sourceGroupID)?.selectedTabID)
+        let source = PaneTabDragSource(workspaceID: workspaceID, tabGroupID: sourceGroupID, tabID: sourceTabID)
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: sourceGroupID, origin: .zero)
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: destinationGroupID, origin: CGPoint(x: 200, y: 0))
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
+        let result = model.finishPaneTabDrag(source: source, finalLocation: CGPoint(x: 280, y: 10))
+
+        guard case .moved(let movedGroupID) = result else {
+            return XCTFail("Expected a tab-strip drop to move the tab.")
+        }
+        XCTAssertEqual(movedGroupID, destinationGroupID)
+        XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 1)
+        XCTAssertEqual(model.selectedWorkspace.group(id: destinationGroupID)?.tabs.last?.id, sourceTabID)
+    }
+
+    func testPaneTabDragBodyDropCreatesThePreviewedHalfPane() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let sourceGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.createTerminalTab(in: sourceGroupID)
+        let tabID = try XCTUnwrap(model.selectedTab?.id)
+        let source = PaneTabDragSource(workspaceID: workspaceID, tabGroupID: sourceGroupID, tabID: tabID)
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: sourceGroupID, origin: .zero)
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
+        let result = model.finishPaneTabDrag(source: source, finalLocation: CGPoint(x: 110, y: 60))
+
+        guard case .moved(let destinationGroupID) = result else {
+            return XCTFail("Expected a pane-body drop to create a new pane.")
+        }
+        XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 2)
+        XCTAssertEqual(model.selectedWorkspace.group(id: destinationGroupID)?.selectedTabID, tabID)
+    }
+
+    func testPaneTabDragCancellationAndFailedMovesClearTheSessionAndSurfaceErrors() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let sourceGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.createTerminalTab(in: sourceGroupID)
+        let tabID = try XCTUnwrap(model.selectedTab?.id)
+        let source = PaneTabDragSource(workspaceID: workspaceID, tabGroupID: sourceGroupID, tabID: tabID)
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: sourceGroupID, origin: .zero)
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
+        model.cancelPaneTabDrag()
+        XCTAssertNil(model.paneTabDragSession)
+        XCTAssertEqual(model.selectedWorkspace.groupID(containing: tabID), sourceGroupID)
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
+        model.unregisterPaneTabDragTab(workspaceID: workspaceID, tabGroupID: sourceGroupID, tabID: tabID)
+        XCTAssertNil(model.paneTabDragSession)
+        XCTAssertEqual(model.selectedWorkspace.groupID(containing: tabID), sourceGroupID)
+
+        let missingGroupID = TabGroupID()
+        model.registerPaneTabDragTabStrip(
+            workspaceID: workspaceID,
+            tabGroupID: missingGroupID,
+            frame: CGRect(x: 200, y: 0, width: 120, height: 20)
+        )
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
+        let result = model.finishPaneTabDrag(source: source, finalLocation: CGPoint(x: 260, y: 10))
+
+        guard case .failed = result else {
+            return XCTFail("Expected an unavailable destination to fail visibly.")
+        }
+        XCTAssertNil(model.paneTabDragSession)
+        XCTAssertNotNil(model.errorDescription)
+    }
+
+    func testBrowserShortcutDeclarationsAreExactAndDoNotDuplicateContextualZoom() {
+        XCTAssertEqual(MyTermCommandShortcuts.reloadBrowser, .init(key: "r", modifiers: [.command]))
+        XCTAssertEqual(MyTermCommandShortcuts.focusBrowserAddress, .init(key: "l", modifiers: [.command]))
+        XCTAssertEqual(MyTermCommandShortcuts.browserBack, .init(key: "[", modifiers: [.command]))
+        XCTAssertEqual(MyTermCommandShortcuts.browserForward, .init(key: "]", modifiers: [.command]))
+        XCTAssertEqual(MyTermCommandShortcuts.findInBrowser, .init(key: "f", modifiers: [.command]))
+        XCTAssertEqual(MyTermCommandShortcuts.resetBrowserZoom, .init(key: "0", modifiers: [.command]))
+
+        let browserShortcuts = [
+            MyTermCommandShortcuts.reloadBrowser,
+            MyTermCommandShortcuts.focusBrowserAddress,
+            MyTermCommandShortcuts.browserBack,
+            MyTermCommandShortcuts.browserForward,
+            MyTermCommandShortcuts.findInBrowser,
+            MyTermCommandShortcuts.resetBrowserZoom,
+        ]
+        XCTAssertEqual(Set(browserShortcuts.map { "\($0.key)|\($0.modifiers)" }).count, browserShortcuts.count)
+        XCTAssertFalse(browserShortcuts.contains(MyTermCommandShortcuts.increaseWorkspaceFontSize))
+        XCTAssertFalse(browserShortcuts.contains(MyTermCommandShortcuts.decreaseWorkspaceFontSize))
+    }
+
+    func testRecoveryNoticeDescribesRepairsAndBackupLocation() throws {
+        let backupURL = URL(fileURLWithPath: "/tmp/MyTerm/workspaces.json.recovery-backup")
+        let notice = try XCTUnwrap(WorkspaceRecoveryNotice(loadReport: WorkspaceStoreLoadReport(
+            sourceVersion: 1,
+            didMigrate: true,
+            droppedElementCount: 2,
+            identifierRepairCount: 3,
+            structuralRepairCount: 4,
+            backupURLs: [backupURL]
+        )))
+
+        XCTAssertTrue(notice.message.contains("upgraded the workspace format"))
+        XCTAssertTrue(notice.message.contains("repaired 3 identifiers"))
+        XCTAssertTrue(notice.message.contains("repaired 4 structural issues"))
+        XCTAssertTrue(notice.message.contains("removed 2 invalid items"))
+        XCTAssertTrue(notice.message.contains(backupURL.path))
+        XCTAssertNil(WorkspaceRecoveryNotice(loadReport: .newStore))
+    }
+
+    func testAppModelPublishesRecoveryNoticeFromWorkspaceStoreLoadReport() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let persistenceURL = MyTermChannel.development.persistenceURL(applicationSupportDirectory: directory)
+        try FileManager.default.createDirectory(
+            at: persistenceURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let snapshot = WorkspaceStoreSnapshot.initial()
+        let validJSON = try XCTUnwrap(String(data: JSONEncoder().encode(snapshot), encoding: .utf8))
+        let original = Data(validJSON.replacingOccurrences(
+            of: snapshot.selectedWorkspaceID.description,
+            with: "invalid-workspace-id"
+        ).utf8)
+        try original.write(to: persistenceURL)
+
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let notice = try XCTUnwrap(model.recoveryNotice)
+
+        XCTAssertGreaterThan(notice.identifierRepairCount, 0)
+        XCTAssertEqual(notice.backupURLs, [persistenceURL.appendingPathExtension("recovery-backup")])
+        XCTAssertTrue(notice.message.contains(persistenceURL.appendingPathExtension("recovery-backup").path))
+    }
+
+    func testNewPaneMovementCommandsRouteAllFourEdges() throws {
+        for edge in [PaneEdge.left, .right, .top, .bottom] {
+            let directory = try makeTemporaryDirectory()
+            defer { removeTemporaryDirectory(directory) }
+            let model = try makeModel(applicationSupportDirectory: directory)
+            let sourceGroupID = model.selectedWorkspace.focusedTabGroupID
+            model.createTerminalTab(in: sourceGroupID)
+            let movedTabID = try XCTUnwrap(model.selectedTab?.id)
+
+            let result = model.routeSelectedTabMovement(.newPane(edge))
+
+            guard case .moved(let destinationGroupID) = result else {
+                XCTFail("Expected movement to a new pane on \(edge).")
+                continue
+            }
+            XCTAssertNotEqual(destinationGroupID, sourceGroupID)
+            XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 2)
+            XCTAssertEqual(model.selectedWorkspace.group(id: destinationGroupID)?.selectedTabID, movedTabID)
+        }
+    }
+
+    func testPreviousPaneMovementCommandUsesOrderedGroupsAcrossVerticalSplit() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let topGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.createTerminalTab(in: topGroupID)
+        model.routeSelectedTabMovement(.newPane(.bottom))
+        let bottomGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.createTerminalTab(in: bottomGroupID)
+
+        let previousResult = model.routeSelectedTabMovement(.previousPane)
+        guard case .moved(let previousDestination) = previousResult else {
+            return XCTFail("Expected previous-pane routing to move the selected tab.")
+        }
+        XCTAssertEqual(previousDestination, topGroupID)
+    }
+
+    func testNextPaneMovementCommandUsesOrderedGroupsAcrossVerticalSplit() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let topGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.createTerminalTab(in: topGroupID)
+        model.routeSelectedTabMovement(.newPane(.bottom))
+        let bottomGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.focusTabGroup(workspaceID: model.store.selectedWorkspaceID, tabGroupID: topGroupID)
+        model.createTerminalTab(in: topGroupID)
+
+        let nextResult = model.routeSelectedTabMovement(.nextPane)
+        guard case .moved(let nextDestination) = nextResult else {
+            return XCTFail("Expected next-pane routing to move the selected tab.")
+        }
+        XCTAssertEqual(nextDestination, bottomGroupID)
+    }
+
+    func testExplicitMovementIdentityDoesNotFollowNewWorkspaceSelection() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let sourceWorkspaceID = model.store.selectedWorkspaceID
+        let sourceGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.createTerminalTab(in: sourceGroupID)
+        let movedTabID = try XCTUnwrap(model.selectedTab?.id)
+        model.createWorkspace()
+        let newlySelectedWorkspaceID = model.store.selectedWorkspaceID
+
+        let result = model.moveTabToNewGroup(
+            workspaceID: sourceWorkspaceID,
+            sourceTabGroupID: sourceGroupID,
+            tabID: movedTabID,
+            beside: sourceGroupID,
+            edge: .right
+        )
+
+        guard case .moved = result else {
+            return XCTFail("Expected the captured source identity to remain valid.")
+        }
+        XCTAssertEqual(model.store.selectedWorkspaceID, newlySelectedWorkspaceID)
+        XCTAssertEqual(model.workspaces.first(where: { $0.id == sourceWorkspaceID })?.orderedGroups.count, 2)
+        XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 1)
+    }
+
+    func testPaneMovementShortcutsDoNotCollideWithExistingCommands() {
+        XCTAssertEqual(
+            MyTermCommandShortcuts.moveTabToPreviousPane,
+            .init(key: "\u{F702}", modifiers: [.command, .option, .shift])
+        )
+        XCTAssertEqual(
+            MyTermCommandShortcuts.moveTabToNextPane,
+            .init(key: "\u{F703}", modifiers: [.command, .option, .shift])
+        )
+
+        let shortcuts = [
+            MyTermCommandShortcuts.newFolder,
+            MyTermCommandShortcuts.decreaseWorkspaceFontSize,
+            MyTermCommandShortcuts.increaseWorkspaceFontSize,
+            MyTermCommandShortcuts.previousTab,
+            MyTermCommandShortcuts.nextTab,
+            MyTermCommandShortcuts.reloadBrowser,
+            MyTermCommandShortcuts.focusBrowserAddress,
+            MyTermCommandShortcuts.browserBack,
+            MyTermCommandShortcuts.browserForward,
+            MyTermCommandShortcuts.findInBrowser,
+            MyTermCommandShortcuts.resetBrowserZoom,
+            MyTermCommandShortcuts.moveTabToPreviousPane,
+            MyTermCommandShortcuts.moveTabToNextPane,
+        ]
+        XCTAssertEqual(Set(shortcuts.map { "\($0.key)|\($0.modifiers)" }).count, shortcuts.count)
+    }
+
+    private func createPaneBesideSource(
+        _ model: AppModel,
+        sourceGroupID: TabGroupID,
+        tabID: TabID
+    ) throws -> TabGroupID {
+        let result = model.moveTabToNewGroup(
+            workspaceID: model.store.selectedWorkspaceID,
+            sourceTabGroupID: sourceGroupID,
+            tabID: tabID,
+            beside: sourceGroupID,
+            edge: .right
+        )
+        guard case .moved(let destinationGroupID) = result else {
+            throw XCTSkip("Could not create a destination pane for drag testing.")
+        }
+        return destinationGroupID
+    }
+
+    private func registerPaneDragFrames(
+        _ model: AppModel,
+        workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
+        origin: CGPoint
+    ) {
+        model.registerPaneTabDragPaneBody(
+            workspaceID: workspaceID,
+            tabGroupID: tabGroupID,
+            frame: CGRect(origin: origin, size: CGSize(width: 120, height: 100))
+        )
+        model.registerPaneTabDragTabStrip(
+            workspaceID: workspaceID,
+            tabGroupID: tabGroupID,
+            frame: CGRect(origin: origin, size: CGSize(width: 120, height: 20))
+        )
+        for (index, tab) in (model.selectedWorkspace.group(id: tabGroupID)?.tabs ?? []).enumerated() {
+            model.registerPaneTabDragTab(
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tab.id,
+                frame: CGRect(
+                    x: origin.x + CGFloat(index * 100),
+                    y: origin.y,
+                    width: 100,
+                    height: 20
+                )
+            )
+        }
     }
 
     private func makeModel(applicationSupportDirectory: URL) throws -> AppModel {

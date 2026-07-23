@@ -50,6 +50,10 @@ final class BrowserSessionHostView: NSView {
         focusWhenPossible()
     }
 
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
     func setPaneActive(_ isActive: Bool) {
         // Before attachment this decides whether workspace restoration should focus the browser.
         // Once attached, toolbar controls own the responder chain and must not lose focus to WebKit.

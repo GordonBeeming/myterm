@@ -3,6 +3,7 @@ import Foundation
 import MyTermCore
 import MyTermPlatform
 import Observation
+import OSLog
 
 enum TerminalSettingsScope: Equatable, Hashable, Sendable {
     case global
@@ -43,8 +44,15 @@ final class AppModel {
     private let markdownOpenCommandAvailabilityChecker: MarkdownOpenCommandAvailabilityChecker
     private(set) var terminalSessions: [TerminalSessionID: any TerminalProcessSession] = [:]
     private(set) var browserControllers: [BrowserSessionID: BrowserSessionController] = [:]
+    var browserAddressFocusRequest: BrowserAddressFocusRequest?
+    var browserFindRequest: BrowserFindRequest?
+    var paneTabDragSession: PaneTabDragSession?
+    var paneTabDragRegistrations: [TabGroupID: PaneTabDragRegistration] = [:]
+    var nextBrowserAddressFocusToken: UInt64 = 0
+    var nextBrowserFindToken: UInt64 = 0
     @ObservationIgnored private var terminalSnapshotTasks: [TerminalSessionID: Task<Void, Never>] = [:]
     var errorDescription: String?
+    let recoveryNotice: WorkspaceRecoveryNotice?
     var isSidebarVisible = true
     var workspaceBeingRenamedID: WorkspaceID?
     var workspaceRenameDraft = ""
@@ -53,11 +61,12 @@ final class AppModel {
     var folderBeingRenamedID: WorkspaceFolderID?
     var folderRenameDraft = ""
     var tabBeingRenamedID: TabID?
+    private var tabBeingRenamedGroupID: TabGroupID?
     var tabRenameDraft = ""
     var isCreatingFolder = false
     var newFolderDraft = ""
     var settingsScope = TerminalSettingsScope.global
-    private var stateVersion = 0
+    private(set) var stateVersion = 0
 
     init(
         channel: MyTermChannel = .active,
@@ -75,6 +84,7 @@ final class AppModel {
         self.channel = channel
         let supportDirectory = try applicationSupportDirectory ?? Self.applicationSupportDirectory()
         store = try WorkspaceStore(persistenceURL: channel.persistenceURL(applicationSupportDirectory: supportDirectory))
+        recoveryNotice = WorkspaceRecoveryNotice(loadReport: store.loadReport)
         self.browserSettings = browserSettings ?? BrowserSettingsStore(channel: channel)
         self.terminalEngine = terminalEngine
         self.startsTerminalProcesses = startsTerminalProcesses
@@ -85,10 +95,15 @@ final class AppModel {
         self.markdownOpenCommandRunner = markdownOpenCommandRunner
         self.markdownOpenCommandAvailabilityChecker = markdownOpenCommandAvailabilityChecker
         browserDataProfileResolver = BrowserDataProfileResolver(channel: channel)
+        if let recoveryNotice {
+            Logger(subsystem: "com.gordonbeeming.myterm", category: "workspace-recovery").notice(
+                "Workspace state repaired: identifiers=\(recoveryNotice.identifierRepairCount, privacy: .public), structure=\(recoveryNotice.structuralRepairCount, privacy: .public), dropped=\(recoveryNotice.droppedElementCount, privacy: .public), migrated=\(recoveryNotice.didMigrate, privacy: .public), backups=\(recoveryNotice.backupURLs.count, privacy: .public)"
+            )
+        }
         try migrateLegacySettings()
         try migrateLegacyBrowserDataProfiles()
         restoreRuntimeObjects()
-        if let sessionID = selectedTab?.focusedTerminalSessionID {
+        if let sessionID = selectedTab?.terminalSession?.id {
             terminalSessions[sessionID]?.focus()
         }
     }
@@ -110,6 +125,10 @@ final class AppModel {
 
     var selectedTab: Tab? {
         selectedWorkspace.selectedTab
+    }
+
+    var selectedTabGroup: TabGroup? {
+        selectedWorkspace.focusedTabGroup
     }
 
     var selectedWorkspaceSettings: TerminalPreferences {
@@ -251,6 +270,7 @@ final class AppModel {
     }
 
     func createWorkspace(in folderID: WorkspaceFolderID? = nil) {
+        cancelPaneTabDrag()
         perform {
             let inheritedActiveDirectory = activeTerminalDirectory(in: selectedWorkspace)
             let targetFolderID = folderID ?? selectedWorkspace.folderID
@@ -265,13 +285,14 @@ final class AppModel {
                 for: workspaceID,
                 activePaneFallback: inheritedActiveDirectory
             )
-            for tab in createdWorkspace.tabs {
-                guard case .terminal(let tree) = tab.content else { continue }
-                for session in tree.terminalSessions where session.workingDirectory == nil {
+            for group in createdWorkspace.orderedGroups {
+                for tab in group.tabs {
+                    guard case .terminal(let session) = tab.content,
+                          session.workingDirectory == nil else { continue }
                     try store.updateTerminalWorkingDirectory(
                         workspaceID: workspaceID,
+                        tabGroupID: group.id,
                         tabID: tab.id,
-                        sessionID: session.id,
                         workingDirectory: workingDirectory
                     )
                 }
@@ -280,7 +301,7 @@ final class AppModel {
                 throw AppModelError.workspaceUnavailable(workspaceID)
             }
             restoreRuntimeObjects(in: workspace)
-            if let sessionID = workspace.selectedTab?.focusedTerminalSessionID {
+            if let sessionID = workspace.selectedTab?.terminalSession?.id {
                 terminalSessions[sessionID]?.focus()
             }
         }
@@ -327,30 +348,52 @@ final class AppModel {
     }
 
     func beginRenamingSelectedTab() {
-        guard let tabID = selectedWorkspace.selectedTabID else { return }
-        beginRenamingTab(tabID)
+        guard let group = selectedWorkspace.focusedTabGroup else { return }
+        beginRenamingTab(group.selectedTabID, in: group.id)
     }
 
     func beginRenamingTab(_ tabID: TabID) {
-        guard let tab = tab(workspaceID: store.selectedWorkspaceID, tabID: tabID) else { return }
+        guard let groupID = selectedWorkspace.groupID(containing: tabID) else { return }
+        beginRenamingTab(tabID, in: groupID)
+    }
+
+    func beginRenamingTab(_ tabID: TabID, in tabGroupID: TabGroupID) {
+        guard let tab = tab(
+            workspaceID: store.selectedWorkspaceID,
+            tabGroupID: tabGroupID,
+            tabID: tabID
+        ) else { return }
         tabRenameDraft = tab.customTitle ?? defaultTitle(for: tab)
         tabBeingRenamedID = tabID
+        tabBeingRenamedGroupID = tabGroupID
     }
 
     func commitTabRename() {
-        guard let tabID = tabBeingRenamedID else { return }
-        renameTab(tabID, title: tabRenameDraft)
+        guard let tabID = tabBeingRenamedID,
+              let tabGroupID = tabBeingRenamedGroupID else { return }
+        renameTab(tabID, in: tabGroupID, title: tabRenameDraft)
         tabBeingRenamedID = nil
+        tabBeingRenamedGroupID = nil
     }
 
     func cancelTabRename() {
         tabBeingRenamedID = nil
+        tabBeingRenamedGroupID = nil
     }
 
     func renameTab(_ tabID: TabID, title: String?) {
+        guard let tabGroupID = selectedWorkspace.groupID(containing: tabID) else {
+            errorDescription = AppModelError.tabUnavailable(tabID).localizedDescription
+            return
+        }
+        renameTab(tabID, in: tabGroupID, title: title)
+    }
+
+    func renameTab(_ tabID: TabID, in tabGroupID: TabGroupID, title: String?) {
         perform {
             try store.renameTab(
                 workspaceID: store.selectedWorkspaceID,
+                tabGroupID: tabGroupID,
                 tabID: tabID,
                 customTitle: title
             )
@@ -438,6 +481,7 @@ final class AppModel {
     }
 
     func deleteWorkspace(_ workspaceID: WorkspaceID) {
+        cancelPaneTabDrag()
         guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
             errorDescription = AppModelError.workspaceUnavailable(workspaceID).localizedDescription
             return
@@ -456,6 +500,7 @@ final class AppModel {
     }
 
     func selectWorkspace(_ workspaceID: WorkspaceID) {
+        cancelPaneTabDrag()
         perform {
             try store.selectWorkspace(workspaceID)
             restoreFocusedPane(in: workspaceID)
@@ -513,9 +558,9 @@ final class AppModel {
         let hasExactOrigin = workspaceID.flatMap { workspaceID in
             store.workspaces.first(where: { $0.id == workspaceID })
         }.flatMap { workspace in
-            besideTabID.flatMap { tabID in workspace.tabs.first(where: { $0.id == tabID }) }
+            besideTabID.flatMap { tabID in workspace.tab(id: tabID) }
         }.map { tab in
-            paneID.map { tab.splitTree.contains(paneID: $0) } == true
+            paneID == tab.paneID
         } == true
 
         if url.isFileURL {
@@ -649,8 +694,8 @@ final class AppModel {
         if let tabID,
            let paneID,
            let workspace = store.workspaces.first(where: { $0.id == workspaceID }),
-           let tab = workspace.tabs.first(where: { $0.id == tabID }),
-           tab.splitTree.contains(paneID: paneID) {
+           let tab = workspace.tab(id: tabID),
+           tab.paneID == paneID {
             createBrowserPane(url: url, in: workspaceID, tabID: tabID, beside: paneID)
         } else if store.workspaces.contains(where: { $0.id == workspaceID }) {
             createBrowserTab(url: url, in: workspaceID)
@@ -710,21 +755,40 @@ final class AppModel {
     private func createTerminalTab(
         workingDirectory: URL,
         initialCommand: String?,
-        workspaceID: WorkspaceID
+        workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID? = nil
     ) throws {
-        let tabID = try store.addTerminalTab(to: workspaceID, workingDirectory: workingDirectory)
-        guard let tab = tab(workspaceID: workspaceID, tabID: tabID) else {
+        guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
+            throw AppModelError.workspaceUnavailable(workspaceID)
+        }
+        let targetGroupID = tabGroupID ?? workspace.focusedTabGroupID
+        let tabID = try store.addTerminalTab(
+            to: workspaceID,
+            tabGroupID: targetGroupID,
+            workingDirectory: workingDirectory
+        )
+        guard let tab = tab(workspaceID: workspaceID, tabGroupID: targetGroupID, tabID: tabID),
+              let session = tab.terminalSession else {
             throw AppModelError.tabUnavailable(tabID)
         }
-        guard case .terminal(let tree) = tab.content else {
-            throw AppModelError.tabUnavailable(tabID)
-        }
-        for session in tree.terminalSessions {
-            try restoreTerminalSession(
-                session,
+        try restoreTerminalSession(
+            session,
+            workspaceID: workspaceID,
+            tabGroupID: targetGroupID,
+            tabID: tab.id,
+            initialCommand: initialCommand
+        )
+        terminalSessions[session.id]?.focus()
+    }
+
+    func createTerminalTab(in tabGroupID: TabGroupID) {
+        perform {
+            let workspaceID = store.selectedWorkspaceID
+            try createTerminalTab(
+                workingDirectory: newSessionWorkingDirectory(for: workspaceID),
+                initialCommand: nil,
                 workspaceID: workspaceID,
-                tabID: tab.id,
-                initialCommand: initialCommand
+                tabGroupID: tabGroupID
             )
         }
     }
@@ -737,25 +801,46 @@ final class AppModel {
         createBrowserTab(url: defaultURL)
     }
 
+    func createBrowserTab(in tabGroupID: TabGroupID) {
+        guard let defaultURL = URL(string: "https://www.google.com") else {
+            errorDescription = AppModelError.defaultBrowserURLInvalid.localizedDescription
+            return
+        }
+        createBrowserTab(url: defaultURL, in: store.selectedWorkspaceID, tabGroupID: tabGroupID)
+    }
+
     private func createBrowserTab(url: URL) {
         createBrowserTab(url: url, in: store.selectedWorkspaceID)
     }
 
-    private func createBrowserTab(url: URL, in workspaceID: WorkspaceID) {
+    private func createBrowserTab(
+        url: URL,
+        in workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID? = nil,
+        sourceWorkingDirectory: URL? = nil
+    ) {
         perform {
             guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
                 throw AppModelError.workspaceUnavailable(workspaceID)
             }
+            let targetGroupID = tabGroupID ?? workspace.focusedTabGroupID
             let settings = try store.resolvedSettings(for: workspaceID)
             let profile = browserDataProfileResolver.resolve(
                 scope: settings.browserDataScope,
-                workspace: workspace
+                workspace: workspace,
+                sourceWorkingDirectory: sourceWorkingDirectory
             )
-            let tabID = try store.addBrowserTab(to: workspaceID, url: url, profile: profile)
-            guard let tab = tab(workspaceID: workspaceID, tabID: tabID) else {
+            let tabID = try store.addBrowserTab(
+                to: workspaceID,
+                tabGroupID: targetGroupID,
+                url: url,
+                profile: profile
+            )
+            guard let tab = tab(workspaceID: workspaceID, tabGroupID: targetGroupID, tabID: tabID) else {
                 throw AppModelError.tabUnavailable(tabID)
             }
-            try restoreBrowserController(for: tab, workspaceID: workspaceID)
+            try restoreBrowserController(for: tab, tabGroupID: targetGroupID, workspaceID: workspaceID)
+            focusContent(of: tab)
         }
     }
 
@@ -769,55 +854,118 @@ final class AppModel {
             guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
                 throw AppModelError.workspaceUnavailable(workspaceID)
             }
-            guard let sourceTab = workspace.tabs.first(where: { $0.id == tabID }) else {
+            guard let sourceGroupID = workspace.groupID(containing: tabID),
+                  let sourceTab = workspace.tab(groupID: sourceGroupID, tabID: tabID) else {
                 throw AppModelError.tabUnavailable(tabID)
             }
-            guard sourceTab.splitTree.contains(paneID: paneID) else {
+            guard sourceTab.paneID == paneID else {
                 throw WorkspaceStoreError.paneNotFound(paneID)
             }
             let settings = try store.resolvedSettings(for: workspaceID)
             let profile = browserDataProfileResolver.resolve(
                 scope: settings.browserDataScope,
                 workspace: workspace,
-                sourceWorkingDirectory: sourceTab.splitTree.session(for: paneID)?.workingDirectory
+                sourceWorkingDirectory: sourceTab.terminalSession?.workingDirectory
             )
-            let browserID = try store.insertBrowserPane(
-                workspaceID: workspaceID,
-                tabID: tabID,
-                beside: paneID,
-                url: url,
-                profile: profile
-            )
-            guard let updatedTab = tab(workspaceID: workspaceID, tabID: tabID),
-                  let browser = updatedTab.splitTree.browser(id: browserID) else {
-                throw AppModelError.browserUnavailable(browserID)
+            let destinationGroupID: TabGroupID
+            var placeholderTabID: TabID?
+            if let adjacent = workspace.adjacentTabGroupID(to: sourceGroupID, direction: .right) {
+                destinationGroupID = adjacent
+            } else {
+                let split = try store.splitTabGroup(
+                    workspaceID: workspaceID,
+                    tabGroupID: sourceGroupID,
+                    edge: .right,
+                    workingDirectory: sourceTab.terminalSession?.workingDirectory
+                )
+                destinationGroupID = split.tabGroupID
+                placeholderTabID = split.tabID
             }
-            try restoreBrowserController(browser, tabID: tabID, workspaceID: workspaceID)
+
+            if let existingTab = store.workspaces.first(where: { $0.id == workspaceID })?
+                .group(id: destinationGroupID)?
+                .tabs.first(where: {
+                    $0.browserSession?.url == url && $0.browserSession?.profile == profile
+                }) {
+                try store.selectTab(
+                    workspaceID: workspaceID,
+                    tabGroupID: destinationGroupID,
+                    tabID: existingTab.id
+                )
+                focusContent(of: existingTab)
+            } else {
+                let browserTabID = try store.addBrowserTab(
+                    to: workspaceID,
+                    tabGroupID: destinationGroupID,
+                    url: url,
+                    profile: profile
+                )
+                guard let browserTab = tab(
+                    workspaceID: workspaceID,
+                    tabGroupID: destinationGroupID,
+                    tabID: browserTabID
+                ) else {
+                    throw AppModelError.tabUnavailable(browserTabID)
+                }
+                try restoreBrowserController(
+                    for: browserTab,
+                    tabGroupID: destinationGroupID,
+                    workspaceID: workspaceID
+                )
+                if let placeholderTabID {
+                    _ = try store.closeTab(
+                        workspaceID: workspaceID,
+                        tabGroupID: destinationGroupID,
+                        tabID: placeholderTabID
+                    )
+                }
+                focusContent(of: browserTab)
+            }
         }
     }
 
     func selectTab(_ tabID: TabID) {
+        guard let tabGroupID = selectedWorkspace.groupID(containing: tabID) else {
+            errorDescription = AppModelError.tabUnavailable(tabID).localizedDescription
+            return
+        }
+        selectTab(tabID, in: tabGroupID)
+    }
+
+    func selectTab(_ tabID: TabID, in tabGroupID: TabGroupID, focusContent: Bool = true) {
         perform {
-            try store.selectTab(workspaceID: store.selectedWorkspaceID, tabID: tabID)
+            let workspaceID = store.selectedWorkspaceID
+            try store.selectTab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)
+            guard let tab = tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID) else {
+                throw AppModelError.tabUnavailable(tabID)
+            }
+            if focusContent {
+                self.focusContent(of: tab)
+            }
         }
     }
 
     func selectTab(at index: Int) {
-        guard selectedWorkspace.tabs.indices.contains(index) else { return }
-        selectTab(selectedWorkspace.tabs[index].id)
+        guard let group = selectedWorkspace.focusedTabGroup,
+              group.tabs.indices.contains(index) else { return }
+        selectTab(group.tabs[index].id, in: group.id)
     }
 
     func selectAdjacentTab(offset: Int) {
-        let tabs = selectedWorkspace.tabs
-        guard !tabs.isEmpty,
-              let selectedTabID = selectedWorkspace.selectedTabID,
-              let selectedIndex = tabs.firstIndex(where: { $0.id == selectedTabID }) else { return }
-        let targetIndex = (selectedIndex + offset + tabs.count) % tabs.count
-        selectTab(tabs[targetIndex].id)
+        guard let group = selectedWorkspace.focusedTabGroup,
+              !group.tabs.isEmpty,
+              let selectedIndex = group.tabs.firstIndex(where: { $0.id == group.selectedTabID }) else { return }
+        let targetIndex = (selectedIndex + offset % group.tabs.count + group.tabs.count) % group.tabs.count
+        selectTab(group.tabs[targetIndex].id, in: group.id)
     }
 
     func closeTab(_ tabID: TabID) {
-        guard let tab = tab(workspaceID: store.selectedWorkspaceID, tabID: tabID) else {
+        guard let tabGroupID = selectedWorkspace.groupID(containing: tabID),
+              let tab = tab(
+                workspaceID: store.selectedWorkspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID
+              ) else {
             errorDescription = AppModelError.tabUnavailable(tabID).localizedDescription
             return
         }
@@ -828,41 +976,42 @@ final class AppModel {
         ) else { return }
 
         perform {
-            try closeTab(workspaceID: store.selectedWorkspaceID, tabID: tabID)
+            try closeTab(
+                workspaceID: store.selectedWorkspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID
+            )
         }
     }
 
     func closeFocusedPaneOrTab() {
-        guard let tab = selectedTab else {
+        guard let group = selectedWorkspace.focusedTabGroup else {
             errorDescription = AppModelError.noSelectedTab.localizedDescription
             return
         }
-        guard let paneID = tab.focusedPaneID else {
-            errorDescription = AppModelError.noFocusedTerminal(tab.id).localizedDescription
-            return
-        }
+        let tab = group.selectedTab
         guard confirmClose(
-            processNames: activeProcessNames(for: paneID, in: tab),
+            processNames: activeProcessNames(in: tab),
             title: "Close this pane?",
             confirmButtonTitle: "Close Pane"
         ) else { return }
 
         perform {
             let workspaceID = store.selectedWorkspaceID
-            let tree = tab.splitTree
-            let terminalSession = tree.session(for: paneID)
-            let browserSession = tree.browser(for: paneID)
+            let terminalSession = tab.terminalSession
+            let browserSession = tab.browserSession
             if let terminalSession {
                 persistTerminalSnapshot(
                     workspaceID: workspaceID,
+                    tabGroupID: group.id,
                     tabID: tab.id,
                     sessionID: terminalSession.id
                 )
             }
-            let lifecycle = try store.closePane(
+            let lifecycle = try store.closeTab(
                 workspaceID: workspaceID,
-                tabID: tab.id,
-                paneID: paneID
+                tabGroupID: group.id,
+                tabID: tab.id
             )
             if let terminalSession {
                 removeTerminalRuntime(terminalSession.id)
@@ -874,80 +1023,278 @@ final class AppModel {
     }
 
     func splitFocusedTerminal(orientation: SplitOrientation) {
-        guard let tab = selectedTab, let paneID = tab.focusedPaneID else {
+        guard let group = selectedWorkspace.focusedTabGroup else {
             errorDescription = AppModelError.noFocusedTerminalTab.localizedDescription
             return
         }
 
         perform {
             let workspaceID = store.selectedWorkspaceID
-            let workingDirectory: URL
-            if let existingDirectory = tab.splitTree.session(for: paneID)?.workingDirectory {
-                workingDirectory = existingDirectory
-            } else {
-                workingDirectory = try newSessionWorkingDirectory(for: workspaceID)
-            }
-            let newPaneID = try store.splitTerminalPane(
+            let workingDirectory = try (group.selectedTab.terminalSession?.workingDirectory
+                ?? newSessionWorkingDirectory(for: workspaceID))
+            let split = try store.splitTabGroup(
                 workspaceID: workspaceID,
-                tabID: tab.id,
-                paneID: paneID,
-                orientation: orientation,
+                tabGroupID: group.id,
+                edge: orientation == .horizontal ? .right : .bottom,
                 workingDirectory: workingDirectory
             )
-            guard let updatedTab = self.tab(workspaceID: workspaceID, tabID: tab.id),
-                  let session = updatedTab.splitTree.session(for: newPaneID)
-            else {
-                throw AppModelError.noFocusedTerminal(tab.id)
+            guard let tab = self.tab(
+                workspaceID: workspaceID,
+                tabGroupID: split.tabGroupID,
+                tabID: split.tabID
+            ), let session = tab.terminalSession else {
+                throw AppModelError.tabUnavailable(split.tabID)
             }
-            try restoreTerminalSession(session, workspaceID: workspaceID, tabID: tab.id)
+            try restoreTerminalSession(
+                session,
+                workspaceID: workspaceID,
+                tabGroupID: split.tabGroupID,
+                tabID: split.tabID
+            )
             terminalSessions[session.id]?.focus()
         }
     }
 
-    func focusTerminal(workspaceID: WorkspaceID, tabID: TabID, sessionID: TerminalSessionID) {
+    func focusTerminal(
+        workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
+        tabID: TabID,
+        sessionID: TerminalSessionID
+    ) {
         perform {
-            try store.focusTerminalPane(workspaceID: workspaceID, tabID: tabID, sessionID: sessionID)
+            guard let tab = tab(
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID
+            ), tab.terminalSession?.id == sessionID else {
+                throw AppModelError.terminalUnavailable(sessionID)
+            }
+            try store.focusPane(
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID,
+                paneID: tab.paneID
+            )
             terminalSessions[sessionID]?.focus()
         }
     }
 
-    func focusPane(workspaceID: WorkspaceID, tabID: TabID, paneID: PaneID) {
+    func focusTabGroup(workspaceID: WorkspaceID, tabGroupID: TabGroupID, focusContent: Bool = false) {
         perform {
-            try store.focusPane(workspaceID: workspaceID, tabID: tabID, paneID: paneID)
-            if let tab = tab(workspaceID: workspaceID, tabID: tabID),
-               let session = tab.splitTree.session(for: paneID) {
-                terminalSessions[session.id]?.focus()
-            } else if let tab = tab(workspaceID: workspaceID, tabID: tabID),
-                      let browser = tab.splitTree.browser(for: paneID),
-                      let webView = browserControllers[browser.id]?.webView {
-                webView.window?.makeFirstResponder(webView)
+            guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }),
+                  let group = workspace.group(id: tabGroupID) else {
+                throw WorkspaceStoreError.tabGroupNotFound(tabGroupID)
+            }
+            if workspace.focusedTabGroupID != tabGroupID {
+                try store.focusTabGroup(workspaceID: workspaceID, tabGroupID: tabGroupID)
+            }
+            if focusContent { self.focusContent(of: group.selectedTab) }
+        }
+    }
+
+    func focusPane(
+        workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
+        tabID: TabID,
+        paneID: PaneID,
+        focusContent: Bool = true
+    ) {
+        guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }),
+              let locatedTab = workspace.tab(groupID: tabGroupID, tabID: tabID),
+              locatedTab.paneID == paneID else { return }
+        let alreadyFocused = store.selectedWorkspaceID == workspaceID
+            && workspace.focusedTabGroupID == tabGroupID
+            && workspace.group(id: tabGroupID)?.selectedTabID == tabID
+        if alreadyFocused {
+            if focusContent { self.focusContent(of: locatedTab) }
+            return
+        }
+        perform {
+            if store.selectedWorkspaceID != workspaceID {
+                try store.selectWorkspace(workspaceID)
+            }
+            try store.focusPane(
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID,
+                paneID: paneID
+            )
+            if focusContent,
+               let tab = tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID) {
+                self.focusContent(of: tab)
             }
         }
     }
 
+    func terminalDidBecomeFirstResponder(
+        workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
+        tabID: TabID,
+        sessionID: TerminalSessionID
+    ) {
+        guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }),
+              let tab = workspace.tab(groupID: tabGroupID, tabID: tabID),
+              tab.terminalSession?.id == sessionID else { return }
+        focusPane(
+            workspaceID: workspaceID,
+            tabGroupID: tabGroupID,
+            tabID: tabID,
+            paneID: tab.paneID,
+            focusContent: false
+        )
+    }
+
     private func restoreFocusedPane(in workspaceID: WorkspaceID) {
         guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }),
-              let tab = workspace.selectedTab,
-              let paneID = tab.focusedPaneID else {
+              let tab = workspace.selectedTab else {
             return
         }
-        if let session = tab.splitTree.session(for: paneID) {
-            terminalSessions[session.id]?.focus()
-        } else if let browser = tab.splitTree.browser(for: paneID),
-                  let webView = browserControllers[browser.id]?.webView {
-            webView.window?.makeFirstResponder(webView)
-        }
+        focusContent(of: tab)
     }
 
     func focusTerminal(direction: PaneFocusDirection) {
-        guard let tab = selectedTab,
-              let focusedPaneID = tab.focusedPaneID,
-              let targetPaneID = tab.splitTree.adjacentPaneID(to: focusedPaneID, direction: direction) else { return }
-        focusPane(
+        let workspace = selectedWorkspace
+        guard let targetGroupID = workspace.adjacentTabGroupID(
+            to: workspace.focusedTabGroupID,
+            direction: direction
+        ) else { return }
+        focusTabGroup(
             workspaceID: store.selectedWorkspaceID,
-            tabID: tab.id,
-            paneID: targetPaneID
+            tabGroupID: targetGroupID,
+            focusContent: true
         )
+    }
+
+    @discardableResult
+    func moveTab(
+        sourceTabGroupID: TabGroupID,
+        tabID: TabID,
+        to destinationTabGroupID: TabGroupID,
+        at index: Int? = nil
+    ) -> TabMovementResult {
+        moveTab(
+            workspaceID: store.selectedWorkspaceID,
+            sourceTabGroupID: sourceTabGroupID,
+            tabID: tabID,
+            to: destinationTabGroupID,
+            at: index
+        )
+    }
+
+    @discardableResult
+    func moveTab(
+        workspaceID: WorkspaceID,
+        sourceTabGroupID: TabGroupID,
+        tabID: TabID,
+        to destinationTabGroupID: TabGroupID,
+        at index: Int? = nil
+    ) -> TabMovementResult {
+        do {
+            _ = try store.moveTab(
+                workspaceID: workspaceID,
+                sourceTabGroupID: sourceTabGroupID,
+                tabID: tabID,
+                to: destinationTabGroupID,
+                at: index
+            )
+            if let movedTab = tab(
+                workspaceID: workspaceID,
+                tabGroupID: destinationTabGroupID,
+                tabID: tabID
+            ) {
+                rebindRuntimeCallbacks(
+                    for: movedTab,
+                    workspaceID: workspaceID,
+                    tabGroupID: destinationTabGroupID
+                )
+                if store.selectedWorkspaceID == workspaceID {
+                    focusContent(of: movedTab)
+                }
+            }
+            stateVersion += 1
+            return .moved(destinationTabGroupID: destinationTabGroupID)
+        } catch {
+            present(error)
+            return .failed(message: error.localizedDescription)
+        }
+    }
+
+    @discardableResult
+    func moveTabToNewGroup(
+        sourceTabGroupID: TabGroupID,
+        tabID: TabID,
+        beside targetTabGroupID: TabGroupID,
+        edge: PaneEdge
+    ) -> TabMovementResult {
+        moveTabToNewGroup(
+            workspaceID: store.selectedWorkspaceID,
+            sourceTabGroupID: sourceTabGroupID,
+            tabID: tabID,
+            beside: targetTabGroupID,
+            edge: edge
+        )
+    }
+
+    @discardableResult
+    func moveTabToNewGroup(
+        workspaceID: WorkspaceID,
+        sourceTabGroupID: TabGroupID,
+        tabID: TabID,
+        beside targetTabGroupID: TabGroupID,
+        edge: PaneEdge
+    ) -> TabMovementResult {
+        do {
+            guard let createdGroupID = try store.moveTabToNewGroup(
+                workspaceID: workspaceID,
+                sourceTabGroupID: sourceTabGroupID,
+                tabID: tabID,
+                beside: targetTabGroupID,
+                edge: edge
+            ) else {
+                let message = "The tab is already the only tab in this pane."
+                errorDescription = message
+                return .failed(message: message)
+            }
+            if let movedTab = tab(
+                workspaceID: workspaceID,
+                tabGroupID: createdGroupID,
+                tabID: tabID
+            ) {
+                rebindRuntimeCallbacks(
+                    for: movedTab,
+                    workspaceID: workspaceID,
+                    tabGroupID: createdGroupID
+                )
+                if store.selectedWorkspaceID == workspaceID {
+                    focusContent(of: movedTab)
+                }
+            }
+            stateVersion += 1
+            return .moved(destinationTabGroupID: createdGroupID)
+        } catch {
+            present(error)
+            return .failed(message: error.localizedDescription)
+        }
+    }
+
+    func updateSplitWeights(splitID: SplitNodeID, weights: [Double]) {
+        perform {
+            try store.updateSplitWeights(
+                workspaceID: store.selectedWorkspaceID,
+                splitID: splitID,
+                weights: weights
+            )
+        }
+    }
+
+    func tab(workspaceID: WorkspaceID, tabGroupID: TabGroupID, tabID: TabID) -> Tab? {
+        store.workspaces.first(where: { $0.id == workspaceID })?.tab(groupID: tabGroupID, tabID: tabID)
+    }
+
+    func tabTitle(workspaceID: WorkspaceID, tabGroupID: TabGroupID, tabID: TabID) -> String? {
+        tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID).map {
+            $0.customTitle ?? defaultTitle(for: $0)
+        }
     }
 
     func terminalSession(for sessionID: TerminalSessionID) -> (any TerminalProcessSession)? {
@@ -958,14 +1305,96 @@ final class AppModel {
         browserControllers[sessionID]
     }
 
+    func focusContent(of tab: Tab) {
+        if let sessionID = tab.terminalSession?.id {
+            terminalSessions[sessionID]?.focus()
+        } else if let browserID = tab.browserSession?.id,
+                  let webView = browserControllers[browserID]?.webView {
+            webView.window?.makeFirstResponder(webView)
+        }
+    }
+
+    func rebindRuntimeCallbacks(
+        for tab: Tab,
+        workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID
+    ) {
+        if let session = tab.terminalSession,
+           let process = terminalSessions[session.id] {
+            terminalSnapshotTasks.removeValue(forKey: session.id)?.cancel()
+            process.onEvent = { [weak self] event in
+                self?.handle(
+                    event,
+                    workspaceID: workspaceID,
+                    tabGroupID: tabGroupID,
+                    tabID: tab.id,
+                    sessionID: session.id
+                )
+            }
+            process.setContentChangeHandler { [weak self] in
+                self?.scheduleTerminalSnapshot(
+                    workspaceID: workspaceID,
+                    tabGroupID: tabGroupID,
+                    tabID: tab.id,
+                    sessionID: session.id
+                )
+            }
+        } else if let browser = tab.browserSession,
+                  let controller = browserControllers[browser.id] {
+            controller.onCloseRequest = { [weak self, weak controller] in
+                guard let controller else { return }
+                self?.requestBrowserClose(
+                    workspaceID: workspaceID,
+                    tabGroupID: tabGroupID,
+                    tabID: tab.id,
+                    browserID: browser.id,
+                    controller: controller
+                )
+            }
+        }
+    }
+
     func loadBrowserAddress(_ address: String, workspaceID: WorkspaceID, tabID: TabID, browserID: BrowserSessionID) {
+        guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }),
+              let tabGroupID = workspace.groupID(containing: tabID) else {
+            errorDescription = AppModelError.tabUnavailable(tabID).localizedDescription
+            return
+        }
+        loadBrowserAddress(
+            address,
+            workspaceID: workspaceID,
+            tabGroupID: tabGroupID,
+            tabID: tabID,
+            browserID: browserID
+        )
+    }
+
+    func loadBrowserAddress(
+        _ address: String,
+        workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
+        tabID: TabID,
+        browserID: BrowserSessionID
+    ) {
         perform {
             guard let controller = browserControllers[browserID] else {
                 throw AppModelError.browserUnavailable(browserID)
             }
             let url = try BrowserURLNormalizer.normalize(address)
             try controller.load(url: url)
-            try store.updateBrowserURL(workspaceID: workspaceID, tabID: tabID, browserID: browserID, url: url)
+            guard tab(
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID
+            )?.browserSession?.id == browserID else {
+                throw AppModelError.browserUnavailable(browserID)
+            }
+            try store.updateBrowserURL(
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID,
+                url: url
+            )
         }
     }
 
@@ -975,8 +1404,38 @@ final class AppModel {
         tabID: TabID,
         browserID: BrowserSessionID
     ) {
+        guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }),
+              let tabGroupID = workspace.groupID(containing: tabID) else { return }
+        persistBrowserURL(
+            url,
+            workspaceID: workspaceID,
+            tabGroupID: tabGroupID,
+            tabID: tabID,
+            browserID: browserID
+        )
+    }
+
+    func persistBrowserURL(
+        _ url: URL,
+        workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
+        tabID: TabID,
+        browserID: BrowserSessionID
+    ) {
         perform {
-            try store.updateBrowserURL(workspaceID: workspaceID, tabID: tabID, browserID: browserID, url: url)
+            guard tab(
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID
+            )?.browserSession?.id == browserID else {
+                throw AppModelError.browserUnavailable(browserID)
+            }
+            try store.updateBrowserURL(
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID,
+                url: url
+            )
         }
     }
 
@@ -986,14 +1445,17 @@ final class AppModel {
 
     func persistTerminalSnapshots() {
         let locations = store.workspaces.flatMap { workspace in
-            workspace.tabs.flatMap { tab -> [(WorkspaceID, TabID, TerminalSessionID)] in
-                guard case .terminal(let tree) = tab.content else { return [] }
-                return tree.terminalSessionIDs.map { (workspace.id, tab.id, $0) }
+            workspace.orderedGroups.flatMap { group in
+                group.tabs.compactMap { tab -> (WorkspaceID, TabGroupID, TabID, TerminalSessionID)? in
+                    guard let sessionID = tab.terminalSession?.id else { return nil }
+                    return (workspace.id, group.id, tab.id, sessionID)
+                }
             }
         }
-        for (workspaceID, tabID, sessionID) in locations {
+        for (workspaceID, tabGroupID, tabID, sessionID) in locations {
             persistTerminalSnapshot(
                 workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
                 tabID: tabID,
                 sessionID: sessionID
             )
@@ -1024,8 +1486,8 @@ final class AppModel {
     private func migrateLegacyBrowserDataProfiles() throws {
         var updates = [(
             workspaceID: WorkspaceID,
+            tabGroupID: TabGroupID,
             tabID: TabID,
-            browserID: BrowserSessionID,
             profile: BrowserDataProfile
         )]()
         for workspace in store.workspaces {
@@ -1034,9 +1496,11 @@ final class AppModel {
                 scope: settings.browserDataScope,
                 workspace: workspace
             )
-            for tab in workspace.tabs {
-                for browser in tab.splitTree.browserSessions where browser.profile == nil {
-                    updates.append((workspace.id, tab.id, browser.id, profile))
+            for group in workspace.orderedGroups {
+                for tab in group.tabs {
+                    if let browser = tab.browserSession, browser.profile == nil {
+                        updates.append((workspace.id, group.id, tab.id, profile))
+                    }
                 }
             }
         }
@@ -1044,39 +1508,27 @@ final class AppModel {
     }
 
     private func restoreRuntimeObjects(in workspace: Workspace) {
-        for tab in workspace.tabs {
-            let tree = tab.splitTree
-            for browser in tree.browserSessions {
+        for group in workspace.orderedGroups {
+            for tab in group.tabs {
                 do {
-                    try restoreBrowserController(browser, tabID: tab.id, workspaceID: workspace.id)
+                    if let browser = tab.browserSession {
+                        try restoreBrowserController(
+                            browser,
+                            tabGroupID: group.id,
+                            tabID: tab.id,
+                            workspaceID: workspace.id
+                        )
+                    } else if let session = tab.terminalSession {
+                        try restoreTerminalSession(
+                            session,
+                            workspaceID: workspace.id,
+                            tabGroupID: group.id,
+                            tabID: tab.id
+                        )
+                    }
                 } catch {
                     present(error)
                 }
-            }
-            for session in tree.terminalSessions {
-                do {
-                    try restoreTerminalSession(session, workspaceID: workspace.id, tabID: tab.id)
-                } catch {
-                    present(error)
-                }
-            }
-        }
-    }
-
-    private func restoreRuntimeObjects(in tab: Tab) {
-        let workspaceID = store.selectedWorkspaceID
-        for browser in tab.splitTree.browserSessions {
-            do {
-                try restoreBrowserController(browser, tabID: tab.id, workspaceID: workspaceID)
-            } catch {
-                present(error)
-            }
-        }
-        for session in tab.splitTree.terminalSessions {
-            do {
-                try restoreTerminalSession(session, workspaceID: workspaceID, tabID: tab.id)
-            } catch {
-                present(error)
             }
         }
     }
@@ -1084,6 +1536,7 @@ final class AppModel {
     private func restoreTerminalSession(
         _ session: TerminalSession,
         workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
         tabID: TabID,
         initialCommand: String? = nil
     ) throws {
@@ -1103,8 +1556,8 @@ final class AppModel {
         if session.workingDirectory?.standardizedFileURL != workingDirectory {
             try store.updateTerminalWorkingDirectory(
                 workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
                 tabID: tabID,
-                sessionID: session.id,
                 workingDirectory: workingDirectory
             )
         }
@@ -1124,11 +1577,18 @@ final class AppModel {
             )
         )
         process.onEvent = { [weak self] event in
-            self?.handle(event, workspaceID: workspaceID, tabID: tabID, sessionID: session.id)
+            self?.handle(
+                event,
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID,
+                sessionID: session.id
+            )
         }
         process.setContentChangeHandler { [weak self] in
             self?.scheduleTerminalSnapshot(
                 workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
                 tabID: tabID,
                 sessionID: session.id
             )
@@ -1137,13 +1597,23 @@ final class AppModel {
         terminalSessions[session.id] = process
     }
 
-    private func restoreBrowserController(for tab: Tab, workspaceID: WorkspaceID) throws {
-        guard let browser = tab.splitTree.browserSessions.first else { throw AppModelError.browserTabRequired(tab.id) }
-        try restoreBrowserController(browser, tabID: tab.id, workspaceID: workspaceID)
+    private func restoreBrowserController(
+        for tab: Tab,
+        tabGroupID: TabGroupID,
+        workspaceID: WorkspaceID
+    ) throws {
+        guard let browser = tab.browserSession else { throw AppModelError.browserTabRequired(tab.id) }
+        try restoreBrowserController(
+            browser,
+            tabGroupID: tabGroupID,
+            tabID: tab.id,
+            workspaceID: workspaceID
+        )
     }
 
     private func restoreBrowserController(
         _ browser: BrowserSession,
+        tabGroupID: TabGroupID,
         tabID: TabID,
         workspaceID: WorkspaceID
     ) throws {
@@ -1162,8 +1632,8 @@ final class AppModel {
             )
             try store.updateBrowserDataProfile(
                 workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
                 tabID: tabID,
-                browserID: browser.id,
                 profile: profile
             )
         }
@@ -1173,6 +1643,7 @@ final class AppModel {
             guard let controller else { return }
             self?.requestBrowserClose(
                 workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
                 tabID: tabID,
                 browserID: browser.id,
                 controller: controller
@@ -1184,13 +1655,14 @@ final class AppModel {
 
     private func requestBrowserClose(
         workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
         tabID: TabID,
         browserID: BrowserSessionID,
         controller: BrowserSessionController
     ) {
         guard browserControllers[browserID] === controller,
-              let tab = tab(workspaceID: workspaceID, tabID: tabID),
-              let browser = tab.splitTree.browser(id: browserID),
+              let tab = tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID),
+              let browser = tab.browserSession,
               browser.id == browserID else {
             return
         }
@@ -1198,17 +1670,18 @@ final class AppModel {
             guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
                 throw AppModelError.workspaceUnavailable(workspaceID)
             }
-            if workspace.tabs.count == 1, tab.splitTree.paneIDs.count == 1 {
+            if workspace.allTabs.count == 1 {
                 try createTerminalTab(
                     workingDirectory: newSessionWorkingDirectory(for: workspaceID),
                     initialCommand: nil,
-                    workspaceID: workspaceID
+                    workspaceID: workspaceID,
+                    tabGroupID: tabGroupID
                 )
             }
-            let lifecycle = try store.closePane(
+            let lifecycle = try store.closeTab(
                 workspaceID: workspaceID,
-                tabID: tabID,
-                paneID: browser.paneID
+                tabGroupID: tabGroupID,
+                tabID: tabID
             )
             browserControllers.removeValue(forKey: browser.id)?.webView.stopLoading()
             handle(lifecycle)
@@ -1218,6 +1691,7 @@ final class AppModel {
     private func handle(
         _ event: TerminalSessionEvent,
         workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
         tabID: TabID,
         sessionID: TerminalSessionID
     ) {
@@ -1226,18 +1700,21 @@ final class AppModel {
             perform {
                 try store.updateTerminalWorkingDirectory(
                     workspaceID: workspaceID,
+                    tabGroupID: tabGroupID,
                     tabID: tabID,
-                    sessionID: sessionID,
                     workingDirectory: directory
                 )
             }
         case .openURL(let url):
-            guard let tab = tab(workspaceID: workspaceID, tabID: tabID),
-                  let paneID = tab.splitTree.terminalSessions.first(where: { $0.id == sessionID })?.paneID else {
+            guard let tab = tab(
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID
+            ), tab.terminalSession?.id == sessionID else {
                 open(url, in: workspaceID)
                 return
             }
-            open(url, in: workspaceID, besideTabID: tabID, paneID: paneID)
+            open(url, in: workspaceID, besideTabID: tabID, paneID: tab.paneID)
         case .failed(let error):
             present(error)
         case .processTerminated(let exitCode):
@@ -1250,44 +1727,51 @@ final class AppModel {
     }
 
     private func cleanUpRuntimeObjects(in workspace: Workspace) {
-        for tab in workspace.tabs {
+        for tab in workspace.allTabs {
             cleanUpRuntimeObjects(in: tab)
         }
     }
 
     private func cleanUpRuntimeObjects(in tab: Tab) {
-        let tree = tab.splitTree
-        for browser in tree.browserSessions {
+        if let browser = tab.browserSession {
             browserControllers.removeValue(forKey: browser.id)?.webView.stopLoading()
         }
-        for sessionID in tree.terminalSessionIDs {
+        if let sessionID = tab.terminalSession?.id {
             removeTerminalRuntime(sessionID)
         }
     }
 
-    private func closeTab(workspaceID: WorkspaceID, tabID: TabID) throws {
-        guard let closingTab = tab(workspaceID: workspaceID, tabID: tabID) else {
+    private func closeTab(
+        workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
+        tabID: TabID
+    ) throws {
+        guard let closingTab = tab(
+            workspaceID: workspaceID,
+            tabGroupID: tabGroupID,
+            tabID: tabID
+        ) else {
             throw AppModelError.tabUnavailable(tabID)
         }
-        for sessionID in closingTab.splitTree.terminalSessionIDs {
+        if let sessionID = closingTab.terminalSession?.id {
             persistTerminalSnapshot(
                 workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
                 tabID: tabID,
                 sessionID: sessionID
             )
         }
-        let lifecycle = try store.closeTab(workspaceID: workspaceID, tabID: tabID)
+        let lifecycle = try store.closeTab(
+            workspaceID: workspaceID,
+            tabGroupID: tabGroupID,
+            tabID: tabID
+        )
         cleanUpRuntimeObjects(in: closingTab)
         handle(lifecycle)
     }
 
     private func tab(workspaceID: WorkspaceID, tabID: TabID) -> Tab? {
-        store.workspaces.first(where: { $0.id == workspaceID })?.tabs.first(where: { $0.id == tabID })
-    }
-
-    private func terminalSession(in tab: Tab, matching sessionID: TerminalSessionID) -> TerminalSession? {
-        guard case .terminal(let tree) = tab.content else { return nil }
-        return tree.terminalSessions.first(where: { $0.id == sessionID })
+        store.workspaces.first(where: { $0.id == workspaceID })?.tab(id: tabID)
     }
 
     private func handle(_ lifecycle: WorkspaceLifecycleChange) {
@@ -1312,6 +1796,7 @@ final class AppModel {
 
     private func scheduleTerminalSnapshot(
         workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
         tabID: TabID,
         sessionID: TerminalSessionID
     ) {
@@ -1324,6 +1809,7 @@ final class AppModel {
             guard !Task.isCancelled else { return }
             self?.persistTerminalSnapshot(
                 workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
                 tabID: tabID,
                 sessionID: sessionID
             )
@@ -1332,6 +1818,7 @@ final class AppModel {
 
     private func persistTerminalSnapshot(
         workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
         tabID: TabID,
         sessionID: TerminalSessionID
     ) {
@@ -1341,8 +1828,8 @@ final class AppModel {
         perform {
             try store.updateTerminalRecentText(
                 workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
                 tabID: tabID,
-                sessionID: sessionID,
                 recentText: output
             )
         }
@@ -1357,9 +1844,8 @@ final class AppModel {
             guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }),
                   let settings = try? store.resolvedSettings(for: workspaceID) else { continue }
             let configuration = runtimeConfiguration(for: settings)
-            for tab in workspace.tabs {
-                guard case .terminal(let tree) = tab.content else { continue }
-                for sessionID in tree.terminalSessionIDs {
+            for tab in workspace.allTabs {
+                if let sessionID = tab.terminalSession?.id {
                     terminalSessions[sessionID]?.apply(runtimeConfiguration: configuration)
                 }
             }
@@ -1387,23 +1873,15 @@ final class AppModel {
     }
 
     private func activeTerminalDirectory(in workspace: Workspace) -> URL? {
-        if let selectedTab = workspace.selectedTab,
-           case .terminal(let tree) = selectedTab.content {
-            if let focusedID = selectedTab.focusedTerminalSessionID,
-               let focusedDirectory = tree.terminalSessions.first(where: { $0.id == focusedID })?.workingDirectory,
-               let validFocusedDirectory = validDirectory(focusedDirectory) {
-                return validFocusedDirectory
-            }
-            if let selectedTabDirectory = tree.terminalSessions.lazy.compactMap(\.workingDirectory)
-                .compactMap(validDirectory).first {
-                return selectedTabDirectory
-            }
+        if let focusedDirectory = workspace.selectedTab?.terminalSession?.workingDirectory,
+           let validFocusedDirectory = validDirectory(focusedDirectory) {
+            return validFocusedDirectory
         }
 
-        return workspace.tabs.lazy.compactMap { tab -> URL? in
-            guard case .terminal(let tree) = tab.content else { return nil }
-            return tree.terminalSessions.lazy.compactMap(\.workingDirectory).compactMap(self.validDirectory).first
-        }.first
+        return workspace.allTabs.lazy
+            .compactMap(\.terminalSession?.workingDirectory)
+            .compactMap(validDirectory)
+            .first
     }
 
     private func validDirectory(_ directory: URL) -> URL? {
@@ -1523,7 +2001,8 @@ final class AppModel {
     }
 
     private func activeProcessNames(for paneID: PaneID, in tab: Tab) -> [String] {
-        guard let session = tab.splitTree.session(for: paneID),
+        guard tab.paneID == paneID,
+              let session = tab.terminalSession,
               let processName = terminalSessions[session.id]?.activeForegroundProcessName else {
             return []
         }
@@ -1531,13 +2010,13 @@ final class AppModel {
     }
 
     private func activeProcessNames(in tab: Tab) -> [String] {
-        tab.splitTree.terminalSessionIDs.compactMap {
-            terminalSessions[$0]?.activeForegroundProcessName
-        }
+        guard let sessionID = tab.terminalSession?.id,
+              let processName = terminalSessions[sessionID]?.activeForegroundProcessName else { return [] }
+        return [processName]
     }
 
     private func activeProcessNames(in workspace: Workspace) -> [String] {
-        workspace.tabs.flatMap(activeProcessNames(in:))
+        workspace.allTabs.flatMap(activeProcessNames(in:))
     }
 
     private func confirmClose(
@@ -1571,7 +2050,7 @@ final class AppModel {
         return alert.runModal() == .alertFirstButtonReturn
     }
 
-    private func perform(_ action: () throws -> Void) {
+    func perform(_ action: () throws -> Void) {
         do {
             try action()
             stateVersion += 1

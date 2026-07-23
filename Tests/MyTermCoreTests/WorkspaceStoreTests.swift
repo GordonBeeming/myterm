@@ -10,422 +10,601 @@ final class WorkspaceStoreTests: XCTestCase {
             .appendingPathExtension("json")
     }
 
-    func testDefaultWorkspaceIsCreatedAndPersisted() throws {
+    func testDefaultWorkspaceIsV2AndHasOneNonemptyFocusedGroup() throws {
         let url = temporaryURL()
         let store = try WorkspaceStore(persistenceURL: url)
 
+        XCTAssertEqual(store.snapshot.version, 2)
         XCTAssertEqual(store.workspaces.count, 1)
-        XCTAssertEqual(store.selectedWorkspace.tabs.count, 1)
-        XCTAssertEqual(store.selectedWorkspace.tabs.first?.isBrowser, false)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+        XCTAssertEqual(store.selectedWorkspace.orderedGroups.count, 1)
+        XCTAssertEqual(store.selectedWorkspace.focusedTabGroup?.tabs.count, 1)
+        XCTAssertNotNil(store.selectedWorkspace.selectedTab?.terminalSession)
 
         let persisted = try JSONDecoder().decode(WorkspaceStoreSnapshot.self, from: Data(contentsOf: url))
-        XCTAssertEqual(persisted.version, WorkspaceStoreSnapshot.currentVersion)
-        XCTAssertEqual(store.globalSettings.cursorShape, .beam)
         XCTAssertEqual(persisted, store.snapshot)
     }
 
-    func testWorkspaceAndTabSelectionIsRepairedAfterRemoval() throws {
-        let store = try WorkspaceStore(persistenceURL: temporaryURL())
-        let firstWorkspace = store.selectedWorkspaceID
-        let secondWorkspace = try store.createWorkspace(title: "Second")
-        XCTAssertEqual(store.selectedWorkspaceID, secondWorkspace)
-
-        let secondTab = try store.addBrowserTab(
-            to: secondWorkspace,
-            url: try XCTUnwrap(URL(string: "https://example.com"))
-        )
-        let firstTab = try XCTUnwrap(store.workspaces[1].tabs.first?.id)
-        try store.selectTab(workspaceID: secondWorkspace, tabID: firstTab)
-        try store.closeTab(workspaceID: secondWorkspace, tabID: firstTab)
-
-        XCTAssertEqual(store.workspaces[1].selectedTabID, secondTab)
-        try store.removeWorkspace(secondWorkspace)
-        XCTAssertEqual(store.selectedWorkspaceID, firstWorkspace)
-    }
-
-    func testFoldersPinningAndWorkspaceOrderingPersist() throws {
+    func testV1MigrationMirrorsSelectedGeometryAndFlattensInactiveLeavesLosslessly() throws {
         let url = temporaryURL()
-        let store = try WorkspaceStore(persistenceURL: url)
-        let unfiledWorkspaceID = store.selectedWorkspaceID
-        let workFolderID = try store.createFolder(title: "Work", color: .teal)
-        let firstWorkID = try store.createWorkspace(title: "API", folderID: workFolderID)
-        let secondWorkID = try store.createWorkspace(title: "Web", folderID: workFolderID)
-
-        try store.setWorkspacePinned(firstWorkID, isPinned: true)
-        try store.setWorkspacePinned(secondWorkID, isPinned: true)
-        try store.setWorkspaceEmoji(firstWorkID, emoji: "  🚨  ")
-        try store.setWorkspaceColor(firstWorkID, color: .orange)
-        try store.moveWorkspace(secondWorkID, to: workFolderID, before: firstWorkID)
-        try store.setFolderExpanded(workFolderID, isExpanded: false)
-
-        let restored = try WorkspaceStore(persistenceURL: url)
-        XCTAssertEqual(restored.folders, [
-            WorkspaceFolder(id: workFolderID, title: "Work", color: .teal, isExpanded: false),
-        ])
-        XCTAssertEqual(restored.workspaces.map(\.id), [unfiledWorkspaceID, secondWorkID, firstWorkID])
-        XCTAssertTrue(try XCTUnwrap(restored.workspaces.first { $0.id == secondWorkID }).isPinned)
-        XCTAssertEqual(restored.workspaces.first { $0.id == firstWorkID }?.folderID, workFolderID)
-        XCTAssertEqual(restored.workspaces.first { $0.id == firstWorkID }?.emoji, "🚨")
-        XCTAssertEqual(restored.workspaces.first { $0.id == firstWorkID }?.color, .orange)
-
-        try restored.setWorkspaceEmoji(firstWorkID, emoji: "  ")
-        try restored.setWorkspaceColor(firstWorkID, color: nil)
-        let cleared = try WorkspaceStore(persistenceURL: url)
-        XCTAssertNil(cleared.workspaces.first { $0.id == firstWorkID }?.emoji)
-        XCTAssertNil(cleared.workspaces.first { $0.id == firstWorkID }?.color)
-    }
-
-    func testFolderMovesBeforeAndToEndPersistAfterReload() throws {
-        let url = temporaryURL()
-        let store = try WorkspaceStore(persistenceURL: url)
-        let firstID = try store.createFolder(title: "First")
-        let secondID = try store.createFolder(title: "Second")
-        let thirdID = try store.createFolder(title: "Third")
-
-        try store.moveFolder(thirdID, before: firstID)
-        XCTAssertEqual(store.folders.map(\.id), [thirdID, firstID, secondID])
-
-        try store.moveFolder(thirdID, before: nil)
-        XCTAssertEqual(store.folders.map(\.id), [firstID, secondID, thirdID])
-
-        let restored = try WorkspaceStore(persistenceURL: url)
-        XCTAssertEqual(restored.folders.map(\.id), [firstID, secondID, thirdID])
-    }
-
-    func testFolderMoveSelfIsNoOpAndInvalidIDsAreRejected() throws {
-        let store = try WorkspaceStore(persistenceURL: temporaryURL())
-        let folderID = try store.createFolder(title: "Work")
-        let snapshot = store.snapshot
-        let missingID = WorkspaceFolderID()
-
-        try store.moveFolder(folderID, before: folderID)
-        XCTAssertEqual(store.snapshot, snapshot)
-        XCTAssertThrowsError(try store.moveFolder(missingID, before: folderID))
-        XCTAssertThrowsError(try store.moveFolder(folderID, before: missingID))
-    }
-
-    func testWorkspaceMovesUseDestinationFolderAndPinnedBands() throws {
-        let url = temporaryURL()
-        let store = try WorkspaceStore(persistenceURL: url)
-        let folderID = try store.createFolder(title: "Work")
-        let pinnedFirstID = try store.createWorkspace(title: "Pinned First", folderID: folderID)
-        let pinnedSecondID = try store.createWorkspace(title: "Pinned Second", folderID: folderID)
-        let unpinnedFirstID = try store.createWorkspace(title: "Unpinned First", folderID: folderID)
-        let unpinnedSecondID = try store.createWorkspace(title: "Unpinned Second", folderID: folderID)
-        try store.setWorkspacePinned(pinnedFirstID, isPinned: true)
-        try store.setWorkspacePinned(pinnedSecondID, isPinned: true)
-
-        try store.moveWorkspace(unpinnedSecondID, to: folderID, before: unpinnedFirstID)
-        XCTAssertEqual(
-            store.workspaces.filter { $0.folderID == folderID && !$0.isPinned }.map(\.id),
-            [unpinnedSecondID, unpinnedFirstID]
-        )
-
-        try store.moveWorkspace(pinnedSecondID, to: folderID, before: pinnedFirstID)
-        XCTAssertEqual(
-            store.workspaces.filter { $0.folderID == folderID && $0.isPinned }.map(\.id),
-            [pinnedSecondID, pinnedFirstID]
-        )
-
-        try store.moveWorkspace(pinnedSecondID, to: folderID, before: nil)
-        XCTAssertEqual(
-            store.workspaces.filter { $0.folderID == folderID && $0.isPinned }.map(\.id),
-            [pinnedFirstID, pinnedSecondID]
-        )
-
-        try store.moveWorkspace(unpinnedSecondID, to: folderID, before: nil)
-        XCTAssertEqual(
-            store.workspaces.filter { $0.folderID == folderID && !$0.isPinned }.map(\.id),
-            [unpinnedFirstID, unpinnedSecondID]
-        )
-        XCTAssertTrue(try XCTUnwrap(store.workspaces.first { $0.id == pinnedFirstID }).isPinned)
-
-        let restored = try WorkspaceStore(persistenceURL: url)
-        XCTAssertEqual(
-            restored.workspaces.filter { $0.folderID == folderID && $0.isPinned }.map(\.id),
-            [pinnedFirstID, pinnedSecondID]
-        )
-        XCTAssertEqual(
-            restored.workspaces.filter { $0.folderID == folderID && !$0.isPinned }.map(\.id),
-            [unpinnedFirstID, unpinnedSecondID]
-        )
-    }
-
-    func testExplicitWorkspaceMoveAppendsWithinCurrentUnfiledBand() throws {
-        let store = try WorkspaceStore(persistenceURL: temporaryURL())
-        let firstID = store.selectedWorkspaceID
-        let secondID = try store.createWorkspace(title: "Second")
-
-        try store.moveWorkspace(firstID, to: nil, before: nil)
-
-        XCTAssertEqual(
-            store.workspaces.filter { $0.folderID == nil }.map(\.id),
-            [secondID, firstID]
-        )
-    }
-
-    func testWorkspaceMoveToCurrentFolderWithoutPositionIsNoOp() throws {
-        let store = try WorkspaceStore(persistenceURL: temporaryURL())
-        let folderID = try store.createFolder(title: "Work")
-        let firstID = try store.createWorkspace(title: "First", folderID: folderID)
-        let secondID = try store.createWorkspace(title: "Second", folderID: folderID)
-        let snapshot = store.snapshot
-
-        try store.moveWorkspace(secondID, to: folderID)
-
-        XCTAssertEqual(store.snapshot, snapshot)
-        XCTAssertEqual(store.workspaces.filter { $0.folderID == folderID }.map(\.id), [firstID, secondID])
-    }
-
-    func testWorkspaceMovesAcrossFoldersAndIntoEmptyOrUnfiledDestinations() throws {
-        let store = try WorkspaceStore(persistenceURL: temporaryURL())
-        let initialUnfiledWorkspaceID = store.selectedWorkspaceID
-        let firstFolderID = try store.createFolder(title: "First")
-        let secondFolderID = try store.createFolder(title: "Second")
-        let workspaceID = try store.createWorkspace(title: "Workspace", folderID: firstFolderID)
-        let targetID = try store.createWorkspace(title: "Target", folderID: secondFolderID)
-
-        try store.moveWorkspace(workspaceID, to: secondFolderID, before: targetID)
-        XCTAssertEqual(store.workspaces.first { $0.id == workspaceID }?.folderID, secondFolderID)
-        XCTAssertEqual(
-            store.workspaces.filter { $0.folderID == secondFolderID }.map(\.id),
-            [workspaceID, targetID]
-        )
-
-        try store.moveWorkspace(workspaceID, to: nil, before: nil)
-        XCTAssertNil(store.workspaces.first { $0.id == workspaceID }?.folderID)
-        XCTAssertEqual(
-            store.workspaces.filter { $0.folderID == nil }.map(\.id),
-            [initialUnfiledWorkspaceID, workspaceID]
-        )
-
-        let emptyFolderID = try store.createFolder(title: "Empty")
-        try store.moveWorkspace(workspaceID, to: emptyFolderID, before: nil)
-        XCTAssertEqual(store.workspaces.first { $0.id == workspaceID }?.folderID, emptyFolderID)
-    }
-
-    func testWorkspaceMoveRejectsInvalidDestinationAndTargetIDs() throws {
-        let store = try WorkspaceStore(persistenceURL: temporaryURL())
-        let firstFolderID = try store.createFolder(title: "First")
-        let secondFolderID = try store.createFolder(title: "Second")
-        let workspaceID = try store.createWorkspace(title: "Workspace", folderID: firstFolderID)
-        let targetID = try store.createWorkspace(title: "Target", folderID: secondFolderID)
-        let pinnedTargetID = try store.createWorkspace(title: "Pinned Target", folderID: firstFolderID)
-        try store.setWorkspacePinned(pinnedTargetID, isPinned: true)
-        let missingWorkspaceID = WorkspaceID()
-        let missingFolderID = WorkspaceFolderID()
-
-        XCTAssertThrowsError(try store.moveWorkspace(workspaceID, to: missingFolderID, before: nil))
-        XCTAssertThrowsError(try store.moveWorkspace(missingWorkspaceID, to: firstFolderID, before: nil))
-        XCTAssertThrowsError(try store.moveWorkspace(workspaceID, to: firstFolderID, before: missingWorkspaceID))
-        XCTAssertThrowsError(try store.moveWorkspace(workspaceID, to: firstFolderID, before: targetID)) { error in
-            guard case .invariantViolation(let reason) = error as? WorkspaceStoreError else {
-                return XCTFail("Expected an invariant violation, got \(error)")
-            }
-            XCTAssertTrue(reason.contains("requested destination and pinned band"))
-        }
-        XCTAssertThrowsError(try store.moveWorkspace(workspaceID, before: pinnedTargetID)) { error in
-            guard case .invariantViolation(let reason) = error as? WorkspaceStoreError else {
-                return XCTFail("Expected an invariant violation, got \(error)")
-            }
-            XCTAssertTrue(reason.contains("requested destination and pinned band"))
-        }
-        try store.moveWorkspace(workspaceID, to: firstFolderID, before: workspaceID)
-    }
-
-    func testWorkspaceOffsetMovesUseSiblingPositionsInBothDirectionsAndStayInBand() throws {
-        let store = try WorkspaceStore(persistenceURL: temporaryURL())
-        let unfiledWorkspaceID = store.selectedWorkspaceID
-        let folderID = try store.createFolder(title: "Work")
-        let firstID = try store.createWorkspace(title: "First", folderID: folderID)
-        let secondID = try store.createWorkspace(title: "Second", folderID: folderID)
-        let thirdID = try store.createWorkspace(title: "Third", folderID: folderID)
-        let pinnedID = try store.createWorkspace(title: "Pinned", folderID: folderID)
-        try store.setWorkspacePinned(pinnedID, isPinned: true)
-
-        try store.moveWorkspace(firstID, offset: 1)
-        XCTAssertEqual(
-            store.workspaces.map(\.id),
-            [unfiledWorkspaceID, secondID, firstID, thirdID, pinnedID]
-        )
-
-        try store.moveWorkspace(thirdID, offset: -1)
-        XCTAssertEqual(
-            store.workspaces.map(\.id),
-            [unfiledWorkspaceID, secondID, thirdID, firstID, pinnedID]
-        )
-
-        let snapshot = store.snapshot
-        try store.moveWorkspace(pinnedID, offset: -1)
-        XCTAssertEqual(store.snapshot, snapshot)
-    }
-
-    func testRemovingFolderKeepsItsWorkspacesAndMovesThemToUnfiled() throws {
-        let store = try WorkspaceStore(persistenceURL: temporaryURL())
-        let folderID = try store.createFolder(title: "Personal")
-        let workspaceID = try store.createWorkspace(title: "Xylem", folderID: folderID)
-
-        try store.removeFolder(folderID)
-
-        XCTAssertTrue(store.folders.isEmpty)
-        XCTAssertNil(store.workspaces.first { $0.id == workspaceID }?.folderID)
-    }
-
-    func testLegacySnapshotDefaultsNewWorkspaceOrganizationFields() throws {
-        let url = temporaryURL()
-        let workspaceID = UUID().uuidString
-        let tabID = UUID().uuidString
-        let sessionID = UUID().uuidString
-        let paneID = UUID().uuidString
+        let workspaceID = WorkspaceID()
+        let selectedTabID = TabID()
+        let inactiveTabID = TabID()
+        let firstSessionID = TerminalSessionID()
+        let focusedSessionID = TerminalSessionID()
+        let inactiveSessionID = TerminalSessionID()
+        let firstPaneID = PaneID()
+        let focusedPaneID = PaneID()
+        let staleFocusedPaneID = PaneID()
+        let selectedBrowserPaneID = PaneID()
+        let inactiveBrowserPaneID = PaneID()
+        let selectedBrowserID = BrowserSessionID()
+        let inactiveBrowserID = BrowserSessionID()
+        let profileID = UUID()
         let json = """
         {
-          "version": 1,
-          "workspaces": [{
-            "id": "\(workspaceID)",
-            "title": "Legacy",
-            "tabs": [{
-              "id": "\(tabID)",
-              "content": {"type": "terminal", "splitTree": {"type": "terminal", "session": {"id": "\(sessionID)", "paneID": "\(paneID)"}}},
-              "focusedTerminalSessionID": "\(sessionID)"
-            }],
-            "selectedTabID": "\(tabID)"
+          "version":1,
+          "globalSettings":{"fontSize":17},
+          "workspaces":[{
+            "id":"\(workspaceID)",
+            "title":"Legacy",
+            "tabs":[
+              {
+                "id":"\(selectedTabID)",
+                "customTitle":"Selected title",
+                "focusedTerminalSessionID":"\(focusedSessionID)",
+                "focusedPaneID":"\(staleFocusedPaneID)",
+                "content":{"type":"terminal","splitTree":{
+                  "type":"horizontal","children":[
+                    {"type":"terminal","session":{"id":"\(firstSessionID)","paneID":"\(firstPaneID)","workingDirectory":"file:///selected","recentText":"selected text"}},
+                    {"type":"vertical","children":[
+                      {"type":"browser","session":{"id":"\(selectedBrowserID)","paneID":"\(selectedBrowserPaneID)","url":"https://selected.example/path","profile":{"scope":"project-directory","persistentStoreID":"\(profileID)","projectDirectory":"file:///project"}}},
+                      {"type":"terminal","session":{"id":"\(focusedSessionID)","paneID":"\(focusedPaneID)","workingDirectory":"file:///focused","recentText":"focused text"}}
+                    ]}
+                  ]}
+                }
+              },
+              {
+                "id":"\(inactiveTabID)",
+                "customTitle":"Inactive title",
+                "focusedPaneID":"\(inactiveBrowserPaneID)",
+                "content":{"type":"terminal","splitTree":{
+                  "type":"horizontal","children":[
+                    {"type":"terminal","session":{"id":"\(inactiveSessionID)","workingDirectory":"file:///inactive","recentText":"inactive text"}},
+                    {"type":"browser","session":{"id":"\(inactiveBrowserID)","paneID":"\(inactiveBrowserPaneID)","url":"https://inactive.example"}}
+                  ]}
+                }
+              }
+            ],
+            "selectedTabID":"\(selectedTabID)"
           }],
-          "selectedWorkspaceID": "\(workspaceID)"
+          "selectedWorkspaceID":"\(workspaceID)"
         }
         """
         try Data(json.utf8).write(to: url)
 
         let store = try WorkspaceStore(persistenceURL: url)
+        let workspace = store.selectedWorkspace
 
-        XCTAssertTrue(store.folders.isEmpty)
-        XCTAssertNil(store.selectedWorkspace.folderID)
-        XCTAssertFalse(store.selectedWorkspace.isPinned)
-        XCTAssertNil(store.selectedWorkspace.emoji)
-        XCTAssertNil(store.selectedWorkspace.color)
+        XCTAssertEqual(store.snapshot.version, 2)
+        XCTAssertEqual(workspace.orderedGroups.count, 3)
+        guard case .split(_, .horizontal, let rootChildren, let rootWeights) = workspace.layout else {
+            return XCTFail("Expected selected tab's horizontal root geometry")
+        }
+        XCTAssertEqual(rootChildren.count, 2)
+        XCTAssertEqual(rootWeights, [0.5, 0.5])
+        guard case .split(_, .vertical, let nestedChildren, let nestedWeights) = rootChildren[1] else {
+            return XCTFail("Expected selected tab's nested vertical geometry")
+        }
+        XCTAssertEqual(nestedChildren.count, 2)
+        XCTAssertEqual(nestedWeights, [0.5, 0.5])
+
+        let firstSelectedLeaf = try XCTUnwrap(workspace.orderedGroups.first?.tabs.first)
+        XCTAssertNotEqual(firstSelectedLeaf.id, selectedTabID)
+        XCTAssertNil(firstSelectedLeaf.customTitle)
+
+        let focusedGroup = try XCTUnwrap(workspace.focusedTabGroup)
+        XCTAssertEqual(focusedGroup.selectedTab.id, selectedTabID)
+        XCTAssertEqual(focusedGroup.selectedTab.customTitle, "Selected title")
+        XCTAssertEqual(focusedGroup.selectedTab.terminalSession?.id, focusedSessionID)
+        XCTAssertEqual(focusedGroup.tabs.count, 3)
+        XCTAssertNotEqual(focusedGroup.tabs[1].id, inactiveTabID)
+        XCTAssertNil(focusedGroup.tabs[1].customTitle)
+        XCTAssertEqual(focusedGroup.tabs[1].terminalSession?.workingDirectory, URL(fileURLWithPath: "/inactive"))
+        XCTAssertEqual(focusedGroup.tabs[1].terminalSession?.recentText, "inactive text")
+        XCTAssertEqual(focusedGroup.tabs[2].id, inactiveTabID)
+        XCTAssertEqual(focusedGroup.tabs[2].customTitle, "Inactive title")
+        XCTAssertEqual(focusedGroup.tabs[2].browserSession?.id, inactiveBrowserID)
+        XCTAssertEqual(focusedGroup.tabs[2].browserSession?.paneID, inactiveBrowserPaneID)
+
+        XCTAssertEqual(workspace.terminalSession(id: firstSessionID)?.workingDirectory, URL(fileURLWithPath: "/selected"))
+        XCTAssertEqual(workspace.terminalSession(id: firstSessionID)?.recentText, "selected text")
+        XCTAssertEqual(workspace.terminalSession(id: focusedSessionID)?.workingDirectory, URL(fileURLWithPath: "/focused"))
+        let migratedBrowser = try XCTUnwrap(workspace.browserSession(id: selectedBrowserID))
+        XCTAssertEqual(migratedBrowser.url, try XCTUnwrap(URL(string: "https://selected.example/path")))
+        XCTAssertEqual(migratedBrowser.profile?.scope, .projectDirectory)
+        XCTAssertEqual(migratedBrowser.profile?.persistentStoreID, profileID)
+        XCTAssertEqual(migratedBrowser.profile?.projectDirectory, URL(fileURLWithPath: "/project"))
+
+        let persistedJSON = String(decoding: try Data(contentsOf: url), as: UTF8.self)
+        XCTAssertTrue(persistedJSON.contains(#""version" : 2"#))
+        XCTAssertFalse(persistedJSON.contains("splitTree"))
+        XCTAssertEqual(try WorkspaceStore(persistenceURL: url).snapshot, store.snapshot)
+
+        XCTAssertEqual(try Data(contentsOf: store.migrationBackupURL), Data(json.utf8))
+        XCTAssertEqual(store.loadReport.sourceVersion, 1)
+        XCTAssertTrue(store.loadReport.didMigrate)
+        XCTAssertEqual(store.loadReport.droppedElementCount, 0)
+        XCTAssertEqual(store.loadReport.identifierRepairCount, 0)
+        XCTAssertEqual(store.loadReport.structuralRepairCount, 0)
+        XCTAssertEqual(store.loadReport.backupURLs, [store.migrationBackupURL])
     }
 
-    func testTerminalSplittingClosingAndFocusPersist() throws {
+    func testSnapshotRepairsSessionAndLayoutIdentifiersAcrossWorkspaces() throws {
+        let terminalID = TerminalSessionID()
+        let browserID = BrowserSessionID()
+        let paneID = PaneID()
+        let groupID = TabGroupID()
+        let tabID = TabID()
+        let splitID = SplitNodeID()
+
+        func workspace(id: WorkspaceID, title: String) throws -> Workspace {
+            let terminal = Tab(
+                id: tabID,
+                content: .terminal(TerminalSession(id: terminalID, paneID: paneID, recentText: title))
+            )
+            let browser = Tab(
+                id: tabID,
+                content: .browser(BrowserSession(
+                    id: browserID,
+                    paneID: paneID,
+                    url: try XCTUnwrap(URL(string: "https://\(title.lowercased()).example"))
+                ))
+            )
+            let first = TabGroup(id: groupID, tab: terminal)
+            let second = TabGroup(id: groupID, tab: browser)
+            return Workspace(
+                id: id,
+                title: title,
+                layout: .split(
+                    id: splitID,
+                    orientation: .horizontal,
+                    children: [.group(first), .group(second)],
+                    weights: [0.5, 0.5]
+                ),
+                focusedTabGroupID: first.id
+            )
+        }
+
+        let firstID = WorkspaceID()
+        let secondID = WorkspaceID()
+        let snapshot = WorkspaceStoreSnapshot(
+            workspaces: [
+                try workspace(id: firstID, title: "First"),
+                try workspace(id: secondID, title: "Second"),
+            ],
+            selectedWorkspaceID: firstID
+        )
+        let tabs = snapshot.workspaces.flatMap(\.allTabs)
+
+        XCTAssertEqual(Set(tabs.map(\.id)).count, tabs.count)
+        XCTAssertEqual(Set(tabs.map(\.paneID)).count, tabs.count)
+        XCTAssertEqual(Set(tabs.compactMap(\.terminalSession?.id)).count, 2)
+        XCTAssertEqual(Set(tabs.compactMap(\.browserSession?.id)).count, 2)
+        XCTAssertEqual(Set(snapshot.workspaces.flatMap { $0.orderedGroups.map(\.id) }).count, 4)
+        XCTAssertEqual(Set(snapshot.workspaces.flatMap { $0.layout.splitNodeIDs }).count, 2)
+        XCTAssertEqual(tabs.compactMap(\.terminalSession?.recentText).sorted(), ["First", "Second"])
+        XCTAssertEqual(
+            tabs.compactMap(\.browserSession?.url.host).sorted(),
+            ["first.example", "second.example"]
+        )
+    }
+
+    func testLossyDecodePreservesOriginalBytesBeforeWritingRepair() throws {
+        let url = temporaryURL()
+        let valid = Workspace(title: "Retained")
+        let validData = try JSONEncoder().encode(valid)
+        let validJSON = try XCTUnwrap(String(data: validData, encoding: .utf8))
+        let original = Data("""
+        {
+          "version":2,
+          "workspaces":[\(validJSON),{"id":false}],
+          "selectedWorkspaceID":"\(valid.id)"
+        }
+        """.utf8)
+        try original.write(to: url)
+
+        let store = try WorkspaceStore(persistenceURL: url)
+
+        XCTAssertEqual(store.workspaces.map(\.title), ["Retained"])
+        XCTAssertEqual(store.loadReport.sourceVersion, 2)
+        XCTAssertFalse(store.loadReport.didMigrate)
+        XCTAssertGreaterThan(store.loadReport.droppedElementCount, 0)
+        XCTAssertEqual(store.loadReport.identifierRepairCount, 0)
+        XCTAssertGreaterThan(store.loadReport.structuralRepairCount, 0)
+        XCTAssertEqual(store.loadReport.backupURLs, [store.recoveryBackupURL])
+        XCTAssertEqual(try Data(contentsOf: store.recoveryBackupURL), original)
+        XCTAssertNotEqual(try Data(contentsOf: url), original)
+    }
+
+    func testDifferentExistingMigrationBackupStopsBeforeOverwritingSource() throws {
+        let url = temporaryURL()
+        let workspaceID = WorkspaceID()
+        let source = Data("""
+        {"version":1,"workspaces":[{"id":"\(workspaceID)","title":"Current","tabs":[]}],"selectedWorkspaceID":"\(workspaceID)"}
+        """.utf8)
+        let differentWorkspaceID = WorkspaceID()
+        let existingBackup = Data("""
+        {"version":1,"workspaces":[{"id":"\(differentWorkspaceID)","title":"Earlier","tabs":[]}],"selectedWorkspaceID":"\(differentWorkspaceID)"}
+        """.utf8)
+        let backupURL = url.appendingPathExtension("v1-backup")
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try source.write(to: url)
+        try existingBackup.write(to: backupURL)
+
+        XCTAssertThrowsError(try WorkspaceStore(persistenceURL: url)) { error in
+            guard case .backupFailed(let path, _) = error as? WorkspaceStoreError else {
+                return XCTFail("Expected backupFailed, got \(error)")
+            }
+            XCTAssertEqual(path, backupURL.path)
+        }
+        XCTAssertEqual(try Data(contentsOf: url), source)
+        XCTAssertEqual(try Data(contentsOf: backupURL), existingBackup)
+    }
+
+    func testStorePreservesOriginalBytesBeforeStructuralV2Repair() throws {
+        let url = temporaryURL()
+        let workspaceID = WorkspaceID()
+        let firstGroupID = TabGroupID()
+        let secondGroupID = TabGroupID()
+        let firstTabID = TabID()
+        let secondTabID = TabID()
+        let firstSessionID = TerminalSessionID()
+        let secondSessionID = TerminalSessionID()
+        let firstPaneID = PaneID()
+        let secondPaneID = PaneID()
+        let splitID = SplitNodeID()
+        let firstGroupJSON = """
+        {"id":"\(firstGroupID)","tabs":[{"id":"\(firstTabID)","content":{"type":"terminal","session":{"id":"\(firstSessionID)","paneID":"\(firstPaneID)"}}}],"selectedTabID":"\(firstTabID)"}
+        """
+        let secondGroupJSON = """
+        {"id":"\(secondGroupID)","tabs":[{"id":"\(secondTabID)","content":{"type":"terminal","session":{"id":"\(secondSessionID)","paneID":"\(secondPaneID)"}}}],"selectedTabID":"\(secondTabID)"}
+        """
+        let original = Data("""
+        {
+          "version":2,
+          "workspaces":[{
+            "id":"\(workspaceID)","title":"Repair",
+            "layout":{"type":"split","id":"\(splitID)","orientation":"horizontal","children":[
+              {"type":"group","group":\(firstGroupJSON)},
+              {"type":"group","group":\(secondGroupJSON)}
+            ],"weights":[-1,0]},
+            "focusedTabGroupID":"\(TabGroupID())"
+          }],
+          "selectedWorkspaceID":"\(workspaceID)"
+        }
+        """.utf8)
+        try original.write(to: url)
+
+        let store = try WorkspaceStore(persistenceURL: url)
+        let workspace = store.selectedWorkspace
+
+        XCTAssertEqual(workspace.orderedGroups.count, 2)
+        XCTAssertNotNil(workspace.focusedTabGroup)
+        guard case .split(_, _, _, let weights) = workspace.layout else {
+            return XCTFail("Expected a repaired split")
+        }
+        XCTAssertEqual(weights, [0.5, 0.5])
+        XCTAssertEqual(store.loadReport.droppedElementCount, 0)
+        XCTAssertEqual(store.loadReport.identifierRepairCount, 0)
+        XCTAssertGreaterThan(store.loadReport.structuralRepairCount, 0)
+        XCTAssertEqual(store.loadReport.backupURLs, [store.recoveryBackupURL])
+        XCTAssertEqual(try Data(contentsOf: store.recoveryBackupURL), original)
+    }
+
+    func testStorePreservesOriginalBytesBeforeRepairingInvalidV2Identifiers() throws {
+        let url = temporaryURL()
+        let validSnapshot = WorkspaceStoreSnapshot.initial()
+        let validJSON = try XCTUnwrap(String(
+            data: JSONEncoder().encode(validSnapshot),
+            encoding: .utf8
+        ))
+        let original = Data(validJSON.replacingOccurrences(
+            of: validSnapshot.selectedWorkspaceID.description,
+            with: "invalid-workspace-id"
+        ).utf8)
+        try original.write(to: url)
+
+        let store = try WorkspaceStore(persistenceURL: url)
+
+        XCTAssertEqual(store.loadReport.droppedElementCount, 0)
+        XCTAssertGreaterThan(store.loadReport.identifierRepairCount, 0)
+        XCTAssertEqual(store.loadReport.structuralRepairCount, 0)
+        XCTAssertEqual(store.loadReport.backupURLs, [store.recoveryBackupURL])
+        XCTAssertEqual(try Data(contentsOf: store.recoveryBackupURL), original)
+    }
+
+    func testValidUnchangedV2SnapshotDoesNotCreateRecoveryBackup() throws {
+        let url = temporaryURL()
+        let snapshot = WorkspaceStoreSnapshot.initial()
+        try JSONEncoder().encode(snapshot).write(to: url)
+
+        let store = try WorkspaceStore(persistenceURL: url)
+
+        XCTAssertEqual(store.loadReport.droppedElementCount, 0)
+        XCTAssertEqual(store.loadReport.identifierRepairCount, 0)
+        XCTAssertEqual(store.loadReport.structuralRepairCount, 0)
+        XCTAssertTrue(store.loadReport.backupURLs.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.recoveryBackupURL.path))
+    }
+
+    func testNumericBooleanValuesTriggerStructuralRepairAndExactByteBackup() throws {
+        let url = temporaryURL()
+        let first = Workspace(title: "Numeric zero", isPinned: false)
+        let second = Workspace(title: "Numeric one", isPinned: true)
+        let snapshot = WorkspaceStoreSnapshot(
+            workspaces: [first, second],
+            selectedWorkspaceID: first.id
+        )
+        let validJSON = try XCTUnwrap(String(
+            data: JSONEncoder().encode(snapshot),
+            encoding: .utf8
+        ))
+        let malformedJSON = validJSON
+            .replacingOccurrences(of: #""isPinned":false"#, with: #""isPinned":0"#)
+            .replacingOccurrences(of: #""isPinned":true"#, with: #""isPinned":1"#)
+        XCTAssertTrue(malformedJSON.contains(#""isPinned":0"#))
+        XCTAssertTrue(malformedJSON.contains(#""isPinned":1"#))
+        let original = Data(malformedJSON.utf8)
+        try original.write(to: url)
+
+        let store = try WorkspaceStore(persistenceURL: url)
+
+        XCTAssertGreaterThan(store.loadReport.structuralRepairCount, 0)
+        XCTAssertEqual(store.loadReport.backupURLs, [store.recoveryBackupURL])
+        XCTAssertEqual(try Data(contentsOf: store.recoveryBackupURL), original)
+        XCTAssertEqual(store.workspaces.map(\.isPinned), [false, false])
+
+        let rewritten = try XCTUnwrap(String(
+            data: Data(contentsOf: url),
+            encoding: .utf8
+        ))
+        XCTAssertFalse(rewritten.contains(#""isPinned" : 0"#))
+        XCTAssertFalse(rewritten.contains(#""isPinned" : 1"#))
+        XCTAssertEqual(rewritten.components(separatedBy: #""isPinned" : false"#).count - 1, 2)
+    }
+
+    func testAddSelectRenameReorderMoveAndCollapsePersist() throws {
         let url = temporaryURL()
         let store = try WorkspaceStore(persistenceURL: url)
         let workspaceID = store.selectedWorkspaceID
-        let tabID = try XCTUnwrap(store.selectedWorkspace.selectedTabID)
-        let firstSessionID = try XCTUnwrap(store.selectedWorkspace.selectedTab?.focusedTerminalSessionID)
-
-        let secondSessionID = try store.splitTerminalPane(
-            workspaceID: workspaceID,
-            tabID: tabID,
-            sessionID: firstSessionID,
-            orientation: .vertical,
-            workingDirectory: URL(fileURLWithPath: "/tmp/myterm")
-        )
-        try store.focusTerminalPane(workspaceID: workspaceID, tabID: tabID, sessionID: firstSessionID)
-        try store.closeTerminalPane(workspaceID: workspaceID, tabID: tabID, sessionID: secondSessionID)
-
-        let restored = try WorkspaceStore(persistenceURL: url)
-        let restoredTab = try XCTUnwrap(restored.selectedWorkspace.selectedTab)
-        XCTAssertEqual(restoredTab.terminalTree?.terminalSessionIDs, [firstSessionID])
-        XCTAssertEqual(restoredTab.focusedTerminalSessionID, firstSessionID)
-    }
-
-    func testTerminalWorkingDirectoryUpdatePersistsBySessionAndPane() throws {
-        let url = temporaryURL()
-        let store = try WorkspaceStore(persistenceURL: url)
-        let workspaceID = store.selectedWorkspaceID
-        let tabID = try XCTUnwrap(store.selectedWorkspace.selectedTabID)
-        let initialSession = try XCTUnwrap(store.selectedWorkspace.selectedTab?.terminalTree?.terminalSessions.first)
-        let firstDirectory = URL(fileURLWithPath: "/tmp/myterm-first")
-        let secondDirectory = URL(fileURLWithPath: "/tmp/myterm-second")
-
-        try store.updateTerminalWorkingDirectory(
-            workspaceID: workspaceID,
-            tabID: tabID,
-            sessionID: initialSession.id,
-            workingDirectory: firstDirectory
-        )
-        try store.updateTerminalWorkingDirectory(
-            workspaceID: workspaceID,
-            tabID: tabID,
-            paneID: initialSession.paneID,
-            workingDirectory: secondDirectory
-        )
-
-        let restored = try WorkspaceStore(persistenceURL: url)
-        let restoredSession = try XCTUnwrap(
-            restored.selectedWorkspace.selectedTab?.terminalTree?.terminalSessions.first
-        )
-        XCTAssertEqual(restoredSession.id, initialSession.id)
-        XCTAssertEqual(restoredSession.paneID, initialSession.paneID)
-        XCTAssertEqual(restoredSession.workingDirectory, secondDirectory)
-    }
-
-    func testBrowserURLUpdatePersistsAndTerminalTabsRejectIt() throws {
-        let url = temporaryURL()
-        let store = try WorkspaceStore(persistenceURL: url)
-        let workspaceID = store.selectedWorkspaceID
+        let firstGroupID = store.selectedWorkspace.focusedTabGroupID
+        let originalTabID = try XCTUnwrap(store.selectedWorkspace.selectedTabID)
         let browserTabID = try store.addBrowserTab(
             to: workspaceID,
-            url: try XCTUnwrap(URL(string: "https://example.com/old"))
+            tabGroupID: firstGroupID,
+            url: try XCTUnwrap(URL(string: "https://example.com"))
         )
-        let newURL = try XCTUnwrap(URL(string: "https://example.com/new"))
+        let terminalTabID = try store.addTerminalTab(
+            to: workspaceID,
+            tabGroupID: firstGroupID,
+            workingDirectory: URL(fileURLWithPath: "/tmp/build")
+        )
 
-        try store.updateBrowserURL(workspaceID: workspaceID, tabID: browserTabID, url: newURL)
+        try store.renameTab(
+            workspaceID: workspaceID,
+            tabGroupID: firstGroupID,
+            tabID: terminalTabID,
+            customTitle: "  Build  "
+        )
+        try store.reorderTab(
+            workspaceID: workspaceID,
+            tabGroupID: firstGroupID,
+            tabID: terminalTabID,
+            to: 0
+        )
+        let newGroupID = try XCTUnwrap(store.moveTabToNewGroup(
+            workspaceID: workspaceID,
+            sourceTabGroupID: firstGroupID,
+            tabID: terminalTabID,
+            beside: firstGroupID,
+            edge: .right
+        ))
+
+        XCTAssertEqual(store.selectedWorkspace.orderedGroups.map(\.id), [firstGroupID, newGroupID])
+        XCTAssertEqual(store.selectedWorkspace.focusedTabGroupID, newGroupID)
+        XCTAssertEqual(store.selectedWorkspace.focusedTabGroup?.selectedTab.customTitle, "Build")
+        XCTAssertTrue(try store.moveTab(
+            workspaceID: workspaceID,
+            sourceTabGroupID: newGroupID,
+            tabID: terminalTabID,
+            to: firstGroupID,
+            at: 1
+        ))
+        XCTAssertEqual(store.selectedWorkspace.orderedGroups.map(\.id), [firstGroupID])
+        XCTAssertEqual(store.selectedWorkspace.focusedTabGroup?.tabs.map(\.id), [originalTabID, terminalTabID, browserTabID])
+
         let restored = try WorkspaceStore(persistenceURL: url)
-        let browserTab = try XCTUnwrap(restored.workspaces[0].tabs.first { $0.id == browserTabID })
-        guard case .browser(let session) = browserTab.content else {
-            return XCTFail("Expected a browser tab")
-        }
-        XCTAssertEqual(session.url, newURL)
-
-        let terminalTabID = try XCTUnwrap(restored.workspaces[0].tabs.first { !$0.isBrowser }?.id)
-        XCTAssertThrowsError(
-            try restored.updateBrowserURL(
-                workspaceID: workspaceID,
-                tabID: terminalTabID,
-                url: newURL
-            )
-        ) { error in
-            XCTAssertEqual(error as? WorkspaceStoreError, .browserTabRequired(terminalTabID))
-        }
+        XCTAssertEqual(restored.selectedWorkspace, store.selectedWorkspace)
     }
 
-    func testBrowserDataProfilePersistsAndTerminalTabsRejectUpdates() throws {
+    func testInvalidAndNoOpMovesDoNotMutateState() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let workspaceID = store.selectedWorkspaceID
+        let groupID = store.selectedWorkspace.focusedTabGroupID
+        let tabID = try XCTUnwrap(store.selectedWorkspace.selectedTabID)
+        let snapshot = store.snapshot
+
+        XCTAssertFalse(try store.moveTab(
+            workspaceID: workspaceID,
+            sourceTabGroupID: groupID,
+            tabID: tabID,
+            to: groupID,
+            at: 0
+        ))
+        XCTAssertNil(try store.moveTabToNewGroup(
+            workspaceID: workspaceID,
+            sourceTabGroupID: groupID,
+            tabID: tabID,
+            beside: groupID,
+            edge: .left
+        ))
+        XCTAssertEqual(store.snapshot, snapshot)
+        XCTAssertThrowsError(try store.moveTab(
+            workspaceID: workspaceID,
+            sourceTabGroupID: groupID,
+            tabID: TabID(),
+            to: groupID
+        ))
+        XCTAssertThrowsError(try store.moveTab(
+            workspaceID: workspaceID,
+            sourceTabGroupID: groupID,
+            tabID: tabID,
+            to: TabGroupID()
+        ))
+    }
+
+    func testSplitWithNewTerminalAndWeightsPersist() throws {
         let url = temporaryURL()
         let store = try WorkspaceStore(persistenceURL: url)
         let workspaceID = store.selectedWorkspaceID
+        let firstGroupID = store.selectedWorkspace.focusedTabGroupID
+        let split = try store.splitTabGroup(
+            workspaceID: workspaceID,
+            tabGroupID: firstGroupID,
+            edge: .bottom,
+            workingDirectory: URL(fileURLWithPath: "/tmp/new-pane")
+        )
+
+        XCTAssertEqual(store.selectedWorkspace.focusedTabGroupID, split.tabGroupID)
+        XCTAssertEqual(store.selectedWorkspace.selectedTabID, split.tabID)
+        guard case .split(let splitID, .vertical, let children, let weights) = store.selectedWorkspace.layout else {
+            return XCTFail("Expected a vertical split")
+        }
+        XCTAssertEqual(children.count, 2)
+        XCTAssertEqual(weights, [0.5, 0.5])
+
+        try store.updateSplitWeights(workspaceID: workspaceID, splitID: splitID, weights: [1, 3])
+        let restored = try WorkspaceStore(persistenceURL: url)
+        guard case .split(let restoredID, .vertical, _, let restoredWeights) = restored.selectedWorkspace.layout else {
+            return XCTFail("Expected the split to persist")
+        }
+        XCTAssertEqual(restoredID, splitID)
+        XCTAssertEqual(restoredWeights, [0.25, 0.75])
+        XCTAssertThrowsError(
+            try restored.updateSplitWeights(workspaceID: workspaceID, splitID: SplitNodeID(), weights: [1, 1])
+        )
+    }
+
+    func testExplicitSessionAndBrowserUpdatesPersistAndRejectWrongContent() throws {
+        let url = temporaryURL()
+        let store = try WorkspaceStore(persistenceURL: url)
+        let workspaceID = store.selectedWorkspaceID
+        let groupID = store.selectedWorkspace.focusedTabGroupID
+        let terminalTabID = try XCTUnwrap(store.selectedWorkspace.selectedTabID)
+        let browserTabID = try store.addBrowserTab(
+            to: workspaceID,
+            tabGroupID: groupID,
+            url: try XCTUnwrap(URL(string: "https://old.example"))
+        )
         let profile = BrowserDataProfile(
             scope: .projectDirectory,
             persistentStoreID: UUID(),
-            projectDirectory: URL(fileURLWithPath: "/tmp/myterm-project")
-        )
-        let browserTabID = try store.addBrowserTab(
-            to: workspaceID,
-            url: try XCTUnwrap(URL(string: "https://example.com"))
+            projectDirectory: URL(fileURLWithPath: "/tmp/project")
         )
 
+        try store.updateTerminalWorkingDirectory(
+            workspaceID: workspaceID,
+            tabGroupID: groupID,
+            tabID: terminalTabID,
+            workingDirectory: URL(fileURLWithPath: "/tmp/work")
+        )
+        try store.updateTerminalRecentText(
+            workspaceID: workspaceID,
+            tabGroupID: groupID,
+            tabID: terminalTabID,
+            recentText: String(repeating: "x", count: 10_000)
+        )
+        try store.updateBrowserURL(
+            workspaceID: workspaceID,
+            tabGroupID: groupID,
+            tabID: browserTabID,
+            url: try XCTUnwrap(URL(string: "https://new.example"))
+        )
         try store.updateBrowserDataProfile(
             workspaceID: workspaceID,
+            tabGroupID: groupID,
             tabID: browserTabID,
             profile: profile
         )
 
         let restored = try WorkspaceStore(persistenceURL: url)
-        let browserTab = try XCTUnwrap(restored.workspaces[0].tabs.first { $0.id == browserTabID })
-        guard case .browser(let session) = browserTab.content else {
-            return XCTFail("Expected a browser tab")
-        }
-        XCTAssertEqual(session.profile, profile)
+        let terminal = try XCTUnwrap(restored.selectedWorkspace.tab(groupID: groupID, tabID: terminalTabID)?.terminalSession)
+        let browser = try XCTUnwrap(restored.selectedWorkspace.tab(groupID: groupID, tabID: browserTabID)?.browserSession)
+        XCTAssertEqual(terminal.workingDirectory, URL(fileURLWithPath: "/tmp/work"))
+        XCTAssertLessThanOrEqual(terminal.recentText?.utf8.count ?? 0, TerminalSession.maximumRecentTextBytes)
+        XCTAssertEqual(browser.url, try XCTUnwrap(URL(string: "https://new.example")))
+        XCTAssertEqual(browser.profile, profile)
+        XCTAssertThrowsError(try restored.updateBrowserURL(
+            workspaceID: workspaceID,
+            tabGroupID: groupID,
+            tabID: terminalTabID,
+            url: browser.url
+        ))
+        XCTAssertThrowsError(try restored.updateTerminalRecentText(
+            workspaceID: workspaceID,
+            tabGroupID: groupID,
+            tabID: browserTabID,
+            recentText: "wrong"
+        ))
+    }
 
-        let terminalTabID = try XCTUnwrap(restored.workspaces[0].tabs.first { !$0.isBrowser }?.id)
-        XCTAssertThrowsError(
-            try restored.updateBrowserDataProfile(
-                workspaceID: workspaceID,
-                tabID: terminalTabID,
-                profile: profile
-            )
-        ) { error in
-            XCTAssertEqual(error as? WorkspaceStoreError, .browserTabRequired(terminalTabID))
-        }
+    func testClosingFinalTabCollapsesGroupThenAppliesWorkspaceLifecycle() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let workspaceID = store.selectedWorkspaceID
+        let firstGroupID = store.selectedWorkspace.focusedTabGroupID
+        let firstTabID = try XCTUnwrap(store.selectedWorkspace.selectedTabID)
+        let split = try store.splitTabGroup(
+            workspaceID: workspaceID,
+            tabGroupID: firstGroupID,
+            edge: .right
+        )
+
+        let groupCollapse = try store.closeTab(
+            workspaceID: workspaceID,
+            tabGroupID: split.tabGroupID,
+            tabID: split.tabID
+        )
+        XCTAssertNil(groupCollapse.removedWorkspace)
+        XCTAssertEqual(store.selectedWorkspace.orderedGroups.map(\.id), [firstGroupID])
+
+        let lifecycle = try store.closeTab(
+            workspaceID: workspaceID,
+            tabGroupID: firstGroupID,
+            tabID: firstTabID
+        )
+        XCTAssertEqual(lifecycle.removedWorkspace?.id, workspaceID)
+        XCTAssertNotNil(lifecycle.replacementWorkspace)
+        XCTAssertEqual(store.workspaces.count, 1)
+    }
+
+    func testFoldersWorkspaceOrderingAndScopedSettingsStillPersist() throws {
+        let url = temporaryURL()
+        let store = try WorkspaceStore(persistenceURL: url)
+        let folderID = try store.createFolder(title: "Work", color: .teal)
+        let firstID = try store.createWorkspace(title: "API", folderID: folderID)
+        let secondID = try store.createWorkspace(title: "Web", folderID: folderID)
+        try store.setWorkspacePinned(firstID, isPinned: true)
+        try store.setWorkspacePinned(secondID, isPinned: true)
+        try store.moveWorkspace(secondID, to: folderID, before: firstID)
+        try store.updateGlobalSettings { $0.fontSize = 12 }
+        try store.updateFolderSettings(folderID) { $0.fontSize = 15 }
+        try store.updateWorkspaceSettings(firstID) { $0.fontSize = 18 }
+
+        XCTAssertEqual(try store.resolvedSettings(for: firstID).fontSize, 18)
+        XCTAssertEqual(try store.resolvedSettings(for: secondID).fontSize, 15)
+        let restored = try WorkspaceStore(persistenceURL: url)
+        XCTAssertEqual(restored.workspaces.filter { $0.folderID == folderID }.map(\.id), [secondID, firstID])
+        XCTAssertEqual(try restored.resolvedSettings(for: firstID).fontSize, 18)
     }
 
     func testCorruptAndUnsupportedPersistenceIsSurfaced() throws {
@@ -438,240 +617,9 @@ final class WorkspaceStoreTests: XCTestCase {
         }
 
         let unsupportedURL = temporaryURL()
-        let unsupportedJSON = """
-        {"version":99,"workspaces":[],"selectedWorkspaceID":"\(UUID().uuidString)"}
-        """
-        try Data(unsupportedJSON.utf8).write(to: unsupportedURL)
+        try Data(#"{"version":99,"workspaces":[],"selectedWorkspaceID":"bad"}"#.utf8).write(to: unsupportedURL)
         XCTAssertThrowsError(try WorkspaceStore(persistenceURL: unsupportedURL)) { error in
             XCTAssertEqual(error as? WorkspaceStoreError, .unsupportedVersion(99))
         }
-    }
-
-    func testPartiallyCorruptButDecodableStateIsRepaired() throws {
-        let url = temporaryURL()
-        let workspaceID = UUID().uuidString
-        let invalidTabID = UUID().uuidString
-        let json = """
-        {
-          "version": 1,
-          "workspaces": [
-            {
-              "id": "\(workspaceID)",
-              "title": "Recovered",
-              "tabs": [
-                {"id": "\(invalidTabID)", "content": {"type": "unknown"}},
-                {"id": "\(UUID().uuidString)", "content": {"type": "browser", "session": {"id": "\(UUID().uuidString)", "url": "https://example.com"}}}
-              ],
-              "selectedTabID": "\(UUID().uuidString)"
-            }
-          ],
-          "selectedWorkspaceID": "\(UUID().uuidString)"
-        }
-        """
-        try Data(json.utf8).write(to: url)
-
-        let store = try WorkspaceStore(persistenceURL: url)
-        XCTAssertEqual(store.workspaces.count, 1)
-        XCTAssertEqual(store.workspaces[0].title, "Recovered")
-        XCTAssertEqual(store.workspaces[0].tabs.count, 1)
-        XCTAssertEqual(store.workspaces[0].selectedTabID, store.workspaces[0].tabs[0].id)
-        XCTAssertEqual(store.selectedWorkspaceID, store.workspaces[0].id)
-    }
-
-    func testSettingsOverridesClearOnlyTheRequestedFieldAndPersist() throws {
-        let url = temporaryURL()
-        let store = try WorkspaceStore(persistenceURL: url)
-        let workspaceID = store.selectedWorkspaceID
-        try store.updateGlobalSettings { $0.fontSize = 13 }
-        try store.updateWorkspaceSettings(workspaceID) { $0.fontSize = 18; $0.optionAsMeta = false }
-        try store.clearWorkspaceSettingsOverride(workspaceID, \.fontSize)
-
-        XCTAssertEqual(try store.resolvedSettings(for: workspaceID).fontSize, 13)
-        XCTAssertFalse(try store.resolvedSettings(for: workspaceID).optionAsMeta)
-        XCTAssertEqual(try WorkspaceStore(persistenceURL: url).resolvedSettings(for: workspaceID).fontSize, 13)
-    }
-
-    func testFolderAndWorkspaceSettingsOverrideGlobalSettingsInOrder() throws {
-        let store = try WorkspaceStore(persistenceURL: temporaryURL())
-        let folderID = try store.createFolder(title: "Work")
-        let workspaceID = try store.createWorkspace(title: "API", folderID: folderID)
-        try store.updateGlobalSettings { $0.fontSize = 11; $0.optionAsMeta = true }
-        try store.updateFolderSettings(folderID) { $0.fontSize = 14; $0.optionAsMeta = false }
-        try store.updateWorkspaceSettings(workspaceID) { $0.fontSize = 18 }
-
-        let resolved = try store.resolvedSettings(for: workspaceID)
-        XCTAssertEqual(resolved.fontSize, 18)
-        XCTAssertFalse(resolved.optionAsMeta)
-    }
-
-    func testMovingWorkspaceBetweenFoldersChangesResolvedOverrides() throws {
-        let store = try WorkspaceStore(persistenceURL: temporaryURL())
-        let firstFolderID = try store.createFolder(title: "First")
-        let secondFolderID = try store.createFolder(title: "Second")
-        let workspaceID = try store.createWorkspace(title: "Workspace", folderID: firstFolderID)
-        try store.updateFolderSettings(firstFolderID) { $0.compactSidebar = false }
-        try store.updateFolderSettings(secondFolderID) { $0.compactSidebar = true }
-
-        XCTAssertFalse(try store.resolvedSettings(for: workspaceID).compactSidebar)
-        try store.moveWorkspace(workspaceID, to: secondFolderID)
-        XCTAssertTrue(try store.resolvedSettings(for: workspaceID).compactSidebar)
-    }
-
-    func testInvalidGlobalSettingsValuesAreClampedOrDefaulted() throws {
-        let workspaceID = UUID().uuidString
-        let json = """
-        {"version":1,"globalSettings":{"fontSize":999,"scrollbackLines":-1,"terminalTheme":"invalid","terminalAppearance":"invalid","shell":{"type":"custom","path":"   "}},"workspaces":[{"id":"\(workspaceID)","title":"Legacy","tabs":[]}],"selectedWorkspaceID":"\(workspaceID)"}
-        """
-
-        let snapshot = try JSONDecoder().decode(WorkspaceStoreSnapshot.self, from: Data(json.utf8))
-        XCTAssertEqual(snapshot.globalSettings.fontSize, TerminalPreferences.fontSizeRange.upperBound)
-        XCTAssertEqual(snapshot.globalSettings.scrollbackLines, TerminalPreferences.scrollbackLinesRange.lowerBound)
-        XCTAssertEqual(snapshot.globalSettings.terminalTheme, .system)
-        XCTAssertEqual(snapshot.globalSettings.terminalAppearance, .system)
-        XCTAssertEqual(snapshot.globalSettings.shell, .loginShell)
-        XCTAssertEqual(snapshot.globalSettings.markdownOpenCommand, TerminalPreferences.defaultMarkdownOpenCommand)
-    }
-
-    func testLegacySnapshotDefaultsSettingsOverridesTitlesAndRecentText() throws {
-        let url = temporaryURL()
-        let workspaceID = UUID().uuidString
-        let tabID = UUID().uuidString
-        let sessionID = UUID().uuidString
-        let paneID = UUID().uuidString
-        let json = """
-        {"version":1,"workspaces":[{"id":"\(workspaceID)","title":"Legacy","tabs":[{"id":"\(tabID)","content":{"type":"terminal","splitTree":{"type":"terminal","session":{"id":"\(sessionID)","paneID":"\(paneID)"}}},"focusedTerminalSessionID":"\(sessionID)"}],"selectedTabID":"\(tabID)"}],"selectedWorkspaceID":"\(workspaceID)"}
-        """
-        try Data(json.utf8).write(to: url)
-
-        let store = try WorkspaceStore(persistenceURL: url)
-        XCTAssertEqual(store.globalSettings, .default)
-        XCTAssertNil(store.selectedWorkspace.settingsOverrides)
-        XCTAssertNil(store.selectedWorkspace.selectedTab?.customTitle)
-        XCTAssertNil(store.selectedWorkspace.selectedTab?.terminalTree?.terminalSessions.first?.recentText)
-    }
-
-    func testClosingFinalTabRemovesWorkspaceAndReturnsReplacement() throws {
-        let store = try WorkspaceStore(persistenceURL: temporaryURL())
-        let workspaceID = store.selectedWorkspaceID
-        let tabID = try XCTUnwrap(store.selectedWorkspace.selectedTabID)
-        let change = try store.closeTab(workspaceID: workspaceID, tabID: tabID)
-
-        XCTAssertEqual(change.removedWorkspace?.id, workspaceID)
-        XCTAssertNotNil(change.replacementWorkspace)
-        XCTAssertEqual(store.workspaces.count, 1)
-        XCTAssertEqual(store.selectedWorkspaceID, change.selectedWorkspaceID)
-    }
-
-    func testClosingFinalTerminalPaneRemovesWorkspaceAndCreatesReplacement() throws {
-        let store = try WorkspaceStore(persistenceURL: temporaryURL())
-        let workspaceID = store.selectedWorkspaceID
-        let tabID = try XCTUnwrap(store.selectedWorkspace.selectedTabID)
-        let sessionID = try XCTUnwrap(store.selectedWorkspace.selectedTab?.focusedTerminalSessionID)
-
-        let change = try store.closeTerminalPane(
-            workspaceID: workspaceID,
-            tabID: tabID,
-            sessionID: sessionID
-        )
-
-        XCTAssertEqual(change.removedWorkspace?.id, workspaceID)
-        XCTAssertNotNil(change.replacementWorkspace)
-        XCTAssertEqual(store.workspaces.count, 1)
-    }
-
-    func testClosingLastTabFromOneOfSeveralWorkspacesRepairsSelectionAndPersists() throws {
-        let url = temporaryURL()
-        let firstTab = Tab.browser(url: try XCTUnwrap(URL(string: "https://first.example")))
-        let secondTab = Tab.browser(url: try XCTUnwrap(URL(string: "https://second.example")))
-        let firstWorkspace = Workspace(title: "First", tabs: [firstTab], selectedTabID: firstTab.id)
-        let secondWorkspace = Workspace(title: "Second", tabs: [secondTab], selectedTabID: secondTab.id)
-        let snapshot = WorkspaceStoreSnapshot(
-            workspaces: [firstWorkspace, secondWorkspace],
-            selectedWorkspaceID: secondWorkspace.id
-        )
-        try JSONEncoder().encode(snapshot).write(to: url)
-        let store = try WorkspaceStore(persistenceURL: url)
-        let firstWorkspaceID = firstWorkspace.id
-        let secondWorkspaceID = secondWorkspace.id
-        let secondTabID = secondTab.id
-
-        let change = try store.closeTab(workspaceID: secondWorkspaceID, tabID: secondTabID)
-        XCTAssertEqual(change.removedWorkspace?.id, secondWorkspaceID)
-        XCTAssertNil(change.replacementWorkspace)
-        XCTAssertEqual(store.selectedWorkspaceID, firstWorkspaceID)
-
-        let restored = try WorkspaceStore(persistenceURL: url)
-        XCTAssertEqual(restored.workspaces.map(\.id), [firstWorkspaceID])
-        XCTAssertEqual(restored.selectedWorkspaceID, firstWorkspaceID)
-    }
-
-    func testTabRenameAndRecentTextPersist() throws {
-        let url = temporaryURL()
-        let store = try WorkspaceStore(persistenceURL: url)
-        let workspaceID = store.selectedWorkspaceID
-        let tabID = try XCTUnwrap(store.selectedWorkspace.selectedTabID)
-        let sessionID = try XCTUnwrap(store.selectedWorkspace.selectedTab?.focusedTerminalSessionID)
-        try store.renameTab(workspaceID: workspaceID, tabID: tabID, customTitle: "Build")
-        try store.updateTerminalRecentText(workspaceID: workspaceID, tabID: tabID, sessionID: sessionID, recentText: String(repeating: "x", count: 10_000))
-
-        let restored = try WorkspaceStore(persistenceURL: url)
-        XCTAssertEqual(restored.selectedWorkspace.selectedTab?.customTitle, "Build")
-        XCTAssertLessThanOrEqual(restored.selectedWorkspace.selectedTab?.terminalTree?.terminalSessions.first?.recentText?.utf8.count ?? 0, TerminalSession.maximumRecentTextBytes)
-    }
-
-    func testWhitespaceTabRenameClearsCustomTitle() throws {
-        let store = try WorkspaceStore(persistenceURL: temporaryURL())
-        let workspaceID = store.selectedWorkspaceID
-        let tabID = try XCTUnwrap(store.selectedWorkspace.selectedTabID)
-        try store.renameTab(workspaceID: workspaceID, tabID: tabID, customTitle: "Build")
-        try store.renameTab(workspaceID: workspaceID, tabID: tabID, customTitle: "  \n ")
-
-        XCTAssertNil(store.selectedWorkspace.selectedTab?.customTitle)
-    }
-
-    func testBrowserAndTerminalPanesShareOnePersistentSplitTree() throws {
-        let url = temporaryURL()
-        let store = try WorkspaceStore(persistenceURL: url)
-        let workspaceID = store.selectedWorkspaceID
-        let tabID = try XCTUnwrap(store.selectedWorkspace.selectedTabID)
-        let terminalPaneID = try XCTUnwrap(store.selectedWorkspace.selectedTab?.focusedPaneID)
-        let browserURL = try XCTUnwrap(URL(string: "https://example.com/first"))
-
-        let browserID = try store.insertBrowserPane(
-            workspaceID: workspaceID,
-            tabID: tabID,
-            beside: terminalPaneID,
-            url: browserURL
-        )
-        let browserPaneID = try XCTUnwrap(store.selectedWorkspace.selectedTab?.splitTree.browser(id: browserID)?.paneID)
-        XCTAssertEqual(store.selectedWorkspace.tabs.count, 1)
-        XCTAssertEqual(store.selectedWorkspace.selectedTab?.splitTree.paneIDs.count, 2)
-        XCTAssertEqual(store.selectedWorkspace.selectedTab?.focusedPaneID, browserPaneID)
-
-        let newTerminalPaneID = try store.splitTerminalPane(
-            workspaceID: workspaceID,
-            tabID: tabID,
-            paneID: browserPaneID,
-            orientation: .vertical
-        )
-        XCTAssertEqual(store.selectedWorkspace.selectedTab?.splitTree.paneIDs.count, 3)
-        XCTAssertNotNil(store.selectedWorkspace.selectedTab?.splitTree.session(for: newTerminalPaneID))
-
-        let updatedURL = try XCTUnwrap(URL(string: "https://example.com/updated"))
-        try store.updateBrowserURL(
-            workspaceID: workspaceID,
-            tabID: tabID,
-            browserID: browserID,
-            url: updatedURL
-        )
-        XCTAssertEqual(store.selectedWorkspace.selectedTab?.splitTree.browser(id: browserID)?.url, updatedURL)
-
-        _ = try store.closePane(workspaceID: workspaceID, tabID: tabID, paneID: browserPaneID)
-        XCTAssertEqual(store.selectedWorkspace.selectedTab?.splitTree.paneIDs.count, 2)
-        XCTAssertNil(store.selectedWorkspace.selectedTab?.splitTree.browser(id: browserID))
-
-        let restored = try WorkspaceStore(persistenceURL: url)
-        XCTAssertEqual(restored.selectedWorkspace.selectedTab?.splitTree.paneIDs.count, 2)
-        XCTAssertTrue(restored.selectedWorkspace.selectedTab?.splitTree.browserSessions.isEmpty == true)
     }
 }
