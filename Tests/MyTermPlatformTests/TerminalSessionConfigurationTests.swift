@@ -288,18 +288,44 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         )
         let originalTerminal = FocusableTerminalTestView(frame: .zero)
         let replacementTerminal = FocusableTerminalTestView(frame: .zero)
-        let host = TerminalSessionHostView(contentView: originalTerminal)
+        var focusedCount = 0
+        let host = TerminalSessionHostView(
+            contentView: originalTerminal,
+            onFocused: { focusedCount += 1 }
+        )
         window.contentView = host
 
         XCTAssertTrue(window.makeFirstResponder(originalTerminal))
 
-        host.update(contentView: replacementTerminal, onFocused: nil)
+        host.update(
+            contentView: replacementTerminal,
+            onFocused: { focusedCount += 1 }
+        )
         host.layoutSubtreeIfNeeded()
 
         XCTAssertNil(originalTerminal.superview)
         XCTAssertTrue(replacementTerminal.superview === host)
         XCTAssertTrue(window.firstResponder === replacementTerminal)
         XCTAssertEqual(replacementTerminal.frame, host.bounds)
+        XCTAssertEqual(focusedCount, 2)
+    }
+
+    @MainActor
+    func testTerminalHostDoesNotRemoveContentReparentedByAnotherHost() {
+        let movedTerminal = NSView(frame: .zero)
+        let sourceReplacement = NSView(frame: .zero)
+        let destinationTerminal = NSView(frame: .zero)
+        let sourceHost = TerminalSessionHostView(contentView: movedTerminal)
+        let destinationHost = TerminalSessionHostView(contentView: destinationTerminal)
+        let container = NSView(frame: .zero)
+        container.addSubview(sourceHost)
+        container.addSubview(destinationHost)
+
+        destinationHost.update(contentView: movedTerminal, onFocused: nil)
+        sourceHost.update(contentView: sourceReplacement, onFocused: nil)
+
+        XCTAssertTrue(movedTerminal.superview === destinationHost)
+        XCTAssertTrue(sourceReplacement.superview === sourceHost)
     }
 
     func testRenderedOutputSanitizesControlsAndKeepsABoundedTail() {

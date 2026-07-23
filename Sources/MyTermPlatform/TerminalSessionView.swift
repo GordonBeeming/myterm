@@ -82,13 +82,17 @@ final class TerminalSessionHostView: NSView {
         guard contentView !== updatedContentView else { return }
 
         let shouldTransferFocus = window?.firstResponder === contentView
-        contentView.removeFromSuperview()
+        let previousContentView = contentView
+        if previousContentView.superview === self {
+            previousContentView.removeFromSuperview()
+        }
         contentView = updatedContentView
         contentView.autoresizingMask = []
         addSubview(contentView)
         needsLayout = true
 
         if shouldTransferFocus {
+            wasFirstResponder = false
             window?.makeFirstResponder(contentView)
         }
     }
