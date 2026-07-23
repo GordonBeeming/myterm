@@ -63,8 +63,8 @@ private struct ObservedBrowserTabContent: View {
                 }
         }
         .onAppear { addressState.synchronizeNavigationText(controller.state.url?.absoluteString ?? "") }
-        .onChange(of: controller.state.url) {
-            guard let url = controller.state.url else { return }
+        .onChange(of: controller.state.url) { _, url in
+            guard let url else { return }
             addressState.synchronizeNavigationText(url.absoluteString)
             model.persistBrowserURL(url, workspaceID: workspaceID, tabID: tab.id, browserID: browser.id)
         }
