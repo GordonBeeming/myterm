@@ -86,9 +86,6 @@ struct WorkspaceTabStrip: View {
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
                 model.cancelPaneTabDrag()
             }
-            .onDisappear {
-                model.unregisterPaneTabDragPane(workspaceID: workspaceID, tabGroupID: tabGroup.id)
-            }
         }
     }
 

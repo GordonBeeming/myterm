@@ -58,6 +58,8 @@ final class AppModel {
     var workspaceRenameDraft = ""
     var workspaceEmojiBeingEditedID: WorkspaceID?
     var workspaceEmojiDraft = ""
+    private(set) var recentWorkspaceEmojis: [String] = []
+    var maximizedTabGroupID: TabGroupID?
     var folderBeingRenamedID: WorkspaceFolderID?
     var folderRenameDraft = ""
     var tabBeingRenamedID: TabID?
@@ -86,6 +88,7 @@ final class AppModel {
         store = try WorkspaceStore(persistenceURL: channel.persistenceURL(applicationSupportDirectory: supportDirectory))
         recoveryNotice = WorkspaceRecoveryNotice(loadReport: store.loadReport)
         self.browserSettings = browserSettings ?? BrowserSettingsStore(channel: channel)
+        recentWorkspaceEmojis = self.browserSettings.recentWorkspaceEmojis
         self.terminalEngine = terminalEngine
         self.startsTerminalProcesses = startsTerminalProcesses
         self.browserSessionFactory = browserSessionFactory
@@ -121,6 +124,15 @@ final class AppModel {
     var selectedWorkspace: Workspace {
         _ = stateVersion
         return store.selectedWorkspace
+    }
+
+    var maximizedTabGroup: TabGroup? {
+        guard let maximizedTabGroupID else { return nil }
+        return selectedWorkspace.group(id: maximizedTabGroupID)
+    }
+
+    var paneFullScreenCommandTitle: String {
+        maximizedTabGroup == nil ? "Make Pane Full Screen" : "Exit Pane Full Screen"
     }
 
     var selectedTab: Tab? {
@@ -278,6 +290,7 @@ final class AppModel {
                 title: "Workspace \(workspaces.count + 1)",
                 folderID: targetFolderID
             )
+            maximizedTabGroupID = nil
             guard let createdWorkspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
                 throw AppModelError.workspaceUnavailable(workspaceID)
             }
@@ -344,7 +357,17 @@ final class AppModel {
     }
 
     func setWorkspaceEmoji(_ workspaceID: WorkspaceID, emoji: String?) {
-        perform { try store.setWorkspaceEmoji(workspaceID, emoji: emoji) }
+        perform {
+            let trimmed = emoji?.trimmingCharacters(in: .whitespacesAndNewlines)
+            try store.setWorkspaceEmoji(workspaceID, emoji: trimmed)
+            browserSettings.recordWorkspaceEmoji(trimmed)
+            recentWorkspaceEmojis = browserSettings.recentWorkspaceEmojis
+        }
+    }
+
+    func toggleFocusedPaneFullScreen() {
+        let focusedTabGroupID = selectedWorkspace.focusedTabGroupID
+        maximizedTabGroupID = maximizedTabGroupID == focusedTabGroupID ? nil : focusedTabGroupID
     }
 
     func beginRenamingSelectedTab() {
@@ -501,6 +524,9 @@ final class AppModel {
 
     func selectWorkspace(_ workspaceID: WorkspaceID) {
         cancelPaneTabDrag()
+        if workspaceID != store.selectedWorkspaceID {
+            maximizedTabGroupID = nil
+        }
         perform {
             try store.selectWorkspace(workspaceID)
             restoreFocusedPane(in: workspaceID)

@@ -424,13 +424,30 @@ private struct WorkspaceSidebarRow: View {
                 model.setWorkspacePinned(workspace.id, isPinned: !workspace.isPinned)
             }
             Button("Rename Workspace…") { model.beginRenamingWorkspace(workspace.id) }
-            Button(workspace.emoji == nil ? "Add Emoji Prefix…" : "Change Emoji Prefix…") {
-                model.beginEditingWorkspaceEmoji(workspace.id)
-            }
-            if workspace.emoji != nil {
-                Button("Remove Emoji Prefix") {
-                    model.setWorkspaceEmoji(workspace.id, emoji: nil)
+            Menu("Workspace Emoji") {
+                ForEach(model.recentWorkspaceEmojis, id: \.self) { emoji in
+                    if workspace.emoji == emoji {
+                        Button {
+                            model.setWorkspaceEmoji(workspace.id, emoji: emoji)
+                        } label: {
+                            Label(emoji, systemImage: "checkmark")
+                        }
+                    } else {
+                        Button(emoji) {
+                            model.setWorkspaceEmoji(workspace.id, emoji: emoji)
+                        }
+                    }
                 }
+                if !model.recentWorkspaceEmojis.isEmpty {
+                    Divider()
+                }
+                if workspace.emoji != nil {
+                    Button("Remove Emoji Prefix") {
+                        model.setWorkspaceEmoji(workspace.id, emoji: nil)
+                    }
+                    Divider()
+                }
+                Button("New Emoji…") { model.beginEditingWorkspaceEmoji(workspace.id) }
             }
             Menu("Workspace Color") {
                 Toggle(isOn: Binding(

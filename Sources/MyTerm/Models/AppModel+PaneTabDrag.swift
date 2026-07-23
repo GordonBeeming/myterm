@@ -9,6 +9,7 @@ struct PaneTabDragSource: Equatable {
 
 enum PaneTabDropTarget: Equatable {
     case tabStrip(tabGroupID: TabGroupID, insertionIndex: Int)
+    case paneCenter(tabGroupID: TabGroupID)
     case paneBody(tabGroupID: TabGroupID, edge: PaneEdge)
 }
 
@@ -25,6 +26,16 @@ enum PaneTabDropPreviewFrame {
         case .bottom:
             CGRect(x: 0, y: size.height / 2, width: size.width, height: size.height / 2)
         }
+    }
+
+    static func centerFrame(in size: CGSize) -> CGRect {
+        guard size.width > 0, size.height > 0 else { return .zero }
+        return CGRect(
+            x: size.width * 0.25,
+            y: size.height * 0.25,
+            width: size.width * 0.5,
+            height: size.height * 0.5
+        )
     }
 }
 
@@ -144,6 +155,14 @@ extension AppModel {
                 to: tabGroupID,
                 at: insertionIndex
             )
+        case .paneCenter(let tabGroupID):
+            result = moveTab(
+                workspaceID: source.workspaceID,
+                sourceTabGroupID: source.tabGroupID,
+                tabID: source.tabID,
+                to: tabGroupID,
+                at: nil
+            )
         case .paneBody(let tabGroupID, let edge):
             result = moveTabToNewGroup(
                 workspaceID: source.workspaceID,
@@ -207,6 +226,9 @@ extension AppModel {
             x: location.x - paneBodyFrame.minX,
             y: location.y - paneBodyFrame.minY
         )
+        if PaneTabDropPreviewFrame.centerFrame(in: paneBodyFrame.size).contains(localLocation) {
+            return .paneCenter(tabGroupID: registration.tabGroupID)
+        }
         return .paneBody(
             tabGroupID: registration.tabGroupID,
             edge: paneEdge(for: localLocation, in: paneBodyFrame.size)

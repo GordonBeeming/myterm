@@ -385,6 +385,35 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.selectedWorkspace.color, .red)
         XCTAssertEqual(model.selectedWorkspace.displayTitle, "🚨 HubX")
         XCTAssertNil(model.workspaceEmojiBeingEditedID)
+        XCTAssertEqual(model.recentWorkspaceEmojis, ["🚨"])
+
+        model.setWorkspaceEmoji(model.store.selectedWorkspaceID, emoji: "🚀")
+        model.setWorkspaceEmoji(model.store.selectedWorkspaceID, emoji: "🚨")
+        XCTAssertEqual(model.recentWorkspaceEmojis, ["🚨", "🚀"])
+    }
+
+    func testFocusedPaneFullScreenTogglesAndResetsWhenChangingWorkspace() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let firstWorkspaceID = model.store.selectedWorkspaceID
+        let firstGroupID = model.selectedWorkspace.focusedTabGroupID
+
+        XCTAssertNil(model.maximizedTabGroup)
+        XCTAssertEqual(model.paneFullScreenCommandTitle, "Make Pane Full Screen")
+
+        model.toggleFocusedPaneFullScreen()
+        XCTAssertEqual(model.maximizedTabGroup?.id, firstGroupID)
+        XCTAssertEqual(model.paneFullScreenCommandTitle, "Exit Pane Full Screen")
+
+        model.toggleFocusedPaneFullScreen()
+        XCTAssertNil(model.maximizedTabGroup)
+
+        model.toggleFocusedPaneFullScreen()
+        model.createWorkspace()
+        XCTAssertNotEqual(model.store.selectedWorkspaceID, firstWorkspaceID)
+        XCTAssertNil(model.maximizedTabGroup)
+        XCTAssertEqual(model.paneFullScreenCommandTitle, "Make Pane Full Screen")
     }
 
     func testSettingsResolveGlobalFolderAndWorkspaceOverridesAndCanClearOneField() throws {
@@ -1800,6 +1829,33 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.selectedWorkspace.group(id: destinationGroupID)?.tabs.last?.id, sourceTabID)
     }
 
+    func testPaneTabDragCenterDropMovesIntoExistingPaneWithoutCreatingAnotherSplit() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let sourceGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.createTerminalTab(in: sourceGroupID)
+        let destinationTabID = try XCTUnwrap(model.selectedTab?.id)
+        let destinationGroupID = try createPaneBesideSource(model, sourceGroupID: sourceGroupID, tabID: destinationTabID)
+        let sourceTabID = try XCTUnwrap(model.selectedWorkspace.group(id: sourceGroupID)?.selectedTabID)
+        let source = PaneTabDragSource(workspaceID: workspaceID, tabGroupID: sourceGroupID, tabID: sourceTabID)
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: sourceGroupID, origin: .zero)
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: destinationGroupID, origin: CGPoint(x: 200, y: 0))
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 260, y: 60))
+        XCTAssertEqual(model.paneTabDragPreviewTarget, .paneCenter(tabGroupID: destinationGroupID))
+        let result = model.finishPaneTabDrag(source: source, finalLocation: CGPoint(x: 260, y: 60))
+
+        guard case .moved(let movedGroupID) = result else {
+            return XCTFail("Expected a center drop to move the tab into the destination pane.")
+        }
+        XCTAssertEqual(movedGroupID, destinationGroupID)
+        XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 1)
+        XCTAssertEqual(model.selectedWorkspace.group(id: destinationGroupID)?.tabs.last?.id, sourceTabID)
+    }
+
     func testPaneTabDragBodyDropCreatesThePreviewedHalfPane() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
@@ -2083,15 +2139,21 @@ final class AppModelTests: XCTestCase {
     }
 
     private func makeModel(applicationSupportDirectory: URL) throws -> AppModel {
-        try AppModel(
+        let suiteName = "MyTermTests.\(applicationSupportDirectory.lastPathComponent)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            throw NSError(domain: "MyTermTests", code: 1)
+        }
+        return try AppModel(
             channel: .development,
             applicationSupportDirectory: applicationSupportDirectory,
             terminalEngine: nil,
-            startsTerminalProcesses: false
+            startsTerminalProcesses: false,
+            browserSettings: BrowserSettingsStore(channel: .development, defaults: defaults)
         )
     }
 
     private func removeTemporaryDirectory(_ directory: URL) {
+        UserDefaults.standard.removePersistentDomain(forName: "MyTermTests.\(directory.lastPathComponent)")
         do {
             try FileManager.default.removeItem(at: directory)
         } catch {

@@ -200,6 +200,10 @@ final class InteractionBehaviorTests: XCTestCase {
             MyTermCommandShortcuts.nextTab,
             MyTermShortcutDeclaration(key: "\t", modifiers: [.control])
         )
+        XCTAssertEqual(
+            MyTermCommandShortcuts.togglePaneFullScreen,
+            MyTermShortcutDeclaration(key: "\r", modifiers: [.command, .shift])
+        )
     }
 
     func testPaneTabDropPreviewOccupiesExactlyHalfTheDestinationPane() {
@@ -220,6 +224,10 @@ final class InteractionBehaviorTests: XCTestCase {
         XCTAssertEqual(
             PaneTabDropPreviewFrame.frame(for: .bottom, in: size),
             CGRect(x: 0, y: 60, width: 240, height: 60)
+        )
+        XCTAssertEqual(
+            PaneTabDropPreviewFrame.centerFrame(in: size),
+            CGRect(x: 60, y: 30, width: 120, height: 60)
         )
     }
 
