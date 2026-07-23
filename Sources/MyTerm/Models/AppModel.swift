@@ -1228,6 +1228,11 @@ final class AppModel {
                 to: destinationTabGroupID,
                 at: index
             )
+            if store.selectedWorkspaceID == workspaceID,
+               maximizedTabGroupID != nil,
+               maximizedTabGroupID != destinationTabGroupID {
+                maximizedTabGroupID = nil
+            }
             if let movedTab = tab(
                 workspaceID: workspaceID,
                 tabGroupID: destinationTabGroupID,
@@ -1285,6 +1290,11 @@ final class AppModel {
                 let message = "The tab is already the only tab in this pane."
                 errorDescription = message
                 return .failed(message: message)
+            }
+            if store.selectedWorkspaceID == workspaceID,
+               maximizedTabGroupID != nil,
+               maximizedTabGroupID != createdGroupID {
+                maximizedTabGroupID = nil
             }
             if let movedTab = tab(
                 workspaceID: workspaceID,
