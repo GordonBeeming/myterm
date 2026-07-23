@@ -2,6 +2,10 @@ import AppKit
 import XCTest
 @testable import MyTermPlatform
 
+private final class FocusableTerminalTestView: NSView {
+    override var acceptsFirstResponder: Bool { true }
+}
+
 final class TerminalSessionConfigurationTests: XCTestCase {
     @MainActor
     func testForegroundProcessDetectionIgnoresIdleShellAndFindsActiveJob() async throws {
@@ -272,6 +276,65 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         XCTAssertEqual(focusedIndexes, [2, 1, 0, 2])
         XCTAssertEqual(terminals.filter { window.firstResponder === $0 }.count, 1)
         XCTAssertEqual(hosts.count, 3)
+    }
+
+    @MainActor
+    func testTerminalHostReplacesTheDisplayedSessionAndTransfersFocus() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 200),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let originalTerminal = FocusableTerminalTestView(frame: .zero)
+        let replacementTerminal = FocusableTerminalTestView(frame: .zero)
+        var focusedCount = 0
+        let host = TerminalSessionHostView(
+            contentView: originalTerminal,
+            onFocused: { focusedCount += 1 }
+        )
+        window.contentView = host
+
+        XCTAssertTrue(window.makeFirstResponder(originalTerminal))
+
+        host.update(
+            contentView: replacementTerminal,
+            onFocused: { focusedCount += 1 }
+        )
+        host.layoutSubtreeIfNeeded()
+
+        XCTAssertNil(originalTerminal.superview)
+        XCTAssertTrue(replacementTerminal.superview === host)
+        XCTAssertTrue(window.firstResponder === replacementTerminal)
+        XCTAssertEqual(replacementTerminal.frame, host.bounds)
+        XCTAssertEqual(focusedCount, 2)
+    }
+
+    @MainActor
+    func testTerminalHostDoesNotRemoveContentReparentedByAnotherHost() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 200),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let movedTerminal = FocusableTerminalTestView(frame: .zero)
+        let sourceReplacement = NSView(frame: .zero)
+        let destinationTerminal = NSView(frame: .zero)
+        let sourceHost = TerminalSessionHostView(contentView: movedTerminal)
+        let destinationHost = TerminalSessionHostView(contentView: destinationTerminal)
+        let container = NSView(frame: .zero)
+        window.contentView = container
+        container.addSubview(sourceHost)
+        container.addSubview(destinationHost)
+
+        destinationHost.update(contentView: movedTerminal, onFocused: nil)
+        XCTAssertTrue(window.makeFirstResponder(movedTerminal))
+        sourceHost.update(contentView: sourceReplacement, onFocused: nil)
+
+        XCTAssertTrue(movedTerminal.superview === destinationHost)
+        XCTAssertTrue(sourceReplacement.superview === sourceHost)
+        XCTAssertTrue(window.firstResponder === movedTerminal)
     }
 
     func testRenderedOutputSanitizesControlsAndKeepsABoundedTail() {

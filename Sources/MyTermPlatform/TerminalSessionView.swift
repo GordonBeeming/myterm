@@ -17,20 +17,70 @@ public struct TerminalSessionView: NSViewRepresentable {
         self.onFocused = onFocused
     }
 
+    public func makeCoordinator() -> Coordinator {
+        Coordinator(session: session)
+    }
+
     public func makeNSView(context: Context) -> NSView {
-        session.setPaneActive(isActive)
+        context.coordinator.update(session: session, isActive: isActive)
         return TerminalSessionHostView(contentView: session.terminalView(), onFocused: onFocused)
     }
 
     public func updateNSView(_ nsView: NSView, context: Context) {
-        session.setPaneActive(isActive)
-        (nsView as? TerminalSessionHostView)?.onFocused = onFocused
+        let terminalView = session.terminalView()
+        guard let host = nsView as? TerminalSessionHostView else {
+            context.coordinator.update(session: session, isActive: isActive)
+            return
+        }
+
+        let shouldDeactivatePreviousSession = context.coordinator.isSessionHosted(by: host)
+        host.update(contentView: terminalView, onFocused: onFocused)
+        context.coordinator.update(
+            session: session,
+            isActive: isActive,
+            shouldDeactivatePreviousSession: shouldDeactivatePreviousSession
+        )
+    }
+
+    public static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.deactivate()
+    }
+
+    @MainActor
+    public final class Coordinator {
+        private var session: any TerminalProcessSession
+
+        fileprivate init(session: any TerminalProcessSession) {
+            self.session = session
+        }
+
+        fileprivate func update(
+            session updatedSession: any TerminalProcessSession,
+            isActive: Bool,
+            shouldDeactivatePreviousSession: Bool = true
+        ) {
+            if session !== updatedSession {
+                if shouldDeactivatePreviousSession {
+                    session.setPaneActive(false)
+                }
+                session = updatedSession
+            }
+            session.setPaneActive(isActive)
+        }
+
+        fileprivate func deactivate() {
+            session.setPaneActive(false)
+        }
+
+        fileprivate func isSessionHosted(by host: TerminalSessionHostView) -> Bool {
+            host.owns(session.terminalView())
+        }
     }
 }
 
 @MainActor
 final class TerminalSessionHostView: NSView {
-    private let contentView: NSView
+    private var contentView: NSView
     var onFocused: (@MainActor () -> Void)?
     private var firstResponderObservation: NSKeyValueObservation?
     private var wasFirstResponder = false
@@ -45,8 +95,34 @@ final class TerminalSessionHostView: NSView {
         addSubview(contentView)
     }
 
+    func update(contentView updatedContentView: NSView, onFocused: (@MainActor () -> Void)?) {
+        self.onFocused = onFocused
+        guard contentView !== updatedContentView else { return }
+
+        let previousContentView = contentView
+        let ownsPreviousContentView = previousContentView.superview === self
+        let shouldTransferFocus = ownsPreviousContentView
+            && window?.firstResponder === previousContentView
+        if ownsPreviousContentView {
+            previousContentView.removeFromSuperview()
+        }
+        contentView = updatedContentView
+        contentView.autoresizingMask = []
+        addSubview(contentView)
+        needsLayout = true
+
+        if shouldTransferFocus {
+            wasFirstResponder = false
+            window?.makeFirstResponder(contentView)
+        }
+    }
+
     required init?(coder: NSCoder) {
         nil
+    }
+
+    func owns(_ view: NSView) -> Bool {
+        contentView === view && view.superview === self
     }
 
     override func layout() {
