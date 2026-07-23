@@ -25,17 +25,21 @@ open -a myterm
 
 The cask installs the signed, notarized, and stapled Apple silicon release. MyTerm quits when its last window closes; launching it again restores the saved workspace layout.
 
+When MyTerm upgrades legacy workspace state, it keeps the original file in an adjacent v1 backup before writing the migrated layout. If recovery has to discard a malformed element, it likewise preserves the original bytes in an adjacent recovery backup before committing the repaired state.
+
 ## The workflow
 
 - **Workspaces** have a title, can be pinned and reordered, and live inside collapsible color-coded folders.
-- **Tabs** contain terminal and native WebKit browser panes. Browser panes keep their URL, cookies, and website data across app restarts.
-- **Panes** split right with <kbd>⌘D</kbd> and down with <kbd>⇧⌘D</kbd>. Terminal and browser panes share the same persistent split layout.
+- **Pane groups** own their own terminal and browser tabs. Every group keeps an independent selected tab, and browser tabs keep their URL, cookies, and website data across app restarts.
+- **Panes** split right with <kbd>⌘D</kbd> and down with <kbd>⇧⌘D</kbd>. Their dividers can be dragged, and the saved proportions restore on the next launch.
 - **One app instance** handles launch requests. Opening a folder, script, SSH link, or web URL reuses the existing window instead of creating another app process.
 - **Compact native UI** keeps workspace and tab chrome out of the way. There is no agent-status layer or ornamental terminal dashboard.
 
 ### Terminal links stay with the work
 
 Command-click any valid HTTP or HTTPS link in a terminal and MyTerm opens it as a browser pane beside that exact terminal. This works for localhost and remote sites alike.
+
+Tabs can be dragged to reorder within a pane group, dropped into another group, or dropped on a pane edge to make a new group. Moving the final tab out closes the now-empty pane.
 
 Every terminal process also receives a `BROWSER` launcher and a narrow `open` shim inside the app bundle. Tools such as Codex, Claude, Plannotator, and `ide browse` send their HTTP and HTTPS links back beside the originating pane, even if another workspace has since become active. MyTerm does not become the macOS default browser.
 
@@ -60,10 +64,17 @@ WebAuthn requests are passed to macOS and the user's chosen credential provider,
 | New workspace | <kbd>⌘N</kbd> |
 | New folder | <kbd>⇧⌘N</kbd> |
 | Rename workspace | <kbd>⇧⌘R</kbd> |
-| Decrease active-workspace font size | <kbd>⌘-</kbd> |
-| Increase active-workspace font size | <kbd>⌘=</kbd> |
+| Zoom out browser / decrease terminal font size | <kbd>⌘-</kbd> |
+| Zoom in browser / increase terminal font size | <kbd>⌘=</kbd> |
+| Reset browser zoom | <kbd>⌘0</kbd> |
+| Reload selected browser tab | <kbd>⌘R</kbd> |
+| Focus selected browser tab's address | <kbd>⌘L</kbd> |
+| Browser back / forward | <kbd>⌘[</kbd> / <kbd>⌘]</kbd> |
+| Find in selected browser tab | <kbd>⌘F</kbd> |
 | New terminal tab | <kbd>⌘T</kbd> |
 | New browser tab | <kbd>⇧⌘L</kbd> |
+| Previous / next tab in focused pane | <kbd>⌃⇧Tab</kbd> / <kbd>⌃Tab</kbd> |
+| Move selected tab to previous / next pane | <kbd>⇧⌥⌘←</kbd> / <kbd>⇧⌥⌘→</kbd> |
 | Split focused pane right | <kbd>⌘D</kbd> |
 | Split focused pane down | <kbd>⇧⌘D</kbd> |
 | Close focused pane or tab | <kbd>⌘W</kbd> |

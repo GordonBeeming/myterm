@@ -30,8 +30,28 @@ public struct BrowserSessionState: Equatable, Sendable {
 }
 
 @MainActor
+final class MyTermWebView: WKWebView {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+}
+
+enum BrowserSessionAction: Equatable, Sendable {
+    case back
+    case forward
+    case reload
+    case reloadFromOrigin
+    case stop
+    case find(query: String, backwards: Bool)
+    case zoomIn
+    case zoomOut
+    case resetZoom
+}
+
+@MainActor
 public final class BrowserSessionController: NSObject, ObservableObject {
     @Published public private(set) var state = BrowserSessionState()
+    private(set) var lastAction: BrowserSessionAction?
 
     public let webView: WKWebView
     public var onCloseRequest: (() -> Void)?
@@ -55,7 +75,7 @@ public final class BrowserSessionController: NSObject, ObservableObject {
                 forKey: "writingToolsBehavior"
             )
         }
-        webView = WKWebView(frame: .zero, configuration: configuration)
+        webView = MyTermWebView(frame: .zero, configuration: configuration)
         super.init()
 
         webView.navigationDelegate = self
@@ -115,20 +135,61 @@ public final class BrowserSessionController: NSObject, ObservableObject {
 
     public func goBack() {
         guard webView.canGoBack else { return }
+        lastAction = .back
         webView.goBack()
     }
 
     public func goForward() {
         guard webView.canGoForward else { return }
+        lastAction = .forward
         webView.goForward()
     }
 
     public func reload() {
+        lastAction = .reload
         webView.reload()
     }
 
+    public func reloadFromOrigin() {
+        lastAction = .reloadFromOrigin
+        webView.reloadFromOrigin()
+    }
+
     public func stopLoading() {
+        lastAction = .stop
         webView.stopLoading()
+    }
+
+    public func find(
+        _ query: String,
+        backwards: Bool = false,
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        guard !query.isEmpty else {
+            completion?(false)
+            return
+        }
+        lastAction = .find(query: query, backwards: backwards)
+        let configuration = WKFindConfiguration()
+        configuration.backwards = backwards
+        webView.find(query, configuration: configuration) { result in
+            completion?(result.matchFound)
+        }
+    }
+
+    public func zoomIn() {
+        lastAction = .zoomIn
+        webView.pageZoom = min(webView.pageZoom + 0.1, 5)
+    }
+
+    public func zoomOut() {
+        lastAction = .zoomOut
+        webView.pageZoom = max(webView.pageZoom - 0.1, 0.25)
+    }
+
+    public func resetZoom() {
+        lastAction = .resetZoom
+        webView.pageZoom = 1
     }
 
     static func configureNavigationPreferences(

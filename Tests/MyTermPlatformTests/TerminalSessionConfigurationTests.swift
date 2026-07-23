@@ -227,6 +227,53 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         XCTAssertEqual(terminal.caretColor, activeColor)
     }
 
+    @MainActor
+    func testTerminalAcceptsTheClickThatActivatesTheApp() {
+        let terminal = MyTermLocalProcessTerminalView(frame: .zero)
+
+        XCTAssertTrue(terminal.acceptsFirstMouse(for: nil))
+    }
+
+    @MainActor
+    func testOnlyTheRealFirstResponderReportsItsTerminalPaneAsActive() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 120),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let container = NSView(frame: window.contentView?.bounds ?? .zero)
+        window.contentView = container
+
+        let terminals = (0..<3).map { _ in
+            MyTermLocalProcessTerminalView(frame: .zero)
+        }
+
+        var focusedIndexes: [Int] = []
+        let hosts = terminals.enumerated().map { index, terminal in
+            let host = TerminalSessionHostView(
+                contentView: terminal,
+                onFocused: { focusedIndexes.append(index) }
+            )
+            host.frame = NSRect(x: CGFloat(index) * 120, y: 0, width: 120, height: 120)
+            container.addSubview(host)
+            return host
+        }
+
+        XCTAssertTrue(window.makeFirstResponder(terminals[2]))
+        XCTAssertTrue(window.firstResponder === terminals[2])
+        XCTAssertTrue(window.makeFirstResponder(terminals[1]))
+        XCTAssertTrue(window.firstResponder === terminals[1])
+        XCTAssertTrue(window.makeFirstResponder(terminals[0]))
+        XCTAssertTrue(window.firstResponder === terminals[0])
+        XCTAssertTrue(window.makeFirstResponder(terminals[2]))
+        XCTAssertTrue(window.firstResponder === terminals[2])
+
+        XCTAssertEqual(focusedIndexes, [2, 1, 0, 2])
+        XCTAssertEqual(terminals.filter { window.firstResponder === $0 }.count, 1)
+        XCTAssertEqual(hosts.count, 3)
+    }
+
     func testRenderedOutputSanitizesControlsAndKeepsABoundedTail() {
         let output = TerminalOutputSnapshot.plainText(
             from: "first\u{1B}[31m\r\nsecond\u{0007}\tthird",

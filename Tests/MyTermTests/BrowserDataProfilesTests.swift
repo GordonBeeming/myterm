@@ -215,11 +215,13 @@ final class BrowserDataProfilesTests: XCTestCase {
 
         let firstLegacyTabID = try initial.store.addBrowserTab(
             to: initial.store.selectedWorkspaceID,
+            tabGroupID: initial.selectedWorkspace.focusedTabGroupID,
             url: try XCTUnwrap(URL(string: "https://example.com")),
             profile: nil
         )
         let secondLegacyTabID = try initial.store.addBrowserTab(
             to: initial.store.selectedWorkspaceID,
+            tabGroupID: initial.selectedWorkspace.focusedTabGroupID,
             url: try XCTUnwrap(URL(string: "https://example.org")),
             profile: nil
         )
@@ -250,7 +252,7 @@ final class BrowserDataProfilesTests: XCTestCase {
 
     private func workspace(workingDirectory: URL) -> Workspace {
         let session = TerminalSession(workingDirectory: workingDirectory)
-        let tab = Tab(content: .terminal(.terminal(session)), focusedTerminalSessionID: session.id)
+        let tab = Tab(content: .terminal(session))
         return Workspace(title: "Workspace", tabs: [tab], selectedTabID: tab.id)
     }
 

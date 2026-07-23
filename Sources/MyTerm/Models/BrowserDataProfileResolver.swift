@@ -72,18 +72,11 @@ struct BrowserDataProfileResolver {
 
     private func workingDirectory(in workspace: Workspace) -> URL {
         let preferredTabs = [workspace.selectedTab].compactMap { $0 }
-            + workspace.tabs.filter { $0.id != workspace.selectedTabID }
+            + workspace.allTabs.filter { $0.id != workspace.selectedTabID }
 
         for tab in preferredTabs {
-            guard case .terminal(let tree) = tab.content else { continue }
-
-            if let focusedSessionID = tab.focusedTerminalSessionID,
-               let focusedSession = tree.terminalSessions.first(where: { $0.id == focusedSessionID }),
-               let workingDirectory = focusedSession.workingDirectory {
-                return workingDirectory.standardizedFileURL
-            }
-
-            if let workingDirectory = tree.terminalSessions.compactMap(\.workingDirectory).first {
+            if case .terminal(let session) = tab.content,
+               let workingDirectory = session.workingDirectory {
                 return workingDirectory.standardizedFileURL
             }
         }

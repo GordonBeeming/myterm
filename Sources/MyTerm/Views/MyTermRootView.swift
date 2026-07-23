@@ -140,6 +140,16 @@ private struct WorkspaceContentView: View {
             WorkspaceSidebar(model: model)
         } detail: {
             VStack(spacing: 0) {
+                if let recoveryNotice = model.recoveryNotice {
+                    Label(recoveryNotice.message, systemImage: "wrench.and.screwdriver.fill")
+                        .font(.callout)
+                        .foregroundStyle(.orange)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal)
+                        .padding(.vertical, 6)
+                        .textSelection(.enabled)
+                        .accessibilityLabel("Workspace recovery: \(recoveryNotice.message)")
+                }
                 if let errorDescription = model.errorDescription {
                     Label(errorDescription, systemImage: "exclamationmark.triangle.fill")
                         .font(.callout)
@@ -149,8 +159,6 @@ private struct WorkspaceContentView: View {
                         .padding(.vertical, 6)
                         .accessibilityLabel("Error: \(errorDescription)")
                 }
-                WorkspaceTabStrip(model: model)
-                Divider()
                 ActiveTabView(model: model)
             }
             .navigationTitle(model.selectedWorkspace.displayTitle)

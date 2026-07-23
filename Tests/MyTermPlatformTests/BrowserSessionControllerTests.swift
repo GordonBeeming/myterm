@@ -40,6 +40,13 @@ final class BrowserSessionControllerTests: XCTestCase {
         }
     }
 
+    func testBrowserContentAcceptsTheClickThatActivatesTheApp() {
+        let controller = BrowserSessionController()
+
+        XCTAssertTrue(controller.webView.acceptsFirstMouse(for: nil))
+        XCTAssertTrue(BrowserSessionHostView(contentView: controller.webView, isActive: false).acceptsFirstMouse(for: nil))
+    }
+
     func testProfileIdentifierIsInstalledOnWebViewConfiguration() {
         let identifier = UUID()
         let controller = BrowserSessionController(
@@ -123,6 +130,31 @@ final class BrowserSessionControllerTests: XCTestCase {
             XCTAssertTrue(preferences.allowsContentJavaScript)
         }
         XCTAssertEqual(webDecision, .allow)
+    }
+
+    func testBrowserActionsAreObservableAndZoomIsBounded() {
+        let controller = BrowserSessionController()
+
+        controller.reload()
+        XCTAssertEqual(controller.lastAction, .reload)
+        controller.reloadFromOrigin()
+        XCTAssertEqual(controller.lastAction, .reloadFromOrigin)
+        controller.stopLoading()
+        XCTAssertEqual(controller.lastAction, .stop)
+        controller.find("MyTerm")
+        XCTAssertEqual(controller.lastAction, .find(query: "MyTerm", backwards: false))
+
+        controller.webView.pageZoom = 1
+        controller.zoomIn()
+        XCTAssertEqual(controller.lastAction, .zoomIn)
+        XCTAssertEqual(controller.webView.pageZoom, 1.1, accuracy: 0.0001)
+        controller.zoomOut()
+        XCTAssertEqual(controller.lastAction, .zoomOut)
+        XCTAssertEqual(controller.webView.pageZoom, 1, accuracy: 0.0001)
+        controller.webView.pageZoom = 2
+        controller.resetZoom()
+        XCTAssertEqual(controller.lastAction, .resetZoom)
+        XCTAssertEqual(controller.webView.pageZoom, 1, accuracy: 0.0001)
     }
 
     func testNamedStoresShareCookiesOnlyWithTheSameIdentifier() async throws {

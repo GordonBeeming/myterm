@@ -41,9 +41,19 @@
     <array>
         <dict>
             <key>UTTypeIdentifier</key>
-            <string>com.gordonbeeming.myterm.sidebar-item</string>
+            <string>com.gordonbeeming.myterm.workspace-sidebar-item</string>
             <key>UTTypeDescription</key>
-            <string>MyTerm sidebar item</string>
+            <string>MyTerm workspace sidebar item</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.data</string>
+            </array>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.gordonbeeming.myterm.folder-sidebar-item</string>
+            <key>UTTypeDescription</key>
+            <string>MyTerm folder sidebar item</string>
             <key>UTTypeConformsTo</key>
             <array>
                 <string>public.data</string>

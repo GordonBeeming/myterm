@@ -22,7 +22,7 @@ components:
 
 **Creative North Star: "The Native Workbench"**
 
-MyTerm should feel like a dependable part of macOS: dense, direct, and quiet enough to disappear while work is happening. The hierarchy comes from familiar system structure—a title-only source list, a compact tab row, and an uninterrupted working surface—not from decoration.
+MyTerm should feel like a dependable part of macOS: dense, direct, and quiet enough to disappear while work is happening. The hierarchy comes from familiar system structure: a title-only source list, compact tab rows inside each pane group, and uninterrupted working surfaces. It does not need decoration.
 
 The app stays deliberately narrow in scope. It should never resemble an agent dashboard, a novelty terminal, or a web app wrapped in desktop chrome.
 
@@ -76,19 +76,22 @@ MyTerm is flat by default. Depth comes from macOS window materials, source-list 
 
 - **Height:** A 26 pt control row with 6 pt vertical and 8 pt horizontal padding.
 - **Tabs:** Native small bordered controls, 112–160 pt wide, with a close control on the selected tab.
-- **Overflow:** Horizontal scrolling with the active tab kept visible. The add-tab menu stays fixed.
+- **Ownership:** Every pane group has its own strip and selected tab. There is no workspace-wide strip.
+- **Overflow:** Horizontal scrolling keeps the local selected tab visible. The add-tab menu stays fixed.
+- **Drag and drop:** A tab can reorder inside its strip, move to another group, or create a group by dropping on an edge.
 
 ### Terminal Pane
 
 - **Surface:** SwiftTerm fills the available pane without an inset card or decorative border.
-- **Splits:** Native draggable splitters. Each pane has one quiet overflow menu for split and close actions.
-- **Focus:** Clicking a pane makes it the target for split and close commands.
+- **Splits:** Native draggable splitters preserve child proportions. Each pane has one quiet overflow menu for split and close actions.
+- **Focus:** The AppKit first responder decides the active terminal. Only that terminal shows a caret at full opacity and receives pane commands.
 
 ### Browser Pane
 
-- **Toolbar:** Back, forward, reload, and one rounded address field in a compact horizontal row.
+- **Toolbar:** Back, Forward, Refresh, then one rounded Address field in a compact horizontal row.
 - **Surface:** WKWebView fills the remaining content area.
 - **Behavior:** Browser and terminal panes can share horizontal and vertical split groups.
+- **Commands:** Reload, address focus, history, find, and page zoom target only the selected browser tab. Reload From Origin and Stop Loading live in the Browser menu without overriding rename or cancel keys.
 
 ### Settings
 
@@ -115,6 +118,15 @@ MyTerm is flat by default. Depth comes from macOS window materials, source-list 
 
 - **Visible path:** Toolbar, contextual menu, or local action button for every frequent task.
 - **Keyboard path:** Native menu commands for workspace creation, terminal and browser tabs, splits, close, and sidebar visibility.
+- **Contextual zoom:** Command-Minus and Command-Equals change browser page zoom when a browser is selected, or the active workspace's terminal font size when a terminal is selected. Command-0 resets browser page zoom.
+
+### Persistence and Recovery
+
+- **Hierarchy:** Persist workspaces as a split layout of pane groups, with each group owning its tabs and selected tab.
+- **Split state:** Persist dragged divider proportions and restore them with the workspace.
+- **Migration:** Before the first v2 write, atomically preserve the exact v1 file at a deterministic adjacent backup path.
+- **Lossy recovery:** If malformed array elements must be discarded, preserve the original bytes in a separate adjacent recovery backup before committing repaired state.
+- **Identity:** Keep already-unique workspace, group, tab, pane, split, terminal-session, and browser-session identifiers stable across migration and repair.
 
 ## Do's and Don'ts
 

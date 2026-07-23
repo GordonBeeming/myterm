@@ -248,6 +248,10 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
         focusWhenPossible()
     }
 
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
     func focusWhenPossible() {
         guard let window else {
             shouldFocusWhenAttachedToWindow = true

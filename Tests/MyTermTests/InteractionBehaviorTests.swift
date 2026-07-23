@@ -201,4 +201,75 @@ final class InteractionBehaviorTests: XCTestCase {
             MyTermShortcutDeclaration(key: "\t", modifiers: [.control])
         )
     }
+
+    func testPaneTabDropPreviewOccupiesExactlyHalfTheDestinationPane() {
+        let size = CGSize(width: 240, height: 120)
+
+        XCTAssertEqual(
+            PaneTabDropPreviewFrame.frame(for: .left, in: size),
+            CGRect(x: 0, y: 0, width: 120, height: 120)
+        )
+        XCTAssertEqual(
+            PaneTabDropPreviewFrame.frame(for: .right, in: size),
+            CGRect(x: 120, y: 0, width: 120, height: 120)
+        )
+        XCTAssertEqual(
+            PaneTabDropPreviewFrame.frame(for: .top, in: size),
+            CGRect(x: 0, y: 0, width: 240, height: 60)
+        )
+        XCTAssertEqual(
+            PaneTabDropPreviewFrame.frame(for: .bottom, in: size),
+            CGRect(x: 0, y: 60, width: 240, height: 60)
+        )
+    }
+
+    func testWorkspaceSplitRatioAdjustmentKeepsWeightsNormalizedAndUsable() {
+        let weights = WorkspaceSplitRatioResolver.adjusting(
+            [0.5, 0.5],
+            dividerAt: 0,
+            translation: 30,
+            availableLength: 200
+        )
+
+        XCTAssertEqual(weights.reduce(0, +), 1, accuracy: 0.000_001)
+        XCTAssertEqual(weights[0], 0.65, accuracy: 0.000_001)
+        XCTAssertEqual(weights[1], 0.35, accuracy: 0.000_001)
+        XCTAssertTrue(weights.allSatisfy { $0 > 0 })
+    }
+
+    func testWorkspaceSplitKeyboardAdjustmentUsesOnlyMatchingAxis() {
+        XCTAssertEqual(
+            WorkspaceSplitKeyboardAdjustment.adjustment(for: .left, orientation: .horizontal),
+            .decrement
+        )
+        XCTAssertEqual(
+            WorkspaceSplitKeyboardAdjustment.adjustment(for: .right, orientation: .horizontal),
+            .increment
+        )
+        XCTAssertEqual(
+            WorkspaceSplitKeyboardAdjustment.adjustment(for: .up, orientation: .vertical),
+            .decrement
+        )
+        XCTAssertEqual(
+            WorkspaceSplitKeyboardAdjustment.adjustment(for: .down, orientation: .vertical),
+            .increment
+        )
+        XCTAssertNil(WorkspaceSplitKeyboardAdjustment.adjustment(for: .up, orientation: .horizontal))
+        XCTAssertNil(WorkspaceSplitKeyboardAdjustment.adjustment(for: .left, orientation: .vertical))
+    }
+
+    func testFindFieldUsesItsOwnAccessiblePresentation() {
+        XCTAssertEqual(
+            BrowserTextFieldPresentation.findInPage,
+            BrowserTextFieldPresentation(
+                placeholder: "Find",
+                accessibilityLabel: "Find in page",
+                accessibilityHelp: "Find text on this page"
+            )
+        )
+        XCTAssertNotEqual(
+            BrowserTextFieldPresentation.findInPage,
+            BrowserTextFieldPresentation.browserAddress
+        )
+    }
 }
