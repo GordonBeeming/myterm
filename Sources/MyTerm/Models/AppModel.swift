@@ -1068,6 +1068,7 @@ final class AppModel {
                 edge: orientation == .horizontal ? .right : .bottom,
                 workingDirectory: workingDirectory
             )
+            maximizedTabGroupID = nil
             guard let tab = self.tab(
                 workspaceID: workspaceID,
                 tabGroupID: split.tabGroupID,

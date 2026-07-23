@@ -455,6 +455,22 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.paneFullScreenCommandTitle, "Exit Pane Full Screen")
     }
 
+    func testSplittingFullScreenPaneRestoresLayoutAndFocusesNewPane() throws {
+        for orientation in [SplitOrientation.horizontal, .vertical] {
+            let directory = try makeTemporaryDirectory()
+            defer { removeTemporaryDirectory(directory) }
+            let model = try makeModel(applicationSupportDirectory: directory)
+            let originalGroupID = model.selectedWorkspace.focusedTabGroupID
+            model.toggleFocusedPaneFullScreen()
+
+            model.splitFocusedTerminal(orientation: orientation)
+
+            XCTAssertNil(model.maximizedTabGroup)
+            XCTAssertNotEqual(model.selectedWorkspace.focusedTabGroupID, originalGroupID)
+            XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 2)
+        }
+    }
+
     func testSettingsResolveGlobalFolderAndWorkspaceOverridesAndCanClearOneField() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
