@@ -433,6 +433,28 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.selectedWorkspace.focusedTabGroupID, rightGroupID)
     }
 
+    func testFullScreenToggleMaximizesFocusedPaneAfterMaximizedPaneCloses() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let remainingGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.createTerminalTab(in: remainingGroupID)
+        guard case .moved(let maximizedGroupID) = model.routeSelectedTabMovement(.newPane(.right)) else {
+            return XCTFail("Expected movement to a new pane.")
+        }
+        model.toggleFocusedPaneFullScreen()
+        XCTAssertEqual(model.maximizedTabGroup?.id, maximizedGroupID)
+
+        model.closeFocusedPaneOrTab()
+        XCTAssertNil(model.maximizedTabGroup)
+        XCTAssertEqual(model.selectedWorkspace.focusedTabGroupID, remainingGroupID)
+
+        model.toggleFocusedPaneFullScreen()
+
+        XCTAssertEqual(model.maximizedTabGroup?.id, remainingGroupID)
+        XCTAssertEqual(model.paneFullScreenCommandTitle, "Exit Pane Full Screen")
+    }
+
     func testSettingsResolveGlobalFolderAndWorkspaceOverridesAndCanClearOneField() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }

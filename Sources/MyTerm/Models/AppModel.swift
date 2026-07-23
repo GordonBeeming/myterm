@@ -366,7 +366,7 @@ final class AppModel {
     }
 
     func toggleFocusedPaneFullScreen() {
-        guard maximizedTabGroupID == nil else {
+        guard maximizedTabGroup == nil else {
             maximizedTabGroupID = nil
             return
         }
