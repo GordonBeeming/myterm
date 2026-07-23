@@ -416,6 +416,23 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.paneFullScreenCommandTitle, "Make Pane Full Screen")
     }
 
+    func testPaneFocusShortcutExitsFullScreenBeforeFocusingAnotherPane() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let leftGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.createTerminalTab(in: leftGroupID)
+        model.routeSelectedTabMovement(.newPane(.right))
+        let rightGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.focusTabGroup(workspaceID: model.store.selectedWorkspaceID, tabGroupID: leftGroupID)
+        model.toggleFocusedPaneFullScreen()
+
+        model.focusTerminal(direction: .right)
+
+        XCTAssertNil(model.maximizedTabGroup)
+        XCTAssertEqual(model.selectedWorkspace.focusedTabGroupID, rightGroupID)
+    }
+
     func testSettingsResolveGlobalFolderAndWorkspaceOverridesAndCanClearOneField() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
@@ -1718,6 +1735,29 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(destinationGroupID, sourceGroupID)
         XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 1)
         XCTAssertEqual(model.selectedWorkspace.group(id: sourceGroupID)?.tabs.first?.id, movedTabID)
+    }
+
+    func testPaneTabDragCenterDropWithinSourcePaneDoesNotReorderTabs() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let sourceGroupID = model.selectedWorkspace.focusedTabGroupID
+        let firstTabID = try XCTUnwrap(model.selectedTab?.id)
+        model.createTerminalTab(in: sourceGroupID)
+        let secondTabID = try XCTUnwrap(model.selectedTab?.id)
+        let source = PaneTabDragSource(
+            workspaceID: workspaceID,
+            tabGroupID: sourceGroupID,
+            tabID: firstTabID
+        )
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: sourceGroupID, origin: .zero)
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
+        let result = model.finishPaneTabDrag(source: source, finalLocation: CGPoint(x: 60, y: 60))
+
+        XCTAssertNil(result)
+        XCTAssertEqual(model.selectedWorkspace.group(id: sourceGroupID)?.tabs.map(\.id), [firstTabID, secondTabID])
     }
 
     func testPaneTabDragReordersForwardUsingThePostRemovalIndex() throws {

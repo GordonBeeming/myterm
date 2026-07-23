@@ -156,6 +156,7 @@ extension AppModel {
                 at: insertionIndex
             )
         case .paneCenter(let tabGroupID):
+            guard tabGroupID != source.tabGroupID else { return nil }
             result = moveTab(
                 workspaceID: source.workspaceID,
                 sourceTabGroupID: source.tabGroupID,

@@ -366,8 +366,12 @@ final class AppModel {
     }
 
     func toggleFocusedPaneFullScreen() {
+        guard maximizedTabGroupID == nil else {
+            maximizedTabGroupID = nil
+            return
+        }
         let focusedTabGroupID = selectedWorkspace.focusedTabGroupID
-        maximizedTabGroupID = maximizedTabGroupID == focusedTabGroupID ? nil : focusedTabGroupID
+        maximizedTabGroupID = focusedTabGroupID
     }
 
     func beginRenamingSelectedTab() {
@@ -1184,6 +1188,7 @@ final class AppModel {
             to: workspace.focusedTabGroupID,
             direction: direction
         ) else { return }
+        maximizedTabGroupID = nil
         focusTabGroup(
             workspaceID: store.selectedWorkspaceID,
             tabGroupID: targetGroupID,
