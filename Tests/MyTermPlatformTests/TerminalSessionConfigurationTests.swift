@@ -312,20 +312,29 @@ final class TerminalSessionConfigurationTests: XCTestCase {
 
     @MainActor
     func testTerminalHostDoesNotRemoveContentReparentedByAnotherHost() {
-        let movedTerminal = NSView(frame: .zero)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 200),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let movedTerminal = FocusableTerminalTestView(frame: .zero)
         let sourceReplacement = NSView(frame: .zero)
         let destinationTerminal = NSView(frame: .zero)
         let sourceHost = TerminalSessionHostView(contentView: movedTerminal)
         let destinationHost = TerminalSessionHostView(contentView: destinationTerminal)
         let container = NSView(frame: .zero)
+        window.contentView = container
         container.addSubview(sourceHost)
         container.addSubview(destinationHost)
 
         destinationHost.update(contentView: movedTerminal, onFocused: nil)
+        XCTAssertTrue(window.makeFirstResponder(movedTerminal))
         sourceHost.update(contentView: sourceReplacement, onFocused: nil)
 
         XCTAssertTrue(movedTerminal.superview === destinationHost)
         XCTAssertTrue(sourceReplacement.superview === sourceHost)
+        XCTAssertTrue(window.firstResponder === movedTerminal)
     }
 
     func testRenderedOutputSanitizesControlsAndKeepsABoundedTail() {
