@@ -17,20 +17,52 @@ public struct TerminalSessionView: NSViewRepresentable {
         self.onFocused = onFocused
     }
 
+    public func makeCoordinator() -> Coordinator {
+        Coordinator(session: session)
+    }
+
     public func makeNSView(context: Context) -> NSView {
-        session.setPaneActive(isActive)
+        context.coordinator.update(session: session, isActive: isActive)
         return TerminalSessionHostView(contentView: session.terminalView(), onFocused: onFocused)
     }
 
     public func updateNSView(_ nsView: NSView, context: Context) {
-        session.setPaneActive(isActive)
-        (nsView as? TerminalSessionHostView)?.onFocused = onFocused
+        context.coordinator.update(session: session, isActive: isActive)
+        (nsView as? TerminalSessionHostView)?.update(
+            contentView: session.terminalView(),
+            onFocused: onFocused
+        )
+    }
+
+    public static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.deactivate()
+    }
+
+    @MainActor
+    public final class Coordinator {
+        private var session: any TerminalProcessSession
+
+        fileprivate init(session: any TerminalProcessSession) {
+            self.session = session
+        }
+
+        fileprivate func update(session updatedSession: any TerminalProcessSession, isActive: Bool) {
+            if session !== updatedSession {
+                session.setPaneActive(false)
+                session = updatedSession
+            }
+            session.setPaneActive(isActive)
+        }
+
+        fileprivate func deactivate() {
+            session.setPaneActive(false)
+        }
     }
 }
 
 @MainActor
 final class TerminalSessionHostView: NSView {
-    private let contentView: NSView
+    private var contentView: NSView
     var onFocused: (@MainActor () -> Void)?
     private var firstResponderObservation: NSKeyValueObservation?
     private var wasFirstResponder = false
@@ -43,6 +75,22 @@ final class TerminalSessionHostView: NSView {
         layer?.masksToBounds = true
         contentView.autoresizingMask = []
         addSubview(contentView)
+    }
+
+    func update(contentView updatedContentView: NSView, onFocused: (@MainActor () -> Void)?) {
+        self.onFocused = onFocused
+        guard contentView !== updatedContentView else { return }
+
+        let shouldTransferFocus = window?.firstResponder === contentView
+        contentView.removeFromSuperview()
+        contentView = updatedContentView
+        contentView.autoresizingMask = []
+        addSubview(contentView)
+        needsLayout = true
+
+        if shouldTransferFocus {
+            window?.makeFirstResponder(contentView)
+        }
     }
 
     required init?(coder: NSCoder) {

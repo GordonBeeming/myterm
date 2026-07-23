@@ -274,6 +274,30 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         XCTAssertEqual(hosts.count, 3)
     }
 
+    @MainActor
+    func testTerminalHostReplacesTheDisplayedSessionAndTransfersFocus() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 200),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let originalTerminal = NSView(frame: .zero)
+        let replacementTerminal = NSView(frame: .zero)
+        let host = TerminalSessionHostView(contentView: originalTerminal)
+        window.contentView = host
+
+        XCTAssertTrue(window.makeFirstResponder(originalTerminal))
+
+        host.update(contentView: replacementTerminal, onFocused: nil)
+        host.layoutSubtreeIfNeeded()
+
+        XCTAssertNil(originalTerminal.superview)
+        XCTAssertTrue(replacementTerminal.superview === host)
+        XCTAssertTrue(window.firstResponder === replacementTerminal)
+        XCTAssertEqual(replacementTerminal.frame, host.bounds)
+    }
+
     func testRenderedOutputSanitizesControlsAndKeepsABoundedTail() {
         let output = TerminalOutputSnapshot.plainText(
             from: "first\u{1B}[31m\r\nsecond\u{0007}\tthird",
