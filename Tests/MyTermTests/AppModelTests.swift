@@ -1519,8 +1519,10 @@ final class AppModelTests: XCTestCase {
         let sourceGroupID = model.selectedWorkspace.focusedTabGroupID
         let sourceSession = try XCTUnwrap(engine.sessions.first)
 
+        model.toggleFocusedPaneFullScreen()
         sourceSession.onEvent?(.openURL(try XCTUnwrap(URL(string: "https://example.com/one"))))
         let rightGroupID = model.selectedWorkspace.focusedTabGroupID
+        XCTAssertNil(model.maximizedTabGroup)
         XCTAssertNotEqual(rightGroupID, sourceGroupID)
         XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 2)
         guard case .split(_, .horizontal, _, let weights) = model.selectedWorkspace.layout else {
@@ -1528,7 +1530,10 @@ final class AppModelTests: XCTestCase {
         }
         XCTAssertEqual(weights, [0.5, 0.5])
 
+        model.focusTabGroup(workspaceID: model.store.selectedWorkspaceID, tabGroupID: sourceGroupID)
+        model.toggleFocusedPaneFullScreen()
         sourceSession.onEvent?(.openURL(try XCTUnwrap(URL(string: "https://example.com/two"))))
+        XCTAssertNil(model.maximizedTabGroup)
         XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 2)
         XCTAssertEqual(model.selectedWorkspace.focusedTabGroupID, rightGroupID)
         XCTAssertEqual(

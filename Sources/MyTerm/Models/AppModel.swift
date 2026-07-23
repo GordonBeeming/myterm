@@ -797,6 +797,7 @@ final class AppModel {
             tabGroupID: targetGroupID,
             workingDirectory: workingDirectory
         )
+        restoreSplitLayoutIfFocusing(workspaceID: workspaceID, tabGroupID: targetGroupID)
         guard let tab = tab(workspaceID: workspaceID, tabGroupID: targetGroupID, tabID: tabID),
               let session = tab.terminalSession else {
             throw AppModelError.tabUnavailable(tabID)
@@ -866,6 +867,7 @@ final class AppModel {
                 url: url,
                 profile: profile
             )
+            restoreSplitLayoutIfFocusing(workspaceID: workspaceID, tabGroupID: targetGroupID)
             guard let tab = tab(workspaceID: workspaceID, tabGroupID: targetGroupID, tabID: tabID) else {
                 throw AppModelError.tabUnavailable(tabID)
             }
@@ -911,6 +913,7 @@ final class AppModel {
                 destinationGroupID = split.tabGroupID
                 placeholderTabID = split.tabID
             }
+            restoreSplitLayoutIfFocusing(workspaceID: workspaceID, tabGroupID: destinationGroupID)
 
             if let existingTab = store.workspaces.first(where: { $0.id == workspaceID })?
                 .group(id: destinationGroupID)?
@@ -966,6 +969,7 @@ final class AppModel {
         perform {
             let workspaceID = store.selectedWorkspaceID
             try store.selectTab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)
+            restoreSplitLayoutIfFocusing(workspaceID: workspaceID, tabGroupID: tabGroupID)
             guard let tab = tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID) else {
                 throw AppModelError.tabUnavailable(tabID)
             }
@@ -1068,7 +1072,7 @@ final class AppModel {
                 edge: orientation == .horizontal ? .right : .bottom,
                 workingDirectory: workingDirectory
             )
-            maximizedTabGroupID = nil
+            restoreSplitLayoutIfFocusing(workspaceID: workspaceID, tabGroupID: split.tabGroupID)
             guard let tab = self.tab(
                 workspaceID: workspaceID,
                 tabGroupID: split.tabGroupID,
@@ -1106,6 +1110,7 @@ final class AppModel {
                 tabID: tabID,
                 paneID: tab.paneID
             )
+            restoreSplitLayoutIfFocusing(workspaceID: workspaceID, tabGroupID: tabGroupID)
             terminalSessions[sessionID]?.focus()
         }
     }
@@ -1118,6 +1123,7 @@ final class AppModel {
             }
             if workspace.focusedTabGroupID != tabGroupID {
                 try store.focusTabGroup(workspaceID: workspaceID, tabGroupID: tabGroupID)
+                restoreSplitLayoutIfFocusing(workspaceID: workspaceID, tabGroupID: tabGroupID)
             }
             if focusContent { self.focusContent(of: group.selectedTab) }
         }
@@ -1150,6 +1156,7 @@ final class AppModel {
                 tabID: tabID,
                 paneID: paneID
             )
+            restoreSplitLayoutIfFocusing(workspaceID: workspaceID, tabGroupID: tabGroupID)
             if focusContent,
                let tab = tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID) {
                 self.focusContent(of: tab)
@@ -1183,13 +1190,19 @@ final class AppModel {
         focusContent(of: tab)
     }
 
+    private func restoreSplitLayoutIfFocusing(workspaceID: WorkspaceID, tabGroupID: TabGroupID) {
+        guard store.selectedWorkspaceID == workspaceID,
+              maximizedTabGroupID != nil,
+              maximizedTabGroupID != tabGroupID else { return }
+        maximizedTabGroupID = nil
+    }
+
     func focusTerminal(direction: PaneFocusDirection) {
         let workspace = selectedWorkspace
         guard let targetGroupID = workspace.adjacentTabGroupID(
             to: workspace.focusedTabGroupID,
             direction: direction
         ) else { return }
-        maximizedTabGroupID = nil
         focusTabGroup(
             workspaceID: store.selectedWorkspaceID,
             tabGroupID: targetGroupID,
@@ -1229,11 +1242,7 @@ final class AppModel {
                 to: destinationTabGroupID,
                 at: index
             )
-            if store.selectedWorkspaceID == workspaceID,
-               maximizedTabGroupID != nil,
-               maximizedTabGroupID != destinationTabGroupID {
-                maximizedTabGroupID = nil
-            }
+            restoreSplitLayoutIfFocusing(workspaceID: workspaceID, tabGroupID: destinationTabGroupID)
             if let movedTab = tab(
                 workspaceID: workspaceID,
                 tabGroupID: destinationTabGroupID,
@@ -1292,11 +1301,7 @@ final class AppModel {
                 errorDescription = message
                 return .failed(message: message)
             }
-            if store.selectedWorkspaceID == workspaceID,
-               maximizedTabGroupID != nil,
-               maximizedTabGroupID != createdGroupID {
-                maximizedTabGroupID = nil
-            }
+            restoreSplitLayoutIfFocusing(workspaceID: workspaceID, tabGroupID: createdGroupID)
             if let movedTab = tab(
                 workspaceID: workspaceID,
                 tabGroupID: createdGroupID,
