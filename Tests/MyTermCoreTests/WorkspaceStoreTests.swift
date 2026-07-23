@@ -4,8 +4,10 @@ import XCTest
 
 final class WorkspaceStoreTests: XCTestCase {
     private func temporaryURL() -> URL {
-        FileManager.default.temporaryDirectory
+        let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("MyTermCoreTests", isDirectory: true)
+        XCTAssertNoThrow(try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true))
+        return directory
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension("json")
     }
