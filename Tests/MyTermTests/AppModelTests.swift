@@ -994,7 +994,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(model.errorDescription)
     }
 
-    func testOpenRequestsCreateTabsInTheExistingModelAndQuoteScripts() throws {
+    func testDirectOpenPreservesTerminalLaunchForScriptPaths() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
         let projectDirectory = directory.appending(path: "Project", directoryHint: .isDirectory)
@@ -1033,7 +1033,34 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(engine.configurations.last?.initialCommand, "ssh 'user%name@example.com'")
     }
 
-    func testMarkdownFilesUseTheConfiguredOpenCommand() async throws {
+    func testDirectUnsupportedDocumentsOpenInTheirExternalApplication() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let documentURL = directory.appending(path: "report.pdf", directoryHint: .notDirectory)
+        try Data().write(to: documentURL)
+        var externallyOpened = [URL]()
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true,
+            externalFileOpener: { url in
+                externallyOpened.append(url)
+                return true
+            }
+        )
+        let initialTabCount = model.selectedWorkspace.tabs.count
+        let initialConfigurationCount = engine.configurations.count
+
+        model.open([documentURL])
+
+        XCTAssertEqual(externallyOpened, [documentURL])
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount)
+        XCTAssertEqual(engine.configurations.count, initialConfigurationCount)
+    }
+
+    func testTerminalTextFilesUseTheConfiguredOpenCommand() async throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
         let markdownURL = directory.appending(path: "release notes.md", directoryHint: .notDirectory)
@@ -1042,39 +1069,164 @@ final class AppModelTests: XCTestCase {
         let recorderURL = directory.appending(path: "record-markdown", directoryHint: .notDirectory)
         try Data("#!/bin/sh\nprintf '%s' \"$1\" > \"$MYTERM_MARKDOWN_CAPTURE\"\n".utf8).write(to: recorderURL)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: recorderURL.path)
-        let model = try makeModel(applicationSupportDirectory: directory)
-        model.updateGlobalSettings {
-            $0.markdownOpenCommand = "'\(recorderURL.path)' {file}"
-        }
-        setenv("MYTERM_MARKDOWN_CAPTURE", captureURL.path, 1)
-        defer { unsetenv("MYTERM_MARKDOWN_CAPTURE") }
-        let initialTabCount = model.selectedWorkspace.tabs.count
-
-        model.open([markdownURL])
-
-        for _ in 0..<50 where !FileManager.default.fileExists(atPath: captureURL.path) {
-            try await Task.sleep(nanoseconds: 20_000_000)
-        }
-        XCTAssertEqual(try String(contentsOf: captureURL, encoding: .utf8), markdownURL.path)
-        XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount)
-    }
-
-    func testMarkdownLauncherFailureFallsBackToMyTermBrowser() throws {
-        let directory = try makeTemporaryDirectory()
-        defer { removeTemporaryDirectory(directory) }
-        let markdownURL = directory.appending(path: "README.md", directoryHint: .notDirectory)
-        try Data("# Read me\n".utf8).write(to: markdownURL)
         let engine = CapturingTerminalEngine()
         let model = try AppModel(
             channel: .development,
             applicationSupportDirectory: directory,
             terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        model.updateGlobalSettings {
+            $0.textFileOpenCommand = "'\(recorderURL.path)' {file}"
+        }
+        setenv("MYTERM_MARKDOWN_CAPTURE", captureURL.path, 1)
+        defer { unsetenv("MYTERM_MARKDOWN_CAPTURE") }
+        let initialTabCount = model.selectedWorkspace.tabs.count
+        let resolvedSettings = try model.store.resolvedSettings(for: model.store.selectedWorkspaceID)
+        XCTAssertTrue(resolvedSettings.matchesNativeTextFile(markdownURL))
+        XCTAssertEqual(resolvedSettings.textFileOpenCommand, "'\(recorderURL.path)' {file}")
+
+        try XCTUnwrap(engine.sessions.first).onEvent?(.openURL(markdownURL))
+
+        for _ in 0..<250 where !FileManager.default.fileExists(atPath: captureURL.path) {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertNil(model.errorDescription)
+        XCTAssertEqual(try String(contentsOf: captureURL, encoding: .utf8), markdownURL.path)
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount)
+    }
+
+    func testTerminalJSONFilesUseTheConfiguredTextFileCommandWithoutCreatingATab() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let jsonURL = directory.appending(path: "settings.json", directoryHint: .notDirectory)
+        try Data("{}".utf8).write(to: jsonURL)
+        let engine = CapturingTerminalEngine()
+        var commands = [String]()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
             startsTerminalProcesses: true,
-            markdownOpenCommandRunner: { _, _, _, _ in
+            browserLauncherURL: nil,
+            textFileOpenCommandRunner: { command, _, _, completion in
+                commands.append(command)
+                completion(0)
+            }
+        )
+        model.updateGlobalSettings { $0.textFileOpenCommand = "editor {file}" }
+        let initialTabCount = model.selectedWorkspace.allTabs.count
+
+        try XCTUnwrap(engine.sessions.first).onEvent?(.openURL(jsonURL))
+
+        XCTAssertEqual(commands, ["exec editor '\(jsonURL.path)'"])
+        XCTAssertEqual(model.selectedWorkspace.allTabs.count, initialTabCount)
+    }
+
+    func testTerminalScopedExactNameAndDotfilePatternsUseTheirScopedCommand() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let dockerfileURL = directory.appending(path: "Dockerfile", directoryHint: .notDirectory)
+        let gitignoreURL = directory.appending(path: ".gitignore", directoryHint: .notDirectory)
+        let suffixedGitignoreURL = directory.appending(path: "foo.gitignore", directoryHint: .notDirectory)
+        try Data("FROM scratch".utf8).write(to: dockerfileURL)
+        try Data(".build".utf8).write(to: gitignoreURL)
+        try Data("generated".utf8).write(to: suffixedGitignoreURL)
+        let engine = CapturingTerminalEngine()
+        var commands = [String]()
+        var externallyOpened = [URL]()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true,
+            browserLauncherURL: nil,
+            textFileOpenCommandRunner: { command, _, _, completion in
+                commands.append(command)
+                completion(0)
+            },
+            externalFileOpener: { url in
+                externallyOpened.append(url)
+                return true
+            }
+        )
+        let workspaceID = model.store.selectedWorkspaceID
+        model.updateGlobalSettings {
+            $0.nativeTextFilePatterns = []
+            $0.textFileOpenCommand = "global-editor {file}"
+        }
+        model.updateWorkspaceSettings(workspaceID) {
+            $0.nativeTextFilePatterns = ["Dockerfile", ".gitignore"]
+            $0.textFileOpenCommand = "workspace-editor {file}"
+        }
+        let initialTabCount = model.selectedWorkspace.allTabs.count
+        let session = try XCTUnwrap(engine.sessions.first)
+
+        session.onEvent?(.openURL(dockerfileURL))
+        session.onEvent?(.openURL(gitignoreURL))
+        session.onEvent?(.openURL(suffixedGitignoreURL))
+
+        XCTAssertEqual(
+            commands,
+            [
+                "exec workspace-editor '\(dockerfileURL.path)'",
+                "exec workspace-editor '\(gitignoreURL.path)'",
+            ]
+        )
+        XCTAssertEqual(externallyOpened, [suffixedGitignoreURL])
+        XCTAssertEqual(model.selectedWorkspace.allTabs.count, initialTabCount)
+    }
+
+    func testTerminalTextFileWithWhitespaceCommandOpensExternallyWithoutRunningCommand() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let jsonURL = directory.appending(path: "settings.json", directoryHint: .notDirectory)
+        try Data("{}".utf8).write(to: jsonURL)
+        let engine = CapturingTerminalEngine()
+        var externallyOpened = [URL]()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true,
+            textFileOpenCommandRunner: { _, _, _, _ in
+                XCTFail("An empty text-file command must not run")
+            },
+            externalFileOpener: { url in
+                externallyOpened.append(url)
+                return true
+            }
+        )
+        model.updateGlobalSettings { $0.textFileOpenCommand = " \n\t " }
+        let initialTabCount = model.selectedWorkspace.allTabs.count
+
+        try XCTUnwrap(engine.sessions.first).onEvent?(.openURL(jsonURL))
+
+        XCTAssertEqual(externallyOpened, [jsonURL])
+        XCTAssertEqual(model.selectedWorkspace.allTabs.count, initialTabCount)
+    }
+
+    func testFailedTextFileLauncherFallsBackToExternalApplication() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let markdownURL = directory.appending(path: "README.md", directoryHint: .notDirectory)
+        try Data("# Read me\n".utf8).write(to: markdownURL)
+        let engine = CapturingTerminalEngine()
+        var externallyOpened = [URL]()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true,
+            textFileOpenCommandRunner: { _, _, _, _ in
                 throw MarkdownLauncherTestError.launchFailed
             },
-            markdownOpenCommandAvailabilityChecker: { executable in
+            textFileOpenCommandAvailabilityChecker: { executable in
                 XCTAssertEqual(executable, "ide")
+                return true
+            },
+            externalFileOpener: { url in
+                externallyOpened.append(url)
                 return true
             }
         )
@@ -1083,39 +1235,40 @@ final class AppModelTests: XCTestCase {
 
         originatingSession.onEvent?(.openURL(markdownURL))
 
-        XCTAssertEqual(model.selectedWorkspace.allTabs.count, initialTabCount + 1)
-        guard let browser = model.selectedTab?.browserSession else {
-            return XCTFail("Expected MyTerm browser fallback")
-        }
-        XCTAssertEqual(browser.url, markdownURL)
-        XCTAssertNotNil(model.errorDescription)
+        XCTAssertEqual(model.selectedWorkspace.allTabs.count, initialTabCount)
+        XCTAssertEqual(externallyOpened, [markdownURL])
+        XCTAssertNil(model.errorDescription)
     }
 
-    func testMissingDefaultMarkdownLauncherFallsBackToMyTermBrowser() throws {
+    func testMissingDefaultTextLauncherFallsBackToExternalApplication() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
         let markdownURL = directory.appending(path: "README.md", directoryHint: .notDirectory)
         try Data("# Read me\n".utf8).write(to: markdownURL)
         let engine = CapturingTerminalEngine()
+        var externallyOpened = [URL]()
         let model = try AppModel(
             channel: .development,
             applicationSupportDirectory: directory,
             terminalEngine: engine,
             startsTerminalProcesses: true,
-            markdownOpenCommandRunner: { _, _, _, _ in
+            textFileOpenCommandRunner: { _, _, _, _ in
                 XCTFail("The unavailable default launcher must not run")
             },
-            markdownOpenCommandAvailabilityChecker: { executable in
+            textFileOpenCommandAvailabilityChecker: { executable in
                 XCTAssertEqual(executable, "ide")
                 return false
+            },
+            externalFileOpener: { url in
+                externallyOpened.append(url)
+                return true
             }
         )
         let originatingSession = try XCTUnwrap(engine.sessions.first)
 
         originatingSession.onEvent?(.openURL(markdownURL))
 
-        let browser = try XCTUnwrap(model.selectedTab?.browserSession)
-        XCTAssertEqual(browser.url, markdownURL)
+        XCTAssertEqual(externallyOpened, [markdownURL])
         XCTAssertNil(model.errorDescription)
     }
 
@@ -1129,7 +1282,7 @@ final class AppModelTests: XCTestCase {
             applicationSupportDirectory: directory,
             terminalEngine: nil,
             startsTerminalProcesses: false,
-            markdownOpenCommandAvailabilityChecker: { _ in false }
+            textFileOpenCommandAvailabilityChecker: { _ in false }
         )
         let initialTabCount = model.selectedWorkspace.tabs.count
 
@@ -1143,50 +1296,80 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(model.errorDescription)
     }
 
-    func testMarkdownOpenerNonzeroExitFallsBackToMyTermBrowser() async throws {
+    func testTextFileOpenerNonzeroExitFallsBackToExternalApplication() async throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
         let markdownURL = directory.appending(path: "README.md", directoryHint: .notDirectory)
         try Data("# Read me\n".utf8).write(to: markdownURL)
-        let model = try AppModel(
-            channel: .development,
-            applicationSupportDirectory: directory,
-            terminalEngine: nil,
-            startsTerminalProcesses: false,
-            markdownOpenCommandRunner: { _, _, _, completion in
-                completion(127)
-            },
-            markdownOpenCommandAvailabilityChecker: { _ in true }
-        )
-        let initialTabCount = model.selectedWorkspace.tabs.count
-
-        model.open([markdownURL])
-        await Task.yield()
-
-        XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount + 1)
-        guard case .browser(let browser) = try XCTUnwrap(model.selectedTab?.content) else {
-            return XCTFail("Expected browser fallback after opener failure")
-        }
-        XCTAssertEqual(browser.url, markdownURL)
-        XCTAssertEqual(
-            model.errorDescription,
-            "The Markdown opener exited with status 127. The file was opened in MyTerm instead."
-        )
-    }
-
-    func testTerminalLocalFilesOpenInTheirOriginatingWorkspaceWhileDirectoriesStayTerminalTabs() throws {
-        let directory = try makeTemporaryDirectory()
-        defer { removeTemporaryDirectory(directory) }
-        let projectDirectory = directory.appending(path: "Project", directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(at: projectDirectory, withIntermediateDirectories: true)
-        let fileURL = projectDirectory.appending(path: "report.html", directoryHint: .notDirectory)
-        try Data("<html><body>Report</body></html>".utf8).write(to: fileURL)
         let engine = CapturingTerminalEngine()
+        var externallyOpened = [URL]()
         let model = try AppModel(
             channel: .development,
             applicationSupportDirectory: directory,
             terminalEngine: engine,
-            startsTerminalProcesses: true
+            startsTerminalProcesses: true,
+            textFileOpenCommandRunner: { _, _, _, completion in
+                completion(127)
+            },
+            textFileOpenCommandAvailabilityChecker: { _ in true },
+            externalFileOpener: { url in
+                externallyOpened.append(url)
+                return true
+            }
+        )
+        let initialTabCount = model.selectedWorkspace.tabs.count
+
+        try XCTUnwrap(engine.sessions.first).onEvent?(.openURL(markdownURL))
+        await Task.yield()
+
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount)
+        XCTAssertEqual(externallyOpened, [markdownURL])
+        XCTAssertNil(model.errorDescription)
+    }
+
+    func testUnsupportedTerminalFilesOpenInTheirExternalApplication() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let pdfURL = directory.appending(path: "report.pdf", directoryHint: .notDirectory)
+        try Data().write(to: pdfURL)
+        let engine = CapturingTerminalEngine()
+        var externallyOpened = [URL]()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true,
+            externalFileOpener: { url in
+                externallyOpened.append(url)
+                return true
+            }
+        )
+        let initialTabCount = model.selectedWorkspace.tabs.count
+
+        try XCTUnwrap(engine.sessions.first).onEvent?(.openURL(pdfURL))
+
+        XCTAssertEqual(externallyOpened, [pdfURL])
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount)
+    }
+
+    func testTerminalUnsupportedFilesOpenExternallyWhileDirectoriesStayTerminalTabs() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let projectDirectory = directory.appending(path: "Project", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: projectDirectory, withIntermediateDirectories: true)
+        let fileURL = projectDirectory.appending(path: "report.pdf", directoryHint: .notDirectory)
+        try Data().write(to: fileURL)
+        let engine = CapturingTerminalEngine()
+        var externallyOpened = [URL]()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true,
+            externalFileOpener: { url in
+                externallyOpened.append(url)
+                return true
+            }
         )
         let originatingWorkspaceID = model.store.selectedWorkspaceID
         let originatingTabCount = model.selectedWorkspace.allTabs.count
@@ -1200,14 +1383,10 @@ final class AppModelTests: XCTestCase {
 
         XCTAssertEqual(model.store.selectedWorkspaceID, selectedWorkspaceID)
         XCTAssertEqual(model.selectedWorkspace.tabs.count, selectedTabCount)
-        guard let originWorkspace = model.workspaces.first(where: { $0.id == originatingWorkspaceID }),
-              let browser = originWorkspace.browserSessions.first else {
-            return XCTFail("Expected the local file to open beside its originating terminal pane")
-        }
-        XCTAssertEqual(browser.url, fileURL.standardizedFileURL)
+        XCTAssertEqual(externallyOpened, [fileURL])
         XCTAssertEqual(
             model.workspaces.first(where: { $0.id == originatingWorkspaceID })?.allTabs.count,
-            originatingTabCount + 1
+            originatingTabCount
         )
 
         originatingSession.onEvent?(.openURL(projectDirectory))

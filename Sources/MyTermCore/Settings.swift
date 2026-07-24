@@ -110,12 +110,23 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
     public static let defaultFontPostScriptName = "Menlo-Regular"
     public static let defaultFontSize = 12.0
     public static let defaultScrollbackLines = 10_000
-    public static let defaultMarkdownOpenCommand = "ide browse {file}"
+    public static let defaultTextFileOpenCommand = "ide browse {file}"
+    public static let defaultNativeTextFilePatterns = [
+        "*.md", "*.markdown", "*.mdown", "*.mdx", "*.mkd", "*.mkdn",
+        "*.json", "*.jsonc", "*.json5", "*.geojson",
+        "*.yaml", "*.yml", "*.toml", "*.xml", "*.ini", "*.cfg", "*.conf",
+        "*.txt", "*.text", "*.log", "*.csv", "*.tsv",
+        "*.html", "*.htm", "*.css", "*.scss", "*.sass", "*.less", "*.js", "*.jsx", "*.ts", "*.tsx", "*.mjs", "*.cjs",
+        "*.swift", "*.c", "*.h", "*.m", "*.mm", "*.cc", "*.cpp", "*.cxx", "*.hpp", "*.cs", "*.java", "*.kt", "*.kts", "*.go", "*.rs", "*.py", "*.rb", "*.php", "*.sh", "*.zsh", "*.fish", "*.ps1", "*.sql",
+        "README", "README.md", "LICENSE", "Dockerfile", "Makefile",
+        ".env", ".gitignore", ".gitattributes", ".gitmodules", ".editorconfig", ".dockerignore", ".npmrc", ".nvmrc", ".ruby-version", ".tool-versions",
+    ]
     public static let fontSizeRange = 6.0...72.0
     public static let scrollbackLinesRange = 100...100_000
 
     public var browserDataScope: BrowserDataScope
-    public var markdownOpenCommand: String
+    public var textFileOpenCommand: String
+    public var nativeTextFilePatterns: [String]
     public var compactSidebar: Bool
     public var fontPostScriptName: String
     public var fontSize: Double
@@ -130,7 +141,8 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
 
     public init(
         browserDataScope: BrowserDataScope = .workspace,
-        markdownOpenCommand: String = TerminalPreferences.defaultMarkdownOpenCommand,
+        textFileOpenCommand: String = TerminalPreferences.defaultTextFileOpenCommand,
+        nativeTextFilePatterns: [String] = TerminalPreferences.defaultNativeTextFilePatterns,
         compactSidebar: Bool = true,
         fontPostScriptName: String = TerminalPreferences.defaultFontPostScriptName,
         fontSize: Double = TerminalPreferences.defaultFontSize,
@@ -139,12 +151,13 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         shell: TerminalShell = .loginShell,
         newSessionWorkingDirectory: NewSessionWorkingDirectoryPolicy = .home,
         scrollbackLines: Int = TerminalPreferences.defaultScrollbackLines,
-        cursorShape: TerminalCursorShape = .beam,
+        cursorShape: TerminalCursorShape = .block,
         cursorBlink: Bool = true,
         optionAsMeta: Bool = true
     ) {
         self.browserDataScope = browserDataScope
-        self.markdownOpenCommand = markdownOpenCommand.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.textFileOpenCommand = textFileOpenCommand.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.nativeTextFilePatterns = Self.normalizedNativeTextFilePatterns(nativeTextFilePatterns)
         self.compactSidebar = compactSidebar
         self.fontPostScriptName = Self.validatedFontName(fontPostScriptName)
         self.fontSize = Self.clampedFontSize(fontSize)
@@ -163,7 +176,8 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
     public func normalized() -> TerminalPreferences {
         TerminalPreferences(
             browserDataScope: browserDataScope,
-            markdownOpenCommand: markdownOpenCommand,
+            textFileOpenCommand: textFileOpenCommand,
+            nativeTextFilePatterns: nativeTextFilePatterns,
             compactSidebar: compactSidebar,
             fontPostScriptName: fontPostScriptName,
             fontSize: fontSize,
@@ -178,9 +192,29 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         )
     }
 
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        var legacyContainer = encoder.container(keyedBy: LegacyCodingKeys.self)
+        try container.encode(browserDataScope, forKey: .browserDataScope)
+        try legacyContainer.encode(textFileOpenCommand, forKey: .markdownOpenCommand)
+        try container.encode(nativeTextFilePatterns, forKey: .nativeTextFilePatterns)
+        try container.encode(compactSidebar, forKey: .compactSidebar)
+        try container.encode(fontPostScriptName, forKey: .fontPostScriptName)
+        try container.encode(fontSize, forKey: .fontSize)
+        try container.encode(terminalAppearance, forKey: .terminalAppearance)
+        try container.encode(terminalTheme, forKey: .terminalTheme)
+        try container.encode(shell, forKey: .shell)
+        try container.encode(newSessionWorkingDirectory, forKey: .newSessionWorkingDirectory)
+        try container.encode(scrollbackLines, forKey: .scrollbackLines)
+        try container.encode(cursorShape, forKey: .cursorShape)
+        try container.encode(cursorBlink, forKey: .cursorBlink)
+        try container.encode(optionAsMeta, forKey: .optionAsMeta)
+    }
+
     private enum CodingKeys: String, CodingKey {
         case browserDataScope
-        case markdownOpenCommand
+        case textFileOpenCommand
+        case nativeTextFilePatterns
         case compactSidebar
         case fontPostScriptName
         case fontSize
@@ -194,11 +228,19 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         case optionAsMeta
     }
 
+    private enum LegacyCodingKeys: String, CodingKey {
+        case markdownOpenCommand
+    }
+
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        let legacyContainer = try decoder.container(keyedBy: LegacyCodingKeys.self)
         self.init(
             browserDataScope: (try? container.decode(BrowserDataScope.self, forKey: .browserDataScope)) ?? .workspace,
-            markdownOpenCommand: (try? container.decode(String.self, forKey: .markdownOpenCommand)) ?? Self.defaultMarkdownOpenCommand,
+            textFileOpenCommand: (try? container.decode(String.self, forKey: .textFileOpenCommand))
+                ?? (try? legacyContainer.decode(String.self, forKey: .markdownOpenCommand))
+                ?? Self.defaultTextFileOpenCommand,
+            nativeTextFilePatterns: (try? container.decode([String].self, forKey: .nativeTextFilePatterns)) ?? Self.defaultNativeTextFilePatterns,
             compactSidebar: (try? container.decode(Bool.self, forKey: .compactSidebar)) ?? true,
             fontPostScriptName: (try? container.decode(String.self, forKey: .fontPostScriptName)) ?? Self.defaultFontPostScriptName,
             fontSize: (try? container.decode(Double.self, forKey: .fontSize)) ?? Self.defaultFontSize,
@@ -207,7 +249,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
             shell: (try? container.decode(TerminalShell.self, forKey: .shell)) ?? .loginShell,
             newSessionWorkingDirectory: (try? container.decode(NewSessionWorkingDirectoryPolicy.self, forKey: .newSessionWorkingDirectory)) ?? .home,
             scrollbackLines: (try? container.decode(Int.self, forKey: .scrollbackLines)) ?? Self.defaultScrollbackLines,
-            cursorShape: (try? container.decode(TerminalCursorShape.self, forKey: .cursorShape)) ?? .beam,
+            cursorShape: (try? container.decode(TerminalCursorShape.self, forKey: .cursorShape)) ?? .block,
             cursorBlink: (try? container.decode(Bool.self, forKey: .cursorBlink)) ?? true,
             optionAsMeta: (try? container.decode(Bool.self, forKey: .optionAsMeta)) ?? true
         )
@@ -226,11 +268,32 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
     private static func clampedScrollbackLines(_ value: Int) -> Int {
         min(max(value, scrollbackLinesRange.lowerBound), scrollbackLinesRange.upperBound)
     }
+
+    public func matchesNativeTextFile(_ url: URL) -> Bool {
+        let filename = url.lastPathComponent.lowercased()
+        return nativeTextFilePatterns.contains { pattern in
+            let normalized = pattern.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !normalized.isEmpty else { return false }
+            if normalized.hasPrefix("*.") {
+                let suffix = String(normalized.dropFirst())
+                return suffix.count > 1 && filename.hasSuffix(suffix)
+            }
+            return filename == normalized
+        }
+    }
+
+    private static func normalizedNativeTextFilePatterns(_ patterns: [String]) -> [String] {
+        patterns.compactMap { pattern in
+            let trimmed = pattern.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+    }
 }
 
 public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendable {
     public var browserDataScope: BrowserDataScope?
-    public var markdownOpenCommand: String?
+    public var textFileOpenCommand: String?
+    public var nativeTextFilePatterns: [String]?
     public var compactSidebar: Bool?
     public var fontPostScriptName: String?
     public var fontSize: Double?
@@ -247,7 +310,8 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
 
     private enum CodingKeys: String, CodingKey {
         case browserDataScope
-        case markdownOpenCommand
+        case textFileOpenCommand
+        case nativeTextFilePatterns
         case compactSidebar
         case fontPostScriptName
         case fontSize
@@ -261,11 +325,18 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         case optionAsMeta
     }
 
+    private enum LegacyCodingKeys: String, CodingKey {
+        case markdownOpenCommand
+    }
+
     public init(from decoder: Decoder) throws {
         self.init()
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        let legacyContainer = try decoder.container(keyedBy: LegacyCodingKeys.self)
         browserDataScope = try? container.decodeIfPresent(BrowserDataScope.self, forKey: .browserDataScope)
-        markdownOpenCommand = try? container.decodeIfPresent(String.self, forKey: .markdownOpenCommand)
+        textFileOpenCommand = (try? container.decodeIfPresent(String.self, forKey: .textFileOpenCommand))
+            ?? (try? legacyContainer.decodeIfPresent(String.self, forKey: .markdownOpenCommand))
+        nativeTextFilePatterns = try? container.decodeIfPresent([String].self, forKey: .nativeTextFilePatterns)
         compactSidebar = try? container.decodeIfPresent(Bool.self, forKey: .compactSidebar)
         fontPostScriptName = try? container.decodeIfPresent(String.self, forKey: .fontPostScriptName)
         fontSize = try? container.decodeIfPresent(Double.self, forKey: .fontSize)
@@ -279,10 +350,30 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         optionAsMeta = try? container.decodeIfPresent(Bool.self, forKey: .optionAsMeta)
     }
 
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        var legacyContainer = encoder.container(keyedBy: LegacyCodingKeys.self)
+        try container.encodeIfPresent(browserDataScope, forKey: .browserDataScope)
+        try legacyContainer.encodeIfPresent(textFileOpenCommand, forKey: .markdownOpenCommand)
+        try container.encodeIfPresent(nativeTextFilePatterns, forKey: .nativeTextFilePatterns)
+        try container.encodeIfPresent(compactSidebar, forKey: .compactSidebar)
+        try container.encodeIfPresent(fontPostScriptName, forKey: .fontPostScriptName)
+        try container.encodeIfPresent(fontSize, forKey: .fontSize)
+        try container.encodeIfPresent(terminalAppearance, forKey: .terminalAppearance)
+        try container.encodeIfPresent(terminalTheme, forKey: .terminalTheme)
+        try container.encodeIfPresent(shell, forKey: .shell)
+        try container.encodeIfPresent(newSessionWorkingDirectory, forKey: .newSessionWorkingDirectory)
+        try container.encodeIfPresent(scrollbackLines, forKey: .scrollbackLines)
+        try container.encodeIfPresent(cursorShape, forKey: .cursorShape)
+        try container.encodeIfPresent(cursorBlink, forKey: .cursorBlink)
+        try container.encodeIfPresent(optionAsMeta, forKey: .optionAsMeta)
+    }
+
     public func applying(to base: TerminalPreferences) -> TerminalPreferences {
         TerminalPreferences(
             browserDataScope: browserDataScope ?? base.browserDataScope,
-            markdownOpenCommand: markdownOpenCommand ?? base.markdownOpenCommand,
+            textFileOpenCommand: textFileOpenCommand ?? base.textFileOpenCommand,
+            nativeTextFilePatterns: nativeTextFilePatterns ?? base.nativeTextFilePatterns,
             compactSidebar: compactSidebar ?? base.compactSidebar,
             fontPostScriptName: fontPostScriptName ?? base.fontPostScriptName,
             fontSize: fontSize ?? base.fontSize,

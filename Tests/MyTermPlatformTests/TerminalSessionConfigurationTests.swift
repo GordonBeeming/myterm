@@ -187,6 +187,146 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         XCTAssertNil(TerminalInputTranslator.sequence(for: unrelatedShortcut, kittyKeyboardEnabled: false))
     }
 
+    func testWordSelectionStartsAMarkedShellRegionAndExtendsIt() {
+        var selection = TerminalWordSelectionInputState()
+        let selectLeft = TerminalInputEvent(
+            keyCode: 123,
+            charactersIgnoringModifiers: "",
+            modifiers: [.shift, .option]
+        )
+
+        XCTAssertEqual(selection.sequence(for: selectLeft, kittyKeyboardEnabled: false), [0x00, 0x1B, 0x62])
+        XCTAssertEqual(selection.sequence(for: selectLeft, kittyKeyboardEnabled: false), [0x1B, 0x62])
+        XCTAssertEqual(selection.netWordMovement, -2)
+    }
+
+    func testWordSelectionTracksNetMovementWhenDirectionReverses() {
+        var selection = TerminalWordSelectionInputState()
+        let selectLeft = TerminalInputEvent(keyCode: 123, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
+        let selectRight = TerminalInputEvent(keyCode: 124, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
+
+        XCTAssertEqual(selection.sequence(for: selectLeft, kittyKeyboardEnabled: false), [0x00, 0x1B, 0x62])
+        XCTAssertEqual(selection.sequence(for: selectLeft, kittyKeyboardEnabled: false), [0x1B, 0x62])
+        XCTAssertEqual(selection.sequence(for: selectRight, kittyKeyboardEnabled: false), [0x1B, 0x66])
+        XCTAssertEqual(selection.netWordMovement, -1)
+        XCTAssertEqual(selection.sequence(for: selectRight, kittyKeyboardEnabled: false), [0x1B, 0x66])
+        XCTAssertEqual(selection.netWordMovement, 0)
+    }
+
+    func testWordSelectionDeletesTheMarkedWordsInEitherDirection() {
+        let selectLeft = TerminalInputEvent(keyCode: 123, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
+        let selectRight = TerminalInputEvent(keyCode: 124, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
+        let backspace = TerminalInputEvent(keyCode: 51, charactersIgnoringModifiers: "\u{7F}", modifiers: [])
+        let forwardDelete = TerminalInputEvent(keyCode: 117, charactersIgnoringModifiers: "", modifiers: [])
+
+        var leftSelection = TerminalWordSelectionInputState()
+        _ = leftSelection.sequence(for: selectLeft, kittyKeyboardEnabled: false)
+        _ = leftSelection.sequence(for: selectLeft, kittyKeyboardEnabled: false)
+        XCTAssertEqual(leftSelection.sequence(for: backspace, kittyKeyboardEnabled: false), [0x1B, 0x64, 0x1B, 0x64])
+        XCTAssertEqual(leftSelection.netWordMovement, 0)
+
+        var rightSelection = TerminalWordSelectionInputState()
+        _ = rightSelection.sequence(for: selectRight, kittyKeyboardEnabled: false)
+        _ = rightSelection.sequence(for: selectRight, kittyKeyboardEnabled: false)
+        XCTAssertEqual(rightSelection.sequence(for: forwardDelete, kittyKeyboardEnabled: false), [0x1B, 0x7F, 0x1B, 0x7F])
+        XCTAssertEqual(rightSelection.netWordMovement, 0)
+    }
+
+    func testWordSelectionCancelsOnOrdinaryInputAndPassesThroughOutsideShellEditing() {
+        let selectLeft = TerminalInputEvent(keyCode: 123, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
+        let plainInput = TerminalInputEvent(keyCode: 0, charactersIgnoringModifiers: "a", modifiers: [])
+        let backspace = TerminalInputEvent(keyCode: 51, charactersIgnoringModifiers: "\u{7F}", modifiers: [])
+
+        var selection = TerminalWordSelectionInputState()
+        _ = selection.sequence(for: selectLeft, kittyKeyboardEnabled: false)
+        XCTAssertNil(selection.sequence(for: plainInput, kittyKeyboardEnabled: false))
+        XCTAssertNil(selection.sequence(for: backspace, kittyKeyboardEnabled: false))
+
+        XCTAssertNil(selection.sequence(for: selectLeft, kittyKeyboardEnabled: true))
+        XCTAssertEqual(selection.netWordMovement, 0)
+
+        _ = selection.sequence(for: selectLeft, kittyKeyboardEnabled: false)
+        XCTAssertNil(
+            selection.sequence(
+                for: selectLeft,
+                kittyKeyboardEnabled: false,
+                normalShellEditing: false
+            )
+        )
+        XCTAssertEqual(selection.netWordMovement, 0)
+    }
+
+    func testShellWordSelectionEditingRequiresTheShellForegroundProcessGroup() {
+        XCTAssertTrue(
+            MyTermLocalProcessTerminalView.isShellWordSelectionEditing(
+                isAlternateScreen: false,
+                childFileDescriptor: 4,
+                shellProcessID: 101,
+                foregroundProcessGroup: 101,
+                shellProcessGroup: 101
+            )
+        )
+        XCTAssertFalse(
+            MyTermLocalProcessTerminalView.isShellWordSelectionEditing(
+                isAlternateScreen: false,
+                childFileDescriptor: 4,
+                shellProcessID: 101,
+                foregroundProcessGroup: 202,
+                shellProcessGroup: 101
+            )
+        )
+    }
+
+    func testShellWordSelectionEditingRejectsInvalidProcessStateAndAlternateScreens() {
+        let validState = (childFileDescriptor: Int32(4), shellProcessID: pid_t(101), foregroundProcessGroup: pid_t(101), shellProcessGroup: pid_t(101))
+
+        XCTAssertFalse(
+            MyTermLocalProcessTerminalView.isShellWordSelectionEditing(
+                isAlternateScreen: true,
+                childFileDescriptor: validState.childFileDescriptor,
+                shellProcessID: validState.shellProcessID,
+                foregroundProcessGroup: validState.foregroundProcessGroup,
+                shellProcessGroup: validState.shellProcessGroup
+            )
+        )
+        XCTAssertFalse(
+            MyTermLocalProcessTerminalView.isShellWordSelectionEditing(
+                isAlternateScreen: false,
+                childFileDescriptor: -1,
+                shellProcessID: validState.shellProcessID,
+                foregroundProcessGroup: validState.foregroundProcessGroup,
+                shellProcessGroup: validState.shellProcessGroup
+            )
+        )
+        XCTAssertFalse(
+            MyTermLocalProcessTerminalView.isShellWordSelectionEditing(
+                isAlternateScreen: false,
+                childFileDescriptor: validState.childFileDescriptor,
+                shellProcessID: 0,
+                foregroundProcessGroup: validState.foregroundProcessGroup,
+                shellProcessGroup: validState.shellProcessGroup
+            )
+        )
+        XCTAssertFalse(
+            MyTermLocalProcessTerminalView.isShellWordSelectionEditing(
+                isAlternateScreen: false,
+                childFileDescriptor: validState.childFileDescriptor,
+                shellProcessID: validState.shellProcessID,
+                foregroundProcessGroup: -1,
+                shellProcessGroup: validState.shellProcessGroup
+            )
+        )
+        XCTAssertFalse(
+            MyTermLocalProcessTerminalView.isShellWordSelectionEditing(
+                isAlternateScreen: false,
+                childFileDescriptor: validState.childFileDescriptor,
+                shellProcessID: validState.shellProcessID,
+                foregroundProcessGroup: validState.foregroundProcessGroup,
+                shellProcessGroup: -1
+            )
+        )
+    }
+
     func testCommandVOnlyBecomesControlVForImageClipboardContent() {
         let commandV = TerminalInputEvent(keyCode: 9, charactersIgnoringModifiers: "v", modifiers: [.command])
 

@@ -26,6 +26,72 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(persisted, store.snapshot)
     }
 
+    func testTextFilePatternsMatchExtensionsExactNamesAndDotfiles() {
+        let preferences = TerminalPreferences(
+            nativeTextFilePatterns: ["*.json", "*.d.ts", ".env", ".gitignore", "Dockerfile"]
+        )
+        let emptySuffixPreferences = TerminalPreferences(nativeTextFilePatterns: ["*."])
+
+        XCTAssertTrue(preferences.matchesNativeTextFile(URL(fileURLWithPath: "/tmp/settings.JSON")))
+        XCTAssertTrue(preferences.matchesNativeTextFile(URL(fileURLWithPath: "/tmp/settings.D.TS")))
+        XCTAssertTrue(preferences.matchesNativeTextFile(URL(fileURLWithPath: "/tmp/.ENV")))
+        XCTAssertTrue(preferences.matchesNativeTextFile(URL(fileURLWithPath: "/tmp/.GITIGNORE")))
+        XCTAssertTrue(preferences.matchesNativeTextFile(URL(fileURLWithPath: "/tmp/dockerfile")))
+        XCTAssertFalse(preferences.matchesNativeTextFile(URL(fileURLWithPath: "/tmp/foo.gitignore")))
+        XCTAssertFalse(preferences.matchesNativeTextFile(URL(fileURLWithPath: "/tmp/report.pdf")))
+        XCTAssertFalse(preferences.matchesNativeTextFile(URL(fileURLWithPath: "/tmp/json")))
+        XCTAssertFalse(emptySuffixPreferences.matchesNativeTextFile(URL(fileURLWithPath: "/tmp/anything")))
+    }
+
+    func testLegacyMarkdownCommandDecodesIntoTextFileCommand() throws {
+        let data = Data("{\"markdownOpenCommand\":\"code --goto {file}\",\"cursorShape\":\"beam\"}".utf8)
+        let preferences = try JSONDecoder().decode(TerminalPreferences.self, from: data)
+
+        XCTAssertEqual(preferences.textFileOpenCommand, "code --goto {file}")
+        XCTAssertEqual(preferences.nativeTextFilePatterns, TerminalPreferences.defaultNativeTextFilePatterns)
+        XCTAssertEqual(preferences.cursorShape, .beam)
+
+        let overrides = try JSONDecoder().decode(
+            TerminalPreferencesOverrides.self,
+            from: Data("{\"markdownOpenCommand\":\"zed {file}\"}".utf8)
+        )
+        XCTAssertEqual(overrides.textFileOpenCommand, "zed {file}")
+    }
+
+    func testTextFileCommandPersistsUnderTheLegacyKeyForGlobalAndScopedSettings() throws {
+        let url = temporaryURL()
+        let store = try WorkspaceStore(persistenceURL: url)
+        let folderID = try store.createFolder(title: "Work")
+        let workspaceID = store.selectedWorkspaceID
+        try store.moveWorkspace(workspaceID, to: folderID)
+        let inheritedWorkspaceID = try store.createWorkspace(title: "Inherited", folderID: folderID)
+        try store.updateGlobalSettings { $0.textFileOpenCommand = "global-editor {file}" }
+        try store.updateFolderSettings(folderID) { $0.textFileOpenCommand = "folder-editor {file}" }
+        try store.updateWorkspaceSettings(workspaceID) { $0.textFileOpenCommand = "workspace-editor {file}" }
+
+        let snapshot = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
+        )
+        let globalSettings = try XCTUnwrap(snapshot["globalSettings"] as? [String: Any])
+        XCTAssertEqual(globalSettings["markdownOpenCommand"] as? String, "global-editor {file}")
+        XCTAssertNil(globalSettings["textFileOpenCommand"])
+
+        let folder = try XCTUnwrap((snapshot["folders"] as? [[String: Any]])?.first)
+        let folderOverrides = try XCTUnwrap(folder["settingsOverrides"] as? [String: Any])
+        XCTAssertEqual(folderOverrides["markdownOpenCommand"] as? String, "folder-editor {file}")
+        XCTAssertNil(folderOverrides["textFileOpenCommand"])
+
+        let workspace = try XCTUnwrap((snapshot["workspaces"] as? [[String: Any]])?.first)
+        let workspaceOverrides = try XCTUnwrap(workspace["settingsOverrides"] as? [String: Any])
+        XCTAssertEqual(workspaceOverrides["markdownOpenCommand"] as? String, "workspace-editor {file}")
+        XCTAssertNil(workspaceOverrides["textFileOpenCommand"])
+
+        let restored = try WorkspaceStore(persistenceURL: url)
+        XCTAssertEqual(restored.globalSettings.textFileOpenCommand, "global-editor {file}")
+        XCTAssertEqual(try restored.resolvedSettings(for: inheritedWorkspaceID).textFileOpenCommand, "folder-editor {file}")
+        XCTAssertEqual(try restored.resolvedSettings(for: workspaceID).textFileOpenCommand, "workspace-editor {file}")
+    }
+
     func testV1MigrationMirrorsSelectedGeometryAndFlattensInactiveLeavesLosslessly() throws {
         let url = temporaryURL()
         let workspaceID = WorkspaceID()

@@ -212,6 +212,7 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
     private var shouldFocusWhenAttachedToWindow = false
     private var paneIsActive = true
     private var activeCaretColor: NSColor?
+    private var wordSelectionInput = TerminalWordSelectionInputState()
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -328,6 +329,38 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
         feed(text: prelude)
     }
 
+    nonisolated static func isShellWordSelectionEditing(
+        isAlternateScreen: Bool,
+        childFileDescriptor: Int32,
+        shellProcessID: pid_t,
+        foregroundProcessGroup: pid_t,
+        shellProcessGroup: pid_t
+    ) -> Bool {
+        !isAlternateScreen
+            && childFileDescriptor >= 0
+            && shellProcessID > 0
+            && foregroundProcessGroup > 0
+            && shellProcessGroup > 0
+            && foregroundProcessGroup == shellProcessGroup
+    }
+
+    private func isShellWordSelectionEditing() -> Bool {
+        let childFileDescriptor = process.childfd
+        let shellProcessID = process.shellPid
+        guard !getTerminal().isCurrentBufferAlternate,
+              childFileDescriptor >= 0,
+              shellProcessID > 0 else {
+            return false
+        }
+        return Self.isShellWordSelectionEditing(
+            isAlternateScreen: false,
+            childFileDescriptor: childFileDescriptor,
+            shellProcessID: shellProcessID,
+            foregroundProcessGroup: tcgetpgrp(childFileDescriptor),
+            shellProcessGroup: getpgid(shellProcessID)
+        )
+    }
+
     private func installKeyEventMonitor() {
         keyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, self.window?.firstResponder === self else { return event }
@@ -336,10 +369,19 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
                 charactersIgnoringModifiers: event.charactersIgnoringModifiers ?? "",
                 modifiers: TerminalInputModifiers(event.modifierFlags)
             )
+            let kittyKeyboardEnabled = !self.getTerminal().keyboardEnhancementFlags.isEmpty
+            if let sequence = self.wordSelectionInput.sequence(
+                for: input,
+                kittyKeyboardEnabled: kittyKeyboardEnabled,
+                normalShellEditing: self.isShellWordSelectionEditing()
+            ) {
+                self.send(sequence)
+                return nil
+            }
             let shouldInspectPasteboard = input.keyCode == 9 && input.modifiers.meaningful == [.command]
             guard let sequence = TerminalInputTranslator.sequence(
                 for: input,
-                kittyKeyboardEnabled: !self.getTerminal().keyboardEnhancementFlags.isEmpty,
+                kittyKeyboardEnabled: kittyKeyboardEnabled,
                 clipboardContainsImage: shouldInspectPasteboard && TerminalPasteboard.containsImage(in: .general)
             ) else {
                 return event

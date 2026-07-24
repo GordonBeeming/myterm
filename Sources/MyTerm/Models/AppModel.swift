@@ -17,14 +17,15 @@ struct ActiveProcessClosePrompt: Equatable {
     let processNames: [String]
 }
 
-typealias MarkdownOpenCommandRunner = @MainActor (
+typealias TextFileOpenCommandRunner = @MainActor (
     _ command: String,
     _ environment: [String: String],
     _ currentDirectory: URL,
     _ completion: @escaping @Sendable (_ terminationStatus: Int32) -> Void
 ) throws -> Void
 
-typealias MarkdownOpenCommandAvailabilityChecker = @MainActor (_ executable: String) -> Bool
+typealias TextFileOpenCommandAvailabilityChecker = @MainActor (_ executable: String) -> Bool
+typealias ExternalFileOpener = @MainActor (_ url: URL) -> Bool
 
 @MainActor
 @Observable
@@ -40,8 +41,9 @@ final class AppModel {
     private let browserLauncherURL: URL?
     private let terminalSnapshotDelayNanoseconds: UInt64
     private let confirmClosingActiveProcesses: @MainActor (ActiveProcessClosePrompt) -> Bool
-    private let markdownOpenCommandRunner: MarkdownOpenCommandRunner
-    private let markdownOpenCommandAvailabilityChecker: MarkdownOpenCommandAvailabilityChecker
+    private let textFileOpenCommandRunner: TextFileOpenCommandRunner
+    private let textFileOpenCommandAvailabilityChecker: TextFileOpenCommandAvailabilityChecker
+    private let externalFileOpener: ExternalFileOpener
     private(set) var terminalSessions: [TerminalSessionID: any TerminalProcessSession] = [:]
     private(set) var browserControllers: [BrowserSessionID: BrowserSessionController] = [:]
     var browserAddressFocusRequest: BrowserAddressFocusRequest?
@@ -80,8 +82,9 @@ final class AppModel {
         browserLauncherURL: URL? = MyTermBrowserLauncher.executableURL(),
         terminalSnapshotDelayNanoseconds: UInt64 = 300_000_000,
         confirmClosingActiveProcesses: @escaping @MainActor (ActiveProcessClosePrompt) -> Bool = AppModel.presentActiveProcessClosePrompt,
-        markdownOpenCommandRunner: @escaping MarkdownOpenCommandRunner = AppModel.runMarkdownOpenCommand,
-        markdownOpenCommandAvailabilityChecker: @escaping MarkdownOpenCommandAvailabilityChecker = AppModel.isExecutableAvailable
+        textFileOpenCommandRunner: @escaping TextFileOpenCommandRunner = AppModel.runTextFileOpenCommand,
+        textFileOpenCommandAvailabilityChecker: @escaping TextFileOpenCommandAvailabilityChecker = AppModel.isExecutableAvailable,
+        externalFileOpener: @escaping ExternalFileOpener = AppModel.openExternally
     ) throws {
         self.channel = channel
         let supportDirectory = try applicationSupportDirectory ?? Self.applicationSupportDirectory()
@@ -95,8 +98,9 @@ final class AppModel {
         self.browserLauncherURL = browserLauncherURL
         self.terminalSnapshotDelayNanoseconds = terminalSnapshotDelayNanoseconds
         self.confirmClosingActiveProcesses = confirmClosingActiveProcesses
-        self.markdownOpenCommandRunner = markdownOpenCommandRunner
-        self.markdownOpenCommandAvailabilityChecker = markdownOpenCommandAvailabilityChecker
+        self.textFileOpenCommandRunner = textFileOpenCommandRunner
+        self.textFileOpenCommandAvailabilityChecker = textFileOpenCommandAvailabilityChecker
+        self.externalFileOpener = externalFileOpener
         browserDataProfileResolver = BrowserDataProfileResolver(channel: channel)
         if let recoveryNotice {
             Logger(subsystem: "com.gordonbeeming.myterm", category: "workspace-recovery").notice(
@@ -104,6 +108,7 @@ final class AppModel {
             )
         }
         try migrateLegacySettings()
+        try migrateTerminalCursorShape()
         try migrateLegacyBrowserDataProfiles()
         restoreRuntimeObjects()
         if let sessionID = selectedTab?.terminalSession?.id {
@@ -607,29 +612,24 @@ final class AppModel {
                         workspaceID: workspaceID ?? store.selectedWorkspaceID
                     )
                 }
-            } else if openMarkdownFile(
+            } else if workspaceID != nil, openTextFile(
                 url,
                 in: workspaceID ?? store.selectedWorkspaceID,
                 tabID: hasExactOrigin ? besideTabID : nil,
                 paneID: hasExactOrigin ? paneID : nil
             ) {
                 return
-            } else if Self.markdownFileExtensions.contains(url.pathExtension.lowercased()) {
-                openMarkdownInBrowser(
-                    url,
-                    in: workspaceID ?? store.selectedWorkspaceID,
-                    tabID: hasExactOrigin ? besideTabID : nil,
-                    paneID: hasExactOrigin ? paneID : nil
-                )
-            } else if hasExactOrigin, let workspaceID, let besideTabID, let paneID {
-                createBrowserPane(url: url, in: workspaceID, tabID: besideTabID, beside: paneID)
-            } else if let workspaceID {
-                createBrowserTab(url: url, in: workspaceID)
-            } else {
+            } else if workspaceID != nil {
+                openExternally(url)
+            } else if Self.isExecutableOrScript(url) {
                 createTerminalTab(
                     workingDirectory: url.deletingLastPathComponent(),
                     initialCommand: Self.shellQuote(url.path)
                 )
+            } else if Self.markdownFileExtensions.contains(url.pathExtension.lowercased()) {
+                openMarkdownInBrowser(url, in: store.selectedWorkspaceID, tabID: nil, paneID: nil)
+            } else {
+                openExternally(url)
             }
             return
         }
@@ -657,21 +657,25 @@ final class AppModel {
         }
     }
 
-    private func openMarkdownFile(
+    private func openTextFile(
         _ url: URL,
         in workspaceID: WorkspaceID,
         tabID: TabID?,
         paneID: PaneID?
     ) -> Bool {
-        guard Self.markdownFileExtensions.contains(url.pathExtension.lowercased()) else { return false }
+        guard (try? store.resolvedSettings(for: workspaceID).matchesNativeTextFile(url)) == true else { return false }
 
         do {
             let settings = try store.resolvedSettings(for: workspaceID)
-            let template = settings.markdownOpenCommand.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !template.isEmpty else { return false }
-            if template == TerminalPreferences.defaultMarkdownOpenCommand,
-               !markdownOpenCommandAvailabilityChecker("ide") {
-                return false
+            let template = settings.textFileOpenCommand.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !template.isEmpty else {
+                openExternally(url)
+                return true
+            }
+            if template == TerminalPreferences.defaultTextFileOpenCommand,
+               !textFileOpenCommandAvailabilityChecker("ide") {
+                openExternally(url)
+                return true
             }
 
             let quotedPath = Self.shellQuote(url.path)
@@ -696,7 +700,7 @@ final class AppModel {
                 pathPrefix = ""
             }
 
-            try markdownOpenCommandRunner(
+            try textFileOpenCommandRunner(
                 "\(pathPrefix)exec \(command)",
                 environment,
                 url.deletingLastPathComponent()
@@ -704,13 +708,12 @@ final class AppModel {
                 guard terminationStatus != 0 else { return }
                 Task { @MainActor [weak self] in
                     guard let self else { return }
-                    self.errorDescription = "The Markdown opener exited with status \(terminationStatus). The file was opened in MyTerm instead."
-                    self.openMarkdownInBrowser(url, in: workspaceID, tabID: tabID, paneID: paneID)
+                    self.openExternally(url, failureDescription: "The text-file opener exited with status \(terminationStatus).")
                 }
             }
         } catch {
-            present(error)
-            return false
+            openExternally(url, failureDescription: "The text-file opener could not start: \(error.localizedDescription)")
+            return true
         }
         return true
     }
@@ -734,7 +737,13 @@ final class AppModel {
         }
     }
 
-    private static func runMarkdownOpenCommand(
+    private func openExternally(_ url: URL, failureDescription: String? = nil) {
+        if !externalFileOpener(url) {
+            errorDescription = failureDescription ?? "MyTerm could not open \(url.path) in its macOS application."
+        }
+    }
+
+    private static func runTextFileOpenCommand(
         _ command: String,
         environment: [String: String],
         currentDirectory: URL,
@@ -751,6 +760,10 @@ final class AppModel {
             completion(process.terminationStatus)
         }
         try process.run()
+    }
+
+    private static func openExternally(_ url: URL) -> Bool {
+        NSWorkspace.shared.open(url)
     }
 
     private static func isExecutableAvailable(_ executable: String) -> Bool {
@@ -771,6 +784,15 @@ final class AppModel {
     private static let markdownFileExtensions: Set<String> = [
         "markdown", "md", "mdown", "mdx", "mkd", "mkdn",
     ]
+
+    private static let scriptFileExtensions: Set<String> = [
+        "command", "sh", "bash", "zsh", "fish", "ps1", "py", "rb", "pl", "php",
+    ]
+
+    private static func isExecutableOrScript(_ url: URL) -> Bool {
+        FileManager.default.isExecutableFile(atPath: url.path)
+            || scriptFileExtensions.contains(url.pathExtension.lowercased())
+    }
 
     private func createTerminalTab(workingDirectory: URL, initialCommand: String?) {
         perform {
@@ -1528,6 +1550,14 @@ final class AppModel {
             }
         }
         browserSettings.markTerminalPreferencesMigrationComplete()
+    }
+
+    private func migrateTerminalCursorShape() throws {
+        guard browserSettings.needsTerminalCursorShapeMigration else { return }
+        if store.globalSettings.cursorShape == .beam {
+            try store.updateGlobalSettings { $0.cursorShape = .block }
+        }
+        browserSettings.markTerminalCursorShapeMigrationComplete()
     }
 
     private func migrateLegacyBrowserDataProfiles() throws {

@@ -43,7 +43,7 @@ Tabs can be dragged to reorder within a pane group, dropped into another group, 
 
 Every terminal process also receives a `BROWSER` launcher and a narrow `open` shim inside the app bundle. Tools such as Codex, Claude, Plannotator, and `ide browse` send their HTTP and HTTPS links back beside the originating pane, even if another workspace has since become active. MyTerm does not become the macOS default browser.
 
-A tool that explicitly invokes `/usr/bin/open` bypasses MyTerm and can still open externally. Non-web `open` requests retain their normal system handling. Markdown file links use the scoped **Open Markdown files with** command in Browser Settings, which defaults to `ide browse {file}`; clearing it opens Markdown directly in MyTerm's browser.
+A tool that explicitly invokes `/usr/bin/open` bypasses MyTerm and can still open externally. Non-web `open` requests retain their normal system handling. Terminal links to configured text files use the scoped **Open text files with** command in Browser Settings, which defaults to `ide browse {file}`. Use suffix patterns such as `*.json` for Markdown, JSON, source, and config files; literal names such as `README`, `Dockerfile`, and `.gitignore` match exactly. Unsupported files and failed or empty text-file commands open in their macOS application instead of MyTerm's browser.
 
 ## Browser sessions and passkeys
 

@@ -353,16 +353,30 @@ struct SettingsView: View {
                 ScopedSettingRow(
                     model: model,
                     scope: scope,
-                    title: "Open Markdown files with",
-                    global: \TerminalPreferences.markdownOpenCommand,
-                    override: \TerminalPreferencesOverrides.markdownOpenCommand
+                    title: "Open text files with",
+                    global: \TerminalPreferences.textFileOpenCommand,
+                    override: \TerminalPreferencesOverrides.textFileOpenCommand
                 ) { value in
                     TextField("Command", text: value)
                         .frame(width: 260)
-                        .accessibilityLabel("Command for opening Markdown files")
+                        .accessibilityLabel("Command for opening text files")
                 }
 
-                Text("Use {file} where the quoted file path should be inserted. If it is omitted, MyTerm appends the file path. Leave the command empty to open Markdown directly in MyTerm's browser.")
+                ScopedSettingRow(
+                    model: model,
+                    scope: scope,
+                    title: "Text file patterns",
+                    global: \TerminalPreferences.nativeTextFilePatterns,
+                    override: \TerminalPreferencesOverrides.nativeTextFilePatterns
+                ) { value in
+                    TextEditor(text: textFilePatternsBinding(value))
+                        .font(.system(.body, design: .monospaced))
+                        .multilineTextAlignment(.leading)
+                        .frame(width: 260, height: 110)
+                        .accessibilityLabel("Patterns for files opened as text")
+                }
+
+                Text("Use one pattern per line. Extension suffixes use *.json; literal names such as Dockerfile and .gitignore match exactly. Terminal file links matching these patterns use the command; other files open in their macOS application. Use {file} where the quoted file path should be inserted. If it is omitted, MyTerm appends the file path. Leave the command empty to open matching files externally.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -384,6 +398,13 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    private func textFilePatternsBinding(_ value: Binding<[String]>) -> Binding<String> {
+        Binding(
+            get: { value.wrappedValue.joined(separator: "\n") },
+            set: { value.wrappedValue = $0.components(separatedBy: .newlines) }
+        )
     }
 
     private var passkeyDescription: String {
