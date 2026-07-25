@@ -199,7 +199,7 @@ final class TerminalSessionConfigurationTests: XCTestCase {
 
         XCTAssertEqual(selection.sequence(for: selectLeft, kittyKeyboardEnabled: false), [0x00, 0x1B, 0x62])
         XCTAssertEqual(selection.sequence(for: selectLeft, kittyKeyboardEnabled: false), [0x1B, 0x62])
-        XCTAssertEqual(selection.netWordMovement, -2)
+        XCTAssertEqual(selection.netCharacterMovement, -2)
     }
 
     func testWordSelectionTracksNetMovementWhenDirectionReverses() {
@@ -210,12 +210,12 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         XCTAssertEqual(selection.sequence(for: selectLeft, kittyKeyboardEnabled: false), [0x00, 0x1B, 0x62])
         XCTAssertEqual(selection.sequence(for: selectLeft, kittyKeyboardEnabled: false), [0x1B, 0x62])
         XCTAssertEqual(selection.sequence(for: selectRight, kittyKeyboardEnabled: false), [0x1B, 0x66])
-        XCTAssertEqual(selection.netWordMovement, -1)
+        XCTAssertEqual(selection.netCharacterMovement, -1)
         XCTAssertEqual(selection.sequence(for: selectRight, kittyKeyboardEnabled: false), [0x1B, 0x66])
-        XCTAssertEqual(selection.netWordMovement, 0)
+        XCTAssertEqual(selection.netCharacterMovement, 0)
     }
 
-    func testWordSelectionDeletesTheMarkedWordsInEitherDirection() {
+    func testWordSelectionDeletesTheExactMarkedCharactersInEitherDirection() {
         let selectLeft = TerminalInputEvent(keyCode: 123, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
         let selectRight = TerminalInputEvent(keyCode: 124, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
         let backspace = TerminalInputEvent(keyCode: 51, charactersIgnoringModifiers: "\u{7F}", modifiers: [])
@@ -224,14 +224,14 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         var leftSelection = TerminalWordSelectionInputState()
         _ = leftSelection.sequence(for: selectLeft, kittyKeyboardEnabled: false)
         _ = leftSelection.sequence(for: selectLeft, kittyKeyboardEnabled: false)
-        XCTAssertEqual(leftSelection.sequence(for: backspace, kittyKeyboardEnabled: false), [0x1B, 0x64, 0x1B, 0x64])
-        XCTAssertEqual(leftSelection.netWordMovement, 0)
+        XCTAssertEqual(leftSelection.sequence(for: backspace, kittyKeyboardEnabled: false), [0x04, 0x04])
+        XCTAssertEqual(leftSelection.netCharacterMovement, 0)
 
         var rightSelection = TerminalWordSelectionInputState()
         _ = rightSelection.sequence(for: selectRight, kittyKeyboardEnabled: false)
         _ = rightSelection.sequence(for: selectRight, kittyKeyboardEnabled: false)
-        XCTAssertEqual(rightSelection.sequence(for: forwardDelete, kittyKeyboardEnabled: false), [0x1B, 0x7F, 0x1B, 0x7F])
-        XCTAssertEqual(rightSelection.netWordMovement, 0)
+        XCTAssertEqual(rightSelection.sequence(for: forwardDelete, kittyKeyboardEnabled: false), [0x7F, 0x7F])
+        XCTAssertEqual(rightSelection.netCharacterMovement, 0)
     }
 
     func testWordSelectionCancelsOnOrdinaryInputAndPassesThroughOutsideShellEditing() {
@@ -245,7 +245,7 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         XCTAssertNil(selection.sequence(for: backspace, kittyKeyboardEnabled: false))
 
         XCTAssertNil(selection.sequence(for: selectLeft, kittyKeyboardEnabled: true))
-        XCTAssertEqual(selection.netWordMovement, 0)
+        XCTAssertEqual(selection.netCharacterMovement, 0)
 
         _ = selection.sequence(for: selectLeft, kittyKeyboardEnabled: false)
         XCTAssertNil(
@@ -255,7 +255,7 @@ final class TerminalSessionConfigurationTests: XCTestCase {
                 normalShellEditing: false
             )
         )
-        XCTAssertEqual(selection.netWordMovement, 0)
+        XCTAssertEqual(selection.netCharacterMovement, 0)
 
         XCTAssertNil(
             selection.sequence(
@@ -266,7 +266,7 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         )
     }
 
-    func testWordSelectionCountsOnlyObservedCursorMovementAndConsumesBoundaryDeletion() {
+    func testWordSelectionCountsObservedCharactersAndConsumesBoundaryDeletion() {
         let selectLeft = TerminalInputEvent(keyCode: 123, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
         let backspace = TerminalInputEvent(keyCode: 51, charactersIgnoringModifiers: "\u{7F}", modifiers: [])
         let start = TerminalInputCursorPosition(column: 5, row: 2)
@@ -276,11 +276,11 @@ final class TerminalSessionConfigurationTests: XCTestCase {
             moved.sequence(for: selectLeft, kittyKeyboardEnabled: false, cursorPosition: start),
             [0x00, 0x1B, 0x62]
         )
-        moved.observeCursorPosition(.init(column: 1, row: 2))
-        XCTAssertEqual(moved.netWordMovement, -1)
+        moved.observeCursorPosition(.init(column: 1, row: 2), characterDistance: { _, _ in 4 })
+        XCTAssertEqual(moved.netCharacterMovement, -4)
         XCTAssertEqual(
             moved.sequence(for: backspace, kittyKeyboardEnabled: false, cursorPosition: .init(column: 1, row: 2)),
-            [0x1B, 0x64]
+            [0x04, 0x04, 0x04, 0x04]
         )
 
         var boundary = TerminalWordSelectionInputState()
@@ -289,7 +289,7 @@ final class TerminalSessionConfigurationTests: XCTestCase {
             boundary.sequence(for: backspace, kittyKeyboardEnabled: false, cursorPosition: start),
             []
         )
-        XCTAssertEqual(boundary.netWordMovement, 0)
+        XCTAssertEqual(boundary.netCharacterMovement, 0)
     }
 
     func testTerminalLinkRouterDisambiguatesCustomAbsoluteRoots() {
@@ -300,9 +300,23 @@ final class TerminalSessionConfigurationTests: XCTestCase {
             TerminalLinkRouter.url(
                 from: first + second,
                 clickedRowText: "- \(second)",
-                fileExists: { $0 == second }
+                isRegularFile: { $0 == second }
             ),
             URL(fileURLWithPath: second)
+        )
+    }
+
+    func testTerminalLinkRouterPreservesAPathWrappedAfterAnExistingDirectory() {
+        let directory = "/tmp/project"
+        let candidate = directory + "/file.txt"
+
+        XCTAssertEqual(
+            TerminalLinkRouter.url(
+                from: candidate,
+                clickedRowText: directory,
+                isRegularFile: { _ in false }
+            ),
+            URL(fileURLWithPath: candidate)
         )
     }
 

@@ -39,7 +39,7 @@ struct TerminalInputCursorPosition: Equatable, Sendable {
 /// Tracks a shell line-editor region created with the terminal's word-selection shortcut.
 /// The terminal cannot select editable input itself, so the shell mark is the source of truth.
 struct TerminalWordSelectionInputState: Sendable {
-    private(set) var netWordMovement = 0
+    private(set) var netCharacterMovement = 0
     private var hasShellMark = false
     private var pendingMovement: (amount: Int, origin: TerminalInputCursorPosition)?
 
@@ -48,9 +48,10 @@ struct TerminalWordSelectionInputState: Sendable {
         kittyKeyboardEnabled: Bool,
         normalShellEditing: Bool = true,
         emacsLineEditing: Bool = true,
-        cursorPosition: TerminalInputCursorPosition? = nil
+        cursorPosition: TerminalInputCursorPosition? = nil,
+        characterDistance: ((TerminalInputCursorPosition, TerminalInputCursorPosition) -> Int)? = nil
     ) -> [UInt8]? {
-        settlePendingMovement(at: cursorPosition)
+        settlePendingMovement(at: cursorPosition, characterDistance: characterDistance)
         guard !kittyKeyboardEnabled, normalShellEditing, emacsLineEditing else {
             reset()
             return nil
@@ -70,21 +71,33 @@ struct TerminalWordSelectionInputState: Sendable {
     }
 
     mutating func reset() {
-        netWordMovement = 0
+        netCharacterMovement = 0
         hasShellMark = false
         pendingMovement = nil
     }
 
-    mutating func observeCursorPosition(_ position: TerminalInputCursorPosition) {
+    mutating func observeCursorPosition(
+        _ position: TerminalInputCursorPosition,
+        characterDistance: (TerminalInputCursorPosition, TerminalInputCursorPosition) -> Int
+    ) {
         guard let pendingMovement, position != pendingMovement.origin else { return }
-        netWordMovement += pendingMovement.amount
+        netCharacterMovement += pendingMovement.amount * max(
+            characterDistance(pendingMovement.origin, position),
+            1
+        )
         self.pendingMovement = nil
     }
 
-    private mutating func settlePendingMovement(at position: TerminalInputCursorPosition?) {
+    private mutating func settlePendingMovement(
+        at position: TerminalInputCursorPosition?,
+        characterDistance: ((TerminalInputCursorPosition, TerminalInputCursorPosition) -> Int)?
+    ) {
         guard let pendingMovement else { return }
         if let position, position != pendingMovement.origin {
-            netWordMovement += pendingMovement.amount
+            netCharacterMovement += pendingMovement.amount * max(
+                characterDistance?(pendingMovement.origin, position) ?? 1,
+                1
+            )
         }
         self.pendingMovement = nil
     }
@@ -97,7 +110,7 @@ struct TerminalWordSelectionInputState: Sendable {
         if let cursorPosition {
             pendingMovement = (amount, cursorPosition)
         } else {
-            netWordMovement += amount
+            netCharacterMovement += amount
         }
         guard !hasShellMark else { return sequence }
         hasShellMark = true
@@ -107,18 +120,18 @@ struct TerminalWordSelectionInputState: Sendable {
     private mutating func deleteSelection() -> [UInt8]? {
         defer { reset() }
         guard hasShellMark else { return nil }
-        guard netWordMovement != 0 else { return [] }
+        guard netCharacterMovement != 0 else { return [] }
 
-        let wordCount = abs(netWordMovement)
-        let sequence = netWordMovement < 0 ? Self.metaForwardDeleteWord : Self.metaBackwardDeleteWord
-        return Array(repeating: sequence, count: wordCount).flatMap { $0 }
+        let characterCount = abs(netCharacterMovement)
+        let byte = netCharacterMovement < 0 ? Self.forwardDeleteCharacter : Self.backwardDeleteCharacter
+        return Array(repeating: byte, count: characterCount)
     }
 
     private static let setMark: UInt8 = 0x00
     private static let metaBackwardWord = Array("\u{1B}b".utf8)
     private static let metaForwardWord = Array("\u{1B}f".utf8)
-    private static let metaForwardDeleteWord = Array("\u{1B}d".utf8)
-    private static let metaBackwardDeleteWord: [UInt8] = [0x1B, 0x7F]
+    private static let forwardDeleteCharacter: UInt8 = 0x04
+    private static let backwardDeleteCharacter: UInt8 = 0x7F
 }
 
 public enum TerminalInputTranslator {

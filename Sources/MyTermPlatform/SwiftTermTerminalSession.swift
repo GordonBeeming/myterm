@@ -240,7 +240,10 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
         defer { allowMouseReporting = originalMouseReporting }
 
         super.dataReceived(slice: slice)
-        wordSelectionInput.observeCursorPosition(terminalInputCursorPosition())
+        wordSelectionInput.observeCursorPosition(
+            terminalInputCursorPosition(),
+            characterDistance: terminalInputCharacterDistance
+        )
         contentChangeCoalescer.notify { [weak self] in
             self?.onContentChanged?()
         }
@@ -387,7 +390,8 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
                 kittyKeyboardEnabled: kittyKeyboardEnabled,
                 normalShellEditing: self.isShellWordSelectionEditing(),
                 emacsLineEditing: self.emacsWordSelectionEnabled,
-                cursorPosition: self.terminalInputCursorPosition()
+                cursorPosition: self.terminalInputCursorPosition(),
+                characterDistance: self.terminalInputCharacterDistance
             ) {
                 self.send(sequence)
                 return nil
@@ -407,7 +411,17 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
 
     private func terminalInputCursorPosition() -> TerminalInputCursorPosition {
         let buffer = getTerminal().buffer
-        return TerminalInputCursorPosition(column: buffer.x, row: buffer.y)
+        return TerminalInputCursorPosition(column: buffer.x, row: buffer.yDisp + buffer.y)
+    }
+
+    private func terminalInputCharacterDistance(
+        from first: TerminalInputCursorPosition,
+        to second: TerminalInputCursorPosition
+    ) -> Int {
+        getTerminal().getText(
+            start: Position(col: first.column, row: first.row),
+            end: Position(col: second.column, row: second.row)
+        ).count
     }
 
     override func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {

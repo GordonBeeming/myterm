@@ -153,14 +153,14 @@ public enum TerminalLinkRouter {
         url(
             from: link,
             clickedRowText: clickedRowText,
-            fileExists: FileManager.default.fileExists(atPath:)
+            isRegularFile: isRegularFile(atPath:)
         )
     }
 
     static func url(
         from link: String,
         clickedRowText: String?,
-        fileExists: (String) -> Bool
+        isRegularFile: (String) -> Bool
     ) -> URL? {
         var candidate = link.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !candidate.isEmpty else { return nil }
@@ -168,7 +168,7 @@ public enum TerminalLinkRouter {
         if let clickedPath = disambiguatedAbsolutePath(
             from: candidate,
             clickedRowText: clickedRowText,
-            fileExists: fileExists
+            isRegularFile: isRegularFile
         ) {
             candidate = clickedPath
         }
@@ -194,7 +194,7 @@ public enum TerminalLinkRouter {
     private static func disambiguatedAbsolutePath(
         from candidate: String,
         clickedRowText: String?,
-        fileExists: (String) -> Bool
+        isRegularFile: (String) -> Bool
     ) -> String? {
         guard candidate.hasPrefix("/"),
               let clickedRowText,
@@ -205,11 +205,18 @@ public enum TerminalLinkRouter {
 
         let clickedPath = clickedRowText[rootStart...]
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard candidate.contains(clickedPath),
-              fileExists(clickedPath) else {
+        guard candidate != clickedPath,
+              candidate.contains(clickedPath),
+              isRegularFile(clickedPath) else {
             return nil
         }
         return clickedPath
+    }
+
+    private static func isRegularFile(atPath path: String) -> Bool {
+        var isDirectory = ObjCBool(false)
+        return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
+            && !isDirectory.boolValue
     }
 
     public static func webURL(from link: String) -> URL? {
