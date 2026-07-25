@@ -113,8 +113,11 @@ private struct DismissibleBanner: View {
                 .accessibilityLabel("\(accessibilityPrefix): \(message)")
             Button(action: dismiss) {
                 Image(systemName: "xmark")
+                    .frame(width: 18, height: 18)
             }
             .buttonStyle(.borderless)
+            .frame(width: 24, height: 24)
+            .contentShape(Rectangle())
             .accessibilityLabel(dismissLabel)
             .help(dismissLabel)
         }
