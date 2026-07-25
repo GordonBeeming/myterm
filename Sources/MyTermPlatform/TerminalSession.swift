@@ -206,6 +206,7 @@ public enum TerminalLinkRouter {
         let clickedPath = clickedRowText[rootStart...]
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard candidate != clickedPath,
+              !isRegularFile(candidate),
               candidate.contains(clickedPath),
               isRegularFile(clickedPath) else {
             return nil

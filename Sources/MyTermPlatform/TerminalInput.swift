@@ -46,7 +46,7 @@ struct TerminalInputCursorPosition: Equatable, Sendable {
 struct TerminalWordSelectionInputState: Sendable {
     private(set) var netCharacterMovement = 0
     private var hasShellMark = false
-    private var hasObservedMovement = false
+    private var shouldPassThroughCollapsedDelete = false
     private var pendingMovement: (amount: Int, origin: TerminalInputCursorPosition)?
     private var queuedMovements: [(amount: Int, sequence: [UInt8])] = []
     private var deferredDeleteSequence: [UInt8]?
@@ -99,7 +99,7 @@ struct TerminalWordSelectionInputState: Sendable {
     mutating func reset() {
         netCharacterMovement = 0
         hasShellMark = false
-        hasObservedMovement = false
+        shouldPassThroughCollapsedDelete = false
         pendingMovement = nil
         queuedMovements = []
         deferredDeleteSequence = nil
@@ -111,7 +111,7 @@ struct TerminalWordSelectionInputState: Sendable {
     ) -> [UInt8]? {
         guard let pendingMovement else { return nil }
         guard position != pendingMovement.origin else { return nil }
-        hasObservedMovement = true
+        shouldPassThroughCollapsedDelete = true
         netCharacterMovement += pendingMovement.amount * max(
             characterDistance(pendingMovement.origin, position),
             1
@@ -124,7 +124,11 @@ struct TerminalWordSelectionInputState: Sendable {
         at position: TerminalInputCursorPosition
     ) -> [UInt8]? {
         guard pendingMovement != nil else { return nil }
+        let hasDeferredDelete = deferredDeleteSequence != nil
         pendingMovement = nil
+        if !hasDeferredDelete {
+            shouldPassThroughCollapsedDelete = true
+        }
         return dispatchQueuedMovementOrDelete(from: position)
     }
 
@@ -151,7 +155,7 @@ struct TerminalWordSelectionInputState: Sendable {
             characterDistance?(pendingMovement.origin, position) ?? 1,
             1
         )
-        hasObservedMovement = true
+        shouldPassThroughCollapsedDelete = true
         self.pendingMovement = nil
         deferredDeleteSequence = nil
     }
@@ -179,7 +183,7 @@ struct TerminalWordSelectionInputState: Sendable {
         defer { reset() }
         guard hasShellMark else { return nil }
         guard netCharacterMovement != 0 else {
-            return hasObservedMovement ? collapsedPassthrough : []
+            return shouldPassThroughCollapsedDelete ? collapsedPassthrough : []
         }
 
         let characterCount = abs(netCharacterMovement)

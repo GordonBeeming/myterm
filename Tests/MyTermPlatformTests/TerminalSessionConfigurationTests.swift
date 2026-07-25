@@ -354,6 +354,13 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         )
         XCTAssertEqual(deletion.resolvePendingMovementAsNoOp(at: start), [])
         XCTAssertFalse(deletion.hasPendingMovement)
+
+        var settledBoundary = TerminalWordSelectionInputState()
+        _ = settledBoundary.sequence(for: selectRight, kittyKeyboardEnabled: false, cursorPosition: start)
+        XCTAssertNil(settledBoundary.resolvePendingMovementAsNoOp(at: start))
+        XCTAssertNil(
+            settledBoundary.sequence(for: backspace, kittyKeyboardEnabled: false, cursorPosition: start)
+        )
     }
 
     func testTerminalInputCursorPositionUsesTheLiveBufferBase() {
@@ -435,6 +442,20 @@ final class TerminalSessionConfigurationTests: XCTestCase {
                 from: candidate,
                 clickedRowText: directory,
                 isRegularFile: { _ in false }
+            ),
+            URL(fileURLWithPath: candidate)
+        )
+    }
+
+    func testTerminalLinkRouterPreservesAValidFullPathBeforeDisambiguatingTheClickedRow() {
+        let candidate = "/workspace/project/wrapped/tmp/file.txt"
+        let clickedPath = "/tmp/file.txt"
+
+        XCTAssertEqual(
+            TerminalLinkRouter.url(
+                from: candidate,
+                clickedRowText: clickedPath,
+                isRegularFile: { $0 == candidate || $0 == clickedPath }
             ),
             URL(fileURLWithPath: candidate)
         )
