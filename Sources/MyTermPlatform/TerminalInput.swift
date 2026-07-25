@@ -46,9 +46,14 @@ struct TerminalInputCursorPosition: Equatable, Sendable {
 struct TerminalWordSelectionInputState: Sendable {
     private(set) var netCharacterMovement = 0
     private var hasShellMark = false
+    private var hasObservedMovement = false
     private var pendingMovement: (amount: Int, origin: TerminalInputCursorPosition)?
     private var queuedMovements: [(amount: Int, sequence: [UInt8])] = []
-    private var deleteWhenMovementResolves = false
+    private var deferredDeleteSequence: [UInt8]?
+
+    var hasPendingMovement: Bool {
+        pendingMovement != nil
+    }
 
     mutating func sequence(
         for event: TerminalInputEvent,
@@ -63,7 +68,7 @@ struct TerminalWordSelectionInputState: Sendable {
             return nil
         }
         if isDelete(event), pendingMovement != nil {
-            deleteWhenMovementResolves = true
+            deferredDeleteSequence = passthroughDeleteSequence(for: event)
             return []
         }
         if pendingMovement != nil {
@@ -94,9 +99,10 @@ struct TerminalWordSelectionInputState: Sendable {
     mutating func reset() {
         netCharacterMovement = 0
         hasShellMark = false
+        hasObservedMovement = false
         pendingMovement = nil
         queuedMovements = []
-        deleteWhenMovementResolves = false
+        deferredDeleteSequence = nil
     }
 
     mutating func observeCursorPosition(
@@ -105,19 +111,34 @@ struct TerminalWordSelectionInputState: Sendable {
     ) -> [UInt8]? {
         guard let pendingMovement else { return nil }
         guard position != pendingMovement.origin else { return nil }
+        hasObservedMovement = true
         netCharacterMovement += pendingMovement.amount * max(
             characterDistance(pendingMovement.origin, position),
             1
         )
         self.pendingMovement = nil
+        return dispatchQueuedMovementOrDelete(from: position)
+    }
+
+    mutating func resolvePendingMovementAsNoOp(
+        at position: TerminalInputCursorPosition
+    ) -> [UInt8]? {
+        guard pendingMovement != nil else { return nil }
+        pendingMovement = nil
+        return dispatchQueuedMovementOrDelete(from: position)
+    }
+
+    private mutating func dispatchQueuedMovementOrDelete(
+        from position: TerminalInputCursorPosition
+    ) -> [UInt8]? {
         if !queuedMovements.isEmpty {
             let nextMovement = queuedMovements.removeFirst()
             self.pendingMovement = (nextMovement.amount, position)
             return nextMovement.sequence
         }
-        guard deleteWhenMovementResolves else { return nil }
-        deleteWhenMovementResolves = false
-        return deleteSelection()
+        guard let deferredDeleteSequence else { return nil }
+        self.deferredDeleteSequence = nil
+        return deleteSelection(collapsedPassthrough: deferredDeleteSequence)
     }
 
     private mutating func settlePendingMovement(
@@ -130,8 +151,9 @@ struct TerminalWordSelectionInputState: Sendable {
             characterDistance?(pendingMovement.origin, position) ?? 1,
             1
         )
+        hasObservedMovement = true
         self.pendingMovement = nil
-        deleteWhenMovementResolves = false
+        deferredDeleteSequence = nil
     }
 
     private mutating func move(
@@ -153,10 +175,12 @@ struct TerminalWordSelectionInputState: Sendable {
         return [Self.setMark] + sequence
     }
 
-    private mutating func deleteSelection() -> [UInt8]? {
+    private mutating func deleteSelection(collapsedPassthrough: [UInt8]? = nil) -> [UInt8]? {
         defer { reset() }
         guard hasShellMark else { return nil }
-        guard netCharacterMovement != 0 else { return [] }
+        guard netCharacterMovement != 0 else {
+            return hasObservedMovement ? collapsedPassthrough : []
+        }
 
         let characterCount = abs(netCharacterMovement)
         let byte = netCharacterMovement < 0 ? Self.forwardDeleteCharacter : Self.backwardDeleteCharacter
@@ -168,11 +192,16 @@ struct TerminalWordSelectionInputState: Sendable {
             && event.modifiers.meaningful.isEmpty
     }
 
+    private func passthroughDeleteSequence(for event: TerminalInputEvent) -> [UInt8] {
+        event.keyCode == 117 ? Self.forwardDeleteKey : [Self.backwardDeleteCharacter]
+    }
+
     private static let setMark: UInt8 = 0x00
     private static let metaBackwardWord = Array("\u{1B}b".utf8)
     private static let metaForwardWord = Array("\u{1B}f".utf8)
     private static let forwardDeleteCharacter: UInt8 = 0x04
     private static let backwardDeleteCharacter: UInt8 = 0x7F
+    private static let forwardDeleteKey = Array("\u{1B}[3~".utf8)
 }
 
 public enum TerminalInputTranslator {

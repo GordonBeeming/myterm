@@ -213,6 +213,7 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
     private var paneIsActive = true
     private var activeCaretColor: NSColor?
     private var wordSelectionInput = TerminalWordSelectionInputState()
+    private var wordSelectionResolutionGeneration = 0
     private var emacsWordSelectionEnabled = true
     private var pendingLinkClickRowText: String?
 
@@ -240,11 +241,17 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
         defer { allowMouseReporting = originalMouseReporting }
 
         super.dataReceived(slice: slice)
-        if let pendingDeletion = wordSelectionInput.observeCursorPosition(
+        let hadPendingMovement = wordSelectionInput.hasPendingMovement
+        let pendingInput = wordSelectionInput.observeCursorPosition(
             terminalInputCursorPosition(),
             characterDistance: terminalInputCharacterDistance
-        ) {
-            send(pendingDeletion)
+        )
+        if let pendingInput {
+            send(pendingInput)
+        }
+        if hadPendingMovement,
+           (pendingInput != nil || !wordSelectionInput.hasPendingMovement) {
+            scheduleWordSelectionResolutionIfNeeded()
         }
         contentChangeCoalescer.notify { [weak self] in
             self?.onContentChanged?()
@@ -396,6 +403,7 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
                 characterDistance: self.terminalInputCharacterDistance
             ) {
                 self.send(sequence)
+                self.scheduleWordSelectionResolutionIfNeeded()
                 return nil
             }
             let shouldInspectPasteboard = input.keyCode == 9 && input.modifiers.meaningful == [.command]
@@ -409,6 +417,45 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
             self.send(sequence)
             return nil
         }
+    }
+
+    private func scheduleWordSelectionResolutionIfNeeded() {
+        wordSelectionResolutionGeneration &+= 1
+        guard wordSelectionInput.hasPendingMovement else { return }
+        let generation = wordSelectionResolutionGeneration
+
+        Task { @MainActor [weak self] in
+            // A shell emits no cursor response when a word motion hits the
+            // input boundary. Wait briefly for a real response, then resolve
+            // that silent boundary motion so later selection keys can proceed.
+            try? await Task.sleep(for: .milliseconds(200))
+            guard let self,
+                  self.wordSelectionResolutionGeneration == generation,
+                  self.wordSelectionInput.hasPendingMovement else {
+                return
+            }
+            self.resolveTimedOutWordSelectionMovement()
+        }
+    }
+
+    private func resolveTimedOutWordSelectionMovement() {
+        let position = terminalInputCursorPosition()
+        if let pendingInput = wordSelectionInput.observeCursorPosition(
+            position,
+            characterDistance: terminalInputCharacterDistance
+        ) {
+            send(pendingInput)
+            scheduleWordSelectionResolutionIfNeeded()
+            return
+        }
+        guard wordSelectionInput.hasPendingMovement else {
+            scheduleWordSelectionResolutionIfNeeded()
+            return
+        }
+        if let pendingInput = wordSelectionInput.resolvePendingMovementAsNoOp(at: position) {
+            send(pendingInput)
+        }
+        scheduleWordSelectionResolutionIfNeeded()
     }
 
     private func terminalInputCursorPosition() -> TerminalInputCursorPosition {

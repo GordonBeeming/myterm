@@ -47,6 +47,25 @@ final class BrowserSessionControllerTests: XCTestCase {
         XCTAssertTrue(BrowserSessionHostView(contentView: controller.webView, isActive: false).acceptsFirstMouse(for: nil))
     }
 
+    func testPluginHandledLoadsAreNotPresentedAsNavigationErrors() {
+        let controller = BrowserSessionController()
+        let handledLoad = NSError(
+            domain: "WebKitErrorDomain",
+            code: 204,
+            userInfo: [NSLocalizedDescriptionKey: "Plug-in handled load"]
+        )
+        let realFailure = NSError(domain: NSURLErrorDomain, code: NSURLErrorCannotOpenFile)
+
+        XCTAssertTrue(BrowserSessionController.isHandledContentNavigation(handledLoad))
+        XCTAssertFalse(BrowserSessionController.isHandledContentNavigation(realFailure))
+
+        controller.webView(controller.webView, didFail: nil, withError: handledLoad)
+        XCTAssertNil(controller.state.errorDescription)
+
+        controller.webView(controller.webView, didFail: nil, withError: realFailure)
+        XCTAssertEqual(controller.state.errorDescription, realFailure.localizedDescription)
+    }
+
     @MainActor
     func testBrowserHostReplacesDisplayedSessionAndTransfersFocus() {
         let window = NSWindow(

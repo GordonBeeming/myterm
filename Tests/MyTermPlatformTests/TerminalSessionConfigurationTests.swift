@@ -330,6 +330,32 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         XCTAssertEqual(selection.netCharacterMovement, 0)
     }
 
+    func testWordSelectionRecoversAfterATimedOutBoundaryMovement() {
+        let selectLeft = TerminalInputEvent(keyCode: 123, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
+        let selectRight = TerminalInputEvent(keyCode: 124, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
+        let backspace = TerminalInputEvent(keyCode: 51, charactersIgnoringModifiers: "\u{7F}", modifiers: [])
+        let start = TerminalInputCursorPosition(column: 0, row: 12)
+
+        var selection = TerminalWordSelectionInputState()
+        _ = selection.sequence(for: selectLeft, kittyKeyboardEnabled: false, cursorPosition: start)
+        XCTAssertNil(selection.resolvePendingMovementAsNoOp(at: start))
+        XCTAssertFalse(selection.hasPendingMovement)
+
+        XCTAssertEqual(
+            selection.sequence(for: selectRight, kittyKeyboardEnabled: false, cursorPosition: start),
+            [0x1B, 0x66]
+        )
+
+        var deletion = TerminalWordSelectionInputState()
+        _ = deletion.sequence(for: selectLeft, kittyKeyboardEnabled: false, cursorPosition: start)
+        XCTAssertEqual(
+            deletion.sequence(for: backspace, kittyKeyboardEnabled: false, cursorPosition: start),
+            []
+        )
+        XCTAssertEqual(deletion.resolvePendingMovementAsNoOp(at: start), [])
+        XCTAssertFalse(deletion.hasPendingMovement)
+    }
+
     func testTerminalInputCursorPositionUsesTheLiveBufferBase() {
         XCTAssertEqual(
             TerminalInputCursorPosition.live(column: 7, row: 4, lineCount: 140, viewportRows: 20),
@@ -359,10 +385,31 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         )
         XCTAssertNil(selection.observeCursorPosition(start, characterDistance: { _, _ in 3 }))
         XCTAssertEqual(selection.netCharacterMovement, 0)
+        XCTAssertNil(
+            selection.sequence(for: backspace, kittyKeyboardEnabled: false, cursorPosition: start)
+        )
+    }
+
+    func testDeferredDeletePassesThroughAfterASelectionCollapses() {
+        let selectLeft = TerminalInputEvent(keyCode: 123, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
+        let selectRight = TerminalInputEvent(keyCode: 124, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
+        let forwardDelete = TerminalInputEvent(keyCode: 117, charactersIgnoringModifiers: "", modifiers: [])
+        let start = TerminalInputCursorPosition(column: 5, row: 2)
+        let left = TerminalInputCursorPosition(column: 2, row: 2)
+
+        var selection = TerminalWordSelectionInputState()
+        _ = selection.sequence(for: selectLeft, kittyKeyboardEnabled: false, cursorPosition: start)
+        _ = selection.observeCursorPosition(left, characterDistance: { _, _ in 3 })
+        _ = selection.sequence(for: selectRight, kittyKeyboardEnabled: false, cursorPosition: left)
         XCTAssertEqual(
-            selection.sequence(for: backspace, kittyKeyboardEnabled: false, cursorPosition: start),
+            selection.sequence(for: forwardDelete, kittyKeyboardEnabled: false, cursorPosition: left),
             []
         )
+        XCTAssertEqual(
+            selection.observeCursorPosition(start, characterDistance: { _, _ in 3 }),
+            Array("\u{1B}[3~".utf8)
+        )
+        XCTAssertFalse(selection.hasPendingMovement)
     }
 
     func testTerminalLinkRouterDisambiguatesCustomAbsoluteRoots() {
