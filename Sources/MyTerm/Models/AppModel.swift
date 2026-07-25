@@ -785,7 +785,7 @@ final class AppModel {
     ]
 
     private static let scriptFileExtensions: Set<String> = [
-        "command", "sh", "bash", "zsh", "fish", "ps1", "py", "rb", "pl", "php",
+        "command", "tool", "sh", "bash", "zsh", "fish", "ps1", "py", "rb", "pl", "php",
     ]
 
     private static func isExecutableOrScript(_ url: URL) -> Bool {

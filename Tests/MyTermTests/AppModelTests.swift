@@ -1001,6 +1001,8 @@ final class AppModelTests: XCTestCase {
         try FileManager.default.createDirectory(at: projectDirectory, withIntermediateDirectories: true)
         let scriptURL = projectDirectory.appending(path: "it's ready.command", directoryHint: .notDirectory)
         try Data("#!/bin/zsh\necho ready\n".utf8).write(to: scriptURL)
+        let toolURL = projectDirectory.appending(path: "build.tool", directoryHint: .notDirectory)
+        try Data("#!/bin/zsh\necho build\n".utf8).write(to: toolURL)
         let engine = CapturingTerminalEngine()
         let model = try AppModel(
             channel: .development,
@@ -1023,13 +1025,20 @@ final class AppModelTests: XCTestCase {
             engine.configurations.last?.initialCommand,
             "'\(scriptURL.path.replacingOccurrences(of: "'", with: "'\\''"))'"
         )
-        model.open([try XCTUnwrap(URL(string: "ssh://gordon@example.com:2222"))])
+
+        model.open([toolURL])
         XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount + 3)
+        XCTAssertEqual(engine.configurations.count, 4)
+        XCTAssertEqual(engine.configurations.last?.workingDirectory, projectDirectory.standardizedFileURL)
+        XCTAssertEqual(engine.configurations.last?.initialCommand, "'\(toolURL.path)'")
+
+        model.open([try XCTUnwrap(URL(string: "ssh://gordon@example.com:2222"))])
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount + 4)
         XCTAssertEqual(engine.configurations.last?.workingDirectory, FileManager.default.homeDirectoryForCurrentUser)
         XCTAssertEqual(engine.configurations.last?.initialCommand, "ssh '-p' '2222' 'gordon@example.com'")
 
         model.open([try XCTUnwrap(URL(string: "ssh://user%25name@example.com"))])
-        XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount + 4)
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount + 5)
         XCTAssertEqual(engine.configurations.last?.initialCommand, "ssh 'user%name@example.com'")
     }
 
