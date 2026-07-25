@@ -568,4 +568,46 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         XCTAssertNil(TerminalLinkRouter.url(from: "ssh://example.com"))
         XCTAssertNil(TerminalLinkRouter.url(from: "https:///missing-host"))
     }
+
+    func testTerminalLinkRouterUsesTheClickedRowWhenAdjacentPathsAreJoined() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let first = directory.appendingPathComponent("first-video.mp4")
+        let second = directory.appendingPathComponent("second-video.mp4")
+        XCTAssertTrue(FileManager.default.createFile(atPath: first.path, contents: Data()))
+        XCTAssertTrue(FileManager.default.createFile(atPath: second.path, contents: Data()))
+
+        let joinedLink = "\(first.path)-\(second.path)"
+        XCTAssertEqual(
+            TerminalLinkRouter.url(
+                from: joinedLink,
+                clickedRowText: "- \(first.path)"
+            )?.path,
+            first.path
+        )
+        XCTAssertEqual(
+            TerminalLinkRouter.url(
+                from: joinedLink,
+                clickedRowText: "- \(second.path)"
+            )?.path,
+            second.path
+        )
+    }
+
+    func testTerminalLinkRouterKeepsAJoinedCandidateWhenTheClickedRowIsNotAFile() {
+        let first = "/tmp/missing-first-video.mp4"
+        let second = "/tmp/missing-second-video.mp4"
+        let joinedLink = "\(first)-\(second)"
+
+        XCTAssertEqual(
+            TerminalLinkRouter.url(
+                from: joinedLink,
+                clickedRowText: "- \(first)"
+            )?.path,
+            joinedLink
+        )
+    }
 }

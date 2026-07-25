@@ -146,9 +146,21 @@ public enum TerminalSessionEvent: Equatable, Sendable {
 }
 
 public enum TerminalLinkRouter {
-    public static func url(from link: String) -> URL? {
-        let candidate = link.trimmingCharacters(in: .whitespacesAndNewlines)
+    private static let absolutePathRoots = [
+        "/Users/", "/Volumes/", "/Applications/", "/System/", "/Library/",
+        "/private/", "/tmp/", "/var/", "/opt/", "/usr/", "/etc/", "/home/",
+    ]
+
+    public static func url(from link: String, clickedRowText: String? = nil) -> URL? {
+        var candidate = link.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !candidate.isEmpty else { return nil }
+
+        if let clickedPath = disambiguatedAbsolutePath(
+            from: candidate,
+            clickedRowText: clickedRowText
+        ) {
+            candidate = clickedPath
+        }
 
         if candidate.hasPrefix("/") {
             return URL(fileURLWithPath: candidate).standardizedFileURL
@@ -166,6 +178,40 @@ public enum TerminalLinkRouter {
         }
 
         return webURL(from: candidate)
+    }
+
+    private static func disambiguatedAbsolutePath(
+        from candidate: String,
+        clickedRowText: String?
+    ) -> String? {
+        guard absolutePathRootCount(in: candidate) > 1,
+              let clickedRowText,
+              let rootStart = firstAbsolutePathRoot(in: clickedRowText)
+        else {
+            return nil
+        }
+
+        let clickedPath = clickedRowText[rootStart...]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard candidate.contains(clickedPath),
+              FileManager.default.fileExists(atPath: clickedPath) else {
+            return nil
+        }
+        return clickedPath
+    }
+
+    private static func absolutePathRootCount(in text: String) -> Int {
+        absolutePathRoots.reduce(into: 0) { count, root in
+            var remaining = text.startIndex..<text.endIndex
+            while let match = text.range(of: root, range: remaining) {
+                count += 1
+                remaining = match.upperBound..<text.endIndex
+            }
+        }
+    }
+
+    private static func firstAbsolutePathRoot(in text: String) -> String.Index? {
+        absolutePathRoots.compactMap { text.range(of: $0)?.lowerBound }.min()
     }
 
     public static func webURL(from link: String) -> URL? {

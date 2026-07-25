@@ -213,6 +213,7 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
     private var paneIsActive = true
     private var activeCaretColor: NSColor?
     private var wordSelectionInput = TerminalWordSelectionInputState()
+    private var pendingLinkClickRowText: String?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -251,6 +252,14 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        if event.modifierFlags.contains(.command) {
+            pendingLinkClickRowText = terminalRowText(at: event)
+        }
+        defer { pendingLinkClickRowText = nil }
+        super.mouseUp(with: event)
     }
 
     func focusWhenPossible() {
@@ -392,11 +401,36 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
     }
 
     override func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
-        guard let url = TerminalLinkRouter.url(from: link) else {
+        guard let url = TerminalLinkRouter.url(
+            from: link,
+            clickedRowText: pendingLinkClickRowText
+        ) else {
             super.requestOpenLink(source: source, link: link, params: params)
             return
         }
         onOpenWebURL?(url)
+    }
+
+    private func terminalRowText(at event: NSEvent) -> String? {
+        let terminal = getTerminal()
+        guard terminal.rows > 0,
+              let cellSize = cellSizeInPixels(source: terminal),
+              cellSize.height > 0 else {
+            return nil
+        }
+
+        let backingScale = max(window?.backingScaleFactor ?? 1, 1)
+        let cellHeight = CGFloat(cellSize.height) / backingScale
+        let localPoint = convert(event.locationInWindow, from: nil)
+        let screenRow = min(
+            max(Int((frame.height - localPoint.y) / cellHeight), 0),
+            terminal.rows - 1
+        )
+        let bufferRow = screenRow + terminal.buffer.yDisp
+        return terminal.getText(
+            start: Position(col: 0, row: bufferRow),
+            end: Position(col: terminal.cols, row: bufferRow)
+        )
     }
 }
 
