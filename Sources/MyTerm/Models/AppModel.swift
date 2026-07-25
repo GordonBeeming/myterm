@@ -54,7 +54,9 @@ final class AppModel {
     var nextBrowserFindToken: UInt64 = 0
     @ObservationIgnored private var terminalSnapshotTasks: [TerminalSessionID: Task<Void, Never>] = [:]
     var errorDescription: String?
-    let recoveryNotice: WorkspaceRecoveryNotice?
+    // Derived fresh from the store's load report on every launch, so clearing it only hides the
+    // banner for this session — a later repair surfaces a new notice.
+    private(set) var recoveryNotice: WorkspaceRecoveryNotice?
     var isSidebarVisible = true
     var workspaceBeingRenamedID: WorkspaceID?
     var workspaceRenameDraft = ""
@@ -2130,6 +2132,14 @@ final class AppModel {
 
     private func present(_ error: Error) {
         errorDescription = error.localizedDescription
+    }
+
+    func dismissError() {
+        errorDescription = nil
+    }
+
+    func dismissRecoveryNotice() {
+        recoveryNotice = nil
     }
 }
 

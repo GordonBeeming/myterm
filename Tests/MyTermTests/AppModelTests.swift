@@ -2249,6 +2249,41 @@ final class AppModelTests: XCTestCase {
         XCTAssertTrue(notice.message.contains(persistenceURL.appendingPathExtension("recovery-backup").path))
     }
 
+    func testDismissRecoveryNoticeClearsBanner() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let persistenceURL = MyTermChannel.development.persistenceURL(applicationSupportDirectory: directory)
+        try FileManager.default.createDirectory(
+            at: persistenceURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let snapshot = WorkspaceStoreSnapshot.initial()
+        let validJSON = try XCTUnwrap(String(data: JSONEncoder().encode(snapshot), encoding: .utf8))
+        let corrupted = Data(validJSON.replacingOccurrences(
+            of: snapshot.selectedWorkspaceID.description,
+            with: "invalid-workspace-id"
+        ).utf8)
+        try corrupted.write(to: persistenceURL)
+
+        let model = try makeModel(applicationSupportDirectory: directory)
+        XCTAssertNotNil(model.recoveryNotice)
+
+        model.dismissRecoveryNotice()
+
+        XCTAssertNil(model.recoveryNotice)
+    }
+
+    func testDismissErrorClearsBanner() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        model.errorDescription = "Terminal exited with status 1."
+
+        model.dismissError()
+
+        XCTAssertNil(model.errorDescription)
+    }
+
     func testNewPaneMovementCommandsRouteAllFourEdges() throws {
         for edge in [PaneEdge.left, .right, .top, .bottom] {
             let directory = try makeTemporaryDirectory()
