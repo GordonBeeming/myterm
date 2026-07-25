@@ -39,8 +39,11 @@ final class BrowserSessionHostView: NSView {
 
         let previousContentView = contentView
         let ownsPreviousContentView = previousContentView.superview === self
-        let shouldTransferFocus = ownsPreviousContentView
-            && window?.firstResponder === previousContentView
+        let focusedView = window?.firstResponder as? NSView
+        let shouldTransferFocus = ownsPreviousContentView && (
+            focusedView === previousContentView
+                || focusedView?.isDescendant(of: previousContentView) == true
+        )
         if ownsPreviousContentView {
             previousContentView.removeFromSuperview()
         }
