@@ -310,6 +310,34 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         XCTAssertEqual(selection.netCharacterMovement, 0)
     }
 
+    func testWordSelectionQueuesRapidDirectionReversalUntilEachCursorMoveArrives() {
+        let selectLeft = TerminalInputEvent(keyCode: 123, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
+        let selectRight = TerminalInputEvent(keyCode: 124, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
+        let backspace = TerminalInputEvent(keyCode: 51, charactersIgnoringModifiers: "\u{7F}", modifiers: [])
+        let start = TerminalInputCursorPosition(column: 5, row: 2)
+        let left = TerminalInputCursorPosition(column: 2, row: 2)
+
+        var selection = TerminalWordSelectionInputState()
+        XCTAssertEqual(
+            selection.sequence(for: selectLeft, kittyKeyboardEnabled: false, cursorPosition: start),
+            [0x00, 0x1B, 0x62]
+        )
+        XCTAssertEqual(
+            selection.sequence(for: selectRight, kittyKeyboardEnabled: false, cursorPosition: start),
+            []
+        )
+        XCTAssertEqual(
+            selection.observeCursorPosition(left, characterDistance: { _, _ in 3 }),
+            [0x1B, 0x66]
+        )
+        XCTAssertNil(selection.observeCursorPosition(start, characterDistance: { _, _ in 3 }))
+        XCTAssertEqual(selection.netCharacterMovement, 0)
+        XCTAssertEqual(
+            selection.sequence(for: backspace, kittyKeyboardEnabled: false, cursorPosition: start),
+            []
+        )
+    }
+
     func testTerminalLinkRouterDisambiguatesCustomAbsoluteRoots() {
         let first = "/workspace/project/first.txt"
         let second = "/mnt/data/second.txt"

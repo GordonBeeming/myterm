@@ -449,7 +449,7 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
         let cellHeight = CGFloat(cellSize.height) / backingScale
         let localPoint = convert(event.locationInWindow, from: nil)
         let screenRow = min(
-            max(Int((frame.height - localPoint.y) / cellHeight), 0),
+            max(Int((bounds.height - localPoint.y) / cellHeight), 0),
             terminal.rows - 1
         )
         let bufferRow = screenRow + terminal.buffer.yDisp

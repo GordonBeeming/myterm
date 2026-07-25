@@ -472,7 +472,10 @@ private struct TextFilePatternsEditor: View {
             .accessibilityLabel("Patterns for files opened as text")
             .focused($isEditing)
             .onChange(of: draft) { _, newValue in
-                patterns = newValue.components(separatedBy: .newlines)
+                let updatedPatterns = newValue.components(separatedBy: .newlines)
+                if updatedPatterns != patterns {
+                    patterns = updatedPatterns
+                }
             }
             .onChange(of: patterns) { _, newValue in
                 guard !isEditing else { return }

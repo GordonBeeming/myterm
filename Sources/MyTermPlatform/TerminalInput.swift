@@ -42,6 +42,7 @@ struct TerminalWordSelectionInputState: Sendable {
     private(set) var netCharacterMovement = 0
     private var hasShellMark = false
     private var pendingMovement: (amount: Int, origin: TerminalInputCursorPosition)?
+    private var queuedMovements: [(amount: Int, sequence: [UInt8])] = []
     private var deleteWhenMovementResolves = false
 
     mutating func sequence(
@@ -56,11 +57,19 @@ struct TerminalWordSelectionInputState: Sendable {
             reset()
             return nil
         }
-        if isDelete(event),
-           let pendingMovement,
-           cursorPosition == pendingMovement.origin {
+        if isDelete(event), pendingMovement != nil {
             deleteWhenMovementResolves = true
             return []
+        }
+        if pendingMovement != nil {
+            switch (event.keyCode, event.modifiers.meaningful) {
+            case (123, [.shift, .option]):
+                return move(by: -1, sequence: Self.metaBackwardWord, from: cursorPosition)
+            case (124, [.shift, .option]):
+                return move(by: 1, sequence: Self.metaForwardWord, from: cursorPosition)
+            default:
+                break
+            }
         }
         settlePendingMovement(at: cursorPosition, characterDistance: characterDistance)
 
@@ -81,6 +90,7 @@ struct TerminalWordSelectionInputState: Sendable {
         netCharacterMovement = 0
         hasShellMark = false
         pendingMovement = nil
+        queuedMovements = []
         deleteWhenMovementResolves = false
     }
 
@@ -88,12 +98,19 @@ struct TerminalWordSelectionInputState: Sendable {
         _ position: TerminalInputCursorPosition,
         characterDistance: (TerminalInputCursorPosition, TerminalInputCursorPosition) -> Int
     ) -> [UInt8]? {
-        guard let pendingMovement, position != pendingMovement.origin else { return nil }
-        netCharacterMovement += pendingMovement.amount * max(
-            characterDistance(pendingMovement.origin, position),
-            1
-        )
+        guard let pendingMovement else { return nil }
+        if position != pendingMovement.origin {
+            netCharacterMovement += pendingMovement.amount * max(
+                characterDistance(pendingMovement.origin, position),
+                1
+            )
+        }
         self.pendingMovement = nil
+        if !queuedMovements.isEmpty {
+            let nextMovement = queuedMovements.removeFirst()
+            self.pendingMovement = (nextMovement.amount, position)
+            return nextMovement.sequence
+        }
         guard deleteWhenMovementResolves else { return nil }
         deleteWhenMovementResolves = false
         return deleteSelection()
@@ -104,12 +121,11 @@ struct TerminalWordSelectionInputState: Sendable {
         characterDistance: ((TerminalInputCursorPosition, TerminalInputCursorPosition) -> Int)?
     ) {
         guard let pendingMovement else { return }
-        if let position, position != pendingMovement.origin {
-            netCharacterMovement += pendingMovement.amount * max(
-                characterDistance?(pendingMovement.origin, position) ?? 1,
-                1
-            )
-        }
+        guard let position, position != pendingMovement.origin else { return }
+        netCharacterMovement += pendingMovement.amount * max(
+            characterDistance?(pendingMovement.origin, position) ?? 1,
+            1
+        )
         self.pendingMovement = nil
         deleteWhenMovementResolves = false
     }
@@ -119,6 +135,10 @@ struct TerminalWordSelectionInputState: Sendable {
         sequence: [UInt8],
         from cursorPosition: TerminalInputCursorPosition?
     ) -> [UInt8] {
+        if pendingMovement != nil {
+            queuedMovements.append((amount, sequence))
+            return []
+        }
         if let cursorPosition {
             pendingMovement = (amount, cursorPosition)
         } else {
