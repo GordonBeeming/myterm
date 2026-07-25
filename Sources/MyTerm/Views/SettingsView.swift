@@ -389,11 +389,8 @@ struct SettingsView: View {
                     global: \TerminalPreferences.nativeTextFilePatterns,
                     override: \TerminalPreferencesOverrides.nativeTextFilePatterns
                 ) { value in
-                    TextEditor(text: textFilePatternsBinding(value))
-                        .font(.system(.body, design: .monospaced))
-                        .multilineTextAlignment(.leading)
-                        .frame(width: 260, height: 110)
-                        .accessibilityLabel("Patterns for files opened as text")
+                    TextFilePatternsEditor(patterns: value)
+                        .id(scope)
                 }
 
                 Text("Use one pattern per line. Extension suffixes use *.json; literal names such as Dockerfile and .gitignore match exactly. Terminal file links matching these patterns use the command; other files open in the default macOS application. Use {file} where the quoted file path should be inserted. If it is omitted, MyTerm appends the file path. Leave the command empty to open matching files externally.")
@@ -418,13 +415,6 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-    }
-
-    private func textFilePatternsBinding(_ value: Binding<[String]>) -> Binding<String> {
-        Binding(
-            get: { value.wrappedValue.joined(separator: "\n") },
-            set: { value.wrappedValue = $0.components(separatedBy: .newlines) }
-        )
     }
 
     private var passkeyDescription: String {
@@ -461,6 +451,38 @@ struct SettingsView: View {
                 model.prepareSettings(for: .global)
             }
         }
+    }
+}
+
+private struct TextFilePatternsEditor: View {
+    @Binding private var patterns: [String]
+    @State private var draft: String
+    @FocusState private var isEditing: Bool
+
+    init(patterns: Binding<[String]>) {
+        _patterns = patterns
+        _draft = State(initialValue: patterns.wrappedValue.joined(separator: "\n"))
+    }
+
+    var body: some View {
+        TextEditor(text: $draft)
+            .font(.system(.body, design: .monospaced))
+            .multilineTextAlignment(.leading)
+            .frame(width: 260, height: 110)
+            .accessibilityLabel("Patterns for files opened as text")
+            .focused($isEditing)
+            .onChange(of: draft) { _, newValue in
+                patterns = newValue.components(separatedBy: .newlines)
+            }
+            .onChange(of: patterns) { _, newValue in
+                guard !isEditing else { return }
+                draft = newValue.joined(separator: "\n")
+            }
+            .onChange(of: isEditing) { _, editing in
+                if !editing {
+                    draft = patterns.joined(separator: "\n")
+                }
+            }
     }
 }
 

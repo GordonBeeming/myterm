@@ -42,6 +42,7 @@ struct TerminalWordSelectionInputState: Sendable {
     private(set) var netCharacterMovement = 0
     private var hasShellMark = false
     private var pendingMovement: (amount: Int, origin: TerminalInputCursorPosition)?
+    private var deleteWhenMovementResolves = false
 
     mutating func sequence(
         for event: TerminalInputEvent,
@@ -51,11 +52,17 @@ struct TerminalWordSelectionInputState: Sendable {
         cursorPosition: TerminalInputCursorPosition? = nil,
         characterDistance: ((TerminalInputCursorPosition, TerminalInputCursorPosition) -> Int)? = nil
     ) -> [UInt8]? {
-        settlePendingMovement(at: cursorPosition, characterDistance: characterDistance)
         guard !kittyKeyboardEnabled, normalShellEditing, emacsLineEditing else {
             reset()
             return nil
         }
+        if isDelete(event),
+           let pendingMovement,
+           cursorPosition == pendingMovement.origin {
+            deleteWhenMovementResolves = true
+            return []
+        }
+        settlePendingMovement(at: cursorPosition, characterDistance: characterDistance)
 
         switch (event.keyCode, event.modifiers.meaningful) {
         case (123, [.shift, .option]):
@@ -74,18 +81,22 @@ struct TerminalWordSelectionInputState: Sendable {
         netCharacterMovement = 0
         hasShellMark = false
         pendingMovement = nil
+        deleteWhenMovementResolves = false
     }
 
     mutating func observeCursorPosition(
         _ position: TerminalInputCursorPosition,
         characterDistance: (TerminalInputCursorPosition, TerminalInputCursorPosition) -> Int
-    ) {
-        guard let pendingMovement, position != pendingMovement.origin else { return }
+    ) -> [UInt8]? {
+        guard let pendingMovement, position != pendingMovement.origin else { return nil }
         netCharacterMovement += pendingMovement.amount * max(
             characterDistance(pendingMovement.origin, position),
             1
         )
         self.pendingMovement = nil
+        guard deleteWhenMovementResolves else { return nil }
+        deleteWhenMovementResolves = false
+        return deleteSelection()
     }
 
     private mutating func settlePendingMovement(
@@ -100,6 +111,7 @@ struct TerminalWordSelectionInputState: Sendable {
             )
         }
         self.pendingMovement = nil
+        deleteWhenMovementResolves = false
     }
 
     private mutating func move(
@@ -125,6 +137,11 @@ struct TerminalWordSelectionInputState: Sendable {
         let characterCount = abs(netCharacterMovement)
         let byte = netCharacterMovement < 0 ? Self.forwardDeleteCharacter : Self.backwardDeleteCharacter
         return Array(repeating: byte, count: characterCount)
+    }
+
+    private func isDelete(_ event: TerminalInputEvent) -> Bool {
+        (event.keyCode == 51 || event.keyCode == 117)
+            && event.modifiers.meaningful.isEmpty
     }
 
     private static let setMark: UInt8 = 0x00

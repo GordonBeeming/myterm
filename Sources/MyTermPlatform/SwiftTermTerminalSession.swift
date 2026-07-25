@@ -240,10 +240,12 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
         defer { allowMouseReporting = originalMouseReporting }
 
         super.dataReceived(slice: slice)
-        wordSelectionInput.observeCursorPosition(
+        if let pendingDeletion = wordSelectionInput.observeCursorPosition(
             terminalInputCursorPosition(),
             characterDistance: terminalInputCharacterDistance
-        )
+        ) {
+            send(pendingDeletion)
+        }
         contentChangeCoalescer.notify { [weak self] in
             self?.onContentChanged?()
         }
