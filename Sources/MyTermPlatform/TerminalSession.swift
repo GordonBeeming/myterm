@@ -89,19 +89,22 @@ public struct TerminalRuntimeConfiguration: Equatable, Sendable {
     public let appearance: TerminalAppearance
     public let scrollbackLines: Int
     public let optionAsMeta: Bool
+    public let emacsWordSelectionEnabled: Bool
 
     public init(
         fontName: String? = nil,
         fontSize: Double = 13,
         appearance: TerminalAppearance = TerminalAppearance(),
         scrollbackLines: Int = 5_000,
-        optionAsMeta: Bool = true
+        optionAsMeta: Bool = true,
+        emacsWordSelectionEnabled: Bool = true
     ) {
         self.fontName = fontName
         self.fontSize = max(fontSize, 1)
         self.appearance = appearance
         self.scrollbackLines = max(scrollbackLines, 0)
         self.optionAsMeta = optionAsMeta
+        self.emacsWordSelectionEnabled = emacsWordSelectionEnabled
     }
 }
 
@@ -146,18 +149,26 @@ public enum TerminalSessionEvent: Equatable, Sendable {
 }
 
 public enum TerminalLinkRouter {
-    private static let absolutePathRoots = [
-        "/Users/", "/Volumes/", "/Applications/", "/System/", "/Library/",
-        "/private/", "/tmp/", "/var/", "/opt/", "/usr/", "/etc/", "/home/",
-    ]
-
     public static func url(from link: String, clickedRowText: String? = nil) -> URL? {
+        url(
+            from: link,
+            clickedRowText: clickedRowText,
+            fileExists: FileManager.default.fileExists(atPath:)
+        )
+    }
+
+    static func url(
+        from link: String,
+        clickedRowText: String?,
+        fileExists: (String) -> Bool
+    ) -> URL? {
         var candidate = link.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !candidate.isEmpty else { return nil }
 
         if let clickedPath = disambiguatedAbsolutePath(
             from: candidate,
-            clickedRowText: clickedRowText
+            clickedRowText: clickedRowText,
+            fileExists: fileExists
         ) {
             candidate = clickedPath
         }
@@ -182,11 +193,12 @@ public enum TerminalLinkRouter {
 
     private static func disambiguatedAbsolutePath(
         from candidate: String,
-        clickedRowText: String?
+        clickedRowText: String?,
+        fileExists: (String) -> Bool
     ) -> String? {
-        guard absolutePathRootCount(in: candidate) > 1,
+        guard candidate.hasPrefix("/"),
               let clickedRowText,
-              let rootStart = firstAbsolutePathRoot(in: clickedRowText)
+              let rootStart = clickedRowText.firstIndex(of: "/")
         else {
             return nil
         }
@@ -194,24 +206,10 @@ public enum TerminalLinkRouter {
         let clickedPath = clickedRowText[rootStart...]
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard candidate.contains(clickedPath),
-              FileManager.default.fileExists(atPath: clickedPath) else {
+              fileExists(clickedPath) else {
             return nil
         }
         return clickedPath
-    }
-
-    private static func absolutePathRootCount(in text: String) -> Int {
-        absolutePathRoots.reduce(into: 0) { count, root in
-            var remaining = text.startIndex..<text.endIndex
-            while let match = text.range(of: root, range: remaining) {
-                count += 1
-                remaining = match.upperBound..<text.endIndex
-            }
-        }
-    }
-
-    private static func firstAbsolutePathRoot(in text: String) -> String.Index? {
-        absolutePathRoots.compactMap { text.range(of: $0)?.lowerBound }.min()
     }
 
     public static func webURL(from link: String) -> URL? {

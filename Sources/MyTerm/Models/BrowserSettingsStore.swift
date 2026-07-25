@@ -9,7 +9,6 @@ final class BrowserSettingsStore {
     private static let compactSidebarKey = "compactSidebar"
     private static let recentWorkspaceEmojisKey = "recentWorkspaceEmojis"
     private static let terminalPreferencesMigrationKey = "terminalPreferencesMigration.v1"
-    private static let terminalCursorShapeMigrationKey = "terminalCursorShapeMigration.v1"
     private static let recentWorkspaceEmojiLimit = 10
 
     private let defaults: UserDefaults
@@ -62,14 +61,6 @@ final class BrowserSettingsStore {
 
     func markTerminalPreferencesMigrationComplete() {
         defaults.set(true, forKey: Self.terminalPreferencesMigrationKey)
-    }
-
-    var needsTerminalCursorShapeMigration: Bool {
-        !defaults.bool(forKey: Self.terminalCursorShapeMigrationKey)
-    }
-
-    func markTerminalCursorShapeMigrationComplete() {
-        defaults.set(true, forKey: Self.terminalCursorShapeMigrationKey)
     }
 
     private static func normalizedRecentWorkspaceEmojis(_ emojis: [String]) -> [String] {

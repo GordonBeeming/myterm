@@ -196,7 +196,7 @@ final class BrowserDataProfilesTests: XCTestCase {
         XCTAssertTrue(restored.store.globalSettings.compactSidebar)
     }
 
-    func testCursorMigrationChangesOnlyTheLegacyGlobalBeamDefault() throws {
+    func testExistingBeamCursorSelectionIsPreserved() throws {
         let directory = try makeTemporaryDirectory()
         let (defaults, suiteName) = makeDefaults()
         defer {
@@ -220,12 +220,11 @@ final class BrowserDataProfilesTests: XCTestCase {
             browserSettings: BrowserSettingsStore(channel: .development, defaults: defaults)
         )
 
-        XCTAssertEqual(model.store.globalSettings.cursorShape, .block)
+        XCTAssertEqual(model.store.globalSettings.cursorShape, .beam)
         XCTAssertEqual(model.folders.first?.settingsOverrides?.cursorShape, .beam)
         XCTAssertEqual(model.workspaces.first?.settingsOverrides?.cursorShape, .beam)
         XCTAssertEqual(model.resolvedSettings(for: .workspace(workspaceID))?.cursorShape, .beam)
 
-        model.updateGlobalSettings { $0.cursorShape = .beam }
         let restored = try AppModel(
             channel: .development,
             applicationSupportDirectory: directory,

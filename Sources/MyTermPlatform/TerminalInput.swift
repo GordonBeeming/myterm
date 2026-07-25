@@ -31,27 +31,36 @@ public struct TerminalInputEvent: Equatable, Sendable {
     }
 }
 
+struct TerminalInputCursorPosition: Equatable, Sendable {
+    let column: Int
+    let row: Int
+}
+
 /// Tracks a shell line-editor region created with the terminal's word-selection shortcut.
 /// The terminal cannot select editable input itself, so the shell mark is the source of truth.
 struct TerminalWordSelectionInputState: Sendable {
     private(set) var netWordMovement = 0
     private var hasShellMark = false
+    private var pendingMovement: (amount: Int, origin: TerminalInputCursorPosition)?
 
     mutating func sequence(
         for event: TerminalInputEvent,
         kittyKeyboardEnabled: Bool,
-        normalShellEditing: Bool = true
+        normalShellEditing: Bool = true,
+        emacsLineEditing: Bool = true,
+        cursorPosition: TerminalInputCursorPosition? = nil
     ) -> [UInt8]? {
-        guard !kittyKeyboardEnabled, normalShellEditing else {
+        settlePendingMovement(at: cursorPosition)
+        guard !kittyKeyboardEnabled, normalShellEditing, emacsLineEditing else {
             reset()
             return nil
         }
 
         switch (event.keyCode, event.modifiers.meaningful) {
         case (123, [.shift, .option]):
-            return move(by: -1, sequence: Self.metaBackwardWord)
+            return move(by: -1, sequence: Self.metaBackwardWord, from: cursorPosition)
         case (124, [.shift, .option]):
-            return move(by: 1, sequence: Self.metaForwardWord)
+            return move(by: 1, sequence: Self.metaForwardWord, from: cursorPosition)
         case (51, []), (117, []):
             return deleteSelection()
         default:
@@ -63,10 +72,33 @@ struct TerminalWordSelectionInputState: Sendable {
     mutating func reset() {
         netWordMovement = 0
         hasShellMark = false
+        pendingMovement = nil
     }
 
-    private mutating func move(by amount: Int, sequence: [UInt8]) -> [UInt8] {
-        defer { netWordMovement += amount }
+    mutating func observeCursorPosition(_ position: TerminalInputCursorPosition) {
+        guard let pendingMovement, position != pendingMovement.origin else { return }
+        netWordMovement += pendingMovement.amount
+        self.pendingMovement = nil
+    }
+
+    private mutating func settlePendingMovement(at position: TerminalInputCursorPosition?) {
+        guard let pendingMovement else { return }
+        if let position, position != pendingMovement.origin {
+            netWordMovement += pendingMovement.amount
+        }
+        self.pendingMovement = nil
+    }
+
+    private mutating func move(
+        by amount: Int,
+        sequence: [UInt8],
+        from cursorPosition: TerminalInputCursorPosition?
+    ) -> [UInt8] {
+        if let cursorPosition {
+            pendingMovement = (amount, cursorPosition)
+        } else {
+            netWordMovement += amount
+        }
         guard !hasShellMark else { return sequence }
         hasShellMark = true
         return [Self.setMark] + sequence
@@ -74,7 +106,8 @@ struct TerminalWordSelectionInputState: Sendable {
 
     private mutating func deleteSelection() -> [UInt8]? {
         defer { reset() }
-        guard netWordMovement != 0 else { return nil }
+        guard hasShellMark else { return nil }
+        guard netWordMovement != 0 else { return [] }
 
         let wordCount = abs(netWordMovement)
         let sequence = netWordMovement < 0 ? Self.metaForwardDeleteWord : Self.metaBackwardDeleteWord

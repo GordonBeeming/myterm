@@ -320,6 +320,26 @@ struct SettingsView: View {
                     Toggle("Use Option as Meta", isOn: value)
                         .labelsHidden()
                 }
+
+                ScopedSettingRow(
+                    model: model,
+                    scope: scope,
+                    title: "Shell line editing",
+                    global: \TerminalPreferences.lineEditingMode,
+                    override: \TerminalPreferencesOverrides.lineEditingMode
+                ) { value in
+                    Picker("Shell line editing", selection: value) {
+                        ForEach(TerminalLineEditingMode.allCases, id: \.self) { mode in
+                            Text(mode.settingsLabel).tag(mode)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 150)
+                }
+
+                Text("Shift-Option word selection uses the configured shell editing mode. Choose Vi to leave those keys to a vi-mode shell.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -761,6 +781,15 @@ private extension MyTermCore.TerminalCursorShape {
         case .block: return "Block"
         case .beam: return "Beam"
         case .underline: return "Underline"
+        }
+    }
+}
+
+private extension TerminalLineEditingMode {
+    var settingsLabel: String {
+        switch self {
+        case .emacs: return "Emacs"
+        case .vi: return "Vi"
         }
     }
 }

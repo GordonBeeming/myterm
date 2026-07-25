@@ -108,7 +108,6 @@ final class AppModel {
             )
         }
         try migrateLegacySettings()
-        try migrateTerminalCursorShape()
         try migrateLegacyBrowserDataProfiles()
         restoreRuntimeObjects()
         if let sessionID = selectedTab?.terminalSession?.id {
@@ -1552,14 +1551,6 @@ final class AppModel {
         browserSettings.markTerminalPreferencesMigrationComplete()
     }
 
-    private func migrateTerminalCursorShape() throws {
-        guard browserSettings.needsTerminalCursorShapeMigration else { return }
-        if store.globalSettings.cursorShape == .beam {
-            try store.updateGlobalSettings { $0.cursorShape = .block }
-        }
-        browserSettings.markTerminalCursorShapeMigrationComplete()
-    }
-
     private func migrateLegacyBrowserDataProfiles() throws {
         var updates = [(
             workspaceID: WorkspaceID,
@@ -1990,7 +1981,8 @@ final class AppModel {
             fontSize: settings.fontSize,
             appearance: terminalAppearance(for: settings),
             scrollbackLines: settings.scrollbackLines,
-            optionAsMeta: settings.optionAsMeta
+            optionAsMeta: settings.optionAsMeta,
+            emacsWordSelectionEnabled: settings.lineEditingMode == .emacs
         )
     }
 

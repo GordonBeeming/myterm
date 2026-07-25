@@ -213,6 +213,7 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
     private var paneIsActive = true
     private var activeCaretColor: NSColor?
     private var wordSelectionInput = TerminalWordSelectionInputState()
+    private var emacsWordSelectionEnabled = true
     private var pendingLinkClickRowText: String?
 
     override init(frame frameRect: NSRect) {
@@ -239,6 +240,7 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
         defer { allowMouseReporting = originalMouseReporting }
 
         super.dataReceived(slice: slice)
+        wordSelectionInput.observeCursorPosition(terminalInputCursorPosition())
         contentChangeCoalescer.notify { [weak self] in
             self?.onContentChanged?()
         }
@@ -290,6 +292,7 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
             size: runtimeConfiguration.fontSize
         )
         optionAsMetaKey = runtimeConfiguration.optionAsMeta
+        emacsWordSelectionEnabled = runtimeConfiguration.emacsWordSelectionEnabled
         changeScrollback(runtimeConfiguration.scrollbackLines)
         getTerminal().setCursorStyle(runtimeConfiguration.appearance.cursor.swiftTermStyle)
         nativeForegroundColor = runtimeConfiguration.appearance.foreground?.nsColor ?? .textColor
@@ -382,7 +385,9 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
             if let sequence = self.wordSelectionInput.sequence(
                 for: input,
                 kittyKeyboardEnabled: kittyKeyboardEnabled,
-                normalShellEditing: self.isShellWordSelectionEditing()
+                normalShellEditing: self.isShellWordSelectionEditing(),
+                emacsLineEditing: self.emacsWordSelectionEnabled,
+                cursorPosition: self.terminalInputCursorPosition()
             ) {
                 self.send(sequence)
                 return nil
@@ -398,6 +403,11 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
             self.send(sequence)
             return nil
         }
+    }
+
+    private func terminalInputCursorPosition() -> TerminalInputCursorPosition {
+        let buffer = getTerminal().buffer
+        return TerminalInputCursorPosition(column: buffer.x, row: buffer.y)
     }
 
     override func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {

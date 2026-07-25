@@ -19,6 +19,11 @@ public enum TerminalCursorShape: String, Codable, CaseIterable, Equatable, Hasha
     case underline
 }
 
+public enum TerminalLineEditingMode: String, Codable, CaseIterable, Equatable, Hashable, Sendable {
+    case emacs
+    case vi
+}
+
 public enum TerminalShell: Codable, Equatable, Hashable, Sendable {
     case loginShell
     case custom(path: String)
@@ -138,6 +143,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
     public var cursorShape: TerminalCursorShape
     public var cursorBlink: Bool
     public var optionAsMeta: Bool
+    public var lineEditingMode: TerminalLineEditingMode
 
     public init(
         browserDataScope: BrowserDataScope = .workspace,
@@ -153,7 +159,8 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         scrollbackLines: Int = TerminalPreferences.defaultScrollbackLines,
         cursorShape: TerminalCursorShape = .block,
         cursorBlink: Bool = true,
-        optionAsMeta: Bool = true
+        optionAsMeta: Bool = true,
+        lineEditingMode: TerminalLineEditingMode = .emacs
     ) {
         self.browserDataScope = browserDataScope
         self.textFileOpenCommand = textFileOpenCommand.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -169,6 +176,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         self.cursorShape = cursorShape
         self.cursorBlink = cursorBlink
         self.optionAsMeta = optionAsMeta
+        self.lineEditingMode = lineEditingMode
     }
 
     public static let `default` = TerminalPreferences()
@@ -188,7 +196,8 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
             scrollbackLines: scrollbackLines,
             cursorShape: cursorShape,
             cursorBlink: cursorBlink,
-            optionAsMeta: optionAsMeta
+            optionAsMeta: optionAsMeta,
+            lineEditingMode: lineEditingMode
         )
     }
 
@@ -209,6 +218,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         try container.encode(cursorShape, forKey: .cursorShape)
         try container.encode(cursorBlink, forKey: .cursorBlink)
         try container.encode(optionAsMeta, forKey: .optionAsMeta)
+        try container.encode(lineEditingMode, forKey: .lineEditingMode)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -226,6 +236,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         case cursorShape
         case cursorBlink
         case optionAsMeta
+        case lineEditingMode
     }
 
     private enum LegacyCodingKeys: String, CodingKey {
@@ -251,7 +262,8 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
             scrollbackLines: (try? container.decode(Int.self, forKey: .scrollbackLines)) ?? Self.defaultScrollbackLines,
             cursorShape: (try? container.decode(TerminalCursorShape.self, forKey: .cursorShape)) ?? .block,
             cursorBlink: (try? container.decode(Bool.self, forKey: .cursorBlink)) ?? true,
-            optionAsMeta: (try? container.decode(Bool.self, forKey: .optionAsMeta)) ?? true
+            optionAsMeta: (try? container.decode(Bool.self, forKey: .optionAsMeta)) ?? true,
+            lineEditingMode: (try? container.decode(TerminalLineEditingMode.self, forKey: .lineEditingMode)) ?? .emacs
         )
     }
 
@@ -305,6 +317,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
     public var cursorShape: TerminalCursorShape?
     public var cursorBlink: Bool?
     public var optionAsMeta: Bool?
+    public var lineEditingMode: TerminalLineEditingMode?
 
     public init() {}
 
@@ -323,6 +336,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         case cursorShape
         case cursorBlink
         case optionAsMeta
+        case lineEditingMode
     }
 
     private enum LegacyCodingKeys: String, CodingKey {
@@ -348,6 +362,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         cursorShape = try? container.decodeIfPresent(TerminalCursorShape.self, forKey: .cursorShape)
         cursorBlink = try? container.decodeIfPresent(Bool.self, forKey: .cursorBlink)
         optionAsMeta = try? container.decodeIfPresent(Bool.self, forKey: .optionAsMeta)
+        lineEditingMode = try? container.decodeIfPresent(TerminalLineEditingMode.self, forKey: .lineEditingMode)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -367,6 +382,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         try container.encodeIfPresent(cursorShape, forKey: .cursorShape)
         try container.encodeIfPresent(cursorBlink, forKey: .cursorBlink)
         try container.encodeIfPresent(optionAsMeta, forKey: .optionAsMeta)
+        try container.encodeIfPresent(lineEditingMode, forKey: .lineEditingMode)
     }
 
     public func applying(to base: TerminalPreferences) -> TerminalPreferences {
@@ -384,7 +400,8 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
             scrollbackLines: scrollbackLines ?? base.scrollbackLines,
             cursorShape: cursorShape ?? base.cursorShape,
             cursorBlink: cursorBlink ?? base.cursorBlink,
-            optionAsMeta: optionAsMeta ?? base.optionAsMeta
+            optionAsMeta: optionAsMeta ?? base.optionAsMeta,
+            lineEditingMode: lineEditingMode ?? base.lineEditingMode
         )
     }
 }

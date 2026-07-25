@@ -45,7 +45,8 @@ final class TerminalSessionConfigurationTests: XCTestCase {
                 cursor: TerminalCursorConfiguration(shape: .bar, blinks: false)
             ),
             scrollbackLines: 800,
-            optionAsMeta: false
+            optionAsMeta: false,
+            emacsWordSelectionEnabled: false
         )
         let configuration = TerminalSessionConfiguration(
             workingDirectory: URL(fileURLWithPath: "/tmp"),
@@ -54,6 +55,7 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         )
 
         XCTAssertEqual(configuration.runtimeConfiguration, runtime)
+        XCTAssertFalse(configuration.runtimeConfiguration.emacsWordSelectionEnabled)
         XCTAssertEqual(configuration.restoredOutput, "previous output")
     }
 
@@ -254,6 +256,54 @@ final class TerminalSessionConfigurationTests: XCTestCase {
             )
         )
         XCTAssertEqual(selection.netWordMovement, 0)
+
+        XCTAssertNil(
+            selection.sequence(
+                for: selectLeft,
+                kittyKeyboardEnabled: false,
+                emacsLineEditing: false
+            )
+        )
+    }
+
+    func testWordSelectionCountsOnlyObservedCursorMovementAndConsumesBoundaryDeletion() {
+        let selectLeft = TerminalInputEvent(keyCode: 123, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
+        let backspace = TerminalInputEvent(keyCode: 51, charactersIgnoringModifiers: "\u{7F}", modifiers: [])
+        let start = TerminalInputCursorPosition(column: 5, row: 2)
+
+        var moved = TerminalWordSelectionInputState()
+        XCTAssertEqual(
+            moved.sequence(for: selectLeft, kittyKeyboardEnabled: false, cursorPosition: start),
+            [0x00, 0x1B, 0x62]
+        )
+        moved.observeCursorPosition(.init(column: 1, row: 2))
+        XCTAssertEqual(moved.netWordMovement, -1)
+        XCTAssertEqual(
+            moved.sequence(for: backspace, kittyKeyboardEnabled: false, cursorPosition: .init(column: 1, row: 2)),
+            [0x1B, 0x64]
+        )
+
+        var boundary = TerminalWordSelectionInputState()
+        _ = boundary.sequence(for: selectLeft, kittyKeyboardEnabled: false, cursorPosition: start)
+        XCTAssertEqual(
+            boundary.sequence(for: backspace, kittyKeyboardEnabled: false, cursorPosition: start),
+            []
+        )
+        XCTAssertEqual(boundary.netWordMovement, 0)
+    }
+
+    func testTerminalLinkRouterDisambiguatesCustomAbsoluteRoots() {
+        let first = "/workspace/project/first.txt"
+        let second = "/mnt/data/second.txt"
+
+        XCTAssertEqual(
+            TerminalLinkRouter.url(
+                from: first + second,
+                clickedRowText: "- \(second)",
+                fileExists: { $0 == second }
+            ),
+            URL(fileURLWithPath: second)
+        )
     }
 
     func testShellWordSelectionEditingRequiresTheShellForegroundProcessGroup() {
