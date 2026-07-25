@@ -199,6 +199,13 @@ public final class BrowserSessionController: NSObject, ObservableObject {
         preferences.allowsContentJavaScript = url?.isFileURL != true
     }
 
+    static func isHandledContentNavigation(_ error: Error) -> Bool {
+        let error = error as NSError
+        // WebKit reports this private-domain code after its built-in PDF or
+        // media viewer successfully takes ownership of a navigation.
+        return error.domain == "WebKitErrorDomain" && error.code == 204
+    }
+
     func decideNavigationPolicy(
         for url: URL?,
         preferences: WKWebpagePreferences,
@@ -220,6 +227,11 @@ public final class BrowserSessionController: NSObject, ObservableObject {
     }
 
     private func record(error: Error) {
+        if Self.isHandledContentNavigation(error) {
+            state.errorDescription = nil
+            refreshState()
+            return
+        }
         state.errorDescription = error.localizedDescription
         state.isLoading = false
     }

@@ -31,6 +31,183 @@ public struct TerminalInputEvent: Equatable, Sendable {
     }
 }
 
+struct TerminalInputCursorPosition: Equatable, Sendable {
+    let column: Int
+    let row: Int
+
+    static func live(column: Int, row: Int, lineCount: Int, viewportRows: Int) -> Self {
+        let baseRow = max(lineCount - viewportRows, 0)
+        return Self(column: column, row: baseRow + row)
+    }
+}
+
+/// Tracks a shell line-editor region created with the terminal's word-selection shortcut.
+/// The terminal cannot select editable input itself, so the shell mark is the source of truth.
+struct TerminalWordSelectionInputState: Sendable {
+    private(set) var netCharacterMovement = 0
+    private var hasShellMark = false
+    private var shouldPassThroughCollapsedDelete = false
+    private var pendingMovement: (amount: Int, origin: TerminalInputCursorPosition)?
+    private var queuedMovements: [(amount: Int, sequence: [UInt8])] = []
+    private var deferredDeleteSequence: [UInt8]?
+
+    var hasPendingMovement: Bool {
+        pendingMovement != nil
+    }
+
+    mutating func sequence(
+        for event: TerminalInputEvent,
+        kittyKeyboardEnabled: Bool,
+        normalShellEditing: Bool = true,
+        emacsLineEditing: Bool = true,
+        cursorPosition: TerminalInputCursorPosition? = nil,
+        characterDistance: ((TerminalInputCursorPosition, TerminalInputCursorPosition) -> Int)? = nil
+    ) -> [UInt8]? {
+        guard !kittyKeyboardEnabled, normalShellEditing, emacsLineEditing else {
+            reset()
+            return nil
+        }
+        if isDelete(event), pendingMovement != nil {
+            deferredDeleteSequence = passthroughDeleteSequence(for: event)
+            return []
+        }
+        if pendingMovement != nil {
+            switch (event.keyCode, event.modifiers.meaningful) {
+            case (123, [.shift, .option]):
+                return move(by: -1, sequence: Self.metaBackwardWord, from: cursorPosition)
+            case (124, [.shift, .option]):
+                return move(by: 1, sequence: Self.metaForwardWord, from: cursorPosition)
+            default:
+                break
+            }
+        }
+        settlePendingMovement(at: cursorPosition, characterDistance: characterDistance)
+
+        switch (event.keyCode, event.modifiers.meaningful) {
+        case (123, [.shift, .option]):
+            return move(by: -1, sequence: Self.metaBackwardWord, from: cursorPosition)
+        case (124, [.shift, .option]):
+            return move(by: 1, sequence: Self.metaForwardWord, from: cursorPosition)
+        case (51, []), (117, []):
+            return deleteSelection()
+        default:
+            reset()
+            return nil
+        }
+    }
+
+    mutating func reset() {
+        netCharacterMovement = 0
+        hasShellMark = false
+        shouldPassThroughCollapsedDelete = false
+        pendingMovement = nil
+        queuedMovements = []
+        deferredDeleteSequence = nil
+    }
+
+    mutating func observeCursorPosition(
+        _ position: TerminalInputCursorPosition,
+        characterDistance: (TerminalInputCursorPosition, TerminalInputCursorPosition) -> Int
+    ) -> [UInt8]? {
+        guard let pendingMovement else { return nil }
+        guard position != pendingMovement.origin else { return nil }
+        shouldPassThroughCollapsedDelete = true
+        netCharacterMovement += pendingMovement.amount * max(
+            characterDistance(pendingMovement.origin, position),
+            1
+        )
+        self.pendingMovement = nil
+        return dispatchQueuedMovementOrDelete(from: position)
+    }
+
+    mutating func resolvePendingMovementAsNoOp(
+        at position: TerminalInputCursorPosition
+    ) -> [UInt8]? {
+        guard pendingMovement != nil else { return nil }
+        let hasDeferredDelete = deferredDeleteSequence != nil
+        pendingMovement = nil
+        if !hasDeferredDelete {
+            shouldPassThroughCollapsedDelete = true
+        }
+        return dispatchQueuedMovementOrDelete(from: position)
+    }
+
+    private mutating func dispatchQueuedMovementOrDelete(
+        from position: TerminalInputCursorPosition
+    ) -> [UInt8]? {
+        if !queuedMovements.isEmpty {
+            let nextMovement = queuedMovements.removeFirst()
+            self.pendingMovement = (nextMovement.amount, position)
+            return nextMovement.sequence
+        }
+        guard let deferredDeleteSequence else { return nil }
+        self.deferredDeleteSequence = nil
+        return deleteSelection(collapsedPassthrough: deferredDeleteSequence)
+    }
+
+    private mutating func settlePendingMovement(
+        at position: TerminalInputCursorPosition?,
+        characterDistance: ((TerminalInputCursorPosition, TerminalInputCursorPosition) -> Int)?
+    ) {
+        guard let pendingMovement else { return }
+        guard let position, position != pendingMovement.origin else { return }
+        netCharacterMovement += pendingMovement.amount * max(
+            characterDistance?(pendingMovement.origin, position) ?? 1,
+            1
+        )
+        shouldPassThroughCollapsedDelete = true
+        self.pendingMovement = nil
+        deferredDeleteSequence = nil
+    }
+
+    private mutating func move(
+        by amount: Int,
+        sequence: [UInt8],
+        from cursorPosition: TerminalInputCursorPosition?
+    ) -> [UInt8] {
+        if pendingMovement != nil {
+            queuedMovements.append((amount, sequence))
+            return []
+        }
+        if let cursorPosition {
+            pendingMovement = (amount, cursorPosition)
+        } else {
+            netCharacterMovement += amount
+        }
+        guard !hasShellMark else { return sequence }
+        hasShellMark = true
+        return [Self.setMark] + sequence
+    }
+
+    private mutating func deleteSelection(collapsedPassthrough: [UInt8]? = nil) -> [UInt8]? {
+        defer { reset() }
+        guard hasShellMark else { return nil }
+        guard netCharacterMovement != 0 else {
+            return shouldPassThroughCollapsedDelete ? collapsedPassthrough : []
+        }
+
+        let characterCount = abs(netCharacterMovement)
+        let byte = netCharacterMovement < 0 ? Self.forwardDeleteCharacter : Self.backwardDeleteCharacter
+        return Array(repeating: byte, count: characterCount)
+    }
+
+    private func isDelete(_ event: TerminalInputEvent) -> Bool {
+        (event.keyCode == 51 || event.keyCode == 117)
+            && event.modifiers.meaningful.isEmpty
+    }
+
+    private func passthroughDeleteSequence(for event: TerminalInputEvent) -> [UInt8] {
+        event.keyCode == 117 ? Self.forwardDeleteKey : [Self.backwardDeleteCharacter]
+    }
+
+    private static let setMark: UInt8 = 0x00
+    private static let metaBackwardWord = Array("\u{1B}b".utf8)
+    private static let metaForwardWord = Array("\u{1B}f".utf8)
+    private static let forwardDeleteCharacter: UInt8 = 0x04
+    private static let backwardDeleteCharacter: UInt8 = 0x7F
+    private static let forwardDeleteKey = Array("\u{1B}[3~".utf8)
+}
+
 public enum TerminalInputTranslator {
     public static func sequence(
         for event: TerminalInputEvent,

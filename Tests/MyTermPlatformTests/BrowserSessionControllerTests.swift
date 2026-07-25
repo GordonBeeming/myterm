@@ -47,6 +47,108 @@ final class BrowserSessionControllerTests: XCTestCase {
         XCTAssertTrue(BrowserSessionHostView(contentView: controller.webView, isActive: false).acceptsFirstMouse(for: nil))
     }
 
+    func testPluginHandledLoadsAreNotPresentedAsNavigationErrors() {
+        let controller = BrowserSessionController()
+        let handledLoad = NSError(
+            domain: "WebKitErrorDomain",
+            code: 204,
+            userInfo: [NSLocalizedDescriptionKey: "Plug-in handled load"]
+        )
+        let realFailure = NSError(domain: NSURLErrorDomain, code: NSURLErrorCannotOpenFile)
+
+        XCTAssertTrue(BrowserSessionController.isHandledContentNavigation(handledLoad))
+        XCTAssertFalse(BrowserSessionController.isHandledContentNavigation(realFailure))
+
+        controller.webView(controller.webView, didFail: nil, withError: handledLoad)
+        XCTAssertNil(controller.state.errorDescription)
+
+        controller.webView(controller.webView, didFail: nil, withError: realFailure)
+        XCTAssertEqual(controller.state.errorDescription, realFailure.localizedDescription)
+    }
+
+    @MainActor
+    func testBrowserHostReplacesDisplayedSessionAndTransfersFocus() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 200),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let originalBrowser = FocusableBrowserTestView()
+        let replacementBrowser = FocusableBrowserTestView()
+        let host = BrowserSessionHostView(contentView: originalBrowser, isActive: false)
+        window.contentView = host
+
+        XCTAssertTrue(window.makeFirstResponder(originalBrowser))
+
+        host.update(contentView: replacementBrowser, isActive: true)
+
+        XCTAssertNil(originalBrowser.superview)
+        XCTAssertTrue(host.owns(replacementBrowser))
+        XCTAssertTrue(window.firstResponder === replacementBrowser)
+    }
+
+    @MainActor
+    func testBrowserHostTransfersFocusHeldByAWebViewDescendant() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 200),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let originalBrowser = FocusableBrowserTestView()
+        let focusedWebContent = FocusableBrowserTestView()
+        originalBrowser.addSubview(focusedWebContent)
+        let replacementBrowser = FocusableBrowserTestView()
+        let host = BrowserSessionHostView(contentView: originalBrowser, isActive: false)
+        window.contentView = host
+
+        XCTAssertTrue(window.makeFirstResponder(focusedWebContent))
+
+        host.update(contentView: replacementBrowser, isActive: true)
+
+        XCTAssertNil(originalBrowser.superview)
+        XCTAssertTrue(host.owns(replacementBrowser))
+        XCTAssertTrue(window.firstResponder === replacementBrowser)
+    }
+
+    @MainActor
+    func testBrowserHostDoesNotRemoveContentReparentedByAnotherHost() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 200),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let movedBrowser = FocusableBrowserTestView()
+        let sourceReplacement = FocusableBrowserTestView()
+        let destinationBrowser = FocusableBrowserTestView()
+        let sourceHost = BrowserSessionHostView(contentView: movedBrowser, isActive: false)
+        let destinationHost = BrowserSessionHostView(contentView: destinationBrowser, isActive: false)
+        let container = NSView(frame: .zero)
+        window.contentView = container
+        container.addSubview(sourceHost)
+        container.addSubview(destinationHost)
+
+        destinationHost.update(contentView: movedBrowser, isActive: true)
+        XCTAssertTrue(window.makeFirstResponder(movedBrowser))
+
+        XCTAssertFalse(sourceHost.owns(movedBrowser))
+        XCTAssertFalse(sourceHost.subviews.contains { $0 === movedBrowser })
+        XCTAssertFalse(sourceHost.constraints.contains { constraint in
+            constraint.isActive && (
+                (constraint.firstItem as AnyObject?) === movedBrowser
+                    || (constraint.secondItem as AnyObject?) === movedBrowser
+            )
+        })
+
+        sourceHost.update(contentView: sourceReplacement, isActive: false)
+
+        XCTAssertTrue(destinationHost.owns(movedBrowser))
+        XCTAssertTrue(sourceHost.owns(sourceReplacement))
+        XCTAssertTrue(window.firstResponder === movedBrowser)
+    }
+
     func testProfileIdentifierIsInstalledOnWebViewConfiguration() {
         let identifier = UUID()
         let controller = BrowserSessionController(

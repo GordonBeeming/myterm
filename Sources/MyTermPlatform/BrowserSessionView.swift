@@ -16,27 +16,61 @@ public struct BrowserSessionView: NSViewRepresentable {
     }
 
     public func updateNSView(_ nsView: NSView, context: Context) {
-        (nsView as? BrowserSessionHostView)?.setPaneActive(isActive)
+        (nsView as? BrowserSessionHostView)?.update(contentView: session.webView, isActive: isActive)
     }
 }
 
 @MainActor
 final class BrowserSessionHostView: NSView {
-    private let contentView: NSView
+    private var contentView: NSView
+    private var contentConstraints: [NSLayoutConstraint] = []
     private var shouldFocusWhenAttachedToWindow: Bool
 
     init(contentView: NSView, isActive: Bool) {
         self.contentView = contentView
         shouldFocusWhenAttachedToWindow = isActive
         super.init(frame: .zero)
+        install(contentView)
+    }
+
+    func update(contentView updatedContentView: NSView, isActive: Bool) {
+        setPaneActive(isActive)
+        guard contentView !== updatedContentView else { return }
+
+        let previousContentView = contentView
+        let ownsPreviousContentView = previousContentView.superview === self
+        let focusedView = window?.firstResponder as? NSView
+        let shouldTransferFocus = ownsPreviousContentView && (
+            focusedView === previousContentView
+                || focusedView?.isDescendant(of: previousContentView) == true
+        )
+        if ownsPreviousContentView {
+            previousContentView.removeFromSuperview()
+        }
+
+        contentView = updatedContentView
+        install(updatedContentView)
+
+        if shouldTransferFocus {
+            shouldFocusWhenAttachedToWindow = false
+            window?.makeFirstResponder(updatedContentView)
+        }
+    }
+
+    func owns(_ view: NSView) -> Bool {
+        contentView === view && view.superview === self
+    }
+
+    private func install(_ contentView: NSView) {
         contentView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(contentView)
-        NSLayoutConstraint.activate([
+        contentConstraints = [
             contentView.leadingAnchor.constraint(equalTo: leadingAnchor),
             contentView.trailingAnchor.constraint(equalTo: trailingAnchor),
             contentView.topAnchor.constraint(equalTo: topAnchor),
             contentView.bottomAnchor.constraint(equalTo: bottomAnchor),
-        ])
+        ]
+        NSLayoutConstraint.activate(contentConstraints)
     }
 
     @available(*, unavailable)
@@ -52,6 +86,13 @@ final class BrowserSessionHostView: NSView {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
+    }
+
+    override func willRemoveSubview(_ subview: NSView) {
+        super.willRemoveSubview(subview)
+        guard subview === contentView else { return }
+        NSLayoutConstraint.deactivate(contentConstraints)
+        contentConstraints = []
     }
 
     func setPaneActive(_ isActive: Bool) {

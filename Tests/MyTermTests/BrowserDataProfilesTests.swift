@@ -196,6 +196,45 @@ final class BrowserDataProfilesTests: XCTestCase {
         XCTAssertTrue(restored.store.globalSettings.compactSidebar)
     }
 
+    func testExistingBeamCursorSelectionIsPreserved() throws {
+        let directory = try makeTemporaryDirectory()
+        let (defaults, suiteName) = makeDefaults()
+        defer {
+            removeTemporaryDirectory(directory)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let persistenceURL = MyTermChannel.development.persistenceURL(applicationSupportDirectory: directory)
+        let store = try WorkspaceStore(persistenceURL: persistenceURL)
+        let workspaceID = store.selectedWorkspaceID
+        let folderID = try store.createFolder(title: "Work")
+        try store.moveWorkspace(workspaceID, to: folderID)
+        try store.updateGlobalSettings { $0.cursorShape = .beam }
+        try store.updateFolderSettings(folderID) { $0.cursorShape = .beam }
+        try store.updateWorkspaceSettings(workspaceID) { $0.cursorShape = .beam }
+
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: nil,
+            startsTerminalProcesses: false,
+            browserSettings: BrowserSettingsStore(channel: .development, defaults: defaults)
+        )
+
+        XCTAssertEqual(model.store.globalSettings.cursorShape, .beam)
+        XCTAssertEqual(model.folders.first?.settingsOverrides?.cursorShape, .beam)
+        XCTAssertEqual(model.workspaces.first?.settingsOverrides?.cursorShape, .beam)
+        XCTAssertEqual(model.resolvedSettings(for: .workspace(workspaceID))?.cursorShape, .beam)
+
+        let restored = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: nil,
+            startsTerminalProcesses: false,
+            browserSettings: BrowserSettingsStore(channel: .development, defaults: defaults)
+        )
+        XCTAssertEqual(restored.store.globalSettings.cursorShape, .beam)
+    }
+
     func testNewTabsUseTheCurrentSettingAndLegacyTabsAreMigratedOnce() throws {
         let directory = try makeTemporaryDirectory()
         let (defaults, suiteName) = makeDefaults()

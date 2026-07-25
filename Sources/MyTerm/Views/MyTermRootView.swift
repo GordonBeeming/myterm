@@ -545,6 +545,9 @@ private struct WorkspaceFolderRow: View {
         }
         .frame(minHeight: rowHeight)
         .contentShape(Rectangle())
+        .onTapGesture(count: 2) {
+            model.setFolderExpanded(folder.id, isExpanded: !folder.isExpanded)
+        }
         .onContinuousHover { phase in
             if case .active(let location) = phase {
                 hoverLocationY = location.y

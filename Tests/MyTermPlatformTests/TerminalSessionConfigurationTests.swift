@@ -45,7 +45,8 @@ final class TerminalSessionConfigurationTests: XCTestCase {
                 cursor: TerminalCursorConfiguration(shape: .bar, blinks: false)
             ),
             scrollbackLines: 800,
-            optionAsMeta: false
+            optionAsMeta: false,
+            emacsWordSelectionEnabled: false
         )
         let configuration = TerminalSessionConfiguration(
             workingDirectory: URL(fileURLWithPath: "/tmp"),
@@ -54,6 +55,7 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         )
 
         XCTAssertEqual(configuration.runtimeConfiguration, runtime)
+        XCTAssertFalse(configuration.runtimeConfiguration.emacsWordSelectionEnabled)
         XCTAssertEqual(configuration.restoredOutput, "previous output")
     }
 
@@ -185,6 +187,349 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         XCTAssertNil(TerminalInputTranslator.sequence(for: plainReturn, kittyKeyboardEnabled: false))
         XCTAssertNil(TerminalInputTranslator.sequence(for: plainArrow, kittyKeyboardEnabled: false))
         XCTAssertNil(TerminalInputTranslator.sequence(for: unrelatedShortcut, kittyKeyboardEnabled: false))
+    }
+
+    func testWordSelectionStartsAMarkedShellRegionAndExtendsIt() {
+        var selection = TerminalWordSelectionInputState()
+        let selectLeft = TerminalInputEvent(
+            keyCode: 123,
+            charactersIgnoringModifiers: "",
+            modifiers: [.shift, .option]
+        )
+
+        XCTAssertEqual(selection.sequence(for: selectLeft, kittyKeyboardEnabled: false), [0x00, 0x1B, 0x62])
+        XCTAssertEqual(selection.sequence(for: selectLeft, kittyKeyboardEnabled: false), [0x1B, 0x62])
+        XCTAssertEqual(selection.netCharacterMovement, -2)
+    }
+
+    func testWordSelectionTracksNetMovementWhenDirectionReverses() {
+        var selection = TerminalWordSelectionInputState()
+        let selectLeft = TerminalInputEvent(keyCode: 123, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
+        let selectRight = TerminalInputEvent(keyCode: 124, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
+
+        XCTAssertEqual(selection.sequence(for: selectLeft, kittyKeyboardEnabled: false), [0x00, 0x1B, 0x62])
+        XCTAssertEqual(selection.sequence(for: selectLeft, kittyKeyboardEnabled: false), [0x1B, 0x62])
+        XCTAssertEqual(selection.sequence(for: selectRight, kittyKeyboardEnabled: false), [0x1B, 0x66])
+        XCTAssertEqual(selection.netCharacterMovement, -1)
+        XCTAssertEqual(selection.sequence(for: selectRight, kittyKeyboardEnabled: false), [0x1B, 0x66])
+        XCTAssertEqual(selection.netCharacterMovement, 0)
+    }
+
+    func testWordSelectionDeletesTheExactMarkedCharactersInEitherDirection() {
+        let selectLeft = TerminalInputEvent(keyCode: 123, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
+        let selectRight = TerminalInputEvent(keyCode: 124, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
+        let backspace = TerminalInputEvent(keyCode: 51, charactersIgnoringModifiers: "\u{7F}", modifiers: [])
+        let forwardDelete = TerminalInputEvent(keyCode: 117, charactersIgnoringModifiers: "", modifiers: [])
+
+        var leftSelection = TerminalWordSelectionInputState()
+        _ = leftSelection.sequence(for: selectLeft, kittyKeyboardEnabled: false)
+        _ = leftSelection.sequence(for: selectLeft, kittyKeyboardEnabled: false)
+        XCTAssertEqual(leftSelection.sequence(for: backspace, kittyKeyboardEnabled: false), [0x04, 0x04])
+        XCTAssertEqual(leftSelection.netCharacterMovement, 0)
+
+        var rightSelection = TerminalWordSelectionInputState()
+        _ = rightSelection.sequence(for: selectRight, kittyKeyboardEnabled: false)
+        _ = rightSelection.sequence(for: selectRight, kittyKeyboardEnabled: false)
+        XCTAssertEqual(rightSelection.sequence(for: forwardDelete, kittyKeyboardEnabled: false), [0x7F, 0x7F])
+        XCTAssertEqual(rightSelection.netCharacterMovement, 0)
+    }
+
+    func testWordSelectionCancelsOnOrdinaryInputAndPassesThroughOutsideShellEditing() {
+        let selectLeft = TerminalInputEvent(keyCode: 123, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
+        let plainInput = TerminalInputEvent(keyCode: 0, charactersIgnoringModifiers: "a", modifiers: [])
+        let backspace = TerminalInputEvent(keyCode: 51, charactersIgnoringModifiers: "\u{7F}", modifiers: [])
+
+        var selection = TerminalWordSelectionInputState()
+        _ = selection.sequence(for: selectLeft, kittyKeyboardEnabled: false)
+        XCTAssertNil(selection.sequence(for: plainInput, kittyKeyboardEnabled: false))
+        XCTAssertNil(selection.sequence(for: backspace, kittyKeyboardEnabled: false))
+
+        XCTAssertNil(selection.sequence(for: selectLeft, kittyKeyboardEnabled: true))
+        XCTAssertEqual(selection.netCharacterMovement, 0)
+
+        _ = selection.sequence(for: selectLeft, kittyKeyboardEnabled: false)
+        XCTAssertNil(
+            selection.sequence(
+                for: selectLeft,
+                kittyKeyboardEnabled: false,
+                normalShellEditing: false
+            )
+        )
+        XCTAssertEqual(selection.netCharacterMovement, 0)
+
+        XCTAssertNil(
+            selection.sequence(
+                for: selectLeft,
+                kittyKeyboardEnabled: false,
+                emacsLineEditing: false
+            )
+        )
+    }
+
+    func testWordSelectionCountsObservedCharactersAndConsumesBoundaryDeletion() {
+        let selectLeft = TerminalInputEvent(keyCode: 123, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
+        let backspace = TerminalInputEvent(keyCode: 51, charactersIgnoringModifiers: "\u{7F}", modifiers: [])
+        let start = TerminalInputCursorPosition(column: 5, row: 2)
+
+        var moved = TerminalWordSelectionInputState()
+        XCTAssertEqual(
+            moved.sequence(for: selectLeft, kittyKeyboardEnabled: false, cursorPosition: start),
+            [0x00, 0x1B, 0x62]
+        )
+        XCTAssertNil(moved.observeCursorPosition(.init(column: 1, row: 2), characterDistance: { _, _ in 4 }))
+        XCTAssertEqual(moved.netCharacterMovement, -4)
+        XCTAssertEqual(
+            moved.sequence(for: backspace, kittyKeyboardEnabled: false, cursorPosition: .init(column: 1, row: 2)),
+            [0x04, 0x04, 0x04, 0x04]
+        )
+
+        var boundary = TerminalWordSelectionInputState()
+        _ = boundary.sequence(for: selectLeft, kittyKeyboardEnabled: false, cursorPosition: start)
+        XCTAssertEqual(
+            boundary.sequence(for: backspace, kittyKeyboardEnabled: false, cursorPosition: start),
+            []
+        )
+        XCTAssertEqual(boundary.netCharacterMovement, 0)
+    }
+
+    func testWordSelectionDefersRapidDeletionUntilThePendingCursorMoveArrives() {
+        let selectLeft = TerminalInputEvent(keyCode: 123, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
+        let backspace = TerminalInputEvent(keyCode: 51, charactersIgnoringModifiers: "\u{7F}", modifiers: [])
+        let start = TerminalInputCursorPosition(column: 5, row: 2)
+
+        var selection = TerminalWordSelectionInputState()
+        _ = selection.sequence(for: selectLeft, kittyKeyboardEnabled: false, cursorPosition: start)
+        XCTAssertEqual(
+            selection.sequence(for: backspace, kittyKeyboardEnabled: false, cursorPosition: start),
+            []
+        )
+        XCTAssertEqual(
+            selection.observeCursorPosition(.init(column: 2, row: 2), characterDistance: { _, _ in 3 }),
+            [0x04, 0x04, 0x04]
+        )
+        XCTAssertEqual(selection.netCharacterMovement, 0)
+    }
+
+    func testWordSelectionIgnoresUnrelatedOutputUntilThePendingCursorMoveArrives() {
+        let selectLeft = TerminalInputEvent(keyCode: 123, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
+        let backspace = TerminalInputEvent(keyCode: 51, charactersIgnoringModifiers: "\u{7F}", modifiers: [])
+        let start = TerminalInputCursorPosition(column: 5, row: 12)
+
+        var selection = TerminalWordSelectionInputState()
+        _ = selection.sequence(for: selectLeft, kittyKeyboardEnabled: false, cursorPosition: start)
+        XCTAssertEqual(
+            selection.sequence(for: backspace, kittyKeyboardEnabled: false, cursorPosition: start),
+            []
+        )
+
+        XCTAssertNil(selection.observeCursorPosition(start, characterDistance: { _, _ in 0 }))
+        XCTAssertEqual(
+            selection.observeCursorPosition(.init(column: 2, row: 12), characterDistance: { _, _ in 3 }),
+            [0x04, 0x04, 0x04]
+        )
+        XCTAssertEqual(selection.netCharacterMovement, 0)
+    }
+
+    func testWordSelectionRecoversAfterATimedOutBoundaryMovement() {
+        let selectLeft = TerminalInputEvent(keyCode: 123, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
+        let selectRight = TerminalInputEvent(keyCode: 124, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
+        let backspace = TerminalInputEvent(keyCode: 51, charactersIgnoringModifiers: "\u{7F}", modifiers: [])
+        let start = TerminalInputCursorPosition(column: 0, row: 12)
+
+        var selection = TerminalWordSelectionInputState()
+        _ = selection.sequence(for: selectLeft, kittyKeyboardEnabled: false, cursorPosition: start)
+        XCTAssertNil(selection.resolvePendingMovementAsNoOp(at: start))
+        XCTAssertFalse(selection.hasPendingMovement)
+
+        XCTAssertEqual(
+            selection.sequence(for: selectRight, kittyKeyboardEnabled: false, cursorPosition: start),
+            [0x1B, 0x66]
+        )
+
+        var deletion = TerminalWordSelectionInputState()
+        _ = deletion.sequence(for: selectLeft, kittyKeyboardEnabled: false, cursorPosition: start)
+        XCTAssertEqual(
+            deletion.sequence(for: backspace, kittyKeyboardEnabled: false, cursorPosition: start),
+            []
+        )
+        XCTAssertEqual(deletion.resolvePendingMovementAsNoOp(at: start), [])
+        XCTAssertFalse(deletion.hasPendingMovement)
+
+        var settledBoundary = TerminalWordSelectionInputState()
+        _ = settledBoundary.sequence(for: selectRight, kittyKeyboardEnabled: false, cursorPosition: start)
+        XCTAssertNil(settledBoundary.resolvePendingMovementAsNoOp(at: start))
+        XCTAssertNil(
+            settledBoundary.sequence(for: backspace, kittyKeyboardEnabled: false, cursorPosition: start)
+        )
+    }
+
+    func testTerminalInputCursorPositionUsesTheLiveBufferBase() {
+        XCTAssertEqual(
+            TerminalInputCursorPosition.live(column: 7, row: 4, lineCount: 140, viewportRows: 20),
+            TerminalInputCursorPosition(column: 7, row: 124)
+        )
+    }
+
+    func testWordSelectionQueuesRapidDirectionReversalUntilEachCursorMoveArrives() {
+        let selectLeft = TerminalInputEvent(keyCode: 123, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
+        let selectRight = TerminalInputEvent(keyCode: 124, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
+        let backspace = TerminalInputEvent(keyCode: 51, charactersIgnoringModifiers: "\u{7F}", modifiers: [])
+        let start = TerminalInputCursorPosition(column: 5, row: 2)
+        let left = TerminalInputCursorPosition(column: 2, row: 2)
+
+        var selection = TerminalWordSelectionInputState()
+        XCTAssertEqual(
+            selection.sequence(for: selectLeft, kittyKeyboardEnabled: false, cursorPosition: start),
+            [0x00, 0x1B, 0x62]
+        )
+        XCTAssertEqual(
+            selection.sequence(for: selectRight, kittyKeyboardEnabled: false, cursorPosition: start),
+            []
+        )
+        XCTAssertEqual(
+            selection.observeCursorPosition(left, characterDistance: { _, _ in 3 }),
+            [0x1B, 0x66]
+        )
+        XCTAssertNil(selection.observeCursorPosition(start, characterDistance: { _, _ in 3 }))
+        XCTAssertEqual(selection.netCharacterMovement, 0)
+        XCTAssertNil(
+            selection.sequence(for: backspace, kittyKeyboardEnabled: false, cursorPosition: start)
+        )
+    }
+
+    func testDeferredDeletePassesThroughAfterASelectionCollapses() {
+        let selectLeft = TerminalInputEvent(keyCode: 123, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
+        let selectRight = TerminalInputEvent(keyCode: 124, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
+        let forwardDelete = TerminalInputEvent(keyCode: 117, charactersIgnoringModifiers: "", modifiers: [])
+        let start = TerminalInputCursorPosition(column: 5, row: 2)
+        let left = TerminalInputCursorPosition(column: 2, row: 2)
+
+        var selection = TerminalWordSelectionInputState()
+        _ = selection.sequence(for: selectLeft, kittyKeyboardEnabled: false, cursorPosition: start)
+        _ = selection.observeCursorPosition(left, characterDistance: { _, _ in 3 })
+        _ = selection.sequence(for: selectRight, kittyKeyboardEnabled: false, cursorPosition: left)
+        XCTAssertEqual(
+            selection.sequence(for: forwardDelete, kittyKeyboardEnabled: false, cursorPosition: left),
+            []
+        )
+        XCTAssertEqual(
+            selection.observeCursorPosition(start, characterDistance: { _, _ in 3 }),
+            Array("\u{1B}[3~".utf8)
+        )
+        XCTAssertFalse(selection.hasPendingMovement)
+    }
+
+    func testTerminalLinkRouterDisambiguatesCustomAbsoluteRoots() {
+        let first = "/workspace/project/first.txt"
+        let second = "/mnt/data/second.txt"
+
+        XCTAssertEqual(
+            TerminalLinkRouter.url(
+                from: first + second,
+                clickedRowText: "- \(second)",
+                isRegularFile: { $0 == second }
+            ),
+            URL(fileURLWithPath: second)
+        )
+    }
+
+    func testTerminalLinkRouterPreservesAPathWrappedAfterAnExistingDirectory() {
+        let directory = "/tmp/project"
+        let candidate = directory + "/file.txt"
+
+        XCTAssertEqual(
+            TerminalLinkRouter.url(
+                from: candidate,
+                clickedRowText: directory,
+                isRegularFile: { _ in false }
+            ),
+            URL(fileURLWithPath: candidate)
+        )
+    }
+
+    func testTerminalLinkRouterPreservesAValidFullPathBeforeDisambiguatingTheClickedRow() {
+        let candidate = "/workspace/project/wrapped/tmp/file.txt"
+        let clickedPath = "/tmp/file.txt"
+
+        XCTAssertEqual(
+            TerminalLinkRouter.url(
+                from: candidate,
+                clickedRowText: clickedPath,
+                isRegularFile: { $0 == candidate || $0 == clickedPath }
+            ),
+            URL(fileURLWithPath: candidate)
+        )
+    }
+
+    func testShellWordSelectionEditingRequiresTheShellForegroundProcessGroup() {
+        XCTAssertTrue(
+            MyTermLocalProcessTerminalView.isShellWordSelectionEditing(
+                isAlternateScreen: false,
+                childFileDescriptor: 4,
+                shellProcessID: 101,
+                foregroundProcessGroup: 101,
+                shellProcessGroup: 101
+            )
+        )
+        XCTAssertFalse(
+            MyTermLocalProcessTerminalView.isShellWordSelectionEditing(
+                isAlternateScreen: false,
+                childFileDescriptor: 4,
+                shellProcessID: 101,
+                foregroundProcessGroup: 202,
+                shellProcessGroup: 101
+            )
+        )
+    }
+
+    func testShellWordSelectionEditingRejectsInvalidProcessStateAndAlternateScreens() {
+        let validState = (childFileDescriptor: Int32(4), shellProcessID: pid_t(101), foregroundProcessGroup: pid_t(101), shellProcessGroup: pid_t(101))
+
+        XCTAssertFalse(
+            MyTermLocalProcessTerminalView.isShellWordSelectionEditing(
+                isAlternateScreen: true,
+                childFileDescriptor: validState.childFileDescriptor,
+                shellProcessID: validState.shellProcessID,
+                foregroundProcessGroup: validState.foregroundProcessGroup,
+                shellProcessGroup: validState.shellProcessGroup
+            )
+        )
+        XCTAssertFalse(
+            MyTermLocalProcessTerminalView.isShellWordSelectionEditing(
+                isAlternateScreen: false,
+                childFileDescriptor: -1,
+                shellProcessID: validState.shellProcessID,
+                foregroundProcessGroup: validState.foregroundProcessGroup,
+                shellProcessGroup: validState.shellProcessGroup
+            )
+        )
+        XCTAssertFalse(
+            MyTermLocalProcessTerminalView.isShellWordSelectionEditing(
+                isAlternateScreen: false,
+                childFileDescriptor: validState.childFileDescriptor,
+                shellProcessID: 0,
+                foregroundProcessGroup: validState.foregroundProcessGroup,
+                shellProcessGroup: validState.shellProcessGroup
+            )
+        )
+        XCTAssertFalse(
+            MyTermLocalProcessTerminalView.isShellWordSelectionEditing(
+                isAlternateScreen: false,
+                childFileDescriptor: validState.childFileDescriptor,
+                shellProcessID: validState.shellProcessID,
+                foregroundProcessGroup: -1,
+                shellProcessGroup: validState.shellProcessGroup
+            )
+        )
+        XCTAssertFalse(
+            MyTermLocalProcessTerminalView.isShellWordSelectionEditing(
+                isAlternateScreen: false,
+                childFileDescriptor: validState.childFileDescriptor,
+                shellProcessID: validState.shellProcessID,
+                foregroundProcessGroup: validState.foregroundProcessGroup,
+                shellProcessGroup: -1
+            )
+        )
     }
 
     func testCommandVOnlyBecomesControlVForImageClipboardContent() {
@@ -427,5 +772,47 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         )
         XCTAssertNil(TerminalLinkRouter.url(from: "ssh://example.com"))
         XCTAssertNil(TerminalLinkRouter.url(from: "https:///missing-host"))
+    }
+
+    func testTerminalLinkRouterUsesTheClickedRowWhenAdjacentPathsAreJoined() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let first = directory.appendingPathComponent("first-video.mp4")
+        let second = directory.appendingPathComponent("second-video.mp4")
+        XCTAssertTrue(FileManager.default.createFile(atPath: first.path, contents: Data()))
+        XCTAssertTrue(FileManager.default.createFile(atPath: second.path, contents: Data()))
+
+        let joinedLink = "\(first.path)-\(second.path)"
+        XCTAssertEqual(
+            TerminalLinkRouter.url(
+                from: joinedLink,
+                clickedRowText: "- \(first.path)"
+            )?.path,
+            first.path
+        )
+        XCTAssertEqual(
+            TerminalLinkRouter.url(
+                from: joinedLink,
+                clickedRowText: "- \(second.path)"
+            )?.path,
+            second.path
+        )
+    }
+
+    func testTerminalLinkRouterKeepsAJoinedCandidateWhenTheClickedRowIsNotAFile() {
+        let first = "/tmp/missing-first-video.mp4"
+        let second = "/tmp/missing-second-video.mp4"
+        let joinedLink = "\(first)-\(second)"
+
+        XCTAssertEqual(
+            TerminalLinkRouter.url(
+                from: joinedLink,
+                clickedRowText: "- \(first)"
+            )?.path,
+            joinedLink
+        )
     }
 }

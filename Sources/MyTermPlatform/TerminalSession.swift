@@ -89,19 +89,22 @@ public struct TerminalRuntimeConfiguration: Equatable, Sendable {
     public let appearance: TerminalAppearance
     public let scrollbackLines: Int
     public let optionAsMeta: Bool
+    public let emacsWordSelectionEnabled: Bool
 
     public init(
         fontName: String? = nil,
         fontSize: Double = 13,
         appearance: TerminalAppearance = TerminalAppearance(),
         scrollbackLines: Int = 5_000,
-        optionAsMeta: Bool = true
+        optionAsMeta: Bool = true,
+        emacsWordSelectionEnabled: Bool = true
     ) {
         self.fontName = fontName
         self.fontSize = max(fontSize, 1)
         self.appearance = appearance
         self.scrollbackLines = max(scrollbackLines, 0)
         self.optionAsMeta = optionAsMeta
+        self.emacsWordSelectionEnabled = emacsWordSelectionEnabled
     }
 }
 
@@ -146,9 +149,29 @@ public enum TerminalSessionEvent: Equatable, Sendable {
 }
 
 public enum TerminalLinkRouter {
-    public static func url(from link: String) -> URL? {
-        let candidate = link.trimmingCharacters(in: .whitespacesAndNewlines)
+    public static func url(from link: String, clickedRowText: String? = nil) -> URL? {
+        url(
+            from: link,
+            clickedRowText: clickedRowText,
+            isRegularFile: isRegularFile(atPath:)
+        )
+    }
+
+    static func url(
+        from link: String,
+        clickedRowText: String?,
+        isRegularFile: (String) -> Bool
+    ) -> URL? {
+        var candidate = link.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !candidate.isEmpty else { return nil }
+
+        if let clickedPath = disambiguatedAbsolutePath(
+            from: candidate,
+            clickedRowText: clickedRowText,
+            isRegularFile: isRegularFile
+        ) {
+            candidate = clickedPath
+        }
 
         if candidate.hasPrefix("/") {
             return URL(fileURLWithPath: candidate).standardizedFileURL
@@ -166,6 +189,35 @@ public enum TerminalLinkRouter {
         }
 
         return webURL(from: candidate)
+    }
+
+    private static func disambiguatedAbsolutePath(
+        from candidate: String,
+        clickedRowText: String?,
+        isRegularFile: (String) -> Bool
+    ) -> String? {
+        guard candidate.hasPrefix("/"),
+              let clickedRowText,
+              let rootStart = clickedRowText.firstIndex(of: "/")
+        else {
+            return nil
+        }
+
+        let clickedPath = clickedRowText[rootStart...]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard candidate != clickedPath,
+              !isRegularFile(candidate),
+              candidate.contains(clickedPath),
+              isRegularFile(clickedPath) else {
+            return nil
+        }
+        return clickedPath
+    }
+
+    private static func isRegularFile(atPath path: String) -> Bool {
+        var isDirectory = ObjCBool(false)
+        return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
+            && !isDirectory.boolValue
     }
 
     public static func webURL(from link: String) -> URL? {

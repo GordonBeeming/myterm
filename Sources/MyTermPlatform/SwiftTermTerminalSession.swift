@@ -212,6 +212,10 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
     private var shouldFocusWhenAttachedToWindow = false
     private var paneIsActive = true
     private var activeCaretColor: NSColor?
+    private var wordSelectionInput = TerminalWordSelectionInputState()
+    private var wordSelectionResolutionGeneration = 0
+    private var emacsWordSelectionEnabled = true
+    private var pendingLinkClickRowText: String?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -237,6 +241,18 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
         defer { allowMouseReporting = originalMouseReporting }
 
         super.dataReceived(slice: slice)
+        let hadPendingMovement = wordSelectionInput.hasPendingMovement
+        let pendingInput = wordSelectionInput.observeCursorPosition(
+            terminalInputCursorPosition(),
+            characterDistance: terminalInputCharacterDistance
+        )
+        if let pendingInput {
+            send(pendingInput)
+        }
+        if hadPendingMovement,
+           (pendingInput != nil || !wordSelectionInput.hasPendingMovement) {
+            scheduleWordSelectionResolutionIfNeeded()
+        }
         contentChangeCoalescer.notify { [weak self] in
             self?.onContentChanged?()
         }
@@ -250,6 +266,14 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        if event.modifierFlags.contains(.command) {
+            pendingLinkClickRowText = terminalRowText(at: event)
+        }
+        defer { pendingLinkClickRowText = nil }
+        super.mouseUp(with: event)
     }
 
     func focusWhenPossible() {
@@ -280,6 +304,7 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
             size: runtimeConfiguration.fontSize
         )
         optionAsMetaKey = runtimeConfiguration.optionAsMeta
+        emacsWordSelectionEnabled = runtimeConfiguration.emacsWordSelectionEnabled
         changeScrollback(runtimeConfiguration.scrollbackLines)
         getTerminal().setCursorStyle(runtimeConfiguration.appearance.cursor.swiftTermStyle)
         nativeForegroundColor = runtimeConfiguration.appearance.foreground?.nsColor ?? .textColor
@@ -328,6 +353,38 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
         feed(text: prelude)
     }
 
+    nonisolated static func isShellWordSelectionEditing(
+        isAlternateScreen: Bool,
+        childFileDescriptor: Int32,
+        shellProcessID: pid_t,
+        foregroundProcessGroup: pid_t,
+        shellProcessGroup: pid_t
+    ) -> Bool {
+        !isAlternateScreen
+            && childFileDescriptor >= 0
+            && shellProcessID > 0
+            && foregroundProcessGroup > 0
+            && shellProcessGroup > 0
+            && foregroundProcessGroup == shellProcessGroup
+    }
+
+    private func isShellWordSelectionEditing() -> Bool {
+        let childFileDescriptor = process.childfd
+        let shellProcessID = process.shellPid
+        guard !getTerminal().isCurrentBufferAlternate,
+              childFileDescriptor >= 0,
+              shellProcessID > 0 else {
+            return false
+        }
+        return Self.isShellWordSelectionEditing(
+            isAlternateScreen: false,
+            childFileDescriptor: childFileDescriptor,
+            shellProcessID: shellProcessID,
+            foregroundProcessGroup: tcgetpgrp(childFileDescriptor),
+            shellProcessGroup: getpgid(shellProcessID)
+        )
+    }
+
     private func installKeyEventMonitor() {
         keyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, self.window?.firstResponder === self else { return event }
@@ -336,10 +393,23 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
                 charactersIgnoringModifiers: event.charactersIgnoringModifiers ?? "",
                 modifiers: TerminalInputModifiers(event.modifierFlags)
             )
+            let kittyKeyboardEnabled = !self.getTerminal().keyboardEnhancementFlags.isEmpty
+            if let sequence = self.wordSelectionInput.sequence(
+                for: input,
+                kittyKeyboardEnabled: kittyKeyboardEnabled,
+                normalShellEditing: self.isShellWordSelectionEditing(),
+                emacsLineEditing: self.emacsWordSelectionEnabled,
+                cursorPosition: self.terminalInputCursorPosition(),
+                characterDistance: self.terminalInputCharacterDistance
+            ) {
+                self.send(sequence)
+                self.scheduleWordSelectionResolutionIfNeeded()
+                return nil
+            }
             let shouldInspectPasteboard = input.keyCode == 9 && input.modifiers.meaningful == [.command]
             guard let sequence = TerminalInputTranslator.sequence(
                 for: input,
-                kittyKeyboardEnabled: !self.getTerminal().keyboardEnhancementFlags.isEmpty,
+                kittyKeyboardEnabled: kittyKeyboardEnabled,
                 clipboardContainsImage: shouldInspectPasteboard && TerminalPasteboard.containsImage(in: .general)
             ) else {
                 return event
@@ -349,12 +419,118 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
         }
     }
 
+    private func scheduleWordSelectionResolutionIfNeeded() {
+        wordSelectionResolutionGeneration &+= 1
+        guard wordSelectionInput.hasPendingMovement else { return }
+        let generation = wordSelectionResolutionGeneration
+
+        Task { @MainActor [weak self] in
+            // A shell emits no cursor response when a word motion hits the
+            // input boundary. Wait briefly for a real response, then resolve
+            // that silent boundary motion so later selection keys can proceed.
+            try? await Task.sleep(for: .milliseconds(200))
+            guard let self,
+                  self.wordSelectionResolutionGeneration == generation,
+                  self.wordSelectionInput.hasPendingMovement else {
+                return
+            }
+            self.resolveTimedOutWordSelectionMovement()
+        }
+    }
+
+    private func resolveTimedOutWordSelectionMovement() {
+        let position = terminalInputCursorPosition()
+        if let pendingInput = wordSelectionInput.observeCursorPosition(
+            position,
+            characterDistance: terminalInputCharacterDistance
+        ) {
+            send(pendingInput)
+            scheduleWordSelectionResolutionIfNeeded()
+            return
+        }
+        guard wordSelectionInput.hasPendingMovement else {
+            scheduleWordSelectionResolutionIfNeeded()
+            return
+        }
+        if let pendingInput = wordSelectionInput.resolvePendingMovementAsNoOp(at: position) {
+            send(pendingInput)
+        }
+        scheduleWordSelectionResolutionIfNeeded()
+    }
+
+    private func terminalInputCursorPosition() -> TerminalInputCursorPosition {
+        let terminal = getTerminal()
+        let buffer = terminal.buffer
+        return .live(
+            column: buffer.x,
+            row: buffer.y,
+            lineCount: terminalBufferLineCount(terminal),
+            viewportRows: terminal.rows
+        )
+    }
+
+    /// SwiftTerm exposes the live cursor relative to `yBase`, but keeps `yBase`
+    /// internal. Derive it from the active buffer's current line count instead
+    /// of using `yDisp`, which points at scrollback while the user is scrolled up.
+    private func terminalBufferLineCount(_ terminal: Terminal) -> Int {
+        let buffer = terminal.buffer
+        let firstRow = buffer.totalLinesTrimmed
+        var lowerBound = firstRow
+        var upperBound = firstRow + buffer.getCorrectBufferLength(terminal.rows)
+
+        while lowerBound < upperBound {
+            let row = lowerBound + (upperBound - lowerBound) / 2
+            if terminal.getScrollInvariantLine(row: row) == nil {
+                upperBound = row
+            } else {
+                lowerBound = row + 1
+            }
+        }
+
+        return lowerBound - firstRow
+    }
+
+    private func terminalInputCharacterDistance(
+        from first: TerminalInputCursorPosition,
+        to second: TerminalInputCursorPosition
+    ) -> Int {
+        getTerminal().getText(
+            start: Position(col: first.column, row: first.row),
+            end: Position(col: second.column, row: second.row)
+        ).count
+    }
+
     override func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
-        guard let url = TerminalLinkRouter.url(from: link) else {
+        guard let url = TerminalLinkRouter.url(
+            from: link,
+            clickedRowText: pendingLinkClickRowText
+        ) else {
             super.requestOpenLink(source: source, link: link, params: params)
             return
         }
         onOpenWebURL?(url)
+    }
+
+    private func terminalRowText(at event: NSEvent) -> String? {
+        let terminal = getTerminal()
+        guard terminal.rows > 0,
+              let cellSize = cellSizeInPixels(source: terminal),
+              cellSize.height > 0 else {
+            return nil
+        }
+
+        let backingScale = max(window?.backingScaleFactor ?? 1, 1)
+        let cellHeight = CGFloat(cellSize.height) / backingScale
+        let localPoint = convert(event.locationInWindow, from: nil)
+        let screenRow = min(
+            max(Int((bounds.height - localPoint.y) / cellHeight), 0),
+            terminal.rows - 1
+        )
+        let bufferRow = screenRow + terminal.buffer.yDisp
+        return terminal.getText(
+            start: Position(col: 0, row: bufferRow),
+            end: Position(col: terminal.cols, row: bufferRow)
+        )
     }
 }
 

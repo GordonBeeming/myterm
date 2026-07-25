@@ -320,6 +320,26 @@ struct SettingsView: View {
                     Toggle("Use Option as Meta", isOn: value)
                         .labelsHidden()
                 }
+
+                ScopedSettingRow(
+                    model: model,
+                    scope: scope,
+                    title: "Shell line editing",
+                    global: \TerminalPreferences.lineEditingMode,
+                    override: \TerminalPreferencesOverrides.lineEditingMode
+                ) { value in
+                    Picker("Shell line editing", selection: value) {
+                        ForEach(TerminalLineEditingMode.allCases, id: \.self) { mode in
+                            Text(mode.settingsLabel).tag(mode)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 150)
+                }
+
+                Text("Shift-Option word selection uses the configured shell editing mode. Choose Vi to leave those keys to a vi-mode shell.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -353,16 +373,27 @@ struct SettingsView: View {
                 ScopedSettingRow(
                     model: model,
                     scope: scope,
-                    title: "Open Markdown files with",
-                    global: \TerminalPreferences.markdownOpenCommand,
-                    override: \TerminalPreferencesOverrides.markdownOpenCommand
+                    title: "Open text files with",
+                    global: \TerminalPreferences.textFileOpenCommand,
+                    override: \TerminalPreferencesOverrides.textFileOpenCommand
                 ) { value in
                     TextField("Command", text: value)
                         .frame(width: 260)
-                        .accessibilityLabel("Command for opening Markdown files")
+                        .accessibilityLabel("Command for opening text files")
                 }
 
-                Text("Use {file} where the quoted file path should be inserted. If it is omitted, MyTerm appends the file path. Leave the command empty to open Markdown directly in MyTerm's browser.")
+                ScopedSettingRow(
+                    model: model,
+                    scope: scope,
+                    title: "Text file patterns",
+                    global: \TerminalPreferences.nativeTextFilePatterns,
+                    override: \TerminalPreferencesOverrides.nativeTextFilePatterns
+                ) { value in
+                    TextFilePatternsEditor(patterns: value)
+                        .id(scope)
+                }
+
+                Text("Use one pattern per line. Extension suffixes use *.json; literal names such as Dockerfile and .gitignore match exactly. Terminal file links matching these patterns use the command; other files open in the default macOS application. Use {file} where the quoted file path should be inserted. If it is omitted, MyTerm appends the file path. Leave the command empty to open matching files externally.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -420,6 +451,41 @@ struct SettingsView: View {
                 model.prepareSettings(for: .global)
             }
         }
+    }
+}
+
+private struct TextFilePatternsEditor: View {
+    @Binding private var patterns: [String]
+    @State private var draft: String
+    @FocusState private var isEditing: Bool
+
+    init(patterns: Binding<[String]>) {
+        _patterns = patterns
+        _draft = State(initialValue: patterns.wrappedValue.joined(separator: "\n"))
+    }
+
+    var body: some View {
+        TextEditor(text: $draft)
+            .font(.system(.body, design: .monospaced))
+            .multilineTextAlignment(.leading)
+            .frame(width: 260, height: 110)
+            .accessibilityLabel("Patterns for files opened as text")
+            .focused($isEditing)
+            .onChange(of: draft) { _, newValue in
+                let updatedPatterns = newValue.components(separatedBy: .newlines)
+                if updatedPatterns != patterns {
+                    patterns = updatedPatterns
+                }
+            }
+            .onChange(of: patterns) { _, newValue in
+                guard !isEditing else { return }
+                draft = newValue.joined(separator: "\n")
+            }
+            .onChange(of: isEditing) { _, editing in
+                if !editing {
+                    draft = patterns.joined(separator: "\n")
+                }
+            }
     }
 }
 
@@ -740,6 +806,15 @@ private extension MyTermCore.TerminalCursorShape {
         case .block: return "Block"
         case .beam: return "Beam"
         case .underline: return "Underline"
+        }
+    }
+}
+
+private extension TerminalLineEditingMode {
+    var settingsLabel: String {
+        switch self {
+        case .emacs: return "Emacs"
+        case .vi: return "Vi"
         }
     }
 }
