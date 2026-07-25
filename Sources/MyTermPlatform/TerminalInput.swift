@@ -34,6 +34,11 @@ public struct TerminalInputEvent: Equatable, Sendable {
 struct TerminalInputCursorPosition: Equatable, Sendable {
     let column: Int
     let row: Int
+
+    static func live(column: Int, row: Int, lineCount: Int, viewportRows: Int) -> Self {
+        let baseRow = max(lineCount - viewportRows, 0)
+        return Self(column: column, row: baseRow + row)
+    }
 }
 
 /// Tracks a shell line-editor region created with the terminal's word-selection shortcut.
@@ -99,12 +104,11 @@ struct TerminalWordSelectionInputState: Sendable {
         characterDistance: (TerminalInputCursorPosition, TerminalInputCursorPosition) -> Int
     ) -> [UInt8]? {
         guard let pendingMovement else { return nil }
-        if position != pendingMovement.origin {
-            netCharacterMovement += pendingMovement.amount * max(
-                characterDistance(pendingMovement.origin, position),
-                1
-            )
-        }
+        guard position != pendingMovement.origin else { return nil }
+        netCharacterMovement += pendingMovement.amount * max(
+            characterDistance(pendingMovement.origin, position),
+            1
+        )
         self.pendingMovement = nil
         if !queuedMovements.isEmpty {
             let nextMovement = queuedMovements.removeFirst()

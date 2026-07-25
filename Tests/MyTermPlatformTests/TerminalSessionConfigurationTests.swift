@@ -310,6 +310,33 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         XCTAssertEqual(selection.netCharacterMovement, 0)
     }
 
+    func testWordSelectionIgnoresUnrelatedOutputUntilThePendingCursorMoveArrives() {
+        let selectLeft = TerminalInputEvent(keyCode: 123, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
+        let backspace = TerminalInputEvent(keyCode: 51, charactersIgnoringModifiers: "\u{7F}", modifiers: [])
+        let start = TerminalInputCursorPosition(column: 5, row: 12)
+
+        var selection = TerminalWordSelectionInputState()
+        _ = selection.sequence(for: selectLeft, kittyKeyboardEnabled: false, cursorPosition: start)
+        XCTAssertEqual(
+            selection.sequence(for: backspace, kittyKeyboardEnabled: false, cursorPosition: start),
+            []
+        )
+
+        XCTAssertNil(selection.observeCursorPosition(start, characterDistance: { _, _ in 0 }))
+        XCTAssertEqual(
+            selection.observeCursorPosition(.init(column: 2, row: 12), characterDistance: { _, _ in 3 }),
+            [0x04, 0x04, 0x04]
+        )
+        XCTAssertEqual(selection.netCharacterMovement, 0)
+    }
+
+    func testTerminalInputCursorPositionUsesTheLiveBufferBase() {
+        XCTAssertEqual(
+            TerminalInputCursorPosition.live(column: 7, row: 4, lineCount: 140, viewportRows: 20),
+            TerminalInputCursorPosition(column: 7, row: 124)
+        )
+    }
+
     func testWordSelectionQueuesRapidDirectionReversalUntilEachCursorMoveArrives() {
         let selectLeft = TerminalInputEvent(keyCode: 123, charactersIgnoringModifiers: "", modifiers: [.shift, .option])
         let selectRight = TerminalInputEvent(keyCode: 124, charactersIgnoringModifiers: "", modifiers: [.shift, .option])

@@ -412,8 +412,35 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
     }
 
     private func terminalInputCursorPosition() -> TerminalInputCursorPosition {
-        let buffer = getTerminal().buffer
-        return TerminalInputCursorPosition(column: buffer.x, row: buffer.yDisp + buffer.y)
+        let terminal = getTerminal()
+        let buffer = terminal.buffer
+        return .live(
+            column: buffer.x,
+            row: buffer.y,
+            lineCount: terminalBufferLineCount(terminal),
+            viewportRows: terminal.rows
+        )
+    }
+
+    /// SwiftTerm exposes the live cursor relative to `yBase`, but keeps `yBase`
+    /// internal. Derive it from the active buffer's current line count instead
+    /// of using `yDisp`, which points at scrollback while the user is scrolled up.
+    private func terminalBufferLineCount(_ terminal: Terminal) -> Int {
+        let buffer = terminal.buffer
+        let firstRow = buffer.totalLinesTrimmed
+        var lowerBound = firstRow
+        var upperBound = firstRow + buffer.getCorrectBufferLength(terminal.rows)
+
+        while lowerBound < upperBound {
+            let row = lowerBound + (upperBound - lowerBound) / 2
+            if terminal.getScrollInvariantLine(row: row) == nil {
+                upperBound = row
+            } else {
+                lowerBound = row + 1
+            }
+        }
+
+        return lowerBound - firstRow
     }
 
     private func terminalInputCharacterDistance(
