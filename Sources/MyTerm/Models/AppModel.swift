@@ -663,10 +663,10 @@ final class AppModel {
         tabID: TabID?,
         paneID: PaneID?
     ) -> Bool {
-        guard (try? store.resolvedSettings(for: workspaceID).matchesNativeTextFile(url)) == true else { return false }
+        guard let settings = try? store.resolvedSettings(for: workspaceID),
+              settings.matchesNativeTextFile(url) else { return false }
 
         do {
-            let settings = try store.resolvedSettings(for: workspaceID)
             let template = settings.textFileOpenCommand.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !template.isEmpty else {
                 openExternally(url)
@@ -739,7 +739,7 @@ final class AppModel {
 
     private func openExternally(_ url: URL, failureDescription: String? = nil) {
         if !externalFileOpener(url) {
-            errorDescription = failureDescription ?? "MyTerm could not open \(url.path) in its macOS application."
+            errorDescription = failureDescription ?? "MyTerm could not open \(url.path) in the default macOS application."
         }
     }
 

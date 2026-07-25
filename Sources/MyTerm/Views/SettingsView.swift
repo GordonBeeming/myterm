@@ -376,7 +376,7 @@ struct SettingsView: View {
                         .accessibilityLabel("Patterns for files opened as text")
                 }
 
-                Text("Use one pattern per line. Extension suffixes use *.json; literal names such as Dockerfile and .gitignore match exactly. Terminal file links matching these patterns use the command; other files open in their macOS application. Use {file} where the quoted file path should be inserted. If it is omitted, MyTerm appends the file path. Leave the command empty to open matching files externally.")
+                Text("Use one pattern per line. Extension suffixes use *.json; literal names such as Dockerfile and .gitignore match exactly. Terminal file links matching these patterns use the command; other files open in the default macOS application. Use {file} where the quoted file path should be inserted. If it is omitted, MyTerm appends the file path. Leave the command empty to open matching files externally.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
