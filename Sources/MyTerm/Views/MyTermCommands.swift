@@ -1,34 +1,97 @@
 import MyTermCore
 import SwiftUI
 
-struct MyTermShortcutDeclaration: Equatable {
-    let key: Character
-    let modifiers: EventModifiers
-
+extension KeyChord {
     var keyEquivalent: KeyEquivalent { KeyEquivalent(key) }
+
+    var eventModifiers: EventModifiers {
+        var result: EventModifiers = []
+        if modifiers.contains(.command) { result.insert(.command) }
+        if modifiers.contains(.shift) { result.insert(.shift) }
+        if modifiers.contains(.option) { result.insert(.option) }
+        if modifiers.contains(.control) { result.insert(.control) }
+        return result
+    }
 }
 
+private extension View {
+    /// Every command binds its chord through here, so a chord can only reach the menu by existing in
+    /// `MyTermCommandShortcuts` — which is also the list browser panes refuse to give web content.
+    func shortcut(_ chord: KeyChord) -> some View {
+        keyboardShortcut(chord.keyEquivalent, modifiers: chord.eventModifiers)
+    }
+}
+
+/// Every keyboard chord the app claims, in one place.
+///
+/// This is the single source of truth in both directions: SwiftUI reads it to build menu key equivalents,
+/// and browser panes read `allReserved` to refuse those chords to web content. A chord declared here is
+/// therefore guaranteed to reach the app rather than being swallowed by a page that binds the same keys.
+/// This governs the app's own menu key equivalents specifically — declaring one of those inline instead
+/// of adding it here silently opts it out of that protection, so don't. SwiftUI role shortcuts such as
+/// `.keyboardShortcut(.cancelAction)` / `.defaultAction` on sheet buttons are a different thing (a button
+/// role, not a chord) and aren't chords the browser layer reserves, so they don't belong in this table.
 enum MyTermCommandShortcuts {
-    static let newFolder = MyTermShortcutDeclaration(key: "n", modifiers: [.command, .shift])
-    static let decreaseWorkspaceFontSize = MyTermShortcutDeclaration(key: "-", modifiers: [.command])
-    static let increaseWorkspaceFontSize = MyTermShortcutDeclaration(key: "=", modifiers: [.command])
-    static let previousTab = MyTermShortcutDeclaration(key: "\t", modifiers: [.control, .shift])
-    static let nextTab = MyTermShortcutDeclaration(key: "\t", modifiers: [.control])
-    static let togglePaneFullScreen = MyTermShortcutDeclaration(key: "\r", modifiers: [.command, .shift])
-    static let reloadBrowser = MyTermShortcutDeclaration(key: "r", modifiers: [.command])
-    static let focusBrowserAddress = MyTermShortcutDeclaration(key: "l", modifiers: [.command])
-    static let browserBack = MyTermShortcutDeclaration(key: "[", modifiers: [.command])
-    static let browserForward = MyTermShortcutDeclaration(key: "]", modifiers: [.command])
-    static let findInBrowser = MyTermShortcutDeclaration(key: "f", modifiers: [.command])
-    static let resetBrowserZoom = MyTermShortcutDeclaration(key: "0", modifiers: [.command])
-    static let moveTabToPreviousPane = MyTermShortcutDeclaration(
-        key: "\u{F702}",
-        modifiers: [.command, .option, .shift]
-    )
-    static let moveTabToNextPane = MyTermShortcutDeclaration(
-        key: "\u{F703}",
-        modifiers: [.command, .option, .shift]
-    )
+    // Application
+    static let globalSettings = KeyChord(key: ",", modifiers: [.command])
+
+    // Workspace
+    static let newWorkspace = KeyChord(key: "n", modifiers: [.command])
+    static let newFolder = KeyChord(key: "n", modifiers: [.command, .shift])
+    static let renameWorkspace = KeyChord(key: "r", modifiers: [.command, .shift])
+    static let decreaseWorkspaceFontSize = KeyChord(key: "-", modifiers: [.command])
+    static let increaseWorkspaceFontSize = KeyChord(key: "=", modifiers: [.command])
+    static let closeWorkspace = KeyChord(key: "w", modifiers: [.command, .shift])
+    static let previousWorkspace = KeyChord(key: "[", modifiers: [.command, .control])
+    static let nextWorkspace = KeyChord(key: "]", modifiers: [.command, .control])
+    static let toggleSidebar = KeyChord(key: "b", modifiers: [.command])
+
+    // Tabs
+    static let newTerminalTab = KeyChord(key: "t", modifiers: [.command])
+    static let newBrowserTab = KeyChord(key: "l", modifiers: [.command, .shift])
+    static let renameTab = KeyChord(key: "r", modifiers: [.command, .option])
+    static let previousTab = KeyChord(key: "\t", modifiers: [.control, .shift])
+    static let nextTab = KeyChord(key: "\t", modifiers: [.control])
+
+    // Pane
+    static let togglePaneFullScreen = KeyChord(key: "\r", modifiers: [.command, .shift])
+    static let splitRight = KeyChord(key: "d", modifiers: [.command])
+    static let splitBelow = KeyChord(key: "d", modifiers: [.command, .shift])
+    static let closeFocusedPaneOrTab = KeyChord(key: "w", modifiers: [.command])
+    static let focusPaneLeft = KeyChord(key: KeyChord.leftArrow, modifiers: [.command, .option])
+    static let focusPaneUp = KeyChord(key: KeyChord.upArrow, modifiers: [.command, .option])
+    static let focusPaneRight = KeyChord(key: KeyChord.rightArrow, modifiers: [.command, .option])
+    static let focusPaneDown = KeyChord(key: KeyChord.downArrow, modifiers: [.command, .option])
+    static let moveTabToPreviousPane = KeyChord(key: KeyChord.leftArrow, modifiers: [.command, .option, .shift])
+    static let moveTabToNextPane = KeyChord(key: KeyChord.rightArrow, modifiers: [.command, .option, .shift])
+
+    // Browser
+    static let browserBack = KeyChord(key: "[", modifiers: [.command])
+    static let browserForward = KeyChord(key: "]", modifiers: [.command])
+    static let reloadBrowser = KeyChord(key: "r", modifiers: [.command])
+    static let focusBrowserAddress = KeyChord(key: "l", modifiers: [.command])
+    static let findInBrowser = KeyChord(key: "f", modifiers: [.command])
+    static let resetBrowserZoom = KeyChord(key: "0", modifiers: [.command])
+
+    /// Cmd+1…9 selects a workspace, Ctrl+1…9 selects a tab. Generated rather than written out so the
+    /// reserved list can't drift from what the menus actually bind.
+    static let numberKeys: [Character] = (1...9).map { Character(String($0)) }
+    static let selectWorkspaceByNumber = numberKeys.map { KeyChord(key: $0, modifiers: [.command]) }
+    static let selectTabByNumber = numberKeys.map { KeyChord(key: $0, modifiers: [.control]) }
+
+    /// The chords browser panes refuse to hand to web content.
+    static let allReserved: [KeyChord] = [
+        globalSettings,
+        newWorkspace, newFolder, renameWorkspace,
+        decreaseWorkspaceFontSize, increaseWorkspaceFontSize,
+        closeWorkspace, previousWorkspace, nextWorkspace, toggleSidebar,
+        newTerminalTab, newBrowserTab, renameTab, previousTab, nextTab,
+        togglePaneFullScreen, splitRight, splitBelow, closeFocusedPaneOrTab,
+        focusPaneLeft, focusPaneUp, focusPaneRight, focusPaneDown,
+        moveTabToPreviousPane, moveTabToNextPane,
+        browserBack, browserForward, reloadBrowser, focusBrowserAddress,
+        findInBrowser, resetBrowserZoom,
+    ] + selectWorkspaceByNumber + selectTabByNumber
 }
 
 struct MyTermCommands: Commands {
@@ -41,73 +104,58 @@ struct MyTermCommands: Commands {
                 startup.model?.prepareSettings(for: .global)
                 openSettings()
             }
-            .keyboardShortcut(",", modifiers: [.command])
+            .shortcut(MyTermCommandShortcuts.globalSettings)
         }
 
         CommandMenu("Workspace") {
             Button("New Workspace") { startup.model?.createWorkspace() }
-                .keyboardShortcut("n", modifiers: [.command])
+                .shortcut(MyTermCommandShortcuts.newWorkspace)
             Button("New Folder…") { startup.model?.beginCreatingFolder() }
-                .keyboardShortcut(
-                    MyTermCommandShortcuts.newFolder.keyEquivalent,
-                    modifiers: MyTermCommandShortcuts.newFolder.modifiers
-                )
+                .shortcut(MyTermCommandShortcuts.newFolder)
             Button("Rename Workspace…") { startup.model?.beginRenamingSelectedWorkspace() }
-                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .shortcut(MyTermCommandShortcuts.renameWorkspace)
             Button(startup.model?.decreaseZoomOrFontCommandTitle ?? "Decrease Workspace Font Size") {
                 startup.model?.decreaseZoomOrFontSize()
             }
-                .keyboardShortcut(
-                    MyTermCommandShortcuts.decreaseWorkspaceFontSize.keyEquivalent,
-                    modifiers: MyTermCommandShortcuts.decreaseWorkspaceFontSize.modifiers
-                )
+                .shortcut(MyTermCommandShortcuts.decreaseWorkspaceFontSize)
             Button(startup.model?.increaseZoomOrFontCommandTitle ?? "Increase Workspace Font Size") {
                 startup.model?.increaseZoomOrFontSize()
             }
-                .keyboardShortcut(
-                    MyTermCommandShortcuts.increaseWorkspaceFontSize.keyEquivalent,
-                    modifiers: MyTermCommandShortcuts.increaseWorkspaceFontSize.modifiers
-                )
+                .shortcut(MyTermCommandShortcuts.increaseWorkspaceFontSize)
             Button("Close Workspace") {
                 guard let model = startup.model else { return }
                 model.deleteWorkspace(model.store.selectedWorkspaceID)
             }
-            .keyboardShortcut("w", modifiers: [.command, .shift])
+            .shortcut(MyTermCommandShortcuts.closeWorkspace)
             Divider()
             Button("Previous Workspace") { startup.model?.selectAdjacentWorkspace(offset: -1) }
-                .keyboardShortcut("[", modifiers: [.command, .control])
+                .shortcut(MyTermCommandShortcuts.previousWorkspace)
             Button("Next Workspace") { startup.model?.selectAdjacentWorkspace(offset: 1) }
-                .keyboardShortcut("]", modifiers: [.command, .control])
-            ForEach(1...9, id: \.self) { number in
-                Button("Workspace \(number)") { startup.model?.selectWorkspace(at: number - 1) }
-                    .keyboardShortcut(KeyEquivalent(Character(String(number))), modifiers: [.command])
+                .shortcut(MyTermCommandShortcuts.nextWorkspace)
+            ForEach(Array(MyTermCommandShortcuts.selectWorkspaceByNumber.enumerated()), id: \.offset) { index, chord in
+                Button("Workspace \(index + 1)") { startup.model?.selectWorkspace(at: index) }
+                    .shortcut(chord)
             }
             Divider()
             Button("Toggle Sidebar") { startup.model?.toggleSidebar() }
-                .keyboardShortcut("b", modifiers: [.command])
+                .shortcut(MyTermCommandShortcuts.toggleSidebar)
         }
 
         CommandMenu("Tabs") {
             Button("New Terminal Tab") { startup.model?.createTerminalTab() }
-                .keyboardShortcut("t", modifiers: [.command])
+                .shortcut(MyTermCommandShortcuts.newTerminalTab)
             Button("New Browser Tab") { startup.model?.createBrowserTab() }
-                .keyboardShortcut("l", modifiers: [.command, .shift])
+                .shortcut(MyTermCommandShortcuts.newBrowserTab)
             Button("Rename Tab…") { startup.model?.beginRenamingSelectedTab() }
-                .keyboardShortcut("r", modifiers: [.command, .option])
+                .shortcut(MyTermCommandShortcuts.renameTab)
             Divider()
             Button("Previous Tab") { startup.model?.selectAdjacentTab(offset: -1) }
-                .keyboardShortcut(
-                    MyTermCommandShortcuts.previousTab.keyEquivalent,
-                    modifiers: MyTermCommandShortcuts.previousTab.modifiers
-                )
+                .shortcut(MyTermCommandShortcuts.previousTab)
             Button("Next Tab") { startup.model?.selectAdjacentTab(offset: 1) }
-                .keyboardShortcut(
-                    MyTermCommandShortcuts.nextTab.keyEquivalent,
-                    modifiers: MyTermCommandShortcuts.nextTab.modifiers
-                )
-            ForEach(1...9, id: \.self) { number in
-                Button("Tab \(number)") { startup.model?.selectTab(at: number - 1) }
-                    .keyboardShortcut(KeyEquivalent(Character(String(number))), modifiers: [.control])
+                .shortcut(MyTermCommandShortcuts.nextTab)
+            ForEach(Array(MyTermCommandShortcuts.selectTabByNumber.enumerated()), id: \.offset) { index, chord in
+                Button("Tab \(index + 1)") { startup.model?.selectTab(at: index) }
+                    .shortcut(chord)
             }
         }
 
@@ -115,31 +163,28 @@ struct MyTermCommands: Commands {
             Button(startup.model?.paneFullScreenCommandTitle ?? "Make Pane Full Screen") {
                 startup.model?.toggleFocusedPaneFullScreen()
             }
-                .keyboardShortcut(
-                    MyTermCommandShortcuts.togglePaneFullScreen.keyEquivalent,
-                    modifiers: MyTermCommandShortcuts.togglePaneFullScreen.modifiers
-                )
+                .shortcut(MyTermCommandShortcuts.togglePaneFullScreen)
             Divider()
             Button("Split Right") { startup.model?.splitFocusedTerminal(orientation: .horizontal) }
-                .keyboardShortcut("d", modifiers: [.command])
+                .shortcut(MyTermCommandShortcuts.splitRight)
             Button("Split Below") { startup.model?.splitFocusedTerminal(orientation: .vertical) }
-                .keyboardShortcut("d", modifiers: [.command, .shift])
+                .shortcut(MyTermCommandShortcuts.splitBelow)
             Button("Close Focused Pane or Tab") { startup.model?.closeFocusedPaneOrTab() }
-                .keyboardShortcut("w", modifiers: [.command])
+                .shortcut(MyTermCommandShortcuts.closeFocusedPaneOrTab)
             Divider()
             Button("Focus Pane Left") { startup.model?.focusTerminal(direction: .left) }
-                .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
+                .shortcut(MyTermCommandShortcuts.focusPaneLeft)
             Button("Focus Pane Up") { startup.model?.focusTerminal(direction: .up) }
-                .keyboardShortcut(.upArrow, modifiers: [.command, .option])
+                .shortcut(MyTermCommandShortcuts.focusPaneUp)
             Button("Focus Pane Right") { startup.model?.focusTerminal(direction: .right) }
-                .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
+                .shortcut(MyTermCommandShortcuts.focusPaneRight)
             Button("Focus Pane Down") { startup.model?.focusTerminal(direction: .down) }
-                .keyboardShortcut(.downArrow, modifiers: [.command, .option])
+                .shortcut(MyTermCommandShortcuts.focusPaneDown)
             Divider()
             Button("Move Tab to Previous Pane") { startup.model?.routeSelectedTabMovement(.previousPane) }
-                .keyboardShortcut(.leftArrow, modifiers: [.command, .option, .shift])
+                .shortcut(MyTermCommandShortcuts.moveTabToPreviousPane)
             Button("Move Tab to Next Pane") { startup.model?.routeSelectedTabMovement(.nextPane) }
-                .keyboardShortcut(.rightArrow, modifiers: [.command, .option, .shift])
+                .shortcut(MyTermCommandShortcuts.moveTabToNextPane)
             Divider()
             Button("Move Tab to New Pane on Left") { startup.model?.routeSelectedTabMovement(.newPane(.left)) }
             Button("Move Tab to New Pane on Right") { startup.model?.routeSelectedTabMovement(.newPane(.right)) }
@@ -149,22 +194,13 @@ struct MyTermCommands: Commands {
 
         CommandMenu("Browser") {
             Button("Back") { startup.model?.goBackInSelectedBrowser() }
-                .keyboardShortcut(
-                    MyTermCommandShortcuts.browserBack.keyEquivalent,
-                    modifiers: MyTermCommandShortcuts.browserBack.modifiers
-                )
+                .shortcut(MyTermCommandShortcuts.browserBack)
                 .disabled(startup.model?.canSelectedBrowserGoBack != true)
             Button("Forward") { startup.model?.goForwardInSelectedBrowser() }
-                .keyboardShortcut(
-                    MyTermCommandShortcuts.browserForward.keyEquivalent,
-                    modifiers: MyTermCommandShortcuts.browserForward.modifiers
-                )
+                .shortcut(MyTermCommandShortcuts.browserForward)
                 .disabled(startup.model?.canSelectedBrowserGoForward != true)
             Button("Reload") { startup.model?.reloadSelectedBrowser() }
-                .keyboardShortcut(
-                    MyTermCommandShortcuts.reloadBrowser.keyEquivalent,
-                    modifiers: MyTermCommandShortcuts.reloadBrowser.modifiers
-                )
+                .shortcut(MyTermCommandShortcuts.reloadBrowser)
                 .disabled(startup.model?.hasSelectedBrowserTab != true)
             Button("Reload From Origin") { startup.model?.reloadSelectedBrowserFromOrigin() }
                 .disabled(startup.model?.hasSelectedBrowserTab != true)
@@ -172,16 +208,10 @@ struct MyTermCommands: Commands {
                 .disabled(startup.model?.canStopSelectedBrowser != true)
             Divider()
             Button("Focus Address") { startup.model?.requestSelectedBrowserAddressFocus() }
-                .keyboardShortcut(
-                    MyTermCommandShortcuts.focusBrowserAddress.keyEquivalent,
-                    modifiers: MyTermCommandShortcuts.focusBrowserAddress.modifiers
-                )
+                .shortcut(MyTermCommandShortcuts.focusBrowserAddress)
                 .disabled(startup.model?.hasSelectedBrowserTab != true)
             Button("Find") { startup.model?.requestSelectedBrowserFind() }
-                .keyboardShortcut(
-                    MyTermCommandShortcuts.findInBrowser.keyEquivalent,
-                    modifiers: MyTermCommandShortcuts.findInBrowser.modifiers
-                )
+                .shortcut(MyTermCommandShortcuts.findInBrowser)
                 .disabled(startup.model?.hasSelectedBrowserTab != true)
             Divider()
             Button("Zoom In") { startup.model?.zoomInSelectedBrowser() }
@@ -189,10 +219,7 @@ struct MyTermCommands: Commands {
             Button("Zoom Out") { startup.model?.zoomOutSelectedBrowser() }
                 .disabled(startup.model?.hasSelectedBrowserTab != true)
             Button("Reset Zoom") { startup.model?.resetSelectedBrowserZoom() }
-                .keyboardShortcut(
-                    MyTermCommandShortcuts.resetBrowserZoom.keyEquivalent,
-                    modifiers: MyTermCommandShortcuts.resetBrowserZoom.modifiers
-                )
+                .shortcut(MyTermCommandShortcuts.resetBrowserZoom)
                 .disabled(startup.model?.hasSelectedBrowserTab != true)
         }
     }

@@ -182,27 +182,27 @@ final class InteractionBehaviorTests: XCTestCase {
     func testWorkspaceCommandShortcutDeclarations() {
         XCTAssertEqual(
             MyTermCommandShortcuts.newFolder,
-            MyTermShortcutDeclaration(key: "n", modifiers: [.command, .shift])
+            KeyChord(key: "n", modifiers: [.command, .shift])
         )
         XCTAssertEqual(
             MyTermCommandShortcuts.decreaseWorkspaceFontSize,
-            MyTermShortcutDeclaration(key: "-", modifiers: [.command])
+            KeyChord(key: "-", modifiers: [.command])
         )
         XCTAssertEqual(
             MyTermCommandShortcuts.increaseWorkspaceFontSize,
-            MyTermShortcutDeclaration(key: "=", modifiers: [.command])
+            KeyChord(key: "=", modifiers: [.command])
         )
         XCTAssertEqual(
             MyTermCommandShortcuts.previousTab,
-            MyTermShortcutDeclaration(key: "\t", modifiers: [.control, .shift])
+            KeyChord(key: "\t", modifiers: [.control, .shift])
         )
         XCTAssertEqual(
             MyTermCommandShortcuts.nextTab,
-            MyTermShortcutDeclaration(key: "\t", modifiers: [.control])
+            KeyChord(key: "\t", modifiers: [.control])
         )
         XCTAssertEqual(
             MyTermCommandShortcuts.togglePaneFullScreen,
-            MyTermShortcutDeclaration(key: "\r", modifiers: [.command, .shift])
+            KeyChord(key: "\r", modifiers: [.command, .shift])
         )
     }
 
