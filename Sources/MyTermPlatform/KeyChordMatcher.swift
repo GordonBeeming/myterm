@@ -5,9 +5,12 @@ import MyTermCore
 /// has reserved for its own menu commands.
 public enum KeyChordMatcher {
     public static func matches(_ chord: KeyChord, event: NSEvent) -> Bool {
+        // `charactersIgnoringModifiers` still applies Shift, so a shifted letter arrives uppercase
+        // ("N") while the table declares it lowercase ("n"). Compare case-insensitively, the same way
+        // AppKit's own menu key-equivalent matching does.
         guard let characters = event.charactersIgnoringModifiers,
               characters.count == 1,
-              characters.first == chord.key else {
+              characters.lowercased() == String(chord.key).lowercased() else {
             return false
         }
         return modifiers(for: event) == chord.modifiers

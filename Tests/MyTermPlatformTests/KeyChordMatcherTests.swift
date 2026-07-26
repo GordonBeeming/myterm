@@ -70,8 +70,33 @@ final class KeyChordMatcherTests: XCTestCase {
     }
 
     func testDoesNotMatchADifferentKey() {
-        let event = keyDown(characters: "d", modifiers: [.command, .shift])
+        // Real Shift+D reports uppercase "D" via charactersIgnoringModifiers; synthesise that rather
+        // than a hand-lowered "d", which is not what a real keyboard produces.
+        let event = keyDown(characters: "D", modifiers: [.command, .shift])
         XCTAssertFalse(KeyChordMatcher.matches(fullScreen, event: event))
+    }
+
+    func testMatchesAShiftedLetterChordDespiteTheUppercaseCharacter() {
+        // charactersIgnoringModifiers still applies Shift, so a real Cmd+Shift+N key-down reports "N"
+        // even though the chord declares the lowercase "n". Every hand-written event below carries the
+        // uppercase a real keyboard would produce, not a lowercased stand-in — one per letter used by a
+        // Cmd+Shift chord in MyTermCommandShortcuts (newFolder, renameWorkspace, closeWorkspace,
+        // newBrowserTab, splitBelow).
+        for lowercaseKey in "nrwld" {
+            let chord = KeyChord(key: lowercaseKey, modifiers: [.command, .shift])
+            let event = keyDown(characters: String(lowercaseKey).uppercased(), modifiers: [.command, .shift])
+            XCTAssertTrue(
+                KeyChordMatcher.matches(chord, event: event),
+                "Expected Cmd+Shift+\(lowercaseKey) to match an uppercase '\(lowercaseKey.uppercased())' key-down"
+            )
+        }
+    }
+
+    func testShiftedMatchingDoesNotLoosenModifierComparison() {
+        // Case-insensitive key comparison must not make the modifier check any less exact: Cmd+N (no
+        // Shift) still must not fire the Cmd+Shift+N command.
+        let event = keyDown(characters: "n", modifiers: [.command])
+        XCTAssertFalse(KeyChordMatcher.matches(KeyChord(key: "n", modifiers: [.command, .shift]), event: event))
     }
 
     func testMatchesAnyFindsAChordInTheReservedList() {
