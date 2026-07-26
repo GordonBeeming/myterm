@@ -13,8 +13,9 @@ final class BrowserDataProfilesTests: XCTestCase {
         XCTAssertEqual(initial.browserDataScope, .workspace)
         XCTAssertTrue(initial.compactSidebar)
         XCTAssertEqual(BrowserDataScope.appWide.browserDataScopeLabel, "Across all workspaces")
+        XCTAssertEqual(BrowserDataScope.folder.browserDataScopeLabel, "Per MyTerm folder")
         XCTAssertEqual(BrowserDataScope.workspace.browserDataScopeLabel, "Per workspace")
-        XCTAssertEqual(BrowserDataScope.projectDirectory.browserDataScopeLabel, "Per project folder")
+        XCTAssertEqual(BrowserDataScope.projectDirectory.browserDataScopeLabel, "Per project directory")
 
         initial.browserDataScope = .projectDirectory
         initial.compactSidebar = false
@@ -50,26 +51,35 @@ final class BrowserDataProfilesTests: XCTestCase {
             at: project.appending(path: ".git", directoryHint: .isDirectory),
             withIntermediateDirectories: false
         )
-        let workspace = workspace(workingDirectory: nested)
+        let workspace = workspace(workingDirectory: nested, folderID: WorkspaceFolderID())
         let development = BrowserDataProfileResolver(channel: .development, homeDirectory: directory)
         let production = BrowserDataProfileResolver(channel: .production, homeDirectory: directory)
 
         let appWide = development.resolve(scope: .appWide, workspace: workspace)
+        let folderProfile = development.resolve(scope: .folder, workspace: workspace)
         let workspaceProfile = development.resolve(scope: .workspace, workspace: workspace)
         let projectProfile = development.resolve(scope: .projectDirectory, workspace: workspace)
 
         XCTAssertEqual(appWide, development.resolve(scope: .appWide, workspace: workspace))
+        XCTAssertEqual(folderProfile, development.resolve(scope: .folder, workspace: workspace))
         XCTAssertEqual(workspaceProfile, development.resolve(scope: .workspace, workspace: workspace))
         XCTAssertEqual(projectProfile, development.resolve(scope: .projectDirectory, workspace: workspace))
         XCTAssertEqual(appWide.scope, .appWide)
         XCTAssertNil(appWide.projectDirectory)
+        XCTAssertEqual(folderProfile.scope, .folder)
+        XCTAssertNil(folderProfile.projectDirectory)
         XCTAssertEqual(workspaceProfile.scope, .workspace)
         XCTAssertNil(workspaceProfile.projectDirectory)
         XCTAssertEqual(projectProfile.scope, .projectDirectory)
         XCTAssertEqual(projectProfile.projectDirectory, project.standardizedFileURL)
-        XCTAssertNotEqual(appWide.persistentStoreID, workspaceProfile.persistentStoreID)
+        XCTAssertNotEqual(appWide.persistentStoreID, folderProfile.persistentStoreID)
+        XCTAssertNotEqual(folderProfile.persistentStoreID, workspaceProfile.persistentStoreID)
         XCTAssertNotEqual(workspaceProfile.persistentStoreID, projectProfile.persistentStoreID)
         XCTAssertNotEqual(appWide.persistentStoreID, production.resolve(scope: .appWide, workspace: workspace).persistentStoreID)
+        XCTAssertNotEqual(
+            folderProfile.persistentStoreID,
+            production.resolve(scope: .folder, workspace: workspace).persistentStoreID
+        )
 
         let browserOnly = Tab.browser(url: try XCTUnwrap(URL(string: "https://example.com")))
         let workspaceWithoutDirectory = Workspace(
@@ -81,6 +91,66 @@ final class BrowserDataProfilesTests: XCTestCase {
             development.resolve(scope: .projectDirectory, workspace: workspaceWithoutDirectory).projectDirectory,
             directory.standardizedFileURL
         )
+    }
+
+    func testFolderScopeSharesAProfileWithinAFolderAndAcrossUnfolderedWorkspaces() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+
+        let folderID = WorkspaceFolderID()
+        let otherFolderID = WorkspaceFolderID()
+        let first = workspace(workingDirectory: directory, folderID: folderID)
+        let second = workspace(workingDirectory: directory, folderID: folderID)
+        let other = workspace(workingDirectory: directory, folderID: otherFolderID)
+        let unfolderedFirst = workspace(workingDirectory: directory)
+        let unfolderedSecond = workspace(workingDirectory: directory)
+
+        let resolver = BrowserDataProfileResolver(channel: .development, homeDirectory: directory)
+        let firstProfile = resolver.resolve(scope: .folder, workspace: first)
+        let secondProfile = resolver.resolve(scope: .folder, workspace: second)
+        let otherProfile = resolver.resolve(scope: .folder, workspace: other)
+        let unfolderedProfile = resolver.resolve(scope: .folder, workspace: unfolderedFirst)
+
+        XCTAssertEqual(firstProfile, secondProfile)
+        XCTAssertEqual(unfolderedProfile, resolver.resolve(scope: .folder, workspace: unfolderedSecond))
+        XCTAssertNotEqual(firstProfile.persistentStoreID, otherProfile.persistentStoreID)
+        XCTAssertNotEqual(firstProfile.persistentStoreID, unfolderedProfile.persistentStoreID)
+        XCTAssertNotEqual(
+            unfolderedProfile.persistentStoreID,
+            resolver.resolve(scope: .workspace, workspace: unfolderedFirst).persistentStoreID
+        )
+    }
+
+    func testFolderScopeSurvivesARenameBecauseItKeysOnTheFolderIdentifier() throws {
+        let directory = try makeTemporaryDirectory()
+        let (defaults, suiteName) = makeDefaults()
+        defer {
+            removeTemporaryDirectory(directory)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let persistenceURL = MyTermChannel.development.persistenceURL(applicationSupportDirectory: directory)
+        let store = try WorkspaceStore(persistenceURL: persistenceURL)
+        let folderID = try store.createFolder(title: "Work")
+        try store.moveWorkspace(store.selectedWorkspaceID, to: folderID)
+        try store.updateGlobalSettings { $0.browserDataScope = .folder }
+
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: nil,
+            startsTerminalProcesses: false,
+            browserSettings: BrowserSettingsStore(channel: .development, defaults: defaults)
+        )
+        model.createBrowserTab()
+        let profile = try XCTUnwrap(browser(in: XCTUnwrap(model.selectedTab)).profile)
+        XCTAssertEqual(profile.scope, .folder)
+
+        try model.store.renameFolder(folderID, title: "Renamed")
+        model.createBrowserTab()
+        let renamedProfile = try XCTUnwrap(browser(in: XCTUnwrap(model.selectedTab)).profile)
+
+        XCTAssertEqual(renamedProfile, profile)
     }
 
     func testProjectDirectoryResolverRecognizesGitFilesAndFallsBackToCurrentDirectory() throws {
@@ -304,10 +374,10 @@ final class BrowserDataProfilesTests: XCTestCase {
         )
     }
 
-    private func workspace(workingDirectory: URL) -> Workspace {
+    private func workspace(workingDirectory: URL, folderID: WorkspaceFolderID? = nil) -> Workspace {
         let session = TerminalSession(workingDirectory: workingDirectory)
         let tab = Tab(content: .terminal(session))
-        return Workspace(title: "Workspace", tabs: [tab], selectedTabID: tab.id)
+        return Workspace(title: "Workspace", tabs: [tab], selectedTabID: tab.id, folderID: folderID)
     }
 
     private func browser(in tab: Tab) throws -> BrowserSession {

@@ -34,7 +34,7 @@ Native, quiet, dependable. The interface should feel dense without becoming cram
 - Prefer native macOS behavior for windows, focus, menus, tabs, accessibility, and appearance.
 - Treat responsiveness under many live sessions as product behavior, not a later optimization.
 - Let users reshape a workspace with native split dividers and tab drag-and-drop without restarting a session.
-- Make browser-data boundaries explicit. Gordon can share website sessions across the app, isolate them by workspace, or tie them to a project folder.
+- Make browser-data boundaries explicit. Gordon can share website sessions across the app, group them by sidebar folder, isolate them by workspace, or tie them to a project directory.
 - Keep browser launches attached to the terminal pane that requested them, regardless of which workspace is active when the request arrives.
 - Preserve the previous persisted bytes before a one-way migration or lossy recovery writes repaired workspace state.
 
@@ -43,8 +43,9 @@ Native, quiet, dependable. The interface should feel dense without becoming cram
 The browser-data setting applies when a new browser tab is created. Existing tabs keep the profile they already use, which avoids surprising sign-outs when the setting changes.
 
 - **Across all workspaces** uses one cookie and website-data profile for the app.
+- **Per MyTerm folder** shares website data between every workspace in the same sidebar folder, so related workspaces stay signed in together, and the workspaces outside any folder share a separate profile between them. The profile follows the folder's identity rather than its name, so renaming a folder keeps its sessions.
 - **Per workspace** keeps each workspace separate and is the default.
-- **Per project folder** shares website data between browser tabs working from the same Git repository or folder.
+- **Per project directory** shares website data between browser tabs working from the same Git repository or directory.
 
 WebKit stores cookies and local website data on disk for each profile. MyTerm never stores passkeys. It passes each request to macOS, where the user's chosen credential provider, such as Apple Passwords or 1Password, handles it. Arbitrary-website passkeys also require Apple's managed browser entitlement in the signed build and the user's permission. The Settings window shows that state and requests access only after the user asks it to.
 
