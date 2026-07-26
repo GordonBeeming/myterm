@@ -8,8 +8,8 @@ final class KeyChordMatcherTests: XCTestCase {
         characters: String,
         modifiers: NSEvent.ModifierFlags,
         keyCode: UInt16 = 0
-    ) -> NSEvent {
-        guard let event = NSEvent.keyEvent(
+    ) throws -> NSEvent {
+        try XCTUnwrap(NSEvent.keyEvent(
             with: .keyDown,
             location: .zero,
             modifierFlags: modifiers,
@@ -20,43 +20,39 @@ final class KeyChordMatcherTests: XCTestCase {
             charactersIgnoringModifiers: characters,
             isARepeat: false,
             keyCode: keyCode
-        ) else {
-            XCTFail("Could not synthesise a key event")
-            return NSEvent()
-        }
-        return event
+        ), "Could not synthesise a key event")
     }
 
     private let fullScreen = KeyChord(key: "\r", modifiers: [.command, .shift])
 
-    func testMatchesTheDeclaredChord() {
-        let event = keyDown(characters: "\r", modifiers: [.command, .shift], keyCode: 36)
+    func testMatchesTheDeclaredChord() throws {
+        let event = try keyDown(characters: "\r", modifiers: [.command, .shift], keyCode: 36)
         XCTAssertTrue(KeyChordMatcher.matches(fullScreen, event: event))
     }
 
-    func testRequiresAnExactModifierSet() {
+    func testRequiresAnExactModifierSet() throws {
         // A subset must not match, or Cmd+Return would trigger the Cmd+Shift+Return command.
         XCTAssertFalse(KeyChordMatcher.matches(
             fullScreen,
-            event: keyDown(characters: "\r", modifiers: [.command], keyCode: 36)
+            event: try keyDown(characters: "\r", modifiers: [.command], keyCode: 36)
         ))
         // A superset must not match either — Cmd+Shift+Option+Return is a different chord.
         XCTAssertFalse(KeyChordMatcher.matches(
             fullScreen,
-            event: keyDown(characters: "\r", modifiers: [.command, .shift, .option], keyCode: 36)
+            event: try keyDown(characters: "\r", modifiers: [.command, .shift, .option], keyCode: 36)
         ))
     }
 
-    func testIgnoresCapsLock() {
-        let event = keyDown(characters: "\r", modifiers: [.command, .shift, .capsLock], keyCode: 36)
+    func testIgnoresCapsLock() throws {
+        let event = try keyDown(characters: "\r", modifiers: [.command, .shift, .capsLock], keyCode: 36)
         XCTAssertTrue(KeyChordMatcher.matches(fullScreen, event: event))
     }
 
-    func testIgnoresTheFunctionAndNumericPadFlagsMacOSSetsOnArrowKeys() {
+    func testIgnoresTheFunctionAndNumericPadFlagsMacOSSetsOnArrowKeys() throws {
         // macOS sets .function and .numericPad on arrow keys. Without stripping them, every arrow chord
         // in the reserved list would silently fail to match.
         let moveTab = KeyChord(key: KeyChord.leftArrow, modifiers: [.command, .option, .shift])
-        let event = keyDown(
+        let event = try keyDown(
             characters: String(KeyChord.leftArrow),
             modifiers: [.command, .option, .shift, .function, .numericPad],
             keyCode: 123
@@ -64,19 +60,19 @@ final class KeyChordMatcherTests: XCTestCase {
         XCTAssertTrue(KeyChordMatcher.matches(moveTab, event: event))
     }
 
-    func testDoesNotMatchAnUnmodifiedKey() {
-        let event = keyDown(characters: "b", modifiers: [])
+    func testDoesNotMatchAnUnmodifiedKey() throws {
+        let event = try keyDown(characters: "b", modifiers: [])
         XCTAssertFalse(KeyChordMatcher.matches(KeyChord(key: "b", modifiers: [.command]), event: event))
     }
 
-    func testDoesNotMatchADifferentKey() {
+    func testDoesNotMatchADifferentKey() throws {
         // Real Shift+D reports uppercase "D" via charactersIgnoringModifiers; synthesise that rather
         // than a hand-lowered "d", which is not what a real keyboard produces.
-        let event = keyDown(characters: "D", modifiers: [.command, .shift])
+        let event = try keyDown(characters: "D", modifiers: [.command, .shift])
         XCTAssertFalse(KeyChordMatcher.matches(fullScreen, event: event))
     }
 
-    func testMatchesAShiftedLetterChordDespiteTheUppercaseCharacter() {
+    func testMatchesAShiftedLetterChordDespiteTheUppercaseCharacter() throws {
         // charactersIgnoringModifiers still applies Shift, so a real Cmd+Shift+N key-down reports "N"
         // even though the chord declares the lowercase "n". Every hand-written event below carries the
         // uppercase a real keyboard would produce, not a lowercased stand-in — one per letter used by a
@@ -84,7 +80,7 @@ final class KeyChordMatcherTests: XCTestCase {
         // newBrowserTab, splitBelow).
         for lowercaseKey in "nrwld" {
             let chord = KeyChord(key: lowercaseKey, modifiers: [.command, .shift])
-            let event = keyDown(characters: String(lowercaseKey).uppercased(), modifiers: [.command, .shift])
+            let event = try keyDown(characters: String(lowercaseKey).uppercased(), modifiers: [.command, .shift])
             XCTAssertTrue(
                 KeyChordMatcher.matches(chord, event: event),
                 "Expected Cmd+Shift+\(lowercaseKey) to match an uppercase '\(lowercaseKey.uppercased())' key-down"
@@ -92,14 +88,14 @@ final class KeyChordMatcherTests: XCTestCase {
         }
     }
 
-    func testShiftedMatchingDoesNotLoosenModifierComparison() {
+    func testShiftedMatchingDoesNotLoosenModifierComparison() throws {
         // Case-insensitive key comparison must not make the modifier check any less exact: Cmd+N (no
         // Shift) still must not fire the Cmd+Shift+N command.
-        let event = keyDown(characters: "n", modifiers: [.command])
+        let event = try keyDown(characters: "n", modifiers: [.command])
         XCTAssertFalse(KeyChordMatcher.matches(KeyChord(key: "n", modifiers: [.command, .shift]), event: event))
     }
 
-    func testMatchesAnyFindsAChordInTheReservedList() {
+    func testMatchesAnyFindsAChordInTheReservedList() throws {
         let reserved = [
             KeyChord(key: "b", modifiers: [.command]),
             fullScreen,
@@ -107,18 +103,18 @@ final class KeyChordMatcherTests: XCTestCase {
         ]
         XCTAssertTrue(KeyChordMatcher.matchesAny(
             reserved,
-            event: keyDown(characters: "\r", modifiers: [.command, .shift], keyCode: 36)
+            event: try keyDown(characters: "\r", modifiers: [.command, .shift], keyCode: 36)
         ))
         XCTAssertFalse(KeyChordMatcher.matchesAny(
             reserved,
-            event: keyDown(characters: "q", modifiers: [.command])
+            event: try keyDown(characters: "q", modifiers: [.command])
         ))
-        XCTAssertFalse(KeyChordMatcher.matchesAny([], event: keyDown(characters: "b", modifiers: [.command])))
+        XCTAssertFalse(KeyChordMatcher.matchesAny([], event: try keyDown(characters: "b", modifiers: [.command])))
     }
 
-    func testMultiCharacterInputNeverMatches() {
+    func testMultiCharacterInputNeverMatches() throws {
         // Dead keys and IME composition can deliver more than one character; none of those are chords.
-        let event = keyDown(characters: "ab", modifiers: [.command])
+        let event = try keyDown(characters: "ab", modifiers: [.command])
         XCTAssertFalse(KeyChordMatcher.matches(KeyChord(key: "a", modifiers: [.command]), event: event))
     }
 
@@ -148,7 +144,7 @@ final class KeyChordMatcherTests: XCTestCase {
     }
 
     @MainActor
-    func testTheWebViewDeclinesReservedChordsAndKeepsTheRest() {
+    func testTheWebViewDeclinesReservedChordsAndKeepsTheRest() throws {
         // Exercises the real override. `false` means "not handled here", which is what lets AppKit carry
         // the event on to the main menu instead of the page.
         let session = WebKitBrowserSessionFactory(reservedChords: [fullScreen])
@@ -157,13 +153,13 @@ final class KeyChordMatcherTests: XCTestCase {
             return XCTFail("Expected the session to use MyTermWebView")
         }
 
-        let reservedEvent = keyDown(characters: "\r", modifiers: [.command, .shift], keyCode: 36)
+        let reservedEvent = try keyDown(characters: "\r", modifiers: [.command, .shift], keyCode: 36)
         XCTAssertFalse(webView.performKeyEquivalent(with: reservedEvent))
 
         // An unreserved chord must fall through to WebKit's own handling rather than being declined by us.
         // With no page loaded WebKit answers `false` too, so assert on the matcher's decision instead —
         // the override's branch is what's under test here.
-        let unreservedEvent = keyDown(characters: "j", modifiers: [.command], keyCode: 38)
+        let unreservedEvent = try keyDown(characters: "j", modifiers: [.command], keyCode: 38)
         XCTAssertFalse(KeyChordMatcher.matchesAny(webView.reservedChords, event: unreservedEvent))
     }
 }

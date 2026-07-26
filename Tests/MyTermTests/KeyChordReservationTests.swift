@@ -8,8 +8,8 @@ import XCTest
 /// `KeyChordMatcherTests` proves the matcher's logic in isolation; this proves the app's actual chords
 /// are actually reserved — the gap where the Shift/uppercase bug shipped despite the matcher tests passing.
 final class KeyChordReservationTests: XCTestCase {
-    private func keyDown(characters: String, modifiers: NSEvent.ModifierFlags) -> NSEvent {
-        guard let event = NSEvent.keyEvent(
+    private func keyDown(characters: String, modifiers: NSEvent.ModifierFlags) throws -> NSEvent {
+        try XCTUnwrap(NSEvent.keyEvent(
             with: .keyDown,
             location: .zero,
             modifierFlags: modifiers,
@@ -20,14 +20,10 @@ final class KeyChordReservationTests: XCTestCase {
             charactersIgnoringModifiers: characters,
             isARepeat: false,
             keyCode: 0
-        ) else {
-            XCTFail("Could not synthesise a key event")
-            return NSEvent()
-        }
-        return event
+        ), "Could not synthesise a key event")
     }
 
-    func testEveryShiftedLetterChordIsReservedAgainstARealisticUppercaseKeyDown() {
+    func testEveryShiftedLetterChordIsReservedAgainstARealisticUppercaseKeyDown() throws {
         // Each of these is a real Cmd+Shift+<letter> menu command. macOS reports the letter uppercase via
         // charactersIgnoringModifiers when Shift is held, so the synthesised event uses the uppercase
         // character a real keyboard produces — not the lowercase spelling the chord is declared with.
@@ -39,7 +35,7 @@ final class KeyChordReservationTests: XCTestCase {
             ("splitBelow", "D"),
         ]
         for (name, uppercaseCharacter) in shiftedLetterCommands {
-            let event = keyDown(characters: uppercaseCharacter, modifiers: [.command, .shift])
+            let event = try keyDown(characters: uppercaseCharacter, modifiers: [.command, .shift])
             XCTAssertTrue(
                 KeyChordMatcher.matchesAny(MyTermCommandShortcuts.allReserved, event: event),
                 "Expected \(name) (Cmd+Shift+\(uppercaseCharacter)) to be reserved"
@@ -47,9 +43,9 @@ final class KeyChordReservationTests: XCTestCase {
         }
     }
 
-    func testAnUnshiftedLetterDoesNotFalselyReserveTheShiftedCommand() {
+    func testAnUnshiftedLetterDoesNotFalselyReserveTheShiftedCommand() throws {
         // Cmd+N (no Shift) must not be caught by newFolder's Cmd+Shift+N reservation.
-        let event = keyDown(characters: "n", modifiers: [.command])
+        let event = try keyDown(characters: "n", modifiers: [.command])
         XCTAssertFalse(
             KeyChordMatcher.matches(MyTermCommandShortcuts.newFolder, event: event),
             "Cmd+N without Shift must not match the Cmd+Shift+N command"

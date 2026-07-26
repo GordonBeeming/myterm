@@ -27,8 +27,10 @@ private extension View {
 /// This is the single source of truth in both directions: SwiftUI reads it to build menu key equivalents,
 /// and browser panes read `allReserved` to refuse those chords to web content. A chord declared here is
 /// therefore guaranteed to reach the app rather than being swallowed by a page that binds the same keys.
-/// Adding a shortcut anywhere else — an inline `keyboardShortcut(...)` — silently opts it out of that
-/// protection, so don't.
+/// This governs the app's own menu key equivalents specifically — declaring one of those inline instead
+/// of adding it here silently opts it out of that protection, so don't. SwiftUI role shortcuts such as
+/// `.keyboardShortcut(.cancelAction)` / `.defaultAction` on sheet buttons are a different thing (a button
+/// role, not a chord) and aren't chords the browser layer reserves, so they don't belong in this table.
 enum MyTermCommandShortcuts {
     // Application
     static let globalSettings = KeyChord(key: ",", modifiers: [.command])
