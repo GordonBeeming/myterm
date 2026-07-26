@@ -3,6 +3,7 @@ import AppKit
 import Foundation
 import MyTermCore
 import MyTermPlatform
+import SwiftUI
 import XCTest
 
 @MainActor
@@ -2204,6 +2205,67 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(Set(browserShortcuts.map { "\($0.key)|\($0.modifiers)" }).count, browserShortcuts.count)
         XCTAssertFalse(browserShortcuts.contains(MyTermCommandShortcuts.increaseWorkspaceFontSize))
         XCTAssertFalse(browserShortcuts.contains(MyTermCommandShortcuts.decreaseWorkspaceFontSize))
+    }
+
+    func testEveryReservedChordIsUniqueSoNoTwoCommandsShareOne() {
+        let reserved = MyTermCommandShortcuts.allReserved
+        XCTAssertEqual(Set(reserved).count, reserved.count, "Two commands are bound to the same chord.")
+    }
+
+    func testReservedChordsCoverTheCommandsThatWebContentUsedToSwallow() {
+        let reserved = Set(MyTermCommandShortcuts.allReserved)
+
+        // The chord that started this: a page handling Cmd+Shift+Enter used to win over the menu.
+        XCTAssertTrue(reserved.contains(MyTermCommandShortcuts.togglePaneFullScreen))
+
+        // Chords that only existed as inline literals before the table became the single source of truth,
+        // so a regression that moved one back inline would drop it out of the reserved list.
+        let previouslyInline = [
+            MyTermCommandShortcuts.globalSettings,
+            MyTermCommandShortcuts.newWorkspace,
+            MyTermCommandShortcuts.renameWorkspace,
+            MyTermCommandShortcuts.closeWorkspace,
+            MyTermCommandShortcuts.previousWorkspace,
+            MyTermCommandShortcuts.nextWorkspace,
+            MyTermCommandShortcuts.toggleSidebar,
+            MyTermCommandShortcuts.newTerminalTab,
+            MyTermCommandShortcuts.newBrowserTab,
+            MyTermCommandShortcuts.renameTab,
+            MyTermCommandShortcuts.splitRight,
+            MyTermCommandShortcuts.splitBelow,
+            MyTermCommandShortcuts.closeFocusedPaneOrTab,
+            MyTermCommandShortcuts.focusPaneLeft,
+            MyTermCommandShortcuts.focusPaneUp,
+            MyTermCommandShortcuts.focusPaneRight,
+            MyTermCommandShortcuts.focusPaneDown,
+        ]
+        for chord in previouslyInline {
+            XCTAssertTrue(reserved.contains(chord), "\(chord) is bound to a menu item but not reserved.")
+        }
+
+        // Both number rows are generated, so all 18 must be present rather than just the first.
+        XCTAssertEqual(MyTermCommandShortcuts.selectWorkspaceByNumber.count, 9)
+        XCTAssertEqual(MyTermCommandShortcuts.selectTabByNumber.count, 9)
+        for chord in MyTermCommandShortcuts.selectWorkspaceByNumber + MyTermCommandShortcuts.selectTabByNumber {
+            XCTAssertTrue(reserved.contains(chord))
+        }
+    }
+
+    func testChordsBridgeToSwiftUIModifiersWithoutLosingAny() {
+        XCTAssertEqual(MyTermCommandShortcuts.togglePaneFullScreen.eventModifiers, [.command, .shift])
+        XCTAssertEqual(
+            MyTermCommandShortcuts.moveTabToNextPane.eventModifiers,
+            [.command, .option, .shift]
+        )
+        XCTAssertEqual(MyTermCommandShortcuts.nextTab.eventModifiers, [.control])
+        XCTAssertEqual(
+            MyTermCommandShortcuts.togglePaneFullScreen.keyEquivalent.character,
+            "\r"
+        )
+        XCTAssertEqual(
+            MyTermCommandShortcuts.focusPaneLeft.keyEquivalent.character,
+            KeyEquivalent.leftArrow.character
+        )
     }
 
     func testRecoveryNoticeDescribesRepairsAndBackupLocation() throws {
