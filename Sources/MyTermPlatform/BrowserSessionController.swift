@@ -2,6 +2,7 @@ import AppKit
 @preconcurrency import WebKit
 import Foundation
 import MyTermCore
+import OSLog
 import SwiftUI
 
 public struct BrowserSessionState: Equatable, Sendable {
@@ -31,9 +32,35 @@ public struct BrowserSessionState: Equatable, Sendable {
 
 @MainActor
 final class MyTermWebView: WKWebView {
+    /// Chords the app owns. Empty means "let the page have everything", which is what the plain
+    /// `WKWebView` behaviour was before this existed.
+    var reservedChords: [KeyChord] = []
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
     }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        // AppKit offers key-downs to the key window's view hierarchy before the main menu, and WebKit
+        // answers `true` for any chord the page handles — so a web page silently shadows the app's own
+        // menu commands. Returning `false` here leaves the event unclaimed, and AppKit carries on to the
+        // menu where the command actually lives. Verified both directions: without this the page's
+        // handler runs and the menu item never fires.
+        if KeyChordMatcher.matchesAny(reservedChords, event: event) {
+            Logger.browserKeyEquivalents.trace(
+                "Declining reserved chord so the app menu can claim it: \(event.charactersIgnoringModifiers ?? "", privacy: .public)"
+            )
+            return false
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+}
+
+private extension Logger {
+    static let browserKeyEquivalents = Logger(
+        subsystem: "com.gordonbeeming.myterm",
+        category: "browser-key-equivalents"
+    )
 }
 
 enum BrowserSessionAction: Equatable, Sendable {
@@ -61,13 +88,13 @@ public final class BrowserSessionController: NSObject, ObservableObject {
         self.init(configuration: WKWebViewConfiguration())
     }
 
-    public convenience init(profile: BrowserDataProfile) {
+    public convenience init(profile: BrowserDataProfile, reservedChords: [KeyChord] = []) {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: profile.persistentStoreID)
-        self.init(configuration: configuration)
+        self.init(configuration: configuration, reservedChords: reservedChords)
     }
 
-    public init(configuration: WKWebViewConfiguration) {
+    public init(configuration: WKWebViewConfiguration, reservedChords: [KeyChord] = []) {
         if #available(macOS 15.0, *) {
             // WebKit's macOS header hides this public property when the deployment target is below 15.
             configuration.setValue(
@@ -75,7 +102,9 @@ public final class BrowserSessionController: NSObject, ObservableObject {
                 forKey: "writingToolsBehavior"
             )
         }
-        webView = MyTermWebView(frame: .zero, configuration: configuration)
+        let webView = MyTermWebView(frame: .zero, configuration: configuration)
+        webView.reservedChords = reservedChords
+        self.webView = webView
         super.init()
 
         webView.navigationDelegate = self

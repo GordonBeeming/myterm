@@ -80,7 +80,9 @@ final class AppModel {
         terminalEngine: (any TerminalEngine)? = SwiftTermTerminalEngine(),
         startsTerminalProcesses: Bool = true,
         browserSettings: BrowserSettingsStore? = nil,
-        browserSessionFactory: any BrowserSessionFactory = WebKitBrowserSessionFactory(),
+        browserSessionFactory: any BrowserSessionFactory = WebKitBrowserSessionFactory(
+            reservedChords: MyTermCommandShortcuts.allReserved
+        ),
         browserLauncherURL: URL? = MyTermBrowserLauncher.executableURL(),
         terminalSnapshotDelayNanoseconds: UInt64 = 300_000_000,
         confirmClosingActiveProcesses: @escaping @MainActor (ActiveProcessClosePrompt) -> Bool = AppModel.presentActiveProcessClosePrompt,
