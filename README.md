@@ -47,11 +47,12 @@ A tool that explicitly invokes `/usr/bin/open` bypasses MyTerm and can still ope
 
 ## Browser sessions and passkeys
 
-New browser tabs can remember cookies and website data at one of three scopes, selected in Settings:
+New browser tabs can remember cookies and website data at one of four scopes, selected in Settings:
 
 - **Across all workspaces** uses one profile for the active app channel.
+- **Per MyTerm folder** shares a profile between every workspace in the same sidebar folder. Workspaces that aren't in a folder share one profile of their own.
 - **Per workspace** isolates each workspace and is the default.
-- **Per project folder** shares a profile for terminals rooted in the same Git repository or folder.
+- **Per project directory** shares a profile for terminals rooted in the same Git repository or directory.
 
 Existing tabs keep their assigned profile when this setting changes. MyTerm stores browser profile identifiers and WebKit stores the website data; MyTerm never stores passkeys.
 

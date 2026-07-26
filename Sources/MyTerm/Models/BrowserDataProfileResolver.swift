@@ -53,6 +53,14 @@ struct BrowserDataProfileResolver {
                 scope: scope,
                 persistentStoreID: persistentStoreID(for: "app-wide")
             )
+        case .folder:
+            // Workspaces without a folder share one profile instead of falling back to
+            // per-workspace isolation, so "no folder" behaves like a folder of its own.
+            let folderKey = workspace.folderID.map(\.description) ?? "none"
+            return BrowserDataProfile(
+                scope: scope,
+                persistentStoreID: persistentStoreID(for: "folder|\(folderKey)")
+            )
         case .workspace:
             return BrowserDataProfile(
                 scope: scope,

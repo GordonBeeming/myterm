@@ -356,7 +356,7 @@ struct SettingsView: View {
                     override: \TerminalPreferencesOverrides.browserDataScope
                 ) { value in
                     Picker("Browser data", selection: value) {
-                        ForEach([BrowserDataScope.appWide, .workspace, .projectDirectory], id: \.self) { dataScope in
+                        ForEach([BrowserDataScope.appWide, .folder, .workspace, .projectDirectory], id: \.self) { dataScope in
                             Text(dataScope.browserDataScopeLabel).tag(dataScope)
                         }
                     }

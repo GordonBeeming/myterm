@@ -52,6 +52,7 @@ public struct TerminalSession: Codable, Equatable, Hashable, Sendable, Identifia
 
 public enum BrowserDataScope: String, Codable, Equatable, Hashable, Sendable {
     case appWide = "app-wide"
+    case folder
     case workspace
     case projectDirectory = "project-directory"
 }

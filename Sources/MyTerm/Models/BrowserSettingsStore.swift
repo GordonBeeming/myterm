@@ -89,10 +89,12 @@ extension BrowserDataScope {
         switch self {
         case .appWide:
             "Across all workspaces"
+        case .folder:
+            "Per MyTerm folder"
         case .workspace:
             "Per workspace"
         case .projectDirectory:
-            "Per project folder"
+            "Per project directory"
         }
     }
 }
