@@ -615,6 +615,16 @@ final class AppModel {
                         workspaceID: workspaceID ?? store.selectedWorkspaceID
                     )
                 }
+            } else if let settings = try? store.resolvedSettings(
+                for: workspaceID ?? store.selectedWorkspaceID
+            ),
+                      settings.matchesBrowserFile(url) {
+                openFileInBrowser(
+                    url,
+                    in: workspaceID ?? store.selectedWorkspaceID,
+                    tabID: hasExactOrigin ? besideTabID : nil,
+                    paneID: hasExactOrigin ? paneID : nil
+                )
             } else if workspaceID != nil, openTextFile(
                 url,
                 in: workspaceID ?? store.selectedWorkspaceID,
@@ -630,7 +640,7 @@ final class AppModel {
                     initialCommand: Self.shellQuote(url.path)
                 )
             } else if Self.markdownFileExtensions.contains(url.pathExtension.lowercased()) {
-                openMarkdownInBrowser(url, in: store.selectedWorkspaceID, tabID: nil, paneID: nil)
+                openFileInBrowser(url, in: store.selectedWorkspaceID, tabID: nil, paneID: nil)
             } else {
                 openExternally(url)
             }
@@ -721,7 +731,7 @@ final class AppModel {
         return true
     }
 
-    private func openMarkdownInBrowser(
+    private func openFileInBrowser(
         _ url: URL,
         in workspaceID: WorkspaceID,
         tabID: TabID?,

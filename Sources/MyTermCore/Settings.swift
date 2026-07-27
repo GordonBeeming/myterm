@@ -126,12 +126,14 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         "README", "README.md", "LICENSE", "Dockerfile", "Makefile",
         ".env", ".gitignore", ".gitattributes", ".gitmodules", ".editorconfig", ".dockerignore", ".npmrc", ".nvmrc", ".ruby-version", ".tool-versions",
     ]
+    public static let defaultBrowserFilePatterns = ["*.html", "*.htm"]
     public static let fontSizeRange = 6.0...72.0
     public static let scrollbackLinesRange = 100...100_000
 
     public var browserDataScope: BrowserDataScope
     public var textFileOpenCommand: String
     public var nativeTextFilePatterns: [String]
+    public var browserFilePatterns: [String]
     public var compactSidebar: Bool
     public var fontPostScriptName: String
     public var fontSize: Double
@@ -149,6 +151,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         browserDataScope: BrowserDataScope = .workspace,
         textFileOpenCommand: String = TerminalPreferences.defaultTextFileOpenCommand,
         nativeTextFilePatterns: [String] = TerminalPreferences.defaultNativeTextFilePatterns,
+        browserFilePatterns: [String] = TerminalPreferences.defaultBrowserFilePatterns,
         compactSidebar: Bool = true,
         fontPostScriptName: String = TerminalPreferences.defaultFontPostScriptName,
         fontSize: Double = TerminalPreferences.defaultFontSize,
@@ -165,6 +168,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         self.browserDataScope = browserDataScope
         self.textFileOpenCommand = textFileOpenCommand.trimmingCharacters(in: .whitespacesAndNewlines)
         self.nativeTextFilePatterns = Self.normalizedNativeTextFilePatterns(nativeTextFilePatterns)
+        self.browserFilePatterns = Self.normalizedFilePatterns(browserFilePatterns)
         self.compactSidebar = compactSidebar
         self.fontPostScriptName = Self.validatedFontName(fontPostScriptName)
         self.fontSize = Self.clampedFontSize(fontSize)
@@ -186,6 +190,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
             browserDataScope: browserDataScope,
             textFileOpenCommand: textFileOpenCommand,
             nativeTextFilePatterns: nativeTextFilePatterns,
+            browserFilePatterns: browserFilePatterns,
             compactSidebar: compactSidebar,
             fontPostScriptName: fontPostScriptName,
             fontSize: fontSize,
@@ -207,6 +212,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         try container.encode(browserDataScope, forKey: .browserDataScope)
         try legacyContainer.encode(textFileOpenCommand, forKey: .markdownOpenCommand)
         try container.encode(nativeTextFilePatterns, forKey: .nativeTextFilePatterns)
+        try container.encode(browserFilePatterns, forKey: .browserFilePatterns)
         try container.encode(compactSidebar, forKey: .compactSidebar)
         try container.encode(fontPostScriptName, forKey: .fontPostScriptName)
         try container.encode(fontSize, forKey: .fontSize)
@@ -225,6 +231,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         case browserDataScope
         case textFileOpenCommand
         case nativeTextFilePatterns
+        case browserFilePatterns
         case compactSidebar
         case fontPostScriptName
         case fontSize
@@ -252,6 +259,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
                 ?? (try? legacyContainer.decode(String.self, forKey: .markdownOpenCommand))
                 ?? Self.defaultTextFileOpenCommand,
             nativeTextFilePatterns: (try? container.decode([String].self, forKey: .nativeTextFilePatterns)) ?? Self.defaultNativeTextFilePatterns,
+            browserFilePatterns: (try? container.decode([String].self, forKey: .browserFilePatterns)) ?? Self.defaultBrowserFilePatterns,
             compactSidebar: (try? container.decode(Bool.self, forKey: .compactSidebar)) ?? true,
             fontPostScriptName: (try? container.decode(String.self, forKey: .fontPostScriptName)) ?? Self.defaultFontPostScriptName,
             fontSize: (try? container.decode(Double.self, forKey: .fontSize)) ?? Self.defaultFontSize,
@@ -282,8 +290,16 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
     }
 
     public func matchesNativeTextFile(_ url: URL) -> Bool {
+        matches(url, patterns: nativeTextFilePatterns)
+    }
+
+    public func matchesBrowserFile(_ url: URL) -> Bool {
+        matches(url, patterns: browserFilePatterns)
+    }
+
+    private func matches(_ url: URL, patterns: [String]) -> Bool {
         let filename = url.lastPathComponent.lowercased()
-        return nativeTextFilePatterns.contains { pattern in
+        return patterns.contains { pattern in
             let normalized = pattern.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             guard !normalized.isEmpty else { return false }
             if normalized.hasPrefix("*.") {
@@ -295,6 +311,10 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
     }
 
     private static func normalizedNativeTextFilePatterns(_ patterns: [String]) -> [String] {
+        normalizedFilePatterns(patterns)
+    }
+
+    private static func normalizedFilePatterns(_ patterns: [String]) -> [String] {
         patterns.compactMap { pattern in
             let trimmed = pattern.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? nil : trimmed
@@ -306,6 +326,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
     public var browserDataScope: BrowserDataScope?
     public var textFileOpenCommand: String?
     public var nativeTextFilePatterns: [String]?
+    public var browserFilePatterns: [String]?
     public var compactSidebar: Bool?
     public var fontPostScriptName: String?
     public var fontSize: Double?
@@ -325,6 +346,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         case browserDataScope
         case textFileOpenCommand
         case nativeTextFilePatterns
+        case browserFilePatterns
         case compactSidebar
         case fontPostScriptName
         case fontSize
@@ -351,6 +373,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         textFileOpenCommand = (try? container.decodeIfPresent(String.self, forKey: .textFileOpenCommand))
             ?? (try? legacyContainer.decodeIfPresent(String.self, forKey: .markdownOpenCommand))
         nativeTextFilePatterns = try? container.decodeIfPresent([String].self, forKey: .nativeTextFilePatterns)
+        browserFilePatterns = try? container.decodeIfPresent([String].self, forKey: .browserFilePatterns)
         compactSidebar = try? container.decodeIfPresent(Bool.self, forKey: .compactSidebar)
         fontPostScriptName = try? container.decodeIfPresent(String.self, forKey: .fontPostScriptName)
         fontSize = try? container.decodeIfPresent(Double.self, forKey: .fontSize)
@@ -371,6 +394,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         try container.encodeIfPresent(browserDataScope, forKey: .browserDataScope)
         try legacyContainer.encodeIfPresent(textFileOpenCommand, forKey: .markdownOpenCommand)
         try container.encodeIfPresent(nativeTextFilePatterns, forKey: .nativeTextFilePatterns)
+        try container.encodeIfPresent(browserFilePatterns, forKey: .browserFilePatterns)
         try container.encodeIfPresent(compactSidebar, forKey: .compactSidebar)
         try container.encodeIfPresent(fontPostScriptName, forKey: .fontPostScriptName)
         try container.encodeIfPresent(fontSize, forKey: .fontSize)
@@ -390,6 +414,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
             browserDataScope: browserDataScope ?? base.browserDataScope,
             textFileOpenCommand: textFileOpenCommand ?? base.textFileOpenCommand,
             nativeTextFilePatterns: nativeTextFilePatterns ?? base.nativeTextFilePatterns,
+            browserFilePatterns: browserFilePatterns ?? base.browserFilePatterns,
             compactSidebar: compactSidebar ?? base.compactSidebar,
             fontPostScriptName: fontPostScriptName ?? base.fontPostScriptName,
             fontSize: fontSize ?? base.fontSize,

@@ -43,12 +43,24 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertFalse(emptySuffixPreferences.matchesNativeTextFile(URL(fileURLWithPath: "/tmp/anything")))
     }
 
+    func testBrowserFilePatternsDefaultAndMatchExtensions() {
+        let preferences = TerminalPreferences(browserFilePatterns: [" *.html ", "*.htm", "index"])
+
+        XCTAssertEqual(TerminalPreferences.defaultBrowserFilePatterns, ["*.html", "*.htm"])
+        XCTAssertEqual(preferences.browserFilePatterns, ["*.html", "*.htm", "index"])
+        XCTAssertTrue(preferences.matchesBrowserFile(URL(fileURLWithPath: "/tmp/report.HTML")))
+        XCTAssertTrue(preferences.matchesBrowserFile(URL(fileURLWithPath: "/tmp/report.htm")))
+        XCTAssertTrue(preferences.matchesBrowserFile(URL(fileURLWithPath: "/tmp/INDEX")))
+        XCTAssertFalse(preferences.matchesBrowserFile(URL(fileURLWithPath: "/tmp/report.xhtml")))
+    }
+
     func testLegacyMarkdownCommandDecodesIntoTextFileCommand() throws {
         let data = Data("{\"markdownOpenCommand\":\"code --goto {file}\",\"cursorShape\":\"beam\"}".utf8)
         let preferences = try JSONDecoder().decode(TerminalPreferences.self, from: data)
 
         XCTAssertEqual(preferences.textFileOpenCommand, "code --goto {file}")
         XCTAssertEqual(preferences.nativeTextFilePatterns, TerminalPreferences.defaultNativeTextFilePatterns)
+        XCTAssertEqual(preferences.browserFilePatterns, TerminalPreferences.defaultBrowserFilePatterns)
         XCTAssertEqual(preferences.cursorShape, .beam)
 
         let overrides = try JSONDecoder().decode(
@@ -56,6 +68,32 @@ final class WorkspaceStoreTests: XCTestCase {
             from: Data("{\"markdownOpenCommand\":\"zed {file}\"}".utf8)
         )
         XCTAssertEqual(overrides.textFileOpenCommand, "zed {file}")
+    }
+
+    func testBrowserFilePatternsRoundTripAndScopedOverrides() throws {
+        let preferences = TerminalPreferences(browserFilePatterns: ["*.svg", "*.html"])
+        let restored = try JSONDecoder().decode(
+            TerminalPreferences.self,
+            from: JSONEncoder().encode(preferences)
+        )
+        XCTAssertEqual(restored.browserFilePatterns, ["*.svg", "*.html"])
+
+        var overrides = TerminalPreferencesOverrides()
+        overrides.browserFilePatterns = ["*.xhtml"]
+        XCTAssertEqual(overrides.applying(to: preferences).browserFilePatterns, ["*.xhtml"])
+
+        let url = temporaryURL()
+        let store = try WorkspaceStore(persistenceURL: url)
+        let folderID = try store.createFolder(title: "Work")
+        let workspaceID = store.selectedWorkspaceID
+        try store.moveWorkspace(workspaceID, to: folderID)
+        let inheritedWorkspaceID = try store.createWorkspace(title: "Inherited", folderID: folderID)
+        try store.updateGlobalSettings { $0.browserFilePatterns = ["*.global"] }
+        try store.updateFolderSettings(folderID) { $0.browserFilePatterns = ["*.folder"] }
+        try store.updateWorkspaceSettings(workspaceID) { $0.browserFilePatterns = ["*.workspace"] }
+
+        XCTAssertEqual(try store.resolvedSettings(for: inheritedWorkspaceID).browserFilePatterns, ["*.folder"])
+        XCTAssertEqual(try store.resolvedSettings(for: workspaceID).browserFilePatterns, ["*.workspace"])
     }
 
     func testTextFileCommandPersistsUnderTheLegacyKeyForGlobalAndScopedSettings() throws {
@@ -400,6 +438,25 @@ final class WorkspaceStoreTests: XCTestCase {
 
         XCTAssertEqual(store.loadReport.droppedElementCount, 0)
         XCTAssertEqual(store.loadReport.identifierRepairCount, 0)
+        XCTAssertEqual(store.loadReport.structuralRepairCount, 0)
+        XCTAssertTrue(store.loadReport.backupURLs.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.recoveryBackupURL.path))
+    }
+
+    func testV2SnapshotMissingBrowserFilePatternsDoesNotCreateRecoveryBackup() throws {
+        let url = temporaryURL()
+        let snapshot = WorkspaceStoreSnapshot.initial()
+        var persisted = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(snapshot)) as? [String: Any]
+        )
+        var globalSettings = try XCTUnwrap(persisted["globalSettings"] as? [String: Any])
+        globalSettings.removeValue(forKey: "browserFilePatterns")
+        persisted["globalSettings"] = globalSettings
+        try JSONSerialization.data(withJSONObject: persisted).write(to: url)
+
+        let store = try WorkspaceStore(persistenceURL: url)
+
+        XCTAssertEqual(store.globalSettings.browserFilePatterns, TerminalPreferences.defaultBrowserFilePatterns)
         XCTAssertEqual(store.loadReport.structuralRepairCount, 0)
         XCTAssertTrue(store.loadReport.backupURLs.isEmpty)
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.recoveryBackupURL.path))

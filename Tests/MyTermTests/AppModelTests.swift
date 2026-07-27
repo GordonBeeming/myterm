@@ -1133,6 +1133,89 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.selectedWorkspace.allTabs.count, initialTabCount)
     }
 
+    func testTerminalBrowserFilesTakePrecedenceOverTextOpenerAndStayWithTheirOrigin() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let htmlURL = directory.appending(path: "report.html", directoryHint: .notDirectory)
+        try Data("<h1>Report</h1>".utf8).write(to: htmlURL)
+        let engine = CapturingTerminalEngine()
+        var commands = [String]()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true,
+            browserLauncherURL: nil,
+            textFileOpenCommandRunner: { command, _, _, completion in
+                commands.append(command)
+                completion(0)
+            }
+        )
+        let originWorkspaceID = model.store.selectedWorkspaceID
+        let originGroupCount = model.selectedWorkspace.orderedGroups.count
+        model.updateGlobalSettings { $0.textFileOpenCommand = "editor {file}" }
+
+        model.createWorkspace()
+        let selectedWorkspaceID = model.store.selectedWorkspaceID
+        try XCTUnwrap(engine.sessions.first).onEvent?(.openURL(htmlURL))
+
+        XCTAssertTrue(commands.isEmpty)
+        XCTAssertEqual(model.store.selectedWorkspaceID, selectedWorkspaceID)
+        let originWorkspace = try XCTUnwrap(model.workspaces.first(where: { $0.id == originWorkspaceID }))
+        XCTAssertEqual(originWorkspace.orderedGroups.count, originGroupCount + 1)
+        XCTAssertEqual(originWorkspace.browserSessions.map(\.url), [htmlURL])
+    }
+
+    func testDirectBrowserFileOpenCreatesBrowserTabInSelectedWorkspace() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let htmlURL = directory.appending(path: "report.html", directoryHint: .notDirectory)
+        try Data("<h1>Report</h1>".utf8).write(to: htmlURL)
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: nil,
+            startsTerminalProcesses: false
+        )
+        let initialTabCount = model.selectedWorkspace.tabs.count
+
+        model.open([htmlURL])
+
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount + 1)
+        XCTAssertEqual(model.selectedTab?.browserSession?.url, htmlURL)
+        XCTAssertNil(model.errorDescription)
+    }
+
+    func testEmptyBrowserPatternsFallsBackToTextOpenerForHTMLFiles() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let htmlURL = directory.appending(path: "report.html", directoryHint: .notDirectory)
+        try Data("<h1>Report</h1>".utf8).write(to: htmlURL)
+        let engine = CapturingTerminalEngine()
+        var commands = [String]()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true,
+            browserLauncherURL: nil,
+            textFileOpenCommandRunner: { command, _, _, completion in
+                commands.append(command)
+                completion(0)
+            }
+        )
+        model.updateGlobalSettings {
+            $0.browserFilePatterns = []
+            $0.textFileOpenCommand = "editor {file}"
+        }
+        let initialTabCount = model.selectedWorkspace.allTabs.count
+
+        try XCTUnwrap(engine.sessions.first).onEvent?(.openURL(htmlURL))
+
+        XCTAssertEqual(commands, ["exec editor '\(htmlURL.path)'"])
+        XCTAssertEqual(model.selectedWorkspace.allTabs.count, initialTabCount)
+    }
+
     func testTerminalScopedExactNameAndDotfilePatternsUseTheirScopedCommand() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
