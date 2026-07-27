@@ -990,13 +990,31 @@ public final class WorkspaceStore {
         do {
             let encodedData = try JSONEncoder().encode(snapshot)
             let original = try JSONSerialization.jsonObject(with: originalData)
-            let repaired = try JSONSerialization.jsonObject(with: encodedData)
+            var repaired = try JSONSerialization.jsonObject(with: encodedData)
+            removeExpectedBrowserFilePatternsMigration(from: original, in: &repaired)
             return jsonDifferenceCount(original, repaired)
         } catch {
             throw WorkspaceStoreError.invalidPersistence(
                 reason: "Could not compare repaired workspace state: \(error.localizedDescription)"
             )
         }
+    }
+
+    private static func removeExpectedBrowserFilePatternsMigration(
+        from original: Any,
+        in repaired: inout Any
+    ) {
+        guard let originalSnapshot = original as? [String: Any],
+              let originalSettings = originalSnapshot["globalSettings"] as? [String: Any],
+              originalSettings["browserFilePatterns"] == nil,
+              var repairedSnapshot = repaired as? [String: Any],
+              var repairedSettings = repairedSnapshot["globalSettings"] as? [String: Any] else {
+            return
+        }
+
+        repairedSettings.removeValue(forKey: "browserFilePatterns")
+        repairedSnapshot["globalSettings"] = repairedSettings
+        repaired = repairedSnapshot
     }
 
     private static func jsonDifferenceCount(_ lhs: Any, _ rhs: Any) -> Int {

@@ -443,6 +443,25 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.recoveryBackupURL.path))
     }
 
+    func testV2SnapshotMissingBrowserFilePatternsDoesNotCreateRecoveryBackup() throws {
+        let url = temporaryURL()
+        let snapshot = WorkspaceStoreSnapshot.initial()
+        var persisted = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(snapshot)) as? [String: Any]
+        )
+        var globalSettings = try XCTUnwrap(persisted["globalSettings"] as? [String: Any])
+        globalSettings.removeValue(forKey: "browserFilePatterns")
+        persisted["globalSettings"] = globalSettings
+        try JSONSerialization.data(withJSONObject: persisted).write(to: url)
+
+        let store = try WorkspaceStore(persistenceURL: url)
+
+        XCTAssertEqual(store.globalSettings.browserFilePatterns, TerminalPreferences.defaultBrowserFilePatterns)
+        XCTAssertEqual(store.loadReport.structuralRepairCount, 0)
+        XCTAssertTrue(store.loadReport.backupURLs.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.recoveryBackupURL.path))
+    }
+
     func testNumericBooleanValuesTriggerStructuralRepairAndExactByteBackup() throws {
         let url = temporaryURL()
         let first = Workspace(title: "Numeric zero", isPinned: false)
