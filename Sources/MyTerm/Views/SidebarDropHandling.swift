@@ -107,6 +107,44 @@ enum SidebarDropCalculations {
     static func containerAcceptsWorkspace(source: Workspace, folderID: WorkspaceFolderID?) -> Bool {
         source.folderID != folderID
     }
+
+    enum FolderRowDrop: Equatable {
+        case rejected
+        case insert(before: WorkspaceFolderID?, edge: InsertionEdge)
+    }
+
+    /// Mirrors `workspaceRowDrop`'s no-op suppression for folder-on-folder reordering: dropping a
+    /// folder back at the slot it already occupies shows no line and moves nothing, rather than
+    /// resolving `moveFolder` to a redundant "move before itself" call.
+    static func folderRowDrop(
+        sourceID: WorkspaceFolderID,
+        folderID: WorkspaceFolderID,
+        nextFolderID: WorkspaceFolderID?,
+        locationY: CGFloat,
+        renderedHeight: CGFloat,
+        in folders: [WorkspaceFolder]
+    ) -> FolderRowDrop {
+        guard sourceID != folderID else {
+            return .rejected
+        }
+
+        let edge: InsertionEdge = locationY <= renderedHeight / 2 ? .top : .bottom
+        let before = folderTarget(
+            folderID: folderID,
+            nextFolderID: nextFolderID,
+            locationY: locationY,
+            renderedHeight: renderedHeight
+        )
+
+        if let sourceIndex = folders.firstIndex(where: { $0.id == sourceID }) {
+            let sourceSuccessorID = folders.dropFirst(sourceIndex + 1).first?.id
+            if before == sourceID || before == sourceSuccessorID {
+                return .rejected
+            }
+        }
+
+        return .insert(before: before, edge: edge)
+    }
 }
 
 /// A workspace row: accepts only a `.workspace` payload from the same container and pinned band,
@@ -224,8 +262,21 @@ struct ContainerRowDropDelegate: DropDelegate {
                 folderInsertionEdge = nil
                 return DropProposal(operation: .forbidden)
             }
-            folderInsertionEdge = info.location.y <= renderedHeight / 2 ? .top : .bottom
-            return DropProposal(operation: .move)
+            switch SidebarDropCalculations.folderRowDrop(
+                sourceID: sourceID,
+                folderID: folderID,
+                nextFolderID: nextFolderID,
+                locationY: info.location.y,
+                renderedHeight: renderedHeight,
+                in: model.folders
+            ) {
+            case .rejected:
+                folderInsertionEdge = nil
+                return DropProposal(operation: .forbidden)
+            case .insert(_, let edge):
+                folderInsertionEdge = edge
+                return DropProposal(operation: .move)
+            }
         case nil:
             isWorkspaceTargeted = false
             folderInsertionEdge = nil
@@ -266,13 +317,19 @@ struct ContainerRowDropDelegate: DropDelegate {
 
     private func applyFolderMove(sourceID: WorkspaceFolderID, locationY: CGFloat) -> Bool {
         guard let folderID, sourceID != folderID else { return false }
-        let targetID = SidebarDropCalculations.folderTarget(
+        switch SidebarDropCalculations.folderRowDrop(
+            sourceID: sourceID,
             folderID: folderID,
             nextFolderID: nextFolderID,
             locationY: locationY,
-            renderedHeight: renderedHeight
-        )
-        model.moveFolder(sourceID, before: targetID)
-        return true
+            renderedHeight: renderedHeight,
+            in: model.folders
+        ) {
+        case .rejected:
+            return false
+        case .insert(let before, _):
+            model.moveFolder(sourceID, before: before)
+            return true
+        }
     }
 }

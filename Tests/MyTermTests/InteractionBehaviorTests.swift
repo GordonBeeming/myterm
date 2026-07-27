@@ -316,6 +316,120 @@ final class InteractionBehaviorTests: XCTestCase {
         )
     }
 
+    func testFolderRowDropRejectsSelfDrop() {
+        let id = WorkspaceFolderID()
+
+        XCTAssertEqual(
+            SidebarDropCalculations.folderRowDrop(
+                sourceID: id,
+                folderID: id,
+                nextFolderID: nil,
+                locationY: 10,
+                renderedHeight: 40,
+                in: [WorkspaceFolder(id: id, title: "Solo")]
+            ),
+            .rejected
+        )
+    }
+
+    func testFolderRowDropRejectsLowerHalfOfTheRowDirectlyAboveSource() {
+        let a = WorkspaceFolder(id: WorkspaceFolderID(), title: "A")
+        let b = WorkspaceFolder(id: WorkspaceFolderID(), title: "B")
+        let c = WorkspaceFolder(id: WorkspaceFolderID(), title: "C")
+        let folders = [a, b, c]
+
+        // Dragging C onto B's lower half resolves to "before C" — B's next sibling — which is
+        // exactly where C already sits, the same no-op shape as workspaceRowDrop's neighbour case.
+        XCTAssertEqual(
+            SidebarDropCalculations.folderRowDrop(
+                sourceID: c.id,
+                folderID: b.id,
+                nextFolderID: c.id,
+                locationY: 21,
+                renderedHeight: 40,
+                in: folders
+            ),
+            .rejected
+        )
+    }
+
+    func testFolderRowDropRejectsUpperHalfOfTheRowDirectlyBelowSource() {
+        let a = WorkspaceFolder(id: WorkspaceFolderID(), title: "A")
+        let b = WorkspaceFolder(id: WorkspaceFolderID(), title: "B")
+        let c = WorkspaceFolder(id: WorkspaceFolderID(), title: "C")
+        let folders = [a, b, c]
+
+        // Dragging A onto B's upper half resolves to "before B", which is exactly where A
+        // already sits.
+        XCTAssertEqual(
+            SidebarDropCalculations.folderRowDrop(
+                sourceID: a.id,
+                folderID: b.id,
+                nextFolderID: c.id,
+                locationY: 19,
+                renderedHeight: 40,
+                in: folders
+            ),
+            .rejected
+        )
+    }
+
+    func testFolderRowDropInsertsBeforeTheTargetOnTheUpperHalf() {
+        let a = WorkspaceFolder(id: WorkspaceFolderID(), title: "A")
+        let b = WorkspaceFolder(id: WorkspaceFolderID(), title: "B")
+        let c = WorkspaceFolder(id: WorkspaceFolderID(), title: "C")
+        let folders = [a, b, c]
+
+        XCTAssertEqual(
+            SidebarDropCalculations.folderRowDrop(
+                sourceID: c.id,
+                folderID: a.id,
+                nextFolderID: b.id,
+                locationY: 19,
+                renderedHeight: 40,
+                in: folders
+            ),
+            .insert(before: a.id, edge: .top)
+        )
+    }
+
+    func testFolderRowDropInsertsBeforeTheNextSiblingOnTheLowerHalf() {
+        let a = WorkspaceFolder(id: WorkspaceFolderID(), title: "A")
+        let b = WorkspaceFolder(id: WorkspaceFolderID(), title: "B")
+        let c = WorkspaceFolder(id: WorkspaceFolderID(), title: "C")
+        let folders = [a, b, c]
+
+        XCTAssertEqual(
+            SidebarDropCalculations.folderRowDrop(
+                sourceID: a.id,
+                folderID: b.id,
+                nextFolderID: c.id,
+                locationY: 21,
+                renderedHeight: 40,
+                in: folders
+            ),
+            .insert(before: c.id, edge: .bottom)
+        )
+    }
+
+    func testFolderRowDropAppendsPastTheLastFolder() {
+        let a = WorkspaceFolder(id: WorkspaceFolderID(), title: "A")
+        let b = WorkspaceFolder(id: WorkspaceFolderID(), title: "B")
+        let folders = [a, b]
+
+        XCTAssertEqual(
+            SidebarDropCalculations.folderRowDrop(
+                sourceID: a.id,
+                folderID: b.id,
+                nextFolderID: nil,
+                locationY: 21,
+                renderedHeight: 40,
+                in: folders
+            ),
+            .insert(before: nil, edge: .bottom)
+        )
+    }
+
     func testInitialFirstResponderRequestWaitsForAttachmentAndRunsOnce() {
         let focusRequest = InitialFirstResponderRequest()
         var requestCount = 0
