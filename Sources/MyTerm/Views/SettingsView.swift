@@ -379,7 +379,8 @@ struct SettingsView: View {
                 ) { value in
                     FilePatternsEditor(
                         patterns: value,
-                        accessibilityLabel: "Patterns for files opened in MyTerm"
+                        accessibilityLabel: "Patterns for files opened in MyTerm",
+                        height: 56
                     )
                     .id(scope)
                 }
@@ -392,6 +393,7 @@ struct SettingsView: View {
                     override: \TerminalPreferencesOverrides.textFileOpenCommand
                 ) { value in
                     TextField("Command", text: value)
+                        .labelsHidden()
                         .frame(width: 260)
                         .accessibilityLabel("Command for opening text files")
                 }
@@ -473,21 +475,24 @@ private struct FilePatternsEditor: View {
     @State private var draft: String
     @FocusState private var isEditing: Bool
     private let accessibilityLabel: String
+    private let height: CGFloat
 
     init(
         patterns: Binding<[String]>,
-        accessibilityLabel: String = "Patterns for files opened as text"
+        accessibilityLabel: String = "Patterns for files opened as text",
+        height: CGFloat = 110
     ) {
         _patterns = patterns
         _draft = State(initialValue: patterns.wrappedValue.joined(separator: "\n"))
         self.accessibilityLabel = accessibilityLabel
+        self.height = height
     }
 
     var body: some View {
         TextEditor(text: $draft)
             .font(.system(.body, design: .monospaced))
             .multilineTextAlignment(.leading)
-            .frame(width: 260, height: 110)
+            .frame(width: 260, height: height)
             .accessibilityLabel(accessibilityLabel)
             .focused($isEditing)
             .onChange(of: draft) { _, newValue in
