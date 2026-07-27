@@ -424,11 +424,14 @@ private struct WorkspaceSidebarRow: View {
                 .fill(workspaceBackgroundColor)
         )
         .overlay(alignment: insertionEdge == .bottom ? .bottom : .top) {
+            // Fully transparent when idle but still a real view, so it hit-tests unless told
+            // not to — without this it can swallow a click or drag right at the row's edge.
             Rectangle()
                 .fill(Color.accentColor)
                 .frame(height: 2)
                 .padding(.horizontal, 4)
                 .opacity(insertionEdge == nil ? 0 : 1)
+                .allowsHitTesting(false)
         }
         .captureSidebarRenderedHeight($renderedRowHeight)
         .contextMenu {
@@ -595,11 +598,14 @@ private struct WorkspaceFolderRow: View {
                 .fill(isWorkspaceDropTargeted ? Color.accentColor.opacity(0.12) : .clear)
         )
         .overlay(alignment: folderInsertionEdge == .bottom ? .bottom : .top) {
+            // Same fix as the workspace row's insertion line above: transparent doesn't mean
+            // non-interactive in SwiftUI, so this still needs telling not to hit-test.
             Rectangle()
                 .fill(Color.accentColor)
                 .frame(height: 2)
                 .padding(.horizontal, 4)
                 .opacity(folderInsertionEdge == nil ? 0 : 1)
+                .allowsHitTesting(false)
         }
         .captureSidebarRenderedHeight($renderedRowHeight)
         .contextMenu {
