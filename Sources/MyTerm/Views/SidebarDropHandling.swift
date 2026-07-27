@@ -56,6 +56,21 @@ enum SidebarDropCalculations {
         case insert(before: WorkspaceID?, edge: InsertionEdge)
     }
 
+    /// Relationship-only acceptance (no pointer position involved): true whenever `source` could
+    /// ever land somewhere in `target`'s row, regardless of which half the pointer is over.
+    /// `validateDrop` uses only this — folding in `workspaceRowDrop`'s location-dependent no-op
+    /// rejection there made a row refuse the drop outright the instant the pointer entered
+    /// through its "wrong" half (e.g. moving a workspace down one slot enters the row below
+    /// through its upper half, which `workspaceRowDrop` treats as a no-op). SwiftUI never calls
+    /// `dropUpdated` for a row `validateDrop` rejected, so the pointer crossing into the row's
+    /// lower half was never observed and a one-slot move became unreachable without leaving the
+    /// row and re-entering from the far edge.
+    static func workspaceRowAcceptsSource(source: Workspace, target: Workspace) -> Bool {
+        source.id != target.id
+            && source.folderID == target.folderID
+            && source.isPinned == target.isPinned
+    }
+
     static func workspaceRowDrop(
         source: Workspace,
         target: Workspace,
@@ -63,9 +78,7 @@ enum SidebarDropCalculations {
         renderedHeight: CGFloat,
         in workspaces: [Workspace]
     ) -> WorkspaceRowDrop {
-        guard source.id != target.id,
-              source.folderID == target.folderID,
-              source.isPinned == target.isPinned else {
+        guard workspaceRowAcceptsSource(source: source, target: target) else {
             return .rejected
         }
 
@@ -106,7 +119,11 @@ struct WorkspaceRowDropDelegate: DropDelegate {
     @Binding var insertionEdge: SidebarDropCalculations.InsertionEdge?
 
     func validateDrop(info: DropInfo) -> Bool {
-        resolvedDrop(locationY: info.location.y) != nil
+        guard case .workspace(let sourceID) = session.payload,
+              let source = model.workspaces.first(where: { $0.id == sourceID }) else {
+            return false
+        }
+        return SidebarDropCalculations.workspaceRowAcceptsSource(source: source, target: target)
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
@@ -188,6 +205,10 @@ struct ContainerRowDropDelegate: DropDelegate {
     func dropUpdated(info: DropInfo) -> DropProposal? {
         switch session.payload {
         case .workspace(let sourceID):
+            // A folder drag's insertion line can outlive its drag if `dropExited` never fired
+            // before this row started seeing a different payload type — this branch doesn't own
+            // that state, so clear it regardless of whether the workspace itself is accepted.
+            folderInsertionEdge = nil
             guard let source = model.workspaces.first(where: { $0.id == sourceID }),
                   SidebarDropCalculations.containerAcceptsWorkspace(source: source, folderID: folderID) else {
                 isWorkspaceTargeted = false
@@ -196,6 +217,9 @@ struct ContainerRowDropDelegate: DropDelegate {
             isWorkspaceTargeted = true
             return DropProposal(operation: .move)
         case .folder(let sourceID):
+            // Mirror of the workspace branch above: a stale workspace-drop tint doesn't belong
+            // to a folder drag.
+            isWorkspaceTargeted = false
             guard let folderID, sourceID != folderID else {
                 folderInsertionEdge = nil
                 return DropProposal(operation: .forbidden)
@@ -203,6 +227,8 @@ struct ContainerRowDropDelegate: DropDelegate {
             folderInsertionEdge = info.location.y <= renderedHeight / 2 ? .top : .bottom
             return DropProposal(operation: .move)
         case nil:
+            isWorkspaceTargeted = false
+            folderInsertionEdge = nil
             return DropProposal(operation: .forbidden)
         }
     }

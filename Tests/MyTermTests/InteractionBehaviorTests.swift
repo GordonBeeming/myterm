@@ -231,6 +231,30 @@ final class InteractionBehaviorTests: XCTestCase {
         )
     }
 
+    func testWorkspaceRowAcceptsSourceIgnoresLocationEvenAtANoOpDropSpot() {
+        let folderID = WorkspaceFolderID()
+        let source = Workspace(title: "Source", folderID: folderID, isPinned: true)
+        let next = Workspace(title: "Next", folderID: folderID, isPinned: true)
+
+        // `workspaceRowDrop` rejects this exact pair as a no-op reorder (see
+        // testWorkspaceRowDropRejectsUpperHalfOfTheRowDirectlyBelowSource above), but
+        // `validateDrop` must still accept the row so SwiftUI keeps forwarding pointer motion —
+        // otherwise a drag can never cross into the row's lower half to become a real move.
+        XCTAssertTrue(SidebarDropCalculations.workspaceRowAcceptsSource(source: source, target: next))
+    }
+
+    func testWorkspaceRowAcceptsSourceRejectsSelfCrossFolderAndPinnedBand() {
+        let folderA = WorkspaceFolderID()
+        let folderB = WorkspaceFolderID()
+        let pinnedInA = Workspace(title: "Pinned A", folderID: folderA, isPinned: true)
+        let unpinnedInA = Workspace(title: "Unpinned A", folderID: folderA, isPinned: false)
+        let pinnedInB = Workspace(title: "Pinned B", folderID: folderB, isPinned: true)
+
+        XCTAssertFalse(SidebarDropCalculations.workspaceRowAcceptsSource(source: pinnedInA, target: pinnedInA))
+        XCTAssertFalse(SidebarDropCalculations.workspaceRowAcceptsSource(source: pinnedInA, target: pinnedInB))
+        XCTAssertFalse(SidebarDropCalculations.workspaceRowAcceptsSource(source: pinnedInA, target: unpinnedInA))
+    }
+
     func testContainerAcceptsWorkspaceReflectsWhetherTheWorkspaceIsAlreadyThere() {
         let folderA = WorkspaceFolderID()
         let folderB = WorkspaceFolderID()

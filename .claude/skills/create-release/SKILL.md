@@ -135,7 +135,13 @@ On failure, inspect `gh run view RUN_ID --log-failed`, report the exact failed g
      "$RELEASE_TMP/myterm-VERSION-aarch64.dmg"
    ```
 
-3. Confirm the tap cask uses the release version, URL, and DMG SHA-256. Confirm the tap update commit is GitHub-verified.
+3. Confirm the tap cask uses the release version, URL, and DMG SHA-256 (compare the cask's `sha256` against `shasum -a 256` of the DMG you downloaded, not against the workflow log). Confirm the tap update commit is signed.
+
+   The `myterm-release[bot]` tap commits carry a real SSH signature but GitHub reports
+   `verified: false` with `reason: no_user`, because the bot's signing key isn't attached to a GitHub
+   account. Check `.commit.verification.signature` is non-null rather than treating `verified: false`
+   as a failed gate — `reason: unsigned` would be the actual failure. Attaching the deploy key's public
+   half to an account that GitHub can map is what would flip it to Verified.
 
 4. Refresh Homebrew, verify its checksum path, then install or upgrade the cask:
 
