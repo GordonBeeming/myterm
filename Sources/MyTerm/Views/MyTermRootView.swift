@@ -1,60 +1,7 @@
 import AppKit
-import CoreTransferable
 import MyTermCore
 import SwiftUI
 import UniformTypeIdentifiers
-
-private extension UTType {
-    static let mytermWorkspaceSidebarItem = UTType(exportedAs: "com.gordonbeeming.myterm.workspace-sidebar-item")
-    static let mytermFolderSidebarItem = UTType(exportedAs: "com.gordonbeeming.myterm.folder-sidebar-item")
-}
-
-private struct WorkspaceSidebarDragItem: Codable, Transferable {
-    let id: WorkspaceID
-
-    static var transferRepresentation: some TransferRepresentation {
-        CodableRepresentation(contentType: .mytermWorkspaceSidebarItem)
-    }
-}
-
-private struct FolderSidebarDragItem: Codable, Transferable {
-    let id: WorkspaceFolderID
-
-    static var transferRepresentation: some TransferRepresentation {
-        CodableRepresentation(contentType: .mytermFolderSidebarItem)
-    }
-}
-
-enum SidebarDropCalculations {
-    static func renderedHeight(measured: CGFloat, minimum: CGFloat) -> CGFloat {
-        measured > 0 ? measured : minimum
-    }
-
-    static func folderTarget(
-        folderID: WorkspaceFolderID,
-        nextFolderID: WorkspaceFolderID?,
-        locationY: CGFloat,
-        renderedHeight: CGFloat
-    ) -> WorkspaceFolderID? {
-        locationY <= renderedHeight / 2 ? folderID : nextFolderID
-    }
-
-    static func workspaceTarget(
-        for target: Workspace,
-        locationY: CGFloat,
-        renderedHeight: CGFloat,
-        in workspaces: [Workspace]
-    ) -> WorkspaceID? {
-        let siblings = workspaces.filter {
-            $0.folderID == target.folderID && $0.isPinned == target.isPinned
-        }
-        guard let targetIndex = siblings.firstIndex(where: { $0.id == target.id }) else {
-            return target.id
-        }
-        guard locationY > renderedHeight / 2 else { return target.id }
-        return siblings.dropFirst(targetIndex + 1).first?.id
-    }
-}
 
 private struct SidebarRenderedHeightPreferenceKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
@@ -271,6 +218,8 @@ private struct WorkspaceContentView: View {
 
 private struct WorkspaceSidebar: View {
     @Bindable var model: AppModel
+    @State private var session = SidebarDragSession()
+    @State private var isUnfiledHeaderDropTargeted = false
     @State private var isUnfiledDropTargeted = false
 
     private var ungroupedWorkspaces: [Workspace] {
@@ -293,6 +242,7 @@ private struct WorkspaceSidebar: View {
                         WorkspaceSidebarRow(
                             model: model,
                             workspace: workspace,
+                            session: session,
                             rowHeight: sidebarRowHeight
                         )
                     }
@@ -301,20 +251,42 @@ private struct WorkspaceSidebar: View {
                         model: model,
                         folder: folder,
                         nextFolderID: nextFolderID(after: folder.id),
+                        session: session,
                         rowHeight: sidebarRowHeight
                     )
                 }
             }
 
             if !ungroupedWorkspaces.isEmpty {
-                Section("Unfiled") {
+                Section {
                     ForEach(ungroupedWorkspaces) { workspace in
                         WorkspaceSidebarRow(
                             model: model,
                             workspace: workspace,
+                            session: session,
                             rowHeight: sidebarRowHeight
                         )
                     }
+                } header: {
+                    Text("Unfiled")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .background(
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .fill(isUnfiledHeaderDropTargeted ? Color.accentColor.opacity(0.12) : .clear)
+                        )
+                        .onDrop(
+                            of: [.mytermWorkspaceSidebarItem, .mytermFolderSidebarItem],
+                            delegate: ContainerRowDropDelegate(
+                                model: model,
+                                folderID: nil,
+                                nextFolderID: nil,
+                                renderedHeight: sidebarRowHeight,
+                                session: session,
+                                isWorkspaceTargeted: $isUnfiledHeaderDropTargeted,
+                                folderInsertionEdge: .constant(nil)
+                            )
+                        )
                 }
             }
         }
@@ -361,14 +333,18 @@ private struct WorkspaceSidebar: View {
                         .background(.regularMaterial, in: Capsule())
                 }
             }
-            .dropDestination(for: WorkspaceSidebarDragItem.self) { items, _ in
-                guard let sourceID = items.first?.id,
-                      model.workspaces.contains(where: { $0.id == sourceID }) else { return false }
-                model.moveWorkspace(sourceID, to: nil)
-                return true
-            } isTargeted: {
-                isUnfiledDropTargeted = $0
-            }
+            .onDrop(
+                of: [.mytermWorkspaceSidebarItem, .mytermFolderSidebarItem],
+                delegate: ContainerRowDropDelegate(
+                    model: model,
+                    folderID: nil,
+                    nextFolderID: nil,
+                    renderedHeight: sidebarRowHeight,
+                    session: session,
+                    isWorkspaceTargeted: $isUnfiledDropTargeted,
+                    folderInsertionEdge: .constant(nil)
+                )
+            )
         }
     }
 
@@ -393,10 +369,11 @@ private struct WorkspaceSidebar: View {
 private struct WorkspaceSidebarRow: View {
     let model: AppModel
     let workspace: Workspace
+    let session: SidebarDragSession
     let rowHeight: CGFloat
 
     @Environment(\.openSettings) private var openSettings
-    @State private var isDropTargeted = false
+    @State private var insertionEdge: SidebarDropCalculations.InsertionEdge?
     @State private var renderedRowHeight: CGFloat = 0
 
     var body: some View {
@@ -416,36 +393,45 @@ private struct WorkspaceSidebarRow: View {
         .contentShape(Rectangle())
         .tag(workspace.id)
         .accessibilityLabel(workspace.isPinned ? "Pinned workspace \(workspace.displayTitle)" : "Workspace \(workspace.displayTitle)")
-        .draggable(WorkspaceSidebarDragItem(id: workspace.id))
-        .dropDestination(for: WorkspaceSidebarDragItem.self) { items, location in
-            guard let sourceID = items.first?.id,
-                  let source = model.workspaces.first(where: { $0.id == sourceID }),
-                  sourceID != workspace.id,
-                  source.isPinned == workspace.isPinned else {
-                return false
+        .onDrag {
+            session.payload = .workspace(workspace.id)
+            let provider = NSItemProvider()
+            provider.registerDataRepresentation(for: .mytermWorkspaceSidebarItem, visibility: .ownProcess) { completion in
+                do {
+                    completion(try JSONEncoder().encode(WorkspaceSidebarDragItem(id: workspace.id)), nil)
+                } catch {
+                    completion(nil, error)
+                }
+                return nil
             }
-
-            let targetID = workspaceBeforeTarget(
-                for: workspace,
-                locationY: location.y,
+            return provider
+        }
+        .onDrop(
+            of: [.mytermWorkspaceSidebarItem, .mytermFolderSidebarItem],
+            delegate: WorkspaceRowDropDelegate(
+                model: model,
+                target: workspace,
                 renderedHeight: SidebarDropCalculations.renderedHeight(
                     measured: renderedRowHeight,
                     minimum: rowHeight
                 ),
-                in: model.workspaces
+                session: session,
+                insertionEdge: $insertionEdge
             )
-            model.moveWorkspace(sourceID, to: workspace.folderID, before: targetID)
-            return true
-        } isTargeted: {
-            isDropTargeted = $0
-        }
+        )
         .background(
             RoundedRectangle(cornerRadius: 4, style: .continuous)
                 .fill(workspaceBackgroundColor)
         )
-        .overlay {
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .stroke(isDropTargeted ? Color.accentColor : .clear, lineWidth: 2)
+        .overlay(alignment: insertionEdge == .bottom ? .bottom : .top) {
+            // Fully transparent when idle but still a real view, so it hit-tests unless told
+            // not to — without this it can swallow a click or drag right at the row's edge.
+            Rectangle()
+                .fill(Color.accentColor)
+                .frame(height: 2)
+                .padding(.horizontal, 4)
+                .opacity(insertionEdge == nil ? 0 : 1)
+                .allowsHitTesting(false)
         }
         .captureSidebarRenderedHeight($renderedRowHeight)
         .contextMenu {
@@ -539,9 +525,6 @@ private struct WorkspaceSidebarRow: View {
     }
 
     private var workspaceBackgroundColor: Color {
-        if isDropTargeted {
-            return Color.accentColor.opacity(0.12)
-        }
         guard let color = workspace.color else { return .clear }
         let isSelected = model.store.selectedWorkspaceID == workspace.id
         return color.swiftUIColor.opacity(isSelected ? 0.30 : 0.18)
@@ -561,12 +544,12 @@ private struct WorkspaceFolderRow: View {
     let model: AppModel
     let folder: WorkspaceFolder
     let nextFolderID: WorkspaceFolderID?
+    let session: SidebarDragSession
     let rowHeight: CGFloat
 
     @Environment(\.openSettings) private var openSettings
-    @State private var isFolderDropTargeted = false
     @State private var isWorkspaceDropTargeted = false
-    @State private var hoverLocationY: CGFloat = 0
+    @State private var folderInsertionEdge: SidebarDropCalculations.InsertionEdge?
     @State private var renderedRowHeight: CGFloat = 0
 
     var body: some View {
@@ -582,50 +565,47 @@ private struct WorkspaceFolderRow: View {
         .onTapGesture(count: 2) {
             model.setFolderExpanded(folder.id, isExpanded: !folder.isExpanded)
         }
-        .onContinuousHover { phase in
-            if case .active(let location) = phase {
-                hoverLocationY = location.y
+        .onDrag {
+            session.payload = .folder(folder.id)
+            let provider = NSItemProvider()
+            provider.registerDataRepresentation(for: .mytermFolderSidebarItem, visibility: .ownProcess) { completion in
+                do {
+                    completion(try JSONEncoder().encode(FolderSidebarDragItem(id: folder.id)), nil)
+                } catch {
+                    completion(nil, error)
+                }
+                return nil
             }
+            return provider
         }
-        .draggable(FolderSidebarDragItem(id: folder.id))
-        .dropDestination(for: FolderSidebarDragItem.self) { items, location in
-            guard let sourceID = items.first?.id, sourceID != folder.id else { return false }
-            let targetID = SidebarDropCalculations.folderTarget(
+        .onDrop(
+            of: [.mytermWorkspaceSidebarItem, .mytermFolderSidebarItem],
+            delegate: ContainerRowDropDelegate(
+                model: model,
                 folderID: folder.id,
                 nextFolderID: nextFolderID,
-                locationY: location.y,
                 renderedHeight: SidebarDropCalculations.renderedHeight(
                     measured: renderedRowHeight,
                     minimum: rowHeight
-                )
+                ),
+                session: session,
+                isWorkspaceTargeted: $isWorkspaceDropTargeted,
+                folderInsertionEdge: $folderInsertionEdge
             )
-            model.moveFolder(sourceID, before: targetID)
-            return true
-        } isTargeted: {
-            isFolderDropTargeted = $0
-        }
-        .dropDestination(for: WorkspaceSidebarDragItem.self) { items, _ in
-            guard let sourceID = items.first?.id,
-                  model.workspaces.contains(where: { $0.id == sourceID }) else { return false }
-            model.moveWorkspace(sourceID, to: folder.id)
-            return true
-        } isTargeted: {
-            isWorkspaceDropTargeted = $0
-        }
+        )
         .background(
             RoundedRectangle(cornerRadius: 4, style: .continuous)
                 .fill(isWorkspaceDropTargeted ? Color.accentColor.opacity(0.12) : .clear)
         )
-        .overlay {
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .stroke(isWorkspaceDropTargeted ? Color.accentColor : .clear, lineWidth: 2)
-        }
-        .overlay(alignment: folderInsertionAlignment) {
+        .overlay(alignment: folderInsertionEdge == .bottom ? .bottom : .top) {
+            // Same fix as the workspace row's insertion line above: transparent doesn't mean
+            // non-interactive in SwiftUI, so this still needs telling not to hit-test.
             Rectangle()
                 .fill(Color.accentColor)
                 .frame(height: 2)
                 .padding(.horizontal, 4)
-                .opacity(isFolderDropTargeted ? 1 : 0)
+                .opacity(folderInsertionEdge == nil ? 0 : 1)
+                .allowsHitTesting(false)
         }
         .captureSidebarRenderedHeight($renderedRowHeight)
         .contextMenu {
@@ -671,14 +651,6 @@ private struct WorkspaceFolderRow: View {
         }
     }
 
-    private var folderInsertionAlignment: Alignment {
-        let height = SidebarDropCalculations.renderedHeight(
-            measured: renderedRowHeight,
-            minimum: rowHeight
-        )
-        return hoverLocationY <= height / 2 ? .top : .bottom
-    }
-
     private func canMoveFolder(by offset: Int) -> Bool {
         guard offset != 0,
               let index = model.folders.firstIndex(where: { $0.id == folder.id }) else {
@@ -705,20 +677,6 @@ private struct WorkspaceFolderRow: View {
         }
         model.moveFolder(folder.id, before: targetID)
     }
-}
-
-private func workspaceBeforeTarget(
-    for target: Workspace,
-    locationY: CGFloat,
-    renderedHeight: CGFloat,
-    in workspaces: [Workspace]
-) -> WorkspaceID? {
-    SidebarDropCalculations.workspaceTarget(
-        for: target,
-        locationY: locationY,
-        renderedHeight: renderedHeight,
-        in: workspaces
-    )
 }
 
 private extension WorkspaceFolderColor {

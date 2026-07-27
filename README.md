@@ -29,7 +29,7 @@ When MyTerm upgrades legacy workspace state, it keeps the original file in an ad
 
 ## The workflow
 
-- **Workspaces** have a title, can be pinned and reordered, and live inside collapsible color-coded folders.
+- **Workspaces** have a title, can be pinned and reordered, and live inside collapsible color-coded folders. Drag one onto a folder to file it there, or onto another workspace to reorder it inside the folder it already lives in.
 - **Pane groups** own their own terminal and browser tabs. Every group keeps an independent selected tab, and browser tabs keep their URL, cookies, and website data across app restarts.
 - **Panes** split right with <kbd>⌘D</kbd> and down with <kbd>⇧⌘D</kbd>. Their dividers can be dragged, and the saved proportions restore on the next launch.
 - **One app instance** handles launch requests. Opening a folder, script, SSH link, or web URL reuses the existing window instead of creating another app process.
