@@ -24,7 +24,6 @@ Stop before publishing unless all of these are true:
   - `DEVELOPER_ID_CERTIFICATE`
   - `DEVELOPER_ID_PASSWORD`
   - `HOMEBREW_TAP_DEPLOY_KEY`
-  - `COMMIT_SIGNING_KEY`
 - Local verification passes:
 
   ```bash
@@ -107,7 +106,7 @@ The successful run must perform this exact security chain:
 5. Sign the DMG with Developer ID and secure timestamp as a separate artifact.
 6. Verify, notarize, staple, and validate the DMG with `codesign`, `stapler`, `hdiutil`, and Gatekeeper.
 7. Upload the DMG to the release.
-8. Update `GordonBeeming/homebrew-tap/Casks/myterm.rb` with an SSH-signed `myterm-release[bot]` commit.
+8. Update `GordonBeeming/homebrew-tap/Casks/myterm.rb` with an unsigned `myterm-release[bot]` commit.
 
 On failure, inspect `gh run view RUN_ID --log-failed`, report the exact failed gate, and fix forward. Never bypass signing, notarization, or validation, and never silently delete the failed release or tag.
 
@@ -135,13 +134,11 @@ On failure, inspect `gh run view RUN_ID --log-failed`, report the exact failed g
      "$RELEASE_TMP/myterm-VERSION-aarch64.dmg"
    ```
 
-3. Confirm the tap cask uses the release version, URL, and DMG SHA-256 (compare the cask's `sha256` against `shasum -a 256` of the DMG you downloaded, not against the workflow log). Confirm the tap update commit is signed.
+3. Confirm the tap cask uses the release version, URL, and DMG SHA-256 (compare the cask's `sha256` against `shasum -a 256` of the DMG you downloaded, not against the workflow log). Confirm the tap update commit is authored by `myterm-release[bot]`.
 
-   The `myterm-release[bot]` tap commits carry a real SSH signature but GitHub reports
-   `verified: false` with `reason: no_user`, because the bot's signing key isn't attached to a GitHub
-   account. Check `.commit.verification.signature` is non-null rather than treating `verified: false`
-   as a failed gate — `reason: unsigned` would be the actual failure. Attaching the deploy key's public
-   half to an account that GitHub can map is what would flip it to Verified.
+   That commit is unsigned by design. `myterm-release[bot]` is a bot identity with no GitHub account
+   behind it, so there's no account to attach a signing key to and no way GitHub could ever verify a
+   signature on its commits. Don't expect one, and don't treat its absence as a failed gate.
 
 4. Refresh Homebrew, verify its checksum path, then install or upgrade the cask:
 

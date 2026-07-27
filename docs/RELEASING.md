@@ -7,7 +7,7 @@ Publishing a GitHub release builds an Apple silicon app, gives the app and DMG t
 - Release source commits are SSH-signed. Confirm the release head is shown as verified on GitHub and with `git log -1 --show-signature` before publishing.
 - `myterm.app` is signed with a Developer ID Application certificate, hardened runtime, and a secure timestamp. The workflow verifies the signature, submits the app to Apple, staples the ticket, and validates it.
 - The generated DMG is then signed with the Developer ID identity and secure timestamp as a separate artifact. It receives a separate notarization submission and stapled ticket before `codesign`, `hdiutil`, and Gatekeeper validation.
-- The Homebrew tap update is committed with SSH signing enabled and pushed as `myterm-release[bot]` through the dedicated tap deploy key.
+- The Homebrew tap update is committed and pushed as `myterm-release[bot]` through the dedicated tap deploy key, without commit signing.
 
 ## GitHub environment
 
@@ -19,7 +19,6 @@ The `prod` environment in `GordonBeeming/myterm` requires these secrets:
 - `DEVELOPER_ID_CERTIFICATE` — base64-encoded Developer ID Application `.p12`
 - `DEVELOPER_ID_PASSWORD`
 - `HOMEBREW_TAP_DEPLOY_KEY` — the dedicated write deploy key for the tap
-- `COMMIT_SIGNING_KEY` — SSH signing key used for the tap update commit
 
 The dedicated deploy key is stored in the `ai-secrets` 1Password vault as `GitHub Deploy Key - myterm Homebrew tap`. Its public key is installed on `GordonBeeming/homebrew-tap` with write access; the private key is only injected into the `prod` environment secret.
 
@@ -29,7 +28,7 @@ The dedicated deploy key is stored in the `ai-secrets` 1Password vault as `GitHu
 2. Create and publish a GitHub release tagged `vMAJOR.MINOR` or `vMAJOR.MINOR.PATCH`, for example `v0.1.0`.
 3. Watch **Build and Test**. The release job imports the certificate into a temporary keychain, signs/notarizes/staples the app, then separately signs/notarizes/staples the DMG, and validates both artifacts.
 4. Confirm the release contains `myterm-VERSION-aarch64.dmg`.
-5. Confirm `GordonBeeming/homebrew-tap/Casks/myterm.rb` was updated by a signed `myterm-release[bot]` commit.
+5. Confirm `GordonBeeming/homebrew-tap/Casks/myterm.rb` was updated by a `myterm-release[bot]` commit.
 6. Verify from a clean machine or Homebrew prefix:
 
    ```bash
