@@ -70,6 +70,7 @@ MyTerm is flat by default. Depth comes from macOS window materials, source-list 
 - **Width:** 220–480 pt, ideally 280 pt.
 - **Rows:** One title line only, using native source-list selection. Renaming is an explicit command or context-menu action.
 - **Folders:** Native disclosure rows with one semantic folder color. Folders collapse and accept dragged workspaces.
+- **Drag and drop:** A drag either files a workspace or reorders it, never both. Folder rows and the Unfiled header tint across their whole width and take the workspace at the bottom; a workspace row in the same folder draws an insertion line at the nearer edge instead, and rows in other folders refuse the drop. Folders reorder against each other the same way, and pinned rows never cross into the unpinned band.
 - **Actions:** Compact plus and minus icons at the bottom, with tooltips and accessibility labels.
 
 ### Tab Strip
