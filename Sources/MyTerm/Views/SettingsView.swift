@@ -373,6 +373,20 @@ struct SettingsView: View {
                 ScopedSettingRow(
                     model: model,
                     scope: scope,
+                    title: "Browser file patterns",
+                    global: \TerminalPreferences.browserFilePatterns,
+                    override: \TerminalPreferencesOverrides.browserFilePatterns
+                ) { value in
+                    FilePatternsEditor(
+                        patterns: value,
+                        accessibilityLabel: "Patterns for files opened in MyTerm"
+                    )
+                    .id(scope)
+                }
+
+                ScopedSettingRow(
+                    model: model,
+                    scope: scope,
                     title: "Open text files with",
                     global: \TerminalPreferences.textFileOpenCommand,
                     override: \TerminalPreferencesOverrides.textFileOpenCommand
@@ -389,11 +403,11 @@ struct SettingsView: View {
                     global: \TerminalPreferences.nativeTextFilePatterns,
                     override: \TerminalPreferencesOverrides.nativeTextFilePatterns
                 ) { value in
-                    TextFilePatternsEditor(patterns: value)
+                    FilePatternsEditor(patterns: value)
                         .id(scope)
                 }
 
-                Text("Use one pattern per line. Extension suffixes use *.json; literal names such as Dockerfile and .gitignore match exactly. Terminal file links matching these patterns use the command; other files open in the default macOS application. Use {file} where the quoted file path should be inserted. If it is omitted, MyTerm appends the file path. Leave the command empty to open matching files externally.")
+                Text("Browser patterns are checked first and open in MyTerm. Text patterns use the command above; unmatched files open in the default macOS application. Enter one pattern per line: use *.json for an extension, or a literal name such as Dockerfile or .gitignore. Put {file} where the quoted path belongs, or MyTerm appends it. Leave the command empty to open matching text files externally.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -454,14 +468,19 @@ struct SettingsView: View {
     }
 }
 
-private struct TextFilePatternsEditor: View {
+private struct FilePatternsEditor: View {
     @Binding private var patterns: [String]
     @State private var draft: String
     @FocusState private var isEditing: Bool
+    private let accessibilityLabel: String
 
-    init(patterns: Binding<[String]>) {
+    init(
+        patterns: Binding<[String]>,
+        accessibilityLabel: String = "Patterns for files opened as text"
+    ) {
         _patterns = patterns
         _draft = State(initialValue: patterns.wrappedValue.joined(separator: "\n"))
+        self.accessibilityLabel = accessibilityLabel
     }
 
     var body: some View {
@@ -469,7 +488,7 @@ private struct TextFilePatternsEditor: View {
             .font(.system(.body, design: .monospaced))
             .multilineTextAlignment(.leading)
             .frame(width: 260, height: 110)
-            .accessibilityLabel("Patterns for files opened as text")
+            .accessibilityLabel(accessibilityLabel)
             .focused($isEditing)
             .onChange(of: draft) { _, newValue in
                 let updatedPatterns = newValue.components(separatedBy: .newlines)
