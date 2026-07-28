@@ -41,6 +41,38 @@ final class AppModelTests: XCTestCase {
         )
     }
 
+    func testApplicationTerminationTerminatesTerminalSessions() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true,
+            terminalSnapshotDelayNanoseconds: 60_000_000_000
+        )
+        let session = try XCTUnwrap(engine.sessions.first)
+        session.snapshotText = "captured before teardown"
+        session.emitContentChanged()
+        let delegate = MyTermApplicationDelegate()
+        delegate.connect(model: model)
+        XCTAssertEqual(session.terminateCallCount, 0)
+
+        delegate.applicationWillTerminate(
+            Notification(name: NSApplication.willTerminateNotification)
+        )
+
+        XCTAssertEqual(session.terminateCallCount, 1)
+        XCTAssertFalse(session.isRunning)
+        XCTAssertTrue(model.terminalSessions.isEmpty)
+        // Snapshots read live session content, so a teardown that ran first would silently persist nothing.
+        XCTAssertEqual(
+            model.selectedWorkspace.selectedTab?.terminalSession?.recentText,
+            "captured before teardown"
+        )
+    }
+
     func testCancelledApplicationTerminationRestoresTheMainWindow() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }

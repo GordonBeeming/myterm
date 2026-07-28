@@ -1876,6 +1876,18 @@ final class AppModel {
         process.terminate()
     }
 
+    /// Quitting never routes through the per-tab close path, so it relies on the kernel's SIGHUP when the
+    /// PTY master closes. That signal only reaches the controlling terminal's foreground process group,
+    /// which leaves a background group — or a child that outlives its shell — running after the app is gone.
+    /// Tearing sessions down explicitly gives quit the same foreground-process-group SIGHUP that closing a
+    /// tab performs, which is what the quit confirmation already promises the user.
+    func terminateTerminalSessions() {
+        // removeTerminalRuntime mutates terminalSessions, so iterate a snapshot of the keys.
+        for sessionID in Array(terminalSessions.keys) {
+            removeTerminalRuntime(sessionID)
+        }
+    }
+
     private func scheduleTerminalSnapshot(
         workspaceID: WorkspaceID,
         tabGroupID: TabGroupID,

@@ -72,7 +72,9 @@ final class MyTermApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // Snapshots read live session content, so they have to be captured before the sessions are torn down.
         model?.persistTerminalSnapshots()
+        model?.terminateTerminalSessions()
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
