@@ -356,7 +356,8 @@ private struct WorkspaceSidebar: View {
     }
 
     private func moveWorkspaces(_ items: [SidebarDragItem], to folderID: WorkspaceFolderID?) -> Bool {
-        guard case .workspace(let sourceID) = items.first,
+        guard items.count == 1,
+              case .workspace(let sourceID) = items.first,
               let source = model.workspaces.first(where: { $0.id == sourceID }),
               SidebarDropCalculations.containerAcceptsWorkspace(source: source, folderID: folderID) else {
             return false
@@ -416,7 +417,8 @@ private struct WorkspaceSidebarRow: View {
                 }
         }
         .dropDestination(for: SidebarDragItem.self) { items, location in
-            guard case .workspace(let sourceID) = items.first,
+            guard items.count == 1,
+                  case .workspace(let sourceID) = items.first,
                   let source = model.workspaces.first(where: { $0.id == sourceID }) else {
                 return false
             }
@@ -582,7 +584,7 @@ private struct WorkspaceFolderRow: View {
             Image(systemName: "folder.fill")
                 .foregroundStyle(folder.color.swiftUIColor)
         }
-        .frame(minHeight: rowHeight)
+        .frame(maxWidth: .infinity, minHeight: rowHeight, alignment: .leading)
         .onTapGesture(count: 2) {
             model.setFolderExpanded(folder.id, isExpanded: !folder.isExpanded)
         }
@@ -596,7 +598,7 @@ private struct WorkspaceFolderRow: View {
                 }
         }
         .dropDestination(for: SidebarDragItem.self) { items, location in
-            guard let item = items.first else { return false }
+            guard items.count == 1, let item = items.first else { return false }
             switch item {
             case .workspace(let sourceID):
                 guard let source = model.workspaces.first(where: { $0.id == sourceID }),
