@@ -453,6 +453,31 @@ final class InteractionBehaviorTests: XCTestCase {
         XCTAssertNotEqual(afterMove, afterCollapse)
     }
 
+    func testSidebarListIdentityChangesWhenPinningOrReorderingSiblingRows() {
+        let folderID = WorkspaceFolderID()
+        let folder = WorkspaceFolder(id: folderID, title: "Folder")
+        let firstWorkspace = Workspace(id: WorkspaceID(), title: "First", folderID: folderID)
+        let secondWorkspace = Workspace(id: WorkspaceID(), title: "Second", folderID: folderID)
+        let original = SidebarListIdentity(
+            folders: [folder],
+            workspaces: [firstWorkspace, secondWorkspace]
+        )
+
+        var pinnedWorkspace = secondWorkspace
+        pinnedWorkspace.isPinned = true
+        let afterPin = SidebarListIdentity(
+            folders: [folder],
+            workspaces: [firstWorkspace, pinnedWorkspace]
+        )
+        let afterReorder = SidebarListIdentity(
+            folders: [folder],
+            workspaces: [secondWorkspace, firstWorkspace]
+        )
+
+        XCTAssertNotEqual(original, afterPin)
+        XCTAssertNotEqual(original, afterReorder)
+    }
+
     func testSidebarListIdentityIgnoresNonStructuralRowChanges() {
         let folderID = WorkspaceFolderID()
         let workspaceID = WorkspaceID()

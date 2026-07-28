@@ -48,22 +48,19 @@ struct SidebarListIdentity: Hashable {
     let ungroupedWorkspaces: [WorkspaceRow]
 
     init(folders: [WorkspaceFolder], workspaces: [Workspace]) {
+        let workspacesByFolder = Dictionary(grouping: workspaces, by: \.folderID)
         self.folders = folders.map { folder in
             Folder(
                 id: folder.id,
                 isExpanded: folder.isExpanded,
-                workspaces: Self.rows(in: folder.id, from: workspaces)
+                workspaces: Self.rows(from: workspacesByFolder[folder.id, default: []])
             )
         }
-        ungroupedWorkspaces = Self.rows(in: nil, from: workspaces)
+        ungroupedWorkspaces = Self.rows(from: workspacesByFolder[nil, default: []])
     }
 
-    private static func rows(
-        in folderID: WorkspaceFolderID?,
-        from workspaces: [Workspace]
-    ) -> [WorkspaceRow] {
-        let siblings = workspaces.filter { $0.folderID == folderID }
-        return (siblings.filter(\.isPinned) + siblings.filter { !$0.isPinned }).map {
+    private static func rows(from workspaces: [Workspace]) -> [WorkspaceRow] {
+        (workspaces.filter(\.isPinned) + workspaces.filter { !$0.isPinned }).map {
             WorkspaceRow(id: $0.id, isPinned: $0.isPinned)
         }
     }
