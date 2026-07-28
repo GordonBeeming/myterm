@@ -197,7 +197,7 @@ final class InteractionBehaviorTests: XCTestCase {
         )
     }
 
-    func testWorkspaceRowDropRejectsUpperHalfOfTheRowDirectlyBelowSource() {
+    func testWorkspaceRowDropUsesTheWholeRowToMoveSourceAfterItsNextSibling() {
         let folderID = WorkspaceFolderID()
         let source = Workspace(title: "Source", folderID: folderID, isPinned: true)
         let next = Workspace(title: "Next", folderID: folderID, isPinned: true)
@@ -210,11 +210,21 @@ final class InteractionBehaviorTests: XCTestCase {
                 renderedHeight: 40,
                 in: [source, next]
             ),
-            .rejected
+            .insert(before: nil, edge: .bottom)
+        )
+        XCTAssertEqual(
+            SidebarDropCalculations.workspaceRowDrop(
+                source: source,
+                target: next,
+                locationY: 21,
+                renderedHeight: 40,
+                in: [source, next]
+            ),
+            .insert(before: nil, edge: .bottom)
         )
     }
 
-    func testWorkspaceRowDropRejectsLowerHalfOfTheRowDirectlyAboveSource() {
+    func testWorkspaceRowDropUsesTheWholeRowToMoveSourceBeforeItsPreviousSibling() {
         let folderID = WorkspaceFolderID()
         let previous = Workspace(title: "Previous", folderID: folderID, isPinned: true)
         let source = Workspace(title: "Source", folderID: folderID, isPinned: true)
@@ -227,19 +237,26 @@ final class InteractionBehaviorTests: XCTestCase {
                 renderedHeight: 40,
                 in: [previous, source]
             ),
-            .rejected
+            .insert(before: previous.id, edge: .top)
+        )
+        XCTAssertEqual(
+            SidebarDropCalculations.workspaceRowDrop(
+                source: source,
+                target: previous,
+                locationY: 19,
+                renderedHeight: 40,
+                in: [previous, source]
+            ),
+            .insert(before: previous.id, edge: .top)
         )
     }
 
-    func testWorkspaceRowAcceptsSourceIgnoresLocationEvenAtANoOpDropSpot() {
+    func testWorkspaceRowAcceptsSourceIgnoresLocation() {
         let folderID = WorkspaceFolderID()
         let source = Workspace(title: "Source", folderID: folderID, isPinned: true)
         let next = Workspace(title: "Next", folderID: folderID, isPinned: true)
 
-        // `workspaceRowDrop` rejects this exact pair as a no-op reorder (see
-        // testWorkspaceRowDropRejectsUpperHalfOfTheRowDirectlyBelowSource above), but
-        // `validateDrop` must still accept the row so SwiftUI keeps forwarding pointer motion —
-        // otherwise a drag can never cross into the row's lower half to become a real move.
+        // Relationship-only acceptance remains independent from the pointer location.
         XCTAssertTrue(SidebarDropCalculations.workspaceRowAcceptsSource(source: source, target: next))
     }
 
@@ -265,6 +282,90 @@ final class InteractionBehaviorTests: XCTestCase {
         XCTAssertTrue(SidebarDropCalculations.containerAcceptsWorkspace(source: filed, folderID: folderB))
         XCTAssertTrue(SidebarDropCalculations.containerAcceptsWorkspace(source: filed, folderID: nil))
         XCTAssertFalse(SidebarDropCalculations.containerAcceptsWorkspace(source: unfiled, folderID: nil))
+    }
+
+    func testWorkspaceRowHighlightAcceptsOnlyACompatibleWorkspacePayload() {
+        let folderA = WorkspaceFolderID()
+        let folderB = WorkspaceFolderID()
+        let source = Workspace(title: "Source", folderID: folderA, isPinned: true)
+        let target = Workspace(title: "Target", folderID: folderA, isPinned: true)
+        let otherFolder = Workspace(title: "Other", folderID: folderB, isPinned: true)
+
+        XCTAssertTrue(
+            SidebarDropCalculations.workspaceRowAcceptsDragItem(
+                .workspace(source.id),
+                target: target,
+                in: [source, target, otherFolder]
+            )
+        )
+        XCTAssertFalse(
+            SidebarDropCalculations.workspaceRowAcceptsDragItem(
+                .workspace(source.id),
+                target: source,
+                in: [source, target, otherFolder]
+            )
+        )
+        XCTAssertFalse(
+            SidebarDropCalculations.workspaceRowAcceptsDragItem(
+                .workspace(otherFolder.id),
+                target: target,
+                in: [source, target, otherFolder]
+            )
+        )
+        XCTAssertFalse(
+            SidebarDropCalculations.workspaceRowAcceptsDragItem(
+                .folder(folderB),
+                target: target,
+                in: [source, target, otherFolder]
+            )
+        )
+    }
+
+    func testContainerHighlightAcceptsOnlyPayloadsThatCanMoveThere() {
+        let folderA = WorkspaceFolder(id: WorkspaceFolderID(), title: "A")
+        let folderB = WorkspaceFolder(id: WorkspaceFolderID(), title: "B")
+        let workspace = Workspace(title: "Workspace", folderID: folderA.id)
+
+        XCTAssertTrue(
+            SidebarDropCalculations.containerAcceptsDragItem(
+                .workspace(workspace.id),
+                folderID: folderB.id,
+                workspaces: [workspace],
+                folders: [folderA, folderB]
+            )
+        )
+        XCTAssertFalse(
+            SidebarDropCalculations.containerAcceptsDragItem(
+                .workspace(workspace.id),
+                folderID: folderA.id,
+                workspaces: [workspace],
+                folders: [folderA, folderB]
+            )
+        )
+        XCTAssertTrue(
+            SidebarDropCalculations.containerAcceptsDragItem(
+                .folder(folderA.id),
+                folderID: folderB.id,
+                workspaces: [workspace],
+                folders: [folderA, folderB]
+            )
+        )
+        XCTAssertFalse(
+            SidebarDropCalculations.containerAcceptsDragItem(
+                .folder(folderA.id),
+                folderID: nil,
+                workspaces: [workspace],
+                folders: [folderA, folderB]
+            )
+        )
+        XCTAssertFalse(
+            SidebarDropCalculations.containerAcceptsDragItem(
+                .folder(folderA.id),
+                folderID: folderA.id,
+                workspaces: [workspace],
+                folders: [folderA, folderB]
+            )
+        )
     }
 
     func testFolderDropTargetsFirstBoundaryAndEndPositions() {
@@ -332,14 +433,12 @@ final class InteractionBehaviorTests: XCTestCase {
         )
     }
 
-    func testFolderRowDropRejectsLowerHalfOfTheRowDirectlyAboveSource() {
+    func testFolderRowDropUsesTheWholeRowToMoveSourceBeforeItsPreviousSibling() {
         let a = WorkspaceFolder(id: WorkspaceFolderID(), title: "A")
         let b = WorkspaceFolder(id: WorkspaceFolderID(), title: "B")
         let c = WorkspaceFolder(id: WorkspaceFolderID(), title: "C")
         let folders = [a, b, c]
 
-        // Dragging C onto B's lower half resolves to "before C" — B's next sibling — which is
-        // exactly where C already sits, the same no-op shape as workspaceRowDrop's neighbour case.
         XCTAssertEqual(
             SidebarDropCalculations.folderRowDrop(
                 sourceID: c.id,
@@ -349,18 +448,27 @@ final class InteractionBehaviorTests: XCTestCase {
                 renderedHeight: 40,
                 in: folders
             ),
-            .rejected
+            .insert(before: b.id, edge: .top)
+        )
+        XCTAssertEqual(
+            SidebarDropCalculations.folderRowDrop(
+                sourceID: c.id,
+                folderID: b.id,
+                nextFolderID: c.id,
+                locationY: 19,
+                renderedHeight: 40,
+                in: folders
+            ),
+            .insert(before: b.id, edge: .top)
         )
     }
 
-    func testFolderRowDropRejectsUpperHalfOfTheRowDirectlyBelowSource() {
+    func testFolderRowDropUsesTheWholeRowToMoveSourceAfterItsNextSibling() {
         let a = WorkspaceFolder(id: WorkspaceFolderID(), title: "A")
         let b = WorkspaceFolder(id: WorkspaceFolderID(), title: "B")
         let c = WorkspaceFolder(id: WorkspaceFolderID(), title: "C")
         let folders = [a, b, c]
 
-        // Dragging A onto B's upper half resolves to "before B", which is exactly where A
-        // already sits.
         XCTAssertEqual(
             SidebarDropCalculations.folderRowDrop(
                 sourceID: a.id,
@@ -370,7 +478,18 @@ final class InteractionBehaviorTests: XCTestCase {
                 renderedHeight: 40,
                 in: folders
             ),
-            .rejected
+            .insert(before: c.id, edge: .bottom)
+        )
+        XCTAssertEqual(
+            SidebarDropCalculations.folderRowDrop(
+                sourceID: a.id,
+                folderID: b.id,
+                nextFolderID: c.id,
+                locationY: 21,
+                renderedHeight: 40,
+                in: folders
+            ),
+            .insert(before: c.id, edge: .bottom)
         )
     }
 
@@ -490,6 +609,17 @@ final class InteractionBehaviorTests: XCTestCase {
         let afterRename = SidebarListIdentity(folders: [folder], workspaces: [renamedWorkspace])
 
         XCTAssertEqual(original, afterRename)
+    }
+
+    func testSidebarDragItemsPreserveTheirIdentifiersInTypedTransferPayloads() throws {
+        let workspaceID = WorkspaceID()
+        let folderID = WorkspaceFolderID()
+
+        let workspaceData = try JSONEncoder().encode(SidebarDragItem.workspace(workspaceID))
+        let folderData = try JSONEncoder().encode(SidebarDragItem.folder(folderID))
+
+        XCTAssertEqual(try JSONDecoder().decode(SidebarDragItem.self, from: workspaceData), .workspace(workspaceID))
+        XCTAssertEqual(try JSONDecoder().decode(SidebarDragItem.self, from: folderData), .folder(folderID))
     }
 
     func testInitialFirstResponderRequestWaitsForAttachmentAndRunsOnce() {
