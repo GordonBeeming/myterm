@@ -290,6 +290,9 @@ private struct WorkspaceSidebar: View {
                 }
             }
         }
+        // Moving a row between nested disclosure groups can leave AppKit's cached List row in
+        // place even though the model is correct. Rebuild only when the rendered tree changes.
+        .id(SidebarListIdentity(folders: model.folders, workspaces: model.workspaces))
         .listStyle(.sidebar)
         .environment(\.defaultMinListRowHeight, model.selectedWorkspaceSettings.compactSidebar ? 22 : 30)
         .navigationTitle("Workspaces")

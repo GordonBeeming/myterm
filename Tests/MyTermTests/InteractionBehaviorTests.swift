@@ -430,6 +430,43 @@ final class InteractionBehaviorTests: XCTestCase {
         )
     }
 
+    func testSidebarListIdentityChangesWhenTheRenderedTreeChanges() {
+        let firstFolderID = WorkspaceFolderID()
+        let secondFolderID = WorkspaceFolderID()
+        let workspaceID = WorkspaceID()
+        let folders = [
+            WorkspaceFolder(id: firstFolderID, title: "First"),
+            WorkspaceFolder(id: secondFolderID, title: "Second")
+        ]
+        let workspace = Workspace(id: workspaceID, title: "Workspace", folderID: secondFolderID)
+        let original = SidebarListIdentity(folders: folders, workspaces: [workspace])
+
+        var movedWorkspace = workspace
+        movedWorkspace.folderID = firstFolderID
+        let afterMove = SidebarListIdentity(folders: folders, workspaces: [movedWorkspace])
+
+        var collapsedFolders = folders
+        collapsedFolders[0].isExpanded = false
+        let afterCollapse = SidebarListIdentity(folders: collapsedFolders, workspaces: [movedWorkspace])
+
+        XCTAssertNotEqual(original, afterMove)
+        XCTAssertNotEqual(afterMove, afterCollapse)
+    }
+
+    func testSidebarListIdentityIgnoresNonStructuralRowChanges() {
+        let folderID = WorkspaceFolderID()
+        let workspaceID = WorkspaceID()
+        let folder = WorkspaceFolder(id: folderID, title: "Folder")
+        let workspace = Workspace(id: workspaceID, title: "Before", folderID: folderID)
+        let original = SidebarListIdentity(folders: [folder], workspaces: [workspace])
+
+        var renamedWorkspace = workspace
+        renamedWorkspace.title = "After"
+        let afterRename = SidebarListIdentity(folders: [folder], workspaces: [renamedWorkspace])
+
+        XCTAssertEqual(original, afterRename)
+    }
+
     func testInitialFirstResponderRequestWaitsForAttachmentAndRunsOnce() {
         let focusRequest = InitialFirstResponderRequest()
         var requestCount = 0
