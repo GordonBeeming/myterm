@@ -32,6 +32,40 @@ final class SidebarDragSession {
     var payload: SidebarDragPayload?
 }
 
+struct SidebarListIdentity: Hashable {
+    struct Folder: Hashable {
+        let id: WorkspaceFolderID
+        let isExpanded: Bool
+        let workspaces: [WorkspaceRow]
+    }
+
+    struct WorkspaceRow: Hashable {
+        let id: WorkspaceID
+        let isPinned: Bool
+    }
+
+    let folders: [Folder]
+    let ungroupedWorkspaces: [WorkspaceRow]
+
+    init(folders: [WorkspaceFolder], workspaces: [Workspace]) {
+        let workspacesByFolder = Dictionary(grouping: workspaces, by: \.folderID)
+        self.folders = folders.map { folder in
+            Folder(
+                id: folder.id,
+                isExpanded: folder.isExpanded,
+                workspaces: Self.rows(from: workspacesByFolder[folder.id, default: []])
+            )
+        }
+        ungroupedWorkspaces = Self.rows(from: workspacesByFolder[nil, default: []])
+    }
+
+    private static func rows(from workspaces: [Workspace]) -> [WorkspaceRow] {
+        (workspaces.filter(\.isPinned) + workspaces.filter { !$0.isPinned }).map {
+            WorkspaceRow(id: $0.id, isPinned: $0.isPinned)
+        }
+    }
+}
+
 enum SidebarDropCalculations {
     static func renderedHeight(measured: CGFloat, minimum: CGFloat) -> CGFloat {
         measured > 0 ? measured : minimum
