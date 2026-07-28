@@ -134,6 +134,36 @@ enum SidebarDropCalculations {
         source.folderID != folderID
     }
 
+    static func containerAcceptsDragItem(
+        _ item: SidebarDragItem?,
+        folderID: WorkspaceFolderID?,
+        workspaces: [Workspace],
+        folders: [WorkspaceFolder]
+    ) -> Bool {
+        switch item {
+        case .workspace(let sourceID):
+            guard let source = workspaces.first(where: { $0.id == sourceID }) else { return false }
+            return containerAcceptsWorkspace(source: source, folderID: folderID)
+        case .folder(let sourceID):
+            guard let folderID else { return false }
+            return sourceID != folderID && folders.contains(where: { $0.id == sourceID })
+        case nil:
+            return false
+        }
+    }
+
+    static func workspaceRowAcceptsDragItem(
+        _ item: SidebarDragItem?,
+        target: Workspace,
+        in workspaces: [Workspace]
+    ) -> Bool {
+        guard case .workspace(let sourceID) = item,
+              let source = workspaces.first(where: { $0.id == sourceID }) else {
+            return false
+        }
+        return workspaceRowAcceptsSource(source: source, target: target)
+    }
+
     enum FolderRowDrop: Equatable {
         case rejected
         case insert(before: WorkspaceFolderID?, edge: InsertionEdge)

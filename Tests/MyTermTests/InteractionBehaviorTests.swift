@@ -284,6 +284,90 @@ final class InteractionBehaviorTests: XCTestCase {
         XCTAssertFalse(SidebarDropCalculations.containerAcceptsWorkspace(source: unfiled, folderID: nil))
     }
 
+    func testWorkspaceRowHighlightAcceptsOnlyACompatibleWorkspacePayload() {
+        let folderA = WorkspaceFolderID()
+        let folderB = WorkspaceFolderID()
+        let source = Workspace(title: "Source", folderID: folderA, isPinned: true)
+        let target = Workspace(title: "Target", folderID: folderA, isPinned: true)
+        let otherFolder = Workspace(title: "Other", folderID: folderB, isPinned: true)
+
+        XCTAssertTrue(
+            SidebarDropCalculations.workspaceRowAcceptsDragItem(
+                .workspace(source.id),
+                target: target,
+                in: [source, target, otherFolder]
+            )
+        )
+        XCTAssertFalse(
+            SidebarDropCalculations.workspaceRowAcceptsDragItem(
+                .workspace(source.id),
+                target: source,
+                in: [source, target, otherFolder]
+            )
+        )
+        XCTAssertFalse(
+            SidebarDropCalculations.workspaceRowAcceptsDragItem(
+                .workspace(otherFolder.id),
+                target: target,
+                in: [source, target, otherFolder]
+            )
+        )
+        XCTAssertFalse(
+            SidebarDropCalculations.workspaceRowAcceptsDragItem(
+                .folder(folderB),
+                target: target,
+                in: [source, target, otherFolder]
+            )
+        )
+    }
+
+    func testContainerHighlightAcceptsOnlyPayloadsThatCanMoveThere() {
+        let folderA = WorkspaceFolder(id: WorkspaceFolderID(), title: "A")
+        let folderB = WorkspaceFolder(id: WorkspaceFolderID(), title: "B")
+        let workspace = Workspace(title: "Workspace", folderID: folderA.id)
+
+        XCTAssertTrue(
+            SidebarDropCalculations.containerAcceptsDragItem(
+                .workspace(workspace.id),
+                folderID: folderB.id,
+                workspaces: [workspace],
+                folders: [folderA, folderB]
+            )
+        )
+        XCTAssertFalse(
+            SidebarDropCalculations.containerAcceptsDragItem(
+                .workspace(workspace.id),
+                folderID: folderA.id,
+                workspaces: [workspace],
+                folders: [folderA, folderB]
+            )
+        )
+        XCTAssertTrue(
+            SidebarDropCalculations.containerAcceptsDragItem(
+                .folder(folderA.id),
+                folderID: folderB.id,
+                workspaces: [workspace],
+                folders: [folderA, folderB]
+            )
+        )
+        XCTAssertFalse(
+            SidebarDropCalculations.containerAcceptsDragItem(
+                .folder(folderA.id),
+                folderID: nil,
+                workspaces: [workspace],
+                folders: [folderA, folderB]
+            )
+        )
+        XCTAssertFalse(
+            SidebarDropCalculations.containerAcceptsDragItem(
+                .folder(folderA.id),
+                folderID: folderA.id,
+                workspaces: [workspace],
+                folders: [folderA, folderB]
+            )
+        )
+    }
+
     func testFolderDropTargetsFirstBoundaryAndEndPositions() {
         let firstID = WorkspaceFolderID()
         let nextID = WorkspaceFolderID()

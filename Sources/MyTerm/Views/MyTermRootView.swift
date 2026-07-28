@@ -219,6 +219,7 @@ private struct WorkspaceContentView: View {
 
 private struct WorkspaceSidebar: View {
     @Bindable var model: AppModel
+    @State private var activeDragItem: SidebarDragItem?
     @State private var isUnfiledHeaderDropTargeted = false
     @State private var isUnfiledDropTargeted = false
 
@@ -242,7 +243,8 @@ private struct WorkspaceSidebar: View {
                         WorkspaceSidebarRow(
                             model: model,
                             workspace: workspace,
-                            rowHeight: sidebarRowHeight
+                            rowHeight: sidebarRowHeight,
+                            activeDragItem: $activeDragItem
                         )
                     }
                 } label: {
@@ -250,7 +252,8 @@ private struct WorkspaceSidebar: View {
                         model: model,
                         folder: folder,
                         nextFolderID: nextFolderID(after: folder.id),
-                        rowHeight: sidebarRowHeight
+                        rowHeight: sidebarRowHeight,
+                        activeDragItem: $activeDragItem
                     )
                 }
             }
@@ -261,7 +264,8 @@ private struct WorkspaceSidebar: View {
                         WorkspaceSidebarRow(
                             model: model,
                             workspace: workspace,
-                            rowHeight: sidebarRowHeight
+                            rowHeight: sidebarRowHeight,
+                            activeDragItem: $activeDragItem
                         )
                     }
                 } header: {
@@ -270,7 +274,7 @@ private struct WorkspaceSidebar: View {
                         .contentShape(Rectangle())
                         .background(
                             RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .fill(isUnfiledHeaderDropTargeted ? Color.accentColor.opacity(0.12) : .clear)
+                                .fill(isUnfiledHeaderHighlighted ? Color.accentColor.opacity(0.12) : .clear)
                         )
                         .dropDestination(for: SidebarDragItem.self) { items, _ in
                             moveWorkspaces(items, to: nil)
@@ -318,7 +322,7 @@ private struct WorkspaceSidebar: View {
             .padding(.vertical, 7)
             .background(.bar)
             .overlay {
-                if isUnfiledDropTargeted {
+                if isUnfiledDropTargeted && acceptsActiveDragItem(in: nil) {
                     Label("Move to Unfiled", systemImage: "tray")
                         .font(.callout)
                         .padding(.horizontal, 10)
@@ -358,7 +362,21 @@ private struct WorkspaceSidebar: View {
             return false
         }
         model.moveWorkspace(sourceID, to: folderID)
+        activeDragItem = nil
         return true
+    }
+
+    private var isUnfiledHeaderHighlighted: Bool {
+        isUnfiledHeaderDropTargeted && acceptsActiveDragItem(in: nil)
+    }
+
+    private func acceptsActiveDragItem(in folderID: WorkspaceFolderID?) -> Bool {
+        SidebarDropCalculations.containerAcceptsDragItem(
+            activeDragItem,
+            folderID: folderID,
+            workspaces: model.workspaces,
+            folders: model.folders
+        )
     }
 }
 
@@ -366,6 +384,7 @@ private struct WorkspaceSidebarRow: View {
     let model: AppModel
     let workspace: Workspace
     let rowHeight: CGFloat
+    @Binding var activeDragItem: SidebarDragItem?
 
     @Environment(\.openSettings) private var openSettings
     @State private var isDropTargeted = false
@@ -387,7 +406,15 @@ private struct WorkspaceSidebarRow: View {
         .frame(maxWidth: .infinity, minHeight: rowHeight, alignment: .leading)
         .tag(workspace.id)
         .accessibilityLabel(workspace.isPinned ? "Pinned workspace \(workspace.displayTitle)" : "Workspace \(workspace.displayTitle)")
-        .draggable(SidebarDragItem.workspace(workspace.id))
+        .draggable(SidebarDragItem.workspace(workspace.id)) {
+            Text(workspace.displayTitle)
+                .onAppear { activeDragItem = .workspace(workspace.id) }
+                .onDisappear {
+                    if activeDragItem == .workspace(workspace.id) {
+                        activeDragItem = nil
+                    }
+                }
+        }
         .dropDestination(for: SidebarDragItem.self) { items, location in
             guard case .workspace(let sourceID) = items.first,
                   let source = model.workspaces.first(where: { $0.id == sourceID }) else {
@@ -404,6 +431,7 @@ private struct WorkspaceSidebarRow: View {
                 return false
             case .insert(let before, _):
                 model.moveWorkspace(sourceID, to: workspace.folderID, before: before)
+                activeDragItem = nil
                 return true
             }
         } isTargeted: { isTargeted in
@@ -509,7 +537,11 @@ private struct WorkspaceSidebarRow: View {
     }
 
     private var workspaceBackgroundColor: Color {
-        if isDropTargeted {
+        if isDropTargeted && SidebarDropCalculations.workspaceRowAcceptsDragItem(
+            activeDragItem,
+            target: workspace,
+            in: model.workspaces
+        ) {
             return Color.accentColor.opacity(0.12)
         }
         guard let color = workspace.color else { return .clear }
@@ -536,6 +568,7 @@ private struct WorkspaceFolderRow: View {
     let folder: WorkspaceFolder
     let nextFolderID: WorkspaceFolderID?
     let rowHeight: CGFloat
+    @Binding var activeDragItem: SidebarDragItem?
 
     @Environment(\.openSettings) private var openSettings
     @State private var isDropTargeted = false
@@ -553,7 +586,15 @@ private struct WorkspaceFolderRow: View {
         .onTapGesture(count: 2) {
             model.setFolderExpanded(folder.id, isExpanded: !folder.isExpanded)
         }
-        .draggable(SidebarDragItem.folder(folder.id))
+        .draggable(SidebarDragItem.folder(folder.id)) {
+            Label(folder.title, systemImage: "folder.fill")
+                .onAppear { activeDragItem = .folder(folder.id) }
+                .onDisappear {
+                    if activeDragItem == .folder(folder.id) {
+                        activeDragItem = nil
+                    }
+                }
+        }
         .dropDestination(for: SidebarDragItem.self) { items, location in
             guard let item = items.first else { return false }
             switch item {
@@ -563,6 +604,7 @@ private struct WorkspaceFolderRow: View {
                     return false
                 }
                 model.moveWorkspace(sourceID, to: folder.id)
+                activeDragItem = nil
                 return true
             case .folder(let sourceID):
                 switch SidebarDropCalculations.folderRowDrop(
@@ -577,6 +619,7 @@ private struct WorkspaceFolderRow: View {
                     return false
                 case .insert(let before, _):
                     model.moveFolder(sourceID, before: before)
+                    activeDragItem = nil
                     return true
                 }
             }
@@ -585,7 +628,7 @@ private struct WorkspaceFolderRow: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(isDropTargeted ? Color.accentColor.opacity(0.12) : .clear)
+                .fill(isValidDropTarget ? Color.accentColor.opacity(0.12) : .clear)
                 .allowsHitTesting(false)
         )
         .captureSidebarRenderedHeight($renderedRowHeight)
@@ -645,6 +688,15 @@ private struct WorkspaceFolderRow: View {
 
     private var renderedRowHeightValue: CGFloat {
         SidebarDropCalculations.renderedHeight(measured: renderedRowHeight, minimum: rowHeight)
+    }
+
+    private var isValidDropTarget: Bool {
+        isDropTargeted && SidebarDropCalculations.containerAcceptsDragItem(
+            activeDragItem,
+            folderID: folder.id,
+            workspaces: model.workspaces,
+            folders: model.folders
+        )
     }
 
     private func moveFolder(by offset: Int) {
