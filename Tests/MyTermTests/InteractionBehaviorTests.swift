@@ -531,11 +531,11 @@ final class InteractionBehaviorTests: XCTestCase {
         let workspaceID = WorkspaceID()
         let folderID = WorkspaceFolderID()
 
-        let workspaceData = try JSONEncoder().encode(WorkspaceSidebarDragItem(id: workspaceID))
-        let folderData = try JSONEncoder().encode(FolderSidebarDragItem(id: folderID))
+        let workspaceData = try JSONEncoder().encode(SidebarDragItem.workspace(workspaceID))
+        let folderData = try JSONEncoder().encode(SidebarDragItem.folder(folderID))
 
-        XCTAssertEqual(try JSONDecoder().decode(WorkspaceSidebarDragItem.self, from: workspaceData).id, workspaceID)
-        XCTAssertEqual(try JSONDecoder().decode(FolderSidebarDragItem.self, from: folderData).id, folderID)
+        XCTAssertEqual(try JSONDecoder().decode(SidebarDragItem.self, from: workspaceData), .workspace(workspaceID))
+        XCTAssertEqual(try JSONDecoder().decode(SidebarDragItem.self, from: folderData), .folder(folderID))
     }
 
     func testInitialFirstResponderRequestWaitsForAttachmentAndRunsOnce() {

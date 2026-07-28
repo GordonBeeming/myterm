@@ -4,27 +4,19 @@ import MyTermCore
 import SwiftUI
 import UniformTypeIdentifiers
 
-// Both identifiers are also declared in Packaging/Info.plist for the packaged app's exported
-// document types; changing either string here without updating that file breaks drops there
-// while dev builds keep working.
+// This identifier is also declared in Packaging/Info.plist for the packaged app's exported
+// document types; changing it here without updating that file breaks drops there while dev
+// builds keep working.
 extension UTType {
-    static let mytermWorkspaceSidebarItem = UTType(exportedAs: "com.gordonbeeming.myterm.workspace-sidebar-item")
-    static let mytermFolderSidebarItem = UTType(exportedAs: "com.gordonbeeming.myterm.folder-sidebar-item")
+    static let mytermSidebarItem = UTType(exportedAs: "com.gordonbeeming.myterm.sidebar-item")
 }
 
-struct WorkspaceSidebarDragItem: Codable, Sendable, Transferable {
-    let id: WorkspaceID
+enum SidebarDragItem: Codable, Equatable, Sendable, Transferable {
+    case workspace(WorkspaceID)
+    case folder(WorkspaceFolderID)
 
     static var transferRepresentation: some TransferRepresentation {
-        CodableRepresentation(contentType: .mytermWorkspaceSidebarItem)
-    }
-}
-
-struct FolderSidebarDragItem: Codable, Sendable, Transferable {
-    let id: WorkspaceFolderID
-
-    static var transferRepresentation: some TransferRepresentation {
-        CodableRepresentation(contentType: .mytermFolderSidebarItem)
+        CodableRepresentation(contentType: .mytermSidebarItem)
     }
 }
 
