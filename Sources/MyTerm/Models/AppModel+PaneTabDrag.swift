@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 import MyTermCore
 
 struct PaneTabDragSource: Equatable {
@@ -51,12 +52,26 @@ struct PaneTabInsertionFrame: Equatable {
     let frame: CGRect
 }
 
+struct PaneTabDragRegistrationID: Hashable {
+    private let value = UUID()
+}
+
 struct PaneTabDragRegistration: Equatable {
     let workspaceID: WorkspaceID
     let tabGroupID: TabGroupID
+    // SwiftUI can overlap outgoing and replacement views for the same logical pane.
+    var viewRegistrations: [PaneTabDragRegistrationID: PaneTabDragViewRegistration] = [:]
+}
+
+struct PaneTabDragViewRegistration: Equatable {
     var paneBodyFrame: CGRect?
     var tabStripFrame: CGRect?
     var tabInsertionFrames: [TabID: PaneTabInsertionFrame] = [:]
+}
+
+private struct PaneTabDragResolvedRegistration {
+    let group: PaneTabDragRegistration
+    let view: PaneTabDragViewRegistration
 }
 
 extension AppModel {
@@ -69,52 +84,84 @@ extension AppModel {
     func registerPaneTabDragPaneBody(
         workspaceID: WorkspaceID,
         tabGroupID: TabGroupID,
+        registrationID: PaneTabDragRegistrationID,
         frame: CGRect
     ) {
-        var registration = paneTabDragRegistrations[tabGroupID]
-            ?? PaneTabDragRegistration(workspaceID: workspaceID, tabGroupID: tabGroupID)
-        registration.paneBodyFrame = frame
-        paneTabDragRegistrations[tabGroupID] = registration
+        updatePaneTabDragRegistration(
+            workspaceID: workspaceID,
+            tabGroupID: tabGroupID,
+            registrationID: registrationID
+        ) { registration in
+            registration.paneBodyFrame = frame
+        }
         refreshPaneTabDragPreview()
     }
 
     func registerPaneTabDragTabStrip(
         workspaceID: WorkspaceID,
         tabGroupID: TabGroupID,
+        registrationID: PaneTabDragRegistrationID,
         frame: CGRect
     ) {
-        var registration = paneTabDragRegistrations[tabGroupID]
-            ?? PaneTabDragRegistration(workspaceID: workspaceID, tabGroupID: tabGroupID)
-        registration.tabStripFrame = frame
-        paneTabDragRegistrations[tabGroupID] = registration
+        updatePaneTabDragRegistration(
+            workspaceID: workspaceID,
+            tabGroupID: tabGroupID,
+            registrationID: registrationID
+        ) { registration in
+            registration.tabStripFrame = frame
+        }
         refreshPaneTabDragPreview()
     }
 
     func registerPaneTabDragTab(
         workspaceID: WorkspaceID,
         tabGroupID: TabGroupID,
+        registrationID: PaneTabDragRegistrationID,
         tabID: TabID,
         frame: CGRect
     ) {
-        var registration = paneTabDragRegistrations[tabGroupID]
-            ?? PaneTabDragRegistration(workspaceID: workspaceID, tabGroupID: tabGroupID)
-        registration.tabInsertionFrames[tabID] = PaneTabInsertionFrame(tabID: tabID, frame: frame)
-        paneTabDragRegistrations[tabGroupID] = registration
+        updatePaneTabDragRegistration(
+            workspaceID: workspaceID,
+            tabGroupID: tabGroupID,
+            registrationID: registrationID
+        ) { registration in
+            registration.tabInsertionFrames[tabID] = PaneTabInsertionFrame(tabID: tabID, frame: frame)
+        }
     }
 
-    func unregisterPaneTabDragTab(workspaceID: WorkspaceID, tabGroupID: TabGroupID, tabID: TabID) {
+    func unregisterPaneTabDragTab(
+        workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
+        registrationID: PaneTabDragRegistrationID,
+        tabID: TabID
+    ) {
         guard var registration = paneTabDragRegistrations[tabGroupID],
-              registration.workspaceID == workspaceID else { return }
-        registration.tabInsertionFrames[tabID] = nil
+              registration.workspaceID == workspaceID,
+              var viewRegistration = registration.viewRegistrations[registrationID] else { return }
+        viewRegistration.tabInsertionFrames[tabID] = nil
+        registration.viewRegistrations[registrationID] = viewRegistration
         paneTabDragRegistrations[tabGroupID] = registration
+        guard !registration.viewRegistrations.values.contains(where: { $0.tabInsertionFrames[tabID] != nil }) else {
+            return
+        }
         cancelPaneTabDragIfSource(tabGroupID: tabGroupID, tabID: tabID)
     }
 
-    func unregisterPaneTabDragPane(workspaceID: WorkspaceID, tabGroupID: TabGroupID) {
-        guard let registration = paneTabDragRegistrations[tabGroupID],
+    func unregisterPaneTabDragPane(
+        workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
+        registrationID: PaneTabDragRegistrationID
+    ) {
+        guard var registration = paneTabDragRegistrations[tabGroupID],
               registration.workspaceID == workspaceID else { return }
-        paneTabDragRegistrations[tabGroupID] = nil
-        if paneTabDragSession?.source.tabGroupID == tabGroupID {
+        registration.viewRegistrations[registrationID] = nil
+        if registration.viewRegistrations.isEmpty {
+            paneTabDragRegistrations[tabGroupID] = nil
+        } else {
+            paneTabDragRegistrations[tabGroupID] = registration
+        }
+        if registration.viewRegistrations.isEmpty,
+           paneTabDragSession?.source.tabGroupID == tabGroupID {
             cancelPaneTabDrag()
         }
     }
@@ -208,36 +255,42 @@ extension AppModel {
             return nil
         }
 
-        let registrations = paneTabDragRegistrations.values.filter {
-            $0.workspaceID == session.source.workspaceID
-        }
-        if let registration = registrations.first(where: { $0.tabStripFrame?.contains(location) == true }) {
+        let registrations = paneTabDragRegistrations.values
+            .flatMap { group in
+                group.viewRegistrations.values.map {
+                    PaneTabDragResolvedRegistration(group: group, view: $0)
+                }
+            }
+            .filter { $0.group.workspaceID == session.source.workspaceID }
+        if let registration = registrations.first(where: { $0.view.tabStripFrame?.contains(location) == true }) {
             return .tabStrip(
-                tabGroupID: registration.tabGroupID,
+                tabGroupID: registration.group.tabGroupID,
                 insertionIndex: insertionIndex(
-                    in: registration,
+                    in: registration.group,
+                    viewRegistration: registration.view,
                     for: location,
                     source: session.source
                 )
             )
         }
-        guard let registration = registrations.first(where: { $0.paneBodyFrame?.contains(location) == true }),
-              let paneBodyFrame = registration.paneBodyFrame else { return nil }
+        guard let registration = registrations.first(where: { $0.view.paneBodyFrame?.contains(location) == true }),
+              let paneBodyFrame = registration.view.paneBodyFrame else { return nil }
         let localLocation = CGPoint(
             x: location.x - paneBodyFrame.minX,
             y: location.y - paneBodyFrame.minY
         )
         if PaneTabDropPreviewFrame.centerFrame(in: paneBodyFrame.size).contains(localLocation) {
-            return .paneCenter(tabGroupID: registration.tabGroupID)
+            return .paneCenter(tabGroupID: registration.group.tabGroupID)
         }
         return .paneBody(
-            tabGroupID: registration.tabGroupID,
+            tabGroupID: registration.group.tabGroupID,
             edge: paneEdge(for: localLocation, in: paneBodyFrame.size)
         )
     }
 
     private func insertionIndex(
         in registration: PaneTabDragRegistration,
+        viewRegistration: PaneTabDragViewRegistration,
         for location: CGPoint,
         source: PaneTabDragSource
     ) -> Int {
@@ -247,7 +300,7 @@ extension AppModel {
             return 0
         }
         let tabIndexes = Dictionary(uniqueKeysWithValues: group.tabs.enumerated().map { ($0.element.id, $0.offset) })
-        let orderedFrames = registration.tabInsertionFrames.values
+        let orderedFrames = viewRegistration.tabInsertionFrames.values
             .compactMap { frame -> (frame: PaneTabInsertionFrame, tabIndex: Int)? in
                 guard let tabIndex = tabIndexes[frame.tabID] else { return nil }
                 return (frame, tabIndex)
@@ -269,6 +322,21 @@ extension AppModel {
         }
         let postRemovalIndex = insertionSlot > sourceIndex ? insertionSlot - 1 : insertionSlot
         return min(max(postRemovalIndex, 0), max(group.tabs.count - 1, 0))
+    }
+
+    private func updatePaneTabDragRegistration(
+        workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
+        registrationID: PaneTabDragRegistrationID,
+        update: (inout PaneTabDragViewRegistration) -> Void
+    ) {
+        var registration = paneTabDragRegistrations[tabGroupID]
+            ?? PaneTabDragRegistration(workspaceID: workspaceID, tabGroupID: tabGroupID)
+        guard registration.workspaceID == workspaceID else { return }
+        var viewRegistration = registration.viewRegistrations[registrationID] ?? PaneTabDragViewRegistration()
+        update(&viewRegistration)
+        registration.viewRegistrations[registrationID] = viewRegistration
+        paneTabDragRegistrations[tabGroupID] = registration
     }
 
     private func paneEdge(for location: CGPoint, in size: CGSize) -> PaneEdge {

@@ -5,12 +5,18 @@ struct PaneGroupView: View {
     let model: AppModel
     let workspaceID: WorkspaceID
     let group: TabGroup
+    @State private var paneTabDragRegistrationID = PaneTabDragRegistrationID()
 
     var body: some View {
         GeometryReader { proxy in
             let frame = proxy.frame(in: .global)
             VStack(spacing: 0) {
-                WorkspaceTabStrip(model: model, workspaceID: workspaceID, tabGroup: group)
+                WorkspaceTabStrip(
+                    model: model,
+                    workspaceID: workspaceID,
+                    tabGroup: group,
+                    paneTabDragRegistrationID: paneTabDragRegistrationID
+                )
                 Divider()
                 PaneContentView(
                     model: model,
@@ -35,6 +41,7 @@ struct PaneGroupView: View {
                         model.registerPaneTabDragPaneBody(
                             workspaceID: workspaceID,
                             tabGroupID: group.id,
+                            registrationID: paneTabDragRegistrationID,
                             frame: frame
                         )
                     }
@@ -42,6 +49,7 @@ struct PaneGroupView: View {
                         model.registerPaneTabDragPaneBody(
                             workspaceID: workspaceID,
                             tabGroupID: group.id,
+                            registrationID: paneTabDragRegistrationID,
                             frame: updatedFrame
                         )
                     }
@@ -55,7 +63,11 @@ struct PaneGroupView: View {
             .accessibilityLabel("Pane \(group.selectedTab.customTitle ?? group.selectedTab.automaticDisplayTitle)")
             .accessibilityValue(isFocused ? "Active pane" : "Inactive pane")
             .onDisappear {
-                model.unregisterPaneTabDragPane(workspaceID: workspaceID, tabGroupID: group.id)
+                model.unregisterPaneTabDragPane(
+                    workspaceID: workspaceID,
+                    tabGroupID: group.id,
+                    registrationID: paneTabDragRegistrationID
+                )
             }
         }
     }
