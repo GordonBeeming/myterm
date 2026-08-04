@@ -774,6 +774,31 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         XCTAssertNil(TerminalLinkRouter.url(from: "https:///missing-host"))
     }
 
+    func testTerminalLinkRouterResolvesRelativePathsAgainstTheLiveWorkingDirectory() {
+        let workingDirectory = URL(fileURLWithPath: "/workspace/project", isDirectory: true)
+
+        XCTAssertEqual(
+            TerminalLinkRouter.url(
+                from: "Sources/MyTerm/Views/MyTermRootView.swift",
+                workingDirectory: workingDirectory
+            )?.path,
+            "/workspace/project/Sources/MyTerm/Views/MyTermRootView.swift"
+        )
+        XCTAssertEqual(
+            TerminalLinkRouter.url(
+                from: "../README.md",
+                workingDirectory: workingDirectory
+            )?.path,
+            "/workspace/README.md"
+        )
+        XCTAssertNil(
+            TerminalLinkRouter.url(
+                from: "ssh://example.com",
+                workingDirectory: workingDirectory
+            )
+        )
+    }
+
     func testTerminalLinkRouterUsesTheClickedRowWhenAdjacentPathsAreJoined() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
