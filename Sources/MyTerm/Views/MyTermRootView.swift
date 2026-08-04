@@ -600,7 +600,6 @@ private struct WorkspaceFolderRow: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .focusable(false)
             .accessibilityLabel(folder.isExpanded ? "Collapse \(folder.title)" : "Expand \(folder.title)")
 
             Label {
