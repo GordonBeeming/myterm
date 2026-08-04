@@ -775,7 +775,7 @@ final class TerminalSessionConfigurationTests: XCTestCase {
     }
 
     func testTerminalLinkRouterResolvesRelativePathsAgainstTheLiveWorkingDirectory() {
-        let workingDirectory = URL(fileURLWithPath: "/workspace/project", isDirectory: true)
+        let workingDirectory = URL(fileURLWithPath: "/workspace/project")
 
         XCTAssertEqual(
             TerminalLinkRouter.url(

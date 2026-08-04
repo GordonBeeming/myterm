@@ -203,7 +203,8 @@ public enum TerminalLinkRouter {
               workingDirectory.isFileURL else {
             return nil
         }
-        return URL(fileURLWithPath: candidate, relativeTo: workingDirectory).standardizedFileURL
+        let directory = URL(fileURLWithPath: workingDirectory.path, isDirectory: true)
+        return URL(fileURLWithPath: candidate, relativeTo: directory).standardizedFileURL
     }
 
     private static func disambiguatedAbsolutePath(
