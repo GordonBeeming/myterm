@@ -2123,10 +2123,16 @@ final class AppModelTests: XCTestCase {
             tabGroupID: sourceGroupID,
             tabID: firstTabID
         )
-        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: sourceGroupID, origin: .zero)
+        let registrationID = registerPaneDragFrames(
+            model,
+            workspaceID: workspaceID,
+            tabGroupID: sourceGroupID,
+            origin: .zero
+        )
         model.registerPaneTabDragTabStrip(
             workspaceID: workspaceID,
             tabGroupID: sourceGroupID,
+            registrationID: registrationID,
             frame: CGRect(x: 0, y: 0, width: 300, height: 20)
         )
 
@@ -2165,7 +2171,7 @@ final class AppModelTests: XCTestCase {
             tabID: sourceTabID
         )
         registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: sourceGroupID, origin: .zero)
-        registerPaneDragFrames(
+        let destinationRegistrationID = registerPaneDragFrames(
             model,
             workspaceID: workspaceID,
             tabGroupID: destinationGroupID,
@@ -2174,6 +2180,7 @@ final class AppModelTests: XCTestCase {
         model.unregisterPaneTabDragTab(
             workspaceID: workspaceID,
             tabGroupID: destinationGroupID,
+            registrationID: destinationRegistrationID,
             tabID: destinationFirstTabID
         )
 
@@ -2273,7 +2280,12 @@ final class AppModelTests: XCTestCase {
         model.createTerminalTab(in: sourceGroupID)
         let tabID = try XCTUnwrap(model.selectedTab?.id)
         let source = PaneTabDragSource(workspaceID: workspaceID, tabGroupID: sourceGroupID, tabID: tabID)
-        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: sourceGroupID, origin: .zero)
+        let sourceRegistrationID = registerPaneDragFrames(
+            model,
+            workspaceID: workspaceID,
+            tabGroupID: sourceGroupID,
+            origin: .zero
+        )
 
         model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
         model.cancelPaneTabDrag()
@@ -2281,14 +2293,21 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.selectedWorkspace.groupID(containing: tabID), sourceGroupID)
 
         model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
-        model.unregisterPaneTabDragTab(workspaceID: workspaceID, tabGroupID: sourceGroupID, tabID: tabID)
+        model.unregisterPaneTabDragTab(
+            workspaceID: workspaceID,
+            tabGroupID: sourceGroupID,
+            registrationID: sourceRegistrationID,
+            tabID: tabID
+        )
         XCTAssertNil(model.paneTabDragSession)
         XCTAssertEqual(model.selectedWorkspace.groupID(containing: tabID), sourceGroupID)
 
         let missingGroupID = TabGroupID()
+        let missingRegistrationID = PaneTabDragRegistrationID()
         model.registerPaneTabDragTabStrip(
             workspaceID: workspaceID,
             tabGroupID: missingGroupID,
+            registrationID: missingRegistrationID,
             frame: CGRect(x: 200, y: 0, width: 120, height: 20)
         )
         model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
@@ -2299,6 +2318,135 @@ final class AppModelTests: XCTestCase {
         }
         XCTAssertNil(model.paneTabDragSession)
         XCTAssertNotNil(model.errorDescription)
+    }
+
+    func testPaneTabDragRetainsReplacementPaneRegistrationAfterOutgoingPaneDisappears() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let sourceGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.createTerminalTab(in: sourceGroupID)
+        let destinationTabID = try XCTUnwrap(model.selectedTab?.id)
+        let destinationGroupID = try createPaneBesideSource(
+            model,
+            sourceGroupID: sourceGroupID,
+            tabID: destinationTabID
+        )
+        let sourceTabID = try XCTUnwrap(model.selectedWorkspace.group(id: sourceGroupID)?.selectedTabID)
+        let source = PaneTabDragSource(
+            workspaceID: workspaceID,
+            tabGroupID: sourceGroupID,
+            tabID: sourceTabID
+        )
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: sourceGroupID, origin: .zero)
+        let outgoingRegistrationID = registerPaneDragFrames(
+            model,
+            workspaceID: workspaceID,
+            tabGroupID: destinationGroupID,
+            origin: CGPoint(x: 200, y: 0)
+        )
+        let replacementRegistrationID = registerPaneDragFrames(
+            model,
+            workspaceID: workspaceID,
+            tabGroupID: destinationGroupID,
+            origin: CGPoint(x: 200, y: 0)
+        )
+
+        model.unregisterPaneTabDragPane(
+            workspaceID: workspaceID,
+            tabGroupID: destinationGroupID,
+            registrationID: outgoingRegistrationID
+        )
+        XCTAssertNotNil(model.paneTabDragRegistrations[destinationGroupID]?.viewRegistrations[replacementRegistrationID])
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 260, y: 10))
+        XCTAssertEqual(
+            model.paneTabDragPreviewTarget,
+            .tabStrip(tabGroupID: destinationGroupID, insertionIndex: 1)
+        )
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 260, y: 60))
+        XCTAssertEqual(model.paneTabDragPreviewTarget, .paneCenter(tabGroupID: destinationGroupID))
+    }
+
+    func testPaneTabDragCancelsOnlyAfterTheFinalSourcePaneRegistrationDisappears() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let sourceGroupID = model.selectedWorkspace.focusedTabGroupID
+        let tabID = try XCTUnwrap(model.selectedTab?.id)
+        let source = PaneTabDragSource(workspaceID: workspaceID, tabGroupID: sourceGroupID, tabID: tabID)
+        let outgoingRegistrationID = registerPaneDragFrames(
+            model,
+            workspaceID: workspaceID,
+            tabGroupID: sourceGroupID,
+            origin: .zero
+        )
+        let replacementRegistrationID = registerPaneDragFrames(
+            model,
+            workspaceID: workspaceID,
+            tabGroupID: sourceGroupID,
+            origin: .zero
+        )
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
+        model.unregisterPaneTabDragPane(
+            workspaceID: workspaceID,
+            tabGroupID: sourceGroupID,
+            registrationID: outgoingRegistrationID
+        )
+        XCTAssertNotNil(model.paneTabDragSession)
+
+        model.unregisterPaneTabDragPane(
+            workspaceID: workspaceID,
+            tabGroupID: sourceGroupID,
+            registrationID: replacementRegistrationID
+        )
+        XCTAssertNil(model.paneTabDragSession)
+        XCTAssertNil(model.paneTabDragRegistrations[sourceGroupID])
+    }
+
+    func testPaneTabDragRefreshesItsPreviewWhenDestinationRegistrationDisappears() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let sourceGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.createTerminalTab(in: sourceGroupID)
+        let destinationTabID = try XCTUnwrap(model.selectedTab?.id)
+        let destinationGroupID = try createPaneBesideSource(
+            model,
+            sourceGroupID: sourceGroupID,
+            tabID: destinationTabID
+        )
+        let sourceTabID = try XCTUnwrap(model.selectedWorkspace.group(id: sourceGroupID)?.selectedTabID)
+        let source = PaneTabDragSource(
+            workspaceID: workspaceID,
+            tabGroupID: sourceGroupID,
+            tabID: sourceTabID
+        )
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: sourceGroupID, origin: .zero)
+        let destinationRegistrationID = registerPaneDragFrames(
+            model,
+            workspaceID: workspaceID,
+            tabGroupID: destinationGroupID,
+            origin: CGPoint(x: 200, y: 0)
+        )
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 260, y: 60))
+        XCTAssertEqual(model.paneTabDragPreviewTarget, .paneCenter(tabGroupID: destinationGroupID))
+
+        model.unregisterPaneTabDragPane(
+            workspaceID: workspaceID,
+            tabGroupID: destinationGroupID,
+            registrationID: destinationRegistrationID
+        )
+
+        XCTAssertNil(model.paneTabDragPreviewTarget)
     }
 
     func testBrowserShortcutDeclarationsAreExactAndDoNotDuplicateContextualZoom() {
@@ -2614,26 +2762,31 @@ final class AppModelTests: XCTestCase {
         return destinationGroupID
     }
 
+    @discardableResult
     private func registerPaneDragFrames(
         _ model: AppModel,
         workspaceID: WorkspaceID,
         tabGroupID: TabGroupID,
-        origin: CGPoint
-    ) {
+        origin: CGPoint,
+        registrationID: PaneTabDragRegistrationID = PaneTabDragRegistrationID()
+    ) -> PaneTabDragRegistrationID {
         model.registerPaneTabDragPaneBody(
             workspaceID: workspaceID,
             tabGroupID: tabGroupID,
+            registrationID: registrationID,
             frame: CGRect(origin: origin, size: CGSize(width: 120, height: 100))
         )
         model.registerPaneTabDragTabStrip(
             workspaceID: workspaceID,
             tabGroupID: tabGroupID,
+            registrationID: registrationID,
             frame: CGRect(origin: origin, size: CGSize(width: 120, height: 20))
         )
         for (index, tab) in (model.selectedWorkspace.group(id: tabGroupID)?.tabs ?? []).enumerated() {
             model.registerPaneTabDragTab(
                 workspaceID: workspaceID,
                 tabGroupID: tabGroupID,
+                registrationID: registrationID,
                 tabID: tab.id,
                 frame: CGRect(
                     x: origin.x + CGFloat(index * 100),
@@ -2643,6 +2796,7 @@ final class AppModelTests: XCTestCase {
                 )
             )
         }
+        return registrationID
     }
 
     private func makeModel(applicationSupportDirectory: URL) throws -> AppModel {

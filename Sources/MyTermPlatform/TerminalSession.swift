@@ -149,10 +149,15 @@ public enum TerminalSessionEvent: Equatable, Sendable {
 }
 
 public enum TerminalLinkRouter {
-    public static func url(from link: String, clickedRowText: String? = nil) -> URL? {
+    public static func url(
+        from link: String,
+        clickedRowText: String? = nil,
+        workingDirectory: URL? = nil
+    ) -> URL? {
         url(
             from: link,
             clickedRowText: clickedRowText,
+            workingDirectory: workingDirectory,
             isRegularFile: isRegularFile(atPath:)
         )
     }
@@ -160,6 +165,7 @@ public enum TerminalLinkRouter {
     static func url(
         from link: String,
         clickedRowText: String?,
+        workingDirectory: URL? = nil,
         isRegularFile: (String) -> Bool
     ) -> URL? {
         var candidate = link.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -188,7 +194,17 @@ public enum TerminalLinkRouter {
             return components.url
         }
 
-        return webURL(from: candidate)
+        if let webURL = webURL(from: candidate) {
+            return webURL
+        }
+
+        guard URLComponents(string: candidate)?.scheme == nil,
+              let workingDirectory,
+              workingDirectory.isFileURL else {
+            return nil
+        }
+        let directory = URL(fileURLWithPath: workingDirectory.path, isDirectory: true)
+        return URL(fileURLWithPath: candidate, relativeTo: directory).standardizedFileURL
     }
 
     private static func disambiguatedAbsolutePath(

@@ -227,35 +227,27 @@ private struct WorkspaceSidebar: View {
         ordered(model.workspaces.filter { $0.folderID == nil })
     }
 
+    private var filedRows: [SidebarVisibleRow] {
+        SidebarVisibleRows.filed(folders: model.folders, workspaces: model.workspaces)
+    }
+
     var body: some View {
+        let foldersByID = Dictionary(uniqueKeysWithValues: model.folders.map { ($0.id, $0) })
+        let workspacesByID = Dictionary(uniqueKeysWithValues: model.workspaces.map { ($0.id, $0) })
+        let nextFolderIDs = Dictionary(uniqueKeysWithValues: zip(model.folders, model.folders.dropFirst()).map {
+            ($0.0.id, $0.1.id)
+        })
         List(selection: Binding(
             get: { model.store.selectedWorkspaceID },
             set: { workspaceID in model.selectWorkspace(workspaceID) }
         )) {
-            ForEach(model.folders) { folder in
-                DisclosureGroup(
-                    isExpanded: Binding(
-                        get: { folder.isExpanded },
-                        set: { model.setFolderExpanded(folder.id, isExpanded: $0) }
-                    )
-                ) {
-                    ForEach(workspaces(in: folder.id)) { workspace in
-                        WorkspaceSidebarRow(
-                            model: model,
-                            workspace: workspace,
-                            rowHeight: sidebarRowHeight,
-                            activeDragItem: $activeDragItem
-                        )
-                    }
-                } label: {
-                    WorkspaceFolderRow(
-                        model: model,
-                        folder: folder,
-                        nextFolderID: nextFolderID(after: folder.id),
-                        rowHeight: sidebarRowHeight,
-                        activeDragItem: $activeDragItem
-                    )
-                }
+            ForEach(filedRows) { row in
+                filedRow(
+                    row,
+                    foldersByID: foldersByID,
+                    workspacesByID: workspacesByID,
+                    nextFolderIDs: nextFolderIDs
+                )
             }
 
             if !ungroupedWorkspaces.isEmpty {
@@ -265,6 +257,7 @@ private struct WorkspaceSidebar: View {
                             model: model,
                             workspace: workspace,
                             rowHeight: sidebarRowHeight,
+                            indentation: 0,
                             activeDragItem: $activeDragItem
                         )
                     }
@@ -284,9 +277,6 @@ private struct WorkspaceSidebar: View {
                 }
             }
         }
-        // Moving a row between nested disclosure groups can leave AppKit's cached List row in
-        // place even though the model is correct. Rebuild only when the rendered tree changes.
-        .id(SidebarListIdentity(folders: model.folders, workspaces: model.workspaces))
         .listStyle(.sidebar)
         .environment(\.defaultMinListRowHeight, model.selectedWorkspaceSettings.compactSidebar ? 22 : 30)
         .navigationTitle("Workspaces")
@@ -338,17 +328,39 @@ private struct WorkspaceSidebar: View {
         }
     }
 
-    private func workspaces(in folderID: WorkspaceFolderID) -> [Workspace] {
-        ordered(model.workspaces.filter { $0.folderID == folderID })
-    }
-
     private var sidebarRowHeight: CGFloat {
         model.selectedWorkspaceSettings.compactSidebar ? 22 : 30
     }
 
-    private func nextFolderID(after folderID: WorkspaceFolderID) -> WorkspaceFolderID? {
-        guard let index = model.folders.firstIndex(where: { $0.id == folderID }) else { return nil }
-        return model.folders.dropFirst(index + 1).first?.id
+    @ViewBuilder
+    private func filedRow(
+        _ row: SidebarVisibleRow,
+        foldersByID: [WorkspaceFolderID: WorkspaceFolder],
+        workspacesByID: [WorkspaceID: Workspace],
+        nextFolderIDs: [WorkspaceFolderID: WorkspaceFolderID]
+    ) -> some View {
+        switch row {
+        case .folder(let folderID):
+            if let folder = foldersByID[folderID] {
+                WorkspaceFolderRow(
+                    model: model,
+                    folder: folder,
+                    nextFolderID: nextFolderIDs[folder.id],
+                    rowHeight: sidebarRowHeight,
+                    activeDragItem: $activeDragItem
+                )
+            }
+        case .workspace(let workspaceID):
+            if let workspace = workspacesByID[workspaceID] {
+                WorkspaceSidebarRow(
+                    model: model,
+                    workspace: workspace,
+                    rowHeight: sidebarRowHeight,
+                    indentation: 16,
+                    activeDragItem: $activeDragItem
+                )
+            }
+        }
     }
 
     private func ordered(_ workspaces: [Workspace]) -> [Workspace] {
@@ -385,6 +397,7 @@ private struct WorkspaceSidebarRow: View {
     let model: AppModel
     let workspace: Workspace
     let rowHeight: CGFloat
+    let indentation: CGFloat
     @Binding var activeDragItem: SidebarDragItem?
 
     @Environment(\.openSettings) private var openSettings
@@ -404,6 +417,7 @@ private struct WorkspaceSidebarRow: View {
             Spacer(minLength: 0)
         }
         .padding(.vertical, model.selectedWorkspaceSettings.compactSidebar ? 0 : 2)
+        .padding(.leading, indentation)
         .frame(maxWidth: .infinity, minHeight: rowHeight, alignment: .leading)
         .tag(workspace.id)
         .accessibilityLabel(workspace.isPinned ? "Pinned workspace \(workspace.displayTitle)" : "Workspace \(workspace.displayTitle)")
@@ -577,16 +591,28 @@ private struct WorkspaceFolderRow: View {
     @State private var renderedRowHeight: CGFloat = 0
 
     var body: some View {
-        Label {
-            Text(folder.title)
-                .lineLimit(1)
-        } icon: {
-            Image(systemName: "folder.fill")
-                .foregroundStyle(folder.color.swiftUIColor)
+        HStack(spacing: 4) {
+            Button(action: toggleExpansion) {
+                Image(systemName: folder.isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 12, height: 16)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(folder.isExpanded ? "Collapse \(folder.title)" : "Expand \(folder.title)")
+
+            Label {
+                Text(folder.title)
+                    .lineLimit(1)
+            } icon: {
+                Image(systemName: "folder.fill")
+                    .foregroundStyle(folder.color.swiftUIColor)
+            }
         }
         .frame(maxWidth: .infinity, minHeight: rowHeight, alignment: .leading)
         .onTapGesture(count: 2) {
-            model.setFolderExpanded(folder.id, isExpanded: !folder.isExpanded)
+            toggleExpansion()
         }
         .draggable(SidebarDragItem.folder(folder.id)) {
             Label(folder.title, systemImage: "folder.fill")
@@ -699,6 +725,10 @@ private struct WorkspaceFolderRow: View {
             workspaces: model.workspaces,
             folders: model.folders
         )
+    }
+
+    private func toggleExpansion() {
+        model.setFolderExpanded(folder.id, isExpanded: !folder.isExpanded)
     }
 
     private func moveFolder(by offset: Int) {

@@ -20,37 +20,36 @@ enum SidebarDragItem: Codable, Equatable, Sendable, Transferable {
     }
 }
 
-struct SidebarListIdentity: Hashable {
-    struct Folder: Hashable {
-        let id: WorkspaceFolderID
-        let isExpanded: Bool
-        let workspaces: [WorkspaceRow]
+enum SidebarVisibleRow: Hashable, Identifiable {
+    enum ID: Hashable {
+        case folder(WorkspaceFolderID)
+        case workspace(WorkspaceID)
     }
 
-    struct WorkspaceRow: Hashable {
-        let id: WorkspaceID
-        let isPinned: Bool
+    case folder(WorkspaceFolderID)
+    case workspace(WorkspaceID)
+
+    var id: ID {
+        switch self {
+        case .folder(let folderID): .folder(folderID)
+        case .workspace(let workspaceID): .workspace(workspaceID)
+        }
     }
+}
 
-    let folders: [Folder]
-    let ungroupedWorkspaces: [WorkspaceRow]
-
-    init(folders: [WorkspaceFolder], workspaces: [Workspace]) {
+enum SidebarVisibleRows {
+    static func filed(folders: [WorkspaceFolder], workspaces: [Workspace]) -> [SidebarVisibleRow] {
         let workspacesByFolder = Dictionary(grouping: workspaces, by: \.folderID)
-        self.folders = folders.map { folder in
-            Folder(
-                id: folder.id,
-                isExpanded: folder.isExpanded,
-                workspaces: Self.rows(from: workspacesByFolder[folder.id, default: []])
-            )
+        return folders.flatMap { folder in
+            let children: [SidebarVisibleRow] = folder.isExpanded
+                ? ordered(workspacesByFolder[folder.id, default: []]).map { .workspace($0.id) }
+                : []
+            return [.folder(folder.id)] + children
         }
-        ungroupedWorkspaces = Self.rows(from: workspacesByFolder[nil, default: []])
     }
 
-    private static func rows(from workspaces: [Workspace]) -> [WorkspaceRow] {
-        (workspaces.filter(\.isPinned) + workspaces.filter { !$0.isPinned }).map {
-            WorkspaceRow(id: $0.id, isPinned: $0.isPinned)
-        }
+    private static func ordered(_ workspaces: [Workspace]) -> [Workspace] {
+        workspaces.filter(\.isPinned) + workspaces.filter { !$0.isPinned }
     }
 }
 

@@ -38,6 +38,7 @@ struct WorkspaceTabStrip: View {
     let model: AppModel
     let workspaceID: WorkspaceID
     let tabGroup: TabGroup
+    let paneTabDragRegistrationID: PaneTabDragRegistrationID
 
     var body: some View {
         ScrollViewReader { scrollProxy in
@@ -80,7 +81,8 @@ struct WorkspaceTabStrip: View {
                 PaneTabStripFrameReporter(
                     model: model,
                     workspaceID: workspaceID,
-                    tabGroupID: tabGroup.id
+                    tabGroupID: tabGroup.id,
+                    registrationID: paneTabDragRegistrationID
                 )
             )
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
@@ -119,6 +121,7 @@ struct WorkspaceTabStrip: View {
                 model: model,
                 workspaceID: workspaceID,
                 tabGroupID: tabGroup.id,
+                registrationID: paneTabDragRegistrationID,
                 tabID: tab.id
             )
         )
@@ -159,6 +162,7 @@ private struct PaneTabStripFrameReporter: View {
     let model: AppModel
     let workspaceID: WorkspaceID
     let tabGroupID: TabGroupID
+    let registrationID: PaneTabDragRegistrationID
 
     var body: some View {
         GeometryReader { proxy in
@@ -168,6 +172,7 @@ private struct PaneTabStripFrameReporter: View {
                     model.registerPaneTabDragTabStrip(
                         workspaceID: workspaceID,
                         tabGroupID: tabGroupID,
+                        registrationID: registrationID,
                         frame: frame
                     )
                 }
@@ -175,6 +180,7 @@ private struct PaneTabStripFrameReporter: View {
                     model.registerPaneTabDragTabStrip(
                         workspaceID: workspaceID,
                         tabGroupID: tabGroupID,
+                        registrationID: registrationID,
                         frame: updatedFrame
                     )
                 }
@@ -186,6 +192,7 @@ private struct PaneTabInsertionFrameReporter: View {
     let model: AppModel
     let workspaceID: WorkspaceID
     let tabGroupID: TabGroupID
+    let registrationID: PaneTabDragRegistrationID
     let tabID: TabID
 
     var body: some View {
@@ -196,6 +203,7 @@ private struct PaneTabInsertionFrameReporter: View {
                     model.registerPaneTabDragTab(
                         workspaceID: workspaceID,
                         tabGroupID: tabGroupID,
+                        registrationID: registrationID,
                         tabID: tabID,
                         frame: frame
                     )
@@ -204,6 +212,7 @@ private struct PaneTabInsertionFrameReporter: View {
                     model.registerPaneTabDragTab(
                         workspaceID: workspaceID,
                         tabGroupID: tabGroupID,
+                        registrationID: registrationID,
                         tabID: tabID,
                         frame: updatedFrame
                     )
@@ -212,6 +221,7 @@ private struct PaneTabInsertionFrameReporter: View {
                     model.unregisterPaneTabDragTab(
                         workspaceID: workspaceID,
                         tabGroupID: tabGroupID,
+                        registrationID: registrationID,
                         tabID: tabID
                     )
                 }

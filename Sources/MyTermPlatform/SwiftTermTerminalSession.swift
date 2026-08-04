@@ -69,6 +69,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
         )
         super.init()
 
+        terminal.currentWorkingDirectory = configuration.workingDirectory
         terminal.processDelegate = self
         terminal.onOpenWebURL = { [weak self] url in
             Task { @MainActor [weak self] in
@@ -180,6 +181,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
     private func emitWorkingDirectoryChanged(_ directory: URL) {
         guard isRunning, directory != lastReportedWorkingDirectory else { return }
         lastReportedWorkingDirectory = directory
+        terminal.currentWorkingDirectory = directory
         workingDirectoryPoller?.updateCurrentDirectory(directory)
         onEvent?(.workingDirectoryChanged(directory))
     }
@@ -205,6 +207,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
 final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
     var onOpenWebURL: ((URL) -> Void)?
     var onContentChanged: (() -> Void)?
+    var currentWorkingDirectory: URL?
     private let contentChangeCoalescer = TerminalContentChangeCoalescer()
     // AppKit owns local monitor tokens and requires the opaque value again for removal.
     // The view is main-actor isolated, while Swift 6 treats deinit as nonisolated.
@@ -503,7 +506,8 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
     override func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
         guard let url = TerminalLinkRouter.url(
             from: link,
-            clickedRowText: pendingLinkClickRowText
+            clickedRowText: pendingLinkClickRowText,
+            workingDirectory: currentWorkingDirectory
         ) else {
             super.requestOpenLink(source: source, link: link, params: params)
             return
