@@ -141,6 +141,7 @@ extension AppModel {
         viewRegistration.tabInsertionFrames[tabID] = nil
         registration.viewRegistrations[registrationID] = viewRegistration
         paneTabDragRegistrations[tabGroupID] = registration
+        refreshPaneTabDragPreview()
         guard !registration.viewRegistrations.values.contains(where: { $0.tabInsertionFrames[tabID] != nil }) else {
             return
         }
@@ -160,6 +161,7 @@ extension AppModel {
         } else {
             paneTabDragRegistrations[tabGroupID] = registration
         }
+        refreshPaneTabDragPreview()
         if registration.viewRegistrations.isEmpty,
            paneTabDragSession?.source.tabGroupID == tabGroupID {
             cancelPaneTabDrag()

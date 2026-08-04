@@ -2409,6 +2409,46 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(model.paneTabDragRegistrations[sourceGroupID])
     }
 
+    func testPaneTabDragRefreshesItsPreviewWhenDestinationRegistrationDisappears() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let sourceGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.createTerminalTab(in: sourceGroupID)
+        let destinationTabID = try XCTUnwrap(model.selectedTab?.id)
+        let destinationGroupID = try createPaneBesideSource(
+            model,
+            sourceGroupID: sourceGroupID,
+            tabID: destinationTabID
+        )
+        let sourceTabID = try XCTUnwrap(model.selectedWorkspace.group(id: sourceGroupID)?.selectedTabID)
+        let source = PaneTabDragSource(
+            workspaceID: workspaceID,
+            tabGroupID: sourceGroupID,
+            tabID: sourceTabID
+        )
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: sourceGroupID, origin: .zero)
+        let destinationRegistrationID = registerPaneDragFrames(
+            model,
+            workspaceID: workspaceID,
+            tabGroupID: destinationGroupID,
+            origin: CGPoint(x: 200, y: 0)
+        )
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 260, y: 60))
+        XCTAssertEqual(model.paneTabDragPreviewTarget, .paneCenter(tabGroupID: destinationGroupID))
+
+        model.unregisterPaneTabDragPane(
+            workspaceID: workspaceID,
+            tabGroupID: destinationGroupID,
+            registrationID: destinationRegistrationID
+        )
+
+        XCTAssertNil(model.paneTabDragPreviewTarget)
+    }
+
     func testBrowserShortcutDeclarationsAreExactAndDoNotDuplicateContextualZoom() {
         XCTAssertEqual(MyTermCommandShortcuts.reloadBrowser, .init(key: "r", modifiers: [.command]))
         XCTAssertEqual(MyTermCommandShortcuts.focusBrowserAddress, .init(key: "l", modifiers: [.command]))

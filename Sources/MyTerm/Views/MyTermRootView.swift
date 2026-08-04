@@ -232,12 +232,22 @@ private struct WorkspaceSidebar: View {
     }
 
     var body: some View {
+        let foldersByID = Dictionary(uniqueKeysWithValues: model.folders.map { ($0.id, $0) })
+        let workspacesByID = Dictionary(uniqueKeysWithValues: model.workspaces.map { ($0.id, $0) })
+        let nextFolderIDs = Dictionary(uniqueKeysWithValues: zip(model.folders, model.folders.dropFirst()).map {
+            ($0.0.id, $0.1.id)
+        })
         List(selection: Binding(
             get: { model.store.selectedWorkspaceID },
             set: { workspaceID in model.selectWorkspace(workspaceID) }
         )) {
             ForEach(filedRows) { row in
-                filedRow(row)
+                filedRow(
+                    row,
+                    foldersByID: foldersByID,
+                    workspacesByID: workspacesByID,
+                    nextFolderIDs: nextFolderIDs
+                )
             }
 
             if !ungroupedWorkspaces.isEmpty {
@@ -323,20 +333,25 @@ private struct WorkspaceSidebar: View {
     }
 
     @ViewBuilder
-    private func filedRow(_ row: SidebarVisibleRow) -> some View {
+    private func filedRow(
+        _ row: SidebarVisibleRow,
+        foldersByID: [WorkspaceFolderID: WorkspaceFolder],
+        workspacesByID: [WorkspaceID: Workspace],
+        nextFolderIDs: [WorkspaceFolderID: WorkspaceFolderID]
+    ) -> some View {
         switch row {
         case .folder(let folderID):
-            if let folder = model.folders.first(where: { $0.id == folderID }) {
+            if let folder = foldersByID[folderID] {
                 WorkspaceFolderRow(
                     model: model,
                     folder: folder,
-                    nextFolderID: nextFolderID(after: folder.id),
+                    nextFolderID: nextFolderIDs[folder.id],
                     rowHeight: sidebarRowHeight,
                     activeDragItem: $activeDragItem
                 )
             }
         case .workspace(let workspaceID):
-            if let workspace = model.workspaces.first(where: { $0.id == workspaceID }) {
+            if let workspace = workspacesByID[workspaceID] {
                 WorkspaceSidebarRow(
                     model: model,
                     workspace: workspace,
@@ -346,11 +361,6 @@ private struct WorkspaceSidebar: View {
                 )
             }
         }
-    }
-
-    private func nextFolderID(after folderID: WorkspaceFolderID) -> WorkspaceFolderID? {
-        guard let index = model.folders.firstIndex(where: { $0.id == folderID }) else { return nil }
-        return model.folders.dropFirst(index + 1).first?.id
     }
 
     private func ordered(_ workspaces: [Workspace]) -> [Workspace] {
