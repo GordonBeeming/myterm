@@ -991,7 +991,7 @@ public final class WorkspaceStore {
             let encodedData = try JSONEncoder().encode(snapshot)
             let original = try JSONSerialization.jsonObject(with: originalData)
             var repaired = try JSONSerialization.jsonObject(with: encodedData)
-            removeExpectedBrowserFilePatternsMigration(from: original, in: &repaired)
+            removeExpectedSettingsDefaultsMigration(from: original, in: &repaired)
             return jsonDifferenceCount(original, repaired)
         } catch {
             throw WorkspaceStoreError.invalidPersistence(
@@ -1000,19 +1000,20 @@ public final class WorkspaceStore {
         }
     }
 
-    private static func removeExpectedBrowserFilePatternsMigration(
+    private static func removeExpectedSettingsDefaultsMigration(
         from original: Any,
         in repaired: inout Any
     ) {
         guard let originalSnapshot = original as? [String: Any],
               let originalSettings = originalSnapshot["globalSettings"] as? [String: Any],
-              originalSettings["browserFilePatterns"] == nil,
               var repairedSnapshot = repaired as? [String: Any],
               var repairedSettings = repairedSnapshot["globalSettings"] as? [String: Any] else {
             return
         }
 
-        repairedSettings.removeValue(forKey: "browserFilePatterns")
+        for key in ["browserFilePatterns", "allowsLocalFileJavaScript"] where originalSettings[key] == nil {
+            repairedSettings.removeValue(forKey: key)
+        }
         repairedSnapshot["globalSettings"] = repairedSettings
         repaired = repairedSnapshot
     }
