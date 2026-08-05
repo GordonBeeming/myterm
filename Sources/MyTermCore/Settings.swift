@@ -122,7 +122,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         "*.yaml", "*.yml", "*.toml", "*.xml", "*.ini", "*.cfg", "*.conf",
         "*.txt", "*.text", "*.log", "*.csv", "*.tsv",
         "*.html", "*.htm", "*.css", "*.scss", "*.sass", "*.less", "*.js", "*.jsx", "*.ts", "*.tsx", "*.mjs", "*.cjs",
-        "*.swift", "*.c", "*.h", "*.m", "*.mm", "*.cc", "*.cpp", "*.cxx", "*.hpp", "*.cs", "*.java", "*.kt", "*.kts", "*.go", "*.rs", "*.py", "*.rb", "*.php", "*.sh", "*.zsh", "*.fish", "*.ps1", "*.sql",
+        "*.swift", "*.c", "*.h", "*.m", "*.mm", "*.cc", "*.cpp", "*.cxx", "*.hpp", "*.cs", "*.java", "*.kt", "*.kts", "*.go", "*.rs", "*.py", "*.rb", "*.php", "*.sh", "*.zsh", "*.fish", "*.ps1", "*.psm1", "*.psd1", "*.ps1xml", "*.cdxml", "*.sql",
         "README", "README.md", "LICENSE", "Dockerfile", "Makefile",
         ".env", ".gitignore", ".gitattributes", ".gitmodules", ".editorconfig", ".dockerignore", ".npmrc", ".nvmrc", ".ruby-version", ".tool-versions",
     ]
@@ -134,6 +134,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
     public var textFileOpenCommand: String
     public var nativeTextFilePatterns: [String]
     public var browserFilePatterns: [String]
+    public var allowsLocalFileJavaScript: Bool
     public var compactSidebar: Bool
     public var fontPostScriptName: String
     public var fontSize: Double
@@ -152,6 +153,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         textFileOpenCommand: String = TerminalPreferences.defaultTextFileOpenCommand,
         nativeTextFilePatterns: [String] = TerminalPreferences.defaultNativeTextFilePatterns,
         browserFilePatterns: [String] = TerminalPreferences.defaultBrowserFilePatterns,
+        allowsLocalFileJavaScript: Bool = false,
         compactSidebar: Bool = true,
         fontPostScriptName: String = TerminalPreferences.defaultFontPostScriptName,
         fontSize: Double = TerminalPreferences.defaultFontSize,
@@ -169,6 +171,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         self.textFileOpenCommand = textFileOpenCommand.trimmingCharacters(in: .whitespacesAndNewlines)
         self.nativeTextFilePatterns = Self.normalizedNativeTextFilePatterns(nativeTextFilePatterns)
         self.browserFilePatterns = Self.normalizedFilePatterns(browserFilePatterns)
+        self.allowsLocalFileJavaScript = allowsLocalFileJavaScript
         self.compactSidebar = compactSidebar
         self.fontPostScriptName = Self.validatedFontName(fontPostScriptName)
         self.fontSize = Self.clampedFontSize(fontSize)
@@ -191,6 +194,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
             textFileOpenCommand: textFileOpenCommand,
             nativeTextFilePatterns: nativeTextFilePatterns,
             browserFilePatterns: browserFilePatterns,
+            allowsLocalFileJavaScript: allowsLocalFileJavaScript,
             compactSidebar: compactSidebar,
             fontPostScriptName: fontPostScriptName,
             fontSize: fontSize,
@@ -213,6 +217,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         try legacyContainer.encode(textFileOpenCommand, forKey: .markdownOpenCommand)
         try container.encode(nativeTextFilePatterns, forKey: .nativeTextFilePatterns)
         try container.encode(browserFilePatterns, forKey: .browserFilePatterns)
+        try container.encode(allowsLocalFileJavaScript, forKey: .allowsLocalFileJavaScript)
         try container.encode(compactSidebar, forKey: .compactSidebar)
         try container.encode(fontPostScriptName, forKey: .fontPostScriptName)
         try container.encode(fontSize, forKey: .fontSize)
@@ -232,6 +237,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         case textFileOpenCommand
         case nativeTextFilePatterns
         case browserFilePatterns
+        case allowsLocalFileJavaScript
         case compactSidebar
         case fontPostScriptName
         case fontSize
@@ -260,6 +266,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
                 ?? Self.defaultTextFileOpenCommand,
             nativeTextFilePatterns: (try? container.decode([String].self, forKey: .nativeTextFilePatterns)) ?? Self.defaultNativeTextFilePatterns,
             browserFilePatterns: (try? container.decode([String].self, forKey: .browserFilePatterns)) ?? Self.defaultBrowserFilePatterns,
+            allowsLocalFileJavaScript: (try? container.decode(Bool.self, forKey: .allowsLocalFileJavaScript)) ?? false,
             compactSidebar: (try? container.decode(Bool.self, forKey: .compactSidebar)) ?? true,
             fontPostScriptName: (try? container.decode(String.self, forKey: .fontPostScriptName)) ?? Self.defaultFontPostScriptName,
             fontSize: (try? container.decode(Double.self, forKey: .fontSize)) ?? Self.defaultFontSize,
@@ -327,6 +334,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
     public var textFileOpenCommand: String?
     public var nativeTextFilePatterns: [String]?
     public var browserFilePatterns: [String]?
+    public var allowsLocalFileJavaScript: Bool?
     public var compactSidebar: Bool?
     public var fontPostScriptName: String?
     public var fontSize: Double?
@@ -347,6 +355,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         case textFileOpenCommand
         case nativeTextFilePatterns
         case browserFilePatterns
+        case allowsLocalFileJavaScript
         case compactSidebar
         case fontPostScriptName
         case fontSize
@@ -374,6 +383,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
             ?? (try? legacyContainer.decodeIfPresent(String.self, forKey: .markdownOpenCommand))
         nativeTextFilePatterns = try? container.decodeIfPresent([String].self, forKey: .nativeTextFilePatterns)
         browserFilePatterns = try? container.decodeIfPresent([String].self, forKey: .browserFilePatterns)
+        allowsLocalFileJavaScript = try? container.decodeIfPresent(Bool.self, forKey: .allowsLocalFileJavaScript)
         compactSidebar = try? container.decodeIfPresent(Bool.self, forKey: .compactSidebar)
         fontPostScriptName = try? container.decodeIfPresent(String.self, forKey: .fontPostScriptName)
         fontSize = try? container.decodeIfPresent(Double.self, forKey: .fontSize)
@@ -395,6 +405,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         try legacyContainer.encodeIfPresent(textFileOpenCommand, forKey: .markdownOpenCommand)
         try container.encodeIfPresent(nativeTextFilePatterns, forKey: .nativeTextFilePatterns)
         try container.encodeIfPresent(browserFilePatterns, forKey: .browserFilePatterns)
+        try container.encodeIfPresent(allowsLocalFileJavaScript, forKey: .allowsLocalFileJavaScript)
         try container.encodeIfPresent(compactSidebar, forKey: .compactSidebar)
         try container.encodeIfPresent(fontPostScriptName, forKey: .fontPostScriptName)
         try container.encodeIfPresent(fontSize, forKey: .fontSize)
@@ -415,6 +426,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
             textFileOpenCommand: textFileOpenCommand ?? base.textFileOpenCommand,
             nativeTextFilePatterns: nativeTextFilePatterns ?? base.nativeTextFilePatterns,
             browserFilePatterns: browserFilePatterns ?? base.browserFilePatterns,
+            allowsLocalFileJavaScript: allowsLocalFileJavaScript ?? base.allowsLocalFileJavaScript,
             compactSidebar: compactSidebar ?? base.compactSidebar,
             fontPostScriptName: fontPostScriptName ?? base.fontPostScriptName,
             fontSize: fontSize ?? base.fontSize,

@@ -996,6 +996,100 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(model.errorDescription)
     }
 
+    func testBrowserNewTabCallbackKeepsTheOriginSelectedAndReusesItsProfile() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        model.createBrowserTab()
+        let groupID = model.selectedWorkspace.focusedTabGroupID
+        let originalTabID = try XCTUnwrap(model.selectedWorkspace.selectedTabID)
+        guard case .browser(let originalBrowser) = try XCTUnwrap(model.selectedTab?.content),
+              let originalController = model.browserController(for: originalBrowser.id) else {
+            return XCTFail("Expected a browser tab and controller")
+        }
+        let destination = try XCTUnwrap(URL(string: "https://example.com/background"))
+        let initialTabCount = model.selectedWorkspace.tabs.count
+
+        originalController.onNewTabRequest?(destination)
+
+        let group = try XCTUnwrap(model.selectedWorkspace.group(id: groupID))
+        XCTAssertEqual(group.selectedTabID, originalTabID)
+        XCTAssertEqual(group.tabs.count, initialTabCount + 1)
+        let newTab = try XCTUnwrap(group.tabs.first { $0.browserSession?.url == destination })
+        XCTAssertEqual(newTab.browserSession?.profile, originalBrowser.profile)
+        XCTAssertNotNil(newTab.browserSession.flatMap { model.browserController(for: $0.id) })
+    }
+
+    func testBrowserNewTabCallbackRejectsUnsupportedAndUntrustedFileURLs() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        model.createBrowserTab()
+        guard case .browser(let browser) = try XCTUnwrap(model.selectedTab?.content),
+              let controller = model.browserController(for: browser.id) else {
+            return XCTFail("Expected a browser tab and controller")
+        }
+        let initialTabCount = model.selectedWorkspace.tabs.count
+
+        controller.onNewTabRequest?(try XCTUnwrap(URL(string: "mailto:test@example.com")))
+        controller.onNewTabRequest?(URL(fileURLWithPath: "/tmp/untrusted.html"))
+
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount)
+    }
+
+    func testLocalFileJavaScriptSettingUpdatesAnExistingBrowserController() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        model.createBrowserTab()
+        guard case .browser(let browser) = try XCTUnwrap(model.selectedTab?.content),
+              let controller = model.browserController(for: browser.id) else {
+            return XCTFail("Expected a browser tab and controller")
+        }
+        XCTAssertFalse(controller.allowsLocalFileJavaScript)
+
+        model.updateGlobalSettings { $0.allowsLocalFileJavaScript = true }
+
+        XCTAssertTrue(controller.allowsLocalFileJavaScript)
+    }
+
+    func testScopedLocalFileJavaScriptUpdatesOnlyAffectedBrowserControllers() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let firstWorkspaceID = model.store.selectedWorkspaceID
+        model.createBrowserTab()
+        guard case .browser(let firstBrowser) = try XCTUnwrap(model.selectedTab?.content),
+              let firstController = model.browserController(for: firstBrowser.id) else {
+            return XCTFail("Expected the first browser controller")
+        }
+
+        model.createWorkspace()
+        let secondWorkspaceID = model.store.selectedWorkspaceID
+        model.createBrowserTab()
+        guard case .browser(let secondBrowser) = try XCTUnwrap(model.selectedTab?.content),
+              let secondController = model.browserController(for: secondBrowser.id) else {
+            return XCTFail("Expected the second browser controller")
+        }
+
+        model.beginCreatingFolder()
+        model.newFolderDraft = "Scoped"
+        model.commitFolderCreation()
+        let folderID = try XCTUnwrap(model.folders.first?.id)
+        model.moveWorkspace(firstWorkspaceID, to: folderID)
+
+        model.updateFolderSettings(folderID) { $0.allowsLocalFileJavaScript = true }
+
+        XCTAssertTrue(firstController.allowsLocalFileJavaScript)
+        XCTAssertFalse(secondController.allowsLocalFileJavaScript)
+
+        model.updateWorkspaceSettings(firstWorkspaceID) { $0.allowsLocalFileJavaScript = false }
+        model.updateWorkspaceSettings(secondWorkspaceID) { $0.allowsLocalFileJavaScript = true }
+
+        XCTAssertFalse(firstController.allowsLocalFileJavaScript)
+        XCTAssertTrue(secondController.allowsLocalFileJavaScript)
+    }
+
     func testFinalBrowserSelfClosePreservesWorkspaceWithReplacementTerminal() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
@@ -1519,6 +1613,55 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.selectedWorkspace.tabs.count, selectedTabCount)
         XCTAssertEqual(engine.configurations.last?.workingDirectory, projectDirectory.standardizedFileURL)
         XCTAssertNil(engine.configurations.last?.initialCommand)
+    }
+
+    func testDirectPowerShellFileOpenUsesCurrentTextFileSettingsWithoutRestarting() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let scriptURL = directory.appending(path: "Deploy.ps1", directoryHint: .notDirectory)
+        try Data("Write-Host 'Hello'".utf8).write(to: scriptURL)
+        var commands = [String]()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            startsTerminalProcesses: false,
+            textFileOpenCommandRunner: { command, _, _, completion in
+                commands.append(command)
+                completion(0)
+            }
+        )
+        let initialTabCount = model.selectedWorkspace.allTabs.count
+
+        model.updateGlobalSettings { $0.textFileOpenCommand = "powershell-editor {file}" }
+        model.open([scriptURL])
+
+        XCTAssertEqual(commands, ["exec powershell-editor '\(scriptURL.path)'"])
+        XCTAssertEqual(model.selectedWorkspace.allTabs.count, initialTabCount)
+    }
+
+    func testDirectFileOpenUsesAPatternAddedAfterTheModelStarts() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let fileURL = directory.appending(path: "Deploy.psdeploy", directoryHint: .notDirectory)
+        try Data("custom script".utf8).write(to: fileURL)
+        var commands = [String]()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            startsTerminalProcesses: false,
+            textFileOpenCommandRunner: { command, _, _, completion in
+                commands.append(command)
+                completion(0)
+            }
+        )
+
+        model.updateGlobalSettings {
+            $0.nativeTextFilePatterns.append("*.psdeploy")
+            $0.textFileOpenCommand = "current-editor {file}"
+        }
+        model.open([fileURL])
+
+        XCTAssertEqual(commands, ["exec current-editor '\(fileURL.path)'"])
     }
 
     func testTerminalWebLinksOpenInTheirOwningWorkspaceAndInjectBrowserLauncher() throws {

@@ -388,6 +388,21 @@ struct SettingsView: View {
                 ScopedSettingRow(
                     model: model,
                     scope: scope,
+                    title: "Run JavaScript in local pages",
+                    global: \TerminalPreferences.allowsLocalFileJavaScript,
+                    override: \TerminalPreferencesOverrides.allowsLocalFileJavaScript
+                ) { value in
+                    Toggle("Run JavaScript in local pages", isOn: value)
+                        .labelsHidden()
+                }
+
+                Text("Off by default. When enabled, HTML files opened in MyTerm can run their scripts. Changing this reloads open local pages in the affected workspaces.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                ScopedSettingRow(
+                    model: model,
+                    scope: scope,
                     title: "Open text files with",
                     global: \TerminalPreferences.textFileOpenCommand,
                     override: \TerminalPreferencesOverrides.textFileOpenCommand

@@ -41,6 +41,14 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertFalse(preferences.matchesNativeTextFile(URL(fileURLWithPath: "/tmp/report.pdf")))
         XCTAssertFalse(preferences.matchesNativeTextFile(URL(fileURLWithPath: "/tmp/json")))
         XCTAssertFalse(emptySuffixPreferences.matchesNativeTextFile(URL(fileURLWithPath: "/tmp/anything")))
+
+        for powerShellExtension in ["ps1", "psm1", "psd1", "ps1xml", "cdxml"] {
+            XCTAssertTrue(
+                TerminalPreferences.default.matchesNativeTextFile(
+                    URL(fileURLWithPath: "/tmp/example.\(powerShellExtension)")
+                )
+            )
+        }
     }
 
     func testBrowserFilePatternsDefaultAndMatchExtensions() {
@@ -94,6 +102,33 @@ final class WorkspaceStoreTests: XCTestCase {
 
         XCTAssertEqual(try store.resolvedSettings(for: inheritedWorkspaceID).browserFilePatterns, ["*.folder"])
         XCTAssertEqual(try store.resolvedSettings(for: workspaceID).browserFilePatterns, ["*.workspace"])
+    }
+
+    func testLocalFileJavaScriptDefaultsOffAndResolvesAtEveryScope() throws {
+        XCTAssertFalse(TerminalPreferences.default.allowsLocalFileJavaScript)
+
+        let enabled = TerminalPreferences(allowsLocalFileJavaScript: true)
+        let restored = try JSONDecoder().decode(
+            TerminalPreferences.self,
+            from: JSONEncoder().encode(enabled)
+        )
+        XCTAssertTrue(restored.allowsLocalFileJavaScript)
+
+        let url = temporaryURL()
+        let store = try WorkspaceStore(persistenceURL: url)
+        let folderID = try store.createFolder(title: "Work")
+        let workspaceID = store.selectedWorkspaceID
+        try store.moveWorkspace(workspaceID, to: folderID)
+        let inheritedWorkspaceID = try store.createWorkspace(title: "Inherited", folderID: folderID)
+
+        try store.updateGlobalSettings { $0.allowsLocalFileJavaScript = true }
+        XCTAssertTrue(try store.resolvedSettings(for: inheritedWorkspaceID).allowsLocalFileJavaScript)
+
+        try store.updateFolderSettings(folderID) { $0.allowsLocalFileJavaScript = false }
+        XCTAssertFalse(try store.resolvedSettings(for: inheritedWorkspaceID).allowsLocalFileJavaScript)
+
+        try store.updateWorkspaceSettings(workspaceID) { $0.allowsLocalFileJavaScript = true }
+        XCTAssertTrue(try store.resolvedSettings(for: workspaceID).allowsLocalFileJavaScript)
     }
 
     func testTextFileCommandPersistsUnderTheLegacyKeyForGlobalAndScopedSettings() throws {

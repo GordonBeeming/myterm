@@ -11,6 +11,7 @@ public struct BrowserSessionState: Equatable, Sendable {
     public fileprivate(set) var canGoBack: Bool
     public fileprivate(set) var canGoForward: Bool
     public fileprivate(set) var isLoading: Bool
+    public fileprivate(set) var estimatedProgress: Double
     public fileprivate(set) var errorDescription: String?
 
     public init(
@@ -19,6 +20,7 @@ public struct BrowserSessionState: Equatable, Sendable {
         canGoBack: Bool = false,
         canGoForward: Bool = false,
         isLoading: Bool = false,
+        estimatedProgress: Double = 0,
         errorDescription: String? = nil
     ) {
         self.url = url
@@ -26,6 +28,7 @@ public struct BrowserSessionState: Equatable, Sendable {
         self.canGoBack = canGoBack
         self.canGoForward = canGoForward
         self.isLoading = isLoading
+        self.estimatedProgress = estimatedProgress
         self.errorDescription = errorDescription
     }
 }
@@ -35,6 +38,7 @@ final class MyTermWebView: WKWebView {
     /// Chords the app owns. Empty means "let the page have everything", which is what the plain
     /// `WKWebView` behaviour was before this existed.
     var reservedChords: [KeyChord] = []
+    var onMiddleClickURL: ((URL) -> Void)?
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
@@ -53,6 +57,52 @@ final class MyTermWebView: WKWebView {
             return false
         }
         return super.performKeyEquivalent(with: event)
+    }
+
+    override func otherMouseDown(with event: NSEvent) {
+        guard event.buttonNumber == 2 else {
+            super.otherMouseDown(with: event)
+            return
+        }
+
+        let point = convert(event.locationInWindow, from: nil)
+        openLinkUnderMiddleClick(at: point) { [weak self] handled in
+            if !handled {
+                self?.forwardOtherMouseDown(event)
+            }
+        }
+    }
+
+    func openLinkUnderMiddleClick(at point: CGPoint, completion: ((Bool) -> Void)? = nil) {
+        let documentPoint = CGPoint(x: point.x, y: bounds.height - point.y)
+        evaluateJavaScript(Self.linkLookupScript(at: documentPoint)) { [weak self] result, _ in
+            guard let self else {
+                completion?(false)
+                return
+            }
+            guard let href = result as? String,
+                  let url = URL(string: href),
+                  let onMiddleClickURL else {
+                completion?(false)
+                return
+            }
+            onMiddleClickURL(url)
+            completion?(true)
+        }
+    }
+
+    private func forwardOtherMouseDown(_ event: NSEvent) {
+        super.otherMouseDown(with: event)
+    }
+
+    static func linkLookupScript(at point: CGPoint) -> String {
+        """
+        (() => {
+          const element = document.elementFromPoint(\(point.x), \(point.y));
+          const link = element?.closest?.('a[href]');
+          return link?.href ?? null;
+        })()
+        """
     }
 }
 
@@ -82,19 +132,46 @@ public final class BrowserSessionController: NSObject, ObservableObject {
 
     public let webView: WKWebView
     public var onCloseRequest: (() -> Void)?
+    public var onNewTabRequest: ((URL) -> Void)?
+    public var allowsLocalFileJavaScript: Bool {
+        didSet {
+            guard allowsLocalFileJavaScript != oldValue,
+                  webView.url?.isFileURL == true else { return }
+            reload()
+        }
+    }
     private var observations = [NSKeyValueObservation]()
 
     public convenience override init() {
         self.init(configuration: WKWebViewConfiguration())
     }
 
-    public convenience init(profile: BrowserDataProfile, reservedChords: [KeyChord] = []) {
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: profile.persistentStoreID)
-        self.init(configuration: configuration, reservedChords: reservedChords)
+    public convenience init(allowsLocalFileJavaScript: Bool) {
+        self.init(
+            configuration: WKWebViewConfiguration(),
+            allowsLocalFileJavaScript: allowsLocalFileJavaScript
+        )
     }
 
-    public init(configuration: WKWebViewConfiguration, reservedChords: [KeyChord] = []) {
+    public convenience init(
+        profile: BrowserDataProfile,
+        reservedChords: [KeyChord] = [],
+        allowsLocalFileJavaScript: Bool = false
+    ) {
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: profile.persistentStoreID)
+        self.init(
+            configuration: configuration,
+            reservedChords: reservedChords,
+            allowsLocalFileJavaScript: allowsLocalFileJavaScript
+        )
+    }
+
+    public init(
+        configuration: WKWebViewConfiguration,
+        reservedChords: [KeyChord] = [],
+        allowsLocalFileJavaScript: Bool = false
+    ) {
         if #available(macOS 15.0, *) {
             // WebKit's macOS header hides this public property when the deployment target is below 15.
             configuration.setValue(
@@ -105,8 +182,12 @@ public final class BrowserSessionController: NSObject, ObservableObject {
         let webView = MyTermWebView(frame: .zero, configuration: configuration)
         webView.reservedChords = reservedChords
         self.webView = webView
+        self.allowsLocalFileJavaScript = allowsLocalFileJavaScript
         super.init()
 
+        webView.onMiddleClickURL = { [weak self] url in
+            self?.onNewTabRequest?(url)
+        }
         webView.navigationDelegate = self
         webView.uiDelegate = self
         observations = [
@@ -123,6 +204,9 @@ public final class BrowserSessionController: NSObject, ObservableObject {
                 Task { @MainActor [weak self] in self?.refreshState() }
             },
             webView.observe(\.isLoading, options: [.initial, .new]) { [weak self] _, _ in
+                Task { @MainActor [weak self] in self?.refreshState() }
+            },
+            webView.observe(\.estimatedProgress, options: [.initial, .new]) { [weak self] _, _ in
                 Task { @MainActor [weak self] in self?.refreshState() }
             },
         ]
@@ -223,9 +307,10 @@ public final class BrowserSessionController: NSObject, ObservableObject {
 
     static func configureNavigationPreferences(
         _ preferences: WKWebpagePreferences,
-        for url: URL?
+        for url: URL?,
+        allowsLocalFileJavaScript: Bool = false
     ) {
-        preferences.allowsContentJavaScript = url?.isFileURL != true
+        preferences.allowsContentJavaScript = url?.isFileURL != true || allowsLocalFileJavaScript
     }
 
     static func isHandledContentNavigation(_ error: Error) -> Bool {
@@ -243,8 +328,22 @@ public final class BrowserSessionController: NSObject, ObservableObject {
             WKWebpagePreferences
         ) -> Void
     ) {
-        Self.configureNavigationPreferences(preferences, for: url)
+        Self.configureNavigationPreferences(
+            preferences,
+            for: url,
+            allowsLocalFileJavaScript: allowsLocalFileJavaScript
+        )
         decisionHandler(.allow, preferences)
+    }
+
+    func handleNewWindowRequest(_ request: URLRequest, buttonNumber: Int?) {
+        if buttonNumber == 2,
+           let url = request.url,
+           let onNewTabRequest {
+            onNewTabRequest(url)
+            return
+        }
+        webView.load(request)
     }
 
     private func refreshState() {
@@ -253,6 +352,7 @@ public final class BrowserSessionController: NSObject, ObservableObject {
         state.canGoBack = webView.canGoBack
         state.canGoForward = webView.canGoForward
         state.isLoading = webView.isLoading
+        state.estimatedProgress = webView.estimatedProgress
     }
 
     private func record(error: Error) {
@@ -274,7 +374,10 @@ extension BrowserSessionController: WKUIDelegate {
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
         guard navigationAction.targetFrame == nil else { return nil }
-        webView.load(navigationAction.request)
+        handleNewWindowRequest(
+            navigationAction.request,
+            buttonNumber: navigationAction.buttonNumber
+        )
         return nil
     }
 

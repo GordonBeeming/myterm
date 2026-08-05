@@ -9,6 +9,7 @@ final class BrowserSettingsStore {
     private static let compactSidebarKey = "compactSidebar"
     private static let recentWorkspaceEmojisKey = "recentWorkspaceEmojis"
     private static let terminalPreferencesMigrationKey = "terminalPreferencesMigration.v1"
+    private static let powerShellTextPatternsMigrationKey = "powerShellTextPatternsMigration.v1"
     private static let recentWorkspaceEmojiLimit = 10
 
     private let defaults: UserDefaults
@@ -61,6 +62,14 @@ final class BrowserSettingsStore {
 
     func markTerminalPreferencesMigrationComplete() {
         defaults.set(true, forKey: Self.terminalPreferencesMigrationKey)
+    }
+
+    var needsPowerShellTextPatternsMigration: Bool {
+        !defaults.bool(forKey: Self.powerShellTextPatternsMigrationKey)
+    }
+
+    func markPowerShellTextPatternsMigrationComplete() {
+        defaults.set(true, forKey: Self.powerShellTextPatternsMigrationKey)
     }
 
     private static func normalizedRecentWorkspaceEmojis(_ emojis: [String]) -> [String] {
