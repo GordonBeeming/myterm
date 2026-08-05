@@ -113,20 +113,6 @@ private extension Logger {
     )
 }
 
-private final class BrowserMiddleClickMonitor: @unchecked Sendable {
-    private let token: Any?
-
-    init(handler: @escaping (NSEvent) -> NSEvent?) {
-        token = NSEvent.addLocalMonitorForEvents(matching: .otherMouseDown, handler: handler)
-    }
-
-    deinit {
-        if let token {
-            NSEvent.removeMonitor(token)
-        }
-    }
-}
-
 enum BrowserSessionAction: Equatable, Sendable {
     case back
     case forward
@@ -155,7 +141,6 @@ public final class BrowserSessionController: NSObject, ObservableObject {
         }
     }
     private var observations = [NSKeyValueObservation]()
-    private var middleClickMonitor: BrowserMiddleClickMonitor?
 
     public convenience override init() {
         self.init(configuration: WKWebViewConfiguration())
@@ -205,18 +190,6 @@ public final class BrowserSessionController: NSObject, ObservableObject {
         }
         webView.navigationDelegate = self
         webView.uiDelegate = self
-        middleClickMonitor = BrowserMiddleClickMonitor {
-            [weak webView] event in
-            guard let webView,
-                  event.buttonNumber == 2,
-                  event.window === webView.window,
-                  !webView.isHiddenOrHasHiddenAncestor else { return event }
-
-            let point = webView.convert(event.locationInWindow, from: nil)
-            guard webView.bounds.contains(point) else { return event }
-            webView.openLinkUnderMiddleClick(at: point)
-            return nil
-        }
         observations = [
             webView.observe(\.url, options: [.initial, .new]) { [weak self] _, _ in
                 Task { @MainActor [weak self] in self?.refreshState() }
