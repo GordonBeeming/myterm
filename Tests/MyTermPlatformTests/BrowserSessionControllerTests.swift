@@ -224,6 +224,21 @@ final class BrowserSessionControllerTests: XCTestCase {
         XCTAssertEqual(webView.url?.host, "myterm.test")
     }
 
+    func testMiddleClickWithoutALinkAlwaysCallsCompletion() async throws {
+        let controller = BrowserSessionController()
+        let webView = try XCTUnwrap(controller.webView as? MyTermWebView)
+        webView.frame = NSRect(x: 0, y: 0, width: 320, height: 200)
+        await loadHTML("<p>No link here</p>", in: webView)
+
+        let handled = await withCheckedContinuation { continuation in
+            webView.openLinkUnderMiddleClick(at: CGPoint(x: 20, y: 180)) {
+                continuation.resume(returning: $0)
+            }
+        }
+
+        XCTAssertFalse(handled)
+    }
+
     func testTargetBlankNavigationLoadsInTheExistingWebView() async {
         let controller = BrowserSessionController()
         let initialWaiter = NavigationWaiter()

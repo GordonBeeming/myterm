@@ -1825,7 +1825,8 @@ final class AppModel {
         guard browserControllers[browserID] === controller,
               let tab = tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID),
               let browser = tab.browserSession,
-              browser.id == browserID else {
+              browser.id == browserID,
+              Self.canOpenNewBrowserTab(url, from: controller.webView.url) else {
             return
         }
         createBrowserTab(
@@ -1835,6 +1836,17 @@ final class AppModel {
             profile: browser.profile,
             selectsNewTab: false
         )
+    }
+
+    private static func canOpenNewBrowserTab(_ url: URL, from sourceURL: URL?) -> Bool {
+        switch url.scheme?.lowercased() {
+        case "http", "https":
+            true
+        case "file":
+            sourceURL?.isFileURL == true
+        default:
+            false
+        }
     }
 
     private func requestBrowserClose(

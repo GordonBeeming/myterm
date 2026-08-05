@@ -76,7 +76,10 @@ final class MyTermWebView: WKWebView {
     func openLinkUnderMiddleClick(at point: CGPoint, completion: ((Bool) -> Void)? = nil) {
         let documentPoint = CGPoint(x: point.x, y: bounds.height - point.y)
         evaluateJavaScript(Self.linkLookupScript(at: documentPoint)) { [weak self] result, _ in
-            guard let self else { return }
+            guard let self else {
+                completion?(false)
+                return
+            }
             guard let href = result as? String,
                   let url = URL(string: href),
                   let onMiddleClickURL else {

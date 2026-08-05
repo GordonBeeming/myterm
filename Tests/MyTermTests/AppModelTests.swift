@@ -1020,6 +1020,23 @@ final class AppModelTests: XCTestCase {
         XCTAssertNotNil(newTab.browserSession.flatMap { model.browserController(for: $0.id) })
     }
 
+    func testBrowserNewTabCallbackRejectsUnsupportedAndUntrustedFileURLs() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        model.createBrowserTab()
+        guard case .browser(let browser) = try XCTUnwrap(model.selectedTab?.content),
+              let controller = model.browserController(for: browser.id) else {
+            return XCTFail("Expected a browser tab and controller")
+        }
+        let initialTabCount = model.selectedWorkspace.tabs.count
+
+        controller.onNewTabRequest?(try XCTUnwrap(URL(string: "mailto:test@example.com")))
+        controller.onNewTabRequest?(URL(fileURLWithPath: "/tmp/untrusted.html"))
+
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount)
+    }
+
     func testLocalFileJavaScriptSettingUpdatesAnExistingBrowserController() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
