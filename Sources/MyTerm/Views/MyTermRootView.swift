@@ -143,8 +143,8 @@ private struct WorkspaceContentView: View {
                 }
                 ActiveTabView(model: model)
             }
-            .navigationTitle(model.selectedWorkspace.displayTitle)
         }
+        .navigationTitle(model.selectedWorkspace.displayTitle)
         .sheet(isPresented: isRenamingWorkspace) {
             RenameItemSheet(
                 title: "Rename Workspace",
@@ -279,7 +279,6 @@ private struct WorkspaceSidebar: View {
         }
         .listStyle(.sidebar)
         .environment(\.defaultMinListRowHeight, model.selectedWorkspaceSettings.compactSidebar ? 22 : 30)
-        .navigationTitle("Workspaces")
         .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 480)
         .safeAreaInset(edge: .bottom) {
             HStack(spacing: 10) {

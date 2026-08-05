@@ -186,6 +186,44 @@ final class BrowserSessionControllerTests: XCTestCase {
         XCTAssertEqual(callbackCount, 1)
     }
 
+    func testMiddleClickNewWindowRequestUsesNewTabCallback() throws {
+        let controller = BrowserSessionController()
+        let expectedURL = try XCTUnwrap(URL(string: "https://example.com/middle-click"))
+        var requestedURL: URL?
+        controller.onNewTabRequest = { requestedURL = $0 }
+
+        controller.handleNewWindowRequest(
+            URLRequest(url: expectedURL),
+            buttonNumber: 2
+        )
+
+        XCTAssertEqual(requestedURL, expectedURL)
+        XCTAssertNil(controller.webView.url)
+    }
+
+    func testMiddleClickHitTestsAnOrdinarySameFrameLink() async throws {
+        let controller = BrowserSessionController()
+        let webView = try XCTUnwrap(controller.webView as? MyTermWebView)
+        webView.frame = NSRect(x: 0, y: 0, width: 320, height: 200)
+        await loadHTML(
+            "<a href='https://example.com/middle-click' style='position:fixed;inset:0'>Open</a>",
+            in: webView
+        )
+        let expectedURL = try XCTUnwrap(URL(string: "https://example.com/middle-click"))
+        var requestedURL: URL?
+        controller.onNewTabRequest = { requestedURL = $0 }
+
+        let handled = await withCheckedContinuation { continuation in
+            webView.openLinkUnderMiddleClick(at: CGPoint(x: 20, y: 180)) {
+                continuation.resume(returning: $0)
+            }
+        }
+
+        XCTAssertTrue(handled)
+        XCTAssertEqual(requestedURL, expectedURL)
+        XCTAssertEqual(webView.url?.host, "myterm.test")
+    }
+
     func testTargetBlankNavigationLoadsInTheExistingWebView() async {
         let controller = BrowserSessionController()
         let initialWaiter = NavigationWaiter()
@@ -234,8 +272,75 @@ final class BrowserSessionControllerTests: XCTestCase {
         XCTAssertEqual(webDecision, .allow)
     }
 
+    func testLocalFileJavaScriptCanBeEnabledExplicitly() {
+        let controller = BrowserSessionController(allowsLocalFileJavaScript: true)
+        let localPreferences = WKWebpagePreferences()
+        var localDecision: WKNavigationActionPolicy?
+
+        controller.decideNavigationPolicy(
+            for: URL(fileURLWithPath: "/tmp/local.html"),
+            preferences: localPreferences
+        ) { policy, preferences in
+            localDecision = policy
+            XCTAssertTrue(preferences.allowsContentJavaScript)
+        }
+
+        XCTAssertEqual(localDecision, .allow)
+    }
+
+    func testEnabledLocalFileJavaScriptRunsPageAuthoredScript() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(
+            path: "myterm-local-page-script-test-\(UUID().uuidString)",
+            directoryHint: .isDirectory
+        )
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let fileURL = directory.appending(path: "index.html", directoryHint: .notDirectory)
+        try Data(
+            "<html><head><title>Before script</title><script>document.title = 'Script ran'</script></head></html>".utf8
+        ).write(to: fileURL)
+        let controller = BrowserSessionController(allowsLocalFileJavaScript: true)
+
+        try controller.load(url: fileURL)
+
+        let didLoad = try await waitUntilLoaded(fileURL, in: controller.webView)
+        XCTAssertTrue(didLoad)
+        XCTAssertEqual(controller.webView.title, "Script ran")
+    }
+
+    func testChangingLocalFileJavaScriptDoesNotReloadANonFilePage() {
+        let controller = BrowserSessionController()
+
+        controller.allowsLocalFileJavaScript = true
+
+        XCTAssertNil(controller.lastAction)
+    }
+
+    func testChangingLocalFileJavaScriptReloadsAnOpenFilePage() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(
+            path: "myterm-local-js-test-\(UUID().uuidString)",
+            directoryHint: .isDirectory
+        )
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let fileURL = directory.appending(path: "index.html", directoryHint: .notDirectory)
+        try Data("<html><body>Local file</body></html>".utf8).write(to: fileURL)
+        let controller = BrowserSessionController()
+
+        try controller.load(url: fileURL)
+        let didLoad = try await waitUntilLoaded(fileURL, in: controller.webView)
+        XCTAssertTrue(didLoad, "Timed out waiting for local WebKit navigation")
+        guard didLoad else { return }
+        controller.allowsLocalFileJavaScript = true
+
+        XCTAssertEqual(controller.lastAction, .reload)
+    }
+
     func testBrowserActionsAreObservableAndZoomIsBounded() {
         let controller = BrowserSessionController()
+
+        XCTAssertGreaterThanOrEqual(controller.state.estimatedProgress, 0)
+        XCTAssertLessThanOrEqual(controller.state.estimatedProgress, 1)
 
         controller.reload()
         XCTAssertEqual(controller.lastAction, .reload)
@@ -314,6 +419,16 @@ final class BrowserSessionControllerTests: XCTestCase {
                 continuation.resume()
             }
         }
+    }
+
+    private func waitUntilLoaded(_ url: URL, in webView: WKWebView) async throws -> Bool {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(5))
+        while webView.url != url || webView.isLoading {
+            guard clock.now < deadline else { return false }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        return true
     }
 }
 

@@ -112,6 +112,7 @@ final class AppModel {
             )
         }
         try migrateLegacySettings()
+        try migratePowerShellTextPatterns()
         try migrateLegacyBrowserDataProfiles()
         restoreRuntimeObjects()
         if let sessionID = selectedTab?.terminalSession?.id {
@@ -625,7 +626,10 @@ final class AppModel {
                     tabID: hasExactOrigin ? besideTabID : nil,
                     paneID: hasExactOrigin ? paneID : nil
                 )
-            } else if workspaceID != nil, openTextFile(
+            } else if workspaceID == nil,
+                      Self.markdownFileExtensions.contains(url.pathExtension.lowercased()) {
+                openFileInBrowser(url, in: store.selectedWorkspaceID, tabID: nil, paneID: nil)
+            } else if openTextFile(
                 url,
                 in: workspaceID ?? store.selectedWorkspaceID,
                 tabID: hasExactOrigin ? besideTabID : nil,
@@ -639,8 +643,6 @@ final class AppModel {
                     workingDirectory: url.deletingLastPathComponent(),
                     initialCommand: Self.shellQuote(url.path)
                 )
-            } else if Self.markdownFileExtensions.contains(url.pathExtension.lowercased()) {
-                openFileInBrowser(url, in: store.selectedWorkspaceID, tabID: nil, paneID: nil)
             } else {
                 openExternally(url)
             }
@@ -883,15 +885,18 @@ final class AppModel {
         url: URL,
         in workspaceID: WorkspaceID,
         tabGroupID: TabGroupID? = nil,
-        sourceWorkingDirectory: URL? = nil
+        sourceWorkingDirectory: URL? = nil,
+        profile sourceProfile: BrowserDataProfile? = nil,
+        selectsNewTab: Bool = true
     ) {
         perform {
             guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
                 throw AppModelError.workspaceUnavailable(workspaceID)
             }
             let targetGroupID = tabGroupID ?? workspace.focusedTabGroupID
+            let previousTabID = workspace.group(id: targetGroupID)?.selectedTabID
             let settings = try store.resolvedSettings(for: workspaceID)
-            let profile = browserDataProfileResolver.resolve(
+            let profile = sourceProfile ?? browserDataProfileResolver.resolve(
                 scope: settings.browserDataScope,
                 workspace: workspace,
                 sourceWorkingDirectory: sourceWorkingDirectory
@@ -902,12 +907,21 @@ final class AppModel {
                 url: url,
                 profile: profile
             )
-            restoreSplitLayoutIfFocusing(workspaceID: workspaceID, tabGroupID: targetGroupID)
+            if !selectsNewTab, let previousTabID {
+                try store.selectTab(
+                    workspaceID: workspaceID,
+                    tabGroupID: targetGroupID,
+                    tabID: previousTabID
+                )
+            }
             guard let tab = tab(workspaceID: workspaceID, tabGroupID: targetGroupID, tabID: tabID) else {
                 throw AppModelError.tabUnavailable(tabID)
             }
             try restoreBrowserController(for: tab, tabGroupID: targetGroupID, workspaceID: workspaceID)
-            focusContent(of: tab)
+            if selectsNewTab {
+                restoreSplitLayoutIfFocusing(workspaceID: workspaceID, tabGroupID: targetGroupID)
+                focusContent(of: tab)
+            }
         }
     }
 
@@ -1433,6 +1447,20 @@ final class AppModel {
                     controller: controller
                 )
             }
+            controller.onNewTabRequest = { [weak self, weak controller] url in
+                guard let controller else { return }
+                self?.requestBrowserNewTab(
+                    url,
+                    workspaceID: workspaceID,
+                    tabGroupID: tabGroupID,
+                    tabID: tab.id,
+                    browserID: browser.id,
+                    controller: controller
+                )
+            }
+            if let settings = try? store.resolvedSettings(for: workspaceID) {
+                controller.allowsLocalFileJavaScript = settings.allowsLocalFileJavaScript
+            }
         }
     }
 
@@ -1563,6 +1591,45 @@ final class AppModel {
             }
         }
         browserSettings.markTerminalPreferencesMigrationComplete()
+    }
+
+    private func migratePowerShellTextPatterns() throws {
+        guard browserSettings.needsPowerShellTextPatternsMigration else { return }
+
+        try store.updateGlobalSettings { settings in
+            settings.nativeTextFilePatterns = Self.migratingPowerShellTextPatterns(
+                settings.nativeTextFilePatterns
+            )
+        }
+        for folder in store.folders where folder.settingsOverrides?.nativeTextFilePatterns != nil {
+            try store.updateFolderSettings(folder.id) { overrides in
+                overrides.nativeTextFilePatterns = overrides.nativeTextFilePatterns.map(
+                    Self.migratingPowerShellTextPatterns
+                )
+            }
+        }
+        for workspace in store.workspaces where workspace.settingsOverrides?.nativeTextFilePatterns != nil {
+            try store.updateWorkspaceSettings(workspace.id) { overrides in
+                overrides.nativeTextFilePatterns = overrides.nativeTextFilePatterns.map(
+                    Self.migratingPowerShellTextPatterns
+                )
+            }
+        }
+        browserSettings.markPowerShellTextPatternsMigrationComplete()
+    }
+
+    private static func migratingPowerShellTextPatterns(_ patterns: [String]) -> [String] {
+        let normalized = Set(patterns.map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        })
+        guard normalized.contains("*.ps1") else { return patterns }
+
+        var migrated = patterns
+        for pattern in ["*.psm1", "*.psd1", "*.ps1xml", "*.cdxml"]
+            where !normalized.contains(pattern) {
+            migrated.append(pattern)
+        }
+        return migrated
     }
 
     private func migrateLegacyBrowserDataProfiles() throws {
@@ -1700,6 +1767,7 @@ final class AppModel {
         workspaceID: WorkspaceID
     ) throws {
         guard browserControllers[browser.id] == nil else { return }
+        let settings = try store.resolvedSettings(for: workspaceID)
         let profile: BrowserDataProfile
         if let existingProfile = browser.profile {
             profile = existingProfile
@@ -1707,7 +1775,6 @@ final class AppModel {
             guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
                 throw AppModelError.workspaceUnavailable(workspaceID)
             }
-            let settings = try store.resolvedSettings(for: workspaceID)
             profile = browserDataProfileResolver.resolve(
                 scope: settings.browserDataScope,
                 workspace: workspace
@@ -1721,6 +1788,7 @@ final class AppModel {
         }
 
         let controller = browserSessionFactory.makeSession(profile: profile)
+        controller.allowsLocalFileJavaScript = settings.allowsLocalFileJavaScript
         controller.onCloseRequest = { [weak self, weak controller] in
             guard let controller else { return }
             self?.requestBrowserClose(
@@ -1731,8 +1799,42 @@ final class AppModel {
                 controller: controller
             )
         }
+        controller.onNewTabRequest = { [weak self, weak controller] url in
+            guard let controller else { return }
+            self?.requestBrowserNewTab(
+                url,
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID,
+                browserID: browser.id,
+                controller: controller
+            )
+        }
         try controller.load(url: browser.url)
         browserControllers[browser.id] = controller
+    }
+
+    private func requestBrowserNewTab(
+        _ url: URL,
+        workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
+        tabID: TabID,
+        browserID: BrowserSessionID,
+        controller: BrowserSessionController
+    ) {
+        guard browserControllers[browserID] === controller,
+              let tab = tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID),
+              let browser = tab.browserSession,
+              browser.id == browserID else {
+            return
+        }
+        createBrowserTab(
+            url: url,
+            in: workspaceID,
+            tabGroupID: tabGroupID,
+            profile: browser.profile,
+            selectsNewTab: false
+        )
     }
 
     private func requestBrowserClose(
@@ -1941,6 +2043,9 @@ final class AppModel {
             for tab in workspace.allTabs {
                 if let sessionID = tab.terminalSession?.id {
                     terminalSessions[sessionID]?.apply(runtimeConfiguration: configuration)
+                }
+                if let browserID = tab.browserSession?.id {
+                    browserControllers[browserID]?.allowsLocalFileJavaScript = settings.allowsLocalFileJavaScript
                 }
             }
         }

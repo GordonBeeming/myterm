@@ -305,6 +305,48 @@ final class BrowserDataProfilesTests: XCTestCase {
         XCTAssertEqual(restored.store.globalSettings.cursorShape, .beam)
     }
 
+    func testExistingPowerShellPatternsMigrateOnceWithoutOverridingLaterEdits() throws {
+        let directory = try makeTemporaryDirectory()
+        let (defaults, suiteName) = makeDefaults()
+        defer {
+            removeTemporaryDirectory(directory)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let persistenceURL = MyTermChannel.development.persistenceURL(applicationSupportDirectory: directory)
+        let store = try WorkspaceStore(persistenceURL: persistenceURL)
+        let workspaceID = store.selectedWorkspaceID
+        let folderID = try store.createFolder(title: "Work")
+        try store.moveWorkspace(workspaceID, to: folderID)
+        try store.updateGlobalSettings { $0.nativeTextFilePatterns = ["*.txt", "*.ps1", "*.ps1"] }
+        try store.updateFolderSettings(folderID) { $0.nativeTextFilePatterns = ["*.ps1"] }
+        try store.updateWorkspaceSettings(workspaceID) { $0.nativeTextFilePatterns = ["*.ps1", "*.psm1"] }
+
+        let first = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: nil,
+            startsTerminalProcesses: false,
+            browserSettings: BrowserSettingsStore(channel: .development, defaults: defaults)
+        )
+        let addedPatterns = ["*.psm1", "*.psd1", "*.ps1xml", "*.cdxml"]
+        for pattern in addedPatterns {
+            XCTAssertTrue(first.store.globalSettings.nativeTextFilePatterns.contains(pattern))
+            XCTAssertTrue(try XCTUnwrap(first.folders.first?.settingsOverrides?.nativeTextFilePatterns).contains(pattern))
+            XCTAssertTrue(try XCTUnwrap(first.workspaces.first?.settingsOverrides?.nativeTextFilePatterns).contains(pattern))
+        }
+
+        first.updateGlobalSettings { $0.nativeTextFilePatterns.removeAll { $0 == "*.psm1" } }
+        let restored = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: nil,
+            startsTerminalProcesses: false,
+            browserSettings: BrowserSettingsStore(channel: .development, defaults: defaults)
+        )
+
+        XCTAssertFalse(restored.store.globalSettings.nativeTextFilePatterns.contains("*.psm1"))
+    }
+
     func testNewTabsUseTheCurrentSettingAndLegacyTabsAreMigratedOnce() throws {
         let directory = try makeTemporaryDirectory()
         let (defaults, suiteName) = makeDefaults()

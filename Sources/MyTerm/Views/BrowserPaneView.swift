@@ -46,6 +46,16 @@ private struct ObservedBrowserTabContent: View {
     var body: some View {
         VStack(spacing: 0) {
             browserToolbar
+            ProgressView(value: controller.state.estimatedProgress)
+                .progressViewStyle(.linear)
+                .tint(.accentColor)
+                .frame(maxWidth: .infinity, minHeight: 2, maxHeight: 2)
+                .opacity(controller.state.isLoading ? 1 : 0)
+                .accessibilityHidden(!controller.state.isLoading)
+                .accessibilityLabel("Page loading progress")
+                .accessibilityValue(
+                    "\(Int((controller.state.estimatedProgress * 100).rounded())) percent"
+                )
             if let error = controller.state.errorDescription {
                 Text(error)
                     .font(.callout)
