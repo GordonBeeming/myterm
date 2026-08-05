@@ -305,7 +305,12 @@ final class BrowserSessionControllerTests: XCTestCase {
 
         let didLoad = try await waitUntilLoaded(fileURL, in: controller.webView)
         XCTAssertTrue(didLoad)
-        XCTAssertEqual(controller.webView.title, "Script ran")
+        let didRunScript = try await waitUntil(
+            "the local page's authored script to update the title"
+        ) {
+            controller.webView.title == "Script ran"
+        }
+        XCTAssertTrue(didRunScript)
     }
 
     func testChangingLocalFileJavaScriptDoesNotReloadANonFilePage() {
@@ -422,9 +427,18 @@ final class BrowserSessionControllerTests: XCTestCase {
     }
 
     private func waitUntilLoaded(_ url: URL, in webView: WKWebView) async throws -> Bool {
+        try await waitUntil("the WebKit navigation to finish") {
+            webView.url == url && !webView.isLoading
+        }
+    }
+
+    private func waitUntil(
+        _ description: String,
+        condition: @escaping @MainActor () -> Bool
+    ) async throws -> Bool {
         let clock = ContinuousClock()
         let deadline = clock.now.advanced(by: .seconds(5))
-        while webView.url != url || webView.isLoading {
+        while !condition() {
             guard clock.now < deadline else { return false }
             try await Task.sleep(for: .milliseconds(10))
         }
