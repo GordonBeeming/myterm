@@ -497,6 +497,29 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.recoveryBackupURL.path))
     }
 
+    func testV2SnapshotMissingLocalFileJavaScriptDoesNotCollideWithExistingRecoveryBackup() throws {
+        let url = temporaryURL()
+        let snapshot = WorkspaceStoreSnapshot.initial()
+        var persisted = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(snapshot)) as? [String: Any]
+        )
+        var globalSettings = try XCTUnwrap(persisted["globalSettings"] as? [String: Any])
+        globalSettings.removeValue(forKey: "allowsLocalFileJavaScript")
+        persisted["globalSettings"] = globalSettings
+        try JSONSerialization.data(withJSONObject: persisted).write(to: url)
+
+        let recoveryBackupURL = url.appendingPathExtension("recovery-backup")
+        let existingBackup = Data("earlier recovery".utf8)
+        try existingBackup.write(to: recoveryBackupURL)
+
+        let store = try WorkspaceStore(persistenceURL: url)
+
+        XCTAssertFalse(store.globalSettings.allowsLocalFileJavaScript)
+        XCTAssertEqual(store.loadReport.structuralRepairCount, 0)
+        XCTAssertTrue(store.loadReport.backupURLs.isEmpty)
+        XCTAssertEqual(try Data(contentsOf: recoveryBackupURL), existingBackup)
+    }
+
     func testNumericBooleanValuesTriggerStructuralRepairAndExactByteBackup() throws {
         let url = temporaryURL()
         let first = Workspace(title: "Numeric zero", isPinned: false)
