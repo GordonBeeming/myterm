@@ -219,6 +219,7 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
     private var wordSelectionResolutionGeneration = 0
     private var emacsWordSelectionEnabled = true
     private var pendingLinkClickRowText: String?
+    private var isSelectingTextForCurrentGesture = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -271,11 +272,25 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
         true
     }
 
+    override func mouseDown(with event: NSEvent) {
+        isSelectingTextForCurrentGesture = false
+        super.mouseDown(with: event)
+        isSelectingTextForCurrentGesture = selectionActive
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        isSelectingTextForCurrentGesture = true
+        super.mouseDragged(with: event)
+    }
+
     override func mouseUp(with event: NSEvent) {
-        if event.modifierFlags.contains(.command) {
+        if event.modifierFlags.contains(.command), !isSelectingTextForCurrentGesture {
             pendingLinkClickRowText = terminalRowText(at: event)
         }
-        defer { pendingLinkClickRowText = nil }
+        defer {
+            pendingLinkClickRowText = nil
+            isSelectingTextForCurrentGesture = false
+        }
         super.mouseUp(with: event)
     }
 
@@ -504,12 +519,15 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
     }
 
     override func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
+        guard !isSelectingTextForCurrentGesture else { return }
         guard let url = TerminalLinkRouter.url(
             from: link,
             clickedRowText: pendingLinkClickRowText,
             workingDirectory: currentWorkingDirectory
         ) else {
-            super.requestOpenLink(source: source, link: link, params: params)
+            if let url = TerminalLinkRouter.externalURL(from: link) {
+                super.requestOpenLink(source: source, link: url.absoluteString, params: params)
+            }
             return
         }
         onOpenWebURL?(url)

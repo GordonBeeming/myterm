@@ -427,7 +427,7 @@ final class TerminalSessionConfigurationTests: XCTestCase {
             TerminalLinkRouter.url(
                 from: first + second,
                 clickedRowText: "- \(second)",
-                isRegularFile: { $0 == second }
+                pathExists: { $0 == second }
             ),
             URL(fileURLWithPath: second)
         )
@@ -441,9 +441,22 @@ final class TerminalSessionConfigurationTests: XCTestCase {
             TerminalLinkRouter.url(
                 from: candidate,
                 clickedRowText: directory,
-                isRegularFile: { _ in false }
+                pathExists: { $0 == candidate || $0 == directory }
             ),
             URL(fileURLWithPath: candidate)
+        )
+    }
+
+    func testTerminalLinkRouterRejectsMissingPathThatStartsWithAnExistingDirectory() {
+        let directory = "/tmp/project"
+        let candidate = directory + "/missing.txt"
+
+        XCTAssertNil(
+            TerminalLinkRouter.url(
+                from: candidate,
+                clickedRowText: directory,
+                pathExists: { $0 == directory }
+            )
         )
     }
 
@@ -455,7 +468,7 @@ final class TerminalSessionConfigurationTests: XCTestCase {
             TerminalLinkRouter.url(
                 from: candidate,
                 clickedRowText: clickedPath,
-                isRegularFile: { $0 == candidate || $0 == clickedPath }
+                pathExists: { $0 == candidate || $0 == clickedPath }
             ),
             URL(fileURLWithPath: candidate)
         )
@@ -581,6 +594,108 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         let terminal = MyTermLocalProcessTerminalView(frame: .zero)
 
         XCTAssertTrue(terminal.acceptsFirstMouse(for: nil))
+    }
+
+    @MainActor
+    func testDraggingASelectionDoesNotOpenTheLink() throws {
+        let terminal = MyTermLocalProcessTerminalView(
+            frame: NSRect(x: 0, y: 0, width: 640, height: 320)
+        )
+        var openedURL: URL?
+        terminal.onOpenWebURL = { openedURL = $0 }
+        let mouseDown = try XCTUnwrap(
+            NSEvent.mouseEvent(
+                with: .leftMouseDown,
+                location: NSPoint(x: 10, y: 10),
+                modifierFlags: [.command],
+                timestamp: 0,
+                windowNumber: 0,
+                context: nil,
+                eventNumber: 1,
+                clickCount: 1,
+                pressure: 1
+            )
+        )
+        let mouseDragged = try XCTUnwrap(
+            NSEvent.mouseEvent(
+                with: .leftMouseDragged,
+                location: NSPoint(x: 80, y: 10),
+                modifierFlags: [.command],
+                timestamp: 0.1,
+                windowNumber: 0,
+                context: nil,
+                eventNumber: 2,
+                clickCount: 1,
+                pressure: 1
+            )
+        )
+        let mouseUp = try XCTUnwrap(
+            NSEvent.mouseEvent(
+                with: .leftMouseUp,
+                location: NSPoint(x: 80, y: 10),
+                modifierFlags: [.command],
+                timestamp: 0.2,
+                windowNumber: 0,
+                context: nil,
+                eventNumber: 3,
+                clickCount: 1,
+                pressure: 0
+            )
+        )
+
+        terminal.mouseDown(with: mouseDown)
+        terminal.mouseDragged(with: mouseDragged)
+        terminal.requestOpenLink(source: terminal, link: "https://example.com", params: [:])
+        XCTAssertNil(openedURL)
+        terminal.mouseUp(with: mouseUp)
+
+        terminal.mouseDown(with: mouseDown)
+        terminal.requestOpenLink(source: terminal, link: "https://example.com", params: [:])
+        XCTAssertEqual(openedURL?.absoluteString, "https://example.com")
+    }
+
+    @MainActor
+    func testDoubleClickSelectionDoesNotOpenTheSelectedLink() throws {
+        let terminal = MyTermLocalProcessTerminalView(
+            frame: NSRect(x: 0, y: 0, width: 640, height: 320)
+        )
+        terminal.feed(text: "https://example.com")
+        var openedURL: URL?
+        terminal.onOpenWebURL = { openedURL = $0 }
+        let doubleClick = try XCTUnwrap(
+            NSEvent.mouseEvent(
+                with: .leftMouseDown,
+                location: NSPoint(x: 10, y: 310),
+                modifierFlags: [.command],
+                timestamp: 0,
+                windowNumber: 0,
+                context: nil,
+                eventNumber: 1,
+                clickCount: 2,
+                pressure: 1
+            )
+        )
+        let deliberateClick = try XCTUnwrap(
+            NSEvent.mouseEvent(
+                with: .leftMouseDown,
+                location: NSPoint(x: 10, y: 310),
+                modifierFlags: [.command],
+                timestamp: 0.1,
+                windowNumber: 0,
+                context: nil,
+                eventNumber: 2,
+                clickCount: 1,
+                pressure: 1
+            )
+        )
+
+        terminal.mouseDown(with: doubleClick)
+        terminal.requestOpenLink(source: terminal, link: "https://example.com", params: [:])
+        XCTAssertNil(openedURL)
+
+        terminal.mouseDown(with: deliberateClick)
+        terminal.requestOpenLink(source: terminal, link: "https://example.com", params: [:])
+        XCTAssertEqual(openedURL?.absoluteString, "https://example.com")
     }
 
     @MainActor
@@ -752,51 +867,97 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         XCTAssertNil(TerminalWorkingDirectoryNormalizer.normalize("https://example.com/workspace"))
     }
 
-    func testTerminalLinkRouterAcceptsWebURLsLocalFileURLsAndAbsolutePaths() {
+    func testTerminalLinkRouterAcceptsWebURLsAndExistingFilesAndDirectories() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let folder = directory.appendingPathComponent("artifacts", isDirectory: true)
+        let report = directory.appendingPathComponent("report.html")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        XCTAssertTrue(FileManager.default.createFile(atPath: report.path, contents: Data()))
+        defer { try? FileManager.default.removeItem(at: directory) }
+
         XCTAssertEqual(
             TerminalLinkRouter.url(from: "https://example.com/path?query=yes#result")?.absoluteString,
             "https://example.com/path?query=yes#result"
         )
         XCTAssertEqual(TerminalLinkRouter.url(from: "http://localhost:3000")?.host, "localhost")
-        XCTAssertEqual(TerminalLinkRouter.url(from: "file:///tmp/report.html")?.path, "/tmp/report.html")
-        XCTAssertEqual(TerminalLinkRouter.url(from: "file:/tmp/report.html")?.path, "/tmp/report.html")
+        XCTAssertEqual(TerminalLinkRouter.url(from: report.absoluteString)?.path, report.path)
+        XCTAssertEqual(TerminalLinkRouter.url(from: report.path)?.path, report.path)
+        XCTAssertEqual(TerminalLinkRouter.url(from: folder.path)?.path, folder.path)
         let deepFileLink = TerminalLinkRouter.url(
-            from: "file:///tmp/../tmp/report.html?theme=dark#section"
+            from: report.absoluteString + "?theme=dark#section"
         )
-        XCTAssertEqual(deepFileLink?.path, "/tmp/report.html")
+        XCTAssertEqual(deepFileLink?.path, report.path)
         XCTAssertEqual(deepFileLink?.query, "theme=dark")
         XCTAssertEqual(deepFileLink?.fragment, "section")
-        XCTAssertEqual(
-            TerminalLinkRouter.url(from: "/Users/gordon beeming/report.html")?.path,
-            "/Users/gordon beeming/report.html"
-        )
+        XCTAssertNil(TerminalLinkRouter.url(from: directory.appendingPathComponent("missing.txt").path))
+        XCTAssertNil(TerminalLinkRouter.url(from: "file:///definitely/missing/report.html"))
         XCTAssertNil(TerminalLinkRouter.url(from: "ssh://example.com"))
         XCTAssertNil(TerminalLinkRouter.url(from: "https:///missing-host"))
     }
 
     func testTerminalLinkRouterResolvesRelativePathsAgainstTheLiveWorkingDirectory() {
         let workingDirectory = URL(fileURLWithPath: "/workspace/project")
+        let source = "/workspace/project/Sources/MyTerm/Views/MyTermRootView.swift"
+        let readme = "/workspace/README.md"
+        let existingPaths = Set([source, readme])
 
         XCTAssertEqual(
             TerminalLinkRouter.url(
                 from: "Sources/MyTerm/Views/MyTermRootView.swift",
-                workingDirectory: workingDirectory
+                clickedRowText: nil,
+                workingDirectory: workingDirectory,
+                pathExists: existingPaths.contains
             )?.path,
-            "/workspace/project/Sources/MyTerm/Views/MyTermRootView.swift"
+            source
         )
         XCTAssertEqual(
             TerminalLinkRouter.url(
                 from: "../README.md",
-                workingDirectory: workingDirectory
+                clickedRowText: nil,
+                workingDirectory: workingDirectory,
+                pathExists: existingPaths.contains
             )?.path,
-            "/workspace/README.md"
+            readme
         )
         XCTAssertNil(
             TerminalLinkRouter.url(
                 from: "ssh://example.com",
-                workingDirectory: workingDirectory
+                clickedRowText: nil,
+                workingDirectory: workingDirectory,
+                pathExists: existingPaths.contains
             )
         )
+    }
+
+    func testTerminalLinkRouterRejectsSelectedProseAndMissingPaths() {
+        let workingDirectory = URL(fileURLWithPath: "/workspace/project")
+
+        XCTAssertNil(
+            TerminalLinkRouter.url(
+                from: "impeccable document",
+                clickedRowText: nil,
+                workingDirectory: workingDirectory,
+                pathExists: { _ in false }
+            )
+        )
+        XCTAssertNil(
+            TerminalLinkRouter.url(
+                from: "/impeccable document",
+                clickedRowText: nil,
+                pathExists: { _ in false }
+            )
+        )
+    }
+
+    func testTerminalLinkRouterOnlyFallsBackForExplicitExternalURLs() {
+        XCTAssertEqual(
+            TerminalLinkRouter.externalURL(from: "mailto:team@example.com")?.absoluteString,
+            "mailto:team@example.com"
+        )
+        XCTAssertNil(TerminalLinkRouter.externalURL(from: "impeccable document"))
+        XCTAssertNil(TerminalLinkRouter.externalURL(from: "file:///tmp/missing.txt"))
+        XCTAssertNil(TerminalLinkRouter.externalURL(from: "https://example.com"))
     }
 
     func testTerminalLinkRouterUsesTheClickedRowWhenAdjacentPathsAreJoined() throws {
@@ -827,17 +988,18 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         )
     }
 
-    func testTerminalLinkRouterKeepsAJoinedCandidateWhenTheClickedRowIsNotAFile() {
-        let first = "/tmp/missing-first-video.mp4"
-        let second = "/tmp/missing-second-video.mp4"
+    func testTerminalLinkRouterRejectsAJoinedCandidateWhenNeitherPathExists() {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let first = directory.appendingPathComponent("missing-first-video.mp4").path
+        let second = directory.appendingPathComponent("missing-second-video.mp4").path
         let joinedLink = "\(first)-\(second)"
 
-        XCTAssertEqual(
+        XCTAssertNil(
             TerminalLinkRouter.url(
                 from: joinedLink,
                 clickedRowText: "- \(first)"
-            )?.path,
-            joinedLink
+            )
         )
     }
 }
