@@ -597,7 +597,7 @@ final class TerminalSessionConfigurationTests: XCTestCase {
     }
 
     @MainActor
-    func testDraggingASelectionDoesNotOpenTheLinkUnderMouseUp() throws {
+    func testDraggingASelectionDoesNotOpenTheLink() throws {
         let terminal = MyTermLocalProcessTerminalView(
             frame: NSRect(x: 0, y: 0, width: 640, height: 320)
         )
@@ -629,11 +629,25 @@ final class TerminalSessionConfigurationTests: XCTestCase {
                 pressure: 1
             )
         )
+        let mouseUp = try XCTUnwrap(
+            NSEvent.mouseEvent(
+                with: .leftMouseUp,
+                location: NSPoint(x: 80, y: 10),
+                modifierFlags: [.command],
+                timestamp: 0.2,
+                windowNumber: 0,
+                context: nil,
+                eventNumber: 3,
+                clickCount: 1,
+                pressure: 0
+            )
+        )
 
         terminal.mouseDown(with: mouseDown)
         terminal.mouseDragged(with: mouseDragged)
         terminal.requestOpenLink(source: terminal, link: "https://example.com", params: [:])
         XCTAssertNil(openedURL)
+        terminal.mouseUp(with: mouseUp)
 
         terminal.mouseDown(with: mouseDown)
         terminal.requestOpenLink(source: terminal, link: "https://example.com", params: [:])
@@ -975,8 +989,10 @@ final class TerminalSessionConfigurationTests: XCTestCase {
     }
 
     func testTerminalLinkRouterRejectsAJoinedCandidateWhenNeitherPathExists() {
-        let first = "/tmp/missing-first-video.mp4"
-        let second = "/tmp/missing-second-video.mp4"
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let first = directory.appendingPathComponent("missing-first-video.mp4").path
+        let second = directory.appendingPathComponent("missing-second-video.mp4").path
         let joinedLink = "\(first)-\(second)"
 
         XCTAssertNil(
