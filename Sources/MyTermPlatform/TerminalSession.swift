@@ -224,9 +224,11 @@ public enum TerminalLinkRouter {
 
         let clickedPath = clickedRowText[rootStart...]
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        let joinsAnotherAbsolutePath = candidate.hasSuffix(clickedPath)
+            || candidate.hasPrefix("\(clickedPath)-/")
         guard candidate != clickedPath,
               !pathExists(candidate),
-              candidate.contains(clickedPath),
+              joinsAnotherAbsolutePath,
               pathExists(clickedPath) else {
             return nil
         }

@@ -447,6 +447,19 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         )
     }
 
+    func testTerminalLinkRouterRejectsMissingPathThatStartsWithAnExistingDirectory() {
+        let directory = "/tmp/project"
+        let candidate = directory + "/missing.txt"
+
+        XCTAssertNil(
+            TerminalLinkRouter.url(
+                from: candidate,
+                clickedRowText: directory,
+                pathExists: { $0 == directory }
+            )
+        )
+    }
+
     func testTerminalLinkRouterPreservesAValidFullPathBeforeDisambiguatingTheClickedRow() {
         let candidate = "/workspace/project/wrapped/tmp/file.txt"
         let clickedPath = "/tmp/file.txt"
