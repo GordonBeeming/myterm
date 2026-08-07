@@ -113,6 +113,40 @@ final class BrowserSessionControllerTests: XCTestCase {
     }
 
     @MainActor
+    func testBrowserHostReportsWebViewDescendantFocusOncePerTransition() {
+        let browserView = FocusableBrowserTestView()
+        let focusedWebContent = FocusableBrowserTestView()
+        browserView.addSubview(focusedWebContent)
+        let otherView = FocusableBrowserTestView()
+        var focusCount = 0
+        let host = BrowserSessionHostView(
+            contentView: browserView,
+            isActive: false,
+            onFocused: { focusCount += 1 }
+        )
+        let container = NSView(frame: .zero)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 200),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = container
+        container.addSubview(host)
+        container.addSubview(otherView)
+
+        XCTAssertTrue(window.makeFirstResponder(focusedWebContent))
+        XCTAssertEqual(focusCount, 1)
+
+        XCTAssertTrue(window.makeFirstResponder(focusedWebContent))
+        XCTAssertEqual(focusCount, 1)
+
+        XCTAssertTrue(window.makeFirstResponder(otherView))
+        XCTAssertTrue(window.makeFirstResponder(focusedWebContent))
+        XCTAssertEqual(focusCount, 2)
+    }
+
+    @MainActor
     func testBrowserHostDoesNotRemoveContentReparentedByAnotherHost() {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 320, height: 200),

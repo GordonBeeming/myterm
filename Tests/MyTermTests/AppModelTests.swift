@@ -1915,6 +1915,56 @@ final class AppModelTests: XCTestCase {
         XCTAssertNotEqual(model.selectedWorkspace.focusedTabGroupID, thirdGroupID)
     }
 
+    func testBrowserFirstResponderCallbacksAreIdempotentAndCanReturnToOlderPanes() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: nil,
+            startsTerminalProcesses: false
+        )
+        let firstGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.createBrowserTab(in: firstGroupID)
+        let firstTab = try XCTUnwrap(model.selectedTab)
+        let firstSessionID = try XCTUnwrap(firstTab.browserSession?.id)
+        model.splitFocusedTerminal(orientation: .horizontal)
+        let secondGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.createBrowserTab(in: secondGroupID)
+        let secondTab = try XCTUnwrap(model.selectedTab)
+        let secondSessionID = try XCTUnwrap(secondTab.browserSession?.id)
+
+        model.browserDidBecomeFirstResponder(
+            workspaceID: model.store.selectedWorkspaceID,
+            tabGroupID: firstGroupID,
+            tabID: firstTab.id,
+            sessionID: firstSessionID
+        )
+        XCTAssertEqual(model.selectedWorkspace.focusedTabGroupID, firstGroupID)
+        XCTAssertEqual(model.selectedTab?.id, firstTab.id)
+        model.toggleFocusedPaneFullScreen()
+        XCTAssertEqual(model.maximizedTabGroupID, firstGroupID)
+        model.toggleFocusedPaneFullScreen()
+        let versionAfterFirstCallback = model.stateVersion
+
+        model.browserDidBecomeFirstResponder(
+            workspaceID: model.store.selectedWorkspaceID,
+            tabGroupID: firstGroupID,
+            tabID: firstTab.id,
+            sessionID: firstSessionID
+        )
+        XCTAssertEqual(model.stateVersion, versionAfterFirstCallback)
+
+        model.browserDidBecomeFirstResponder(
+            workspaceID: model.store.selectedWorkspaceID,
+            tabGroupID: secondGroupID,
+            tabID: secondTab.id,
+            sessionID: secondSessionID
+        )
+        XCTAssertEqual(model.selectedWorkspace.focusedTabGroupID, secondGroupID)
+        XCTAssertEqual(model.selectedTab?.id, secondTab.id)
+    }
+
     func testMovingTabsAcrossGroupsPreservesRuntimeIdentityAndCollapsesEmptySource() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
