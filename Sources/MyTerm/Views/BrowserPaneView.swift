@@ -65,7 +65,18 @@ private struct ObservedBrowserTabContent: View {
                     .padding(.bottom, 6)
                     .accessibilityLabel("Browser error: \(error)")
             }
-            BrowserSessionView(session: controller, isActive: isFocused)
+            BrowserSessionView(
+                session: controller,
+                isActive: isFocused,
+                onFocused: {
+                    model.browserDidBecomeFirstResponder(
+                        workspaceID: workspaceID,
+                        tabGroupID: tabGroupID,
+                        tabID: tab.id,
+                        sessionID: browser.id
+                    )
+                }
+            )
                 .simultaneousGesture(TapGesture().onEnded { select() })
                 .accessibilityLabel("Browser pane \(paneTitle), \(isFocused ? "active" : "inactive")")
                 .overlay(alignment: .topTrailing) {

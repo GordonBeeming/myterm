@@ -5,18 +5,32 @@ import SwiftUI
 public struct BrowserSessionView: NSViewRepresentable {
     private let session: BrowserSessionController
     private let isActive: Bool
+    private let onFocused: (@MainActor () -> Void)?
 
-    public init(session: BrowserSessionController, isActive: Bool = true) {
+    public init(
+        session: BrowserSessionController,
+        isActive: Bool = true,
+        onFocused: (@MainActor () -> Void)? = nil
+    ) {
         self.session = session
         self.isActive = isActive
+        self.onFocused = onFocused
     }
 
     public func makeNSView(context: Context) -> NSView {
-        BrowserSessionHostView(contentView: session.webView, isActive: isActive)
+        BrowserSessionHostView(
+            contentView: session.webView,
+            isActive: isActive,
+            onFocused: onFocused
+        )
     }
 
     public func updateNSView(_ nsView: NSView, context: Context) {
-        (nsView as? BrowserSessionHostView)?.update(contentView: session.webView, isActive: isActive)
+        (nsView as? BrowserSessionHostView)?.update(
+            contentView: session.webView,
+            isActive: isActive,
+            onFocused: onFocused
+        )
     }
 }
 
@@ -25,15 +39,28 @@ final class BrowserSessionHostView: NSView {
     private var contentView: NSView
     private var contentConstraints: [NSLayoutConstraint] = []
     private var shouldFocusWhenAttachedToWindow: Bool
+    private var onFocused: (@MainActor () -> Void)?
+    private var firstResponderObservation: NSKeyValueObservation?
+    private var wasContentFirstResponder = false
 
-    init(contentView: NSView, isActive: Bool) {
+    init(
+        contentView: NSView,
+        isActive: Bool,
+        onFocused: (@MainActor () -> Void)? = nil
+    ) {
         self.contentView = contentView
         shouldFocusWhenAttachedToWindow = isActive
+        self.onFocused = onFocused
         super.init(frame: .zero)
         install(contentView)
     }
 
-    func update(contentView updatedContentView: NSView, isActive: Bool) {
+    func update(
+        contentView updatedContentView: NSView,
+        isActive: Bool,
+        onFocused: (@MainActor () -> Void)? = nil
+    ) {
+        self.onFocused = onFocused
         setPaneActive(isActive)
         guard contentView !== updatedContentView else { return }
 
@@ -49,6 +76,7 @@ final class BrowserSessionHostView: NSView {
         }
 
         contentView = updatedContentView
+        wasContentFirstResponder = false
         install(updatedContentView)
 
         if shouldTransferFocus {
@@ -80,8 +108,17 @@ final class BrowserSessionHostView: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        guard window != nil, shouldFocusWhenAttachedToWindow else { return }
-        focusWhenPossible()
+        firstResponderObservation = nil
+        wasContentFirstResponder = false
+        guard let window else { return }
+        firstResponderObservation = window.observe(\.firstResponder, options: [.initial, .new]) { [weak self] _, _ in
+            MainActor.assumeIsolated {
+                self?.reportFirstResponderIfNeeded()
+            }
+        }
+        if shouldFocusWhenAttachedToWindow {
+            focusWhenPossible()
+        }
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
@@ -109,5 +146,14 @@ final class BrowserSessionHostView: NSView {
         }
         shouldFocusWhenAttachedToWindow = false
         window.makeFirstResponder(contentView)
+    }
+
+    private func reportFirstResponderIfNeeded() {
+        let focusedView = window?.firstResponder as? NSView
+        let isContentFirstResponder = focusedView === contentView
+            || focusedView?.isDescendant(of: contentView) == true
+        defer { wasContentFirstResponder = isContentFirstResponder }
+        guard isContentFirstResponder, !wasContentFirstResponder else { return }
+        onFocused?()
     }
 }

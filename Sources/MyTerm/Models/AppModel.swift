@@ -1231,6 +1231,24 @@ final class AppModel {
         )
     }
 
+    func browserDidBecomeFirstResponder(
+        workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
+        tabID: TabID,
+        sessionID: BrowserSessionID
+    ) {
+        guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }),
+              let tab = workspace.tab(groupID: tabGroupID, tabID: tabID),
+              tab.browserSession?.id == sessionID else { return }
+        focusPane(
+            workspaceID: workspaceID,
+            tabGroupID: tabGroupID,
+            tabID: tabID,
+            paneID: tab.paneID,
+            focusContent: false
+        )
+    }
+
     private func restoreFocusedPane(in workspaceID: WorkspaceID) {
         guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }),
               let tab = workspace.selectedTab else {
