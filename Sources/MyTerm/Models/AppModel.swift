@@ -296,7 +296,7 @@ final class AppModel {
             let inheritedActiveDirectory = activeTerminalDirectory(in: selectedWorkspace)
             let targetFolderID = folderID ?? selectedWorkspace.folderID
             let workspaceID = try store.createWorkspace(
-                title: "Workspace \(workspaces.count + 1)",
+                title: nextWorkspaceTitle(),
                 folderID: targetFolderID
             )
             maximizedTabGroupID = nil
@@ -542,6 +542,9 @@ final class AppModel {
         }
         perform {
             try store.selectWorkspace(workspaceID)
+            if let workspace = store.workspaces.first(where: { $0.id == workspaceID }) {
+                restoreRuntimeObjects(in: workspace)
+            }
             restoreFocusedPane(in: workspaceID)
         }
     }
@@ -917,7 +920,9 @@ final class AppModel {
             guard let tab = tab(workspaceID: workspaceID, tabGroupID: targetGroupID, tabID: tabID) else {
                 throw AppModelError.tabUnavailable(tabID)
             }
-            try restoreBrowserController(for: tab, tabGroupID: targetGroupID, workspaceID: workspaceID)
+            if store.selectedWorkspaceID == workspaceID {
+                try restoreBrowserController(for: tab, tabGroupID: targetGroupID, workspaceID: workspaceID)
+            }
             if selectsNewTab {
                 restoreSplitLayoutIfFocusing(workspaceID: workspaceID, tabGroupID: targetGroupID)
                 focusContent(of: tab)
@@ -989,11 +994,13 @@ final class AppModel {
                 ) else {
                     throw AppModelError.tabUnavailable(browserTabID)
                 }
-                try restoreBrowserController(
-                    for: browserTab,
-                    tabGroupID: destinationGroupID,
-                    workspaceID: workspaceID
-                )
+                if store.selectedWorkspaceID == workspaceID {
+                    try restoreBrowserController(
+                        for: browserTab,
+                        tabGroupID: destinationGroupID,
+                        workspaceID: workspaceID
+                    )
+                }
                 if let placeholderTabID {
                     _ = try store.closeTab(
                         workspaceID: workspaceID,
@@ -1590,10 +1597,34 @@ final class AppModel {
         }
     }
 
+    func persistBrowserURLs() {
+        let updates = store.workspaces.flatMap { workspace in
+            workspace.orderedGroups.flatMap { group in
+                group.tabs.compactMap { tab -> (
+                    workspaceID: WorkspaceID,
+                    tabGroupID: TabGroupID,
+                    tabID: TabID,
+                    url: URL
+                )? in
+                    guard let browser = tab.browserSession,
+                          let controller = browserControllers[browser.id],
+                          let url = controller.webView.url,
+                          url != browser.url else { return nil }
+                    return (workspace.id, group.id, tab.id, url)
+                }
+            }
+        }
+        guard !updates.isEmpty else { return }
+        perform {
+            try store.updateBrowserURLs(updates)
+        }
+    }
+
     private func restoreRuntimeObjects() {
         for workspace in store.workspaces {
-            restoreRuntimeObjects(in: workspace)
+            restoreTerminalSessions(in: workspace)
         }
+        restoreBrowserControllers(in: store.selectedWorkspace)
     }
 
     private func migrateLegacySettings() throws {
@@ -1675,17 +1706,16 @@ final class AppModel {
     }
 
     private func restoreRuntimeObjects(in workspace: Workspace) {
+        restoreTerminalSessions(in: workspace)
+        guard workspace.id == store.selectedWorkspaceID else { return }
+        restoreBrowserControllers(in: workspace)
+    }
+
+    private func restoreTerminalSessions(in workspace: Workspace) {
         for group in workspace.orderedGroups {
             for tab in group.tabs {
                 do {
-                    if let browser = tab.browserSession {
-                        try restoreBrowserController(
-                            browser,
-                            tabGroupID: group.id,
-                            tabID: tab.id,
-                            workspaceID: workspace.id
-                        )
-                    } else if let session = tab.terminalSession {
+                    if let session = tab.terminalSession {
                         try restoreTerminalSession(
                             session,
                             workspaceID: workspace.id,
@@ -1698,6 +1728,44 @@ final class AppModel {
                 }
             }
         }
+    }
+
+    private func restoreBrowserControllers(in workspace: Workspace) {
+        for group in workspace.orderedGroups {
+            for tab in group.tabs {
+                guard let browser = tab.browserSession else { continue }
+                do {
+                    try restoreBrowserController(
+                        browser,
+                        tabGroupID: group.id,
+                        tabID: tab.id,
+                        workspaceID: workspace.id
+                    )
+                } catch {
+                    present(error)
+                }
+            }
+        }
+    }
+
+    private func nextWorkspaceTitle() -> String {
+        var number = 1
+        let usedNumbers = Set(workspaces.compactMap { Self.defaultWorkspaceNumber(in: $0.title) })
+        while usedNumbers.contains(number) {
+            number += 1
+        }
+        return "Workspace \(number)"
+    }
+
+    private static func defaultWorkspaceNumber(in title: String) -> Int? {
+        let prefix = "Workspace "
+        guard title.hasPrefix(prefix) else { return nil }
+        let suffix = title.dropFirst(prefix.count)
+        guard !suffix.isEmpty,
+              suffix.allSatisfy(\.isNumber),
+              let number = Int(suffix),
+              number > 0 else { return nil }
+        return number
     }
 
     private func restoreTerminalSession(

@@ -894,6 +894,34 @@ public final class WorkspaceStore {
         }
     }
 
+    public func updateBrowserURLs(
+        _ updates: [(
+            workspaceID: WorkspaceID,
+            tabGroupID: TabGroupID,
+            tabID: TabID,
+            url: URL
+        )]
+    ) throws {
+        guard !updates.isEmpty else { return }
+        try mutate { snapshot in
+            for update in updates {
+                let workspaceIndex = try workspaceIndex(update.workspaceID, in: snapshot)
+                var workspace = snapshot.workspaces[workspaceIndex]
+                var group = try tabGroup(update.tabGroupID, in: workspace)
+                guard let tabIndex = group.tabs.firstIndex(where: { $0.id == update.tabID }) else {
+                    throw WorkspaceStoreError.tabNotFound(update.tabID)
+                }
+                guard case .browser(var session) = group.tabs[tabIndex].content else {
+                    throw WorkspaceStoreError.browserTabRequired(update.tabID)
+                }
+                session.url = update.url
+                group.tabs[tabIndex].content = .browser(session)
+                _ = workspace.layout.replaceGroup(id: group.id, with: group)
+                snapshot.workspaces[workspaceIndex] = workspace
+            }
+        }
+    }
+
     public func updateBrowserDataProfile(
         workspaceID: WorkspaceID,
         tabGroupID: TabGroupID,

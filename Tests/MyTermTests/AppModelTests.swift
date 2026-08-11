@@ -290,6 +290,195 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(engine.sessions[1].focusCallCount, 1)
     }
 
+    func testNewWorkspaceUsesLowestUnusedDefaultNumberAcrossFolders() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let firstWorkspaceID = model.store.selectedWorkspaceID
+        model.renameWorkspace(firstWorkspaceID, title: "Workspace 2 copy")
+        let folderID = try model.store.createFolder(title: "Projects")
+        model.moveWorkspace(firstWorkspaceID, to: folderID)
+
+        model.createWorkspace()
+        XCTAssertEqual(model.selectedWorkspace.title, "Workspace 1")
+        let firstGeneratedWorkspaceID = model.store.selectedWorkspaceID
+
+        model.createWorkspace()
+        XCTAssertEqual(model.selectedWorkspace.title, "Workspace 2")
+        let secondGeneratedWorkspaceID = model.store.selectedWorkspaceID
+        model.moveWorkspace(secondGeneratedWorkspaceID, to: nil)
+        model.renameWorkspace(secondGeneratedWorkspaceID, title: "Workspace 13")
+
+        model.createWorkspace()
+        XCTAssertEqual(model.selectedWorkspace.title, "Workspace 2")
+        model.renameWorkspace(firstGeneratedWorkspaceID, title: "Workspace 13")
+
+        model.createWorkspace()
+        XCTAssertEqual(model.selectedWorkspace.title, "Workspace 1")
+        XCTAssertEqual(
+            model.workspaces.filter { $0.title == "Workspace 13" }.count,
+            2
+        )
+        XCTAssertEqual(
+            model.workspaces.first(where: { $0.id == firstGeneratedWorkspaceID })?.folderID,
+            folderID
+        )
+        XCTAssertNil(model.workspaces.first(where: { $0.id == secondGeneratedWorkspaceID })?.folderID)
+    }
+
+    func testStartupAndWorkspaceSelectionRestoreBrowserControllersLazily() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let inactiveFirstURL = directory.appendingPathComponent("inactive-one.html")
+        let inactiveSecondURL = directory.appendingPathComponent("inactive-two.html")
+        try Data("<html><body>one</body></html>".utf8).write(to: inactiveFirstURL)
+        try Data("<html><body>two</body></html>".utf8).write(to: inactiveSecondURL)
+        let persistenceURL = MyTermChannel.development.persistenceURL(applicationSupportDirectory: directory)
+        let store = try WorkspaceStore(persistenceURL: persistenceURL)
+        let selectedWorkspaceID = store.selectedWorkspaceID
+        let selectedGroupID = store.selectedWorkspace.focusedTabGroupID
+        _ = try store.addBrowserTab(
+            to: selectedWorkspaceID,
+            tabGroupID: selectedGroupID,
+            url: try XCTUnwrap(URL(string: "https://selected-one.example"))
+        )
+        _ = try store.addBrowserTab(
+            to: selectedWorkspaceID,
+            tabGroupID: selectedGroupID,
+            url: try XCTUnwrap(URL(string: "https://selected-two.example"))
+        )
+        let inactiveWorkspaceID = try store.createWorkspace(title: "Inactive")
+        let inactiveGroupID = store.selectedWorkspace.focusedTabGroupID
+        let inactiveFirstID = try store.addBrowserTab(
+            to: inactiveWorkspaceID,
+            tabGroupID: inactiveGroupID,
+            url: inactiveFirstURL
+        )
+        let inactiveSecondID = try store.addBrowserTab(
+            to: inactiveWorkspaceID,
+            tabGroupID: inactiveGroupID,
+            url: inactiveSecondURL
+        )
+        let inactiveFirstSessionID = try XCTUnwrap(
+            store.selectedWorkspace.tab(groupID: inactiveGroupID, tabID: inactiveFirstID)?.browserSession?.id
+        )
+        let inactiveSecondSessionID = try XCTUnwrap(
+            store.selectedWorkspace.tab(groupID: inactiveGroupID, tabID: inactiveSecondID)?.browserSession?.id
+        )
+        try store.selectWorkspace(selectedWorkspaceID)
+
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: nil,
+            startsTerminalProcesses: false
+        )
+        XCTAssertEqual(model.browserControllers.count, 2)
+        XCTAssertNil(model.browserController(for: inactiveFirstSessionID))
+        XCTAssertNil(model.browserController(for: inactiveSecondSessionID))
+
+        model.selectWorkspace(inactiveWorkspaceID)
+        let firstController = try XCTUnwrap(model.browserController(for: inactiveFirstSessionID))
+        let secondController = try XCTUnwrap(model.browserController(for: inactiveSecondSessionID))
+        try await waitForBrowserURL(firstController, inactiveFirstURL)
+        try await waitForBrowserURL(secondController, inactiveSecondURL)
+        XCTAssertEqual(firstController.webView.url, inactiveFirstURL)
+        XCTAssertEqual(secondController.webView.url, inactiveSecondURL)
+        model.selectWorkspace(selectedWorkspaceID)
+        model.selectWorkspace(inactiveWorkspaceID)
+        XCTAssertTrue(model.browserController(for: inactiveFirstSessionID) === firstController)
+        XCTAssertTrue(model.browserController(for: inactiveSecondSessionID) === secondController)
+    }
+
+    func testBrowserRouteIntoInactiveWorkspaceStaysUnloadedUntilSelection() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let selectedWorkspaceID = model.store.selectedWorkspaceID
+        model.createWorkspace()
+        let inactiveWorkspaceID = model.store.selectedWorkspaceID
+        model.selectWorkspace(selectedWorkspaceID)
+        let route = try XCTUnwrap(
+            MyTermBrowserLauncher.browserRoute(
+                for: inactiveWorkspaceID,
+                url: try XCTUnwrap(URL(string: "https://routed-inactive.example"))
+            )
+        )
+
+        model.open([route])
+        let browser = try XCTUnwrap(model.workspaces.first(where: { $0.id == inactiveWorkspaceID })?.browserSessions.first)
+        XCTAssertNil(model.browserController(for: browser.id))
+        model.selectWorkspace(inactiveWorkspaceID)
+        XCTAssertNotNil(model.browserController(for: browser.id))
+    }
+
+    func testApplicationTerminationFlushesBrowserURLAndLeavesInactiveBrowserURLWithoutController() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let firstPage = directory.appendingPathComponent("first.html")
+        try Data("<html><body>first</body></html>".utf8).write(to: firstPage)
+
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: nil,
+            startsTerminalProcesses: false
+        )
+        model.createBrowserTab()
+        let browserTab = try XCTUnwrap(model.selectedTab)
+        let browserSession = try XCTUnwrap(browserTab.browserSession)
+        let controller = try XCTUnwrap(model.browserController(for: browserSession.id))
+        try controller.load(url: firstPage)
+        try await waitForBrowserURL(controller, firstPage)
+
+        let activeWorkspaceID = model.store.selectedWorkspaceID
+        model.createWorkspace()
+        let inactiveWorkspaceID = model.store.selectedWorkspaceID
+        let inactiveGroupID = model.selectedWorkspace.focusedTabGroupID
+        let inactiveURL = try XCTUnwrap(URL(string: "https://inactive.example/stored"))
+        let inactiveTabID = try model.store.addBrowserTab(
+            to: inactiveWorkspaceID,
+            tabGroupID: inactiveGroupID,
+            url: inactiveURL
+        )
+        let inactiveSessionID = try XCTUnwrap(
+            model.store.selectedWorkspace.tab(groupID: inactiveGroupID, tabID: inactiveTabID)?.browserSession?.id
+        )
+        model.selectWorkspace(activeWorkspaceID)
+        XCTAssertNil(model.browserController(for: inactiveSessionID))
+
+        let delegate = MyTermApplicationDelegate()
+        delegate.connect(model: model)
+        delegate.applicationWillTerminate(
+            Notification(name: NSApplication.willTerminateNotification)
+        )
+
+        let persisted = try WorkspaceStore(
+            persistenceURL: MyTermChannel.development.persistenceURL(applicationSupportDirectory: directory)
+        )
+        XCTAssertEqual(
+            persisted.selectedWorkspace.selectedTab?.browserSession?.url,
+            firstPage
+        )
+        XCTAssertEqual(
+            persisted.workspaces.first(where: { $0.id == inactiveWorkspaceID })?.browserSessions.first?.url,
+            inactiveURL
+        )
+    }
+
+    private func waitForBrowserURL(
+        _ controller: BrowserSessionController,
+        _ expectedURL: URL
+    ) async throws {
+        for _ in 0..<100 {
+            if controller.webView.url?.standardizedFileURL == expectedURL.standardizedFileURL {
+                return
+            }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTFail("Timed out waiting for browser URL \(expectedURL.absoluteString)")
+    }
+
     func testMovingWorkspaceToItsCurrentFolderDoesNotReorderIt() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
