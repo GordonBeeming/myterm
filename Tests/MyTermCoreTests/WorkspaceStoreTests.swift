@@ -741,6 +741,49 @@ final class WorkspaceStoreTests: XCTestCase {
         ))
     }
 
+    func testBrowserURLBatchUpdatesAreAtomicAndRejectNonBrowserTabs() throws {
+        let url = temporaryURL()
+        let store = try WorkspaceStore(persistenceURL: url)
+        let workspaceID = store.selectedWorkspaceID
+        let groupID = store.selectedWorkspace.focusedTabGroupID
+        let terminalTabID = try XCTUnwrap(store.selectedWorkspace.selectedTabID)
+        let firstBrowserTabID = try store.addBrowserTab(
+            to: workspaceID,
+            tabGroupID: groupID,
+            url: try XCTUnwrap(URL(string: "https://first.example/old"))
+        )
+        let secondBrowserTabID = try store.addBrowserTab(
+            to: workspaceID,
+            tabGroupID: groupID,
+            url: try XCTUnwrap(URL(string: "https://second.example/old"))
+        )
+
+        XCTAssertThrowsError(try store.updateBrowserURLs([
+            (workspaceID, groupID, firstBrowserTabID, try XCTUnwrap(URL(string: "https://first.example/new"))),
+            (workspaceID, groupID, terminalTabID, try XCTUnwrap(URL(string: "https://wrong.example")))
+        ])) { error in
+            XCTAssertEqual(error as? WorkspaceStoreError, .browserTabRequired(terminalTabID))
+        }
+        XCTAssertEqual(
+            store.selectedWorkspace.tab(groupID: groupID, tabID: firstBrowserTabID)?.browserSession?.url,
+            try XCTUnwrap(URL(string: "https://first.example/old"))
+        )
+
+        try store.updateBrowserURLs([
+            (workspaceID, groupID, firstBrowserTabID, try XCTUnwrap(URL(string: "https://first.example/new"))),
+            (workspaceID, groupID, secondBrowserTabID, try XCTUnwrap(URL(string: "https://second.example/new")))
+        ])
+        let restored = try WorkspaceStore(persistenceURL: url)
+        XCTAssertEqual(
+            restored.selectedWorkspace.tab(groupID: groupID, tabID: firstBrowserTabID)?.browserSession?.url,
+            try XCTUnwrap(URL(string: "https://first.example/new"))
+        )
+        XCTAssertEqual(
+            restored.selectedWorkspace.tab(groupID: groupID, tabID: secondBrowserTabID)?.browserSession?.url,
+            try XCTUnwrap(URL(string: "https://second.example/new"))
+        )
+    }
+
     func testClosingFinalTabCollapsesGroupThenAppliesWorkspaceLifecycle() throws {
         let store = try WorkspaceStore(persistenceURL: temporaryURL())
         let workspaceID = store.selectedWorkspaceID

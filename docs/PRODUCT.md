@@ -10,7 +10,7 @@ MyTerm is built first for Gordon, who works across many software repositories an
 
 ## Product Purpose
 
-MyTerm is a fast, dependable macOS workspace for terminal and browser pane groups. Each group owns its tabs and selected tab, so a split does not force unrelated work into one workspace-wide tab strip. It restores the working layout and divider proportions after a restart, and remains responsive with dozens of live sessions. Browser tabs also keep their website data, so signing in does not become a daily ritual.
+MyTerm is a fast, dependable macOS workspace for terminal and browser pane groups. Each group owns its tabs and selected tab, so a split does not force unrelated work into one workspace-wide tab strip. It restores the working layout and divider proportions after a restart, and remains responsive with dozens of live sessions. When you first focus a workspace, its browser tabs return to their last pages. Browser tabs also keep their website data, so signing in does not become a daily ritual.
 
 The first release succeeds when it can replace Gordon's daily cmux workflow without bringing across cmux's unrelated features or instability.
 
