@@ -12,6 +12,19 @@ final class WorkspaceStoreTests: XCTestCase {
             .appendingPathExtension("json")
     }
 
+    private func removeSelectedWorkspace(_ store: WorkspaceStore) throws {
+        try store.removeWorkspace(store.selectedWorkspaceID)
+    }
+
+    private func closeSelectedWorkspace(_ store: WorkspaceStore) throws -> WorkspaceLifecycleChange {
+        let workspace = store.selectedWorkspace
+        return try store.closeTab(
+            workspaceID: workspace.id,
+            tabGroupID: workspace.focusedTabGroupID,
+            tabID: try XCTUnwrap(workspace.selectedTabID)
+        )
+    }
+
     func testDefaultWorkspaceIsV2AndHasOneNonemptyFocusedGroup() throws {
         let url = temporaryURL()
         let store = try WorkspaceStore(persistenceURL: url)
@@ -811,6 +824,152 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(lifecycle.removedWorkspace?.id, workspaceID)
         XCTAssertNotNil(lifecycle.replacementWorkspace)
         XCTAssertEqual(store.workspaces.count, 1)
+    }
+
+    func testRemovingMiddleSiblingSelectsPreviousSibling() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let folderID = try store.createFolder(title: "Folder")
+        let firstID = try store.createWorkspace(title: "First", folderID: folderID)
+        let middleID = try store.createWorkspace(title: "Middle", folderID: folderID)
+        _ = try store.createWorkspace(title: "Last", folderID: folderID)
+        try store.selectWorkspace(middleID)
+
+        try removeSelectedWorkspace(store)
+
+        XCTAssertEqual(store.selectedWorkspaceID, firstID)
+    }
+
+    func testRemovingFirstSiblingSelectsFollowingSibling() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let folderID = try store.createFolder(title: "Folder")
+        let firstID = try store.createWorkspace(title: "First", folderID: folderID)
+        let secondID = try store.createWorkspace(title: "Second", folderID: folderID)
+        try store.selectWorkspace(firstID)
+
+        try removeSelectedWorkspace(store)
+
+        XCTAssertEqual(store.selectedWorkspaceID, secondID)
+    }
+
+    func testRemovingFinalSiblingSelectsBottomWorkspaceAboveSkippingEmptyFolders() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let aboveID = try store.createFolder(title: "Above")
+        _ = try store.createFolder(title: "Empty")
+        let removedFolderID = try store.createFolder(title: "Removed")
+        _ = try store.createWorkspace(title: "Above first", folderID: aboveID)
+        let aboveWorkspaceID = try store.createWorkspace(title: "Above bottom", folderID: aboveID)
+        let removedID = try store.createWorkspace(title: "Removed workspace", folderID: removedFolderID)
+        try store.selectWorkspace(removedID)
+
+        try removeSelectedWorkspace(store)
+
+        XCTAssertEqual(store.selectedWorkspaceID, aboveWorkspaceID)
+    }
+
+    func testSelectingCollapsedDestinationExpandsItsFolder() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let folderID = try store.createFolder(title: "Collapsed")
+        let firstID = try store.createWorkspace(title: "First", folderID: folderID)
+        let secondID = try store.createWorkspace(title: "Second", folderID: folderID)
+        try store.setFolderExpanded(folderID, isExpanded: false)
+        try store.selectWorkspace(firstID)
+
+        try removeSelectedWorkspace(store)
+
+        XCTAssertEqual(store.selectedWorkspaceID, secondID)
+        XCTAssertTrue(try XCTUnwrap(store.folders.first { $0.id == folderID }).isExpanded)
+    }
+
+    func testRemovingFinalTopFolderWorkspaceFallsDownward() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let topFolderID = try store.createFolder(title: "Top")
+        let bottomFolderID = try store.createFolder(title: "Bottom")
+        let topID = try store.createWorkspace(title: "Top workspace", folderID: topFolderID)
+        let bottomID = try store.createWorkspace(title: "Bottom first", folderID: bottomFolderID)
+        _ = try store.createWorkspace(title: "Bottom second", folderID: bottomFolderID)
+        try store.selectWorkspace(topID)
+
+        try removeSelectedWorkspace(store)
+
+        XCTAssertEqual(store.selectedWorkspaceID, bottomID)
+    }
+
+    func testUnfiledIsFinalSectionForDownwardFallback() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let unfiledID = store.selectedWorkspaceID
+        let folderID = try store.createFolder(title: "Folder")
+        let folderWorkspaceID = try store.createWorkspace(title: "Folder workspace", folderID: folderID)
+        try store.selectWorkspace(folderWorkspaceID)
+
+        try removeSelectedWorkspace(store)
+
+        XCTAssertEqual(store.selectedWorkspaceID, unfiledID)
+        XCTAssertEqual(store.workspaces.count, 1)
+    }
+
+    func testUnfiledFallsBackUpToNearestPopulatedFolder() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let unfiledID = store.selectedWorkspaceID
+        let folderID = try store.createFolder(title: "Folder")
+        let folderWorkspaceID = try store.createWorkspace(title: "Folder workspace", folderID: folderID)
+        try store.selectWorkspace(unfiledID)
+
+        try removeSelectedWorkspace(store)
+
+        XCTAssertEqual(store.selectedWorkspaceID, folderWorkspaceID)
+        XCTAssertFalse(store.workspaces.contains { $0.id == unfiledID })
+        XCTAssertEqual(store.workspaces.count, 1)
+    }
+
+    func testPinnedWorkspaceOrderingChoosesPinnedPredecessor() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let folderID = try store.createFolder(title: "Folder")
+        let unpinnedID = try store.createWorkspace(title: "Unpinned", folderID: folderID)
+        let pinnedID = try store.createWorkspace(title: "Pinned", folderID: folderID)
+        try store.setWorkspacePinned(pinnedID, isPinned: true)
+        try store.selectWorkspace(unpinnedID)
+
+        try removeSelectedWorkspace(store)
+
+        XCTAssertEqual(store.selectedWorkspaceID, pinnedID)
+    }
+
+    func testRemovingNonSelectedWorkspacePreservesSelectionAndExpansion() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let folderID = try store.createFolder(title: "Collapsed")
+        let selectedID = try store.createWorkspace(title: "Selected", folderID: folderID)
+        let removedID = try store.createWorkspace(title: "Removed", folderID: folderID)
+        try store.setFolderExpanded(folderID, isExpanded: false)
+        try store.selectWorkspace(selectedID)
+
+        try store.removeWorkspace(removedID)
+
+        XCTAssertEqual(store.selectedWorkspaceID, selectedID)
+        XCTAssertFalse(try XCTUnwrap(store.folders.first { $0.id == folderID }).isExpanded)
+    }
+
+    func testFinalTabClosureUsesTheSameWorkspaceSuccessor() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let folderID = try store.createFolder(title: "Folder")
+        let firstID = try store.createWorkspace(title: "First", folderID: folderID)
+        let secondID = try store.createWorkspace(title: "Second", folderID: folderID)
+        try store.selectWorkspace(firstID)
+
+        let lifecycle = try closeSelectedWorkspace(store)
+
+        XCTAssertEqual(lifecycle.removedWorkspace?.id, firstID)
+        XCTAssertEqual(lifecycle.selectedWorkspaceID, secondID)
+        XCTAssertNil(lifecycle.replacementWorkspace)
+    }
+
+    func testRemovingOnlyWorkspaceCreatesReplacement() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let removedID = store.selectedWorkspaceID
+
+        try removeSelectedWorkspace(store)
+
+        XCTAssertEqual(store.workspaces.count, 1)
+        XCTAssertNotEqual(store.selectedWorkspaceID, removedID)
     }
 
     func testFoldersWorkspaceOrderingAndScopedSettingsStillPersist() throws {
