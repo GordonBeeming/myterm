@@ -520,7 +520,9 @@ public final class WorkspaceStore {
     }
 
     public func removeWorkspace(_ workspaceID: WorkspaceID) throws {
-        try mutate { $0.workspaces.remove(at: try workspaceIndex(workspaceID, in: $0)) }
+        try mutate { snapshot in
+            _ = try removeWorkspace(workspaceID, from: &snapshot)
+        }
     }
 
     public func selectWorkspace(_ workspaceID: WorkspaceID) throws {
@@ -810,13 +812,9 @@ public final class WorkspaceStore {
                 workspace.repair()
                 snapshot.workspaces[workspaceIndex] = workspace
             } else {
-                removedWorkspace = snapshot.workspaces.remove(at: workspaceIndex)
-                if snapshot.workspaces.isEmpty {
-                    let replacement = Workspace(title: "Workspace")
-                    snapshot.workspaces = [replacement]
-                    snapshot.selectedWorkspaceID = replacement.id
-                    replacementWorkspace = replacement
-                }
+                let removal = try removeWorkspace(workspaceID, from: &snapshot)
+                removedWorkspace = removal.removedWorkspace
+                replacementWorkspace = removal.replacementWorkspace
             }
         }
         return WorkspaceLifecycleChange(
@@ -990,6 +988,98 @@ public final class WorkspaceStore {
         next.repair()
         try write(next, fileManager: .default)
         snapshot = next
+    }
+
+    private struct WorkspaceRemoval {
+        let removedWorkspace: Workspace
+        let replacementWorkspace: Workspace?
+    }
+
+    private func removeWorkspace(
+        _ workspaceID: WorkspaceID,
+        from snapshot: inout WorkspaceStoreSnapshot
+    ) throws -> WorkspaceRemoval {
+        let removedIndex = try workspaceIndex(workspaceID, in: snapshot)
+        let removedWorkspace = snapshot.workspaces[removedIndex]
+        let wasSelected = snapshot.selectedWorkspaceID == workspaceID
+        let originalWorkspaces = snapshot.workspaces
+        snapshot.workspaces.remove(at: removedIndex)
+
+        guard wasSelected else {
+            return WorkspaceRemoval(removedWorkspace: removedWorkspace, replacementWorkspace: nil)
+        }
+
+        if let successor = selectedSuccessor(
+            afterRemoving: removedWorkspace,
+            originalWorkspaces: originalWorkspaces,
+            snapshot: snapshot
+        ) {
+            snapshot.selectedWorkspaceID = successor.workspace.id
+            if let folderIndex = successor.folderIndex, !snapshot.folders[folderIndex].isExpanded {
+                snapshot.folders[folderIndex].isExpanded = true
+            }
+            return WorkspaceRemoval(removedWorkspace: removedWorkspace, replacementWorkspace: nil)
+        }
+
+        let replacement = Workspace(title: "Workspace")
+        snapshot.workspaces = [replacement]
+        snapshot.selectedWorkspaceID = replacement.id
+        return WorkspaceRemoval(removedWorkspace: removedWorkspace, replacementWorkspace: replacement)
+    }
+
+    private func selectedSuccessor(
+        afterRemoving removedWorkspace: Workspace,
+        originalWorkspaces: [Workspace],
+        snapshot: WorkspaceStoreSnapshot
+    ) -> (workspace: Workspace, folderIndex: Int?)? {
+        let originalSiblings = orderedWorkspaces(
+            originalWorkspaces.filter { $0.folderID == removedWorkspace.folderID }
+        )
+        let siblings = orderedWorkspaces(
+            snapshot.workspaces.filter { $0.folderID == removedWorkspace.folderID }
+        )
+        if let removedRenderedIndex = originalSiblings.firstIndex(where: { $0.id == removedWorkspace.id }) {
+            if removedRenderedIndex > 0 {
+                let preceding = originalSiblings[removedRenderedIndex - 1]
+                return (preceding, folderIndex(for: preceding, in: snapshot))
+            }
+            if removedRenderedIndex < originalSiblings.count - 1, !siblings.isEmpty {
+                let following = originalSiblings[removedRenderedIndex + 1]
+                return (following, folderIndex(for: following, in: snapshot))
+            }
+        }
+
+        let removedFolderIndex = removedWorkspace.folderID.flatMap { folderID in
+            snapshot.folders.firstIndex { $0.id == folderID }
+        } ?? snapshot.folders.count
+
+        if removedFolderIndex > 0 {
+            for index in stride(from: min(removedFolderIndex - 1, snapshot.folders.count - 1), through: 0, by: -1) {
+                if let workspace = orderedWorkspaces(snapshot.workspaces.filter { $0.folderID == snapshot.folders[index].id }).last {
+                    return (workspace, index)
+                }
+            }
+        }
+        if removedFolderIndex + 1 < snapshot.folders.count {
+            for index in (removedFolderIndex + 1)..<snapshot.folders.count {
+                if let workspace = orderedWorkspaces(snapshot.workspaces.filter { $0.folderID == snapshot.folders[index].id }).first {
+                    return (workspace, index)
+                }
+            }
+        }
+        if removedWorkspace.folderID != nil,
+           let workspace = orderedWorkspaces(snapshot.workspaces.filter { $0.folderID == nil }).first {
+            return (workspace, nil)
+        }
+        return nil
+    }
+
+    private func orderedWorkspaces(_ workspaces: [Workspace]) -> [Workspace] {
+        workspaces.filter(\.isPinned) + workspaces.filter { !$0.isPinned }
+    }
+
+    private func folderIndex(for workspace: Workspace, in snapshot: WorkspaceStoreSnapshot) -> Int? {
+        workspace.folderID.flatMap { folderID in snapshot.folders.firstIndex { $0.id == folderID } }
     }
 
     private func write(_ snapshot: WorkspaceStoreSnapshot, fileManager: FileManager) throws {
