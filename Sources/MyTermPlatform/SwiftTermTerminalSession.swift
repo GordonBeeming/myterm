@@ -214,7 +214,10 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
     nonisolated(unsafe) private var keyEventMonitor: Any?
     private var shouldFocusWhenAttachedToWindow = false
     private var paneIsActive = true
-    private var activeCaretColor: NSColor?
+    /// Colour the caret takes whenever this pane is active. Held separately because an
+    /// inactive pane parks `caretColor` at `.clear`, and a theme change while parked must
+    /// still be what the caret comes back as.
+    private var themeCaretColor: NSColor = .textColor
     private var wordSelectionInput = TerminalWordSelectionInputState()
     private var wordSelectionResolutionGeneration = 0
     private var emacsWordSelectionEnabled = true
@@ -224,11 +227,13 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         installKeyEventMonitor()
+        applyDefaultCaretColors()
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
         installKeyEventMonitor()
+        applyDefaultCaretColors()
     }
 
     deinit {
@@ -306,14 +311,19 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
     func setPaneActive(_ isActive: Bool) {
         guard paneIsActive != isActive else { return }
         paneIsActive = isActive
-        if isActive {
-            caretColor = activeCaretColor ?? .selectedControlColor
-            activeCaretColor = nil
-        } else {
-            activeCaretColor = caretColor
-            caretColor = .clear
-        }
+        updateCaretColor()
         needsDisplay = true
+    }
+
+    /// Seeds the caret from the system text colours so a view built before its first
+    /// `apply(runtimeConfiguration:)` never shows SwiftTerm's accent-coloured default.
+    private func applyDefaultCaretColors() {
+        caretTextColor = .textBackgroundColor
+        updateCaretColor()
+    }
+
+    private func updateCaretColor() {
+        caretColor = paneIsActive ? themeCaretColor : .clear
     }
 
     func apply(runtimeConfiguration: TerminalRuntimeConfiguration) {
@@ -325,8 +335,17 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
         emacsWordSelectionEnabled = runtimeConfiguration.emacsWordSelectionEnabled
         changeScrollback(runtimeConfiguration.scrollbackLines)
         getTerminal().setCursorStyle(runtimeConfiguration.appearance.cursor.swiftTermStyle)
-        nativeForegroundColor = runtimeConfiguration.appearance.foreground?.nsColor ?? .textColor
-        nativeBackgroundColor = runtimeConfiguration.appearance.background?.nsColor ?? .textBackgroundColor
+        let foreground = runtimeConfiguration.appearance.foreground?.nsColor ?? .textColor
+        let background = runtimeConfiguration.appearance.background?.nsColor ?? .textBackgroundColor
+        nativeForegroundColor = foreground
+        nativeBackgroundColor = background
+        // SwiftTerm fills the block caret with `caretColor` and redraws the covered glyph in
+        // `caretTextColor`, so tying those to the theme's text and background colours makes the
+        // caret an inverse block at full text contrast. Left unset, SwiftTerm defaults the caret
+        // to the macOS accent colour, which barely registers against a dark terminal background.
+        themeCaretColor = foreground
+        caretTextColor = background
+        updateCaretColor()
         needsDisplay = true
     }
 

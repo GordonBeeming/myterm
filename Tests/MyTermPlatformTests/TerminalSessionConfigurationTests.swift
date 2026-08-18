@@ -7,6 +7,17 @@ private final class FocusableTerminalTestView: NSView {
 }
 
 final class TerminalSessionConfigurationTests: XCTestCase {
+    // Channel values are full-scale so the expected NSColor can be written out directly
+    // instead of re-deriving MyTermPlatform's 16-bit-to-unit-interval conversion here.
+    private static let themedRuntimeConfiguration = TerminalRuntimeConfiguration(
+        appearance: TerminalAppearance(
+            foreground: TerminalColor(red: .max, green: 0, blue: 0),
+            background: TerminalColor(red: 0, green: 0, blue: .max)
+        )
+    )
+    private static let themeForegroundColor = NSColor(red: 1, green: 0, blue: 0, alpha: 1)
+    private static let themeBackgroundColor = NSColor(red: 0, green: 0, blue: 1, alpha: 1)
+
     @MainActor
     func testForegroundProcessDetectionIgnoresIdleShellAndFindsActiveJob() async throws {
         let session = try SwiftTermTerminalSession(
@@ -580,13 +591,40 @@ final class TerminalSessionConfigurationTests: XCTestCase {
     @MainActor
     func testInactivePaneHidesAndRestoresItsCaret() {
         let terminal = MyTermLocalProcessTerminalView(frame: .zero)
-        let activeColor = terminal.caretColor
+        terminal.apply(runtimeConfiguration: Self.themedRuntimeConfiguration)
+        XCTAssertEqual(terminal.caretColor, Self.themeForegroundColor)
 
         terminal.setPaneActive(false)
         XCTAssertEqual(terminal.caretColor, .clear)
 
         terminal.setPaneActive(true)
-        XCTAssertEqual(terminal.caretColor, activeColor)
+        XCTAssertEqual(terminal.caretColor, Self.themeForegroundColor)
+    }
+
+    @MainActor
+    func testCaretTakesTheThemeTextAndBackgroundColors() {
+        let terminal = MyTermLocalProcessTerminalView(frame: .zero)
+        terminal.apply(runtimeConfiguration: Self.themedRuntimeConfiguration)
+
+        XCTAssertEqual(terminal.caretColor, Self.themeForegroundColor)
+        XCTAssertEqual(terminal.caretTextColor, Self.themeBackgroundColor)
+
+        terminal.apply(runtimeConfiguration: TerminalRuntimeConfiguration())
+        XCTAssertEqual(terminal.caretColor, .textColor)
+        XCTAssertEqual(terminal.caretTextColor, .textBackgroundColor)
+    }
+
+    @MainActor
+    func testRethemingAnInactivePaneShowsTheNewCaretColorWhenItComesBack() {
+        let terminal = MyTermLocalProcessTerminalView(frame: .zero)
+        terminal.apply(runtimeConfiguration: TerminalRuntimeConfiguration())
+        terminal.setPaneActive(false)
+
+        terminal.apply(runtimeConfiguration: Self.themedRuntimeConfiguration)
+        XCTAssertEqual(terminal.caretColor, .clear)
+
+        terminal.setPaneActive(true)
+        XCTAssertEqual(terminal.caretColor, Self.themeForegroundColor)
     }
 
     @MainActor
