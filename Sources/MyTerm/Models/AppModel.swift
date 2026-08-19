@@ -4,6 +4,7 @@ import MyTermCore
 import MyTermPlatform
 import Observation
 import OSLog
+import UniformTypeIdentifiers
 
 enum TerminalSettingsScope: Equatable, Hashable, Sendable {
     case global
@@ -434,6 +435,49 @@ final class AppModel {
                 customTitle: title
             )
         }
+    }
+
+    func beginImportingWorkspaces() {
+        let panel = NSOpenPanel()
+        panel.title = "Import Workspaces"
+        panel.message = "Choose a workspace import file."
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let summary = importWorkspaces(from: url) else { return }
+        presentImportSummary(summary)
+    }
+
+    @discardableResult
+    func importWorkspaces(from url: URL) -> WorkspaceImportSummary? {
+        cancelPaneTabDrag()
+        var summary: WorkspaceImportSummary?
+        perform {
+            let data = try Data(contentsOf: url)
+            summary = try store.importWorkspaces(fromJSON: data)
+            maximizedTabGroupID = nil
+        }
+        return summary
+    }
+
+    private func presentImportSummary(_ summary: WorkspaceImportSummary) {
+        let alert = NSAlert()
+        alert.alertStyle = summary.warnings.isEmpty ? .informational : .warning
+        alert.messageText = "Imported \(summary.importedWorkspaceCount) workspace\(summary.importedWorkspaceCount == 1 ? "" : "s")"
+
+        var lines: [String] = []
+        lines.append("\(summary.importedTabCount) tab\(summary.importedTabCount == 1 ? "" : "s") added.")
+        if summary.createdFolderCount > 0 {
+            lines.append("\(summary.createdFolderCount) folder\(summary.createdFolderCount == 1 ? "" : "s") created.")
+        }
+        if summary.reusedFolderCount > 0 {
+            lines.append("\(summary.reusedFolderCount) existing folder\(summary.reusedFolderCount == 1 ? "" : "s") reused.")
+        }
+        lines.append(contentsOf: summary.warnings)
+        alert.informativeText = lines.joined(separator: "\n")
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     func beginCreatingFolder() {

@@ -18,6 +18,7 @@ public enum WorkspaceStoreError: Error, Equatable, LocalizedError, Sendable {
     case browserTabRequired(TabID)
     case terminalTabRequired(TabID)
     case invalidTabIndex(Int)
+    case invalidImportDocument(reason: String)
 
     public var errorDescription: String? {
         switch self {
@@ -37,6 +38,7 @@ public enum WorkspaceStoreError: Error, Equatable, LocalizedError, Sendable {
         case .browserTabRequired(let id): "Tab \(id) is not a browser tab."
         case .terminalTabRequired(let id): "Tab \(id) is not a terminal tab."
         case .invalidTabIndex(let index): "Tab index \(index) is invalid."
+        case .invalidImportDocument(let reason): "Workspaces could not be imported: \(reason)"
         }
     }
 }
@@ -349,6 +351,61 @@ public final class WorkspaceStore {
         let folder = WorkspaceFolder(title: title, color: color)
         try mutate { $0.folders.append(folder) }
         return folder.id
+    }
+
+    /// Adds the workspaces described by `data` to this store.
+    ///
+    /// The import always appends. Existing workspaces are never modified or removed, and every
+    /// imported identifier is freshly generated, so an import cannot collide with what is already
+    /// stored. Folders are matched to existing ones by title so repeat imports do not accumulate
+    /// duplicates.
+    @discardableResult
+    public func importWorkspaces(
+        fromJSON data: Data,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) throws -> WorkspaceImportSummary {
+        let document: WorkspaceImportDocument
+        do {
+            document = try JSONDecoder().decode(WorkspaceImportDocument.self, from: data)
+        } catch {
+            throw WorkspaceStoreError.invalidImportDocument(reason: error.localizedDescription)
+        }
+        guard document.version <= WorkspaceImportDocument.currentVersion else {
+            throw WorkspaceStoreError.invalidImportDocument(
+                reason: "version \(document.version) is newer than this version of myterm understands"
+            )
+        }
+        return try importWorkspaces(document, homeDirectory: homeDirectory)
+    }
+
+    @discardableResult
+    public func importWorkspaces(
+        _ document: WorkspaceImportDocument,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) throws -> WorkspaceImportSummary {
+        guard !document.workspaces.isEmpty else {
+            throw WorkspaceStoreError.invalidImportDocument(reason: "the document contains no workspaces")
+        }
+
+        var importer = WorkspaceImporter(homeDirectory: homeDirectory)
+        let converted = importer.convert(document, existingFolders: snapshot.folders)
+        guard let firstImported = converted.workspaces.first else {
+            throw WorkspaceStoreError.invalidImportDocument(reason: "no workspace could be read from the document")
+        }
+
+        try mutate {
+            $0.folders.append(contentsOf: converted.folders)
+            $0.workspaces.append(contentsOf: converted.workspaces)
+            $0.selectedWorkspaceID = firstImported.id
+        }
+
+        return WorkspaceImportSummary(
+            importedWorkspaceCount: converted.workspaces.count,
+            createdFolderCount: converted.folders.count,
+            reusedFolderCount: converted.reusedFolderCount,
+            importedTabCount: converted.tabCount,
+            warnings: importer.warnings
+        )
     }
 
     public func renameFolder(_ folderID: WorkspaceFolderID, title: String) throws {

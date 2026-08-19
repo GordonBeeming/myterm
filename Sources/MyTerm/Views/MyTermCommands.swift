@@ -114,6 +114,8 @@ struct MyTermCommands: Commands {
                 .shortcut(MyTermCommandShortcuts.newFolder)
             Button("Rename Workspace…") { startup.model?.beginRenamingSelectedWorkspace() }
                 .shortcut(MyTermCommandShortcuts.renameWorkspace)
+            Divider()
+            Button("Import Workspaces…") { startup.model?.beginImportingWorkspaces() }
             Button(startup.model?.decreaseZoomOrFontCommandTitle ?? "Decrease Workspace Font Size") {
                 startup.model?.decreaseZoomOrFontSize()
             }
