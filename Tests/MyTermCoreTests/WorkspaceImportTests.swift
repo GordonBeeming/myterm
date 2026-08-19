@@ -325,3 +325,62 @@ final class WorkspaceImportTests: XCTestCase {
         XCTAssertEqual(store.workspaces.last?.title, "API")
     }
 }
+
+extension WorkspaceImportTests {
+    func testStartupCommandsAreReportedAgainstTheirSession() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let summary = try store.importWorkspaces(
+            fromJSON: Data(
+                """
+                { "workspaces": [{ "title": "API", "tabs": [
+                  { "directory": "/a", "command": "claude --resume abc123" },
+                  { "directory": "/b" }
+                ] }] }
+                """.utf8
+            ),
+            homeDirectory: URL(fileURLWithPath: "/Users/example", isDirectory: true)
+        )
+
+        XCTAssertEqual(summary.startupCommands.count, 1)
+        let workspace = try XCTUnwrap(store.workspaces.last)
+        let firstSession = try XCTUnwrap(workspace.orderedGroups.first?.tabs.first?.terminalSession)
+        XCTAssertEqual(summary.startupCommands[firstSession.id], "claude --resume abc123")
+    }
+
+    func testStartupCommandsAreNotPersisted() throws {
+        let url = temporaryURL()
+        let store = try WorkspaceStore(persistenceURL: url)
+        try store.importWorkspaces(
+            fromJSON: Data(
+                #"{ "workspaces": [{ "title": "API", "tabs": [{ "directory": "/a", "command": "echo hi" }] }] }"#.utf8
+            ),
+            homeDirectory: URL(fileURLWithPath: "/Users/example", isDirectory: true)
+        )
+
+        XCTAssertFalse(try String(contentsOf: url, encoding: .utf8).contains("echo hi"))
+    }
+
+    func testCommandOnABrowserTabIsIgnored() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let summary = try store.importWorkspaces(
+            fromJSON: Data(
+                #"{ "workspaces": [{ "title": "Docs", "tabs": [{ "url": "https://example.com", "command": "echo hi" }] }] }"#.utf8
+            ),
+            homeDirectory: URL(fileURLWithPath: "/Users/example", isDirectory: true)
+        )
+
+        XCTAssertTrue(summary.startupCommands.isEmpty)
+    }
+
+    func testTabTitlesSurviveImport() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        try store.importWorkspaces(
+            fromJSON: Data(
+                #"{ "workspaces": [{ "title": "API", "tabs": [{ "directory": "/a", "title": "server" }] }] }"#.utf8
+            ),
+            homeDirectory: URL(fileURLWithPath: "/Users/example", isDirectory: true)
+        )
+
+        XCTAssertEqual(store.workspaces.last?.orderedGroups.first?.tabs.first?.customTitle, "server")
+    }
+}

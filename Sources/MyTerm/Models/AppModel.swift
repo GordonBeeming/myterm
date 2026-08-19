@@ -455,8 +455,16 @@ final class AppModel {
         var summary: WorkspaceImportSummary?
         perform {
             let data = try Data(contentsOf: url)
-            summary = try store.importWorkspaces(fromJSON: data)
+            let result = try store.importWorkspaces(fromJSON: data)
+            summary = result
             maximizedTabGroupID = nil
+            pendingStartupCommands.merge(result.startupCommands) { _, new in new }
+            // Imported workspaces have no running processes yet. Selecting one restores them, but
+            // the import selects a workspace itself, so start the selected one here.
+            if let workspace = store.workspaces.first(where: { $0.id == store.selectedWorkspaceID }) {
+                restoreRuntimeObjects(in: workspace)
+                restoreFocusedPane(in: workspace.id)
+            }
         }
         return summary
     }
@@ -473,6 +481,9 @@ final class AppModel {
         }
         if summary.reusedFolderCount > 0 {
             lines.append("\(summary.reusedFolderCount) existing folder\(summary.reusedFolderCount == 1 ? "" : "s") reused.")
+        }
+        if !summary.startupCommands.isEmpty {
+            lines.append("\(summary.startupCommands.count) tab\(summary.startupCommands.count == 1 ? "" : "s") will run a startup command.")
         }
         lines.append(contentsOf: summary.warnings)
         alert.informativeText = lines.joined(separator: "\n")
@@ -1755,6 +1766,12 @@ final class AppModel {
         restoreBrowserControllers(in: workspace)
     }
 
+    /// Commands from an import, waiting for their terminal to start.
+    ///
+    /// Held in memory rather than in workspace state: a startup command is how you re-enter a piece
+    /// of work once, not something that should re-run on every relaunch.
+    private var pendingStartupCommands: [TerminalSessionID: String] = [:]
+
     private func restoreTerminalSessions(in workspace: Workspace) {
         for group in workspace.orderedGroups {
             for tab in group.tabs {
@@ -1764,7 +1781,8 @@ final class AppModel {
                             session,
                             workspaceID: workspace.id,
                             tabGroupID: group.id,
-                            tabID: tab.id
+                            tabID: tab.id,
+                            initialCommand: pendingStartupCommands.removeValue(forKey: session.id)
                         )
                     }
                 } catch {

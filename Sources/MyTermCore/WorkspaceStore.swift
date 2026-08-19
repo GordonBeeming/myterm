@@ -404,6 +404,7 @@ public final class WorkspaceStore {
             createdFolderCount: converted.folders.count,
             reusedFolderCount: converted.reusedFolderCount,
             importedTabCount: converted.tabCount,
+            startupCommands: importer.startupCommands,
             warnings: importer.warnings
         )
     }

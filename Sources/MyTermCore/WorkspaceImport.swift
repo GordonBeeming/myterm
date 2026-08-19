@@ -110,11 +110,19 @@ public struct WorkspaceImportDocument: Decodable, Equatable, Sendable {
         /// A browser address. A tab carrying one becomes a browser tab.
         public var url: String?
         public var title: String?
+        /// A command to run once, when this tab's terminal first starts. Ignored on browser tabs.
+        public var command: String?
 
-        public init(directory: String? = nil, url: String? = nil, title: String? = nil) {
+        public init(
+            directory: String? = nil,
+            url: String? = nil,
+            title: String? = nil,
+            command: String? = nil
+        ) {
             self.directory = directory
             self.url = url
             self.title = title
+            self.command = command
         }
     }
 }
@@ -125,6 +133,11 @@ public struct WorkspaceImportSummary: Equatable, Sendable {
     public let createdFolderCount: Int
     public let reusedFolderCount: Int
     public let importedTabCount: Int
+    /// Commands to run when each imported terminal first starts, keyed by session.
+    ///
+    /// These are deliberately not persisted: a startup command describes how to re-enter a piece
+    /// of work once, not something that should re-run every time the app relaunches.
+    public let startupCommands: [TerminalSessionID: String]
     public let warnings: [String]
 
     public init(
@@ -132,12 +145,14 @@ public struct WorkspaceImportSummary: Equatable, Sendable {
         createdFolderCount: Int,
         reusedFolderCount: Int,
         importedTabCount: Int,
+        startupCommands: [TerminalSessionID: String] = [:],
         warnings: [String]
     ) {
         self.importedWorkspaceCount = importedWorkspaceCount
         self.createdFolderCount = createdFolderCount
         self.reusedFolderCount = reusedFolderCount
         self.importedTabCount = importedTabCount
+        self.startupCommands = startupCommands
         self.warnings = warnings
     }
 }
@@ -148,6 +163,7 @@ public struct WorkspaceImportSummary: Equatable, Sendable {
 struct WorkspaceImporter {
     let homeDirectory: URL
     private(set) var warnings: [String] = []
+    private(set) var startupCommands: [TerminalSessionID: String] = [:]
 
     init(homeDirectory: URL) {
         self.homeDirectory = homeDirectory
@@ -296,15 +312,28 @@ struct WorkspaceImporter {
             return .browser(url: url, customTitle: customTitle)
         }
 
+        let command = source.command?.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let directory = source.directory?.trimmingCharacters(in: .whitespacesAndNewlines),
               !directory.isEmpty else {
-            return .terminal(customTitle: customTitle)
+            return terminal(customTitle: customTitle, command: command)
         }
         guard let url = expandedDirectory(directory) else {
             warnings.append("Skipped a terminal tab with an unreadable directory: \(directory)")
             return nil
         }
-        return .terminal(workingDirectory: url, customTitle: customTitle)
+        return terminal(workingDirectory: url, customTitle: customTitle, command: command)
+    }
+
+    private mutating func terminal(
+        workingDirectory: URL? = nil,
+        customTitle: String?,
+        command: String?
+    ) -> Tab {
+        let tab = Tab.terminal(workingDirectory: workingDirectory, customTitle: customTitle)
+        if let command, !command.isEmpty, let session = tab.terminalSession {
+            startupCommands[session.id] = command
+        }
+        return tab
     }
 
     private func expandedDirectory(_ raw: String) -> URL? {

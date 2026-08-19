@@ -114,6 +114,19 @@ A split with a single child collapses into that child rather than being rejected
 | `directory` | Terminal working directory. Accepts `~/x`, `/x`, or `file:///x`. |
 | `url` | Makes the tab a browser tab. Takes precedence over `directory`. |
 | `title` | Optional custom tab title. |
+| `command` | A command to run once, when this tab's terminal first starts. Ignored on browser tabs. |
+
+`command` is how a tab comes back to work already in progress rather than to a bare prompt — resuming
+an agent session, starting a dev server, attaching to a log:
+
+```json
+{ "directory": "~/code/api", "title": "agent", "command": "claude --resume 9d9a9523" }
+```
+
+It runs **once**, when that terminal first starts, which is when the workspace is first selected
+after the import. It is deliberately not saved into workspace state: a startup command describes how
+to re-enter a piece of work, not something that should re-run on every relaunch. Import the document
+again if you want it to run again.
 
 A directory that no longer exists is not an error: the terminal opens in the workspace's configured
 new-session directory, exactly as it would when restoring saved state.
