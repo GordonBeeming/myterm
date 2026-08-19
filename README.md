@@ -35,6 +35,13 @@ When MyTerm upgrades legacy workspace state, it keeps the original file in an ad
 - **One app instance** handles launch requests. Opening a folder, script, SSH link, or web URL reuses the existing window instead of creating another app process.
 - **Compact native UI** keeps workspace and tab chrome out of the way. There is no agent-status layer or ornamental terminal dashboard.
 
+### Bringing workspaces in from elsewhere
+
+**Workspace → Import Workspaces…** adds workspaces from a JSON document, so a set of projects can be
+described in a file — or generated from another terminal's saved session — instead of being rebuilt
+by hand. The import only ever appends, and folders are matched by title so a repeat import does not
+duplicate them. See [docs/WORKSPACE_IMPORT.md](docs/WORKSPACE_IMPORT.md) for the format.
+
 ### Terminal links stay with the work
 
 Command-click any valid HTTP or HTTPS link in a terminal and MyTerm opens it as a browser pane beside that exact terminal. This works for localhost and remote sites alike.
