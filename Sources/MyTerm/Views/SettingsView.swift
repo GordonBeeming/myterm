@@ -93,6 +93,19 @@ struct SettingsView: View {
         }
     }
 
+    private var updatesFootnote: String {
+        var lines = ["Checks GitHub for a newer release once a day. Nothing is downloaded or installed for you."]
+        if let command = model.updates.upgradeCommand {
+            lines.append("Updating runs `\(command)` in a new tab.")
+        } else {
+            lines.append("This copy was not installed with Homebrew, so updating opens the release page.")
+        }
+        if let checked = model.updates.lastCheckedAt {
+            lines.append("Last checked \(checked.formatted(date: .abbreviated, time: .shortened)).")
+        }
+        return lines.joined(separator: " ")
+    }
+
     private var generalSettings: some View {
         Form {
             Section("Workspace appearance") {
@@ -108,6 +121,30 @@ struct SettingsView: View {
                 }
 
                 Text("Uses shorter workspace rows so more projects remain visible.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Updates") {
+                Toggle("Check for updates automatically", isOn: Binding(
+                    get: { model.updates.automaticallyChecks },
+                    set: { model.updates.automaticallyChecks = $0 }
+                ))
+
+                LabeledContent("Installed") {
+                    Text(model.updates.currentVersion.isEmpty ? "unknown" : model.updates.currentVersion)
+                        .foregroundStyle(.secondary)
+                }
+
+                HStack {
+                    Button("Check Now") { model.checkForUpdates() }
+                    if case .checking = model.updates.status {
+                        ProgressView().controlSize(.small)
+                    }
+                    Spacer()
+                }
+
+                Text(updatesFootnote)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

@@ -99,6 +99,10 @@ struct MyTermCommands: Commands {
     let startup: MyTermStartup
 
     var body: some Commands {
+        CommandGroup(after: .appInfo) {
+            Button("Check for Updates…") { startup.model?.checkForUpdates() }
+        }
+
         CommandGroup(replacing: .appSettings) {
             Button("Global Settings…") {
                 startup.model?.prepareSettings(for: .global)
