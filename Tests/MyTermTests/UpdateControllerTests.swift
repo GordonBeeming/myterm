@@ -141,6 +141,26 @@ final class UpdateControllerTests: XCTestCase {
         XCTAssertNil(controller(currentVersion: "0.25", defaults: store).status.release)
     }
 
+    func testOverlappingChecksRunOnceAndAgreeOnTheResult() async throws {
+        let calls = Counter()
+        let gate = Gate()
+        let controller = controller(defaults: try defaults(), fetch: { [json = releaseJSON(tag: "v0.24")] _ in
+            await calls.increment()
+            await gate.wait()
+            return json
+        })
+
+        async let first = controller.check()
+        async let second = controller.check()
+        await gate.open()
+        let results = await [first, second]
+
+        let callCount = await calls.value
+        XCTAssertEqual(callCount, 1, "the second caller should join the check already running")
+        XCTAssertEqual(results[0], results[1])
+        XCTAssertEqual(results[0].release?.version.description, "0.24")
+    }
+
     func testHomebrewCopyOffersTheUpgradeCommand() throws {
         let controller = controller(
             route: .homebrew(command: "brew upgrade --cask gordonbeeming/tap/myterm"),
@@ -162,4 +182,22 @@ final class UpdateControllerTests: XCTestCase {
 private actor Counter {
     private(set) var value = 0
     func increment() { value += 1 }
+}
+
+/// Holds a fetch open so both callers are genuinely in flight at the same time.
+private actor Gate {
+    private var isOpen = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        if isOpen { return }
+        await withCheckedContinuation { waiting.append($0) }
+    }
+
+    func open() {
+        isOpen = true
+        let resuming = waiting
+        waiting.removeAll()
+        for continuation in resuming { continuation.resume() }
+    }
 }

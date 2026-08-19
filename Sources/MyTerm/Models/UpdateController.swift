@@ -60,6 +60,7 @@ final class UpdateController {
     private let defaults: UserDefaults
     private let now: () -> Date
     private let poll = PollTimer()
+    private var inFlightCheck: Task<Status, Never>?
 
     init(
         channel: MyTermChannel = .active,
@@ -108,8 +109,21 @@ final class UpdateController {
         return command
     }
 
+    /// Concurrent callers join the check already running rather than starting a second one.
+    ///
+    /// "Check Now" during an automatic poll would otherwise leave two checks in flight, and
+    /// whichever response landed last would win — which is not necessarily the one asked for last.
     @discardableResult
     func check() async -> Status {
+        if let inFlightCheck { return await inFlightCheck.value }
+        let task = Task { @MainActor in await performCheck() }
+        inFlightCheck = task
+        let result = await task.value
+        inFlightCheck = nil
+        return result
+    }
+
+    private func performCheck() async -> Status {
         status = .checking
         do {
             let data = try await fetch(UpdateCheck.latestReleaseEndpoint)
