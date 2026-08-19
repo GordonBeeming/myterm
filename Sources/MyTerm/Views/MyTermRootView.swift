@@ -306,6 +306,18 @@ private struct WorkspaceSidebar: View {
                 .accessibilityLabel("Close selected workspace")
                 .help("Close Workspace")
                 Spacer()
+                if let release = model.updates.status.release {
+                    Button {
+                        model.presentAvailableUpdate()
+                    } label: {
+                        Label("Update to \(release.version)", systemImage: "arrow.down.circle.fill")
+                            .labelStyle(.iconOnly)
+                            .foregroundStyle(.tint)
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Update available, version \(release.version)")
+                    .help("Update Available — \(release.version)")
+                }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)

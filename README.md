@@ -41,6 +41,16 @@ When MyTerm upgrades legacy workspace state, it keeps the original file in an ad
 described in a file — or generated from another terminal's saved session — instead of being rebuilt
 by hand. The import only ever appends, and folders are matched by title so a repeat import does not
 duplicate them. See [docs/WORKSPACE_IMPORT.md](docs/WORKSPACE_IMPORT.md) for the format.
+### Staying current
+
+**myterm → Check for Updates…** compares this build against the newest published release, and the app
+checks once a day on its own. A waiting update shows as a quiet badge at the bottom of the sidebar —
+nothing appears while you are current, and nothing is ever downloaded or installed for you.
+
+Updating is handled by whatever installed the app. A Homebrew copy runs
+`brew upgrade --cask gordonbeeming/tap/myterm` in a new tab, so the upgrade happens in front of you
+rather than behind a progress bar; quit and reopen myterm once it finishes. Any other copy is sent to
+the release page. The automatic check can be turned off under **Updates** in Global Settings.
 
 ### Terminal links stay with the work
 

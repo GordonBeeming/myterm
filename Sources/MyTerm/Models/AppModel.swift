@@ -74,6 +74,7 @@ final class AppModel {
     var newFolderDraft = ""
     var settingsScope = TerminalSettingsScope.global
     private(set) var stateVersion = 0
+    let updates: UpdateController
 
     init(
         channel: MyTermChannel = .active,
@@ -89,7 +90,8 @@ final class AppModel {
         confirmClosingActiveProcesses: @escaping @MainActor (ActiveProcessClosePrompt) -> Bool = AppModel.presentActiveProcessClosePrompt,
         textFileOpenCommandRunner: @escaping TextFileOpenCommandRunner = AppModel.runTextFileOpenCommand,
         textFileOpenCommandAvailabilityChecker: @escaping TextFileOpenCommandAvailabilityChecker = AppModel.isExecutableAvailable,
-        externalFileOpener: @escaping ExternalFileOpener = AppModel.openExternally
+        externalFileOpener: @escaping ExternalFileOpener = AppModel.openExternally,
+        updates: UpdateController? = nil
     ) throws {
         self.channel = channel
         let supportDirectory = try applicationSupportDirectory ?? Self.applicationSupportDirectory()
@@ -107,6 +109,7 @@ final class AppModel {
         self.textFileOpenCommandAvailabilityChecker = textFileOpenCommandAvailabilityChecker
         self.externalFileOpener = externalFileOpener
         browserDataProfileResolver = BrowserDataProfileResolver(channel: channel)
+        self.updates = updates ?? UpdateController(channel: channel)
         if let recoveryNotice {
             Logger(subsystem: "com.gordonbeeming.myterm", category: "workspace-recovery").notice(
                 "Workspace state repaired: identifiers=\(recoveryNotice.identifierRepairCount, privacy: .public), structure=\(recoveryNotice.structuralRepairCount, privacy: .public), dropped=\(recoveryNotice.droppedElementCount, privacy: .public), migrated=\(recoveryNotice.didMigrate, privacy: .public), backups=\(recoveryNotice.backupURLs.count, privacy: .public)"
@@ -489,6 +492,68 @@ final class AppModel {
         alert.informativeText = lines.joined(separator: "\n")
         alert.addButton(withTitle: "OK")
         alert.runModal()
+    }
+
+    /// Menu-driven check. Automatic checks stay silent and speak through the sidebar badge only;
+    /// a check the user asked for always answers, including when there is nothing to report.
+    func checkForUpdates() {
+        Task { @MainActor in
+            switch await updates.check() {
+            case .available(let release): presentUpdateAvailable(release)
+            case .upToDate(let version): presentUpToDate(version)
+            case .failed(let reason): errorDescription = reason
+            case .idle, .checking: break
+            }
+        }
+    }
+
+    /// The sidebar badge and the menu item land in the same place once an update is known.
+    func presentAvailableUpdate() {
+        guard let release = updates.status.release else { return checkForUpdates() }
+        presentUpdateAvailable(release)
+    }
+
+    private func presentUpdateAvailable(_ release: AppRelease) {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = "Update available — \(release.version)"
+        let howItInstalls = updates.upgradeCommand.map {
+            "Updating runs `\($0)` in a new tab. Quit and reopen myterm once it finishes."
+        } ?? "This copy was not installed with Homebrew, so the release page has the download."
+        alert.informativeText = "You have \(updates.currentVersion).\n\n\(howItInstalls)"
+        alert.addButton(withTitle: updates.upgradeActionTitle)
+        // Without a Homebrew command to offer, the primary button already opens the release, and a
+        // separate "Release Notes" button would be a second way to do the identical thing.
+        let offersReleaseNotes = updates.upgradeCommand != nil
+        if offersReleaseNotes { alert.addButton(withTitle: "Release Notes") }
+        alert.addButton(withTitle: "Later")
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: startUpgrade(for: release)
+        case .alertSecondButtonReturn where offersReleaseNotes: _ = externalFileOpener(release.releaseURL)
+        default: break
+        }
+    }
+
+    private func presentUpToDate(_ version: AppVersion) {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = "myterm is up to date"
+        alert.informativeText = "You are running \(version), the newest published release."
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+
+    private func startUpgrade(for release: AppRelease) {
+        // Running the upgrade in a tab is the honest version of "update from the app": Homebrew
+        // owns the install, and the user watches it happen rather than trusting a progress bar.
+        guard let command = updates.upgradeCommand else {
+            _ = externalFileOpener(release.releaseURL)
+            return
+        }
+        createTerminalTab(
+            workingDirectory: FileManager.default.homeDirectoryForCurrentUser,
+            initialCommand: command
+        )
     }
 
     func beginCreatingFolder() {
