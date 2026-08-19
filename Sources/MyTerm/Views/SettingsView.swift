@@ -11,6 +11,7 @@ struct SettingsView: View {
     @State private var passkeyAccess = PasskeyAccessController()
     @State private var defaultTerminal = DefaultTerminalController()
     @State private var agentHooks = AgentHooksController()
+    @State private var installedBrowsers = ExternalBrowserCatalog.installedBrowsers()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -436,6 +437,42 @@ struct SettingsView: View {
                 }
 
                 Text("New browser tabs use this profile. Existing tabs keep their current profile.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Web links") {
+                ScopedSettingRow(
+                    model: model,
+                    scope: scope,
+                    title: "Open web links in",
+                    global: \TerminalPreferences.webLinkDestination,
+                    override: \TerminalPreferencesOverrides.webLinkDestination
+                ) { value in
+                    Picker("Open web links in", selection: value) {
+                        Text("MyTerm").tag(WebLinkDestination.myterm)
+                        Text("Default browser").tag(WebLinkDestination.systemDefaultBrowser)
+                        if !installedBrowsers.isEmpty {
+                            Divider()
+                            ForEach(installedBrowsers) { browser in
+                                Text(browser.name)
+                                    .tag(WebLinkDestination.application(bundleIdentifier: browser.bundleIdentifier))
+                            }
+                        }
+                        // Keep a browser that is no longer installed visible, so the setting still
+                        // reads as the choice that was made rather than as an empty picker.
+                        if case .application(let bundleIdentifier) = value.wrappedValue,
+                           !installedBrowsers.contains(where: { $0.bundleIdentifier == bundleIdentifier }) {
+                            Divider()
+                            Text("\(bundleIdentifier) (not installed)")
+                                .tag(WebLinkDestination.application(bundleIdentifier: bundleIdentifier))
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 220)
+                }
+
+                Text("Links opened from a terminal, and web addresses handed to MyTerm, go to this browser. New Browser Tab always opens MyTerm's own browser.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

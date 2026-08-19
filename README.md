@@ -79,6 +79,16 @@ Code session after installing the hooks.
 
 The state is not saved. After a relaunch, no tab carries a dot.
 
+### Send web links to Safari instead
+
+MyTerm's own browser is the default destination for web links. To use a real browser, set **Open web links in** in Browser Settings to **Default browser** or to a specific application, such as Safari or Google Chrome. The picker lists the browsers installed on this Mac.
+
+The setting follows the same three scopes as the other preferences, so one workspace can send its links to Safari while the rest keep using MyTerm.
+
+It applies to command-clicked terminal links, to links from tools that use the `BROWSER` launcher or the `open` shim, and to web addresses handed to MyTerm. **New Browser Tab** always opens MyTerm's own browser, and links clicked inside an existing browser pane stay in MyTerm.
+
+MyTerm never sends a link to itself. If the chosen browser is missing, or if MyTerm is the default browser, the link opens in MyTerm and the app reports why.
+
 ## Browser sessions and passkeys
 
 New browser tabs can remember cookies and website data at one of four scopes, selected in Settings:

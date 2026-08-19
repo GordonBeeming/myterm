@@ -24,6 +24,57 @@ public enum TerminalLineEditingMode: String, Codable, CaseIterable, Equatable, H
     case vi
 }
 
+/// Where a web link opens when MyTerm is asked to show one.
+public enum WebLinkDestination: Codable, Equatable, Hashable, Sendable {
+    case myterm
+    case systemDefaultBrowser
+    /// A named application, so the choice survives the app moving on disk.
+    case application(bundleIdentifier: String)
+
+    private enum CodingKeys: String, CodingKey {
+        case type
+        case bundleIdentifier
+    }
+
+    private enum Kind: String, Codable {
+        case myterm
+        case systemDefaultBrowser
+        case application
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        switch (try? container.decode(Kind.self, forKey: .type)) ?? .myterm {
+        case .myterm:
+            self = .myterm
+        case .systemDefaultBrowser:
+            self = .systemDefaultBrowser
+        case .application:
+            guard let bundleIdentifier = try? container.decode(String.self, forKey: .bundleIdentifier),
+                  !bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                self = .myterm
+                return
+            }
+            self = .application(bundleIdentifier: bundleIdentifier)
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .myterm:
+            try container.encode(Kind.myterm, forKey: .type)
+        case .systemDefaultBrowser:
+            try container.encode(Kind.systemDefaultBrowser, forKey: .type)
+        case .application(let bundleIdentifier):
+            try container.encode(Kind.application, forKey: .type)
+            try container.encode(bundleIdentifier, forKey: .bundleIdentifier)
+        }
+    }
+
+    public var opensInMyTerm: Bool { self == .myterm }
+}
+
 public enum TerminalShell: Codable, Equatable, Hashable, Sendable {
     case loginShell
     case custom(path: String)
@@ -131,6 +182,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
     public static let scrollbackLinesRange = 100...100_000
 
     public var browserDataScope: BrowserDataScope
+    public var webLinkDestination: WebLinkDestination
     public var textFileOpenCommand: String
     public var nativeTextFilePatterns: [String]
     public var browserFilePatterns: [String]
@@ -150,6 +202,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
 
     public init(
         browserDataScope: BrowserDataScope = .workspace,
+        webLinkDestination: WebLinkDestination = .myterm,
         textFileOpenCommand: String = TerminalPreferences.defaultTextFileOpenCommand,
         nativeTextFilePatterns: [String] = TerminalPreferences.defaultNativeTextFilePatterns,
         browserFilePatterns: [String] = TerminalPreferences.defaultBrowserFilePatterns,
@@ -168,6 +221,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         lineEditingMode: TerminalLineEditingMode = .emacs
     ) {
         self.browserDataScope = browserDataScope
+        self.webLinkDestination = webLinkDestination
         self.textFileOpenCommand = textFileOpenCommand.trimmingCharacters(in: .whitespacesAndNewlines)
         self.nativeTextFilePatterns = Self.normalizedNativeTextFilePatterns(nativeTextFilePatterns)
         self.browserFilePatterns = Self.normalizedFilePatterns(browserFilePatterns)
@@ -191,6 +245,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
     public func normalized() -> TerminalPreferences {
         TerminalPreferences(
             browserDataScope: browserDataScope,
+            webLinkDestination: webLinkDestination,
             textFileOpenCommand: textFileOpenCommand,
             nativeTextFilePatterns: nativeTextFilePatterns,
             browserFilePatterns: browserFilePatterns,
@@ -214,6 +269,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         var legacyContainer = encoder.container(keyedBy: LegacyCodingKeys.self)
         try container.encode(browserDataScope, forKey: .browserDataScope)
+        try container.encode(webLinkDestination, forKey: .webLinkDestination)
         try legacyContainer.encode(textFileOpenCommand, forKey: .markdownOpenCommand)
         try container.encode(nativeTextFilePatterns, forKey: .nativeTextFilePatterns)
         try container.encode(browserFilePatterns, forKey: .browserFilePatterns)
@@ -234,6 +290,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case browserDataScope
+        case webLinkDestination
         case textFileOpenCommand
         case nativeTextFilePatterns
         case browserFilePatterns
@@ -261,6 +318,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         let legacyContainer = try decoder.container(keyedBy: LegacyCodingKeys.self)
         self.init(
             browserDataScope: (try? container.decode(BrowserDataScope.self, forKey: .browserDataScope)) ?? .workspace,
+            webLinkDestination: (try? container.decode(WebLinkDestination.self, forKey: .webLinkDestination)) ?? .myterm,
             textFileOpenCommand: (try? container.decode(String.self, forKey: .textFileOpenCommand))
                 ?? (try? legacyContainer.decode(String.self, forKey: .markdownOpenCommand))
                 ?? Self.defaultTextFileOpenCommand,
@@ -331,6 +389,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
 
 public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendable {
     public var browserDataScope: BrowserDataScope?
+    public var webLinkDestination: WebLinkDestination?
     public var textFileOpenCommand: String?
     public var nativeTextFilePatterns: [String]?
     public var browserFilePatterns: [String]?
@@ -352,6 +411,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
 
     private enum CodingKeys: String, CodingKey {
         case browserDataScope
+        case webLinkDestination
         case textFileOpenCommand
         case nativeTextFilePatterns
         case browserFilePatterns
@@ -379,6 +439,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let legacyContainer = try decoder.container(keyedBy: LegacyCodingKeys.self)
         browserDataScope = try? container.decodeIfPresent(BrowserDataScope.self, forKey: .browserDataScope)
+        webLinkDestination = try? container.decodeIfPresent(WebLinkDestination.self, forKey: .webLinkDestination)
         textFileOpenCommand = (try? container.decodeIfPresent(String.self, forKey: .textFileOpenCommand))
             ?? (try? legacyContainer.decodeIfPresent(String.self, forKey: .markdownOpenCommand))
         nativeTextFilePatterns = try? container.decodeIfPresent([String].self, forKey: .nativeTextFilePatterns)
@@ -402,6 +463,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         var container = encoder.container(keyedBy: CodingKeys.self)
         var legacyContainer = encoder.container(keyedBy: LegacyCodingKeys.self)
         try container.encodeIfPresent(browserDataScope, forKey: .browserDataScope)
+        try container.encodeIfPresent(webLinkDestination, forKey: .webLinkDestination)
         try legacyContainer.encodeIfPresent(textFileOpenCommand, forKey: .markdownOpenCommand)
         try container.encodeIfPresent(nativeTextFilePatterns, forKey: .nativeTextFilePatterns)
         try container.encodeIfPresent(browserFilePatterns, forKey: .browserFilePatterns)
@@ -423,6 +485,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
     public func applying(to base: TerminalPreferences) -> TerminalPreferences {
         TerminalPreferences(
             browserDataScope: browserDataScope ?? base.browserDataScope,
+            webLinkDestination: webLinkDestination ?? base.webLinkDestination,
             textFileOpenCommand: textFileOpenCommand ?? base.textFileOpenCommand,
             nativeTextFilePatterns: nativeTextFilePatterns ?? base.nativeTextFilePatterns,
             browserFilePatterns: browserFilePatterns ?? base.browserFilePatterns,
