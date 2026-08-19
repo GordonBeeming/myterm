@@ -111,7 +111,7 @@ A split with a single child collapses into that child rather than being rejected
 
 | Field | Meaning |
 |---|---|
-| `directory` | Terminal working directory. Accepts `~/x`, `/x`, or `file:///x`. |
+| `directory` | Terminal working directory. Accepts `~/x`, `/x`, or `file:///x`. A relative path is rejected, because it would resolve against whatever directory the app happens to be running in. |
 | `url` | Makes the tab a browser tab. Takes precedence over `directory`. |
 | `title` | Optional custom tab title. |
 | `command` | A command to run once, when this tab's terminal first starts. Ignored on browser tabs. |
@@ -139,9 +139,11 @@ file:
 - An entry that cannot be read at all — a string where an object belongs — is skipped, and the rest
   of the document still imports.
 - A tab with an unreadable address or directory is skipped and reported.
-- Mismatched split weights fall back to even proportions and are reported.
+- Split `weights` that cannot be used — the wrong number of them, or a value that is zero or
+  negative — fall back to even proportions and are reported. Weights that merely do not sum to 1 are
+  normalized silently, so `[7, 3]` means the same as `[0.7, 0.3]`.
 
-Anything skipped is counted in the summary shown when the import finishes. These are fatal, and
+Every one of these appears in the summary shown when the import finishes. These are fatal, and
 nothing is imported:
 
 - The file is not valid JSON.

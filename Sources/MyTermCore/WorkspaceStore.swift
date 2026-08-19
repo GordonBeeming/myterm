@@ -364,9 +364,16 @@ public final class WorkspaceStore {
         fromJSON data: Data,
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
     ) throws -> WorkspaceImportSummary {
+        // LossyArray only counts what it drops when the tracker is in userInfo. Without it, a
+        // malformed entry disappears silently and the summary would claim a clean import.
+        let tracker = RecoveryDecodingTracker()
+        let decoder = JSONDecoder()
+        decoder.userInfo[.recoveryDecodingTracker] = tracker
         let document: WorkspaceImportDocument
         do {
-            document = try JSONDecoder().decode(WorkspaceImportDocument.self, from: data)
+            document = try decoder.decode(WorkspaceImportDocument.self, from: data)
+        } catch let error as DecodingError {
+            throw WorkspaceStoreError.invalidImportDocument(reason: Self.describe(error))
         } catch {
             throw WorkspaceStoreError.invalidImportDocument(reason: error.localizedDescription)
         }
@@ -375,19 +382,50 @@ public final class WorkspaceStore {
                 reason: "version \(document.version) is newer than this version of myterm understands"
             )
         }
-        return try importWorkspaces(document, homeDirectory: homeDirectory)
+        return try importWorkspaces(
+            document,
+            homeDirectory: homeDirectory,
+            droppedElementCount: tracker.droppedElementCount
+        )
+    }
+
+    /// `DecodingError.localizedDescription` is "The data couldn't be read…" for every failure,
+    /// which tells the reader nothing about which part of their document is wrong.
+    private static func describe(_ error: DecodingError) -> String {
+        func path(_ context: DecodingError.Context) -> String {
+            let keys = context.codingPath.map(\.stringValue).filter { !$0.isEmpty }
+            return keys.isEmpty ? "the document" : keys.joined(separator: ".")
+        }
+        switch error {
+        case .dataCorrupted(let context):
+            return context.codingPath.isEmpty
+                ? "the file is not valid JSON"
+                : "\(path(context)) is not valid"
+        case .keyNotFound(let key, let context):
+            return "\(path(context)) is missing \"\(key.stringValue)\""
+        case .typeMismatch(_, let context), .valueNotFound(_, let context):
+            return "\(path(context)) has the wrong type"
+        @unknown default:
+            return error.localizedDescription
+        }
     }
 
     @discardableResult
     public func importWorkspaces(
         _ document: WorkspaceImportDocument,
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        droppedElementCount: Int = 0
     ) throws -> WorkspaceImportSummary {
         guard !document.workspaces.isEmpty else {
             throw WorkspaceStoreError.invalidImportDocument(reason: "the document contains no workspaces")
         }
 
         var importer = WorkspaceImporter(homeDirectory: homeDirectory)
+        if droppedElementCount > 0 {
+            importer.recordWarning(
+                "Skipped \(droppedElementCount) entr\(droppedElementCount == 1 ? "y" : "ies") that could not be read."
+            )
+        }
         let converted = importer.convert(document, existingFolders: snapshot.folders)
         guard let firstImported = converted.workspaces.first else {
             throw WorkspaceStoreError.invalidImportDocument(reason: "no workspace could be read from the document")

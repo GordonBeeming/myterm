@@ -323,6 +323,78 @@ final class WorkspaceImportTests: XCTestCase {
 
         XCTAssertEqual(summary.importedWorkspaceCount, 1)
         XCTAssertEqual(store.workspaces.last?.title, "API")
+        XCTAssertEqual(summary.warnings, ["Skipped 1 entry that could not be read."])
+    }
+
+    func testWorkspaceWithoutTabsCountsTheFallbackTerminal() throws {
+        let store = try store()
+        let summary = try importing(#"{ "workspaces": [{ "title": "Scratch" }] }"#, into: store)
+
+        XCTAssertEqual(summary.importedTabCount, 1)
+    }
+
+    func testUnnormalizedWeightsAreNormalizedWithoutAWarning() throws {
+        let store = try store()
+        let summary = try importing(
+            """
+            { "workspaces": [{ "title": "Split", "layout": { "children": [
+              { "tabs": [{ "directory": "/a" }] },
+              { "tabs": [{ "directory": "/b" }] }
+            ], "weights": [7, 3] } }] }
+            """,
+            into: store
+        )
+
+        XCTAssertTrue(summary.warnings.isEmpty, "\(summary.warnings)")
+        guard case .split(_, _, _, let weights) = try XCTUnwrap(store.workspaces.last).layout else {
+            return XCTFail("expected a split layout")
+        }
+        XCTAssertEqual(weights, [0.7, 0.3])
+    }
+
+    /// JSON cannot express a non-finite number — `JSONDecoder` rejects `1e999` outright — so the
+    /// reachable bad-weight cases through this path are negative and zero values.
+    func testNonPositiveWeightsAreRejected() throws {
+        let store = try store()
+        let summary = try importing(
+            """
+            { "workspaces": [{ "title": "Split", "layout": { "children": [
+              { "tabs": [{ "directory": "/a" }] },
+              { "tabs": [{ "directory": "/b" }] }
+            ], "weights": [-1, 2] } }] }
+            """,
+            into: store
+        )
+
+        XCTAssertEqual(summary.warnings.count, 1)
+        guard case .split(_, _, _, let weights) = try XCTUnwrap(store.workspaces.last).layout else {
+            return XCTFail("expected a split layout")
+        }
+        XCTAssertEqual(weights, [0.5, 0.5])
+    }
+
+    func testRelativeDirectoryIsRejectedRatherThanResolvedAgainstTheProcess() throws {
+        let store = try store()
+        let summary = try importing(
+            #"{ "workspaces": [{ "title": "Rel", "tabs": [{ "directory": "code/api" }, { "directory": "/a" }] }] }"#,
+            into: store
+        )
+
+        XCTAssertEqual(summary.importedTabCount, 1)
+        XCTAssertEqual(summary.warnings.count, 1)
+        XCTAssertTrue(summary.warnings[0].contains("code/api"), summary.warnings[0])
+    }
+
+    func testDecodeFailureNamesTheOffendingField() throws {
+        let store = try store()
+        XCTAssertThrowsError(
+            try importing(#"{ "workspaces": [{ "title": "API" }], "folders": "nope" }"#, into: store)
+        ) { error in
+            guard case .invalidImportDocument(let reason) = error as? WorkspaceStoreError else {
+                return XCTFail("expected an invalidImportDocument error, got \(error)")
+            }
+            XCTAssertTrue(reason.contains("folders"), reason)
+        }
     }
 }
 

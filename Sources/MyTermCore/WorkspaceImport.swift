@@ -169,6 +169,10 @@ struct WorkspaceImporter {
         self.homeDirectory = homeDirectory
     }
 
+    mutating func recordWarning(_ warning: String) {
+        warnings.append(warning)
+    }
+
     /// Existing folders are passed in so a document can drop workspaces into a folder the store
     /// already has, matching on title, rather than creating a second folder with the same name.
     mutating func convert(
@@ -265,8 +269,10 @@ struct WorkspaceImporter {
                 if let tab = convertTab(source) { tabs.append(tab) }
             }
             // An empty group is legal: TabGroup fills in a single terminal tab, which is what
-            // someone writing `{"title": "Scratch"}` by hand expects to get.
-            return (.group(TabGroup(tabs: tabs)), tabs.count)
+            // someone writing `{"title": "Scratch"}` by hand expects to get. Count what the group
+            // ended up holding rather than what went in, so that fallback tab is not missed.
+            let group = TabGroup(tabs: tabs)
+            return (.group(group), group.tabs.count)
         case .split(let orientation, let children, let weights):
             var converted: [WorkspaceLayout] = []
             var count = 0
@@ -279,14 +285,15 @@ struct WorkspaceImporter {
                 // A split with one child is not a split. Collapse rather than reject it.
                 return (converted.first ?? .group(TabGroup(tabs: [])), count)
             }
-            let resolvedWeights: [Double]
-            if let weights, weights.count == converted.count, weights.allSatisfy({ $0 > 0 }) {
-                resolvedWeights = weights
-            } else {
-                if weights != nil {
-                    warnings.append("Ignored split weights that did not match the number of children.")
-                }
-                resolvedWeights = Array(repeating: 1.0 / Double(converted.count), count: converted.count)
+            // WorkspaceLayout owns what a valid weight set is — count, finiteness, positivity —
+            // and stores them normalized. Reuse that rather than keeping a second opinion here,
+            // which would drift and would let `[7, 3]` persist unnormalized.
+            let resolvedWeights = WorkspaceLayout.normalizedWeights(weights ?? [], count: converted.count)
+            // Only unusable weights are worth reporting. `[7, 3]` is a perfectly good ratio that
+            // simply gets normalized, and warning about it would be noise.
+            if let weights, !weights.isEmpty,
+               weights.count != converted.count || !weights.allSatisfy({ $0.isFinite && $0 > 0 }) {
+                warnings.append("Replaced split weights that could not be used: \(weights).")
             }
             return (
                 .split(
@@ -349,6 +356,9 @@ struct WorkspaceImporter {
                 .appendingPathComponent(String(raw.dropFirst(2)), isDirectory: true)
                 .standardizedFileURL
         }
+        // A relative path would resolve against whatever directory the app happens to be running
+        // in, which is not a location the document's author can predict. Require an absolute one.
+        guard raw.hasPrefix("/") else { return nil }
         return URL(fileURLWithPath: raw, isDirectory: true).standardizedFileURL
     }
 
