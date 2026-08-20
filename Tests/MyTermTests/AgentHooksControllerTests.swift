@@ -16,7 +16,7 @@ final class AgentHooksControllerTests: XCTestCase {
         let settings = try readSettings(at: url)
         let hooks = try XCTUnwrap(settings["hooks"] as? [String: Any])
         XCTAssertEqual(
-            Set(AgentHooksController.installedEvents(in: settings)),
+            Set(controller.installedEvents(in: settings)),
             ["UserPromptSubmit", "Stop", "Notification"]
         )
         let stop = try XCTUnwrap((hooks["Stop"] as? [[String: Any]])?.first)

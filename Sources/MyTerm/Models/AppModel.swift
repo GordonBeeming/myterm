@@ -51,9 +51,33 @@ final class AppModel {
     private(set) var browserControllers: [BrowserSessionID: BrowserSessionController] = [:]
     var browserAddressFocusRequest: BrowserAddressFocusRequest?
     var browserFindRequest: BrowserFindRequest?
-    /// Tabs whose agent finished, or asked a question, while the user was looking somewhere else.
+    /// What each tab's agent is doing. A tab with nothing to say is simply absent.
     /// Runtime only: an indicator that survived a relaunch would point at work the user has moved on from.
     var agentAttention: [TabID: AgentActivity] = [:]
+    let agentNotifications: AgentNotificationSettings
+    /// Whether MyTerm is the app the user is looking at. Injected so tests can be either.
+    let isApplicationActive: @MainActor () -> Bool
+    @ObservationIgnored private let makeAgentNotificationPoster: @MainActor () -> any AgentNotificationPosting
+    @ObservationIgnored private var createdAgentNotificationPoster: (any AgentNotificationPosting)?
+
+    /// Built the first time something needs it. Opening Notification Centre is a side effect worth
+    /// avoiding in a process that never posts anything, a test run above all.
+    var agentNotificationPoster: any AgentNotificationPosting {
+        if let createdAgentNotificationPoster { return createdAgentNotificationPoster }
+        let poster = makeAgentNotificationPoster()
+        poster.openTab = { [weak self] workspaceID, tabID in
+            self?.revealTab(tabID, in: workspaceID)
+        }
+        createdAgentNotificationPoster = poster
+        return poster
+    }
+
+    /// Called once at launch. A banner clicked while MyTerm was in the background needs the
+    /// delegate to already be in place, so the poster is built ahead of the first post.
+    func startAgentNotifications() {
+        guard agentNotifications.isEnabled else { return }
+        _ = agentNotificationPoster
+    }
     var paneTabDragSession: PaneTabDragSession?
     var paneTabDragRegistrations: [TabGroupID: PaneTabDragRegistration] = [:]
     var nextBrowserAddressFocusToken: UInt64 = 0
@@ -97,7 +121,10 @@ final class AppModel {
         textFileOpenCommandAvailabilityChecker: @escaping TextFileOpenCommandAvailabilityChecker = AppModel.isExecutableAvailable,
         externalFileOpener: @escaping ExternalFileOpener = AppModel.openExternally,
         externalWebOpener: @escaping ExternalWebOpener = AppModel.openInBrowserApplication,
-        updates: UpdateController? = nil
+        updates: UpdateController? = nil,
+        agentNotifications: AgentNotificationSettings? = nil,
+        makeAgentNotificationPoster: @escaping @MainActor () -> any AgentNotificationPosting = { UserNotificationPoster() },
+        isApplicationActive: @escaping @MainActor () -> Bool = { NSApp.isActive }
     ) throws {
         self.channel = channel
         let supportDirectory = try applicationSupportDirectory ?? Self.applicationSupportDirectory()
@@ -115,6 +142,9 @@ final class AppModel {
         self.textFileOpenCommandAvailabilityChecker = textFileOpenCommandAvailabilityChecker
         self.externalFileOpener = externalFileOpener
         self.externalWebOpener = externalWebOpener
+        self.agentNotifications = agentNotifications ?? AgentNotificationSettings(channel: channel)
+        self.makeAgentNotificationPoster = makeAgentNotificationPoster
+        self.isApplicationActive = isApplicationActive
         browserDataProfileResolver = BrowserDataProfileResolver(channel: channel)
         self.updates = updates ?? UpdateController(channel: channel)
         if let recoveryNotice {
@@ -673,7 +703,7 @@ final class AppModel {
                 restoreRuntimeObjects(in: workspace)
             }
             restoreFocusedPane(in: workspaceID)
-            clearAgentAttentionForVisibleTabs(in: workspaceID)
+            markVisibleTabsAsRead(in: workspaceID)
         }
     }
 
@@ -1201,7 +1231,7 @@ final class AppModel {
             if focusContent {
                 self.focusContent(of: tab)
             }
-            agentAttention.removeValue(forKey: tabID)
+            markAsRead(tabID: tabID)
         }
     }
 
@@ -2182,7 +2212,7 @@ final class AppModel {
             }
         case .agentActivity(let report):
             recordAgentActivity(
-                report.activity,
+                report,
                 workspaceID: workspaceID,
                 tabGroupID: tabGroupID,
                 tabID: tabID

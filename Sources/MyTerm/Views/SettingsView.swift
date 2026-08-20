@@ -10,7 +10,8 @@ struct SettingsView: View {
 
     @State private var passkeyAccess = PasskeyAccessController()
     @State private var defaultTerminal = DefaultTerminalController()
-    @State private var agentHooks = AgentHooksController()
+    @State private var claudeHooks = AgentHooksController(target: .claude)
+    @State private var codexHooks = AgentHooksController(target: .codex)
     @State private var installedBrowsers = ExternalBrowserCatalog.installedBrowsers()
 
     var body: some View {
@@ -174,39 +175,75 @@ struct SettingsView: View {
             }
 
             Section("Agent activity") {
-                Text("Mark a tab and its workspace when Claude Code finishes a turn, or asks a question, in a tab you are not looking at. The mark clears when you reach the tab.")
+                Text("Put a cook beside a tab whose agent is running. He stirs while the agent works, turns blue when it finishes, and turns purple when it has a question. He leaves once you have read the tab, and the tab goes back to its own icon.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
-                HStack(spacing: 12) {
-                    Button(agentHooks.isInstalled ? "Remove from Claude Code" : "Set Up Claude Code Hooks") {
-                        if agentHooks.isInstalled {
-                            agentHooks.remove()
-                        } else {
-                            agentHooks.install()
+                hookButton(for: claudeHooks)
+                hookButton(for: codexHooks)
+
+                Text("Each agent gets three hooks in its own file. They report through the pane's terminal and stay silent outside MyTerm, so other terminals are unaffected. Other tools' hooks in the same file are left alone, and removing takes out only what MyTerm wrote. Restart an agent session for the change to take effect.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Agent notifications") {
+                Toggle("Notify when an agent needs you", isOn: Binding(
+                    get: { model.agentNotifications.isEnabled },
+                    set: { isEnabled in
+                        model.agentNotifications.isEnabled = isEnabled
+                        // macOS only shows the permission prompt on request, so ask at the moment
+                        // the user says yes rather than at launch.
+                        if isEnabled {
+                            model.agentNotificationPoster.requestAuthorization()
                         }
                     }
+                ))
 
-                    if agentHooks.isInstalled {
-                        Label("Installed", systemImage: "checkmark.circle.fill")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                Picker("Name the notification after", selection: Binding(
+                    get: { model.agentNotifications.naming },
+                    set: { model.agentNotifications.naming = $0 }
+                )) {
+                    ForEach(AgentNotificationNaming.allCases, id: \.self) { naming in
+                        Text(naming.label).tag(naming)
                     }
                 }
+                .disabled(!model.agentNotifications.isEnabled)
 
-                if case .failed(let message) = agentHooks.state {
-                    Label(message, systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                        .accessibilityLabel("Agent hooks error: \(message)")
-                }
-
-                Text("This writes three hooks to ~/.claude/settings.json, and removes only those. They report through the pane's terminal and stay silent outside MyTerm, so other terminals are unaffected. Restart a Claude Code session for the change to take effect.")
+                Text("A banner arrives only while MyTerm is not the app in front, and carries a swatch of the workspace's folder colour. Clicking it opens the tab. This applies to the whole app and is not inherited by folders or workspaces.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
+    }
+
+    @ViewBuilder
+    private func hookButton(for hooks: AgentHooksController) -> some View {
+        HStack(spacing: 12) {
+            Button(hooks.isInstalled
+                ? "Remove from \(hooks.target.displayName)"
+                : "Set Up \(hooks.target.displayName) Hooks") {
+                if hooks.isInstalled {
+                    hooks.remove()
+                } else {
+                    hooks.install()
+                }
+            }
+
+            if hooks.isInstalled {
+                Label("Installed in \(hooks.target.fileDescription)", systemImage: "checkmark.circle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+
+        if case .failed(let message) = hooks.state {
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .font(.footnote)
+                .foregroundStyle(.red)
+                .accessibilityLabel("\(hooks.target.displayName) hooks error: \(message)")
+        }
     }
 
     private var terminalSettings: some View {
