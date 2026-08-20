@@ -6,7 +6,8 @@ import MyTermCore
 @MainActor
 final class AgentAttentionTests: XCTestCase {
     func testATabTheUserCannotSeeIsMarkedUntilTheyReachIt() throws {
-        let model = try makeModel()
+        let harness = try makeHarness()
+        let model = harness.model
         let firstWorkspace = model.selectedWorkspace
         let group = try XCTUnwrap(firstWorkspace.orderedGroups.first)
         let tabID = group.selectedTabID
@@ -14,118 +15,172 @@ final class AgentAttentionTests: XCTestCase {
         model.createWorkspace()
         XCTAssertNotEqual(model.selectedWorkspace.id, firstWorkspace.id)
 
-        model.recordAgentActivity(
-            .finished,
-            workspaceID: firstWorkspace.id,
-            tabGroupID: group.id,
-            tabID: tabID
-        )
-        XCTAssertEqual(model.agentActivity(forTab: tabID), .finished)
-        XCTAssertTrue(model.needsAgentAttention(workspaceID: firstWorkspace.id))
-        XCTAssertFalse(model.needsAgentAttention(workspaceID: model.selectedWorkspace.id))
+        harness.record(.finished, workspaceID: firstWorkspace.id, tabGroupID: group.id, tabID: tabID)
+        XCTAssertEqual(model.agentAttention(forTab: tabID), .finished)
+        XCTAssertEqual(model.agentAttention(forWorkspace: firstWorkspace.id), .finished)
+        XCTAssertNil(model.agentAttention(forWorkspace: model.selectedWorkspace.id))
 
         model.selectWorkspace(firstWorkspace.id)
-        XCTAssertNil(model.agentActivity(forTab: tabID))
-        XCTAssertFalse(model.needsAgentAttention(workspaceID: firstWorkspace.id))
+        XCTAssertNil(
+            model.agentAttention(forTab: tabID),
+            "Reaching the tab retires the cook"
+        )
     }
 
-    func testTheTabInFrontOfTheUserIsNeverMarked() throws {
-        let model = try makeModel()
-        let workspace = model.selectedWorkspace
+    func testTheTabInFrontOfTheUserIsReadAsItArrives() throws {
+        let harness = try makeHarness()
+        let workspace = harness.model.selectedWorkspace
         let group = try XCTUnwrap(workspace.orderedGroups.first)
 
-        model.recordAgentActivity(
-            .finished,
-            workspaceID: workspace.id,
-            tabGroupID: group.id,
-            tabID: group.selectedTabID
-        )
-        XCTAssertNil(model.agentActivity(forTab: group.selectedTabID))
+        harness.record(.finished, workspaceID: workspace.id, tabGroupID: group.id, tabID: group.selectedTabID)
+        XCTAssertNil(harness.model.agentAttention(forTab: group.selectedTabID))
     }
 
-    func testAQuestionOutranksAFinishedTurnAndWorkingClearsBoth() throws {
-        let model = try makeModel()
+    func testTheSelectedTabIsStillMarkedWhileTheAppIsBehindAnother() throws {
+        let harness = try makeHarness()
+        harness.isApplicationActive = false
+        let workspace = harness.model.selectedWorkspace
+        let group = try XCTUnwrap(workspace.orderedGroups.first)
+
+        harness.record(.finished, workspaceID: workspace.id, tabGroupID: group.id, tabID: group.selectedTabID)
+        XCTAssertEqual(harness.model.agentAttention(forTab: group.selectedTabID), .finished)
+
+        harness.isApplicationActive = true
+        harness.model.markVisibleTabsAsRead()
+        XCTAssertNil(harness.model.agentAttention(forTab: group.selectedTabID))
+    }
+
+    func testAQuestionSurvivesBeingReadUntilTheAgentMovesOn() throws {
+        let harness = try makeHarness()
+        let model = harness.model
         let workspace = model.selectedWorkspace
         let group = try XCTUnwrap(workspace.orderedGroups.first)
         let tabID = group.selectedTabID
         model.createWorkspace()
 
-        func record(_ activity: AgentActivity) {
-            model.recordAgentActivity(
-                activity,
-                workspaceID: workspace.id,
-                tabGroupID: group.id,
-                tabID: tabID
-            )
-        }
+        harness.record(.awaitingInput, workspaceID: workspace.id, tabGroupID: group.id, tabID: tabID)
+        XCTAssertEqual(model.agentAttention(forTab: tabID), .awaitingInput)
 
-        record(.awaitingInput)
-        XCTAssertEqual(model.agentActivity(forTab: tabID), .awaitingInput)
+        model.selectWorkspace(workspace.id)
+        XCTAssertEqual(
+            model.agentAttention(forTab: tabID),
+            .awaitingInput,
+            "Looking at a question is not answering it"
+        )
 
-        record(.finished)
-        XCTAssertEqual(model.agentActivity(forTab: tabID), .awaitingInput, "A question still needs an answer")
-
-        record(.working)
-        XCTAssertNil(model.agentActivity(forTab: tabID))
-
-        record(.finished)
-        XCTAssertEqual(model.agentActivity(forTab: tabID), .finished)
-
-        record(.awaitingInput)
-        XCTAssertEqual(model.agentActivity(forTab: tabID), .awaitingInput)
+        harness.record(.working, workspaceID: workspace.id, tabGroupID: group.id, tabID: tabID)
+        XCTAssertEqual(model.agentAttention(forTab: tabID), .working)
     }
 
-    func testSelectingTheTabClearsItsMark() throws {
-        let model = try makeModel()
+    func testAWorkspaceRowShowsItsMostUrgentTab() throws {
+        let harness = try makeHarness()
+        let model = harness.model
         let workspace = model.selectedWorkspace
         let group = try XCTUnwrap(workspace.orderedGroups.first)
         let firstTabID = group.selectedTabID
         model.createTerminalTab()
         let secondTabID = try XCTUnwrap(model.selectedWorkspace.orderedGroups.first?.selectedTabID)
-        XCTAssertNotEqual(firstTabID, secondTabID)
+        model.createWorkspace()
 
-        model.recordAgentActivity(
-            .awaitingInput,
-            workspaceID: workspace.id,
-            tabGroupID: group.id,
-            tabID: firstTabID
-        )
-        XCTAssertEqual(model.agentActivity(forTab: firstTabID), .awaitingInput)
-
-        model.selectTab(firstTabID, in: group.id)
-        XCTAssertNil(model.agentActivity(forTab: firstTabID))
+        harness.record(.finished, workspaceID: workspace.id, tabGroupID: group.id, tabID: firstTabID)
+        harness.record(.awaitingInput, workspaceID: workspace.id, tabGroupID: group.id, tabID: secondTabID)
+        XCTAssertEqual(model.agentAttention(forWorkspace: workspace.id), .awaitingInput)
     }
 
     func testClosingAMarkedTabForgetsIt() throws {
-        let model = try makeModel()
+        let harness = try makeHarness()
+        let model = harness.model
         let workspace = model.selectedWorkspace
         let group = try XCTUnwrap(workspace.orderedGroups.first)
         let firstTabID = group.selectedTabID
         model.createTerminalTab()
 
-        model.recordAgentActivity(
-            .finished,
-            workspaceID: workspace.id,
-            tabGroupID: group.id,
-            tabID: firstTabID
-        )
-        XCTAssertEqual(model.agentActivity(forTab: firstTabID), .finished)
+        harness.record(.finished, workspaceID: workspace.id, tabGroupID: group.id, tabID: firstTabID)
+        XCTAssertEqual(model.agentAttention(forTab: firstTabID), .finished)
 
         model.closeTab(firstTabID)
-        XCTAssertNil(model.agentActivity(forTab: firstTabID))
-        XCTAssertFalse(model.needsAgentAttention(workspaceID: workspace.id))
+        XCTAssertNil(model.agentAttention(forTab: firstTabID))
+        XCTAssertNil(model.agentAttention(forWorkspace: workspace.id))
     }
 
-    private func makeModel() throws -> AppModel {
+    private func makeHarness() throws -> AgentTestHarness {
+        try AgentTestHarness { directory in
+            addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        }
+    }
+}
+
+/// An `AppModel` with the two things agent attention depends on under the test's control: whether
+/// MyTerm is the app in front, and where notifications go.
+@MainActor
+final class AgentTestHarness {
+    let model: AppModel
+    let poster: RecordingNotificationPoster
+    let notifications: AgentNotificationSettings
+
+    var isApplicationActive: Bool {
+        get { activeFlag.isActive }
+        set { activeFlag.isActive = newValue }
+    }
+
+    private let activeFlag: ActiveFlag
+
+    init(registerTeardown: (URL) -> Void) throws {
+        let poster = RecordingNotificationPoster()
+        let activeFlag = ActiveFlag()
+        self.poster = poster
+        self.activeFlag = activeFlag
+
         let directory = FileManager.default.temporaryDirectory
             .appending(path: "myterm-agent-attention-\(UUID().uuidString)", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
-        return try AppModel(
+        registerTeardown(directory)
+
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "myterm-agent-tests-\(UUID().uuidString)"))
+        notifications = AgentNotificationSettings(channel: .development, defaults: defaults)
+        model = try AppModel(
             channel: .development,
             applicationSupportDirectory: directory,
             terminalEngine: nil,
-            startsTerminalProcesses: false
+            startsTerminalProcesses: false,
+            agentNotifications: notifications,
+            makeAgentNotificationPoster: { poster },
+            isApplicationActive: { activeFlag.isActive }
         )
+    }
+
+    func record(
+        _ activity: AgentActivity,
+        agent: String = "claude",
+        workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
+        tabID: TabID
+    ) {
+        model.recordAgentActivity(
+            AgentActivityReport(agent: agent, activity: activity),
+            workspaceID: workspaceID,
+            tabGroupID: tabGroupID,
+            tabID: tabID
+        )
+    }
+}
+
+@MainActor
+final class ActiveFlag {
+    var isActive = true
+}
+
+@MainActor
+final class RecordingNotificationPoster: AgentNotificationPosting {
+    var openTab: ((WorkspaceID, TabID) -> Void)?
+    private(set) var authorizationRequests = 0
+    private(set) var posted: [AgentNotification] = []
+
+    func requestAuthorization() {
+        authorizationRequests += 1
+    }
+
+    func post(_ notification: AgentNotification) {
+        posted.append(notification)
     }
 }

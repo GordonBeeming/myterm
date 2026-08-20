@@ -106,7 +106,7 @@ struct WorkspaceTabStrip: View {
             source: source,
             isSelected: tab.id == tabGroup.selectedTabID,
             title: title(for: tab),
-            agentActivity: model.agentActivity(forTab: tab.id),
+            agentAttention: model.agentAttention(forTab: tab.id),
             select: { model.selectTab(tab.id, in: tabGroup.id) },
             rename: { model.beginRenamingTab(tab.id, in: tabGroup.id) },
             close: { model.closeTab(tab.id) },
@@ -235,7 +235,7 @@ private struct WorkspaceTabItem: View {
     let source: PaneTabDragSource
     let isSelected: Bool
     let title: String
-    let agentActivity: AgentActivity?
+    let agentAttention: AgentActivity?
     let select: () -> Void
     let rename: () -> Void
     let close: () -> Void
@@ -249,18 +249,24 @@ private struct WorkspaceTabItem: View {
 
     private var accessibilityValue: String {
         let state = isSelected ? "Selected tab" : "Tab"
-        guard let agentActivity else { return state }
-        return "\(state), \(agentActivity.attentionDescription)"
+        guard let agentAttention else { return state }
+        return "\(state), \(agentAttention.attentionDescription)"
     }
 
     var body: some View {
         ZStack(alignment: .trailing) {
             Button(action: select) {
                 HStack(spacing: 6) {
-                    Image(systemName: iconName)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .accessibilityHidden(true)
+                    // The cook stands in for the tab's own icon, so it is still there on the
+                    // selected tab and never lands under the close button.
+                    if let agentAttention {
+                        AgentChefBadge(state: agentAttention)
+                    } else {
+                        Image(systemName: iconName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+                    }
                     Text(title)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -285,15 +291,6 @@ private struct WorkspaceTabItem: View {
             .accessibilityValue(accessibilityValue)
             .accessibilityAddTraits(isSelected ? .isSelected : [])
             .help(title)
-
-            if let agentActivity, !isSelected, !isHovering {
-                Circle()
-                    .fill(.tint)
-                    .frame(width: 7, height: 7)
-                    .padding(.trailing, 9)
-                    .accessibilityHidden(true)
-                    .help(agentActivity.attentionDescription)
-            }
 
             Button(action: close) {
                 Image(systemName: "xmark")

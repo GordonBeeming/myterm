@@ -49,10 +49,17 @@ final class MyTermApplicationDelegate: NSObject, NSApplicationDelegate {
     func connect(model: AppModel?) {
         self.model = model
         urlDispatcher.connect(handler: model)
+        model?.startAgentNotifications()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        // Coming back to the app counts as reading whatever is on screen, the same as reaching the
+        // tab does. Without this the cook would stay blue in the tab the user is already looking at.
+        model?.markVisibleTabsAsRead()
     }
 
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {

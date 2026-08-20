@@ -71,3 +71,58 @@ public enum AgentActivityMarker {
         }
     }
 }
+
+/// How an activity report drives the cook that sits beside a tab.
+///
+/// There is no separate idle state. A session with nothing to say shows no cook at all, so the tab
+/// goes back to its own icon and the sidebar row goes quiet.
+extension AgentActivity {
+    /// What a tab is left showing once the user has looked at it.
+    ///
+    /// A question outlives being read, because reading a question does not answer it: the agent
+    /// clears it by reporting `working` when the user finally replies. A finished turn has been
+    /// seen, so the cook goes away.
+    public var afterReading: AgentActivity? {
+        switch self {
+        case .working, .awaitingInput:
+            self
+        case .finished:
+            nil
+        }
+    }
+
+    /// Whether the state is asking the user for something, which is what a notification announces.
+    public var needsAttention: Bool {
+        switch self {
+        case .finished, .awaitingInput:
+            true
+        case .working:
+            false
+        }
+    }
+
+    /// A workspace row shows one cook for every tab inside it. The most urgent one wins.
+    public static func mostUrgent(of activities: some Sequence<AgentActivity>) -> AgentActivity? {
+        activities.max { $0.urgency < $1.urgency }
+    }
+
+    private var urgency: Int {
+        switch self {
+        case .awaitingInput: 2
+        case .finished: 1
+        case .working: 0
+        }
+    }
+
+    /// What the state means, for tooltips and VoiceOver.
+    public var attentionDescription: String {
+        switch self {
+        case .working:
+            "Agent is working"
+        case .finished:
+            "Agent finished"
+        case .awaitingInput:
+            "Agent is waiting for you"
+        }
+    }
+}

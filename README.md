@@ -64,20 +64,54 @@ A tool that explicitly invokes `/usr/bin/open` bypasses MyTerm and can still ope
 
 ### Know when an agent needs you
 
-A tab shows a small dot when Claude Code finishes a turn, or asks a question, in a tab you are not
-looking at. The workspace row in the sidebar shows the same dot while any of its tabs carries one.
-Reaching the tab clears it. A tab you are already looking at is never marked.
+A tab whose agent is running shows a cook where its icon usually goes. He tells you what the agent
+is doing without you having to read the terminal:
 
-The indicator is off until you press **Set Up Claude Code Hooks** in General Settings. That writes
-three hooks to `~/.claude/settings.json`, for `UserPromptSubmit`, `Stop`, and `Notification`, and the
-same button removes them again. Nothing else in that file is changed.
+| The cook | What it means |
+| --- | --- |
+| Stirring | The agent is working. |
+| Blue | The agent finished its turn, and you have not seen it yet. |
+| Purple | The agent asked a question, and it is still unanswered. |
+| Gone | Nothing is happening. The tab goes back to its own icon. |
+
+The workspace row in the sidebar carries the same cook, showing whichever of its tabs is most
+urgent: a question, then a finish, then work in progress.
+
+Reading a tab is what quietens it. Reaching the tab, switching to its workspace, or coming back to
+MyTerm from another app all count. A question is the exception, because reading a question does not
+answer it: the cook stays purple until you reply and the agent goes back to work.
+
+The indicator is off until you press **Set Up Claude Code Hooks** or **Set Up Codex Hooks** in
+General Settings. Each writes three hooks to that agent's own file, and the same button removes them
+again:
+
+| Agent | File | Working | Finished | Question |
+| --- | --- | --- | --- | --- |
+| Claude Code | `~/.claude/settings.json` | `UserPromptSubmit` | `Stop` | `Notification` |
+| Codex | `~/.codex/hooks.json` | `UserPromptSubmit` | `Stop` | `PermissionRequest` |
+
+These files are shared with other tools. MyTerm marks its own commands with a trailing
+`# myterm-managed-hook` comment, adds nothing else, and removes only what carries that mark.
 
 Each hook writes an escape sequence to its own terminal, `ESC ]7337;agent=claude;event=finished ESC \`,
 and does nothing unless `MYTERM_PANE_ID` is set. Only MyTerm's terminals set it, so the hooks stay
-silent in every other terminal, and terminals that do not know the code ignore it. Restart a Claude
-Code session after installing the hooks.
+silent in every other terminal, and terminals that do not know the code ignore it. Restart the agent
+session after installing the hooks.
 
-The state is not saved. After a relaunch, no tab carries a dot.
+Any agent can drive the cook by writing that sequence itself, with its own name in `agent=`. The
+name is what the notification says, so a Codex report reads "Codex finished its turn."
+
+The state is not saved. After a relaunch, no tab carries a cook until its agent reports again.
+
+### Notifications when you are somewhere else
+
+**Notify when an agent needs you**, in General Settings, posts a banner when an agent finishes or
+asks a question. It only fires while MyTerm is not the app in front, because the cook has already
+said it when the window is on screen.
+
+The banner is named after the workspace, the tab, or both, whichever you pick, and it carries a
+swatch of the workspace's folder colour, so a glance is enough to tell which project wants you.
+A workspace outside a folder uses its own colour. Clicking the banner opens that tab.
 
 ### Send web links to Safari instead
 
