@@ -147,6 +147,45 @@ final class MyTermBrowserRoutingTests: XCTestCase {
         )
     }
 
+    func testEnvironmentPrefersAnInheritedOriginalZDOTDIROverTheParentsShimDirectory() throws {
+        // A pane nested two MyTerm builds deep inherits ZDOTDIR pointing at the parent's own
+        // shim directory, while MYTERM_ORIGINAL_ZDOTDIR already carries the true user directory
+        // the parent's shim chain resolved. The grandchild must use that inherited value, not
+        // mirror the parent's shim directory forward as though it were the user's own.
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let launcher = directory.appending(path: "myterm-browser", directoryHint: .notDirectory)
+        try Data("#!/bin/sh\nexit 0\n".utf8).write(to: launcher)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: launcher.path)
+
+        let nested = MyTermBrowserLauncher.environment(
+            executableURL: launcher,
+            baseEnvironment: [
+                "PATH": "/usr/bin",
+                "ZDOTDIR": "/Applications/ParentMyTerm.app/Contents/Resources/zsh",
+                "MYTERM_ORIGINAL_ZDOTDIR": "/Users/example/.config/zsh",
+            ]
+        )
+        XCTAssertEqual(
+            nested[MyTermBrowserLauncher.originalZDOTDIREnvironmentKey],
+            "/Users/example/.config/zsh"
+        )
+
+        // An empty inherited value is treated as absent, falling back to ZDOTDIR as before.
+        let emptyInherited = MyTermBrowserLauncher.environment(
+            executableURL: launcher,
+            baseEnvironment: [
+                "PATH": "/usr/bin",
+                "ZDOTDIR": "/Users/example/.config/zsh",
+                "MYTERM_ORIGINAL_ZDOTDIR": "",
+            ]
+        )
+        XCTAssertEqual(
+            emptyInherited[MyTermBrowserLauncher.originalZDOTDIREnvironmentKey],
+            "/Users/example/.config/zsh"
+        )
+    }
+
     func testBrowserRoutesRoundTripCompleteURLsIndependently() throws {
         let workspaceID = WorkspaceID()
         let tabID = TabID()

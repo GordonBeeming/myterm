@@ -66,7 +66,17 @@ enum MyTermBrowserLauncher {
         // Compare the standardized paths rather than the URLs. A trailing slash makes a file URL a
         // directory URL, which keeps the slash in absoluteString, so two spellings of one directory
         // are unequal as URLs while their paths match.
-        if let originalZDOTDIR = baseEnvironment[zdotdirEnvironmentKey], !originalZDOTDIR.isEmpty,
+        //
+        // Prefer an existing MYTERM_ORIGINAL_ZDOTDIR over ZDOTDIR as the source. A pane one level
+        // further nested (MyTerm-in-MyTerm-in-MyTerm) inherits ZDOTDIR pointing at the parent's own
+        // shim directory, not the user's real one — the parent's shim already resolved the true user
+        // directory into MYTERM_ORIGINAL_ZDOTDIR before re-pointing ZDOTDIR back at itself for the
+        // rest of its own chain. Falling back to ZDOTDIR here would mirror the parent's shim directory
+        // forward as though it were the user's, and the grandchild shim would source it as real
+        // dotfiles instead of skipping straight to HOME.
+        let originalZDOTDIRSource = baseEnvironment[originalZDOTDIREnvironmentKey].flatMap { $0.isEmpty ? nil : $0 }
+            ?? baseEnvironment[zdotdirEnvironmentKey]
+        if let originalZDOTDIR = originalZDOTDIRSource, !originalZDOTDIR.isEmpty,
            URL(fileURLWithPath: originalZDOTDIR).standardizedFileURL.path
              != URL(fileURLWithPath: zdotdir).standardizedFileURL.path {
             environment[originalZDOTDIREnvironmentKey] = originalZDOTDIR
