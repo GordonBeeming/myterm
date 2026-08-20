@@ -253,6 +253,13 @@ public final class WorkspaceStore {
     public private(set) var snapshot: WorkspaceStoreSnapshot
     public private(set) var loadReport: WorkspaceStoreLoadReport
 
+    /// Whether the store keeps its state in memory only.
+    ///
+    /// A repair rewrites the state file, and the backup beside it is the only copy of what the file
+    /// held before. When no backup could be written, every later write would destroy state the user
+    /// cannot get back, so the store stops writing for the rest of the session.
+    public var isPersistenceSuspended: Bool { !loadReport.backupFailureDescriptions.isEmpty }
+
     public var migrationBackupURL: URL { persistenceURL.appendingPathExtension("v1-backup") }
     public var recoveryBackupURL: URL { persistenceURL.appendingPathExtension("recovery-backup") }
 
@@ -332,11 +339,7 @@ public final class WorkspaceStore {
             snapshot = .initial()
             loadReport = .newStore
         }
-        // Writing the repaired snapshot destroys the original bytes. When nothing preserved them,
-        // leave the file untouched: the repair lives in memory, and the first real change saves it.
-        if loadReport.backupFailureDescriptions.isEmpty {
-            try write(snapshot, fileManager: fileManager)
-        }
+        try write(snapshot, fileManager: fileManager)
     }
 
     public func save() throws { try write(snapshot, fileManager: .default) }
@@ -1193,6 +1196,10 @@ public final class WorkspaceStore {
     }
 
     private func write(_ snapshot: WorkspaceStoreSnapshot, fileManager: FileManager) throws {
+        // A repair with a failed backup has no copy of the original bytes anywhere. Writing here
+        // would overwrite the only surviving copy of the pre-repair state, so the store stays
+        // in-memory-only for the rest of the session instead.
+        guard !isPersistenceSuspended else { return }
         do {
             try fileManager.createDirectory(
                 at: persistenceURL.deletingLastPathComponent(),

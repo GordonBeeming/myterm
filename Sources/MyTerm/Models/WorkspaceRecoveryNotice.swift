@@ -52,7 +52,9 @@ struct WorkspaceRecoveryNotice: Equatable, Sendable {
         }
         if !loadReport.backupFailureDescriptions.isEmpty {
             let reasons = loadReport.backupFailureDescriptions.joined(separator: " ")
-            sentences.append("MyTerm could not back up the original data: \(reasons)")
+            sentences.append(
+                "MyTerm could not back up the original data: \(reasons) Changes in this session will not be saved."
+            )
         }
         message = sentences.joined(separator: " ")
     }

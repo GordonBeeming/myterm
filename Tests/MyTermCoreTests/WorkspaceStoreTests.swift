@@ -515,6 +515,39 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: url), source)
     }
 
+    func testPersistenceStaysSuspendedForTheRestOfTheSessionAfterABackupFailure() throws {
+        let directory = try temporaryDirectory()
+        let url = directory.appendingPathComponent("workspace-state.json")
+        let source = try snapshotNeedingStructuralRepair()
+        try source.write(to: url)
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: directory.path)
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: 0o700],
+                ofItemAtPath: directory.path
+            )
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        let store = try WorkspaceStore(persistenceURL: url, now: Self.fixedBackupDate)
+
+        XCTAssertTrue(store.isPersistenceSuspended)
+        // A later write (a migration, a user action) must not throw and must not touch the file
+        // the failed backup left as the only copy of the original state.
+        XCTAssertNoThrow(try store.createWorkspace(title: "x"))
+        XCTAssertEqual(try Data(contentsOf: url), source)
+    }
+
+    func testACleanLoadIsNotSuspendedAndWritesNormally() throws {
+        let url = temporaryURL()
+
+        let store = try WorkspaceStore(persistenceURL: url, now: Self.fixedBackupDate)
+
+        XCTAssertFalse(store.isPersistenceSuspended)
+        try store.createWorkspace(title: "x")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+    }
+
     func testStorePreservesOriginalBytesBeforeStructuralV2Repair() throws {
         let url = temporaryURL()
         let workspaceID = WorkspaceID()

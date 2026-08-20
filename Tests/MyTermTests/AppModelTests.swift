@@ -2945,6 +2945,7 @@ final class AppModelTests: XCTestCase {
 
         XCTAssertTrue(notice.message.contains("repaired 1 identifier"))
         XCTAssertTrue(notice.message.contains("MyTerm could not back up the original data: The volume is full."))
+        XCTAssertTrue(notice.message.contains("Changes in this session will not be saved."))
     }
 
     func testAppModelPublishesRecoveryNoticeFromWorkspaceStoreLoadReport() throws {
