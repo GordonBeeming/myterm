@@ -253,60 +253,26 @@ private struct WorkspaceTabItem: View {
         return "\(state), \(agentAttention.attentionDescription)"
     }
 
+    // Each piece stays in its own property so the type checker takes them one at a time. Folded
+    // back into a single expression, this body outruns the solver's budget and fails to compile.
     var body: some View {
-        ZStack(alignment: .trailing) {
-            Button(action: select) {
-                HStack(spacing: 6) {
-                    // The cook stands in for the tab's own icon, so it is still there on the
-                    // selected tab and never lands under the close button.
-                    if let agentAttention {
-                        AgentChefBadge(state: agentAttention)
-                    } else {
-                        Image(systemName: iconName)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .accessibilityHidden(true)
-                    }
-                    Text(title)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .fontWeight(isSelected ? .medium : .regular)
-                    Spacer(minLength: 18)
-                }
-                .padding(.horizontal, 8)
-                .frame(width: 136, height: 26, alignment: .leading)
-                .contentShape(Rectangle())
-                .background {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(backgroundStyle)
-                }
-                .overlay {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .strokeBorder(borderStyle, lineWidth: isSelected ? 1 : 0.5)
-                }
-            }
-            .buttonStyle(.plain)
-            .focusable(false)
-            .accessibilityLabel(title)
-            .accessibilityValue(accessibilityValue)
-            .accessibilityAddTraits(isSelected ? .isSelected : [])
-            .help(title)
+        tabWithMenu
+            .accessibilityAction(named: "Move to previous pane", moveToPreviousPane)
+            .accessibilityAction(named: "Move to next pane", moveToNextPane)
+            .accessibilityAction(named: "Move to new left pane") { moveToNewPane(.left) }
+            .accessibilityAction(named: "Move to new right pane") { moveToNewPane(.right) }
+            .accessibilityAction(named: "Move to new pane above") { moveToNewPane(.top) }
+            .accessibilityAction(named: "Move to new pane below") { moveToNewPane(.bottom) }
+    }
 
-            Button(action: close) {
-                Image(systemName: "xmark")
-                    .font(.caption2.weight(.semibold))
-                    .frame(width: 18, height: 18)
-            }
-            .buttonStyle(.plain)
-            .frame(width: 22, height: 22)
-            .contentShape(Rectangle())
-            .focusable(false)
-            .opacity(isSelected || isHovering ? 1 : 0)
-            .allowsHitTesting(isSelected || isHovering)
-            .accessibilityHidden(!(isSelected || isHovering))
-            .accessibilityLabel("Close \(title) tab")
-            .help("Close Tab")
-            .padding(.trailing, 2)
+    private var tabWithMenu: some View {
+        interactiveTab.contextMenu { tabMenu }
+    }
+
+    private var interactiveTab: some View {
+        ZStack(alignment: .trailing) {
+            selectButton
+            closeButton
         }
         .frame(width: 136, height: 26)
         .contentShape(Rectangle())
@@ -320,26 +286,80 @@ private struct WorkspaceTabItem: View {
         }
         .onHover { isHovering = $0 }
         .onDisappear(perform: dragCancelled)
-        .contextMenu {
-            Button("Rename Tab…", action: rename)
-            Divider()
-            Button("Move to Previous Pane", action: moveToPreviousPane)
-            Button("Move to Next Pane", action: moveToNextPane)
-            Menu("Move to New Pane") {
-                Button("Left", action: { moveToNewPane(.left) })
-                Button("Right", action: { moveToNewPane(.right) })
-                Button("Above", action: { moveToNewPane(.top) })
-                Button("Below", action: { moveToNewPane(.bottom) })
-            }
-            Divider()
-            Button("Close Tab", action: close)
+    }
+
+    @ViewBuilder
+    private var tabMenu: some View {
+        Button("Rename Tab…", action: rename)
+        Divider()
+        Button("Move to Previous Pane", action: moveToPreviousPane)
+        Button("Move to Next Pane", action: moveToNextPane)
+        Menu("Move to New Pane") {
+            Button("Left", action: { moveToNewPane(.left) })
+            Button("Right", action: { moveToNewPane(.right) })
+            Button("Above", action: { moveToNewPane(.top) })
+            Button("Below", action: { moveToNewPane(.bottom) })
         }
-        .accessibilityAction(named: "Move to previous pane", moveToPreviousPane)
-        .accessibilityAction(named: "Move to next pane", moveToNextPane)
-        .accessibilityAction(named: "Move to new left pane") { moveToNewPane(.left) }
-        .accessibilityAction(named: "Move to new right pane") { moveToNewPane(.right) }
-        .accessibilityAction(named: "Move to new pane above") { moveToNewPane(.top) }
-        .accessibilityAction(named: "Move to new pane below") { moveToNewPane(.bottom) }
+        Divider()
+        Button("Close Tab", action: close)
+    }
+
+    private var selectButton: some View {
+        Button(action: select) {
+            HStack(spacing: 6) {
+                // The cook stands in for the tab's own icon, so it is still there on the
+                // selected tab and never lands under the close button.
+                if let agentAttention {
+                    AgentChefBadge(state: agentAttention)
+                } else {
+                    Image(systemName: iconName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                }
+                Text(title)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .fontWeight(isSelected ? .medium : .regular)
+                Spacer(minLength: 18)
+            }
+            .padding(.horizontal, 8)
+            .frame(width: 136, height: 26, alignment: .leading)
+            .contentShape(Rectangle())
+            .background {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(backgroundStyle)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .strokeBorder(borderStyle, lineWidth: isSelected ? 1 : 0.5)
+            }
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .accessibilityLabel(title)
+        .accessibilityValue(accessibilityValue)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .help(title)
+    }
+
+    /// Shown on the selected tab and under the pointer, and out of the way otherwise.
+    private var closeButton: some View {
+        Button(action: close) {
+            Image(systemName: "xmark")
+                .font(.caption2.weight(.semibold))
+                .frame(width: 18, height: 18)
+        }
+        .buttonStyle(.plain)
+        .frame(width: 22, height: 22)
+        .contentShape(Rectangle())
+        .focusable(false)
+        .opacity(isSelected || isHovering ? 1 : 0)
+        .allowsHitTesting(isSelected || isHovering)
+        .accessibilityHidden(!(isSelected || isHovering))
+        .accessibilityLabel("Close \(title) tab")
+        .help("Close Tab")
+        .padding(.trailing, 2)
     }
 
     private var backgroundStyle: Color {
