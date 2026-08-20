@@ -27,6 +27,7 @@ typealias TextFileOpenCommandRunner = @MainActor (
 
 typealias TextFileOpenCommandAvailabilityChecker = @MainActor (_ executable: String) -> Bool
 typealias ExternalFileOpener = @MainActor (_ url: URL) -> Bool
+typealias ExternalWebOpener = @MainActor (_ url: URL, _ applicationURL: URL) -> Bool
 
 @MainActor
 @Observable
@@ -45,6 +46,7 @@ final class AppModel {
     private let textFileOpenCommandRunner: TextFileOpenCommandRunner
     private let textFileOpenCommandAvailabilityChecker: TextFileOpenCommandAvailabilityChecker
     private let externalFileOpener: ExternalFileOpener
+    private let externalWebOpener: ExternalWebOpener
     private(set) var terminalSessions: [TerminalSessionID: any TerminalProcessSession] = [:]
     private(set) var browserControllers: [BrowserSessionID: BrowserSessionController] = [:]
     var browserAddressFocusRequest: BrowserAddressFocusRequest?
@@ -94,6 +96,7 @@ final class AppModel {
         textFileOpenCommandRunner: @escaping TextFileOpenCommandRunner = AppModel.runTextFileOpenCommand,
         textFileOpenCommandAvailabilityChecker: @escaping TextFileOpenCommandAvailabilityChecker = AppModel.isExecutableAvailable,
         externalFileOpener: @escaping ExternalFileOpener = AppModel.openExternally,
+        externalWebOpener: @escaping ExternalWebOpener = AppModel.openInBrowserApplication,
         updates: UpdateController? = nil
     ) throws {
         self.channel = channel
@@ -111,6 +114,7 @@ final class AppModel {
         self.textFileOpenCommandRunner = textFileOpenCommandRunner
         self.textFileOpenCommandAvailabilityChecker = textFileOpenCommandAvailabilityChecker
         self.externalFileOpener = externalFileOpener
+        self.externalWebOpener = externalWebOpener
         browserDataProfileResolver = BrowserDataProfileResolver(channel: channel)
         self.updates = updates ?? UpdateController(channel: channel)
         if let recoveryNotice {
@@ -778,6 +782,9 @@ final class AppModel {
 
         switch url.scheme?.lowercased() {
         case "http", "https":
+            if openInExternalBrowser(url, workspaceID: workspaceID ?? store.selectedWorkspaceID) {
+                return
+            }
             if hasExactOrigin, let workspaceID, let besideTabID, let paneID {
                 createBrowserPane(url: url, in: workspaceID, tabID: besideTabID, beside: paneID)
             } else if let workspaceID {
@@ -879,6 +886,28 @@ final class AppModel {
         }
     }
 
+    /// Sends a web link to the browser chosen for this workspace.
+    /// Returns false when the link belongs in MyTerm's own browser, including every failure case.
+    private func openInExternalBrowser(_ url: URL, workspaceID: WorkspaceID) -> Bool {
+        guard let settings = try? store.resolvedSettings(for: workspaceID),
+              !settings.webLinkDestination.opensInMyTerm else {
+            return false
+        }
+        switch ExternalBrowserCatalog.resolve(settings.webLinkDestination) {
+        case .myterm:
+            return false
+        case .unavailable(let description):
+            errorDescription = description
+            return false
+        case .application(let applicationURL):
+            guard externalWebOpener(url, applicationURL) else {
+                errorDescription = "MyTerm could not open \(url.absoluteString) in \(FileManager.default.displayName(atPath: applicationURL.path))."
+                return false
+            }
+            return true
+        }
+    }
+
     private func openExternally(_ url: URL, failureDescription: String? = nil) {
         if !externalFileOpener(url) {
             errorDescription = failureDescription ?? "MyTerm could not open \(url.path) in the default macOS application."
@@ -906,6 +935,22 @@ final class AppModel {
 
     private static func openExternally(_ url: URL) -> Bool {
         NSWorkspace.shared.open(url)
+    }
+
+    private static func openInBrowserApplication(_ url: URL, applicationURL: URL) -> Bool {
+        // AppKit has no synchronous "open in this application" call, so the launch is reported
+        // asynchronously. Treat a started open as success and log a launch failure.
+        NSWorkspace.shared.open(
+            [url],
+            withApplicationAt: applicationURL,
+            configuration: NSWorkspace.OpenConfiguration()
+        ) { _, error in
+            guard let error else { return }
+            Logger(subsystem: "com.gordonbeeming.myterm", category: "web-links").error(
+                "Could not open a web link in \(applicationURL.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)"
+            )
+        }
+        return true
     }
 
     private static func isExecutableAvailable(_ executable: String) -> Bool {
