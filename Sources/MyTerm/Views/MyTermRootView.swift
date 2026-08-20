@@ -367,7 +367,7 @@ private struct WorkspaceSidebar: View {
                     model: model,
                     workspace: workspace,
                     rowHeight: sidebarRowHeight,
-                    indentation: 16,
+                    indentation: SidebarRowMetrics.filedWorkspaceIndent,
                     activeDragItem: $activeDragItem
                 )
             }
@@ -402,6 +402,21 @@ private struct WorkspaceSidebar: View {
             folders: model.folders
         )
     }
+}
+
+/// The leading space the sidebar rows share.
+///
+/// A workspace filed in a folder lines its title up with the folder's title. Anything less leaves the
+/// workspace hanging to the left of the folder it belongs to, which reads as a sibling of the folder
+/// rather than as something inside it.
+private enum SidebarRowMetrics {
+    /// The folder row's disclosure chevron.
+    static let disclosureWidth: CGFloat = 12
+    static let disclosureSpacing: CGFloat = 4
+    /// The folder icon, and the gap `Label` leaves between that icon and its text.
+    static let folderIconWidth: CGFloat = 24
+
+    static let filedWorkspaceIndent = disclosureWidth + disclosureSpacing + folderIconWidth
 }
 
 private struct WorkspaceSidebarRow: View {
@@ -602,12 +617,12 @@ private struct WorkspaceFolderRow: View {
     @State private var renderedRowHeight: CGFloat = 0
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: SidebarRowMetrics.disclosureSpacing) {
             Button(action: toggleExpansion) {
                 Image(systemName: folder.isExpanded ? "chevron.down" : "chevron.right")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .frame(width: 12, height: 16)
+                    .frame(width: SidebarRowMetrics.disclosureWidth, height: 16)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
