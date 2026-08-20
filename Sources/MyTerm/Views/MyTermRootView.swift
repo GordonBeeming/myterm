@@ -430,6 +430,17 @@ private struct WorkspaceSidebarRow: View {
     @State private var isDropTargeted = false
     @State private var renderedRowHeight: CGFloat = 0
 
+    private var needsAgentAttention: Bool {
+        model.needsAgentAttention(workspaceID: workspace.id)
+    }
+
+    private var accessibilityLabel: String {
+        let name = workspace.isPinned
+            ? "Pinned workspace \(workspace.displayTitle)"
+            : "Workspace \(workspace.displayTitle)"
+        return needsAgentAttention ? "\(name), an agent needs you" : name
+    }
+
     var body: some View {
         HStack(spacing: 6) {
             if workspace.isPinned {
@@ -441,12 +452,20 @@ private struct WorkspaceSidebarRow: View {
             Text(workspace.displayTitle)
                 .lineLimit(1)
             Spacer(minLength: 0)
+            if needsAgentAttention {
+                Circle()
+                    .fill(.tint)
+                    .frame(width: 7, height: 7)
+                    .padding(.trailing, 2)
+                    .accessibilityHidden(true)
+                    .help("An agent in this workspace needs you")
+            }
         }
         .padding(.vertical, model.selectedWorkspaceSettings.compactSidebar ? 0 : 2)
         .padding(.leading, indentation)
         .frame(maxWidth: .infinity, minHeight: rowHeight, alignment: .leading)
         .tag(workspace.id)
-        .accessibilityLabel(workspace.isPinned ? "Pinned workspace \(workspace.displayTitle)" : "Workspace \(workspace.displayTitle)")
+        .accessibilityLabel(accessibilityLabel)
         .draggable(SidebarDragItem.workspace(workspace.id)) {
             Text(workspace.displayTitle)
                 .onAppear { activeDragItem = .workspace(workspace.id) }
