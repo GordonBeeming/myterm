@@ -30,6 +30,8 @@ final class MyTermBrowserRoutingTests: XCTestCase {
                 "MYTERM_OPEN_SHIM": "\(directory.path)/open",
                 "MYTERM_ORIGINAL_BASH_ENV": "/tmp/original-bash-env",
                 "PATH": "\(directory.path):/usr/local/bin:/usr/bin",
+                MyTermBrowserLauncher.zdotdirEnvironmentKey: "\(directory.path)/zsh",
+                MyTermBrowserLauncher.resourceDirectoryEnvironmentKey: directory.path,
             ]
         )
 
@@ -46,6 +48,8 @@ final class MyTermBrowserRoutingTests: XCTestCase {
                 "MYTERM_OPEN_SHIM": "\(directory.path)/open",
                 "PATH": "\(directory.path):/usr/bin",
                 MyTermBrowserLauncher.workspaceIDEnvironmentKey: workspaceID.description,
+                MyTermBrowserLauncher.zdotdirEnvironmentKey: "\(directory.path)/zsh",
+                MyTermBrowserLauncher.resourceDirectoryEnvironmentKey: directory.path,
             ]
         )
 
@@ -67,7 +71,79 @@ final class MyTermBrowserRoutingTests: XCTestCase {
                 MyTermBrowserLauncher.workspaceIDEnvironmentKey: workspaceID.description,
                 MyTermBrowserLauncher.tabIDEnvironmentKey: tabID.description,
                 MyTermBrowserLauncher.paneIDEnvironmentKey: paneID.description,
+                MyTermBrowserLauncher.zdotdirEnvironmentKey: "\(directory.path)/zsh",
+                MyTermBrowserLauncher.resourceDirectoryEnvironmentKey: directory.path,
             ]
+        )
+    }
+
+    func testEnvironmentReturnsEmptyWhenTheExecutableIsMissing() {
+        XCTAssertEqual(
+            MyTermBrowserLauncher.environment(executableURL: nil, baseEnvironment: [:]),
+            [:]
+        )
+    }
+
+    func testEnvironmentCarriesTheUsersRealZDOTDIROnlyWhenOneIsSet() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let launcher = directory.appending(path: "myterm-browser", directoryHint: .notDirectory)
+        try Data("#!/bin/sh\nexit 0\n".utf8).write(to: launcher)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: launcher.path)
+
+        let withoutZDOTDIR = MyTermBrowserLauncher.environment(
+            executableURL: launcher,
+            baseEnvironment: ["PATH": "/usr/bin"]
+        )
+        XCTAssertNil(withoutZDOTDIR[MyTermBrowserLauncher.originalZDOTDIREnvironmentKey])
+
+        let withEmptyZDOTDIR = MyTermBrowserLauncher.environment(
+            executableURL: launcher,
+            baseEnvironment: ["PATH": "/usr/bin", "ZDOTDIR": ""]
+        )
+        XCTAssertNil(withEmptyZDOTDIR[MyTermBrowserLauncher.originalZDOTDIREnvironmentKey])
+
+        let withZDOTDIR = MyTermBrowserLauncher.environment(
+            executableURL: launcher,
+            baseEnvironment: ["PATH": "/usr/bin", "ZDOTDIR": "/Users/example/.config/zsh"]
+        )
+        XCTAssertEqual(
+            withZDOTDIR[MyTermBrowserLauncher.originalZDOTDIREnvironmentKey],
+            "/Users/example/.config/zsh"
+        )
+    }
+
+    func testEnvironmentDropsTheOriginalZDOTDIRWhenItIsThisSameShimDirectory() throws {
+        // MyTerm can run from inside a MyTerm pane while developing MyTerm. In that case
+        // baseEnvironment's ZDOTDIR is already the shim directory this call is about to set,
+        // and mirroring it as MYTERM_ORIGINAL_ZDOTDIR would point .zshenv at itself.
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let launcher = directory.appending(path: "myterm-browser", directoryHint: .notDirectory)
+        try Data("#!/bin/sh\nexit 0\n".utf8).write(to: launcher)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: launcher.path)
+
+        let sameDirectory = MyTermBrowserLauncher.environment(
+            executableURL: launcher,
+            baseEnvironment: ["PATH": "/usr/bin", "ZDOTDIR": "\(directory.path)/zsh"]
+        )
+        XCTAssertNil(sameDirectory[MyTermBrowserLauncher.originalZDOTDIREnvironmentKey])
+
+        // A trailing slash and a redundant "./" resolve to the same directory but are not
+        // string-equal, so the comparison has to standardize the paths, not compare them raw.
+        let equivalentPathSpelling = MyTermBrowserLauncher.environment(
+            executableURL: launcher,
+            baseEnvironment: ["PATH": "/usr/bin", "ZDOTDIR": "\(directory.path)/./zsh/"]
+        )
+        XCTAssertNil(equivalentPathSpelling[MyTermBrowserLauncher.originalZDOTDIREnvironmentKey])
+
+        let differentDirectory = MyTermBrowserLauncher.environment(
+            executableURL: launcher,
+            baseEnvironment: ["PATH": "/usr/bin", "ZDOTDIR": "\(directory.path)/zsh-elsewhere"]
+        )
+        XCTAssertEqual(
+            differentDirectory[MyTermBrowserLauncher.originalZDOTDIREnvironmentKey],
+            "\(directory.path)/zsh-elsewhere"
         )
     }
 
@@ -135,6 +211,7 @@ final class MyTermBrowserRoutingTests: XCTestCase {
         let webBatches = try capturedBatches(at: webCapture)
         XCTAssertEqual(webBatches.count, 2)
         XCTAssertEqual(webBatches[0], [
+            "-g",
             "-a",
             appBundle.path,
             try XCTUnwrap(
@@ -147,6 +224,7 @@ final class MyTermBrowserRoutingTests: XCTestCase {
             ).absoluteString,
         ])
         XCTAssertEqual(webBatches[1], [
+            "-g",
             "-a",
             appBundle.path,
             try XCTUnwrap(
@@ -167,6 +245,7 @@ final class MyTermBrowserRoutingTests: XCTestCase {
             capture: directCapture
         )
         XCTAssertEqual(try capturedBatches(at: directCapture), [[
+            "-g",
             "-a",
             appBundle.path,
             firstURL.absoluteString,
@@ -218,6 +297,7 @@ final class MyTermBrowserRoutingTests: XCTestCase {
             paneID: paneID.description
         )
         XCTAssertEqual(try capturedBatches(at: webCapture), [[
+            "-g",
             "-a",
             appBundle.path,
             try XCTUnwrap(

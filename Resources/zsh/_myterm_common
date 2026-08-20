@@ -1,0 +1,48 @@
+# shellcheck shell=bash
+#
+# The hand-off every MyTerm zsh shim performs, in one place.
+#
+# MyTerm points ZDOTDIR at its own directory so each zsh startup file passes
+# through here first. Each shim sets _myterm_dotfile to its own name and
+# sources this file, which runs the user's matching file and then points
+# ZDOTDIR back at the shim directory so zsh finds the next shim in the chain.
+# Without the hand-back, the user's own ZDOTDIR would stay in place and the
+# later shims would never run.
+#
+# This is sourced rather than called as a function on purpose. A function
+# body is its own scope, so a `typeset` or `local` in the user's own rc file
+# would be scoped to the function and vanish when it returned, which breaks
+# the common `typeset -U path` idiom outright.
+#
+# MyTerm is developed inside MyTerm: a pane can launch MyTerm's own build,
+# which then inherits this shim directory as its ZDOTDIR and hands it back in
+# as the "user's real" directory. Pointing a shim at itself makes it source
+# itself forever, so every resolved directory is checked against the shim
+# directory first. HOME gets a sentinel rather than an empty fallback, so an
+# unset HOME can never resolve the user directory to the filesystem root.
+
+_myterm_shim_dir="${ZDOTDIR:-}"
+_myterm_user_dir="${MYTERM_ORIGINAL_ZDOTDIR:-${HOME:-/nonexistent}}"
+if [ -n "$_myterm_shim_dir" ] && [ "$_myterm_user_dir" = "$_myterm_shim_dir" ]; then
+  _myterm_user_dir="${HOME:-/nonexistent}"
+fi
+MYTERM_ORIGINAL_ZDOTDIR="$_myterm_user_dir"
+export MYTERM_ORIGINAL_ZDOTDIR
+
+ZDOTDIR="$_myterm_user_dir"
+if [ -n "${_myterm_dotfile:-}" ] && [ -r "$ZDOTDIR/$_myterm_dotfile" ]; then
+  . "$ZDOTDIR/$_myterm_dotfile"
+fi
+
+# The user's own file may have repointed ZDOTDIR; that new value wins.
+_myterm_user_dir="${ZDOTDIR:-${HOME:-/nonexistent}}"
+if [ -n "$_myterm_shim_dir" ] && [ "$_myterm_user_dir" = "$_myterm_shim_dir" ]; then
+  _myterm_user_dir="${HOME:-/nonexistent}"
+fi
+MYTERM_ORIGINAL_ZDOTDIR="$_myterm_user_dir"
+export MYTERM_ORIGINAL_ZDOTDIR
+
+if [ -n "$_myterm_shim_dir" ]; then
+  ZDOTDIR="$_myterm_shim_dir"
+fi
+unset _myterm_shim_dir _myterm_user_dir _myterm_dotfile

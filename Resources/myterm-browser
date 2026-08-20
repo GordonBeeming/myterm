@@ -20,8 +20,13 @@ resource_directory=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 app_bundle=$(dirname "$(dirname "$resource_directory")")
 open_command=${MYTERM_OPEN_COMMAND:-/usr/bin/open}
 
+# -g keeps MyTerm in the background. A link handed over here comes from a pane
+# rather than from the user, often while they are working in another app, so
+# delivering it must not pull MyTerm to the front. Dropping the flag silently
+# restores that interruption.
+
 if [ -z "${MYTERM_WORKSPACE_ID:-}" ]; then
-  exec "$open_command" -a "$app_bundle" "$@"
+  exec "$open_command" -g -a "$app_bundle" "$@"
 fi
 
 for argument in "$@"; do
@@ -30,6 +35,6 @@ for argument in "$@"; do
   if [ -n "${MYTERM_TAB_ID:-}" ] && [ -n "${MYTERM_PANE_ID:-}" ]; then
     route="${route}/${MYTERM_TAB_ID}/${MYTERM_PANE_ID}"
   fi
-  "$open_command" -a "$app_bundle" \
+  "$open_command" -g -a "$app_bundle" \
     "${route}?url=${payload}"
 done
