@@ -174,4 +174,29 @@ assert_contains "$AWKWARD_DIR/open" "$awkward_output" \
 assert_contains "COUNT:1" "$awkward_output" \
   "the resource directory must appear in PATH exactly once, even when its name contains pattern characters"
 
+# A user may set SH_WORD_SPLIT in their own .zshrc. Under that option an
+# unquoted array expansion word-splits on whitespace, so the PATH rebuild has
+# to quote both array expansions or it corrupts a pre-existing entry that
+# contains a space rather than just reordering it. The measurement has to
+# quote too - an unquoted `print -l -- $path` word-splits the printed values
+# regardless of what the code under test did, which makes a correct fix look
+# broken and a broken original look broken for the wrong reason.
+SH_WORD_SPLIT_HOME="$SCRATCH_DIR/sh-word-split-home"
+mkdir -p "$SH_WORD_SPLIT_HOME"
+cat > "$SH_WORD_SPLIT_HOME/.zshrc" <<'EOF'
+setopt SH_WORD_SPLIT
+EOF
+sh_word_split_output="$(
+  env -i \
+    HOME="$SH_WORD_SPLIT_HOME" \
+    ZDOTDIR="$RESOURCE_DIR/zsh" \
+    MYTERM_RESOURCE_DIR="$RESOURCE_DIR" \
+    PATH="/some dir/with space:/usr/bin:/bin" \
+    zsh -ic 'print -l -- "${(@)path}"; printf "COUNT:%s\n" "${#path}"' </dev/null 2>&1
+)"
+assert_contains "/some dir/with space" "$sh_word_split_output" \
+  "a pre-existing PATH entry containing a space must survive the rebuild whole under SH_WORD_SPLIT"
+assert_contains "COUNT:4" "$sh_word_split_output" \
+  "the rebuild must not change the PATH entry count under SH_WORD_SPLIT (resource dir + 3 original entries)"
+
 printf 'zsh shim checks passed\n'

@@ -16,6 +16,12 @@
 # macOS produces on its own for a second download of the same disk image
 # (/Applications/myterm (1).app), and a pattern match silently fails to remove
 # the stale entry there.
+#
+# Both array expansions below are quoted with the (@) flag. A user may set
+# SH_WORD_SPLIT in their own .zshrc, which makes an unquoted array expansion
+# word-split on whitespace and drop empty components, same as $* everywhere
+# else in the shell. Unquoted here, that would corrupt any pre-existing PATH
+# entry containing a space rather than just reordering it.
 
 _myterm_dotfile=".zshrc"
 if [ -r "${ZDOTDIR:-}/_myterm_common" ]; then
@@ -25,12 +31,12 @@ fi
 if [ -n "${MYTERM_RESOURCE_DIR:-}" ]; then
   typeset -a _myterm_kept_path
   _myterm_kept_path=()
-  for _myterm_entry in $path; do
+  for _myterm_entry in "${(@)path}"; do
     if [ "$_myterm_entry" != "$MYTERM_RESOURCE_DIR" ]; then
       _myterm_kept_path+=("$_myterm_entry")
     fi
   done
-  path=("$MYTERM_RESOURCE_DIR" $_myterm_kept_path)
+  path=("$MYTERM_RESOURCE_DIR" "${(@)_myterm_kept_path}")
   export PATH
   unset _myterm_kept_path _myterm_entry
 fi
