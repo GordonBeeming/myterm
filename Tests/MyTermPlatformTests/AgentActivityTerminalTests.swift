@@ -27,11 +27,84 @@ final class AgentActivityTerminalTests: XCTestCase {
         view.feed("\u{1B}]\(AgentActivityMarker.oscCode);nothing useful\u{07}")
         XCTAssertEqual(reportCount, 0)
     }
+
+    /// The marker arrives as bytes from a pty, which hands it over in whatever pieces it likes.
+    func testAMarkerSplitAcrossTwoWritesIsOneReport() {
+        let view = MyTermLocalProcessTerminalView(frame: NSRect(x: 0, y: 0, width: 200, height: 100))
+        var reports: [AgentActivityReport] = []
+        view.onAgentActivity = { reports.append($0) }
+
+        let marker = "\u{1B}]\(AgentActivityMarker.oscCode);agent=claude;event=finished\u{07}"
+        let bytes = Array(marker.utf8)
+        for split in [1, 5, bytes.count / 2, bytes.count - 1] {
+            reports = []
+            view.feedBytes(bytes[..<split])
+            XCTAssertTrue(reports.isEmpty, "nothing to report until the terminator arrives")
+            view.feedBytes(bytes[split...])
+            XCTAssertEqual(reports, [AgentActivityReport(agent: "claude", activity: .finished)], "split at \(split)")
+        }
+    }
+
+    func testTwoMarkersInOneWriteAreTwoReports() {
+        let view = MyTermLocalProcessTerminalView(frame: NSRect(x: 0, y: 0, width: 200, height: 100))
+        var reports: [AgentActivityReport] = []
+        view.onAgentActivity = { reports.append($0) }
+
+        view.feed("\u{1B}]\(AgentActivityMarker.oscCode);agent=claude;event=working\u{07}text\u{1B}]\(AgentActivityMarker.oscCode);agent=claude;event=finished\u{1B}\\")
+        XCTAssertEqual(reports.map(\.activity), [.working, .finished])
+    }
+
+    func testAMarkerInsideAMarkerReportsBothWithTheOuterCutShort() {
+        let view = MyTermLocalProcessTerminalView(frame: NSRect(x: 0, y: 0, width: 200, height: 100))
+        var reports: [AgentActivityReport] = []
+        view.onAgentActivity = { reports.append($0) }
+
+        // The inner ESC ends the outer string, so what the outer reports is what stood before it;
+        // the inner one is then a marker of its own.
+        view.feed("\u{1B}]\(AgentActivityMarker.oscCode);agent=claude;event=finished;session=\u{1B}]\(AgentActivityMarker.oscCode);agent=codex;event=working\u{07}")
+        XCTAssertEqual(reports, [
+            AgentActivityReport(agent: "claude", activity: .finished),
+            AgentActivityReport(agent: "codex", activity: .working),
+        ])
+    }
+
+    func testAMarkerAtTheByteCapIsReportedAndOneOverItIsNot() {
+        let view = MyTermLocalProcessTerminalView(frame: NSRect(x: 0, y: 0, width: 200, height: 100))
+        var reports: [AgentActivityReport] = []
+        view.onAgentActivity = { reports.append($0) }
+
+        let base = "agent=claude;event=finished;x="
+        let atCap = base + String(repeating: "y", count: AgentActivityMarker.maximumPayloadBytes - base.utf8.count)
+        XCTAssertEqual(atCap.utf8.count, AgentActivityMarker.maximumPayloadBytes)
+        view.feed("\u{1B}]\(AgentActivityMarker.oscCode);\(atCap)\u{07}")
+        XCTAssertEqual(reports.count, 1)
+        view.feed("\u{1B}]\(AgentActivityMarker.oscCode);\(atCap)y\u{07}")
+        XCTAssertEqual(reports.count, 1, "one byte over the cap is not a report")
+    }
+
+    func testAMarkerNeverTerminatedSwallowsTheOutputAfterItButReportsNothing() {
+        let view = MyTermLocalProcessTerminalView(frame: NSRect(x: 0, y: 0, width: 200, height: 100))
+        var reports: [AgentActivityReport] = []
+        view.onAgentActivity = { reports.append($0) }
+
+        view.feed("\u{1B}]\(AgentActivityMarker.oscCode);agent=claude;event=finished")
+        view.feed(String(repeating: "more output that is really part of the string\n", count: 100))
+        XCTAssertTrue(reports.isEmpty)
+        view.feed("\u{07}")
+        XCTAssertTrue(reports.isEmpty, "the payload is over the cap by the time it ends")
+        // The terminal is back in its ground state: the next marker is read as one.
+        view.feed("\u{1B}]\(AgentActivityMarker.oscCode);agent=claude;event=working\u{07}")
+        XCTAssertEqual(reports.map(\.activity), [.working])
+    }
 }
 
 private extension MyTermLocalProcessTerminalView {
     /// Pushes bytes through the same path the process output takes.
     func feed(_ text: String) {
         dataReceived(slice: ArraySlice(Array(text.utf8)))
+    }
+
+    func feedBytes(_ bytes: ArraySlice<UInt8>) {
+        dataReceived(slice: ArraySlice(Array(bytes)))
     }
 }
