@@ -45,6 +45,22 @@ jobs:
       - name: Build and verify the app bundle
         run: make verify VERSION=0.0.0 BUILD=1
 
+      # `codesign --verify` is perfectly happy with a bundle whose shell shims never got copied,
+      # and those going missing is the packaging break this job exists to catch: without them
+      # `open` in a pane leaves for the system browser, which looks like no bug at all.
+      - name: Check the shell shims shipped in the bundle
+        run: |
+          resources="dist/myterm.app/Contents/Resources"
+          missing=0
+          for shim in myterm-browser open myterm-bash-env \
+                      zsh/_myterm_common zsh/.zshenv zsh/.zprofile zsh/.zshrc zsh/.zlogin zsh/.zlogout; do
+            if [ ! -f "$resources/$shim" ]; then
+              echo "missing from the bundle: $shim" >&2
+              missing=1
+            fi
+          done
+          test "$missing" -eq 0
+
   release:
     needs: [build-and-test, verify-bundle]
     if: github.event_name == 'release'
