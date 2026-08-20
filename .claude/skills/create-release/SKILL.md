@@ -39,17 +39,22 @@ alone do not provide one: Metal ships as a separate Xcode component, so the fix 
 install plus `xcodebuild -downloadComponent MetalToolchain`. `actionlint` and `shellcheck` are
 unaffected and must still pass.
 
-When the Metal toolchain is missing, the two build gates may run on CI instead, but only with all
-of this confirmed and reported:
+When the Metal toolchain is missing, both build gates may run on CI instead, but only with all of
+this confirmed and reported for the exact release head:
 
-- the `Build and Test` run for the exact release head is green, and its `Build all targets` and
-  `Run tests` steps both succeeded
-- the release workflow's signing job declares `needs: build-and-test`, so those tests gate the
-  signed artifacts on the release run too
+- the `Build & Test` job is green, and its `Build all targets` and `Run tests` steps both succeeded
+- the `Verify App Bundle` job is green. This is the substitute for `make verify`, and it runs the
+  same `make verify` command, so it assembles the bundle, copies resources, writes the plist, signs
+  ad-hoc, and then runs `codesign --verify --deep --strict` and `plutil -lint` against the result
+- the release workflow's signing job declares `needs: [build-and-test, verify-bundle]`, so both gate
+  the signed artifacts on the release run itself
 
-`make verify` needs no substitute in that case: it checks a locally dev-signed bundle, and the
-release job's Developer ID signing, notarization, and Gatekeeper validation are stricter. Tell
-Gordon which gates ran where rather than reporting the precondition block as passed.
+**Do not treat the Developer ID job as the bundle check.** It is triggered by `release.published`,
+so it only starts once the release exists. A packaging failure caught there leaves a published tag
+whose distribution run failed, and this skill forbids deleting that tag. The bundle has to be proven
+before `gh release create`, which is what `Verify App Bundle` is for.
+
+Tell Gordon which gates ran where rather than reporting the precondition block as passed.
 
 List environment secret names with `gh secret list --repo GordonBeeming/myterm --env prod`. Never print or retrieve their values.
 

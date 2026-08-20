@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2016
-# The single-quoted strings below are zsh source handed to `zsh -lic`. bash must not expand
-# them: the expansion has to happen in the zsh under test, not in this script.
+# The single-quoted strings below are zsh source, handed to zsh in its several forms here
+# (-c, -ic, -lic). bash must not expand them: the expansion has to happen in the zsh under
+# test, not in this script.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

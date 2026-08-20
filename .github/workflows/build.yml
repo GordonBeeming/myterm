@@ -29,8 +29,22 @@ jobs:
       - name: Run zsh shim test
         run: bash script/zsh_shim_test.sh
 
+  verify-bundle:
+    runs-on: macos-15
+    name: Verify App Bundle
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      # `swift test` never assembles the app, so a packaging break stays invisible until the
+      # release job runs, and that job only starts once the release is already published. This
+      # builds and checks the real bundle so the failure lands on the pull request instead.
+      - name: Build and verify the app bundle
+        run: make verify VERSION=0.0.0 BUILD=0
+
   release:
-    needs: build-and-test
+    needs: [build-and-test, verify-bundle]
     if: github.event_name == 'release'
     runs-on: macos-15
     name: Sign, Notarize & Release
