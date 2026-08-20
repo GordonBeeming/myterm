@@ -2932,6 +2932,21 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(WorkspaceRecoveryNotice(loadReport: .newStore))
     }
 
+    func testRecoveryNoticeReportsABackupThatCouldNotBeWritten() throws {
+        let notice = try XCTUnwrap(WorkspaceRecoveryNotice(loadReport: WorkspaceStoreLoadReport(
+            sourceVersion: 2,
+            didMigrate: false,
+            droppedElementCount: 0,
+            identifierRepairCount: 1,
+            structuralRepairCount: 0,
+            backupURLs: [],
+            backupFailureDescriptions: ["The volume is full."]
+        )))
+
+        XCTAssertTrue(notice.message.contains("repaired 1 identifier"))
+        XCTAssertTrue(notice.message.contains("MyTerm could not back up the original data: The volume is full."))
+    }
+
     func testAppModelPublishesRecoveryNoticeFromWorkspaceStoreLoadReport() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }

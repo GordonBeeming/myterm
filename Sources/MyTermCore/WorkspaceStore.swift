@@ -50,6 +50,11 @@ public struct WorkspaceStoreLoadReport: Equatable, Sendable {
     public let identifierRepairCount: Int
     public let structuralRepairCount: Int
     public let backupURLs: [URL]
+    /// Why no file holds the original bytes, when a backup was needed and every name failed.
+    ///
+    /// The store reports a backup it could not write, and starts anyway. Refusing to start leaves
+    /// the user with a dead window and no way to clear whatever blocks it.
+    public let backupFailureDescriptions: [String]
 
     public init(
         sourceVersion: Int?,
@@ -57,7 +62,8 @@ public struct WorkspaceStoreLoadReport: Equatable, Sendable {
         droppedElementCount: Int,
         identifierRepairCount: Int,
         structuralRepairCount: Int,
-        backupURLs: [URL]
+        backupURLs: [URL],
+        backupFailureDescriptions: [String] = []
     ) {
         self.sourceVersion = sourceVersion
         self.didMigrate = didMigrate
@@ -65,6 +71,7 @@ public struct WorkspaceStoreLoadReport: Equatable, Sendable {
         self.identifierRepairCount = identifierRepairCount
         self.structuralRepairCount = structuralRepairCount
         self.backupURLs = backupURLs
+        self.backupFailureDescriptions = backupFailureDescriptions
     }
 
     public static let newStore = WorkspaceStoreLoadReport(
@@ -260,7 +267,7 @@ public final class WorkspaceStore {
     }
     public var globalSettings: TerminalPreferences { snapshot.globalSettings }
 
-    public init(persistenceURL: URL, fileManager: FileManager = .default) throws {
+    public init(persistenceURL: URL, fileManager: FileManager = .default, now: Date = Date()) throws {
         self.persistenceURL = persistenceURL
         let migrationBackupURL = persistenceURL.appendingPathExtension("v1-backup")
         let recoveryBackupURL = persistenceURL.appendingPathExtension("recovery-backup")
@@ -285,23 +292,25 @@ public final class WorkspaceStore {
                 }
 
                 var backupURLs: [URL] = []
-                if sourceVersion == 1 {
-                    try Self.preserveOriginal(
+                var backupFailures: [String] = []
+                func preserve(at preferredURL: URL) {
+                    switch Self.preserveOriginal(
                         originalData,
-                        at: migrationBackupURL,
+                        at: preferredURL,
+                        now: now,
                         fileManager: fileManager
-                    )
-                    backupURLs.append(migrationBackupURL)
+                    ) {
+                    case .success(let url): backupURLs.append(url)
+                    case .failure(let error): backupFailures.append(error.localizedDescription)
+                    }
+                }
+                if sourceVersion == 1 {
+                    preserve(at: migrationBackupURL)
                 }
                 if tracker.droppedElementCount > 0
                     || tracker.identifierRepairCount > 0
                     || tracker.structuralRepairCount > 0 {
-                    try Self.preserveOriginal(
-                        originalData,
-                        at: recoveryBackupURL,
-                        fileManager: fileManager
-                    )
-                    backupURLs.append(recoveryBackupURL)
+                    preserve(at: recoveryBackupURL)
                 }
                 loadReport = WorkspaceStoreLoadReport(
                     sourceVersion: sourceVersion,
@@ -309,7 +318,8 @@ public final class WorkspaceStore {
                     droppedElementCount: tracker.droppedElementCount,
                     identifierRepairCount: tracker.identifierRepairCount,
                     structuralRepairCount: tracker.structuralRepairCount,
-                    backupURLs: backupURLs
+                    backupURLs: backupURLs,
+                    backupFailureDescriptions: backupFailures
                 )
             } catch let error as WorkspaceStoreError {
                 throw error
@@ -322,7 +332,11 @@ public final class WorkspaceStore {
             snapshot = .initial()
             loadReport = .newStore
         }
-        try write(snapshot, fileManager: fileManager)
+        // Writing the repaired snapshot destroys the original bytes. When nothing preserved them,
+        // leave the file untouched: the repair lives in memory, and the first real change saves it.
+        if loadReport.backupFailureDescriptions.isEmpty {
+            try write(snapshot, fileManager: fileManager)
+        }
     }
 
     public func save() throws { try write(snapshot, fileManager: .default) }
@@ -1265,30 +1279,80 @@ public final class WorkspaceStore {
         return 1
     }
 
+    /// Copies the original bytes beside the state file, without ever replacing an earlier backup.
+    ///
+    /// Every schema change repairs the state file again, so one fixed name is only ever correct
+    /// once. The first repair takes the preferred name, and every later repair takes a timestamped
+    /// sibling instead. Names never run out, so a repair can happen any number of times.
+    ///
+    /// Returns the URL that holds the bytes, or the reason no file holds them.
     private static func preserveOriginal(
         _ data: Data,
-        at backupURL: URL,
+        at preferredURL: URL,
+        now: Date,
         fileManager: FileManager
-    ) throws {
+    ) -> Result<URL, WorkspaceStoreError> {
         do {
             try fileManager.createDirectory(
-                at: backupURL.deletingLastPathComponent(),
+                at: preferredURL.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            if fileManager.fileExists(atPath: backupURL.path) {
-                let existing = try Data(contentsOf: backupURL)
-                if existing == data { return }
-                throw WorkspaceStoreError.backupFailed(
-                    path: backupURL.path,
-                    reason: "A different backup already exists; the current source was not overwritten."
-                )
-            }
-            try data.write(to: backupURL, options: .atomic)
-        } catch let error as WorkspaceStoreError {
-            throw error
         } catch {
-            throw WorkspaceStoreError.backupFailed(path: backupURL.path, reason: error.localizedDescription)
+            return .failure(.backupFailed(path: preferredURL.path, reason: error.localizedDescription))
         }
+
+        // The first write error is the one worth reporting: it names the preferred file, and every
+        // later attempt fails the same way for the same reason.
+        var reason: String?
+        for candidate in backupCandidates(for: preferredURL, now: now) {
+            if fileManager.fileExists(atPath: candidate.path) {
+                // A repair that runs twice over identical bytes reuses the backup it already wrote,
+                // so a restart cannot fill the directory with copies of one file.
+                if let existing = try? Data(contentsOf: candidate), existing == data {
+                    return .success(candidate)
+                }
+                continue
+            }
+            do {
+                try data.write(to: candidate, options: .atomic)
+                return .success(candidate)
+            } catch {
+                reason = reason ?? error.localizedDescription
+            }
+        }
+        return .failure(.backupFailed(
+            path: preferredURL.path,
+            reason: reason ?? "Every backup name beside the workspace state file already holds other data."
+        ))
+    }
+
+    /// The backup names to try, in order: the preferred one, then timestamped siblings.
+    ///
+    /// The numbered tail only applies when two repairs land in the same second with different
+    /// bytes, which takes a restart inside that second.
+    private static func backupCandidates(for preferredURL: URL, now: Date) -> [URL] {
+        let directory = preferredURL.deletingLastPathComponent()
+        let base = preferredURL.lastPathComponent
+        let stamp = backupTimestamp(now)
+        return [preferredURL, directory.appendingPathComponent("\(base)-\(stamp)")]
+            + (2...8).map { directory.appendingPathComponent("\(base)-\(stamp)-\($0)") }
+    }
+
+    /// Formats `date` in the local time zone, so the name matches the date Finder shows.
+    private static func backupTimestamp(_ date: Date) -> String {
+        let parts = Calendar.current.dateComponents(
+            [.year, .month, .day, .hour, .minute, .second],
+            from: date
+        )
+        return String(
+            format: "%04d%02d%02d-%02d%02d%02d",
+            parts.year ?? 0,
+            parts.month ?? 0,
+            parts.day ?? 0,
+            parts.hour ?? 0,
+            parts.minute ?? 0,
+            parts.second ?? 0
+        )
     }
 
     private func workspaceIndex(_ workspaceID: WorkspaceID, in snapshot: WorkspaceStoreSnapshot) throws -> Int {

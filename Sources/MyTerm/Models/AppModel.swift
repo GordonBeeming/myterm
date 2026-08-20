@@ -157,9 +157,13 @@ final class AppModel {
             )
         }
         if let recoveryNotice {
-            Logger(subsystem: "com.gordonbeeming.myterm", category: "workspace-recovery").notice(
+            let logger = Logger(subsystem: "com.gordonbeeming.myterm", category: "workspace-recovery")
+            logger.notice(
                 "Workspace state repaired: identifiers=\(recoveryNotice.identifierRepairCount, privacy: .public), structure=\(recoveryNotice.structuralRepairCount, privacy: .public), dropped=\(recoveryNotice.droppedElementCount, privacy: .public), migrated=\(recoveryNotice.didMigrate, privacy: .public), backups=\(recoveryNotice.backupURLs.count, privacy: .public)"
             )
+            for failure in recoveryNotice.backupFailureDescriptions {
+                logger.error("Workspace state repaired without a backup: \(failure, privacy: .public)")
+            }
         }
         try migrateLegacySettings()
         try migratePowerShellTextPatterns()

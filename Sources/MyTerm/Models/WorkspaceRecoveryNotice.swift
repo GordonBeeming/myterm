@@ -8,10 +8,14 @@ struct WorkspaceRecoveryNotice: Equatable, Sendable {
     let droppedElementCount: Int
     let didMigrate: Bool
     let backupURLs: [URL]
+    let backupFailureDescriptions: [String]
 
     init?(loadReport: WorkspaceStoreLoadReport) {
         let repairedCount = loadReport.identifierRepairCount + loadReport.structuralRepairCount
-        guard loadReport.didMigrate || repairedCount > 0 || loadReport.droppedElementCount > 0 else {
+        guard loadReport.didMigrate
+            || repairedCount > 0
+            || loadReport.droppedElementCount > 0
+            || !loadReport.backupFailureDescriptions.isEmpty else {
             return nil
         }
 
@@ -20,6 +24,7 @@ struct WorkspaceRecoveryNotice: Equatable, Sendable {
         droppedElementCount = loadReport.droppedElementCount
         didMigrate = loadReport.didMigrate
         backupURLs = loadReport.backupURLs
+        backupFailureDescriptions = loadReport.backupFailureDescriptions
 
         var changes: [String] = []
         if loadReport.didMigrate {
@@ -35,13 +40,21 @@ struct WorkspaceRecoveryNotice: Equatable, Sendable {
             changes.append("removed \(Self.counted(loadReport.droppedElementCount, singular: "invalid item"))")
         }
 
-        let summary = changes.joined(separator: ", ")
-        if loadReport.backupURLs.isEmpty {
-            message = "MyTerm repaired workspace state during startup: \(summary)."
-        } else {
-            let paths = loadReport.backupURLs.map(\.path).joined(separator: ", ")
-            message = "MyTerm repaired workspace state during startup: \(summary). Original data is backed up at \(paths)."
+        var sentences: [String] = []
+        if !changes.isEmpty {
+            sentences.append(
+                "MyTerm repaired workspace state during startup: \(changes.joined(separator: ", "))."
+            )
         }
+        if !loadReport.backupURLs.isEmpty {
+            let paths = loadReport.backupURLs.map(\.path).joined(separator: ", ")
+            sentences.append("Original data is backed up at \(paths).")
+        }
+        if !loadReport.backupFailureDescriptions.isEmpty {
+            let reasons = loadReport.backupFailureDescriptions.joined(separator: " ")
+            sentences.append("MyTerm could not back up the original data: \(reasons)")
+        }
+        message = sentences.joined(separator: " ")
     }
 
     private static func counted(_ count: Int, singular: String) -> String {
