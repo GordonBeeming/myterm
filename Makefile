@@ -1,4 +1,4 @@
-.PHONY: build test bundle verify install clean channel-isolation-test
+.PHONY: build test bundle verify install clean channel-isolation-test zsh-shim-test
 
 VERSION ?= 0.1.0
 BUILD ?= 1
@@ -15,6 +15,9 @@ test:
 
 channel-isolation-test:
 	bash script/channel_isolation_test.sh
+
+zsh-shim-test:
+	bash script/zsh_shim_test.sh
 
 bundle:
 	MYTERM_VERSION="$(VERSION)" \

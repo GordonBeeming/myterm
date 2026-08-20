@@ -60,6 +60,10 @@ Tabs can be dragged to reorder within a pane group, dropped into another group, 
 
 Every terminal process also receives a `BROWSER` launcher and a narrow `open` shim inside the app bundle. Tools such as Codex, Claude, Plannotator, and `ide browse` send their HTTP and HTTPS links back beside the originating pane, even if another workspace has since become active. MyTerm does not become the macOS default browser.
 
+The link arrives without pulling MyTerm to the front, so an agent working in a workspace you are not watching cannot interrupt you.
+
+Reaching the shim takes more than `PATH`. Your own shell startup files run after MyTerm sets `PATH` and normally push the bundle behind `/usr/bin`, which would send every `open` to your default browser instead. So the app also loads a startup file of its own: `BASH_ENV` for bash, and a `ZDOTDIR` chain for zsh. Each one defines an `open` function, and a function is found before anything on `PATH`. The zsh chain runs your `.zshenv`, `.zprofile`, `.zshrc`, and `.zlogin` in their usual order and leaves `MYTERM_ORIGINAL_ZDOTDIR` holding your real `ZDOTDIR`. Panes that are already open keep the environment they started with, so restart a pane after updating the app.
+
 A tool that explicitly invokes `/usr/bin/open` bypasses MyTerm and can still open externally. Non-web `open` requests retain their normal system handling. Terminal links to configured text files use the scoped **Open text files with** command in Browser Settings, which defaults to `ide browse {file}`. Use suffix patterns such as `*.json` for Markdown, JSON, source, and config files; literal names such as `README`, `Dockerfile`, and `.gitignore` match exactly. Unsupported files and failed or empty text-file commands open in their macOS application instead of MyTerm's browser.
 
 ### Know when an agent needs you
@@ -120,6 +124,8 @@ MyTerm's own browser is the default destination for web links. To use a real bro
 The setting follows the same three scopes as the other preferences, so one workspace can send its links to Safari while the rest keep using MyTerm.
 
 It applies to command-clicked terminal links, to links from tools that use the `BROWSER` launcher or the `open` shim, and to web addresses handed to MyTerm. **New Browser Tab** always opens MyTerm's own browser, and links clicked inside an existing browser pane stay in MyTerm.
+
+The browser you choose comes forward only for a link from the workspace you are looking at, while MyTerm is the active app. So a link you command-click in the pane in front of you still jumps straight to it, while one an agent opened somewhere else loads in the background and waits for you.
 
 MyTerm never sends a link to itself. If the chosen browser is missing, or if MyTerm is the default browser, the link opens in MyTerm and the app reports why.
 

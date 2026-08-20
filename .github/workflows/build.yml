@@ -26,6 +26,9 @@ jobs:
       - name: Run tests
         run: swift test --parallel
 
+      - name: Run zsh shim test
+        run: bash script/zsh_shim_test.sh
+
   release:
     needs: build-and-test
     if: github.event_name == 'release'

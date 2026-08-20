@@ -20,16 +20,25 @@ resource_directory=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 app_bundle=$(dirname "$(dirname "$resource_directory")")
 open_command=${MYTERM_OPEN_COMMAND:-/usr/bin/open}
 
+# With no workspace to route to, this hands MyTerm an ordinary URL rather than
+# a myterm://browser route, so the delegate cannot tell it apart from a link
+# another app handed to MyTerm directly — and that case genuinely should come
+# forward. -g cannot hold on this path, so it is not claimed here; claiming a
+# background delivery this call cannot deliver is worse than not claiming it.
 if [ -z "${MYTERM_WORKSPACE_ID:-}" ]; then
   exec "$open_command" -a "$app_bundle" "$@"
 fi
 
+# -g keeps MyTerm in the background here. A routed link comes from a pane
+# rather than from the user, often while they are working in another app, and
+# the delegate recognizes the route and exempts it from activation, so the
+# flag actually holds on this path.
 for argument in "$@"; do
   payload=$(printf '%s' "$argument" | /usr/bin/base64 | tr -d '\n' | tr '+/' '-_' | tr -d '=')
   route="myterm://browser/${MYTERM_WORKSPACE_ID}"
   if [ -n "${MYTERM_TAB_ID:-}" ] && [ -n "${MYTERM_PANE_ID:-}" ]; then
     route="${route}/${MYTERM_TAB_ID}/${MYTERM_PANE_ID}"
   fi
-  "$open_command" -a "$app_bundle" \
+  "$open_command" -g -a "$app_bundle" \
     "${route}?url=${payload}"
 done

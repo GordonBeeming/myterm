@@ -5,6 +5,9 @@ enum MyTermBrowserLauncher {
     static let workspaceIDEnvironmentKey = "MYTERM_WORKSPACE_ID"
     static let tabIDEnvironmentKey = "MYTERM_TAB_ID"
     static let paneIDEnvironmentKey = "MYTERM_PANE_ID"
+    static let zdotdirEnvironmentKey = "ZDOTDIR"
+    static let resourceDirectoryEnvironmentKey = "MYTERM_RESOURCE_DIR"
+    static let originalZDOTDIREnvironmentKey = "MYTERM_ORIGINAL_ZDOTDIR"
     static let workspaceRouteScheme = "myterm"
     static let workspaceRouteHost = "browser"
 
@@ -44,14 +47,39 @@ enum MyTermBrowserLauncher {
         guard let executableURL else { return [:] }
         let resourceDirectory = executableURL.deletingLastPathComponent().path
         let basePath = baseEnvironment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+        let zdotdir = "\(resourceDirectory)/zsh"
         var environment = [
             "BASH_ENV": "\(resourceDirectory)/myterm-bash-env",
             "BROWSER": executableURL.path,
             "MYTERM_OPEN_SHIM": "\(resourceDirectory)/open",
             "PATH": "\(resourceDirectory):\(basePath)",
+            zdotdirEnvironmentKey: zdotdir,
+            resourceDirectoryEnvironmentKey: resourceDirectory,
         ]
         if let originalBashEnvironment = baseEnvironment["BASH_ENV"], !originalBashEnvironment.isEmpty {
             environment["MYTERM_ORIGINAL_BASH_ENV"] = originalBashEnvironment
+        }
+        // MyTerm can itself run from inside a MyTerm pane (developing MyTerm in MyTerm), in
+        // which case baseEnvironment's ZDOTDIR is already this same shim directory. Mirroring
+        // it as MYTERM_ORIGINAL_ZDOTDIR would then point .zshenv at itself and it would source
+        // itself forever, so drop it when the two resolve to the same directory.
+        // Compare the standardized paths rather than the URLs. A trailing slash makes a file URL a
+        // directory URL, which keeps the slash in absoluteString, so two spellings of one directory
+        // are unequal as URLs while their paths match.
+        //
+        // Prefer an existing MYTERM_ORIGINAL_ZDOTDIR over ZDOTDIR as the source. A pane one level
+        // further nested (MyTerm-in-MyTerm-in-MyTerm) inherits ZDOTDIR pointing at the parent's own
+        // shim directory, not the user's real one — the parent's shim already resolved the true user
+        // directory into MYTERM_ORIGINAL_ZDOTDIR before re-pointing ZDOTDIR back at itself for the
+        // rest of its own chain. Falling back to ZDOTDIR here would mirror the parent's shim directory
+        // forward as though it were the user's, and the grandchild shim would source it as real
+        // dotfiles instead of skipping straight to HOME.
+        let originalZDOTDIRSource = baseEnvironment[originalZDOTDIREnvironmentKey].flatMap { $0.isEmpty ? nil : $0 }
+            ?? baseEnvironment[zdotdirEnvironmentKey]
+        if let originalZDOTDIR = originalZDOTDIRSource, !originalZDOTDIR.isEmpty,
+           URL(fileURLWithPath: originalZDOTDIR).standardizedFileURL.path
+             != URL(fileURLWithPath: zdotdir).standardizedFileURL.path {
+            environment[originalZDOTDIREnvironmentKey] = originalZDOTDIR
         }
         if let workspaceID {
             environment[workspaceIDEnvironmentKey] = workspaceID.description
