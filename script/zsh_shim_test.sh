@@ -31,6 +31,10 @@ echo "zshrc-ran" >> "$MARKER_FILE"
 export PATH="$JUNK_DIR:\$PATH"
 EOF
 
+cat > "$FAKE_HOME/.zlogout" <<EOF
+echo "zlogout-ran" >> "$MARKER_FILE"
+EOF
+
 assert_contains() {
   local needle="$1" haystack="$2" description="$3"
   if ! grep -Fq "$needle" <<<"$haystack"; then
@@ -82,6 +86,12 @@ run_zsh -lic 'true' >/dev/null 2>&1
 markers="$(cat "$MARKER_FILE")"
 assert_contains "zshenv-ran" "$markers" "the user's own .zshenv must still run"
 assert_contains "zshrc-ran" "$markers" "the user's own .zshrc must still run"
+
+# A login shell reads $ZDOTDIR/.zlogout on exit. _myterm_common re-points
+# ZDOTDIR back at the shim directory after .zlogin, so without a .zlogout
+# shim there the user's real .zlogout (history flushing, session cleanup)
+# would never run.
+assert_contains "zlogout-ran" "$markers" "the user's own .zlogout must still run on shell exit"
 
 original_zdotdir_output="$(run_zsh -lic 'printf %s "$MYTERM_ORIGINAL_ZDOTDIR"' 2>&1)"
 if [ "$original_zdotdir_output" != "$FAKE_HOME" ]; then
