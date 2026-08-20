@@ -1,6 +1,7 @@
 import AppKit
 import Darwin
 import Foundation
+import MyTermCore
 @preconcurrency import SwiftTerm
 import UniformTypeIdentifiers
 
@@ -78,6 +79,11 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
         }
         terminal.onContentChanged = { [weak self] in
             self?.contentChangeHandler?()
+        }
+        terminal.onAgentActivity = { [weak self] report in
+            Task { @MainActor [weak self] in
+                self?.onEvent?(.agentActivity(report))
+            }
         }
         terminal.autoresizingMask = [.width, .height]
         terminal.apply(runtimeConfiguration: configuration.runtimeConfiguration)
@@ -207,6 +213,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
 final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
     var onOpenWebURL: ((URL) -> Void)?
     var onContentChanged: (() -> Void)?
+    var onAgentActivity: ((AgentActivityReport) -> Void)?
     var currentWorkingDirectory: URL?
     private let contentChangeCoalescer = TerminalContentChangeCoalescer()
     // AppKit owns local monitor tokens and requires the opaque value again for removal.
@@ -228,12 +235,25 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
         super.init(frame: frameRect)
         installKeyEventMonitor()
         applyDefaultCaretColors()
+        installAgentActivityHandler()
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
         installKeyEventMonitor()
         applyDefaultCaretColors()
+        installAgentActivityHandler()
+    }
+
+    private func installAgentActivityHandler() {
+        getTerminal().registerOscHandler(code: AgentActivityMarker.oscCode) { [weak self] payload in
+            guard let self,
+                  let text = String(bytes: payload, encoding: .utf8),
+                  let report = AgentActivityMarker.report(fromPayload: text) else {
+                return
+            }
+            self.onAgentActivity?(report)
+        }
     }
 
     deinit {

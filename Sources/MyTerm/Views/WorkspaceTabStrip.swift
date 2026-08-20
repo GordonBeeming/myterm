@@ -106,6 +106,7 @@ struct WorkspaceTabStrip: View {
             source: source,
             isSelected: tab.id == tabGroup.selectedTabID,
             title: title(for: tab),
+            agentActivity: model.agentActivity(forTab: tab.id),
             select: { model.selectTab(tab.id, in: tabGroup.id) },
             rename: { model.beginRenamingTab(tab.id, in: tabGroup.id) },
             close: { model.closeTab(tab.id) },
@@ -234,6 +235,7 @@ private struct WorkspaceTabItem: View {
     let source: PaneTabDragSource
     let isSelected: Bool
     let title: String
+    let agentActivity: AgentActivity?
     let select: () -> Void
     let rename: () -> Void
     let close: () -> Void
@@ -244,6 +246,12 @@ private struct WorkspaceTabItem: View {
     let moveToNextPane: () -> Void
     let moveToNewPane: (PaneEdge) -> Void
     @State private var isHovering = false
+
+    private var accessibilityValue: String {
+        let state = isSelected ? "Selected tab" : "Tab"
+        guard let agentActivity else { return state }
+        return "\(state), \(agentActivity.attentionDescription)"
+    }
 
     var body: some View {
         ZStack(alignment: .trailing) {
@@ -274,9 +282,18 @@ private struct WorkspaceTabItem: View {
             .buttonStyle(.plain)
             .focusable(false)
             .accessibilityLabel(title)
-            .accessibilityValue(isSelected ? "Selected tab" : "Tab")
+            .accessibilityValue(accessibilityValue)
             .accessibilityAddTraits(isSelected ? .isSelected : [])
             .help(title)
+
+            if let agentActivity, !isSelected, !isHovering {
+                Circle()
+                    .fill(.tint)
+                    .frame(width: 7, height: 7)
+                    .padding(.trailing, 9)
+                    .accessibilityHidden(true)
+                    .help(agentActivity.attentionDescription)
+            }
 
             Button(action: close) {
                 Image(systemName: "xmark")

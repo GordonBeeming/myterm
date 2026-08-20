@@ -49,6 +49,9 @@ final class AppModel {
     private(set) var browserControllers: [BrowserSessionID: BrowserSessionController] = [:]
     var browserAddressFocusRequest: BrowserAddressFocusRequest?
     var browserFindRequest: BrowserFindRequest?
+    /// Tabs whose agent finished, or asked a question, while the user was looking somewhere else.
+    /// Runtime only: an indicator that survived a relaunch would point at work the user has moved on from.
+    var agentAttention: [TabID: AgentActivity] = [:]
     var paneTabDragSession: PaneTabDragSession?
     var paneTabDragRegistrations: [TabGroupID: PaneTabDragRegistration] = [:]
     var nextBrowserAddressFocusToken: UInt64 = 0
@@ -601,6 +604,7 @@ final class AppModel {
                 restoreRuntimeObjects(in: workspace)
             }
             restoreFocusedPane(in: workspaceID)
+            clearAgentAttentionForVisibleTabs(in: workspaceID)
         }
     }
 
@@ -1087,6 +1091,7 @@ final class AppModel {
             if focusContent {
                 self.focusContent(of: tab)
             }
+            agentAttention.removeValue(forKey: tabID)
         }
     }
 
@@ -2065,6 +2070,13 @@ final class AppModel {
             if let exitCode, exitCode != 0 {
                 errorDescription = "Terminal exited with status \(exitCode)."
             }
+        case .agentActivity(let report):
+            recordAgentActivity(
+                report.activity,
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID
+            )
         case .titleChanged:
             break
         }
@@ -2083,6 +2095,7 @@ final class AppModel {
         if let sessionID = tab.terminalSession?.id {
             removeTerminalRuntime(sessionID)
         }
+        forgetAgentAttention(forTab: tab.id)
     }
 
     private func closeTab(

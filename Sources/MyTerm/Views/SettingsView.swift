@@ -10,6 +10,7 @@ struct SettingsView: View {
 
     @State private var passkeyAccess = PasskeyAccessController()
     @State private var defaultTerminal = DefaultTerminalController()
+    @State private var agentHooks = AgentHooksController()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -130,6 +131,39 @@ struct SettingsView: View {
                 }
 
                 Text("This action applies to the whole app and is not inherited by folders or workspaces.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Agent activity") {
+                Text("Mark a tab and its workspace when Claude Code finishes a turn, or asks a question, in a tab you are not looking at. The mark clears when you reach the tab.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 12) {
+                    Button(agentHooks.isInstalled ? "Remove from Claude Code" : "Set Up Claude Code Hooks") {
+                        if agentHooks.isInstalled {
+                            agentHooks.remove()
+                        } else {
+                            agentHooks.install()
+                        }
+                    }
+
+                    if agentHooks.isInstalled {
+                        Label("Installed", systemImage: "checkmark.circle.fill")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if case .failed(let message) = agentHooks.state {
+                    Label(message, systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .accessibilityLabel("Agent hooks error: \(message)")
+                }
+
+                Text("This writes three hooks to ~/.claude/settings.json, and removes only those. They report through the pane's terminal and stay silent outside MyTerm, so other terminals are unaffected. Restart a Claude Code session for the change to take effect.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

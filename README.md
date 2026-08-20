@@ -52,6 +52,23 @@ Every terminal process also receives a `BROWSER` launcher and a narrow `open` sh
 
 A tool that explicitly invokes `/usr/bin/open` bypasses MyTerm and can still open externally. Non-web `open` requests retain their normal system handling. Terminal links to configured text files use the scoped **Open text files with** command in Browser Settings, which defaults to `ide browse {file}`. Use suffix patterns such as `*.json` for Markdown, JSON, source, and config files; literal names such as `README`, `Dockerfile`, and `.gitignore` match exactly. Unsupported files and failed or empty text-file commands open in their macOS application instead of MyTerm's browser.
 
+### Know when an agent needs you
+
+A tab shows a small dot when Claude Code finishes a turn, or asks a question, in a tab you are not
+looking at. The workspace row in the sidebar shows the same dot while any of its tabs carries one.
+Reaching the tab clears it. A tab you are already looking at is never marked.
+
+The indicator is off until you press **Set Up Claude Code Hooks** in General Settings. That writes
+three hooks to `~/.claude/settings.json`, for `UserPromptSubmit`, `Stop`, and `Notification`, and the
+same button removes them again. Nothing else in that file is changed.
+
+Each hook writes an escape sequence to its own terminal, `ESC ]7337;agent=claude;event=finished ESC \`,
+and does nothing unless `MYTERM_PANE_ID` is set. Only MyTerm's terminals set it, so the hooks stay
+silent in every other terminal, and terminals that do not know the code ignore it. Restart a Claude
+Code session after installing the hooks.
+
+The state is not saved. After a relaunch, no tab carries a dot.
+
 ## Browser sessions and passkeys
 
 New browser tabs can remember cookies and website data at one of four scopes, selected in Settings:

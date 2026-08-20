@@ -1,6 +1,7 @@
 import AppKit
 import Darwin
 import Foundation
+import MyTermCore
 
 /// This is the only contract a terminal engine needs to implement, so the rest of the app does
 /// not depend on SwiftTerm types.
@@ -142,6 +143,7 @@ public struct TerminalSessionConfiguration: Equatable, Sendable {
 
 public enum TerminalSessionEvent: Equatable, Sendable {
     case titleChanged(String)
+    case agentActivity(AgentActivityReport)
     case workingDirectoryChanged(URL)
     case openURL(URL)
     case processTerminated(exitCode: Int32?)
