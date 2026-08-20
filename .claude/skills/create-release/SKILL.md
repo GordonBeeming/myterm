@@ -33,6 +33,29 @@ Stop before publishing unless all of these are true:
   shellcheck run.sh script/*.sh Resources/myterm-browser
   ```
 
+`swift test` and `make verify` both build SwiftTerm, which compiles a `.metal` shader. Without a
+Metal compiler on the machine they fail at `unable to spawn process 'metal'`. Command Line Tools
+alone do not provide one: Metal ships as a separate Xcode component, so the fix is a full Xcode
+install plus `xcodebuild -downloadComponent MetalToolchain`. `actionlint` and `shellcheck` are
+unaffected and must still pass.
+
+When the Metal toolchain is missing, both build gates may run on CI instead, but only with all of
+this confirmed and reported for the exact release head:
+
+- the `Build & Test` job is green, and its `Build all targets` and `Run tests` steps both succeeded
+- the `Verify App Bundle` job is green. This is the substitute for `make verify`, and it runs the
+  same `make verify` command, so it assembles the bundle, copies resources, writes the plist, signs
+  ad-hoc, and then runs `codesign --verify --deep --strict` and `plutil -lint` against the result
+- the release workflow's signing job declares `needs: [build-and-test, verify-bundle]`, so both gate
+  the signed artifacts on the release run itself
+
+**Do not treat the Developer ID job as the bundle check.** It is triggered by `release.published`,
+so it only starts once the release exists. A packaging failure caught there leaves a published tag
+whose distribution run failed, and this skill forbids deleting that tag. The bundle has to be proven
+before `gh release create`, which is what `Verify App Bundle` is for.
+
+Tell Gordon which gates ran where rather than reporting the precondition block as passed.
+
 List environment secret names with `gh secret list --repo GordonBeeming/myterm --env prod`. Never print or retrieve their values.
 
 ## Version convention
@@ -154,6 +177,11 @@ On failure, inspect `gh run view RUN_ID --log-failed`, report the exact failed g
    spctl --assess --type execute --verbose=2 /Applications/myterm.app
    ```
 
-5. Remove only the temporary verification directory after every check succeeds.
+5. `brew upgrade` replaces the bundle on disk but leaves an already-running myterm on the old code,
+   so `ps` will show a process older than the upgrade. Quitting it ends Gordon's live terminal
+   sessions, so never do that to finish a check. Report that the new build needs a restart and let
+   him pick the moment.
+
+6. Remove only the temporary verification directory after every check succeeds.
 
 Report the release URL, workflow URL and conclusion, source commit verification, app and DMG trust checks, asset name, signed tap commit, cask SHA verification, and Homebrew install result. Do not call the release complete while any one of these remains unverified.

@@ -29,8 +29,40 @@ jobs:
       - name: Run zsh shim test
         run: bash script/zsh_shim_test.sh
 
+  verify-bundle:
+    runs-on: macos-15
+    name: Verify App Bundle
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      # `swift test` never assembles the app, so a packaging break stays invisible until the
+      # release job runs, and that job only starts once the release is already published. This
+      # builds and checks the real bundle so the failure lands on the pull request instead.
+      # BUILD must match ^[1-9][0-9]*$, so it cannot be 0. The values are throwaway: this job
+      # proves the bundle assembles and verifies, and the real ones come from the release tag.
+      - name: Build and verify the app bundle
+        run: make verify VERSION=0.0.0 BUILD=1
+
+      # `codesign --verify` is perfectly happy with a bundle whose shell shims never got copied,
+      # and those going missing is the packaging break this job exists to catch: without them
+      # `open` in a pane leaves for the system browser, which looks like no bug at all.
+      - name: Check the shell shims shipped in the bundle
+        run: |
+          resources="dist/myterm.app/Contents/Resources"
+          missing=0
+          for shim in myterm-browser open myterm-bash-env \
+                      zsh/_myterm_common zsh/.zshenv zsh/.zprofile zsh/.zshrc zsh/.zlogin zsh/.zlogout; do
+            if [ ! -f "$resources/$shim" ]; then
+              echo "missing from the bundle: $shim" >&2
+              missing=1
+            fi
+          done
+          test "$missing" -eq 0
+
   release:
-    needs: build-and-test
+    needs: [build-and-test, verify-bundle]
     if: github.event_name == 'release'
     runs-on: macos-15
     name: Sign, Notarize & Release
