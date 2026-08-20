@@ -87,7 +87,18 @@ final class MyTermApplicationDelegate: NSObject, NSApplicationDelegate {
 
     func application(_ application: NSApplication, open urls: [URL]) {
         urlDispatcher.dispatch(urls)
+        guard Self.shouldActivate(for: urls) else { return }
         application.activate(ignoringOtherApps: true)
+    }
+
+    /// Whether an incoming batch of URLs is worth bringing MyTerm to the front for.
+    ///
+    /// A workspace browser route comes from a pane, often while the user is working in another app
+    /// entirely, so taking focus for it is the interruption this exists to prevent. Every other kind
+    /// of URL reaches the app because the user asked for it somewhere else, and still comes forward.
+    static func shouldActivate(for urls: [URL]) -> Bool {
+        guard !urls.isEmpty else { return false }
+        return !urls.allSatisfy { MyTermBrowserLauncher.browserDestination(from: $0) != nil }
     }
 
     private static func restoreMainWindow(_ application: NSApplication) {

@@ -96,7 +96,7 @@ final class WebLinkRoutingTests: XCTestCase {
             applicationSupportDirectory: directory,
             terminalEngine: nil,
             startsTerminalProcesses: false,
-            externalWebOpener: { url, applicationURL in
+            externalWebOpener: { url, applicationURL, _ in
                 opened.append((url, applicationURL))
                 return true
             }
@@ -132,7 +132,7 @@ final class WebLinkRoutingTests: XCTestCase {
             applicationSupportDirectory: directory,
             terminalEngine: nil,
             startsTerminalProcesses: false,
-            externalWebOpener: { _, _ in
+            externalWebOpener: { _, _, _ in
                 openCallCount += 1
                 return true
             }
@@ -146,6 +146,52 @@ final class WebLinkRoutingTests: XCTestCase {
         XCTAssertEqual(openCallCount, 0)
         XCTAssertEqual(model.selectedWorkspace.tabs.count, tabCount + 1)
         XCTAssertNotNil(model.errorDescription)
+    }
+
+    func testExternalBrowserComesForwardOnlyForTheWorkspaceInFrontOfTheUser() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var isActive = true
+        var activations: [Bool] = []
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: nil,
+            startsTerminalProcesses: false,
+            externalWebOpener: { _, _, activate in
+                activations.append(activate)
+                return true
+            },
+            isApplicationActive: { isActive }
+        )
+        model.updateGlobalSettings {
+            $0.webLinkDestination = .application(bundleIdentifier: "com.apple.Safari")
+        }
+        let url = try XCTUnwrap(URL(string: "https://example.com"))
+        let selectedWorkspaceID = model.selectedWorkspace.id
+        model.createWorkspace()
+        let backgroundWorkspaceID = model.selectedWorkspace.id
+        XCTAssertNotEqual(backgroundWorkspaceID, selectedWorkspaceID)
+        model.selectWorkspace(selectedWorkspaceID)
+
+        func route(to workspaceID: WorkspaceID) throws -> URL {
+            try XCTUnwrap(MyTermBrowserLauncher.browserRoute(for: workspaceID, url: url))
+        }
+
+        isActive = true
+        model.open([try route(to: selectedWorkspaceID)])
+        isActive = false
+        model.open([try route(to: selectedWorkspaceID)])
+        isActive = true
+        model.open([try route(to: backgroundWorkspaceID)])
+        isActive = false
+        model.open([try route(to: backgroundWorkspaceID)])
+
+        XCTAssertEqual(
+            activations,
+            [true, false, false, false],
+            "Only a link from the selected workspace, while MyTerm is active, should bring the browser forward"
+        )
     }
 
     private func makeTemporaryDirectory() throws -> URL {

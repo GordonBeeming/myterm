@@ -27,7 +27,7 @@ typealias TextFileOpenCommandRunner = @MainActor (
 
 typealias TextFileOpenCommandAvailabilityChecker = @MainActor (_ executable: String) -> Bool
 typealias ExternalFileOpener = @MainActor (_ url: URL) -> Bool
-typealias ExternalWebOpener = @MainActor (_ url: URL, _ applicationURL: URL) -> Bool
+typealias ExternalWebOpener = @MainActor (_ url: URL, _ applicationURL: URL, _ activate: Bool) -> Bool
 
 @MainActor
 @Observable
@@ -147,6 +147,15 @@ final class AppModel {
         self.isApplicationActive = isApplicationActive
         browserDataProfileResolver = BrowserDataProfileResolver(channel: channel)
         self.updates = updates ?? UpdateController(channel: channel)
+        if browserLauncherURL == nil {
+            // Without the launcher every pane starts with an empty MyTerm environment, so BROWSER,
+            // the open shim and the zsh chain are all absent and web links leave for the system
+            // browser. That looks exactly like the routing bug it replaced, so it has to say so
+            // rather than fail quietly.
+            Logger(subsystem: "com.gordonbeeming.myterm", category: "web-links").error(
+                "No browser launcher in the app bundle. Web links will not return to MyTerm."
+            )
+        }
         if let recoveryNotice {
             Logger(subsystem: "com.gordonbeeming.myterm", category: "workspace-recovery").notice(
                 "Workspace state repaired: identifiers=\(recoveryNotice.identifierRepairCount, privacy: .public), structure=\(recoveryNotice.structuralRepairCount, privacy: .public), dropped=\(recoveryNotice.droppedElementCount, privacy: .public), migrated=\(recoveryNotice.didMigrate, privacy: .public), backups=\(recoveryNotice.backupURLs.count, privacy: .public)"
@@ -930,7 +939,11 @@ final class AppModel {
             errorDescription = description
             return false
         case .application(let applicationURL):
-            guard externalWebOpener(url, applicationURL) else {
+            // A link the user command-clicked in the workspace in front of them is a deliberate act,
+            // so the browser should come forward. A link routed in from a workspace they are not
+            // watching, or arriving while MyTerm itself is in the background, must not interrupt.
+            let activate = workspaceID == store.selectedWorkspaceID && isApplicationActive()
+            guard externalWebOpener(url, applicationURL, activate) else {
                 errorDescription = "MyTerm could not open \(url.absoluteString) in \(FileManager.default.displayName(atPath: applicationURL.path))."
                 return false
             }
@@ -967,13 +980,15 @@ final class AppModel {
         NSWorkspace.shared.open(url)
     }
 
-    private static func openInBrowserApplication(_ url: URL, applicationURL: URL) -> Bool {
+    private static func openInBrowserApplication(_ url: URL, applicationURL: URL, activate: Bool) -> Bool {
         // AppKit has no synchronous "open in this application" call, so the launch is reported
         // asynchronously. Treat a started open as success and log a launch failure.
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = activate
         NSWorkspace.shared.open(
             [url],
             withApplicationAt: applicationURL,
-            configuration: NSWorkspace.OpenConfiguration()
+            configuration: configuration
         ) { _, error in
             guard let error else { return }
             Logger(subsystem: "com.gordonbeeming.myterm", category: "web-links").error(
