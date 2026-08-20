@@ -283,8 +283,11 @@ final class MyTermBrowserRoutingTests: XCTestCase {
             recorder: recorder,
             capture: directCapture
         )
+        // No workspaceID means this hands over an ordinary URL rather than a myterm://browser
+        // route, so the delegate cannot tell it apart from a link another app handed to MyTerm
+        // directly - which genuinely should activate. -g cannot hold on this path, so it is not
+        // claimed here.
         XCTAssertEqual(try capturedBatches(at: directCapture), [[
-            "-g",
             "-a",
             appBundle.path,
             firstURL.absoluteString,
