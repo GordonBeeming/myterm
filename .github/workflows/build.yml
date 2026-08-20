@@ -8,6 +8,13 @@ on:
   release:
     types: [published]
 
+# The runner image carries several Xcodes and moves its default on a schedule, so an unpinned
+# build ships from whichever compiler the image happened to pick that week. The signed release
+# comes out of this workflow, so the toolchain it is built with is named here rather than
+# inherited. Every job reads this.
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+
 jobs:
   build-and-test:
     runs-on: macos-15
@@ -17,8 +24,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Print Swift version
-        run: swift --version
+      # The pin names a version, not a build. GitHub replaces patch builds behind the same path,
+      # so the build that made a release is only knowable if the run wrote it down.
+      - name: Print the toolchain
+        run: |
+          xcodebuild -version
+          swift --version
 
       - name: Build all targets
         run: swift build --build-tests
