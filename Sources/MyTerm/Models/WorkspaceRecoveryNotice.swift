@@ -51,7 +51,11 @@ struct WorkspaceRecoveryNotice: Equatable, Sendable {
             sentences.append("Original data is backed up at \(paths).")
         }
         if !loadReport.backupFailureDescriptions.isEmpty {
-            let reasons = loadReport.backupFailureDescriptions.joined(separator: " ")
+            // The system reason isn't guaranteed to end in a period, so add one before joining
+            // sentences; otherwise the next sentence reads as a continuation of the reason.
+            let reasons = loadReport.backupFailureDescriptions
+                .map { $0.hasSuffix(".") ? $0 : "\($0)." }
+                .joined(separator: " ")
             sentences.append(
                 "MyTerm could not back up the original data: \(reasons) Changes in this session will not be saved."
             )

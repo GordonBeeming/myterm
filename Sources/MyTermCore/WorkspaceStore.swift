@@ -308,7 +308,15 @@ public final class WorkspaceStore {
                         fileManager: fileManager
                     ) {
                     case .success(let url): backupURLs.append(url)
-                    case .failure(let error): backupFailures.append(error.localizedDescription)
+                    case .failure(let error):
+                        // The path is already visible in the notice's backup-location text when a
+                        // backup does exist; the failure reason alone is what a reader needs here,
+                        // without also carrying the path into `.public` logs.
+                        if case .backupFailed(_, let reason) = error {
+                            backupFailures.append(reason)
+                        } else {
+                            backupFailures.append(error.localizedDescription)
+                        }
                     }
                 }
                 if sourceVersion == 1 {
@@ -1290,7 +1298,8 @@ public final class WorkspaceStore {
     ///
     /// Every schema change repairs the state file again, so one fixed name is only ever correct
     /// once. The first repair takes the preferred name, and every later repair takes a timestamped
-    /// sibling instead. Names never run out, so a repair can happen any number of times.
+    /// sibling instead. A numbered tail covers up to eight repairs inside the same second; beyond
+    /// that the candidates are exhausted and the caller reports a failure instead of a URL.
     ///
     /// Returns the URL that holds the bytes, or the reason no file holds them.
     private static func preserveOriginal(
