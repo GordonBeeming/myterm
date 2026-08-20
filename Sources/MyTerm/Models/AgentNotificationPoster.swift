@@ -36,15 +36,18 @@ final class UserNotificationPoster: NSObject, AgentNotificationPosting {
     }
 
     func requestAuthorization() {
-        center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        // `@Sendable` is load-bearing on every handler Notification Centre calls back. Without it
+        // the closure takes this type's main-actor isolation, and Swift traps when the framework
+        // runs it on its own queue.
+        center.requestAuthorization(options: [.alert, .sound]) { @Sendable _, _ in }
     }
 
     func post(_ notification: AgentNotification) {
-        center.getNotificationSettings { settings in
+        center.getNotificationSettings { @Sendable [weak self] settings in
             // Only the status crosses back to the main actor. The settings object itself is not
             // safe to send.
             let status = settings.authorizationStatus
-            Task { @MainActor [weak self] in
+            Task { @MainActor in
                 guard let self else { return }
                 switch status {
                 case .notDetermined:
