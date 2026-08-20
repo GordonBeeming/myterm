@@ -49,6 +49,8 @@ final class AgentActivityMarkerTests: XCTestCase {
             "agent=;event=finished",
             "just some terminal output",
             "agent=claude;event=finished;" + String(repeating: "x", count: 300),
+            // Under the byte cap this is 228 characters but 828 bytes.
+            "agent=claude;event=finished;" + String(repeating: "\u{1F642}", count: 200),
         ]
         for payload in rejected {
             XCTAssertNil(

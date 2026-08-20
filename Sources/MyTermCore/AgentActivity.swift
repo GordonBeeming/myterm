@@ -29,10 +29,11 @@ public enum AgentActivityMarker {
     public static let oscCode = 7337
 
     /// Longer payloads are ignored rather than parsed, so a stream of text cannot become a report.
-    static let maximumPayloadLength = 256
+    /// The payload arrives as terminal bytes, so the cap counts bytes rather than characters.
+    static let maximumPayloadBytes = 256
 
     public static func report(fromPayload payload: String) -> AgentActivityReport? {
-        guard payload.count <= maximumPayloadLength else { return nil }
+        guard payload.utf8.count <= maximumPayloadBytes else { return nil }
         var agent: String?
         var activity: AgentActivity?
 
