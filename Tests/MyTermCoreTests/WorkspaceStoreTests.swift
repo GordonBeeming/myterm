@@ -12,6 +12,54 @@ final class WorkspaceStoreTests: XCTestCase {
             .appendingPathExtension("json")
     }
 
+    /// A private directory, for the tests that change directory permissions.
+    private func temporaryDirectory() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MyTermCoreTests", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    /// A fixed clock for the backup-name tests.
+    ///
+    /// Building the date from components in the current calendar keeps `fixedBackupStamp` correct
+    /// in whatever time zone the test machine runs in.
+    private static let fixedBackupDate = Calendar.current.date(from: DateComponents(
+        year: 2026, month: 8, day: 21, hour: 9, minute: 21, second: 5
+    )) ?? Date(timeIntervalSince1970: 0)
+    private static let fixedBackupStamp = "20260821-092105"
+
+    private func timestampedBackupURL(_ preferredURL: URL, suffix: String = "") -> URL {
+        preferredURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("\(preferredURL.lastPathComponent)-\(Self.fixedBackupStamp)\(suffix)")
+    }
+
+    /// Every candidate name `preserveOriginal` tries for `preferredURL`, in order — mirrors
+    /// `WorkspaceStore.backupCandidates(for:now:)` so a test can block them all without hand-spelling
+    /// nine paths.
+    private func allBackupCandidates(for preferredURL: URL) -> [URL] {
+        [preferredURL, timestampedBackupURL(preferredURL)]
+            + (2...8).map { timestampedBackupURL(preferredURL, suffix: "-\($0)") }
+    }
+
+    /// A v2 snapshot whose `isPinned` values are numbers, which the loader repairs on read.
+    private func snapshotNeedingStructuralRepair() throws -> Data {
+        let workspace = Workspace(title: "Repairable", isPinned: false)
+        let snapshot = WorkspaceStoreSnapshot(
+            workspaces: [workspace],
+            selectedWorkspaceID: workspace.id
+        )
+        let validJSON = try XCTUnwrap(String(data: JSONEncoder().encode(snapshot), encoding: .utf8))
+        let malformedJSON = validJSON.replacingOccurrences(
+            of: #""isPinned":false"#,
+            with: #""isPinned":0"#
+        )
+        XCTAssertTrue(malformedJSON.contains(#""isPinned":0"#))
+        return Data(malformedJSON.utf8)
+    }
+
     private func removeSelectedWorkspace(_ store: WorkspaceStore) throws {
         try store.removeWorkspace(store.selectedWorkspaceID)
     }
@@ -380,7 +428,7 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertNotEqual(try Data(contentsOf: url), original)
     }
 
-    func testDifferentExistingMigrationBackupStopsBeforeOverwritingSource() throws {
+    func testDifferentExistingMigrationBackupTakesATimestampedNameAndStillStarts() throws {
         let url = temporaryURL()
         let workspaceID = WorkspaceID()
         let source = Data("""
@@ -395,14 +443,164 @@ final class WorkspaceStoreTests: XCTestCase {
         try source.write(to: url)
         try existingBackup.write(to: backupURL)
 
-        XCTAssertThrowsError(try WorkspaceStore(persistenceURL: url)) { error in
-            guard case .backupFailed(let path, _) = error as? WorkspaceStoreError else {
-                return XCTFail("Expected backupFailed, got \(error)")
-            }
-            XCTAssertEqual(path, backupURL.path)
-        }
-        XCTAssertEqual(try Data(contentsOf: url), source)
+        let store = try WorkspaceStore(persistenceURL: url, now: Self.fixedBackupDate)
+
+        XCTAssertEqual(store.workspaces.map(\.title), ["Current"])
+        XCTAssertTrue(store.loadReport.backupFailureDescriptions.isEmpty)
+        XCTAssertEqual(store.loadReport.backupURLs, [timestampedBackupURL(backupURL)])
+        XCTAssertEqual(try Data(contentsOf: timestampedBackupURL(backupURL)), source)
         XCTAssertEqual(try Data(contentsOf: backupURL), existingBackup)
+        XCTAssertNotEqual(try Data(contentsOf: url), source)
+    }
+
+    func testDifferentExistingRecoveryBackupTakesATimestampedNameAndStillStarts() throws {
+        let url = temporaryURL()
+        let source = try snapshotNeedingStructuralRepair()
+        try source.write(to: url)
+        let backupURL = url.appendingPathExtension("recovery-backup")
+        let existingBackup = Data("an earlier repair".utf8)
+        try existingBackup.write(to: backupURL)
+
+        let store = try WorkspaceStore(persistenceURL: url, now: Self.fixedBackupDate)
+
+        XCTAssertEqual(store.workspaces.map(\.isPinned), [false])
+        XCTAssertTrue(store.loadReport.backupFailureDescriptions.isEmpty)
+        XCTAssertEqual(store.loadReport.backupURLs, [timestampedBackupURL(backupURL)])
+        XCTAssertEqual(try Data(contentsOf: timestampedBackupURL(backupURL)), source)
+        XCTAssertEqual(try Data(contentsOf: backupURL), existingBackup)
+    }
+
+    func testAPreExistingDirectoryAtACandidateNameIsSkippedRatherThanTreatedAsAMatch() throws {
+        let url = temporaryURL()
+        let source = try snapshotNeedingStructuralRepair()
+        try source.write(to: url)
+        let backupURL = url.appendingPathExtension("recovery-backup")
+        // The exclusive create fails with "file exists" for a directory just like it would for a
+        // regular file, but a directory holds no bytes to compare, so the candidate must be skipped
+        // rather than misread as an identical-content match that reuses a name with no real backup.
+        try FileManager.default.createDirectory(at: backupURL, withIntermediateDirectories: true)
+
+        let store = try WorkspaceStore(persistenceURL: url, now: Self.fixedBackupDate)
+
+        let expectedURL = timestampedBackupURL(backupURL)
+        XCTAssertTrue(store.loadReport.backupFailureDescriptions.isEmpty)
+        XCTAssertEqual(store.loadReport.backupURLs, [expectedURL])
+        XCTAssertEqual(try Data(contentsOf: expectedURL), source)
+        XCTAssertEqual(store.workspaces.map(\.isPinned), [false])
+    }
+
+    func testRepeatedRecoveryBackupOfTheSameBytesReusesTheExistingFile() throws {
+        let url = temporaryURL()
+        let source = try snapshotNeedingStructuralRepair()
+        try source.write(to: url)
+        let backupURL = url.appendingPathExtension("recovery-backup")
+        try source.write(to: backupURL)
+
+        let store = try WorkspaceStore(persistenceURL: url, now: Self.fixedBackupDate)
+
+        XCTAssertEqual(store.loadReport.backupURLs, [backupURL])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: timestampedBackupURL(backupURL).path))
+    }
+
+    func testASecondRepairWithinTheSameSecondTakesANumberedName() throws {
+        let url = temporaryURL()
+        let source = try snapshotNeedingStructuralRepair()
+        try source.write(to: url)
+        let backupURL = url.appendingPathExtension("recovery-backup")
+        try Data("an earlier repair".utf8).write(to: backupURL)
+        try Data("a repair from this second".utf8).write(to: timestampedBackupURL(backupURL))
+
+        let store = try WorkspaceStore(persistenceURL: url, now: Self.fixedBackupDate)
+
+        let numberedURL = timestampedBackupURL(backupURL, suffix: "-2")
+        XCTAssertEqual(store.loadReport.backupURLs, [numberedURL])
+        XCTAssertEqual(try Data(contentsOf: numberedURL), source)
+    }
+
+    func testAnUnwritableDirectoryReportsTheBackupFailureAndKeepsTheOriginalBytes() throws {
+        let directory = try temporaryDirectory()
+        let url = directory.appendingPathComponent("workspace-state.json")
+        let source = try snapshotNeedingStructuralRepair()
+        try source.write(to: url)
+        // Read and execute only: the store can still read the state file, and can write nothing
+        // beside it, which is the only way a timestamped name runs out of options.
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: directory.path)
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: 0o700],
+                ofItemAtPath: directory.path
+            )
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        let store = try WorkspaceStore(persistenceURL: url, now: Self.fixedBackupDate)
+
+        XCTAssertEqual(store.workspaces.map(\.isPinned), [false])
+        XCTAssertTrue(store.loadReport.backupURLs.isEmpty)
+        XCTAssertEqual(store.loadReport.backupFailureDescriptions.count, 1)
+        // Nothing preserved the original bytes, so the store must not have rewritten over them.
+        XCTAssertEqual(try Data(contentsOf: url), source)
+    }
+
+    func testPersistenceStaysSuspendedForTheRestOfTheSessionAfterABackupFailure() throws {
+        let directory = try temporaryDirectory()
+        let url = directory.appendingPathComponent("workspace-state.json")
+        let source = try snapshotNeedingStructuralRepair()
+        try source.write(to: url)
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: directory.path)
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: 0o700],
+                ofItemAtPath: directory.path
+            )
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        let store = try WorkspaceStore(persistenceURL: url, now: Self.fixedBackupDate)
+
+        XCTAssertTrue(store.isPersistenceSuspended)
+        // A later write (a migration, a user action) must not throw and must not touch the file
+        // the failed backup left as the only copy of the original state.
+        XCTAssertNoThrow(try store.createWorkspace(title: "x"))
+        XCTAssertEqual(try Data(contentsOf: url), source)
+    }
+
+    func testACleanLoadIsNotSuspendedAndWritesNormally() throws {
+        let url = temporaryURL()
+
+        let store = try WorkspaceStore(persistenceURL: url, now: Self.fixedBackupDate)
+
+        XCTAssertFalse(store.isPersistenceSuspended)
+        try store.createWorkspace(title: "x")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    func testOneBackupSucceedingKeepsPersistenceEnabledEvenWhenTheOtherFails() throws {
+        // A version-1 source that also needs a repair writes both a migration backup and a
+        // recovery backup of the same original bytes. Blocking every migration-backup candidate
+        // name fails that branch while the recovery backup, left free, succeeds.
+        let url = temporaryURL()
+        let workspaceID = WorkspaceID()
+        let source = Data("""
+        {"version":1,"workspaces":[{"id":"\(workspaceID)","title":"Current","tabs":[]},{"id":false}],"selectedWorkspaceID":"\(workspaceID)"}
+        """.utf8)
+        try source.write(to: url)
+        let migrationBackupURL = url.appendingPathExtension("v1-backup")
+        for candidate in allBackupCandidates(for: migrationBackupURL) {
+            try FileManager.default.createDirectory(at: candidate, withIntermediateDirectories: true)
+        }
+
+        let store = try WorkspaceStore(persistenceURL: url, now: Self.fixedBackupDate)
+
+        XCTAssertEqual(store.workspaces.map(\.title), ["Current"])
+        XCTAssertEqual(store.loadReport.droppedElementCount, 1)
+        XCTAssertEqual(store.loadReport.backupURLs, [store.recoveryBackupURL])
+        XCTAssertEqual(store.loadReport.backupFailureDescriptions.count, 1)
+        // The recovery backup preserved the original bytes, so the migration backup's failure
+        // costs nothing and the store keeps writing.
+        XCTAssertFalse(store.isPersistenceSuspended)
+        XCTAssertNoThrow(try store.createWorkspace(title: "later"))
+        XCTAssertEqual(try WorkspaceStore(persistenceURL: url).workspaces.map(\.title), ["Current", "later"])
     }
 
     func testStorePreservesOriginalBytesBeforeStructuralV2Repair() throws {
