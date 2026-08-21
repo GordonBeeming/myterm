@@ -1321,17 +1321,21 @@ public final class WorkspaceStore {
         // later attempt fails the same way for the same reason.
         var reason: String?
         for candidate in backupCandidates(for: preferredURL, now: now) {
-            if fileManager.fileExists(atPath: candidate.path) {
+            do {
+                // `.withoutOverwriting` is an exclusive create, so two MyTerm processes repairing the
+                // same store cannot both claim one name. A check-then-write with `.atomic` would let
+                // the second process's rename replace the first process's backup, which is the one
+                // thing this function must never do. Giving up `.atomic`'s temp-and-rename is the
+                // right trade: a name another process might take is a live hazard, and a crash inside
+                // one small write is not.
+                try data.write(to: candidate, options: .withoutOverwriting)
+                return .success(candidate)
+            } catch let error as CocoaError where error.code == .fileWriteFileExists {
                 // A repair that runs twice over identical bytes reuses the backup it already wrote,
                 // so a restart cannot fill the directory with copies of one file.
                 if let existing = try? Data(contentsOf: candidate), existing == data {
                     return .success(candidate)
                 }
-                continue
-            }
-            do {
-                try data.write(to: candidate, options: .atomic)
-                return .success(candidate)
             } catch {
                 reason = reason ?? error.localizedDescription
             }

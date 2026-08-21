@@ -462,6 +462,25 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: backupURL), existingBackup)
     }
 
+    func testAPreExistingDirectoryAtACandidateNameIsSkippedRatherThanTreatedAsAMatch() throws {
+        let url = temporaryURL()
+        let source = try snapshotNeedingStructuralRepair()
+        try source.write(to: url)
+        let backupURL = url.appendingPathExtension("recovery-backup")
+        // The exclusive create fails with "file exists" for a directory just like it would for a
+        // regular file, but a directory holds no bytes to compare, so the candidate must be skipped
+        // rather than misread as an identical-content match that reuses a name with no real backup.
+        try FileManager.default.createDirectory(at: backupURL, withIntermediateDirectories: true)
+
+        let store = try WorkspaceStore(persistenceURL: url, now: Self.fixedBackupDate)
+
+        let expectedURL = timestampedBackupURL(backupURL)
+        XCTAssertTrue(store.loadReport.backupFailureDescriptions.isEmpty)
+        XCTAssertEqual(store.loadReport.backupURLs, [expectedURL])
+        XCTAssertEqual(try Data(contentsOf: expectedURL), source)
+        XCTAssertEqual(store.workspaces.map(\.isPinned), [false])
+    }
+
     func testRepeatedRecoveryBackupOfTheSameBytesReusesTheExistingFile() throws {
         let url = temporaryURL()
         let source = try snapshotNeedingStructuralRepair()
