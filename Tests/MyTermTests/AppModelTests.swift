@@ -2948,6 +2948,24 @@ final class AppModelTests: XCTestCase {
         XCTAssertTrue(notice.message.contains("Changes in this session will not be saved."))
     }
 
+    func testRecoveryNoticeOmitsUnsavedChangesWhenTheOtherBackupSucceeded() throws {
+        let backupURL = URL(fileURLWithPath: "/tmp/MyTerm/workspaces.json.recovery-backup")
+        let notice = try XCTUnwrap(WorkspaceRecoveryNotice(loadReport: WorkspaceStoreLoadReport(
+            sourceVersion: 1,
+            didMigrate: true,
+            droppedElementCount: 1,
+            identifierRepairCount: 0,
+            structuralRepairCount: 0,
+            backupURLs: [backupURL],
+            backupFailureDescriptions: ["The volume is full."]
+        )))
+
+        // The recovery backup preserved the original bytes, so the migration backup's failure is
+        // still worth reporting, but it did not cost the user anything.
+        XCTAssertTrue(notice.message.contains("MyTerm could not back up the original data: The volume is full."))
+        XCTAssertFalse(notice.message.contains("Changes in this session will not be saved."))
+    }
+
     func testAppModelPublishesRecoveryNoticeFromWorkspaceStoreLoadReport() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }

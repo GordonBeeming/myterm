@@ -56,9 +56,14 @@ struct WorkspaceRecoveryNotice: Equatable, Sendable {
             let reasons = loadReport.backupFailureDescriptions
                 .map { $0.hasSuffix(".") ? $0 : "\($0)." }
                 .joined(separator: " ")
-            sentences.append(
-                "MyTerm could not back up the original data: \(reasons) Changes in this session will not be saved."
-            )
+            var sentence = "MyTerm could not back up the original data: \(reasons)"
+            // A version-1 source that also needs a repair writes two backups of the same bytes. One
+            // succeeding preserves the original even when the other fails, so changes are only at
+            // risk when nothing preserved the original data.
+            if loadReport.preservedNothing {
+                sentence += " Changes in this session will not be saved."
+            }
+            sentences.append(sentence)
         }
         message = sentences.joined(separator: " ")
     }

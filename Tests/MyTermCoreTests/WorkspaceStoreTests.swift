@@ -36,6 +36,14 @@ final class WorkspaceStoreTests: XCTestCase {
             .appendingPathComponent("\(preferredURL.lastPathComponent)-\(Self.fixedBackupStamp)\(suffix)")
     }
 
+    /// Every candidate name `preserveOriginal` tries for `preferredURL`, in order — mirrors
+    /// `WorkspaceStore.backupCandidates(for:now:)` so a test can block them all without hand-spelling
+    /// nine paths.
+    private func allBackupCandidates(for preferredURL: URL) -> [URL] {
+        [preferredURL, timestampedBackupURL(preferredURL)]
+            + (2...8).map { timestampedBackupURL(preferredURL, suffix: "-\($0)") }
+    }
+
     /// A v2 snapshot whose `isPinned` values are numbers, which the loader repairs on read.
     private func snapshotNeedingStructuralRepair() throws -> Data {
         let workspace = Workspace(title: "Repairable", isPinned: false)
@@ -565,6 +573,34 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertFalse(store.isPersistenceSuspended)
         try store.createWorkspace(title: "x")
         XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    func testOneBackupSucceedingKeepsPersistenceEnabledEvenWhenTheOtherFails() throws {
+        // A version-1 source that also needs a repair writes both a migration backup and a
+        // recovery backup of the same original bytes. Blocking every migration-backup candidate
+        // name fails that branch while the recovery backup, left free, succeeds.
+        let url = temporaryURL()
+        let workspaceID = WorkspaceID()
+        let source = Data("""
+        {"version":1,"workspaces":[{"id":"\(workspaceID)","title":"Current","tabs":[]},{"id":false}],"selectedWorkspaceID":"\(workspaceID)"}
+        """.utf8)
+        try source.write(to: url)
+        let migrationBackupURL = url.appendingPathExtension("v1-backup")
+        for candidate in allBackupCandidates(for: migrationBackupURL) {
+            try FileManager.default.createDirectory(at: candidate, withIntermediateDirectories: true)
+        }
+
+        let store = try WorkspaceStore(persistenceURL: url, now: Self.fixedBackupDate)
+
+        XCTAssertEqual(store.workspaces.map(\.title), ["Current"])
+        XCTAssertEqual(store.loadReport.droppedElementCount, 1)
+        XCTAssertEqual(store.loadReport.backupURLs, [store.recoveryBackupURL])
+        XCTAssertEqual(store.loadReport.backupFailureDescriptions.count, 1)
+        // The recovery backup preserved the original bytes, so the migration backup's failure
+        // costs nothing and the store keeps writing.
+        XCTAssertFalse(store.isPersistenceSuspended)
+        XCTAssertNoThrow(try store.createWorkspace(title: "later"))
+        XCTAssertEqual(try WorkspaceStore(persistenceURL: url).workspaces.map(\.title), ["Current", "later"])
     }
 
     func testStorePreservesOriginalBytesBeforeStructuralV2Repair() throws {

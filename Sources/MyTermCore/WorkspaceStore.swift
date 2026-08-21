@@ -56,6 +56,14 @@ public struct WorkspaceStoreLoadReport: Equatable, Sendable {
     /// the user with a dead window and no way to clear whatever blocks it.
     public let backupFailureDescriptions: [String]
 
+    /// Whether a needed backup ran and nothing came out of it.
+    ///
+    /// A version-1 source that also needs a repair writes two backups of the same original bytes.
+    /// Both copy `originalData`, so one success preserves it and the other branch's failure costs
+    /// nothing. Only a load that preserved nothing leaves the state file as the last copy of what
+    /// came before the repair.
+    public var preservedNothing: Bool { backupURLs.isEmpty && !backupFailureDescriptions.isEmpty }
+
     public init(
         sourceVersion: Int?,
         didMigrate: Bool,
@@ -256,9 +264,9 @@ public final class WorkspaceStore {
     /// Whether the store keeps its state in memory only.
     ///
     /// A repair rewrites the state file, and the backup beside it is the only copy of what the file
-    /// held before. When no backup could be written, every later write would destroy state the user
-    /// cannot get back, so the store stops writing for the rest of the session.
-    public var isPersistenceSuspended: Bool { !loadReport.backupFailureDescriptions.isEmpty }
+    /// held before. When a needed backup preserved nothing, every later write would destroy state the
+    /// user cannot get back, so the store stops writing for the rest of the session.
+    public var isPersistenceSuspended: Bool { loadReport.preservedNothing }
 
     public var migrationBackupURL: URL { persistenceURL.appendingPathExtension("v1-backup") }
     public var recoveryBackupURL: URL { persistenceURL.appendingPathExtension("recovery-backup") }
