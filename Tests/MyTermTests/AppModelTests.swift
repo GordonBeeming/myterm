@@ -2946,6 +2946,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertTrue(notice.message.contains("repaired 1 identifier"))
         XCTAssertTrue(notice.message.contains("MyTerm could not back up the original data: The volume is full."))
         XCTAssertTrue(notice.message.contains("Changes in this session will not be saved."))
+        XCTAssertTrue(notice.preservedNothing)
     }
 
     func testRecoveryNoticeOmitsUnsavedChangesWhenTheOtherBackupSucceeded() throws {
@@ -2966,6 +2967,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertTrue(notice.message.contains("MyTerm could not write a second backup copy: The volume is full."))
         XCTAssertFalse(notice.message.contains("could not back up the original data"))
         XCTAssertFalse(notice.message.contains("Changes in this session will not be saved."))
+        XCTAssertFalse(notice.preservedNothing)
     }
 
     func testAppModelPublishesRecoveryNoticeFromWorkspaceStoreLoadReport() throws {

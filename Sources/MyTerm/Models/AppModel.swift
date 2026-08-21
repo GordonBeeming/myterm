@@ -161,8 +161,15 @@ final class AppModel {
             logger.notice(
                 "Workspace state repaired: identifiers=\(recoveryNotice.identifierRepairCount, privacy: .public), structure=\(recoveryNotice.structuralRepairCount, privacy: .public), dropped=\(recoveryNotice.droppedElementCount, privacy: .public), migrated=\(recoveryNotice.didMigrate, privacy: .public), backups=\(recoveryNotice.backupURLs.count, privacy: .public)"
             )
+            // A version-1 source that also needs a repair writes two backups of the same bytes, so
+            // one succeeding leaves the other's failure as a redundant copy, not a lost original.
+            // The level and wording below follow that split, the same way the banner text does.
             for failure in recoveryNotice.backupFailureDescriptions {
-                logger.error("Workspace state repaired without a backup: \(failure, privacy: .public)")
+                if recoveryNotice.preservedNothing {
+                    logger.error("Workspace state repaired without a backup: \(failure, privacy: .public)")
+                } else {
+                    logger.notice("Workspace state backed up, but a second copy failed: \(failure, privacy: .public)")
+                }
             }
         }
         try migrateLegacySettings()

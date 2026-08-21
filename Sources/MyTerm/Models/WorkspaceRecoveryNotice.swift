@@ -9,6 +9,11 @@ struct WorkspaceRecoveryNotice: Equatable, Sendable {
     let didMigrate: Bool
     let backupURLs: [URL]
     let backupFailureDescriptions: [String]
+    /// Whether a needed backup ran and nothing came out of it — see `WorkspaceStoreLoadReport`.
+    ///
+    /// Exposed here too so the banner text and any other reader of this notice (the startup log)
+    /// branch on the same fact instead of each re-deriving it and risking drift.
+    let preservedNothing: Bool
 
     init?(loadReport: WorkspaceStoreLoadReport) {
         let repairedCount = loadReport.identifierRepairCount + loadReport.structuralRepairCount
@@ -25,6 +30,7 @@ struct WorkspaceRecoveryNotice: Equatable, Sendable {
         didMigrate = loadReport.didMigrate
         backupURLs = loadReport.backupURLs
         backupFailureDescriptions = loadReport.backupFailureDescriptions
+        preservedNothing = loadReport.preservedNothing
 
         var changes: [String] = []
         if loadReport.didMigrate {
@@ -59,7 +65,7 @@ struct WorkspaceRecoveryNotice: Equatable, Sendable {
             // A version-1 source that also needs a repair writes two backups of the same bytes. When
             // one succeeds, the "Original data is backed up at ..." sentence above already covers it,
             // so this failure is a second, redundant copy, not the loss the other wording implies.
-            if loadReport.preservedNothing {
+            if preservedNothing {
                 sentences.append(
                     "MyTerm could not back up the original data: \(reasons) Changes in this session will not be saved."
                 )
