@@ -2961,8 +2961,10 @@ final class AppModelTests: XCTestCase {
         )))
 
         // The recovery backup preserved the original bytes, so the migration backup's failure is
-        // still worth reporting, but it did not cost the user anything.
-        XCTAssertTrue(notice.message.contains("MyTerm could not back up the original data: The volume is full."))
+        // still worth reporting, but it did not cost the user anything: the wording must not claim
+        // the original data itself is unbacked-up, and must not tell the user changes are unsaved.
+        XCTAssertTrue(notice.message.contains("MyTerm could not write a second backup copy: The volume is full."))
+        XCTAssertFalse(notice.message.contains("could not back up the original data"))
         XCTAssertFalse(notice.message.contains("Changes in this session will not be saved."))
     }
 
