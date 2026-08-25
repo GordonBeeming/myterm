@@ -85,6 +85,10 @@ Reading a tab is what quietens it. Reaching the tab, switching to its workspace,
 MyTerm from another app all count. A question is the exception, because reading a question does not
 answer it: the cook stays purple until you reply and the agent goes back to work.
 
+A prompt you have not typed into for a while is not a question. Claude Code reports both under the
+same event, so MyTerm reads the report's own payload and passes on only the one that asks for
+something. Without that, every finished turn would turn purple a minute later and stay there.
+
 The indicator is off until you press **Set Up Claude Code Hooks** or **Set Up Codex Hooks** in
 General Settings. Each writes three hooks to that agent's own file, and the same button removes them
 again:
@@ -96,6 +100,10 @@ again:
 
 These files are shared with other tools. MyTerm marks its own commands with a trailing
 `# myterm-managed-hook` comment, adds nothing else, and removes only what carries that mark.
+
+What a hook reports can change between MyTerm versions. When Settings finds hooks an older MyTerm
+wrote, it says so and offers **Update**, which rewrites MyTerm's own commands and leaves the rest of
+the file alone. Until then the old hooks keep reporting the old way.
 
 Each hook writes an escape sequence to its own terminal, `ESC ]7337;agent=claude;event=finished ESC \`,
 and does nothing unless `MYTERM_PANE_ID` is set. Only MyTerm's terminals set it, so the hooks stay
