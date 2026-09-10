@@ -731,6 +731,28 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: recoveryBackupURL), existingBackup)
     }
 
+    func testASettingTheFilePredatesIsADefaultNotARepair() throws {
+        let url = temporaryURL()
+        let workspace = Workspace(title: "Older file", isPinned: false)
+        let snapshot = WorkspaceStoreSnapshot(workspaces: [workspace], selectedWorkspaceID: workspace.id)
+        var json = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(snapshot)) as? [String: Any]
+        )
+        var settings = try XCTUnwrap(json["globalSettings"] as? [String: Any])
+        XCTAssertNotNil(settings.removeValue(forKey: "compactSidebar"))
+        XCTAssertNotNil(settings.removeValue(forKey: "cursorBlink"))
+        json["globalSettings"] = settings
+        try JSONSerialization.data(withJSONObject: json).write(to: url)
+
+        let store = try WorkspaceStore(persistenceURL: url)
+
+        XCTAssertEqual(store.loadReport.structuralRepairCount, 0)
+        XCTAssertEqual(store.loadReport.identifierRepairCount, 0)
+        XCTAssertEqual(store.loadReport.backupURLs, [])
+        XCTAssertTrue(store.globalSettings.compactSidebar)
+        XCTAssertTrue(store.globalSettings.cursorBlink)
+    }
+
     func testNumericBooleanValuesTriggerStructuralRepairAndExactByteBackup() throws {
         let url = temporaryURL()
         let first = Workspace(title: "Numeric zero", isPinned: false)
