@@ -13,6 +13,7 @@ enum MyTermBrowserLauncher {
     /// another MyTerm's copy is recognised wherever it lives, and a user's own ZDOTDIR that merely
     /// holds a file of the same name is not.
     static let zshShimMarker = "# MyTerm zsh shim"
+    static let bashEnvironmentFileName = "myterm-bash-env"
     static let workspaceRouteScheme = "myterm"
     static let workspaceRouteHost = "browser"
 
@@ -54,14 +55,22 @@ enum MyTermBrowserLauncher {
         let basePath = baseEnvironment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
         let zdotdir = "\(resourceDirectory)/zsh"
         var environment = [
-            "BASH_ENV": "\(resourceDirectory)/myterm-bash-env",
+            "BASH_ENV": "\(resourceDirectory)/\(bashEnvironmentFileName)",
             "BROWSER": executableURL.path,
             "MYTERM_OPEN_SHIM": "\(resourceDirectory)/open",
             "PATH": "\(resourceDirectory):\(basePath)",
             zdotdirEnvironmentKey: zdotdir,
             resourceDirectoryEnvironmentKey: resourceDirectory,
         ]
-        if let originalBashEnvironment = baseEnvironment["BASH_ENV"], !originalBashEnvironment.isEmpty {
+        // The same nesting rules as ZDOTDIR below apply to BASH_ENV: prefer the original a parent
+        // MyTerm already resolved, and never mirror a MyTerm shim as though it were the user's own
+        // file. This matters across bundles too. An app launched from a pane of an older copy
+        // inherits that copy's shim, and two shims pointing at each other source one another
+        // until bash runs out of stack.
+        let originalBashEnvironmentSource = baseEnvironment["MYTERM_ORIGINAL_BASH_ENV"].flatMap { $0.isEmpty ? nil : $0 }
+            ?? baseEnvironment["BASH_ENV"]
+        if let originalBashEnvironment = originalBashEnvironmentSource, !originalBashEnvironment.isEmpty,
+           URL(fileURLWithPath: originalBashEnvironment).lastPathComponent != bashEnvironmentFileName {
             environment["MYTERM_ORIGINAL_BASH_ENV"] = originalBashEnvironment
         }
         // MyTerm can itself run from inside a MyTerm pane (developing MyTerm in MyTerm), in

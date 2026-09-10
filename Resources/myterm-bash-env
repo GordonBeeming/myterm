@@ -1,11 +1,17 @@
 # shellcheck shell=bash
 
-if [ -n "${MYTERM_ORIGINAL_BASH_ENV:-}" ] \
-  && [ "$MYTERM_ORIGINAL_BASH_ENV" != "${BASH_ENV:-}" ] \
-  && [ -r "$MYTERM_ORIGINAL_BASH_ENV" ]; then
-  # shellcheck disable=SC1090
-  . "$MYTERM_ORIGINAL_BASH_ENV"
-fi
+# Another MyTerm's copy of this file is never the user's own BASH_ENV. Sourcing it would come
+# straight back here, and the two files would source each other until bash ran out of stack.
+case "${MYTERM_ORIGINAL_BASH_ENV:-}" in
+  ""|*/myterm-bash-env) ;;
+  "${BASH_ENV:-}") ;;
+  *)
+    if [ -r "$MYTERM_ORIGINAL_BASH_ENV" ]; then
+      # shellcheck disable=SC1090
+      . "$MYTERM_ORIGINAL_BASH_ENV"
+    fi
+    ;;
+esac
 
 open() {
   "${MYTERM_OPEN_SHIM:-/usr/bin/open}" "$@"

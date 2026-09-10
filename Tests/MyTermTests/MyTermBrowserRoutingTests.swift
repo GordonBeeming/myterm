@@ -113,6 +113,59 @@ final class MyTermBrowserRoutingTests: XCTestCase {
         )
     }
 
+    func testEnvironmentNeverMirrorsAnotherMyTermBashShimAsTheOriginal() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let launcher = directory.appending(path: "myterm-browser", directoryHint: .notDirectory)
+        try Data("#!/bin/sh\nexit 0\n".utf8).write(to: launcher)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: launcher.path)
+
+        // Launched from a pane of an older copy: its shim is the inherited BASH_ENV, and it has
+        // already resolved the user's real file into MYTERM_ORIGINAL_BASH_ENV.
+        let nested = MyTermBrowserLauncher.environment(
+            executableURL: launcher,
+            baseEnvironment: [
+                "PATH": "/usr/bin",
+                "BASH_ENV": "/Applications/myterm.app/Contents/Resources/myterm-bash-env",
+                "MYTERM_ORIGINAL_BASH_ENV": "/Users/example/.bash-env",
+            ]
+        )
+        XCTAssertEqual(nested["MYTERM_ORIGINAL_BASH_ENV"], "/Users/example/.bash-env")
+
+        // With no resolved original, the other copy's shim is dropped rather than mirrored. Two
+        // shims pointing at each other would source one another until bash ran out of stack.
+        let onlyShim = MyTermBrowserLauncher.environment(
+            executableURL: launcher,
+            baseEnvironment: [
+                "PATH": "/usr/bin",
+                "BASH_ENV": "/Applications/myterm.app/Contents/Resources/myterm-bash-env",
+            ]
+        )
+        XCTAssertNil(onlyShim["MYTERM_ORIGINAL_BASH_ENV"])
+    }
+
+    func testBashShimRefusesToSourceAnotherCopyOfItself() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let shim = repositoryRoot.appending(path: "Resources/myterm-bash-env", directoryHint: .notDirectory)
+        let otherCopy = directory.appending(path: "other/myterm-bash-env", directoryHint: .notDirectory)
+        try FileManager.default.createDirectory(at: otherCopy.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: shim, to: otherCopy)
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = ["-c", "exit 0"]
+        process.environment = [
+            "PATH": "/usr/bin:/bin",
+            "BASH_ENV": shim.path,
+            "MYTERM_ORIGINAL_BASH_ENV": otherCopy.path,
+        ]
+        try process.run()
+        process.waitUntilExit()
+
+        XCTAssertEqual(process.terminationStatus, 0)
+    }
+
     func testEnvironmentDropsTheOriginalZDOTDIRWhenItIsThisSameShimDirectory() throws {
         // MyTerm can run from inside a MyTerm pane while developing MyTerm. In that case
         // baseEnvironment's ZDOTDIR is already the shim directory this call is about to set,
