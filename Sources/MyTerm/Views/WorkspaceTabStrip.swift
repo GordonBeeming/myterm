@@ -17,7 +17,7 @@ enum MiddleClickTabInteraction {
 }
 
 @MainActor
-final class MiddleClickMonitorLifecycle {
+final class LocalEventMonitorLifecycle {
     private var monitor: Any?
 
     var isMonitoring: Bool { monitor != nil }
@@ -34,19 +34,29 @@ final class MiddleClickMonitorLifecycle {
     }
 }
 
+enum WorkspaceTabStripMetrics {
+    static let tabWidth: CGFloat = 136
+    static let tabHeight: CGFloat = 26
+    static let tabSpacing: CGFloat = 4
+    static var slotWidth: CGFloat { tabWidth + tabSpacing }
+    static let slide = Animation.easeInOut(duration: 0.18)
+}
+
 struct WorkspaceTabStrip: View {
     let model: AppModel
     let workspaceID: WorkspaceID
     let tabGroup: TabGroup
     let paneTabDragRegistrationID: PaneTabDragRegistrationID
+    @State private var escapeMonitor = LocalEventMonitorLifecycle()
 
     var body: some View {
+        let reorderPreview = model.paneTabReorderPreview(in: tabGroup.id)
         ScrollViewReader { scrollProxy in
             HStack(spacing: 8) {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: 4) {
+                    LazyHStack(spacing: WorkspaceTabStripMetrics.tabSpacing) {
                         ForEach(Array(tabGroup.tabs.enumerated()), id: \.element.id) { entry in
-                            tabItem(entry.element)
+                            tabItem(entry.element, at: entry.offset, reorderPreview: reorderPreview)
                                 .id(entry.element.id)
                         }
                     }
@@ -88,35 +98,80 @@ struct WorkspaceTabStrip: View {
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
                 model.cancelPaneTabDrag()
             }
+            .onChange(of: reorderPreview != nil, initial: true) { _, isDraggingOwnTab in
+                if isDraggingOwnTab {
+                    startEscapeMonitor()
+                } else {
+                    stopEscapeMonitor()
+                }
+            }
+            .onDisappear(perform: stopEscapeMonitor)
         }
+    }
+
+    private func startEscapeMonitor() {
+        escapeMonitor.start {
+            NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                guard event.keyCode == 53 else { return event }
+                MainActor.assumeIsolated {
+                    withAnimation(WorkspaceTabStripMetrics.slide) {
+                        model.cancelPaneTabDragUntilRelease()
+                    }
+                }
+                return nil
+            }
+        }
+    }
+
+    private func stopEscapeMonitor() {
+        escapeMonitor.stop { NSEvent.removeMonitor($0) }
     }
 
     private func scrollToSelectedTab(using scrollProxy: ScrollViewProxy) {
         scrollProxy.scrollTo(tabGroup.selectedTabID, anchor: .center)
     }
 
-    private func tabItem(_ tab: MyTermCore.Tab) -> some View {
+    private func tabItem(_ tab: MyTermCore.Tab, at index: Int, reorderPreview: PaneTabReorderPreview?) -> some View {
         let source = PaneTabDragSource(
             workspaceID: workspaceID,
             tabGroupID: tabGroup.id,
             tabID: tab.id
         )
+        let isDragged = reorderPreview?.draggedTabID == tab.id
+        let offset = reorderPreview?.offset(
+            forTabAt: index,
+            tabID: tab.id,
+            slotWidth: WorkspaceTabStripMetrics.slotWidth
+        ) ?? 0
+        let slotShift = reorderPreview?.slotShift(forTabAt: index) ?? 0
         return WorkspaceTabItem(
             tab: tab,
             source: source,
             isSelected: tab.id == tabGroup.selectedTabID,
+            isDragged: isDragged,
             title: title(for: tab),
             agentAttention: model.agentAttention(forTab: tab.id),
             select: { model.selectTab(tab.id, in: tabGroup.id) },
             rename: { model.beginRenamingTab(tab.id, in: tabGroup.id) },
             close: { model.closeTab(tab.id) },
             dragChanged: { location in model.updatePaneTabDrag(source: source, location: location) },
-            dragEnded: { location in model.finishPaneTabDrag(source: source, finalLocation: location) },
+            dragEnded: { location in release(source: source, tab: tab, at: location) },
             dragCancelled: { model.cancelPaneTabDrag() },
             moveToPreviousPane: { move(tab, relativeTo: tabGroup.id, offset: -1) },
             moveToNextPane: { move(tab, relativeTo: tabGroup.id, offset: 1) },
             moveToNewPane: { edge in move(tab, toNewPaneBeside: tabGroup.id, edge: edge) }
         )
+        .offset(x: offset)
+        .zIndex(isDragged ? 1 : 0)
+        // Neighbours slide a whole slot at a time, so their offset animates on its own; the
+        // dragged tab tracks the pointer verbatim and only animates when a transaction (drop or
+        // cancel) asks it to.
+        .animation(WorkspaceTabStripMetrics.slide, value: slotShift)
+        // Insertion indexes are resolved against the frames reported here. `offset` moves what is
+        // drawn but not the layout frame, so sitting outside it this reporter keeps publishing the
+        // tab's slot rather than where it has slid to. Resolving against slots is what keeps the
+        // preview stable: a tab that slides out of the pointer's way would otherwise carry its
+        // midpoint across the pointer and immediately slide back.
         .background(
             PaneTabInsertionFrameReporter(
                 model: model,
@@ -126,6 +181,32 @@ struct WorkspaceTabStrip: View {
                 tabID: tab.id
             )
         )
+    }
+
+    private func release(source: PaneTabDragSource, tab: MyTermCore.Tab, at location: CGPoint) {
+        let isClick = model.isPaneTabDragClick(source: source, releaseLocation: location)
+        _ = withAnimation(releaseAnimation) {
+            model.finishPaneTabDrag(source: source, finalLocation: location)
+        }
+        if isClick {
+            model.selectTab(tab.id, in: tabGroup.id)
+        }
+    }
+
+    /// A drop that keeps the tab in this strip (or sends it nowhere) settles with the same slide
+    /// the preview used, so the committed order lands exactly where the gap was. A drop that
+    /// changes the pane layout stays instant: animating a split resizes live terminals.
+    private var releaseAnimation: Animation? {
+        switch model.paneTabDragPreviewTarget {
+        case nil:
+            WorkspaceTabStripMetrics.slide
+        case .tabStrip(let targetGroupID, _) where targetGroupID == tabGroup.id:
+            WorkspaceTabStripMetrics.slide
+        case .paneCenter(let targetGroupID) where targetGroupID == tabGroup.id:
+            WorkspaceTabStripMetrics.slide
+        default:
+            nil
+        }
     }
 
     private func title(for tab: MyTermCore.Tab) -> String {
@@ -234,6 +315,7 @@ private struct WorkspaceTabItem: View {
     let tab: MyTermCore.Tab
     let source: PaneTabDragSource
     let isSelected: Bool
+    let isDragged: Bool
     let title: String
     let agentAttention: AgentActivity?
     let select: () -> Void
@@ -255,41 +337,48 @@ private struct WorkspaceTabItem: View {
 
     var body: some View {
         ZStack(alignment: .trailing) {
-            Button(action: select) {
-                HStack(spacing: 6) {
-                    // The cook stands in for the tab's own icon, so it is still there on the
-                    // selected tab and never lands under the close button.
-                    if let agentAttention {
-                        AgentChefBadge(state: agentAttention)
-                    } else {
-                        Image(systemName: iconName)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .accessibilityHidden(true)
-                    }
-                    Text(title)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .fontWeight(isSelected ? .medium : .regular)
-                    Spacer(minLength: 18)
+            HStack(spacing: 6) {
+                // The cook stands in for the tab's own icon, so it is still there on the
+                // selected tab and never lands under the close button.
+                if let agentAttention {
+                    AgentChefBadge(state: agentAttention)
+                } else {
+                    Image(systemName: iconName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
                 }
-                .padding(.horizontal, 8)
-                .frame(width: 136, height: 26, alignment: .leading)
-                .contentShape(Rectangle())
-                .background {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(backgroundStyle)
-                }
-                .overlay {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .strokeBorder(borderStyle, lineWidth: isSelected ? 1 : 0.5)
-                }
+                Text(title)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .fontWeight(isSelected ? .medium : .regular)
+                Spacer(minLength: 18)
             }
-            .buttonStyle(.plain)
-            .focusable(false)
+            .padding(.horizontal, 8)
+            .frame(width: WorkspaceTabStripMetrics.tabWidth, height: WorkspaceTabStripMetrics.tabHeight, alignment: .leading)
+            .contentShape(Rectangle())
+            .background {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(backgroundStyle)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .strokeBorder(borderStyle, lineWidth: isSelected ? 1 : 0.5)
+            }
+            .shadow(color: .black.opacity(isDragged ? 0.22 : 0), radius: 4, y: 1)
+            // The same press either selects the tab or drags it, decided on release by how far
+            // the pointer travelled. The close button sits on top of this content, so a click on
+            // it never reaches this gesture and cannot select the tab on its way to closing it.
+            .gesture(
+                DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                    .onChanged { value in dragChanged(value.location) }
+                    .onEnded { value in dragEnded(value.location) }
+            )
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel(title)
             .accessibilityValue(accessibilityValue)
-            .accessibilityAddTraits(isSelected ? .isSelected : [])
+            .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+            .accessibilityAction(.default, select)
             .help(title)
 
             Button(action: close) {
@@ -308,13 +397,8 @@ private struct WorkspaceTabItem: View {
             .help("Close Tab")
             .padding(.trailing, 2)
         }
-        .frame(width: 136, height: 26)
+        .frame(width: WorkspaceTabStripMetrics.tabWidth, height: WorkspaceTabStripMetrics.tabHeight)
         .contentShape(Rectangle())
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 0, coordinateSpace: .global)
-                .onChanged { value in dragChanged(value.location) }
-                .onEnded { value in dragEnded(value.location) }
-        )
         .overlay {
             MiddleClickTabHandler(close: close).allowsHitTesting(false)
         }
@@ -378,7 +462,7 @@ private struct MiddleClickTabHandler: NSViewRepresentable {
     final class Coordinator {
         var close: () -> Void
         private weak var view: NSView?
-        private let monitorLifecycle = MiddleClickMonitorLifecycle()
+        private let monitorLifecycle = LocalEventMonitorLifecycle()
 
         init(close: @escaping () -> Void) { self.close = close }
 

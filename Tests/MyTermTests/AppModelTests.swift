@@ -2831,6 +2831,159 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(model.paneTabDragPreviewTarget)
     }
 
+    func testPaneTabDragPreviewsExactlyTheOrderTheDropCommits() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let groupID = model.selectedWorkspace.focusedTabGroupID
+        let firstTabID = try XCTUnwrap(model.selectedTab?.id)
+        model.createTerminalTab(in: groupID)
+        let secondTabID = try XCTUnwrap(model.selectedTab?.id)
+        model.createTerminalTab(in: groupID)
+        let thirdTabID = try XCTUnwrap(model.selectedTab?.id)
+        let source = PaneTabDragSource(workspaceID: workspaceID, tabGroupID: groupID, tabID: firstTabID)
+        let registrationID = registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: groupID, origin: .zero)
+        model.registerPaneTabDragTabStrip(
+            workspaceID: workspaceID,
+            tabGroupID: groupID,
+            registrationID: registrationID,
+            frame: CGRect(x: 0, y: 0, width: 300, height: 20)
+        )
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
+        XCTAssertNil(model.paneTabReorderPreview(in: groupID), "A press that has not moved is not a drag yet.")
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 210, y: 10))
+        let preview = try XCTUnwrap(model.paneTabReorderPreview(in: groupID))
+        XCTAssertEqual(preview.draggedTabID, firstTabID)
+        XCTAssertEqual(preview.sourceIndex, 0)
+        XCTAssertEqual(preview.insertionIndex, 1)
+        XCTAssertEqual(preview.pointerOffset, 170)
+        XCTAssertEqual((0..<3).map(preview.slotShift(forTabAt:)), [0, -1, 0])
+        XCTAssertNil(model.paneTabReorderPreview(in: TabGroupID()), "Only the strip being dragged from previews.")
+
+        let previewedOrder = PaneTabReorderPreview.previewOrder(
+            of: [firstTabID, secondTabID, thirdTabID],
+            movingTabAt: preview.sourceIndex,
+            to: try XCTUnwrap(preview.insertionIndex)
+        )
+        model.finishPaneTabDrag(source: source, finalLocation: CGPoint(x: 210, y: 10))
+        XCTAssertEqual(model.selectedWorkspace.group(id: groupID)?.tabs.map(\.id), previewedOrder)
+        XCTAssertEqual(previewedOrder, [secondTabID, firstTabID, thirdTabID])
+        XCTAssertNil(model.paneTabReorderPreview(in: groupID))
+    }
+
+    func testPaneTabDragClosesTheGapWhenThePointerLeavesTheStripButStaysLifted() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let groupID = model.selectedWorkspace.focusedTabGroupID
+        let firstTabID = try XCTUnwrap(model.selectedTab?.id)
+        model.createTerminalTab(in: groupID)
+        let source = PaneTabDragSource(workspaceID: workspaceID, tabGroupID: groupID, tabID: firstTabID)
+        let registrationID = registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: groupID, origin: .zero)
+        model.registerPaneTabDragTabStrip(
+            workspaceID: workspaceID,
+            tabGroupID: groupID,
+            registrationID: registrationID,
+            frame: CGRect(x: 0, y: 0, width: 300, height: 20)
+        )
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 160, y: 10))
+        XCTAssertEqual(model.paneTabReorderPreview(in: groupID)?.insertionIndex, 1)
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 60, y: 60))
+        XCTAssertEqual(model.paneTabDragPreviewTarget, .paneCenter(tabGroupID: groupID))
+        let overBody = try XCTUnwrap(model.paneTabReorderPreview(in: groupID))
+        XCTAssertNil(overBody.insertionIndex)
+        XCTAssertEqual(overBody.pointerOffset, 20)
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 500, y: 500))
+        XCTAssertNil(model.paneTabDragPreviewTarget)
+        XCTAssertNil(model.paneTabReorderPreview(in: groupID)?.insertionIndex)
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 42, y: 10))
+        XCTAssertNotNil(model.paneTabReorderPreview(in: groupID), "Wandering back near the press point does not put a lifted tab down.")
+        XCTAssertFalse(model.isPaneTabDragClick(source: source, releaseLocation: CGPoint(x: 42, y: 10)))
+    }
+
+    func testPaneTabDragEscapeRestoresTheOrderAndStaysCancelledUntilRelease() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let groupID = model.selectedWorkspace.focusedTabGroupID
+        let firstTabID = try XCTUnwrap(model.selectedTab?.id)
+        model.createTerminalTab(in: groupID)
+        let secondTabID = try XCTUnwrap(model.selectedTab?.id)
+        let source = PaneTabDragSource(workspaceID: workspaceID, tabGroupID: groupID, tabID: firstTabID)
+        let registrationID = registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: groupID, origin: .zero)
+        model.registerPaneTabDragTabStrip(
+            workspaceID: workspaceID,
+            tabGroupID: groupID,
+            registrationID: registrationID,
+            frame: CGRect(x: 0, y: 0, width: 300, height: 20)
+        )
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 160, y: 10))
+        XCTAssertEqual(model.paneTabReorderPreview(in: groupID)?.insertionIndex, 1)
+
+        model.cancelPaneTabDragUntilRelease()
+        XCTAssertNotNil(model.paneTabDragSession)
+        XCTAssertNil(model.paneTabReorderPreview(in: groupID))
+        XCTAssertNil(model.paneTabDragPreviewTarget)
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 165, y: 10))
+        XCTAssertNil(model.paneTabReorderPreview(in: groupID), "Pointer movement after Escape must not restart the drag.")
+        XCTAssertNil(model.paneTabDragPreviewTarget)
+        XCTAssertFalse(model.isPaneTabDragClick(source: source, releaseLocation: CGPoint(x: 165, y: 10)))
+
+        XCTAssertNil(model.finishPaneTabDrag(source: source, finalLocation: CGPoint(x: 165, y: 10)))
+        XCTAssertNil(model.paneTabDragSession)
+        XCTAssertEqual(model.selectedWorkspace.group(id: groupID)?.tabs.map(\.id), [firstTabID, secondTabID])
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 160, y: 10))
+        XCTAssertEqual(model.paneTabReorderPreview(in: groupID)?.insertionIndex, 1, "The next press starts a fresh drag.")
+        model.cancelPaneTabDrag()
+    }
+
+    func testPaneTabDragClickIsOnlyAPressThatNeverLifted() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let groupID = model.selectedWorkspace.focusedTabGroupID
+        let firstTabID = try XCTUnwrap(model.selectedTab?.id)
+        model.createTerminalTab(in: groupID)
+        let secondTabID = try XCTUnwrap(model.selectedTab?.id)
+        let source = PaneTabDragSource(workspaceID: workspaceID, tabGroupID: groupID, tabID: firstTabID)
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: groupID, origin: .zero)
+
+        XCTAssertFalse(model.isPaneTabDragClick(source: source, releaseLocation: CGPoint(x: 40, y: 10)), "No press, no click.")
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 44, y: 12))
+        XCTAssertTrue(model.isPaneTabDragClick(source: source, releaseLocation: CGPoint(x: 44, y: 12)))
+        XCTAssertFalse(
+            model.isPaneTabDragClick(source: source, releaseLocation: CGPoint(x: 60, y: 10)),
+            "A release that itself travels past the threshold is a drag, and finish treats it as one."
+        )
+        let otherSource = PaneTabDragSource(workspaceID: workspaceID, tabGroupID: groupID, tabID: secondTabID)
+        XCTAssertFalse(model.isPaneTabDragClick(source: otherSource, releaseLocation: CGPoint(x: 44, y: 12)))
+        XCTAssertNil(model.finishPaneTabDrag(source: source, finalLocation: CGPoint(x: 44, y: 12)))
+        XCTAssertEqual(model.selectedWorkspace.group(id: groupID)?.tabs.map(\.id), [firstTabID, secondTabID])
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 160, y: 10))
+        XCTAssertFalse(model.isPaneTabDragClick(source: source, releaseLocation: CGPoint(x: 41, y: 10)))
+        model.cancelPaneTabDrag()
+    }
+
     func testBrowserShortcutDeclarationsAreExactAndDoNotDuplicateContextualZoom() {
         XCTAssertEqual(MyTermCommandShortcuts.reloadBrowser, .init(key: "r", modifiers: [.command]))
         XCTAssertEqual(MyTermCommandShortcuts.focusBrowserAddress, .init(key: "l", modifiers: [.command]))

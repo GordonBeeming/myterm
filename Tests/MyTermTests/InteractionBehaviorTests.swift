@@ -47,8 +47,8 @@ final class InteractionBehaviorTests: XCTestCase {
         )
     }
 
-    func testMiddleClickMonitorLifecycleInstallsAndRemovesExactlyOnce() {
-        let lifecycle = MiddleClickMonitorLifecycle()
+    func testLocalEventMonitorLifecycleInstallsAndRemovesExactlyOnce() {
+        let lifecycle = LocalEventMonitorLifecycle()
         var installCount = 0
         var removalCount = 0
 
