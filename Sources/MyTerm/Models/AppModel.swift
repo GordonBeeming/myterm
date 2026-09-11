@@ -84,7 +84,9 @@ final class AppModel {
     /// and the history of what they did before. Saved beside the workspace state; what comes back
     /// after a relaunch comes back read, because the agents it pointed at went with the processes.
     var agentInbox = AgentNotificationInbox() {
-        didSet { persistAgentInbox() }
+        // Every tab switch reads the tab it lands on, which is a mutating call whether or not the
+        // tab had anything waiting. Only a real change is worth a file write on the main thread.
+        didSet { if oldValue != agentInbox { persistAgentInbox() } }
     }
     /// Where the history lives between launches, beside the workspace state.
     @ObservationIgnored let agentInboxURL: URL
