@@ -56,6 +56,25 @@ final class AgentTranscriptReaderHardeningTests: XCTestCase {
         XCTAssertLessThanOrEqual(result.toolUseID.count, RemoteAgentLimits.maximumSummaryCharacters + 1)
     }
 
+    // MARK: - The cap has to hold in bytes, because the wire is bytes
+
+    func testACappedBacklogFitsInsideOneFrameWhateverItsScriptIs() throws {
+        // The limits count characters, and a character can be dozens of scalars. Sixty entries of
+        // four thousand such characters pass every cap and encode to more than the frame cap, so
+        // the device refuses the frame and can never open the conversation.
+        let cluster = "e" + String(repeating: "\\u0301", count: 30)
+        let body = String(repeating: cluster, count: RemoteAgentLimits.maximumBlockCharacters)
+        let lines = (0..<60).map { index in
+            #"{"type":"assistant","uuid":"a\#(index)","message":{"role":"assistant","content":[{"type":"text","text":"\#(body)"}]}}"#
+        }
+        let conversation = reader.conversation(tabID: "tab", agent: "claude", lines: lines)
+        let encoded = try RemoteControlCodec.encode(.agentConversation(conversation))
+        XCTAssertLessThanOrEqual(
+            encoded.payload.count + 1, RemoteFrameCodec.maximumFrameBytes,
+            "\(encoded.payload.count) bytes across \(conversation.entries.count) entries"
+        )
+    }
+
     // MARK: - Shapes that must not crash
 
     func testUnexpectedTypesInKnownFieldsAreSkippedNotCrashedOn() {

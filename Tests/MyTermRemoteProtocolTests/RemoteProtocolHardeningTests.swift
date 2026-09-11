@@ -118,6 +118,18 @@ final class RemoteProtocolHardeningTests: XCTestCase {
         XCTAssertFalse(RemoteAgentReply(tabID: "t", text: "").isTypable)
     }
 
+    func testTheReplyCapCountsWhatReachesTheTerminalNotGraphemes() {
+        // The cap exists because the text becomes keystrokes on someone's Mac. One grapheme
+        // cluster can be dozens of scalars, so counting clusters lets a reply of forty thousand
+        // scalars (164 KB) through a cap that says four thousand. The same mistake was fixed for
+        // the activity marker in "Cap the agent payload by bytes"; this is the reply path.
+        let cluster = "e" + String(repeating: "\u{0301}", count: 20)
+        let text = String(repeating: cluster, count: RemoteAgentReply.maximumCharacters)
+        XCTAssertEqual(text.count, RemoteAgentReply.maximumCharacters, "one cluster per character")
+        XCTAssertGreaterThan(text.utf8.count, 100_000)
+        XCTAssertFalse(RemoteAgentReply(tabID: "t", text: text).isTypable)
+    }
+
     // MARK: - A host that sends something unreadable
 
     @MainActor
