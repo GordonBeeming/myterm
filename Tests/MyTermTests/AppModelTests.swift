@@ -2986,6 +2986,220 @@ final class AppModelTests: XCTestCase {
         model.cancelPaneTabDrag()
     }
 
+    func testPaneTabDragDroppedBackOnItsOwnSlotChangesNothing() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let groupID = model.selectedWorkspace.focusedTabGroupID
+        let firstTabID = try XCTUnwrap(model.selectedTab?.id)
+        model.createTerminalTab(in: groupID)
+        let secondTabID = try XCTUnwrap(model.selectedTab?.id)
+        model.createTerminalTab(in: groupID)
+        let thirdTabID = try XCTUnwrap(model.selectedTab?.id)
+        let source = PaneTabDragSource(workspaceID: workspaceID, tabGroupID: groupID, tabID: secondTabID)
+        let registrationID = registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: groupID, origin: .zero)
+        model.registerPaneTabDragTabStrip(
+            workspaceID: workspaceID,
+            tabGroupID: groupID,
+            registrationID: registrationID,
+            frame: CGRect(x: 0, y: 0, width: 300, height: 20)
+        )
+        let persisted = try Data(contentsOf: model.store.persistenceURL)
+
+        // Lift the middle tab, open a gap past the last tab, then wander back over its own slot.
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 150, y: 10))
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 280, y: 10))
+        XCTAssertEqual(model.paneTabReorderPreview(in: groupID)?.insertionIndex, 2)
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 140, y: 10))
+        let home = try XCTUnwrap(model.paneTabReorderPreview(in: groupID))
+        XCTAssertEqual(home.insertionIndex, 1)
+        XCTAssertEqual((0..<3).map(home.slotShift(forTabAt:)), [0, 0, 0], "Over its own slot no neighbour slides.")
+
+        XCTAssertNotNil(model.finishPaneTabDrag(source: source, finalLocation: CGPoint(x: 140, y: 10)))
+        XCTAssertEqual(model.selectedWorkspace.group(id: groupID)?.tabs.map(\.id), [firstTabID, secondTabID, thirdTabID])
+        XCTAssertNil(model.paneTabDragSession)
+        XCTAssertNil(model.errorDescription)
+        XCTAssertEqual(
+            try Data(contentsOf: model.store.persistenceURL), persisted,
+            "A drop on the tab's own slot is a no-op and must not rewrite the store."
+        )
+    }
+
+    func testPaneTabDragOnASingleTabStripNeverOpensAGap() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let groupID = model.selectedWorkspace.focusedTabGroupID
+        let onlyTabID = try XCTUnwrap(model.selectedTab?.id)
+        let source = PaneTabDragSource(workspaceID: workspaceID, tabGroupID: groupID, tabID: onlyTabID)
+        let registrationID = registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: groupID, origin: .zero)
+        model.registerPaneTabDragTabStrip(
+            workspaceID: workspaceID,
+            tabGroupID: groupID,
+            registrationID: registrationID,
+            frame: CGRect(x: 0, y: 0, width: 300, height: 20)
+        )
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 20, y: 10))
+        for x: CGFloat in [120, 290, 5] {
+            model.updatePaneTabDrag(source: source, location: CGPoint(x: x, y: 10))
+            let preview = try XCTUnwrap(model.paneTabReorderPreview(in: groupID), "x=\(x)")
+            XCTAssertEqual(preview.sourceIndex, 0)
+            XCTAssertEqual(preview.insertionIndex, 0, "x=\(x)")
+            XCTAssertEqual(preview.slotShift(forTabAt: 0), 0)
+            XCTAssertEqual(preview.pointerOffset, x - 20)
+        }
+
+        XCTAssertNotNil(model.finishPaneTabDrag(source: source, finalLocation: CGPoint(x: 290, y: 10)))
+        XCTAssertEqual(model.selectedWorkspace.group(id: groupID)?.tabs.map(\.id), [onlyTabID])
+        XCTAssertNil(model.errorDescription)
+        XCTAssertNil(model.paneTabDragSession)
+    }
+
+    func testPaneTabDragIntoAnotherStripMovesTheLastTabOutAndClosesItsPane() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let leftGroupID = model.selectedWorkspace.focusedTabGroupID
+        let leftTabID = try XCTUnwrap(model.selectedTab?.id)
+        model.splitFocusedTerminal(orientation: .horizontal)
+        let rightGroupID = model.selectedWorkspace.focusedTabGroupID
+        XCTAssertNotEqual(rightGroupID, leftGroupID)
+        let rightTabID = try XCTUnwrap(model.selectedWorkspace.group(id: rightGroupID)?.tabs.first?.id)
+
+        // Two strips side by side: the left one at x 0..<200, the right one at x 200..<400.
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: leftGroupID, origin: .zero)
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: rightGroupID, origin: CGPoint(x: 200, y: 0))
+
+        let source = PaneTabDragSource(workspaceID: workspaceID, tabGroupID: rightGroupID, tabID: rightTabID)
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 220, y: 10))
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 20, y: 10))
+
+        XCTAssertEqual(model.paneTabDragPreviewTarget, .tabStrip(tabGroupID: leftGroupID, insertionIndex: 0))
+        let sourcePreview = try XCTUnwrap(model.paneTabReorderPreview(in: rightGroupID))
+        XCTAssertNil(sourcePreview.insertionIndex, "The gap closes in the strip the tab left.")
+        XCTAssertEqual(sourcePreview.pointerOffset, -200)
+        XCTAssertNil(model.paneTabReorderPreview(in: leftGroupID), "Only the strip being dragged from previews.")
+
+        XCTAssertNotNil(model.finishPaneTabDrag(source: source, finalLocation: CGPoint(x: 20, y: 10)))
+        XCTAssertEqual(model.selectedWorkspace.orderedGroups.map(\.id), [leftGroupID])
+        XCTAssertEqual(model.selectedWorkspace.group(id: leftGroupID)?.tabs.map(\.id), [rightTabID, leftTabID])
+        XCTAssertEqual(model.selectedWorkspace.group(id: leftGroupID)?.selectedTabID, rightTabID)
+        XCTAssertNil(model.paneTabDragSession)
+        XCTAssertNil(model.paneTabReorderPreview(in: leftGroupID))
+        XCTAssertNil(model.paneTabReorderPreview(in: rightGroupID))
+        XCTAssertNil(model.errorDescription)
+    }
+
+    func testPaneTabDragEndsWhenTheDraggedTabOrItsWorkspaceGoesAway() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let groupID = model.selectedWorkspace.focusedTabGroupID
+        let firstTabID = try XCTUnwrap(model.selectedTab?.id)
+        model.createTerminalTab(in: groupID)
+        let secondTabID = try XCTUnwrap(model.selectedTab?.id)
+        let source = PaneTabDragSource(workspaceID: workspaceID, tabGroupID: groupID, tabID: firstTabID)
+        let registrationID = registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: groupID, origin: .zero)
+        let stripFrame = CGRect(x: 0, y: 0, width: 300, height: 20)
+        model.registerPaneTabDragTabStrip(
+            workspaceID: workspaceID, tabGroupID: groupID, registrationID: registrationID, frame: stripFrame
+        )
+
+        // The dragged tab closes under the pointer: the preview is gone at once, and the session
+        // goes with the tab's frame reporter.
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 160, y: 10))
+        XCTAssertEqual(model.paneTabReorderPreview(in: groupID)?.insertionIndex, 1)
+        model.closeTab(firstTabID)
+        XCTAssertEqual(model.selectedWorkspace.group(id: groupID)?.tabs.map(\.id), [secondTabID])
+        XCTAssertNil(model.paneTabReorderPreview(in: groupID))
+        // closeTab itself leaves the session (and its last pane target) in place; it is the tab's
+        // frame reporter going away that ends the drag, which is what happens in the app.
+        model.unregisterPaneTabDragTab(
+            workspaceID: workspaceID, tabGroupID: groupID, registrationID: registrationID, tabID: firstTabID
+        )
+        XCTAssertNil(model.paneTabDragSession)
+        XCTAssertNil(model.paneTabDragPreviewTarget)
+        XCTAssertNil(model.finishPaneTabDrag(source: source, finalLocation: CGPoint(x: 160, y: 10)))
+        XCTAssertEqual(model.selectedWorkspace.group(id: groupID)?.tabs.map(\.id), [secondTabID])
+
+        // Switching workspace mid-drag ends the session, and the gesture's late updates cannot
+        // revive it or move anything once the user comes back.
+        model.createTerminalTab(in: groupID)
+        let thirdTabID = try XCTUnwrap(model.selectedTab?.id)
+        let laterSource = PaneTabDragSource(workspaceID: workspaceID, tabGroupID: groupID, tabID: secondTabID)
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: groupID, origin: .zero, registrationID: registrationID)
+        model.registerPaneTabDragTabStrip(
+            workspaceID: workspaceID, tabGroupID: groupID, registrationID: registrationID, frame: stripFrame
+        )
+        model.updatePaneTabDrag(source: laterSource, location: CGPoint(x: 40, y: 10))
+        model.updatePaneTabDrag(source: laterSource, location: CGPoint(x: 160, y: 10))
+        XCTAssertEqual(model.paneTabReorderPreview(in: groupID)?.insertionIndex, 1)
+        model.createWorkspace()
+        XCTAssertNil(model.paneTabDragSession)
+        model.updatePaneTabDrag(source: laterSource, location: CGPoint(x: 165, y: 10))
+        XCTAssertNil(model.paneTabDragSession)
+        model.selectWorkspace(workspaceID)
+        XCTAssertNil(model.paneTabReorderPreview(in: groupID))
+        XCTAssertNil(model.finishPaneTabDrag(source: laterSource, finalLocation: CGPoint(x: 165, y: 10)))
+        XCTAssertEqual(model.selectedWorkspace.group(id: groupID)?.tabs.map(\.id), [secondTabID, thirdTabID])
+    }
+
+    func testPaneTabDragPreviewFollowsATabClosedElsewhereInTheStrip() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let groupID = model.selectedWorkspace.focusedTabGroupID
+        let firstTabID = try XCTUnwrap(model.selectedTab?.id)
+        model.createTerminalTab(in: groupID)
+        let secondTabID = try XCTUnwrap(model.selectedTab?.id)
+        model.createTerminalTab(in: groupID)
+        let thirdTabID = try XCTUnwrap(model.selectedTab?.id)
+        let source = PaneTabDragSource(workspaceID: workspaceID, tabGroupID: groupID, tabID: thirdTabID)
+        let registrationID = registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: groupID, origin: .zero)
+        model.registerPaneTabDragTabStrip(
+            workspaceID: workspaceID,
+            tabGroupID: groupID,
+            registrationID: registrationID,
+            frame: CGRect(x: 0, y: 0, width: 300, height: 20)
+        )
+
+        // Third is lifted and headed for the first slot.
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 250, y: 10))
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 20, y: 10))
+        var preview = try XCTUnwrap(model.paneTabReorderPreview(in: groupID))
+        XCTAssertEqual(preview.sourceIndex, 2)
+        XCTAssertEqual(preview.insertionIndex, 0)
+        XCTAssertEqual((0..<3).map(preview.slotShift(forTabAt:)), [1, 1, 0])
+
+        // The middle tab closes while the drag is in flight (its process ended, say). The strip
+        // re-lays out [First, Third] and the preview is re-resolved against what is left.
+        model.closeTab(secondTabID)
+        model.unregisterPaneTabDragTab(
+            workspaceID: workspaceID, tabGroupID: groupID, registrationID: registrationID, tabID: secondTabID
+        )
+        model.registerPaneTabDragTab(
+            workspaceID: workspaceID, tabGroupID: groupID, registrationID: registrationID, tabID: thirdTabID,
+            frame: CGRect(x: 100, y: 0, width: 100, height: 20)
+        )
+        XCTAssertEqual(model.selectedWorkspace.group(id: groupID)?.tabs.map(\.id), [firstTabID, thirdTabID])
+        preview = try XCTUnwrap(model.paneTabReorderPreview(in: groupID))
+        XCTAssertEqual(preview.sourceIndex, 1)
+        XCTAssertEqual(preview.insertionIndex, 0)
+        XCTAssertEqual((0..<2).map(preview.slotShift(forTabAt:)), [1, 0])
+
+        XCTAssertNotNil(model.finishPaneTabDrag(source: source, finalLocation: CGPoint(x: 20, y: 10)))
+        XCTAssertEqual(model.selectedWorkspace.group(id: groupID)?.tabs.map(\.id), [thirdTabID, firstTabID])
+        XCTAssertNil(model.paneTabDragSession)
+        XCTAssertNil(model.errorDescription)
+    }
+
     func testBrowserShortcutDeclarationsAreExactAndDoNotDuplicateContextualZoom() {
         XCTAssertEqual(MyTermCommandShortcuts.reloadBrowser, .init(key: "r", modifiers: [.command]))
         XCTAssertEqual(MyTermCommandShortcuts.focusBrowserAddress, .init(key: "l", modifiers: [.command]))

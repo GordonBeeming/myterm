@@ -1037,6 +1037,352 @@ final class InteractionBehaviorTests: XCTestCase {
         )
     }
 
+    // MARK: - Live preview stability
+
+    /// A live preview is re-resolved on every drag update, including the periodic ones AppKit sends
+    /// while the pointer is still. Whatever a row resolves therefore has to be a fixed point: once
+    /// the preview is applied, the same row asked at the same location must keep it. The adjacent
+    /// swap rule breaks this whenever the target row stays put after the rows slide, because the
+    /// source is then adjacent to it in the previewed order and the whole-row swap fires again in
+    /// the other direction.
+    func testWorkspaceRowFeedbackIsAFixedPointUnderAStationaryPointer() {
+        let folderID = WorkspaceFolderID()
+        let a = Workspace(title: "A", folderID: folderID)
+        let b = Workspace(title: "B", folderID: folderID)
+        let c = Workspace(title: "C", folderID: folderID)
+        let d = Workspace(title: "D", folderID: folderID)
+        let workspaces = [a, b, c, d]
+
+        // Down two rows into the upper half: A lands before C. B slides up into A's old slot and
+        // C's row does not move, so the pointer is still in C's upper half.
+        assertStationaryWorkspacePreview(
+            dragging: a, over: c, locationY: 5, in: workspaces, expectedOrder: [b, a, c, d]
+        )
+        // Up three rows into the lower half: D lands after A. A's row does not move.
+        assertStationaryWorkspacePreview(
+            dragging: d, over: a, locationY: 25, in: workspaces, expectedOrder: [a, d, b, c]
+        )
+
+        // The same crossing the pinned band: B into the lower half of the only pinned row lands
+        // pinned after P, and P's row does not move.
+        let pinned = Workspace(title: "P", folderID: folderID, isPinned: true)
+        let banded = [pinned, a, b]
+        assertStationaryWorkspacePreview(
+            dragging: b, over: pinned, locationY: 25, in: banded, expectedOrder: [pinned, b, a]
+        )
+    }
+
+    func testFolderRowFeedbackIsAFixedPointUnderAStationaryPointer() {
+        let a = WorkspaceFolder(id: WorkspaceFolderID(), title: "A")
+        let b = WorkspaceFolder(id: WorkspaceFolderID(), title: "B")
+        let c = WorkspaceFolder(id: WorkspaceFolderID(), title: "C")
+        let folders = [a, b, c]
+
+        // A into the upper half of C: A lands before C and C's row stays where it was.
+        assertStationaryFolderPreview(dragging: a, over: c, locationY: 5, in: folders, expectedOrder: [b, a, c])
+        // C into the lower half of A: C lands after A and A's row stays where it was.
+        assertStationaryFolderPreview(dragging: c, over: a, locationY: 25, in: folders, expectedOrder: [a, c, b])
+    }
+
+    /// A folder row carries its expanded children with it. Once the rows slide, the row under the
+    /// pointer is routinely one of those children, either the dragged folder's own or the target's.
+    /// A child row cannot take a folder, but answering `.none` closes the preview, which puts the
+    /// target folder row back under the pointer and reopens it on the next update.
+    func testWorkspaceRowsUnderneathAFolderPreviewKeepItOpen() throws {
+        let first = WorkspaceFolder(id: WorkspaceFolderID(), title: "First")
+        let second = WorkspaceFolder(id: WorkspaceFolderID(), title: "Second")
+        let folders = [first, second]
+        let a1 = Workspace(title: "A1", folderID: first.id)
+        let a2 = Workspace(title: "A2", folderID: first.id)
+        let b1 = Workspace(title: "B1", folderID: second.id)
+        let workspaces = [a1, a2, b1]
+
+        let rows = SidebarVisibleRows.filed(folders: folders, workspaces: workspaces)
+        XCTAssertEqual(
+            rows.map(\.id),
+            [.folder(first.id), .workspace(a1.id), .workspace(a2.id), .folder(second.id), .workspace(b1.id)]
+        )
+        let secondRowSlot = try XCTUnwrap(rows.firstIndex(of: .folder(second.id)))
+
+        let feedback = SidebarDropCalculations.folderRowFeedback(
+            .folder(first.id),
+            folderID: second.id,
+            nextFolderID: nil,
+            locationY: 5,
+            renderedHeight: 30,
+            workspaces: workspaces,
+            folders: folders
+        )
+        XCTAssertEqual(feedback, .preview(.folder(first.id, before: nil)))
+        guard case .preview(let preview) = feedback else { return XCTFail("expected a preview") }
+
+        let previewedFolders = SidebarDropCalculations.previewedFolders(folders, applying: preview)
+        let previewedRows = SidebarVisibleRows.filed(folders: previewedFolders, workspaces: workspaces)
+        XCTAssertEqual(
+            previewedRows.map(\.id),
+            [.folder(second.id), .workspace(b1.id), .folder(first.id), .workspace(a1.id), .workspace(a2.id)]
+        )
+
+        // The pointer has not moved, so it now sits on the row that slid into Second's old slot.
+        guard case .workspace(let underPointerID) = previewedRows[secondRowSlot],
+              let underPointer = workspaces.first(where: { $0.id == underPointerID }) else {
+            return XCTFail("expected a workspace row under the pointer")
+        }
+        XCTAssertEqual(underPointer.id, a1.id)
+        XCTAssertEqual(
+            SidebarDropCalculations.workspaceRowFeedback(
+                .folder(first.id),
+                target: underPointer,
+                locationY: 5,
+                renderedHeight: 30,
+                in: workspaces
+            ),
+            .keep,
+            "A child row cannot take a folder, but it must not close the folder preview either."
+        )
+    }
+
+    private func assertStationaryWorkspacePreview(
+        dragging source: Workspace,
+        over target: Workspace,
+        locationY: CGFloat,
+        in workspaces: [Workspace],
+        expectedOrder: [Workspace],
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let first = SidebarDropCalculations.workspaceRowFeedback(
+            .workspace(source.id), target: target, locationY: locationY, renderedHeight: 30, in: workspaces
+        )
+        guard case .preview(let preview) = first else {
+            return XCTFail("expected a preview, got \(first)", file: file, line: line)
+        }
+        let previewed = SidebarDropCalculations.previewedWorkspaces(workspaces, applying: preview)
+        XCTAssertEqual(previewed.map(\.title), expectedOrder.map(\.title), file: file, line: line)
+        XCTAssertEqual(
+            previewed.firstIndex(where: { $0.id == target.id }),
+            workspaces.firstIndex(where: { $0.id == target.id }),
+            "This scenario relies on the target row not moving.", file: file, line: line
+        )
+
+        // The same row, the same location, now judged against the previewed order.
+        guard let targetInPreview = previewed.first(where: { $0.id == target.id }) else {
+            return XCTFail("target missing from preview", file: file, line: line)
+        }
+        let again = SidebarDropCalculations.workspaceRowFeedback(
+            .workspace(source.id), target: targetInPreview, locationY: locationY, renderedHeight: 30, in: previewed
+        )
+        switch again {
+        case .keep:
+            break
+        case .preview(let next):
+            XCTAssertEqual(
+                SidebarDropCalculations.previewedWorkspaces(workspaces, applying: next).map(\.title),
+                previewed.map(\.title),
+                "A stationary pointer re-resolved the preview to a different order (\(next)).",
+                file: file, line: line
+            )
+        default:
+            XCTFail("A stationary pointer closed the preview: \(again)", file: file, line: line)
+        }
+    }
+
+    private func assertStationaryFolderPreview(
+        dragging source: WorkspaceFolder,
+        over target: WorkspaceFolder,
+        locationY: CGFloat,
+        in folders: [WorkspaceFolder],
+        expectedOrder: [WorkspaceFolder],
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        func next(after folderID: WorkspaceFolderID, in folders: [WorkspaceFolder]) -> WorkspaceFolderID? {
+            guard let index = folders.firstIndex(where: { $0.id == folderID }) else { return nil }
+            return folders.dropFirst(index + 1).first?.id
+        }
+        let first = SidebarDropCalculations.folderRowFeedback(
+            .folder(source.id),
+            folderID: target.id,
+            nextFolderID: next(after: target.id, in: folders),
+            locationY: locationY,
+            renderedHeight: 30,
+            workspaces: [],
+            folders: folders
+        )
+        guard case .preview(let preview) = first else {
+            return XCTFail("expected a preview, got \(first)", file: file, line: line)
+        }
+        let previewed = SidebarDropCalculations.previewedFolders(folders, applying: preview)
+        XCTAssertEqual(previewed.map(\.title), expectedOrder.map(\.title), file: file, line: line)
+        XCTAssertEqual(
+            previewed.firstIndex(where: { $0.id == target.id }),
+            folders.firstIndex(where: { $0.id == target.id }),
+            "This scenario relies on the target row not moving.", file: file, line: line
+        )
+
+        let again = SidebarDropCalculations.folderRowFeedback(
+            .folder(source.id),
+            folderID: target.id,
+            nextFolderID: next(after: target.id, in: previewed),
+            locationY: locationY,
+            renderedHeight: 30,
+            workspaces: [],
+            folders: previewed
+        )
+        switch again {
+        case .keep:
+            break
+        case .preview(let nextPreview):
+            XCTAssertEqual(
+                SidebarDropCalculations.previewedFolders(folders, applying: nextPreview).map(\.title),
+                previewed.map(\.title),
+                "A stationary pointer re-resolved the preview to a different order (\(nextPreview)).",
+                file: file, line: line
+            )
+        default:
+            XCTFail("A stationary pointer closed the preview: \(again)", file: file, line: line)
+        }
+    }
+
+    // MARK: - Preview edge cases
+
+    func testPreviewedWorkspacesHandleSingleRowsAndEmptyDestinations() {
+        let folderA = WorkspaceFolderID()
+        let folderB = WorkspaceFolderID()
+        let only = Workspace(title: "Only", folderID: folderA)
+
+        // The only row moved to the end of its own band, to an empty folder, into the empty pinned
+        // band of an empty folder, and out to an empty Unfiled section.
+        XCTAssertEqual(
+            SidebarDropCalculations.previewedWorkspaces(
+                [only], applying: .workspace(only.id, folderID: folderA, isPinned: false, before: nil)
+            ).map(\.id),
+            [only.id]
+        )
+        let toEmptyFolder = SidebarDropCalculations.previewedWorkspaces(
+            [only], applying: .workspace(only.id, folderID: folderB, isPinned: false, before: nil)
+        )
+        XCTAssertEqual(toEmptyFolder.map(\.folderID), [folderB])
+        let toEmptyPinnedBand = SidebarDropCalculations.previewedWorkspaces(
+            [only], applying: .workspace(only.id, folderID: folderB, isPinned: true, before: nil)
+        )
+        XCTAssertEqual(toEmptyPinnedBand.map(\.isPinned), [true])
+        XCTAssertEqual(toEmptyPinnedBand.map(\.folderID), [folderB])
+        let toUnfiled = SidebarDropCalculations.previewedWorkspaces(
+            [only], applying: .workspace(only.id, folderID: nil, isPinned: false, before: nil)
+        )
+        XCTAssertEqual(toUnfiled.map(\.folderID), [nil])
+
+        // Nothing to preview leaves an empty list empty, and a single folder stays put.
+        XCTAssertEqual(
+            SidebarDropCalculations.previewedWorkspaces(
+                [], applying: .workspace(only.id, folderID: folderA, isPinned: false, before: nil)
+            ),
+            []
+        )
+        XCTAssertEqual(SidebarDropCalculations.previewedFolders([], applying: .folder(folderA, before: nil)), [])
+        let single = WorkspaceFolder(id: folderA, title: "A")
+        XCTAssertEqual(
+            SidebarDropCalculations.previewedFolders([single], applying: .folder(folderA, before: nil)),
+            [single]
+        )
+
+        // Into a folder the source is not yet in: the pinned band goes ahead of an existing
+        // unpinned band, and the unpinned band goes after an existing pinned band.
+        let pinnedInB = Workspace(title: "PB", folderID: folderB, isPinned: true)
+        let looseInB = Workspace(title: "LB", folderID: folderB)
+        XCTAssertEqual(
+            SidebarDropCalculations.previewedWorkspaces(
+                [only, looseInB], applying: .workspace(only.id, folderID: folderB, isPinned: true, before: nil)
+            ).map(\.title),
+            ["Only", "LB"]
+        )
+        XCTAssertEqual(
+            SidebarDropCalculations.previewedWorkspaces(
+                [only, pinnedInB], applying: .workspace(only.id, folderID: folderB, isPinned: false, before: nil)
+            ).map(\.title),
+            ["PB", "Only"]
+        )
+    }
+
+    /// Every preview a workspace row can hand the sidebar must commit to exactly the order it
+    /// showed, and the store must accept it without throwing. Walks every source, every target row
+    /// and both halves of a fixture that spans two folders, Unfiled and both pinned bands.
+    func testEveryWorkspaceRowPreviewCommitsToTheOrderItShowed() throws {
+        struct Slot: Equatable, CustomStringConvertible {
+            let title: String
+            let folder: String?
+            let isPinned: Bool
+            var description: String { "\(title)@\(folder ?? "Unfiled")\(isPinned ? "*" : "")" }
+        }
+        func slots(_ workspaces: [Workspace], _ folders: [WorkspaceFolder]) -> [Slot] {
+            workspaces.map { workspace in
+                Slot(
+                    title: workspace.title,
+                    folder: folders.first(where: { $0.id == workspace.folderID })?.title,
+                    isPinned: workspace.isPinned
+                )
+            }
+        }
+        func makeStore() throws -> WorkspaceStore {
+            let store = try WorkspaceStore(persistenceURL: temporaryStoreURL())
+            let alpha = try store.createFolder(title: "Alpha")
+            let beta = try store.createFolder(title: "Beta")
+            let alphaPinned = try store.createWorkspace(title: "AP", folderID: alpha)
+            try store.setWorkspacePinned(alphaPinned, isPinned: true)
+            _ = try store.createWorkspace(title: "A1", folderID: alpha)
+            _ = try store.createWorkspace(title: "A2", folderID: alpha)
+            _ = try store.createWorkspace(title: "B1", folderID: beta)
+            let unfiledPinned = try store.createWorkspace(title: "UP", folderID: nil)
+            try store.setWorkspacePinned(unfiledPinned, isPinned: true)
+            _ = try store.createWorkspace(title: "U1", folderID: nil)
+            return store
+        }
+
+        let fixture = try makeStore()
+        let titles = fixture.workspaces.map(\.title)
+        try? FileManager.default.removeItem(at: fixture.persistenceURL)
+        var previewCount = 0
+        for sourceTitle in titles {
+            for targetTitle in titles where targetTitle != sourceTitle {
+                for locationY: CGFloat in [5, 25] {
+                    let store = try makeStore()
+                    defer { try? FileManager.default.removeItem(at: store.persistenceURL) }
+                    let workspaces = store.workspaces
+                    let source = try XCTUnwrap(workspaces.first(where: { $0.title == sourceTitle }))
+                    let target = try XCTUnwrap(workspaces.first(where: { $0.title == targetTitle }))
+                    let label = "\(sourceTitle) over \(targetTitle) at y=\(locationY)"
+                    let feedback = SidebarDropCalculations.workspaceRowFeedback(
+                        .workspace(source.id),
+                        target: target,
+                        locationY: locationY,
+                        renderedHeight: 30,
+                        in: workspaces
+                    )
+                    guard case .preview(let preview) = feedback else {
+                        XCTAssertEqual(feedback, SidebarDropFeedback.none, label)
+                        continue
+                    }
+                    guard case .workspace(let sourceID, let folderID, let isPinned, let before) = preview else {
+                        return XCTFail("a workspace row previewed a folder move: \(label)")
+                    }
+                    previewCount += 1
+                    let previewed = SidebarDropCalculations.previewedWorkspaces(workspaces, applying: preview)
+                    XCTAssertNotEqual(
+                        slots(previewed, store.folders), slots(workspaces, store.folders),
+                        "\(label) previewed a no-op instead of leaving the rows still"
+                    )
+                    XCTAssertNoThrow(
+                        try store.moveWorkspace(sourceID, to: folderID, before: before, isPinned: isPinned),
+                        label
+                    )
+                    XCTAssertEqual(slots(previewed, store.folders), slots(store.workspaces, store.folders), label)
+                }
+            }
+        }
+        XCTAssertGreaterThan(previewCount, 40, "the fixture should exercise many previews")
+    }
+
     private func temporaryStoreURL() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("sidebar-drop-preview-\(UUID().uuidString)")
