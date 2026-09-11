@@ -865,8 +865,8 @@ private struct WorkspaceSidebarRow: View {
         }
     }
 
-    // A reorder draws an insertion line on the edge the workspace will land on, so this row keeps
-    // showing its own colour rather than tinting as though the drop landed inside it.
+    // A reorder previews as the rows sliding apart, so this row keeps showing its own colour
+    // rather than tinting as though the drop landed inside it.
     private var workspaceBackgroundColor: Color {
         guard let color = workspace.color else { return .clear }
         let isSelected = model.store.selectedWorkspaceID == workspace.id
