@@ -229,6 +229,14 @@ export class Rendezvous implements DurableObject {
       // Surfaced to the peer via the eventual close event; nothing else to do here.
     });
 
+    // Sessions announced to the socket this one replaced are still waiting, and their timers are
+    // still running. The Mac that just arrived is the one that can answer them.
+    for (const [sid, session] of this.sessions) {
+      if (session.state === "pending") {
+        server.send(JSON.stringify({ type: "open", session: sid }));
+      }
+    }
+
     return new Response(null, { status: 101, webSocket: client });
   }
 

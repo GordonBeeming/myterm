@@ -688,6 +688,46 @@ test("a Mac that never opens the session leaves the device with 4008 after ten s
   host.close();
 });
 
+test("a device that arrived while the Mac was reconnecting is handed to the new control socket", async () => {
+  const id = randomId("id-");
+  const key = randomId("key-");
+
+  // The old socket: from the relay's side still open, from the Mac's side already dead.
+  const stale = new WebSocket(`${BASE_WS}/v1/host/${id}`, {
+    headers: { "X-MyTerm-Host-Key": key },
+  });
+  await waitOpen(stale);
+  const staleInbox = inbox(stale);
+
+  const device = new WebSocket(`${BASE_WS}/v1/device/${id}`);
+  await waitOpen(device);
+  const deviceInbox = inbox(device);
+  const announcedToStale = await staleInbox.next();
+  device.send(new TextEncoder().encode("sent while the Mac was away"));
+
+  const fresh = new WebSocket(`${BASE_WS}/v1/host/${id}`, {
+    headers: { "X-MyTerm-Host-Key": key },
+  });
+  await waitOpen(fresh);
+  const freshInbox = inbox(fresh);
+  const announcedAgain = await freshInbox.next();
+  assert.equal(announcedAgain.type, "open");
+  assert.equal(announcedAgain.session, announcedToStale.session);
+
+  const hostSession = new WebSocket(`${BASE_WS}/v1/host/${id}/session/${announcedAgain.session}`, {
+    headers: { "X-MyTerm-Host-Key": key },
+  });
+  await waitOpen(hostSession);
+  const sessionInbox = inbox(hostSession);
+  assert.equal(new TextDecoder().decode(await sessionInbox.next()), "sent while the Mac was away");
+  hostSession.send(new TextEncoder().encode("back"));
+  assert.equal(new TextDecoder().decode(await deviceInbox.next()), "back");
+
+  hostSession.close();
+  device.close();
+  fresh.close();
+});
+
 /**
  * Performs a raw HTTP WebSocket-upgrade handshake and resolves with the status
  * code the server responded with. Node's global WebSocket does not expose the

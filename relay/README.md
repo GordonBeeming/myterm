@@ -100,8 +100,10 @@ malformed id or key is rejected with `400` before it reaches the Durable Object.
 ### Closing
 
 When either side of a joined session closes, the other is closed with code `1000`, reason
-`peer closed`. When a control socket closes or is replaced, every pending session for that id is
-closed with `4004`, `host offline`.
+`peer closed`. When a control socket closes, every pending session for that id is closed with
+`4004`, `host offline`. When a control socket is replaced, every pending session is announced again
+to the new socket with a fresh `open` message, and keeps whatever remains of its ten seconds: a
+device that arrived while the Mac was reconnecting is handed to the Mac that came back.
 
 ### Limits
 
