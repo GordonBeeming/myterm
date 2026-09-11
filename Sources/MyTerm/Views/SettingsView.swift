@@ -192,21 +192,6 @@ struct SettingsView: View {
                 Text("Each agent gets three hooks in its own file. They report through the pane's terminal and stay silent outside MyTerm, so other terminals are unaffected. Other tools' hooks in the same file are left alone, and removing takes out only what MyTerm wrote. Restart an agent session for the change to take effect.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-
-                ScopedSettingRow(
-                    model: model,
-                    scope: scope,
-                    title: "Restore agent sessions",
-                    global: \TerminalPreferences.restoresAgentSessions,
-                    override: \TerminalPreferencesOverrides.restoresAgentSessions
-                ) { value in
-                    Toggle("Restore agent sessions", isOn: value)
-                        .labelsHidden()
-                }
-
-                Text("A pane that was in a Claude Code conversation rejoins it on the next launch, using Claude Code's own resume command. A pane left at its shell prompt comes back to a shell prompt. This needs the hooks above, because the conversation is what they report. Codex panes are not restored: it reports a new identifier every turn rather than the one its resume command takes.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
 
             Section("Agent notifications") {
