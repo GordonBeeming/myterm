@@ -166,6 +166,42 @@ final class MyTermBrowserRoutingTests: XCTestCase {
         XCTAssertEqual(process.terminationStatus, 0)
     }
 
+    func testBashShimRunsTheUsersOwnBashEnvOnceAndStillDefinesOpen() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let shim = repositoryRoot.appending(path: "Resources/myterm-bash-env", directoryHint: .notDirectory)
+        let marker = directory.appending(path: "marker", directoryHint: .notDirectory)
+        let usersFile = directory.appending(path: "users-bash-env", directoryHint: .notDirectory)
+        // The user's file defines its own open too. The shim's function has to be the one that
+        // wins, or a user who wraps open loses MyTerm's routing.
+        try Data("""
+        printf 'ran\\n' >> '\(marker.path)'
+        open() { echo users-open; }
+
+        """.utf8).write(to: usersFile)
+        let output = directory.appending(path: "output", directoryHint: .notDirectory)
+        FileManager.default.createFile(atPath: output.path, contents: nil)
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = ["-c", "type open"]
+        process.environment = [
+            "PATH": "/usr/bin:/bin",
+            "BASH_ENV": shim.path,
+            "MYTERM_ORIGINAL_BASH_ENV": usersFile.path,
+            "MYTERM_OPEN_SHIM": "\(directory.path)/open",
+        ]
+        process.standardOutput = try FileHandle(forWritingTo: output)
+        try process.run()
+        process.waitUntilExit()
+
+        XCTAssertEqual(process.terminationStatus, 0)
+        XCTAssertEqual(try String(contentsOf: marker, encoding: .utf8), "ran\n", "the user's own BASH_ENV runs exactly once")
+        let typed = try String(contentsOf: output, encoding: .utf8)
+        XCTAssertTrue(typed.contains("open is a function"), typed)
+        XCTAssertTrue(typed.contains("MYTERM_OPEN_SHIM"), "the shim's open must be the one in force, not the user's: \(typed)")
+    }
+
     func testEnvironmentDropsTheOriginalZDOTDIRWhenItIsThisSameShimDirectory() throws {
         // MyTerm can run from inside a MyTerm pane while developing MyTerm. In that case
         // baseEnvironment's ZDOTDIR is already the shim directory this call is about to set,
