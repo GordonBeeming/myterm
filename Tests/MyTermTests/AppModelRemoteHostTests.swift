@@ -588,7 +588,6 @@ final class AppModelRemoteHostTests: XCTestCase {
         defer { removeTemporaryDirectory(directory) }
         let workspace = model.selectedWorkspace
         let group = try XCTUnwrap(workspace.orderedGroups.first)
-        let firstTabID = group.selectedTabID
         let firstSession = try XCTUnwrap(group.selectedTab.terminalSession?.id)
         model.createTerminalTab()
         let secondTabID = try XCTUnwrap(model.selectedWorkspace.orderedGroups.first?.selectedTabID)

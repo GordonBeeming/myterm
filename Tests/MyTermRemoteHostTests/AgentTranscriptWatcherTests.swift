@@ -13,15 +13,17 @@ final class AgentTranscriptWatcherTests: XCTestCase {
     private var root: URL!
     private var project: URL!
     private let session = "87d84ef0-4227-42d8-92e3-3dafcf13979f"
+    /// The session a watcher built by hand is following; a test moves it to stand in for `/clear`.
+    private var followedSession: String?
 
-    override func setUpWithError() throws {
+    override func setUp() async throws {
         root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("watcher-\(UUID().uuidString)")
         project = root.appendingPathComponent("-Users-someone-code")
         try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
     }
 
-    override func tearDownWithError() throws {
+    override func tearDown() async throws {
         try? FileManager.default.removeItem(at: root)
     }
 
@@ -167,13 +169,13 @@ final class AgentTranscriptWatcherTests: XCTestCase {
     func testANewSessionIsFollowedAsAFreshConversation() async throws {
         try append(line("a1", text: "first") + "\n")
         let newSession = "2bd52f6c-9f22-4a60-8afd-a53466ab5219"
-        var current = session
+        followedSession = session
         var conversations: [RemoteAgentConversation] = []
         var updates: [RemoteAgentEntries] = []
         let watcher = AgentTranscriptWatcher(
             tabID: "tab-1",
             agent: "claude",
-            sessionID: { current },
+            sessionID: { [unowned self] in self.followedSession },
             projectsDirectory: root,
             onConversation: { conversations.append($0) },
             onEntries: { updates.append($0) }
@@ -190,7 +192,7 @@ final class AgentTranscriptWatcherTests: XCTestCase {
         <command-message>clear</command-message>\\n<command-args></command-args>"}}\n
         """
         try clear.write(to: project.appendingPathComponent("\(newSession).jsonl"), atomically: true, encoding: .utf8)
-        current = newSession
+        followedSession = newSession
 
         await wait { conversations.count > 1 }
         XCTAssertEqual(conversations.count, 2, "a new session is a new backlog, not a batch of entries")
