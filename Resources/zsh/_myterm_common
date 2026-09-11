@@ -22,22 +22,40 @@
 # unset HOME can never resolve the user directory to the filesystem root.
 
 _myterm_shim_dir="${ZDOTDIR:-}"
-_myterm_user_dir="${MYTERM_ORIGINAL_ZDOTDIR:-${HOME:-/nonexistent}}"
+_myterm_home="${HOME:-/nonexistent}"
+_myterm_user_dir="${MYTERM_ORIGINAL_ZDOTDIR:-$_myterm_home}"
 if [ -n "$_myterm_shim_dir" ] && [ "$_myterm_user_dir" = "$_myterm_shim_dir" ]; then
-  _myterm_user_dir="${HOME:-/nonexistent}"
+  _myterm_user_dir="$_myterm_home"
+fi
+# Another MyTerm's shim directory is not the user's either. A pane whose shell
+# is not zsh never runs this file, so it never resolves MYTERM_ORIGINAL_ZDOTDIR,
+# and a MyTerm launched from it inherits the parent's shim directory as though
+# it were the user's own. Sourcing that would run the user's files through the
+# other copy's shims instead of these.
+if [ -r "$_myterm_user_dir/_myterm_common" ]; then
+  _myterm_user_dir="$_myterm_home"
 fi
 MYTERM_ORIGINAL_ZDOTDIR="$_myterm_user_dir"
 export MYTERM_ORIGINAL_ZDOTDIR
 
-ZDOTDIR="$_myterm_user_dir"
-if [ -n "${_myterm_dotfile:-}" ] && [ -r "$ZDOTDIR/$_myterm_dotfile" ]; then
-  . "$ZDOTDIR/$_myterm_dotfile"
+# A user without a ZDOTDIR of their own must not see one while their file
+# runs. Plain zsh leaves it unset, and the usual relocation in a .zshenv,
+# `ZDOTDIR="${ZDOTDIR:-$HOME/.config/zsh}"`, only fires when it is. Set to
+# HOME here it would read as already chosen, and the dotfiles under
+# .config/zsh would silently give way to whatever sits in HOME.
+if [ "$_myterm_user_dir" = "$_myterm_home" ]; then
+  unset ZDOTDIR
+else
+  ZDOTDIR="$_myterm_user_dir"
+fi
+if [ -n "${_myterm_dotfile:-}" ] && [ -r "$_myterm_user_dir/$_myterm_dotfile" ]; then
+  . "$_myterm_user_dir/$_myterm_dotfile"
 fi
 
 # The user's own file may have repointed ZDOTDIR; that new value wins.
-_myterm_user_dir="${ZDOTDIR:-${HOME:-/nonexistent}}"
+_myterm_user_dir="${ZDOTDIR:-$_myterm_home}"
 if [ -n "$_myterm_shim_dir" ] && [ "$_myterm_user_dir" = "$_myterm_shim_dir" ]; then
-  _myterm_user_dir="${HOME:-/nonexistent}"
+  _myterm_user_dir="$_myterm_home"
 fi
 MYTERM_ORIGINAL_ZDOTDIR="$_myterm_user_dir"
 export MYTERM_ORIGINAL_ZDOTDIR
@@ -45,4 +63,4 @@ export MYTERM_ORIGINAL_ZDOTDIR
 if [ -n "$_myterm_shim_dir" ]; then
   ZDOTDIR="$_myterm_shim_dir"
 fi
-unset _myterm_shim_dir _myterm_user_dir _myterm_dotfile
+unset _myterm_shim_dir _myterm_user_dir _myterm_dotfile _myterm_home
