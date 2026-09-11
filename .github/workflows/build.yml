@@ -35,7 +35,10 @@ jobs:
       # The companion app is the only consumer of MyTermRemoteProtocol on iOS. `swift build` never
       # compiles it, so without this a change that breaks the app lands unnoticed.
       - name: Build the companion app for the iOS Simulator
+        # Without pipefail the step's status is grep's, and grep matches "error:" on a failed
+        # build just as happily as "BUILD SUCCEEDED" on a good one, so the step could never fail.
         run: |
+          set -o pipefail
           xcodebuild -project apps/MyTermRemote/MyTermRemote.xcodeproj \
             -scheme MyTermRemote \
             -destination 'generic/platform=iOS Simulator' \
