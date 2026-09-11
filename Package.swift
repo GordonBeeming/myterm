@@ -25,10 +25,7 @@ let package = Package(
     targets: [
         .target(name: "MyTermCore"),
         .target(name: "MyTermRemoteProtocol", dependencies: ["MyTermCore"]),
-        .target(
-            name: "MyTermRemoteHost",
-            dependencies: ["MyTermCore", "MyTermPlatform", "MyTermRemoteProtocol"]
-        ),
+        .target(name: "MyTermRemoteHost", dependencies: ["MyTermRemoteProtocol"]),
         .target(
             name: "MyTermPlatform",
             dependencies: [
@@ -45,9 +42,11 @@ let package = Package(
             name: "MyTermRemoteProtocolTests",
             dependencies: ["MyTermRemoteProtocol"]
         ),
+        // RemoteHostDemo serves real terminals to a device, which is the one place the remote host
+        // meets MyTermPlatform. The library itself never imports it.
         .testTarget(
             name: "MyTermRemoteHostTests",
-            dependencies: ["MyTermRemoteHost"]
+            dependencies: ["MyTermRemoteHost", "MyTermRemoteProtocol", "MyTermCore", "MyTermPlatform"]
         ),
         .testTarget(
             name: "MyTermPlatformTests",
