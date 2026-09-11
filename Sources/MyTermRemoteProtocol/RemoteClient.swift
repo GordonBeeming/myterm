@@ -367,10 +367,14 @@ public final class RemoteClient {
                 }
             },
             ended: { [weak self] failure in
-                // The relay side went away. The connection above notices the closed loopback on its
-                // own and ends up in `giveUp`; keeping the verdict lets the message say why.
+                // The relay side went away. Once connected, the loopback leg notices its peer
+                // closing and ends up in `giveUp` on its own; keeping the verdict lets the message
+                // say why. Before that, a TLS handshake whose peer vanished sits in `.waiting` and
+                // would only report at the timeout, so the relay's verdict is acted on here.
                 guard let self, self.attempt == thisAttempt else { return }
                 self.tunnelFailure = failure
+                if case .connected = self.state { return }
+                self.giveUp(on: target, route: .relay, error: self.pendingWaitError)
             }
         )
     }
@@ -443,7 +447,10 @@ public final class RemoteClient {
     }
 
     private var tunnelFailureMessage: String? {
-        tunnelFailure?.message
+        // A normal close is the Mac hanging up, passed on by the relay. Before a welcome that is the
+        // handshake being refused, which the general wording describes; the relay has nothing to add.
+        if case .closed(code: 1000) = tunnelFailure { return nil }
+        return tunnelFailure?.message
     }
 
     private func receive(attempt thisAttempt: Int) {

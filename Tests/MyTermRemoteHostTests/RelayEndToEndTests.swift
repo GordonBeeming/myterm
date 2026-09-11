@@ -14,7 +14,6 @@ final class RelayEndToEndTests: XCTestCase {
 
     @MainActor
     override func setUp() async throws {
-        continueAfterFailure = false
         if Self.relay == nil {
             Self.relay = try await LocalRelay.start()
         }
@@ -158,9 +157,14 @@ final class RelayEndToEndTests: XCTestCase {
             try await Task.sleep(nanoseconds: 50_000_000)
         }
         XCTAssertTrue(collector.trees.isEmpty, "the relay must not weaken the token check")
-        if case .connected = client.state {
-            XCTFail("a device without the token must not connect through the relay")
+        // The Mac refuses the handshake and hangs up; the relay passes that on. The device must
+        // say so straight away, not sit out its relay timeout, and it must blame the token rather
+        // than the relay.
+        guard case .failed(let message) = client.state else {
+            return XCTFail("a device without the token must be refused, not left waiting: \(client.state)")
         }
+        XCTAssertTrue(message.contains("token"), message)
+        XCTAssertFalse(message.contains("relay"), message)
         client.disconnect()
     }
 
