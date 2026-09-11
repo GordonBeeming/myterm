@@ -32,9 +32,14 @@ enum AgentPermissionMenu {
         // away from one.
         "ask again",
         "auto mode",
+        "auto-accept",
         "always allow",
         "always approve",
         "remember this",
+        // "Yes, allow all edits during this session (shift+tab)" is the CLI's file-edit prompt.
+        // It turns on accept-edits for the rest of the session, which is the same disarming.
+        "allow all",
+        "this session",
     ]
 
     /// Whether these rows are showing a permission prompt at all.
@@ -84,6 +89,9 @@ enum AgentPermissionMenu {
               matches(current.label, option.label) else {
             return nil
         }
+        // The label on screen now is the one the keystroke answers. "Yes" is a prefix of "Yes,
+        // and switch to auto mode", and the cut-off allowance must not widen a plain yes into that.
+        guard !isRefused(current.label) else { return nil }
         return Array("\(option.number)\r".utf8)
     }
 

@@ -41,6 +41,7 @@ final class RemoteHostConnection {
 
     private var decoder = RemoteFrameDecoder()
     private var didGreet = false
+    private var isRefusing = false
     /// The attachment handle for each session this device is watching.
     private var attachedSessions: [UUID: UUID] = [:]
     /// One watcher per followed conversation. Held here so they die with the connection: a watcher
@@ -121,6 +122,24 @@ final class RemoteHostConnection {
         closed?()
     }
 
+    /// Says why, then hangs up.
+    ///
+    /// Cancelling straight after queueing the refusal races it: the device then sees a bare close
+    /// before any welcome, which it reports as a wrong token. So the hang-up waits until the
+    /// refusal has been handed to the transport.
+    private func closeAfterRefusing(_ error: RemoteError) {
+        isRefusing = true
+        guard let frame = try? RemoteControlCodec.encode(.error(error)) else {
+            close()
+            return
+        }
+        connection.send(content: Data(RemoteFrameCodec.encode(frame)), completion: .contentProcessed { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.close()
+            }
+        })
+    }
+
     func send(tree: RemoteTree) {
         sendControl(.tree(tree))
     }
@@ -151,14 +170,15 @@ final class RemoteHostConnection {
     }
 
     private func consume(_ data: Data) {
+        // A refusal is on its way out; nothing more from this device is read.
+        guard !isRefusing else { return }
         decoder.append(data)
         while true {
             let frame: RemoteFrame?
             do {
                 frame = try decoder.nextFrame()
             } catch {
-                sendControl(.error(RemoteError(code: "frame", message: "\(error)")))
-                close()
+                closeAfterRefusing(RemoteError(code: "frame", message: "\(error)"))
                 return
             }
             guard let frame else { return }
@@ -189,11 +209,10 @@ final class RemoteHostConnection {
         switch message {
         case .hello(let hello):
             guard hello.protocolVersion == RemoteProtocol.version else {
-                sendControl(.error(RemoteError(
+                closeAfterRefusing(RemoteError(
                     code: "version",
                     message: "this Mac speaks protocol \(RemoteProtocol.version)"
-                )))
-                close()
+                ))
                 return
             }
             deviceName = hello.deviceName

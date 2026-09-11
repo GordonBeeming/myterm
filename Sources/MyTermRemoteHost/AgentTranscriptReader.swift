@@ -174,10 +174,11 @@ public struct AgentTranscriptReader {
 
     private static func entry(from object: [String: Any], pending: inout PendingTools) -> RemoteAgentEntry? {
         // The identifier is the agent's own, so a device that reattaches recognises what it has.
-        guard let id = object["uuid"] as? String, !id.isEmpty,
+        guard let rawID = object["uuid"] as? String, !rawID.isEmpty,
               let type = object["type"] as? String else {
             return nil
         }
+        let id = label(rawID)
         let timestamp = timestamp(from: object["timestamp"])
 
         if type == "system" {
@@ -232,7 +233,7 @@ public struct AgentTranscriptReader {
               model != AgentModelCatalog.syntheticModel else {
             return nil
         }
-        return model
+        return label(model)
     }
 
     // MARK: - System records
@@ -252,7 +253,7 @@ public struct AgentTranscriptReader {
             // A manual compaction is already shown by the `/compact` command that follows it.
             let metadata = object["compactMetadata"] as? [String: Any]
             guard metadata?["trigger"] as? String != "manual" else { return nil }
-            return .note(RemoteAgentNote(text: content ?? "Conversation compacted"))
+            return .note(RemoteAgentNote(text: content.map(presentable) ?? "Conversation compacted"))
         case "informational", "model_refusal_fallback":
             guard let content else { return nil }
             let level: RemoteAgentNote.Level = object["level"] as? String == "warning" ? .warning : .info
@@ -289,7 +290,10 @@ public struct AgentTranscriptReader {
         }
         if let name = tagged(LocalCommandMarkup.name, in: trimmed) {
             guard !name.isEmpty else { return nil }
-            return RemoteAgentLocalCommand(name: name, args: tagged(LocalCommandMarkup.args, in: trimmed) ?? "")
+            return RemoteAgentLocalCommand(
+                name: label(name),
+                args: cut(tagged(LocalCommandMarkup.args, in: trimmed) ?? "", to: RemoteAgentLimits.maximumBlockCharacters).text
+            )
         }
         if let output = tagged(LocalCommandMarkup.stdout, in: trimmed) {
             let text = presentable(output)
@@ -377,8 +381,8 @@ public struct AgentTranscriptReader {
         }
         let input = block["input"] as? [String: Any] ?? [:]
         return RemoteAgentToolUse(
-            id: id,
-            name: name,
+            id: label(id),
+            name: label(name),
             summary: summary(ofToolNamed: name, input: input),
             detail: cut(detail(of: input), to: RemoteAgentLimits.maximumDetailCharacters).text,
             teammate: teammate(ofToolNamed: name, input: input)
@@ -394,13 +398,13 @@ public struct AgentTranscriptReader {
         case "Agent", "Task":
             return RemoteAgentTeammate(
                 kind: .delegated,
-                role: nonEmpty(input["subagent_type"] as? String)
-                    ?? nonEmpty(input["name"] as? String)
+                role: (nonEmpty(input["subagent_type"] as? String)
+                    ?? nonEmpty(input["name"] as? String)).map(label)
             )
         case "SendMessage":
             return RemoteAgentTeammate(
                 kind: .message,
-                addressee: nonEmpty(input["to"] as? String)
+                addressee: nonEmpty(input["to"] as? String).map(label)
             )
         default:
             return nil
@@ -457,7 +461,7 @@ public struct AgentTranscriptReader {
         let (text, isTruncated) = cut(resultText(from: block["content"]),
                                       to: RemoteAgentLimits.maximumBlockCharacters)
         return RemoteAgentToolResult(
-            toolUseID: toolUseID,
+            toolUseID: label(toolUseID),
             isError: isError,
             text: text,
             isTruncated: isTruncated
@@ -537,6 +541,12 @@ public struct AgentTranscriptReader {
     static func cut(_ text: String, to limit: Int) -> (text: String, isTruncated: Bool) {
         guard text.count > limit else { return (text, false) }
         return (String(text.prefix(limit)) + "…", true)
+    }
+
+    /// A name or identifier the file supplies, cut to the one-line cap. The agent's own are a
+    /// few dozen characters; the file is not trusted to keep them that way.
+    private static func label(_ value: String) -> String {
+        cut(value, to: RemoteAgentLimits.maximumSummaryCharacters).text
     }
 
     private static func nonEmpty(_ value: String?) -> String? {

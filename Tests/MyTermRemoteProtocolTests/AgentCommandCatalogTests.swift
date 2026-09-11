@@ -209,4 +209,47 @@ final class AgentCommandCatalogTests: XCTestCase {
         let compacted = entries + [RemoteAgentEntry(id: "n2", role: .system, blocks: [.note(RemoteAgentNote(text: "Conversation compacted"))])]
         XCTAssertNil(AgentCommandCatalog.notice(in: compacted), "a plain note names nothing")
     }
+
+    // MARK: - What a typed line can be
+
+    func testAScreenCommandWithWordsAfterItIsStillReadOffTheScreen() {
+        // The CLI ignores what follows `/usage`; the dialog is drawn all the same, so the host
+        // must still wait for it.
+        XCTAssertEqual(AgentCommandCatalog.screenCommand(typed: "/usage now please")?.name, "/usage")
+        XCTAssertEqual(AgentCommandCatalog.typed("/status\t"), .runnable(AgentCommandCatalog.command(named: "/status")!))
+    }
+
+    func testACommandNameIsMatchedExactly() {
+        // The CLI is case sensitive too: `/Usage` is unknown to it, so nothing waits for a dialog.
+        XCTAssertEqual(AgentCommandCatalog.typed("/Usage"), .unknown(name: "/Usage"))
+        XCTAssertNil(AgentCommandCatalog.screenCommand(typed: "/USAGE"))
+        XCTAssertEqual(AgentCommandCatalog.typed("/usage/"), .unknown(name: "/usage/"))
+        XCTAssertEqual(AgentCommandCatalog.typed("/clearx"), .unknown(name: "/clearx"))
+    }
+
+    func testABareSlashIsAnUnknownCommandNotAMessage() {
+        XCTAssertEqual(AgentCommandCatalog.typed("/"), .unknown(name: "/"))
+        XCTAssertEqual(AgentCommandCatalog.typed("  /  "), .unknown(name: "/"))
+    }
+
+    func testAPickerCommandWithOnlyWhitespaceAfterItStillOpensOnTheMac() {
+        XCTAssertEqual(AgentCommandCatalog.typed("/model   "), .macOnly(AgentCommandCatalog.command(named: "/model")!))
+        XCTAssertEqual(AgentCommandCatalog.typed("/effort \t"), .macOnly(AgentCommandCatalog.command(named: "/effort")!))
+    }
+
+    func testTheCatalogDoesNotClassifyTheAgentsBashMode() {
+        // Claude Code runs a line starting with `!` as a shell command without asking the model.
+        // The table treats it as words, so the phone offers no warning and the host types it
+        // through the reply path like any other message. The Mac's input switch is the only gate.
+        XCTAssertEqual(AgentCommandCatalog.typed("!rm -rf ~/scratch"), .message)
+        XCTAssertNil(AgentCommandCatalog.screenCommand(typed: "!ls"))
+    }
+
+    func testTheCommandsTheDocCallsNotApplicableAreUnknownToTheTable() {
+        // Not offered and not named, per the companion doc. They still reach the agent as typed
+        // when a person types them by hand: the table is what the phone offers, not a gate.
+        for name in ["/exit", "/logout", "/vim", "/terminal-setup", "/init"] {
+            XCTAssertEqual(AgentCommandCatalog.typed(name), .unknown(name: name), name)
+        }
+    }
 }

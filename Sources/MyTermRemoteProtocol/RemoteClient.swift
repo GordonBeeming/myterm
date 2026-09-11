@@ -483,7 +483,19 @@ public final class RemoteClient {
 
     private func consume(_ data: Data) {
         decoder.append(data)
-        while let frame = try? decoder.nextFrame() {
+        while true {
+            let frame: RemoteFrame?
+            do {
+                frame = try decoder.nextFrame()
+            } catch {
+                // The bad header stays at the front of the buffer, so nothing behind it can ever
+                // be read. Staying "connected" would mean a screen that never updates again and a
+                // buffer that only grows. The host hangs up on the same error.
+                tearDown()
+                state = .failed("The Mac sent something this app could not read. Try connecting again.")
+                return
+            }
+            guard let frame else { return }
             handle(frame)
         }
     }

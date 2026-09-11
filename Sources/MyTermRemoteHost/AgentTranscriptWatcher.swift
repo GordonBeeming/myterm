@@ -110,8 +110,10 @@ public final class AgentTranscriptWatcher {
             }
             if let session, let url = Self.locate(sessionID: session, projectsDirectory: projectsDirectory) {
                 if !sentBacklog {
-                    await sendBacklog(at: url)
-                    sentBacklog = true
+                    // A file with no complete line yet is one the agent is still creating. The
+                    // device opens on the conversation and drops entries sent before it, so the
+                    // backlog is tried again rather than counted as sent with nothing in it.
+                    sentBacklog = await sendBacklog(at: url)
                 } else {
                     await sendNewEntries(at: url)
                 }
@@ -122,14 +124,17 @@ public final class AgentTranscriptWatcher {
         }
     }
 
-    private func sendBacklog(at url: URL) async {
-        let read = await Self.readAll(at: url)
-        guard !read.lines.isEmpty || read.length > 0 else { return }
+    /// Sends everything complete in the file, and says whether there was anything to send.
+    @discardableResult
+    private func sendBacklog(at url: URL) async -> Bool {
+        let read = await Self.readAppended(at: url, from: 0)
+        guard !read.lines.isEmpty else { return false }
         offset = read.length
         let conversation = reader.conversation(tabID: tabID, agent: agent, lines: read.lines)
         title = conversation.title
         delivered = Set(conversation.entries.map(\.id))
         onConversation(conversation)
+        return true
     }
 
     private func sendNewEntries(at url: URL) async {
@@ -171,15 +176,7 @@ public final class AgentTranscriptWatcher {
         var wasReplaced = false
     }
 
-    private nonisolated static func readAll(at url: URL) async -> Read {
-        await Task.detached(priority: .utility) {
-            guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return Read() }
-            let text = String(decoding: data, as: UTF8.self)
-            return Read(lines: text.split(separator: "\n").map(String.init), length: UInt64(data.count))
-        }.value
-    }
-
-    /// What the file gained since `offset`.
+    /// What the file gained since `offset`. From zero, the whole file.
     ///
     /// A partly written last line is left behind rather than parsed: the offset stops at the last
     /// newline, so the remainder is read again once the agent finishes writing it.

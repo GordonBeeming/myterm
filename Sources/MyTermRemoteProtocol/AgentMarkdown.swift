@@ -77,7 +77,10 @@ public enum AgentMarkdown {
             }
         }
 
-        let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        // "\r\n" is one Character in Swift, so a message with Windows line endings would never
+        // split at all and every heading, list and fence in it would collapse into one paragraph.
+        let lines = text.replacingOccurrences(of: "\r\n", with: "\n")
+            .split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
         var index = 0
         while index < lines.count {
             let line = lines[index]
