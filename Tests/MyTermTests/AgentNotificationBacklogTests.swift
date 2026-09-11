@@ -287,6 +287,149 @@ final class AgentNotificationBacklogTests: XCTestCase {
         XCTAssertFalse(text.contains("secret-id-42"))
     }
 
+    // MARK: - What counts as in front of the user
+
+    /// With one pane full screen, the other panes are not drawn at all. An agent finishing in one
+    /// of those is as unseen as one in another workspace, so it must ring the bell and mark the tab.
+    func testATabBehindAFullScreenPaneIsNotInFrontOfTheUser() throws {
+        let harness = try makeHarness()
+        let model = harness.model
+        let workspace = model.selectedWorkspace
+        let leftGroup = try XCTUnwrap(workspace.orderedGroups.first)
+        let hiddenTabID = leftGroup.selectedTabID
+        model.createTerminalTab(in: leftGroup.id)
+        guard case .moved(let rightGroupID) = model.routeSelectedTabMovement(.newPane(.right)) else {
+            return XCTFail("precondition: the second tab moves into a pane of its own")
+        }
+        model.focusTabGroup(workspaceID: workspace.id, tabGroupID: rightGroupID)
+        model.toggleFocusedPaneFullScreen()
+        XCTAssertEqual(model.maximizedTabGroup?.id, rightGroupID, "precondition: the right pane fills the window")
+        XCTAssertEqual(
+            model.selectedWorkspace.group(id: leftGroup.id)?.selectedTabID, hiddenTabID,
+            "precondition: the hidden pane still has the first tab selected"
+        )
+
+        harness.record(.finished, workspaceID: workspace.id, tabGroupID: leftGroup.id, tabID: hiddenTabID)
+
+        XCTAssertEqual(model.agentNotificationItems.map(\.id), [hiddenTabID], "nobody could see that pane")
+        XCTAssertEqual(model.agentAttention(forTab: hiddenTabID), .finished)
+    }
+
+    // MARK: - The bell and the cook
+
+    /// The docs promise the bell and the tab indicator never disagree. A question answered on a
+    /// paired device, followed by the agent finishing, is the sequence that tests the promise: the
+    /// `Notification` hook fired for the prompt, then `Stop` fired for the turn.
+    func testTheBellAndTheCookAgreeAfterAQuestionIsAnsweredElsewhere() throws {
+        let harness = try makeHarness()
+        let model = harness.model
+        let workspace = model.selectedWorkspace
+        let group = try XCTUnwrap(workspace.orderedGroups.first)
+        let tabID = group.selectedTabID
+        model.createWorkspace()
+
+        harness.record(.awaitingInput, workspaceID: workspace.id, tabGroupID: group.id, tabID: tabID)
+        harness.record(.finished, workspaceID: workspace.id, tabGroupID: group.id, tabID: tabID)
+
+        let item = try XCTUnwrap(model.agentNotificationItems.first)
+        XCTAssertEqual(model.agentAttention(forTab: tabID), .finished, "precondition: the cook shows the turn ended")
+        XCTAssertEqual(item.activity, model.agentAttention(forTab: tabID), "the bell says what the cook says")
+    }
+
+    // MARK: - Workspaces going away
+
+    func testDeletingAWorkspaceTakesItsEntriesOutOfTheBellAndTheHistoryADeviceGets() throws {
+        let harness = try makeHarness()
+        let model = harness.model
+        let doomed = model.selectedWorkspace
+        let group = try XCTUnwrap(doomed.orderedGroups.first)
+        let tabID = group.selectedTabID
+        model.createWorkspace()
+        let kept = model.selectedWorkspace
+        let keptGroup = try XCTUnwrap(kept.orderedGroups.first)
+        let keptTabID = keptGroup.selectedTabID
+        model.createWorkspace()
+
+        harness.record(.awaitingInput, workspaceID: doomed.id, tabGroupID: group.id, tabID: tabID)
+        harness.record(.finished, workspaceID: kept.id, tabGroupID: keptGroup.id, tabID: keptTabID)
+        XCTAssertEqual(model.agentNotificationCount, 2)
+
+        model.deleteWorkspace(doomed.id)
+
+        XCTAssertEqual(model.agentNotificationItems.map(\.id), [keptTabID])
+        XCTAssertNil(model.agentAttention(forTab: tabID))
+        XCTAssertFalse(model.needsAgentAttention(workspaceID: doomed.id))
+        XCTAssertEqual(model.remoteNotifications()?.entries.map(\.tabID), [keptTabID.description])
+    }
+
+    // MARK: - The file on disk
+
+    func testAHistoryFileThatCannotBeReadStartsOverWithoutStoppingTheLaunch() throws {
+        let harness = try makeHarness()
+        let model = harness.model
+        let workspace = model.selectedWorkspace
+        let group = try XCTUnwrap(workspace.orderedGroups.first)
+        model.createWorkspace()
+        harness.record(.finished, workspaceID: workspace.id, tabGroupID: group.id, tabID: group.selectedTabID)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: model.agentInboxURL.path), "precondition: the history was saved")
+        try Data("{\"entries\": [{\"tabID\": 12".utf8).write(to: model.agentInboxURL)
+
+        let relaunched = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: model.agentInboxURL.deletingLastPathComponent().deletingLastPathComponent(),
+            terminalEngine: nil,
+            startsTerminalProcesses: false
+        )
+
+        XCTAssertTrue(relaunched.agentNotificationItems.isEmpty)
+        XCTAssertEqual(relaunched.remoteNotifications()?.entries.count, 0)
+    }
+
+    func testTheHistoryIsSavedWhereTheWorkspaceStateIs() throws {
+        let harness = try makeHarness()
+        let model = harness.model
+        let workspace = model.selectedWorkspace
+        let group = try XCTUnwrap(workspace.orderedGroups.first)
+        model.createWorkspace()
+
+        harness.record(.finished, workspaceID: workspace.id, tabGroupID: group.id, tabID: group.selectedTabID)
+
+        XCTAssertEqual(model.agentInboxURL.lastPathComponent, "agent-notifications.json")
+        XCTAssertEqual(
+            model.agentInboxURL.deletingLastPathComponent(),
+            model.store.persistenceURL.deletingLastPathComponent()
+        )
+        let saved = try JSONDecoder().decode(AgentNotificationInbox.self, from: Data(contentsOf: model.agentInboxURL))
+        XCTAssertEqual(saved, model.agentInbox)
+    }
+
+    /// Every tab switch reads the tab it lands on. With nothing waiting there, that is not a change
+    /// to the history, and a change is the only reason to write a file on the main thread.
+    func testReachingATabWithNothingWaitingDoesNotRewriteTheHistory() throws {
+        let harness = try makeHarness()
+        let model = harness.model
+        let workspace = model.selectedWorkspace
+        let group = try XCTUnwrap(workspace.orderedGroups.first)
+        let firstTabID = group.selectedTabID
+        model.createTerminalTab()
+        let secondTabID = try XCTUnwrap(model.selectedWorkspace.orderedGroups.first?.selectedTabID)
+        model.createWorkspace()
+        harness.record(.finished, workspaceID: workspace.id, tabGroupID: group.id, tabID: firstTabID)
+        model.selectWorkspace(workspace.id)
+        model.selectTab(firstTabID, in: group.id)
+        XCTAssertTrue(model.agentNotificationItems.isEmpty, "precondition: the entry was read")
+        try FileManager.default.removeItem(at: model.agentInboxURL)
+
+        model.selectTab(secondTabID, in: group.id)
+        model.selectTab(firstTabID, in: group.id)
+        harness.record(.working, workspaceID: workspace.id, tabGroupID: group.id, tabID: secondTabID)
+
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: model.agentInboxURL.path),
+            "nothing changed, so nothing was written"
+        )
+    }
+
     private func makeHarness() throws -> AgentTestHarness {
         try AgentTestHarness { directory in
             addTeardownBlock { try? FileManager.default.removeItem(at: directory) }

@@ -187,4 +187,126 @@ final class AgentNotificationInboxTests: XCTestCase {
         XCTAssertEqual(entry?.activity, .awaitingInput)
         XCTAssertEqual(entry?.date, Date(timeIntervalSince1970: 5))
     }
+
+    // MARK: - Sequences the hooks produce
+
+    /// Claude Code's `Notification` hook fires for a permission prompt and its `Stop` hook fires when
+    /// the turn ends, in that order. A turn cannot end while the prompt is still up, so a finished
+    /// turn arriving after an unread question means the question was answered somewhere the Mac
+    /// did not see, such as a paired device. The bell must then say the agent finished, and the
+    /// history must record that it did.
+    func testAFinishedTurnAfterAnUnansweredQuestionSupersedesTheQuestion() {
+        var inbox = AgentNotificationInbox()
+        let tabID = TabID()
+
+        record(&inbox, .awaitingInput, tabID: tabID, at: 10)
+        let changed = inbox.record(
+            .finished,
+            workspaceID: workspaceID,
+            tabGroupID: tabGroupID,
+            tabID: tabID,
+            isTabVisible: false,
+            date: Date(timeIntervalSince1970: 20)
+        )
+
+        XCTAssertTrue(changed, "the agent moved on from the question, which is news")
+        XCTAssertEqual(inbox.activity(forTab: tabID), .finished, "the bell says what the agent is doing now")
+        XCTAssertTrue(
+            inbox.history.contains { $0.activity == .finished },
+            "the finished turn is on record, the same as any other"
+        )
+    }
+
+    func testAQuestionAfterAFinishedTurnSupersedesTheFinishedTurn() {
+        var inbox = AgentNotificationInbox()
+        let tabID = TabID()
+
+        record(&inbox, .finished, tabID: tabID, at: 10)
+        record(&inbox, .awaitingInput, tabID: tabID, at: 20)
+
+        XCTAssertEqual(inbox.activity(forTab: tabID), .awaitingInput)
+        XCTAssertEqual(inbox.history.count, 1, "the unread finished turn was superseded, not kept")
+    }
+
+    func testAnEntryFiledReadKeepsItsPlaceInTheHistoryWhenTheTabNeedsTheUserAgain() {
+        var inbox = AgentNotificationInbox()
+        let tabID = TabID()
+
+        record(&inbox, .finished, tabID: tabID, isTabVisible: true, at: 10)
+        record(&inbox, .awaitingInput, tabID: tabID, at: 20)
+
+        XCTAssertEqual(inbox.items.map(\.activity), [.awaitingInput])
+        XCTAssertEqual(inbox.history.map(\.activity), [.awaitingInput, .finished])
+        XCTAssertEqual(inbox.history.map(\.isRead), [false, true], "what was seen stays seen")
+    }
+
+    // MARK: - The file on disk
+
+    /// The on-disk shape is a contract with every MyTerm that wrote it before. A key rename here
+    /// silently discards the user's history at the next launch, so the shape is pinned as text.
+    func testTheHistoryFileWrittenByThisVersionStillDecodes() throws {
+        let tabID = TabID()
+        let workspaceID = WorkspaceID()
+        let tabGroupID = TabGroupID()
+        let json = """
+        {"entries":[{"tabID":"\(tabID.description)","workspaceID":"\(workspaceID.description)",\
+        "tabGroupID":"\(tabGroupID.description)","activity":"awaitingInput","date":700000000,"isRead":true},\
+        {"tabID":"\(tabID.description)","workspaceID":"\(workspaceID.description)",\
+        "tabGroupID":"\(tabGroupID.description)","activity":"finished","date":600000000,"isRead":false}]}
+        """
+
+        let inbox = try JSONDecoder().decode(AgentNotificationInbox.self, from: Data(json.utf8))
+
+        XCTAssertEqual(inbox.history.map(\.activity), [.awaitingInput, .finished])
+        XCTAssertEqual(inbox.history.map(\.isRead), [true, false])
+        XCTAssertEqual(inbox.history.first?.tabID, tabID)
+        XCTAssertEqual(inbox.history.first?.workspaceID, workspaceID)
+        XCTAssertEqual(inbox.history.first?.tabGroupID, tabGroupID)
+        XCTAssertEqual(inbox.history.first?.date, Date(timeIntervalSinceReferenceDate: 700_000_000))
+        XCTAssertEqual(inbox.items.map(\.activity), [.finished])
+    }
+
+    func testTheHistoryFileKeepsTheOrderItWasSavedIn() throws {
+        var inbox = AgentNotificationInbox()
+        for second in stride(from: 30, through: 10, by: -10) {
+            record(&inbox, .finished, tabID: TabID(), at: TimeInterval(second))
+        }
+        let decoded = try JSONDecoder().decode(AgentNotificationInbox.self, from: JSONEncoder().encode(inbox))
+
+        XCTAssertEqual(
+            decoded.history.map(\.date),
+            [30, 20, 10].map { Date(timeIntervalSince1970: $0) },
+            "newest first, which is the order a device shows it in"
+        )
+    }
+
+    func testAnEmptyHistoryFileIsAnEmptyHistory() throws {
+        let inbox = try JSONDecoder().decode(AgentNotificationInbox.self, from: Data("{\"entries\":[]}".utf8))
+        XCTAssertTrue(inbox.isEmpty)
+        XCTAssertTrue(inbox.history.isEmpty)
+    }
+
+    // MARK: - The cap
+
+    func testTheCapCountsReadAndUnreadTogether() {
+        var inbox = AgentNotificationInbox()
+        for second in 0..<(AgentNotificationInbox.capacity + 5) {
+            record(&inbox, .finished, tabID: TabID(), at: TimeInterval(second))
+        }
+
+        XCTAssertEqual(inbox.history.count, AgentNotificationInbox.capacity)
+        XCTAssertEqual(inbox.count, AgentNotificationInbox.capacity, "with nothing read, the oldest unread goes")
+        XCTAssertEqual(inbox.history.last?.date, Date(timeIntervalSince1970: 5))
+    }
+
+    func testATabReportingAgainNeverGrowsTheHistoryWhileItIsUnread() {
+        var inbox = AgentNotificationInbox()
+        let tabID = TabID()
+        for second in 0..<1_000 {
+            record(&inbox, second.isMultiple(of: 2) ? .finished : .awaitingInput, tabID: tabID, at: TimeInterval(second))
+        }
+
+        XCTAssertEqual(inbox.history.count, 1, "one tab is in the backlog once, however often it reports")
+        XCTAssertEqual(inbox.history.first?.date, Date(timeIntervalSince1970: 999))
+    }
 }
