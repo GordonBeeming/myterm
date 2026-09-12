@@ -65,6 +65,11 @@ struct LatestView: View {
 private struct LatestRow: View {
     let entry: RemoteNotificationLogEntry
 
+    /// At an accessibility text size the elapsed time is wider than the row has room for beside
+    /// the title: the title is squeezed to nothing and the time runs off the screen. Under the
+    /// title, both fit.
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     private var isQuestion: Bool { entry.activity == .awaitingInput }
 
     var body: some View {
@@ -81,18 +86,18 @@ private struct LatestRow: View {
                 .opacity(entry.isRead ? 0.5 : 1)
                 .padding(.top, 1)
             VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(entry.tabTitle)
-                        .font(entry.isRead ? .body : .body.weight(.semibold))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Spacer(minLength: 0)
-                    (Text(entry.date, style: .relative) + Text(" ago"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        // The elapsed time is short and grows as it counts, so it keeps its width
-                        // and the tab name gives way instead.
-                        .fixedSize(horizontal: true, vertical: false)
+                if dynamicTypeSize.isAccessibilitySize {
+                    title
+                    elapsed
+                } else {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        title
+                        Spacer(minLength: 0)
+                        elapsed
+                            // The elapsed time is short and grows as it counts, so it keeps its
+                            // width and the tab name gives way instead.
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
                 }
                 Text(entry.activity.attentionDescription)
                     .font(.subheadline)
@@ -106,6 +111,19 @@ private struct LatestRow: View {
         .padding(.vertical, 2)
         .accessibilityElement(children: .combine)
         .accessibilityValue(entry.isRead ? "Read" : "Unread")
+    }
+
+    private var title: some View {
+        Text(entry.tabTitle)
+            .font(entry.isRead ? .body : .body.weight(.semibold))
+            .lineLimit(1)
+            .truncationMode(.middle)
+    }
+
+    private var elapsed: some View {
+        (Text(entry.date, style: .relative) + Text(" ago"))
+            .font(.caption)
+            .foregroundStyle(.secondary)
     }
 }
 

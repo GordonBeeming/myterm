@@ -195,16 +195,24 @@ struct AgentNoticeBanner: View {
     let run: (String) -> Void
     let openTerminal: () -> Void
 
+    /// At an accessibility text size the summary and the button do not fit side by side: the
+    /// words wrap one to a line beside the button and still get cut. Stacked, both are read whole.
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
-        HStack(spacing: 12) {
-            Label(notice.summary, systemImage: "exclamationmark.triangle.fill")
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(.orange)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 10) {
+                    summary
+                    button
+                }
                 .frame(maxWidth: .infinity, alignment: .leading)
-            action
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .accessibilityIdentifier("agent.noticeAction")
+            } else {
+                HStack(spacing: 12) {
+                    summary
+                    button
+                }
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -214,6 +222,22 @@ struct AgentNoticeBanner: View {
         .overlay(alignment: .top) { Divider() }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("agent.notice")
+    }
+
+    private var summary: some View {
+        Label(notice.summary, systemImage: "exclamationmark.triangle.fill")
+            .font(.footnote.weight(.medium))
+            .foregroundStyle(.orange)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // Given its height, or the inset it sits in cuts it to a line.
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var button: some View {
+        action
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .accessibilityIdentifier("agent.noticeAction")
     }
 
     @ViewBuilder
