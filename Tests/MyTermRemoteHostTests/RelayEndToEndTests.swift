@@ -227,6 +227,144 @@ final class RelayEndToEndTests: XCTestCase {
         XCTAssertEqual(client.path, .relay, "the relay is the route that worked")
         client.disconnect()
     }
+
+    // MARK: - Many devices through one rendezvous
+
+    /// The relay allows sixteen sessions per Mac. The seventeenth is told so in as many words, the
+    /// sixteen keep working, and when one leaves the next device gets in.
+    @MainActor
+    func testTheSeventeenthDeviceIsRefusedCleanlyAndTheSixteenKeepWorking() async throws {
+        let relay = try XCTUnwrap(Self.relay)
+        let endpoint = RelayEndpoint(url: relay.url, rendezvousID: RelayRendezvous.makeIdentifier())
+        let token = RemoteTransportSecurity.makeToken()
+        let source = RelayFakeDataSource()
+        let service = try await startedHost(token: token, dataSource: source)
+        defer { service.stop() }
+        let link = try await linkedHost(service, endpoint: endpoint)
+        defer { link.stop() }
+
+        var clients: [RemoteClient] = []
+        var collectors: [RelayCollector] = []
+        for index in 0..<16 {
+            let collector = RelayCollector()
+            let client = RemoteClient(deviceName: "Pad \(index)")
+            client.delegate = collector
+            client.connect(to: RemoteTarget(host: "", port: 0, token: token, relay: endpoint))
+            clients.append(client)
+            collectors.append(collector)
+        }
+        for _ in 0..<600 where !collectors.allSatisfy({ !$0.trees.isEmpty }) {
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTAssertTrue(collectors.allSatisfy { !$0.trees.isEmpty }, "all sixteen devices must get in")
+        for _ in 0..<100 where link.sessionCount < 16 {
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTAssertEqual(link.sessionCount, 16)
+        XCTAssertEqual(service.connectedDevices.count, 16)
+
+        let seventeenth = RemoteClient(deviceName: "Pad 16")
+        seventeenth.connect(to: RemoteTarget(host: "", port: 0, token: token, relay: endpoint))
+        for _ in 0..<200 {
+            if case .failed = seventeenth.state { break }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        guard case .failed(let message) = seventeenth.state else {
+            return XCTFail("the seventeenth device must be refused, not left waiting: \(seventeenth.state)")
+        }
+        XCTAssertEqual(message, RelayFailure.tooManySessions.message)
+
+        // The sixteen are untouched: one of them still gets its screen.
+        let collector = collectors[7]
+        let attached = expectation(description: "attached")
+        collector.onAttached = { attached.fulfill() }
+        clients[7].attach(tabID: RelayFakeDataSource.tabID)
+        await fulfillment(of: [attached], timeout: 20)
+        XCTAssertEqual(service.connectedDevices.count, 16, "a refusal at the relay must not cost the Mac a device")
+
+        // One leaves, and the door opens for the next.
+        clients[0].disconnect()
+        for _ in 0..<200 where link.sessionCount != 15 {
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTAssertEqual(link.sessionCount, 15)
+        let next = RemoteClient(deviceName: "Pad 17")
+        let nextCollector = RelayCollector()
+        next.delegate = nextCollector
+        let nextTree = expectation(description: "next tree")
+        nextCollector.onTree = { nextTree.fulfill() }
+        next.connect(to: RemoteTarget(host: "", port: 0, token: token, relay: endpoint))
+        await fulfillment(of: [nextTree], timeout: 20)
+
+        for client in clients.dropFirst() {
+            client.disconnect()
+        }
+        next.disconnect()
+        seventeenth.disconnect()
+    }
+
+    /// The Mac's control socket drops while devices are on it. The devices' sessions are their own
+    /// sockets and keep going; the Mac re-registers; a new device gets in through the new
+    /// registration.
+    @MainActor
+    func testTheMacReconnectingToTheRelayKeepsTheSessionsItHad() async throws {
+        let relay = try XCTUnwrap(Self.relay)
+        let endpoint = RelayEndpoint(url: relay.url, rendezvousID: RelayRendezvous.makeIdentifier())
+        let token = RemoteTransportSecurity.makeToken()
+        let source = RelayFakeDataSource()
+        let service = try await startedHost(token: token, dataSource: source)
+        defer { service.stop() }
+        let hostKey = RelayRendezvous.makeIdentifier()
+        let link = try await linkedHost(service, endpoint: endpoint, hostKey: hostKey)
+        defer { link.stop() }
+
+        let collector = RelayCollector()
+        let client = RemoteClient(deviceName: "Pad")
+        client.delegate = collector
+        let treeArrived = expectation(description: "tree")
+        collector.onTree = { treeArrived.fulfill() }
+        client.connect(to: RemoteTarget(host: "", port: 0, token: token, relay: endpoint))
+        await fulfillment(of: [treeArrived], timeout: 20)
+        collector.onTree = nil
+
+        // Another copy of the Mac registers with the same key, which the relay answers by closing
+        // the first control socket with 4001. That is the Mac's control link going away under it.
+        let usurper = try await linkedHost(service, endpoint: endpoint, hostKey: hostKey)
+        for _ in 0..<200 {
+            if case .retrying = link.state { break }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        guard case .retrying(let message) = link.state else {
+            return XCTFail("the replaced link must say so: \(link.state)")
+        }
+        XCTAssertTrue(message.contains("Another copy"), message)
+
+        // The device on the first link is still talking to the Mac.
+        let attached = expectation(description: "attached")
+        collector.onAttached = { attached.fulfill() }
+        client.attach(tabID: RelayFakeDataSource.tabID)
+        await fulfillment(of: [attached], timeout: 20)
+        guard case .connected = client.state else {
+            return XCTFail("a control socket replaced must not cut a session that was already joined")
+        }
+
+        // The Mac that registered last is the one the relay sends new devices to.
+        let second = RemoteClient(deviceName: "Phone")
+        let secondCollector = RelayCollector()
+        second.delegate = secondCollector
+        let secondTree = expectation(description: "second tree")
+        secondCollector.onTree = { secondTree.fulfill() }
+        second.connect(to: RemoteTarget(host: "", port: 0, token: token, relay: endpoint))
+        await fulfillment(of: [secondTree], timeout: 20)
+        for _ in 0..<100 where usurper.sessionCount == 0 {
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTAssertEqual(usurper.sessionCount, 1)
+
+        client.disconnect()
+        second.disconnect()
+        usurper.stop()
+    }
 }
 
 // MARK: - The relay on this machine
