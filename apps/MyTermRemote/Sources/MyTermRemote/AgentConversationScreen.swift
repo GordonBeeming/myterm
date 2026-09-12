@@ -24,6 +24,8 @@ struct AgentConversationScreen: View {
     /// the Mac reads it back, and for as long as it stays when the Mac could not.
     @State private var screenCommand: AgentCommandCatalog.Command?
     @State private var screenCommandTimer: Task<Void, Never>?
+    /// This screen's identity to the store, so its stop cannot undo a successor's follow.
+    @State private var follower = ConversationFollower()
 
     var body: some View {
         Group {
@@ -57,8 +59,8 @@ struct AgentConversationScreen: View {
                 .accessibilityIdentifier("agent.toggleTerminal")
             }
         }
-        .onAppear { store.followConversation(tabID: tab.id) }
-        .onDisappear { store.stopFollowingConversation(tabID: tab.id) }
+        .onAppear { store.followConversation(tabID: tab.id, owner: follower) }
+        .onDisappear { store.stopFollowingConversation(tabID: tab.id, owner: follower) }
         .onChange(of: store.screen) { _, screen in
             // The Mac read the dialog: its rows are in the conversation and the bar below offers
             // to dismiss it, so the notice that could only name the Mac has nothing left to say.
@@ -184,6 +186,20 @@ struct AgentConversationScreen: View {
             .onChange(of: conversation.entries.count) {
                 withAnimation { proxy.scrollTo(Self.bottomAnchor, anchor: .bottom) }
             }
+            // The bars below grow the inset the conversation sits above. Without following them,
+            // a prompt's buttons appear over the very question they answer. The scroll waits a
+            // turn, because at the moment of the change the inset has not been laid out yet and
+            // the bottom the scroll would go to is still the old one.
+            .onChange(of: store.promptOptions.isEmpty) {
+                DispatchQueue.main.async {
+                    withAnimation { proxy.scrollTo(Self.bottomAnchor, anchor: .bottom) }
+                }
+            }
+            .onChange(of: store.screen == nil) {
+                DispatchQueue.main.async {
+                    withAnimation { proxy.scrollTo(Self.bottomAnchor, anchor: .bottom) }
+                }
+            }
             .onAppear { proxy.scrollTo(Self.bottomAnchor, anchor: .bottom) }
         }
     }
@@ -247,6 +263,10 @@ struct AgentConversationScreen: View {
 
     private static let bottomAnchor = "conversation.bottom"
 }
+
+/// An identity for one showing of the conversation screen. A class, because the store keeps it
+/// weakly and compares it by reference, as it does the terminal's attachment owner.
+private final class ConversationFollower {}
 
 /// Work the agent handed to another agent.
 ///

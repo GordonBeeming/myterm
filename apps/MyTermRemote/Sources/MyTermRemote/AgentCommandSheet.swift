@@ -208,7 +208,9 @@ struct AgentNoticeBanner: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
+        // The tint alone is see-through, and the conversation scrolls underneath this bar.
         .background(Color.orange.opacity(0.12))
+        .background(.bar)
         .overlay(alignment: .top) { Divider() }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("agent.notice")

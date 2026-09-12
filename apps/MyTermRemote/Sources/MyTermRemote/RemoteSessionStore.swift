@@ -61,6 +61,12 @@ final class RemoteSessionStore {
     /// screen it replaced is torn down, so a departing screen must not clear its successor's.
     @ObservationIgnored
     private weak var attachmentOwner: AnyObject?
+    /// The screen following the conversation, and which tab, kept apart from `conversation`
+    /// because a follow that has not been answered yet is still a follow.
+    @ObservationIgnored
+    private weak var followOwner: AnyObject?
+    @ObservationIgnored
+    private var followedTabID: String?
     @ObservationIgnored
     private var refusalTimer: Task<Void, Never>?
     @ObservationIgnored
@@ -99,16 +105,25 @@ final class RemoteSessionStore {
     }
 
     /// Starts following a tab's agent conversation, dropping whatever was followed before.
-    func followConversation(tabID: String) {
-        if let current = conversation?.tabID, current != tabID {
+    ///
+    /// `owner` is the screen asking. As with the terminal attachment, a replacing screen can
+    /// appear before the one it replaces has gone, and the departing screen's stop must not undo
+    /// what its successor just started, for the same tab or another.
+    func followConversation(tabID: String, owner: AnyObject) {
+        if let current = followedTabID, current != tabID {
             client.detachAgent(tabID: current)
         }
+        followOwner = owner
+        followedTabID = tabID
         conversation = nil
         isLoadingConversation = true
         client.attachAgent(tabID: tabID)
     }
 
-    func stopFollowingConversation(tabID: String) {
+    func stopFollowingConversation(tabID: String, owner: AnyObject) {
+        guard followOwner === owner else { return }
+        followOwner = nil
+        followedTabID = nil
         client.detachAgent(tabID: tabID)
         if conversation?.tabID == tabID {
             conversation = nil
@@ -149,6 +164,8 @@ final class RemoteSessionStore {
     /// tree so the screen stays where the user left it while the device reconnects.
     func clearTree() {
         tree = nil
+        followOwner = nil
+        followedTabID = nil
         conversation = nil
         isLoadingConversation = false
         promptOptions = []
