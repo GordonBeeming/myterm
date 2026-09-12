@@ -934,6 +934,70 @@ final class RemoteHostManyDevicesTests: XCTestCase {
 
         XCTAssertEqual(source.tabWrites.map(\.text), ["rm -rf build"], "the Return must not follow once typing is refused")
     }
+
+    // MARK: - Open findings
+    //
+    // Each of these is red on purpose. It states what the host should do and shows that it does
+    // not yet, so the fix has its proof waiting.
+
+    /// Two devices reply to the same agent inside the Return delay. Each connection sends its words
+    /// then its own Return 200 ms later, and nothing orders them across connections, so the agent
+    /// reads "yesno" as one line and an empty Return as nothing. Replies to one tab need a queue
+    /// shared by every connection, so the second waits for the first's Return.
+    @MainActor
+    func testTwoDevicesReplyingWithinTenMillisecondsSubmitTwoLinesNotOne() async throws {
+        let token = RemoteTransportSecurity.makeToken()
+        let source = ManyTabsDataSource()
+        let (service, port) = try await startedService(token: token, dataSource: source)
+        defer { service.stop() }
+        let pad = try await greetedDevice("Pad", port: port, token: token)
+        let phone = try await greetedDevice("Phone", port: port, token: token)
+
+        pad.send(.agentReply(RemoteAgentReply(tabID: ManyTabsDataSource.tabID, text: "yes")))
+        phone.send(.agentReply(RemoteAgentReply(tabID: ManyTabsDataSource.tabID, text: "no")))
+        await wait { source.tabWrites.count >= 4 }
+
+        // What the agent sees is either "yes⏎ no⏎" or "no⏎ yes⏎". "yesno⏎⏎" is one line the
+        // agent reads as "yesno" and an empty Return it reads as nothing.
+        let writes = source.tabWrites.map(\.text)
+        XCTAssertTrue(
+            writes == ["yes", "\r", "no", "\r"] || writes == ["no", "\r", "yes", "\r"],
+            "two replies were merged into one line: \(writes)"
+        )
+    }
+
+    /// The relay allows sixteen sessions per Mac; the Mac's own listener allows any number. A
+    /// device holding the token can open as many connections as it likes, each with its own TLS
+    /// session, tree poll and prompt poll, and the Settings list grows with them. The listener
+    /// should refuse the seventeenth with an error the device can show, the way the relay does.
+    @MainActor
+    func testTheSeventeenthDeviceOnTheListenerIsRefusedAndTheSixteenKeepWorking() async throws {
+        let token = RemoteTransportSecurity.makeToken()
+        let source = ManyTabsDataSource()
+        let (service, port) = try await startedService(token: token, dataSource: source)
+        defer { service.stop() }
+
+        var devices: [Device] = []
+        for index in 0..<16 {
+            devices.append(try await greetedDevice("Pad \(index)", port: port, token: token))
+        }
+        XCTAssertEqual(service.connectedDevices.count, 16)
+
+        let seventeenth = Device(host: "127.0.0.1", port: port, token: token)
+        try await seventeenth.start()
+        seventeenth.startReading()
+        seventeenth.send(.hello(RemoteHello(deviceName: "Pad 16", token: token)))
+        await seventeenth.wait { $0.welcomes > 0 || $0.isClosed }
+
+        XCTAssertEqual(seventeenth.welcomes, 0, "a seventeenth device must not be welcomed")
+        XCTAssertTrue(seventeenth.isClosed, "the seventeenth must be told and hung up on")
+        XCTAssertEqual(seventeenth.errors.first?.code, "busy")
+        XCTAssertEqual(service.connectedDevices.count, 16, "the sixteen are untouched")
+
+        devices[3].send(.attach(RemoteAttach(tabID: ManyTabsDataSource.tabID)))
+        await wait { devices[3].attached.count == 1 }
+        XCTAssertEqual(devices[3].attached.count, 1)
+    }
 }
 
 // MARK: - A device that speaks the framing directly
