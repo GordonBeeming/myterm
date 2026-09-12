@@ -32,6 +32,9 @@ public final class AgentTranscriptWatcher {
     /// Entries already sent, so a file that is re-read from the start does not repeat them.
     private var delivered: Set<String> = []
     private var offset: UInt64 = 0
+    /// The inode the offset belongs to. An atomic rewrite keeps the name and changes the inode, and
+    /// the new file can be longer than the offset, so length alone would not show the swap.
+    private var inode: UInt64?
     private var title: String?
     private var task: Task<Void, Never>?
 
@@ -105,6 +108,7 @@ public final class AgentTranscriptWatcher {
                 sessionID = session
                 sentBacklog = false
                 offset = 0
+                inode = nil
                 delivered = []
                 title = nil
             }
@@ -130,6 +134,7 @@ public final class AgentTranscriptWatcher {
         let read = await Self.readAppended(at: url, from: 0)
         guard !read.lines.isEmpty else { return false }
         offset = read.length
+        inode = read.inode
         let conversation = reader.conversation(tabID: tabID, agent: agent, lines: read.lines)
         title = conversation.title
         delivered = Set(conversation.entries.map(\.id))
@@ -139,9 +144,11 @@ public final class AgentTranscriptWatcher {
 
     private func sendNewEntries(at url: URL) async {
         let read = await Self.readAppended(at: url, from: offset)
-        // A shorter file was replaced rather than appended to, so what this remembers is worthless.
-        if read.wasReplaced {
+        // A shorter file, or another inode under the same name, was replaced rather than appended
+        // to, so what this remembers is worthless.
+        if read.wasReplaced || (read.inode != nil && read.inode != inode) {
             offset = 0
+            inode = nil
             delivered = []
             await sendBacklog(at: url)
             return
@@ -173,6 +180,7 @@ public final class AgentTranscriptWatcher {
     private struct Read: Sendable {
         var lines: [String] = []
         var length: UInt64 = 0
+        var inode: UInt64?
         var wasReplaced = false
     }
 
@@ -184,23 +192,32 @@ public final class AgentTranscriptWatcher {
         await Task.detached(priority: .utility) {
             guard let handle = try? FileHandle(forReadingFrom: url) else { return Read() }
             defer { try? handle.close() }
+            let inode = Self.inode(of: handle)
             guard let end = try? handle.seekToEnd() else { return Read() }
-            if end < offset { return Read(length: end, wasReplaced: true) }
-            if end == offset { return Read(length: end) }
+            if end < offset { return Read(length: end, inode: inode, wasReplaced: true) }
+            if end == offset { return Read(length: end, inode: inode) }
             guard (try? handle.seek(toOffset: offset)) != nil,
                   let data = try? handle.readToEnd(), !data.isEmpty else {
-                return Read(length: end)
+                return Read(length: end, inode: inode)
             }
             guard let lastNewline = data.lastIndex(of: UInt8(ascii: "\n")) else {
                 // No complete line yet. Leave the offset where it was and take it next time.
-                return Read(length: offset)
+                return Read(length: offset, inode: inode)
             }
             let complete = data[data.startIndex...lastNewline]
             let text = String(decoding: complete, as: UTF8.self)
             return Read(
                 lines: text.split(separator: "\n").map(String.init),
-                length: offset + UInt64(complete.count)
+                length: offset + UInt64(complete.count),
+                inode: inode
             )
         }.value
+    }
+
+    /// The inode behind an open handle, which is what tells one file from its replacement.
+    private nonisolated static func inode(of handle: FileHandle) -> UInt64? {
+        var status = stat()
+        guard fstat(handle.fileDescriptor, &status) == 0 else { return nil }
+        return UInt64(status.st_ino)
     }
 }

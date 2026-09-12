@@ -41,13 +41,22 @@ public struct AgentTranscriptReader {
             return nil
         }
         let name = sessionID + ".jsonl"
+        // `claude --resume` from another directory files the same session under a second slug and
+        // writes there from then on, so one identifier can name two files. The one written most
+        // recently is the live one, and the directory listing's order says nothing about that.
+        var found: (url: URL, modified: Date)?
         for directory in entries {
             let candidate = directory.appendingPathComponent(name)
-            if fileManager.fileExists(atPath: candidate.path) {
-                return candidate
+            guard let attributes = try? fileManager.attributesOfItem(atPath: candidate.path),
+                  attributes[.type] as? FileAttributeType != .typeDirectory else {
+                continue
+            }
+            let modified = attributes[.modificationDate] as? Date ?? .distantPast
+            if found == nil || modified > found!.modified {
+                found = (candidate, modified)
             }
         }
-        return nil
+        return found?.url
     }
 
     /// A session identifier may only name a file. Anything that could climb out of the projects
