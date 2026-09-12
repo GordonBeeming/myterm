@@ -209,6 +209,12 @@ public struct AgentTranscriptReader {
         let id = label(rawID)
         let timestamp = timestamp(from: object["timestamp"])
 
+        // A sidechain is another agent's own exchange, filed in this record by older builds. Its
+        // prompt is written in the person's name, and it is not something the person said.
+        if object["isSidechain"] as? Bool == true {
+            return nil
+        }
+
         if type == "system" {
             guard let block = systemBlock(from: object) else { return nil }
             return RemoteAgentEntry(id: id, role: .system, timestamp: timestamp, blocks: [block])
@@ -434,7 +440,11 @@ public struct AgentTranscriptReader {
         guard let list = content as? [Any] else { return [] }
 
         var blocks: [RemoteAgentBlock] = []
-        for element in list {
+        for (index, element) in list.enumerated() {
+            if blocks.count == RemoteAgentLimits.maximumBlocksPerEntry {
+                blocks.append(.note(RemoteAgentNote(text: "\(list.count - index) more blocks not shown")))
+                break
+            }
             guard let block = element as? [String: Any],
                   let kind = block["type"] as? String else {
                 continue

@@ -312,6 +312,9 @@ public enum RemoteAgentLimits {
     /// The whole backlog sent on attach. Older entries are dropped from the front, and the
     /// conversation is marked truncated.
     public static let maximumBacklogCharacters = 200_000
+    /// One entry's blocks. The backlog cap always keeps the last entry whole, so this is what
+    /// keeps a single record from growing past what one frame can carry.
+    public static let maximumBlocksPerEntry = 200
 }
 
 // MARK: - Answering the agent
