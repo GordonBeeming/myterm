@@ -235,6 +235,14 @@ public protocol SavedConnectionTokenStoring: Sendable {
     func saveToken(_ token: String, forConnectionID id: UUID)
     func readToken(forConnectionID id: UUID) -> String?
     func deleteToken(forConnectionID id: UUID)
+    /// Every token this store holds, whoever they belonged to. For a device whose list of Macs is
+    /// gone: the Keychain outlives an uninstall, and a token with no row to own it would otherwise
+    /// stay on the device for good.
+    func deleteAllTokens()
+}
+
+public extension SavedConnectionTokenStoring {
+    func deleteAllTokens() {}
 }
 
 /// The Keychain-backed `SavedConnectionTokenStoring`. Each token is its own generic-password item,
@@ -278,6 +286,15 @@ public struct KeychainSavedConnectionTokenStore: SavedConnectionTokenStoring {
         SecItemDelete(query(for: id) as CFDictionary)
     }
 
+    public func deleteAllTokens() {
+        // Without an account, the query matches every item of this service, and a delete takes
+        // all of them.
+        SecItemDelete([
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+        ] as CFDictionary)
+    }
+
     private func query(for id: UUID) -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
@@ -312,7 +329,15 @@ public final class SavedConnectionStore {
         self.defaults = defaults
         self.defaultsKey = defaultsKey
         self.tokenStore = tokenStore
-        connections = Self.load(from: defaults, key: defaultsKey)
+        if let saved = Self.load(from: defaults, key: defaultsKey) {
+            connections = saved
+        } else {
+            // No list at all is a device that has never saved a Mac, or one where the app was
+            // removed and put back. The Keychain survives a removal and the list does not, so
+            // whatever tokens are there belong to rows that no longer exist.
+            connections = []
+            tokenStore.deleteAllTokens()
+        }
     }
 
     /// Most-recently-connected first. See `SavedConnectionList.sortedByRecency`.
@@ -414,14 +439,15 @@ public final class SavedConnectionStore {
         defaults.set(data, forKey: defaultsKey)
     }
 
-    /// One row at a time: a row that cannot be read is skipped, not the list. Losing every Mac for
-    /// one bad row would also strand every token in the Keychain, with no row left to delete them by.
-    private static func load(from defaults: UserDefaults, key: String) -> [SavedConnection] {
-        guard let data = defaults.data(forKey: key),
-              let rows = try? JSONDecoder().decode(LossyRows.self, from: data)
-        else {
-            return []
-        }
+    /// The saved list, or nil when there has never been one. An empty list is still a list: the
+    /// person removed every Mac themselves, and each removal took its own token with it.
+    ///
+    /// A list that is there is read one row at a time: a row that cannot be read is skipped, not
+    /// the list. Losing every Mac for one bad row would also strand every token in the Keychain,
+    /// with no row left to delete them by.
+    private static func load(from defaults: UserDefaults, key: String) -> [SavedConnection]? {
+        guard let data = defaults.data(forKey: key) else { return nil }
+        guard let rows = try? JSONDecoder().decode(LossyRows.self, from: data) else { return [] }
         return rows.connections
     }
 
