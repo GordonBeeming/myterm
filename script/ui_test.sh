@@ -19,6 +19,18 @@ url_file="$work/demo_url.txt"
 control_file="$work/demo_control.txt"
 mkdir -p "$shots"
 
+# The agent tests read transcripts. The host finds a session by identifier alone, anywhere under
+# ~/.claude/projects, so the fixtures are staged there in a directory of their own for the run
+# and removed afterwards. The first is the conversation the demo's agent tab opens on; the second
+# is what a /clear would start; the third ends on a pipe table.
+fixtures="$PWD/apps/MyTermRemote/Tests/MyTermRemoteUITests/Fixtures/agent-projects"
+agent_projects="$HOME/.claude/projects/myterm-remote-ui-test-fixtures"
+agent_session="11111111-1111-4111-8111-111111111111"
+agent_next_session="22222222-2222-4222-8222-222222222222"
+agent_table_session="33333333-3333-4333-8333-333333333333"
+mkdir -p "$agent_projects"
+cp "$fixtures"/*/*.jsonl "$agent_projects/"
+
 # With the relay's dependencies installed, a local Worker runs too, and the host registers with
 # it, so the relay flow is tested as well. `cd relay && npm install` turns this on.
 relay_url=""
@@ -44,9 +56,10 @@ MYTERM_REMOTE_DEMO_RELAY="$relay_url" \
 MYTERM_REMOTE_DEMO_SECONDS="${MYTERM_REMOTE_DEMO_SECONDS:-900}" \
 MYTERM_REMOTE_DEMO_URL_FILE="$url_file" \
 MYTERM_REMOTE_DEMO_CONTROL_FILE="$control_file" \
+MYTERM_REMOTE_DEMO_AGENT_SESSION="$agent_session" \
 swift test --scratch-path "$work/build" --filter RemoteHostDemo >"$work/demo.log" 2>&1 &
 demo_pid=$!
-trap 'kill "$demo_pid" 2>/dev/null || true; [ -n "${relay_pid:-}" ] && pkill -f "wrangler dev --port $relay_port --local" 2>/dev/null; rm -rf "$work"' EXIT
+trap 'kill "$demo_pid" 2>/dev/null || true; [ -n "${relay_pid:-}" ] && pkill -f "wrangler dev --port $relay_port --local" 2>/dev/null; rm -rf "$work" "$agent_projects"' EXIT
 
 for _ in $(seq 1 300); do
     [ -f "$url_file" ] && break
@@ -74,6 +87,9 @@ TEST_RUNNER_MYTERM_REMOTE_RENDEZVOUS="$rendezvous" \
 TEST_RUNNER_MYTERM_REMOTE_TOKEN="$token" \
 TEST_RUNNER_MYTERM_SHOTS_DIR="$shots" \
 TEST_RUNNER_MYTERM_REMOTE_CONTROL_FILE="$control_file" \
+TEST_RUNNER_MYTERM_REMOTE_AGENT_TAB="tab-1" \
+TEST_RUNNER_MYTERM_REMOTE_AGENT_NEXT_SESSION="$agent_next_session" \
+TEST_RUNNER_MYTERM_REMOTE_AGENT_TABLE_SESSION="$agent_table_session" \
 xcodebuild test \
     -project apps/MyTermRemote/MyTermRemote.xcodeproj \
     -scheme MyTermRemote \

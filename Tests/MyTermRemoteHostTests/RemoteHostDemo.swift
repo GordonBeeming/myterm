@@ -417,6 +417,10 @@ final class RemoteHostDemo: XCTestCase {
             source.sendsBacklog = false
         case "unmute":
             source.sendsBacklog = true
+        case "agent-wipe":
+            // Clears the agent tab's screen, so what one test drew there, such as a menu shaped
+            // like a permission prompt, is not what the next test's device reads off it.
+            _ = source.sendInput(tabID: "tab-1", bytes: ArraySlice("clear\n".utf8))
         case let command where command.hasPrefix("agent-session "):
             // The tab's agent moved to a new session, as after `/clear`. "default" is the one
             // the environment named, so a test can put things back for the next.

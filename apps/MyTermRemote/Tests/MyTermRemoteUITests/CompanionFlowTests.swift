@@ -166,11 +166,18 @@ final class CompanionFlowTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Agent finished"].exists, "a finished turn says so")
         snap(app, "70-latest")
 
-        // Opening the newest row lands on its tab, and reads it.
+        // Opening the newest row lands on its tab, and reads it. The tab is the host's agent tab,
+        // which opens as a conversation under the conversation's own title when the host has a
+        // transcript for it, and as a terminal under the tab's name when it has not, so what is
+        // checked is that a tab screen replaced the list rather than which title it carries.
         rows.element(boundBy: 0).tap()
-        XCTAssertTrue(app.navigationBars["agent"].waitForExistence(timeout: 5), "the row opens the tab it names")
+        XCTAssertTrue(waitForDisappearance(of: app.navigationBars["Latest"], timeout: 5), "the row opens the tab it names")
+        XCTAssertTrue(
+            app.textFields["agent.reply"].waitForExistence(timeout: 10) || app.buttons["terminal.keyboard"].exists,
+            "the tab opened as a conversation or a terminal"
+        )
         snap(app, "71-latest-opened")
-        app.navigationBars["agent"].buttons.element(boundBy: 0).tap()
+        app.navigationBars.firstMatch.buttons.element(boundBy: 0).tap()
         XCTAssertTrue(app.navigationBars["Latest"].waitForExistence(timeout: 5))
         XCTAssertTrue(waitForUnread(1, badge: latestTab, in: app), "an opened entry is read")
         XCTAssertEqual(rows.count, 2, "a read entry stays in the list")
@@ -524,6 +531,21 @@ final class AgentAnsweringTests: XCTestCase {
             "\"do not ask again\" must never reach a device"
         )
         XCTAssertTrue(app.buttons["agent.deny"].exists, "cancelling is always offered")
+
+        // The menu is still on the shell's screen, and the Mac reads it again for every device
+        // that follows this tab, so the next test here would find these buttons where it expects
+        // the reply field. The host clears the screen, and the device sees the menu go.
+        try tellHost("agent-wipe")
+        XCTAssertTrue(
+            app.otherElements["agent.prompt"].waitForNonExistence(timeout: 15),
+            "a cleared screen offers nothing to answer"
+        )
+        XCTAssertTrue(app.textFields["agent.reply"].waitForExistence(timeout: 5), "the reply field is back")
+    }
+
+    private func tellHost(_ command: String) throws {
+        let path = try XCTUnwrap(environment["MYTERM_REMOTE_CONTROL_FILE"], "the demo host's control file is not set")
+        try command.write(toFile: path, atomically: true, encoding: .utf8)
     }
 
     @MainActor
@@ -618,16 +640,17 @@ final class AgentCommandTests: XCTestCase {
         let app = try launchOnAgentTab()
 
         app.buttons["agent.openCommands"].tap()
-        XCTAssertTrue(app.descendants(matching: .any)["agent.commands"].firstMatch.waitForExistence(timeout: 5), "the slash button opens the command list")
+        let sheet = app.descendants(matching: .any)["agent.commands"].firstMatch
+        XCTAssertTrue(sheet.waitForExistence(timeout: 5), "the slash button opens the command list")
         for name in ["/clear", "/compact", "/model", "/status"] {
-            XCTAssertTrue(app.descendants(matching: .any)["agent.command.\(name)"].firstMatch.exists, "\(name) should be offered")
+            XCTAssertTrue(commandRow(name, in: app, sheet: sheet).exists, "\(name) should be offered")
         }
         XCTAssertFalse(app.descendants(matching: .any)["agent.command./resume"].firstMatch.exists, "a picker command is not offered")
         snap("73-command-sheet")
 
         // `/status` draws only on the Mac's screen, verified against the CLI. The demo host's
         // agent tab draws the same kind of dialog, and the Mac reads it back for the phone.
-        app.descendants(matching: .any)["agent.command./status"].firstMatch.tap()
+        commandRow("/status", in: app, sheet: sheet).tap()
         XCTAssertTrue(app.otherElements["agent.screen"].waitForExistence(timeout: 15), "the dialog the Mac read is offered for dismissal")
         XCTAssertFalse(app.staticTexts["refusal.message"].exists, "the command should be accepted")
         XCTAssertFalse(app.otherElements["agent.screenNotice"].exists, "the notice that could only name the Mac has given way")
@@ -642,6 +665,20 @@ final class AgentCommandTests: XCTestCase {
         XCTAssertTrue(app.otherElements["agent.screen"].waitForNonExistence(timeout: 15), "the dialog closed on the Mac and the offer to dismiss it went")
         XCTAssertTrue(app.textFields["agent.reply"].exists, "the reply field is back")
         snap("74-screen-dismissed")
+    }
+
+    /// A row of the command sheet, scrolled to when it is below the fold. An iPad presents the
+    /// sheet as a form sheet shorter than the list, and a list row that has not been scrolled
+    /// into view does not exist to the test at all.
+    @MainActor
+    private func commandRow(_ name: String, in app: XCUIApplication, sheet: XCUIElement) -> XCUIElement {
+        let row = app.descendants(matching: .any)["agent.command.\(name)"].firstMatch
+        var swipes = 0
+        while !row.exists, swipes < 4 {
+            sheet.swipeUp()
+            swipes += 1
+        }
+        return row
     }
 
     @MainActor
