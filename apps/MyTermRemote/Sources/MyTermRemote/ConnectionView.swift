@@ -14,7 +14,10 @@ struct ConnectionView: View {
     /// list so a one-off connection does not have to be saved to be tried.
     @AppStorage("remote.host") private var host = ""
     @AppStorage("remote.port") private var portText = ""
-    @AppStorage("remote.token") private var token = ""
+    /// Never `@AppStorage`: the token is the pre-shared key, and `SavedConnectionStore` keeps it in
+    /// the Keychain for that reason. Read once from defaults so the `-remote.token` launch
+    /// argument, which lives in the volatile argument domain, still reaches the manual path.
+    @State private var token = Self.launchToken()
     /// A relay and rendezvous for the manual path. Launch arguments set these; the form does not.
     @AppStorage("remote.relay") private var relayText = ""
     @AppStorage("remote.rendezvous") private var rendezvousText = ""
@@ -64,6 +67,14 @@ struct ConnectionView: View {
     init(notifier: AgentNotifier) {
         self.notifier = notifier
         _store = State(initialValue: RemoteSessionStore(deviceName: UIDevice.current.name, notifier: notifier))
+    }
+
+    /// The token a launch argument supplied, if one did. A copy an earlier build persisted is
+    /// removed on the way past, so it does not outlive the Keychain entry that replaced it.
+    private static func launchToken() -> String {
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: "remote.token")
+        return defaults.string(forKey: "remote.token") ?? ""
     }
 
     var body: some View {
