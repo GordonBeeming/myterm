@@ -150,7 +150,31 @@ public struct AgentTranscriptReader {
     private static func object(from line: String) -> [String: Any]? {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, let data = trimmed.data(using: .utf8) else { return nil }
-        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        if let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
+            return object
+        }
+        // The agent is a JavaScript program, and JavaScript strings hold lone surrogates that its
+        // JSON writer escapes as `\ud800`. Foundation refuses the whole line for one of those, which
+        // would drop a tool's result because a file it read had a broken character in it. Only a
+        // line that already failed is rewritten, so nothing well-formed is touched.
+        guard let repaired = replacingLoneSurrogateEscapes(in: trimmed),
+              let repairedData = repaired.data(using: .utf8) else {
+            return nil
+        }
+        return (try? JSONSerialization.jsonObject(with: repairedData)) as? [String: Any]
+    }
+
+    /// Every `\uD800`–`\uDFFF` escape that is not half of a valid pair, replaced with the
+    /// replacement character's escape. Nothing when the line carries no such escape.
+    static func replacingLoneSurrogateEscapes(in line: String) -> String? {
+        // Left to right: an escaped backslash is consumed as a unit so `\\ud800`, a literal
+        // backslash followed by text, is not taken for an escape; a valid pair is consumed as a
+        // unit so the lone alternative can never take the high half of one on its own.
+        let escape = /(?<kept>\\\\|\\u[dD][89abAB][0-9a-fA-F]{2}\\u[dD][c-fC-F][0-9a-fA-F]{2})|(?<lone>\\u[dD][89a-fA-F][0-9a-fA-F]{2})/
+        guard line.contains(/\\u[dD][89a-fA-F]/) else { return nil }
+        return line.replacing(escape) { match in
+            match.output.kept.map(String.init) ?? "\\ufffd"
+        }
     }
 
     private static func title(from object: [String: Any]) -> String? {
@@ -158,8 +182,12 @@ public struct AgentTranscriptReader {
               let raw = object["aiTitle"] as? String else {
             return nil
         }
-        let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        return name.isEmpty ? nil : String(name.prefix(RemoteAgentLimits.maximumSummaryCharacters))
+        // The name is shown as a heading, where a terminal escape would be nonsense and a bidi
+        // override could reverse it.
+        let name = String(String.UnicodeScalarView(
+            raw.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }
+        )).trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? nil : label(name)
     }
 
     /// Tool requests seen so far, and the ones that have been answered.
@@ -317,9 +345,74 @@ public struct AgentTranscriptReader {
     /// Command output as words. The agent styles it for its own screen with terminal escapes,
     /// and a device has no terminal to interpret them.
     static func presentable(_ output: String) -> String {
-        let plain = output.replacing(/\u{1B}\[[0-9;?]*[ -\/]*[@-~]/, with: "")
-        return cut(plain.trimmingCharacters(in: .whitespacesAndNewlines),
-                   to: RemoteAgentLimits.maximumBlockCharacters).text
+        cut(strippingTerminalEscapes(output).trimmingCharacters(in: .whitespacesAndNewlines),
+            to: RemoteAgentLimits.maximumBlockCharacters).text
+    }
+
+    /// The text with every terminal escape and control taken out, save the ones that lay text
+    /// out. A scanner rather than a regex: an output of megabytes is normal for a command, and
+    /// Swift's regex engine takes seconds over one.
+    ///
+    /// CSI in both spellings, the string commands (OSC, DCS, APC, PM, SOS) up to BEL or ST, and
+    /// two- and three-byte escapes such as a charset designation or a reset. A string never
+    /// terminated is cut at the end of its line rather than eating the rest of the output.
+    static func strippingTerminalEscapes(_ text: String) -> String {
+        enum State { case ground, escape, csi, string, stringEscape }
+        var kept = String.UnicodeScalarView()
+        var state = State.ground
+        var scalars = text.unicodeScalars.makeIterator()
+        var pending: Unicode.Scalar?
+
+        while let scalar = pending ?? scalars.next() {
+            pending = nil
+            let value = scalar.value
+            switch state {
+            case .ground:
+                switch value {
+                case 0x1B: state = .escape
+                case 0x9B: state = .csi
+                case 0x90, 0x98, 0x9D, 0x9E, 0x9F: state = .string
+                case 0x09, 0x0A, 0x0D: kept.append(scalar)
+                case 0x00...0x1F, 0x7F, 0x80...0x9F: break
+                default: kept.append(scalar)
+                }
+            case .escape:
+                switch value {
+                case 0x5B: state = .csi
+                case 0x5D, 0x50, 0x5E, 0x5F, 0x58: state = .string
+                case 0x20...0x2F: break
+                case 0x30...0x7E: state = .ground
+                default:
+                    state = .ground
+                    pending = scalar
+                }
+            case .csi:
+                switch value {
+                case 0x20...0x3F: break
+                case 0x40...0x7E: state = .ground
+                default:
+                    state = .ground
+                    pending = scalar
+                }
+            case .string:
+                switch value {
+                case 0x07, 0x9C: state = .ground
+                case 0x1B: state = .stringEscape
+                case 0x0A:
+                    state = .ground
+                    pending = scalar
+                default: break
+                }
+            case .stringEscape:
+                if value == 0x5C {
+                    state = .ground
+                } else {
+                    state = .escape
+                    pending = scalar
+                }
+            }
+        }
+        return String(kept)
     }
 
     /// The agent writes fractional seconds. A parser without that option returns nothing for every
@@ -522,25 +615,35 @@ public struct AgentTranscriptReader {
         entry.blocks.reduce(0) { total, block in
             switch block {
             case .text(let value), .thinking(let value):
-                return total + value.count
+                return total + length(value)
             case .toolUse(let use):
-                return total + use.summary.count + use.detail.count
+                return total + length(use.summary) + length(use.detail)
             case .toolResult(let result):
-                return total + result.text.count
+                return total + length(result.text)
             case .image:
                 return total + 16
             case .localCommand(let command):
-                return total + command.name.count + command.args.count + command.output.count
+                return total + length(command.name) + length(command.args) + length(command.output)
             case .note(let note):
-                return total + note.text.count
+                return total + length(note.text)
             }
         }
     }
 
-    /// Cuts on a character boundary and says whether it cut.
+    /// The size a cap is measured in.
+    ///
+    /// Unicode scalars, never `String.count`. A grapheme cluster has no upper size: one base letter
+    /// followed by a million combining marks is a single `Character`, so a cap counted in
+    /// characters would pass megabytes through as "one". A scalar is at most four bytes, so a cap
+    /// in scalars bounds the bytes that reach the wire.
+    static func length(_ text: String) -> Int {
+        text.unicodeScalars.count
+    }
+
+    /// Cuts on a scalar boundary and says whether it cut.
     static func cut(_ text: String, to limit: Int) -> (text: String, isTruncated: Bool) {
-        guard text.count > limit else { return (text, false) }
-        return (String(text.prefix(limit)) + "…", true)
+        guard length(text) > limit else { return (text, false) }
+        return (String(String.UnicodeScalarView(text.unicodeScalars.prefix(limit))) + "…", true)
     }
 
     /// A name or identifier the file supplies, cut to the one-line cap. The agent's own are a
