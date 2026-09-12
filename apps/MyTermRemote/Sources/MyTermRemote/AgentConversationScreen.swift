@@ -61,6 +61,12 @@ struct AgentConversationScreen: View {
         }
         .onAppear { store.followConversation(tabID: tab.id, owner: follower) }
         .onDisappear { store.stopFollowingConversation(tabID: tab.id, owner: follower) }
+        // A follow lives on one socket. A Mac that slept, or an app that iOS suspended, comes
+        // back on a new one where nothing is followed: the words would stay as they were and no
+        // prompt would ever arrive. The terminal re-attaches on the same count.
+        .onChange(of: store.client.connectionGeneration) {
+            store.followConversation(tabID: tab.id, owner: follower)
+        }
         .onChange(of: store.screen) { _, screen in
             // The Mac read the dialog: its rows are in the conversation and the bar below offers
             // to dismiss it, so the notice that could only name the Mac has nothing left to say.
@@ -78,7 +84,7 @@ struct AgentConversationScreen: View {
             isPresented: Binding(get: { macOnlyCommand != nil }, set: { if !$0 { macOnlyCommand = nil } }),
             presenting: macOnlyCommand
         ) { command in
-            Button("Send anyway") { deliver(command.name); draft = "" }
+            Button("Send anyway") { if deliver(command.name) { draft = "" } }
             Button("Open terminal") { isShowingTerminal = true }
             Button("Cancel", role: .cancel) {}
         } message: { command in
@@ -97,7 +103,8 @@ struct AgentConversationScreen: View {
     /// The catalog says what to expect afterwards, and that decides what the phone does: warn
     /// before a command that opens on the Mac, or say where the answer went when it cannot be
     /// read back from the transcript.
-    /// Returns whether the line went, so a field can keep a draft the person has yet to confirm.
+    /// Returns whether the line went, so a field can keep a draft the person has yet to confirm,
+    /// or one the phone would not send as it stands.
     @discardableResult
     private func send(_ line: String) -> Bool {
         switch AgentCommandCatalog.typed(line) {
@@ -105,16 +112,16 @@ struct AgentConversationScreen: View {
             macOnlyCommand = command
             return false
         case .runnable(let command):
-            deliver(line)
+            guard deliver(line) else { return false }
             if command.outcome == .screen { showScreenNotice(for: command) }
             return true
         case .message, .unknown:
-            deliver(line)
-            return true
+            return deliver(line)
         }
     }
 
-    private func deliver(_ line: String) {
+    @discardableResult
+    private func deliver(_ line: String) -> Bool {
         store.reply(tabID: tab.id, text: line)
     }
 
@@ -241,7 +248,10 @@ struct AgentConversationScreen: View {
 
     @ViewBuilder
     private var input: some View {
-        if !store.client.allowsMutation {
+        // Only while connected: a dropped connection is the banner's story, and it must not be
+        // told here as the Mac having turned typing off. The field stays, holding what was being
+        // written, and Send waits for the Mac to be back.
+        if store.client.hostName != nil, !store.client.allowsMutation {
             Label("View only. Typing is turned off on the Mac.", systemImage: "eye")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -255,6 +265,7 @@ struct AgentConversationScreen: View {
             AgentReplyBar(
                 draft: $draft,
                 isWriting: $isWritingReply,
+                canSend: store.client.allowsMutation,
                 send: send,
                 openCommands: { isShowingCommands = true }
             )
@@ -347,6 +358,8 @@ private struct AgentPromptBar: View {
             Label("Your agent is waiting on this", systemImage: "hand.raised.fill")
                 .font(.footnote.weight(.medium))
                 .foregroundStyle(.orange)
+                // Wraps at a large text size rather than ending in an ellipsis.
+                .fixedSize(horizontal: false, vertical: true)
 
             ForEach(store.promptOptions) { option in
                 Button {
@@ -390,6 +403,8 @@ private struct AgentPromptBar: View {
 private struct AgentReplyBar: View {
     @Binding var draft: String
     @FocusState.Binding var isWriting: Bool
+    /// False while there is no Mac to send to. Words typed then wait rather than go nowhere.
+    let canSend: Bool
     let send: (String) -> Bool
     let openCommands: () -> Void
 
@@ -421,7 +436,9 @@ private struct AgentReplyBar: View {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.title2)
             }
-            .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(!canSend || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            // Without a label VoiceOver reads the symbol's name, "Arrow Up Circle".
+            .accessibilityLabel("Send")
             .accessibilityIdentifier("agent.send")
         }
         .padding(.horizontal, 12)

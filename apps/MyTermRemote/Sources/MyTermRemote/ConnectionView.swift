@@ -755,6 +755,9 @@ private struct RefusalBanner: View {
         switch error.code {
         case "denied":
             "Your Mac is not taking changes from devices."
+        case RemoteSessionStore.deviceRefusalCode:
+            // The phone's own refusal, already a sentence.
+            error.message
         default:
             "Your Mac " + error.message + "."
         }

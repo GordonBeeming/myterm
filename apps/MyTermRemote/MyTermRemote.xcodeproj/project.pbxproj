@@ -22,6 +22,10 @@
 		C0299DEB1F74BE9A76910351 /* MyTermCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4F7F859315CF4EDDE039A454 /* MyTermCore */; };
 		CE5F786C6527F7AE45C78181 /* RemoteTreeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23A1084A45A7B752F93C5152 /* RemoteTreeView.swift */; };
 		D41ED9F658C03221ECE7B2C0 /* CompanionFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A01CC9C6560EA5456BF5A241 /* CompanionFlowTests.swift */; };
+		D41ED9F658C03221ECE7B2C1 /* AgentTabTestCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = A01CC9C6560EA5456BF5A242 /* AgentTabTestCase.swift */; };
+		D41ED9F658C03221ECE7B2C2 /* AgentReplyEdgeCaseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A01CC9C6560EA5456BF5A243 /* AgentReplyEdgeCaseTests.swift */; };
+		D41ED9F658C03221ECE7B2C3 /* AgentPromptEdgeCaseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A01CC9C6560EA5456BF5A244 /* AgentPromptEdgeCaseTests.swift */; };
+		D41ED9F658C03221ECE7B2C4 /* AgentLayoutEdgeCaseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A01CC9C6560EA5456BF5A245 /* AgentLayoutEdgeCaseTests.swift */; };
 		DD082A156CB5E755C4648E3A /* TerminalScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13383CF15800BEF48C9D0F5F /* TerminalScreen.swift */; };
 		DD213E5B2D6FF5D043416776 /* ConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D76A051C944D2431A9BA086 /* ConnectionView.swift */; };
 		E2AD24161758A49CB0170909 /* MacBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69B18F142646855B8A51891B /* MacBrowser.swift */; };
@@ -56,6 +60,10 @@
 		78433D720F06C8526EACE249 /* MyTermRemoteUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MyTermRemoteUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		993DC1858E350F207D3EB9F3 /* AgentCommandSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentCommandSheet.swift; sourceTree = "<group>"; };
 		A01CC9C6560EA5456BF5A241 /* CompanionFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionFlowTests.swift; sourceTree = "<group>"; };
+		A01CC9C6560EA5456BF5A242 /* AgentTabTestCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentTabTestCase.swift; sourceTree = "<group>"; };
+		A01CC9C6560EA5456BF5A243 /* AgentReplyEdgeCaseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentReplyEdgeCaseTests.swift; sourceTree = "<group>"; };
+		A01CC9C6560EA5456BF5A244 /* AgentPromptEdgeCaseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentPromptEdgeCaseTests.swift; sourceTree = "<group>"; };
+		A01CC9C6560EA5456BF5A245 /* AgentLayoutEdgeCaseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentLayoutEdgeCaseTests.swift; sourceTree = "<group>"; };
 		BF67B826E451A2CE4BE9B0F3 /* AgentChefIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentChefIcon.swift; sourceTree = "<group>"; };
 		CCD2C8C5F470EB6CBC96D1E4 /* LatestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LatestView.swift; sourceTree = "<group>"; };
 		DBD88D365BF17A04A182AA51 /* RemoteSplitView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSplitView.swift; sourceTree = "<group>"; };
@@ -131,6 +139,10 @@
 			isa = PBXGroup;
 			children = (
 				A01CC9C6560EA5456BF5A241 /* CompanionFlowTests.swift */,
+				A01CC9C6560EA5456BF5A242 /* AgentTabTestCase.swift */,
+				A01CC9C6560EA5456BF5A243 /* AgentReplyEdgeCaseTests.swift */,
+				A01CC9C6560EA5456BF5A244 /* AgentPromptEdgeCaseTests.swift */,
+				A01CC9C6560EA5456BF5A245 /* AgentLayoutEdgeCaseTests.swift */,
 			);
 			name = MyTermRemoteUITests;
 			path = Tests/MyTermRemoteUITests;
@@ -251,6 +263,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				D41ED9F658C03221ECE7B2C0 /* CompanionFlowTests.swift in Sources */,
+				D41ED9F658C03221ECE7B2C1 /* AgentTabTestCase.swift in Sources */,
+				D41ED9F658C03221ECE7B2C2 /* AgentReplyEdgeCaseTests.swift in Sources */,
+				D41ED9F658C03221ECE7B2C3 /* AgentPromptEdgeCaseTests.swift in Sources */,
+				D41ED9F658C03221ECE7B2C4 /* AgentLayoutEdgeCaseTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

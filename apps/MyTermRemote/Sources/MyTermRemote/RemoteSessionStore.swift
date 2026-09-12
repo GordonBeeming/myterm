@@ -70,6 +70,8 @@ final class RemoteSessionStore {
     @ObservationIgnored
     private var refusalTimer: Task<Void, Never>?
     @ObservationIgnored
+    private var answeringTimer: Task<Void, Never>?
+    @ObservationIgnored
     private let notifier: AgentNotifier?
     /// Read at the moment a report arrives rather than mirrored from `scenePhase`: inactive covers
     /// the lock screen and the app switcher, both of which are away from the tab.
@@ -115,8 +117,21 @@ final class RemoteSessionStore {
         }
         followOwner = owner
         followedTabID = tabID
-        conversation = nil
-        isLoadingConversation = true
+        // What was read off the Mac's screen for the last follow is not this one's. Another
+        // tab's prompt or dialog must not be offered under this tab's name: a screen that
+        // replaces another can appear before its predecessor has gone, and the predecessor's
+        // stop, seeing it is no longer the follower, then clears nothing. After a reconnect the
+        // Mac reads the screen again and says what is there now.
+        promptOptions = []
+        clearAnswering()
+        screen = nil
+        isDismissingScreen = false
+        if conversation?.tabID != tabID {
+            conversation = nil
+        }
+        // The same tab keeps its words on screen until the fresh copy lands, which is what a
+        // re-follow after a reconnect wants: nothing blinks, and the tail catches up.
+        isLoadingConversation = conversation == nil
         client.attachAgent(tabID: tabID)
     }
 
@@ -130,27 +145,67 @@ final class RemoteSessionStore {
         }
         isLoadingConversation = false
         promptOptions = []
-        isAnswering = false
+        clearAnswering()
         screen = nil
         isDismissingScreen = false
     }
 
-    func reply(tabID: String, text: String) {
+    /// Sends words to the agent, or says why they cannot go.
+    ///
+    /// Checked here, before anything leaves the phone, with the same rule the Mac applies. The
+    /// Mac's refusal comes back after the words have been sent, and a field that had already
+    /// cleared itself would have lost them. Returns whether the text went, so the field keeps
+    /// what it holds when it did not.
+    @discardableResult
+    func reply(tabID: String, text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        let reply = RemoteAgentReply(tabID: tabID, text: trimmed)
+        if let problem = reply.problem {
+            guard problem != .empty else { return false }
+            show(RemoteError(code: Self.deviceRefusalCode, message: problem.message))
+            return false
+        }
         client.replyToAgent(tabID: tabID, text: trimmed)
+        return true
     }
+
+    /// The code of a refusal the phone made on its own, whose message is already in the phone's
+    /// words and is shown as it is.
+    static let deviceRefusalCode = "device"
 
     /// Sends the whole option rather than its number. The Mac checks the label is still on that
     /// number before it types anything, so a menu that changed answers nothing at all.
     func answerPrompt(tabID: String, option: RemoteAgentPromptOption) {
-        isAnswering = true
+        beginAnswering()
         client.answerAgentPrompt(tabID: tabID, option: option)
     }
 
     func denyPrompt(tabID: String) {
-        isAnswering = true
+        beginAnswering()
         client.denyAgentPrompt(tabID: tabID)
+    }
+
+    /// How long the buttons stay down waiting for the Mac to say what its screen shows now.
+    ///
+    /// The Mac reports the prompt again only when it changes. A deny whose Escape changed nothing,
+    /// or a report that was lost with the connection, would otherwise leave the buttons down for
+    /// good, with nothing the person could do but leave the tab.
+    static let answeringTimeout: Duration = .seconds(5)
+
+    private func beginAnswering() {
+        isAnswering = true
+        answeringTimer?.cancel()
+        answeringTimer = Task { [weak self] in
+            try? await Task.sleep(for: Self.answeringTimeout)
+            guard !Task.isCancelled else { return }
+            self?.isAnswering = false
+        }
+    }
+
+    private func clearAnswering() {
+        answeringTimer?.cancel()
+        answeringTimer = nil
+        isAnswering = false
     }
 
     /// Asks the Mac to close the dialog a screen-only command drew. The Mac sends the Escape and
@@ -169,7 +224,7 @@ final class RemoteSessionStore {
         conversation = nil
         isLoadingConversation = false
         promptOptions = []
-        isAnswering = false
+        clearAnswering()
         screen = nil
         isDismissingScreen = false
     }
@@ -178,6 +233,17 @@ final class RemoteSessionStore {
         refusalTimer?.cancel()
         refusalTimer = nil
         refusal = nil
+    }
+
+    /// Shows a refusal for a few seconds, whichever side refused.
+    private func show(_ error: RemoteError) {
+        refusal = error
+        refusalTimer?.cancel()
+        refusalTimer = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard !Task.isCancelled else { return }
+            self?.refusal = nil
+        }
     }
 }
 
@@ -237,7 +303,7 @@ extension RemoteSessionStore: RemoteClientDelegate {
     func remoteClient(_ client: RemoteClient, didReceive prompt: RemoteAgentPrompt) {
         guard conversation?.tabID == prompt.tabID else { return }
         promptOptions = prompt.options
-        isAnswering = false
+        clearAnswering()
     }
 
     /// What a screen-only command drew, put into the conversation as that command's row.
@@ -268,10 +334,12 @@ extension RemoteSessionStore: RemoteClientDelegate {
             attachRefusal = error.message
             return
         }
-        if error.code == "agentAnswer" || error.code == "agentReply" {
+        if error.code == "agentAnswer" || error.code == "agentReply" || error.code == "denied" {
             // The banner says what happened. Freeing the buttons matters as much: a refused answer
-            // that left them disabled would look like the Mac had stopped listening.
-            isAnswering = false
+            // that left them disabled would look like the Mac had stopped listening. "denied" is
+            // the Mac turning typing off between the prompt and the tap, and the buttons come
+            // back with typing, so they must not come back dead.
+            clearAnswering()
         }
         if error.code == "dismissAgentScreen" || error.code == "denied" {
             isDismissingScreen = false
@@ -282,13 +350,7 @@ extension RemoteSessionStore: RemoteClientDelegate {
             isLoadingConversation = false
             return
         }
-        refusal = error
-        refusalTimer?.cancel()
-        refusalTimer = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 5_000_000_000)
-            guard !Task.isCancelled else { return }
-            self?.refusal = nil
-        }
+        show(error)
     }
 }
 
