@@ -159,7 +159,8 @@ final class AppModel {
         updates: UpdateController? = nil,
         agentNotifications: AgentNotificationSettings? = nil,
         makeAgentNotificationPoster: @escaping @MainActor () -> any AgentNotificationPosting = { UserNotificationPoster() },
-        isApplicationActive: @escaping @MainActor () -> Bool = { NSApp?.isActive ?? false }
+        isApplicationActive: @escaping @MainActor () -> Bool = { NSApp?.isActive ?? false },
+        remoteHostDefaultsOverride: UserDefaults? = nil
     ) throws {
         self.channel = channel
         let supportDirectory = try applicationSupportDirectory ?? Self.applicationSupportDirectory()
@@ -188,8 +189,10 @@ final class AppModel {
         self.isApplicationActive = isApplicationActive
         browserDataProfileResolver = BrowserDataProfileResolver(channel: channel)
         self.updates = updates ?? UpdateController(channel: channel)
+        // Injected by tests, which must never rotate the token or rewrite the relay address the
+        // developer's own paired devices depend on.
         let remoteHostSuiteName = ProcessInfo.processInfo.environment["MYTERM_USER_DEFAULTS_SUITE"] ?? channel.bundleIdentifier
-        remoteHostDefaults = UserDefaults(suiteName: remoteHostSuiteName) ?? .standard
+        remoteHostDefaults = remoteHostDefaultsOverride ?? UserDefaults(suiteName: remoteHostSuiteName) ?? .standard
         let remoteHostToken = remoteHostDefaults.string(forKey: Self.remoteHostTokenDefaultsKey).flatMap { $0.isEmpty ? nil : $0 }
             ?? RemoteTransportSecurity.makeToken()
         remoteHostDefaults.set(remoteHostToken, forKey: Self.remoteHostTokenDefaultsKey)

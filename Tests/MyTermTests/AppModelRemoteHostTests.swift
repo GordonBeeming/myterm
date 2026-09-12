@@ -63,11 +63,17 @@ final class AppModelRemoteHostTests: XCTestCase {
 
     private func makeModel(engine: StubTerminalEngine) throws -> (AppModel, URL) {
         let directory = try makeTemporaryDirectory()
+        // Its own defaults: a test that rotates the token or sets a relay must not do that to
+        // the developer's real dev channel.
+        let suiteName = "myterm-remote-host-tests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
         let model = try AppModel(
             channel: .development,
             applicationSupportDirectory: directory,
             terminalEngine: engine,
-            startsTerminalProcesses: true
+            startsTerminalProcesses: true,
+            remoteHostDefaultsOverride: defaults
         )
         return (model, directory)
     }
