@@ -343,10 +343,65 @@ public struct RemoteAgentReply: Codable, Equatable, Sendable {
     ///
     /// Newlines included: a reply carrying its own Return would submit lines the person never saw
     /// as one message, and an escape would drive the agent's interface rather than talk to it.
-    public var isTypable: Bool {
-        !text.isEmpty
-            && text.unicodeScalars.count <= Self.maximumCharacters
-            && !text.unicodeScalars.contains { CharacterSet.controlCharacters.contains($0) }
+    public var isTypable: Bool { problem == nil }
+
+    /// Why a reply cannot be typed, so a device can say so before the words are sent and lost.
+    public enum Problem: Equatable, Sendable {
+        case empty
+        /// A Return inside the text. Named apart from the other control characters because it
+        /// is the one a person puts there on purpose, and the one they can fix by hand.
+        case lineBreaks
+        case controlCharacters
+        /// A bidirectional override or isolate, or the byte-order mark: text that would draw as
+        /// something other than what it holds. Carries the scalar so the person can find it.
+        case directionOverride(Unicode.Scalar)
+        case tooLong(characters: Int)
+
+        /// What the device says to the person. The host refuses with its own words; these are
+        /// the device's, said before anything leaves the phone.
+        public var message: String {
+            switch self {
+            case .empty:
+                "There is nothing to send."
+            case .lineBreaks:
+                "A reply goes to your agent as one line. Remove the line breaks, or send each line on its own."
+            case .controlCharacters:
+                "A reply cannot carry control characters, such as tabs. Remove them and send again."
+            case .directionOverride(let scalar):
+                "A reply cannot carry a text-direction override (U+\(String(scalar.value, radix: 16, uppercase: true))). Remove it and send again."
+            case .tooLong(let characters):
+                "A reply can be at most \(RemoteAgentReply.maximumCharacters) characters; this one is \(characters)."
+            }
+        }
+    }
+
+    /// The first thing wrong with the text, or nothing when it can be typed as it is.
+    ///
+    /// Control means the C0 and C1 ranges and DEL: the bytes a terminal acts on. Foundation's
+    /// `controlCharacters` set is wider and takes in Unicode's format characters too, which
+    /// would refuse the joiner inside a family emoji and the marks right-to-left text is written
+    /// with. Those are words, and a terminal only ever prints them. The exceptions, as for a
+    /// name in `RemoteTitle`, are the bidirectional overrides and isolates and the byte-order
+    /// mark: a reply that draws reversed says something other than what it holds.
+    ///
+    /// Length is counted in Unicode scalars, which bounds the bytes: `String.count` does not,
+    /// because one letter under any number of combining marks is one `Character`.
+    public var problem: Problem? {
+        if text.isEmpty { return .empty }
+        let scalars = text.unicodeScalars
+        if scalars.count > Self.maximumCharacters { return .tooLong(characters: scalars.count) }
+        if scalars.contains(where: { $0 == "\n" || $0 == "\r" }) { return .lineBreaks }
+        if scalars.contains(where: Self.isTerminalControl) { return .controlCharacters }
+        if let override = scalars.first(where: Self.isDirectionOverride) { return .directionOverride(override) }
+        return nil
+    }
+
+    private static func isTerminalControl(_ scalar: Unicode.Scalar) -> Bool {
+        scalar.value < 0x20 || (0x7F...0x9F).contains(scalar.value)
+    }
+
+    private static func isDirectionOverride(_ scalar: Unicode.Scalar) -> Bool {
+        (0x202A...0x202E).contains(scalar.value) || (0x2066...0x2069).contains(scalar.value) || scalar.value == 0xFEFF
     }
 }
 

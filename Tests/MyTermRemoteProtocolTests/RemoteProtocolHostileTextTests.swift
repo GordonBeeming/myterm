@@ -16,7 +16,8 @@ final class RemoteProtocolHostileTextTests: XCTestCase {
         XCTAssertTrue(RemoteAgentReply(tabID: "t", text: String(repeating: "é", count: 4_000)).isTypable)
     }
 
-    func testAReplyRefusesEightBitControlsAndFormatCharactersAlike() {
+    /// Other format characters, such as the joiner in an emoji, are words and stay.
+    func testAReplyRefusesEightBitControlsBidiOverridesAndTheBOMAlike() {
         for scalar in ["\u{9B}", "\u{7F}", "\u{202E}", "\u{FEFF}", "\u{00}"] {
             XCTAssertFalse(RemoteAgentReply(tabID: "t", text: "hi" + scalar).isTypable, scalar.debugDescription)
         }
