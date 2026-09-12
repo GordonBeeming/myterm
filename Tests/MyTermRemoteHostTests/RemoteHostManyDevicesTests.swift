@@ -471,20 +471,24 @@ final class RemoteHostManyDevicesTests: XCTestCase {
         let source = ManyTabsDataSource()
         let (service, port) = try await startedService(token: token, dataSource: source)
         defer { service.stop() }
+        // The app listens on a fixed port; the switch flipped off and on must land on it again.
+        service.preferredPort = port
         let device = try await greetedDevice(port: port, token: token)
         device.send(.attach(RemoteAttach(tabID: ManyTabsDataSource.tabID)))
         await wait { device.attached.count == 1 }
 
+        // Off and straight back on, faster than the old socket lets go of its port.
         service.stop()
+        XCTAssertEqual(service.state, .stopped)
+        service.start()
         await wait { device.isClosed }
         XCTAssertTrue(device.isClosed)
-        XCTAssertEqual(service.state, .stopped)
         XCTAssertEqual(source.tapCount(session: ManyTabsDataSource.sessionID), 0)
         XCTAssertTrue(service.connectedDevices.isEmpty)
 
-        service.start()
         await wait { service.listeningPort != nil }
         let again = try XCTUnwrap(service.listeningPort)
+        XCTAssertEqual(again, port, "the listener must come back on the port the pairing codes name")
         let back = try await greetedDevice("Back", port: again, token: token)
         back.send(.attach(RemoteAttach(tabID: ManyTabsDataSource.tabID)))
         await wait { back.attached.count == 1 }

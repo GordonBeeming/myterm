@@ -101,18 +101,23 @@ public final class RemoteHostService {
         token = RemoteTransportSecurity.makeToken()
         switch state {
         case .listening, .starting:
-            // The old socket gives its port back only once its cancel has run on the listener's
-            // queue. Starting again before then lands on EADDRINUSE and the fallback port, and
-            // the Mac quietly moves off the port every saved pairing names.
             stop()
-            restartsWhenCancelled = true
+            start()
         case .stopped, .failed:
             break
         }
     }
 
     public func start() {
-        restartsWhenCancelled = false
+        guard listener == nil else { return }
+        guard cancelling.isEmpty else {
+            // The old socket gives its port back only once its cancel has run on the listener's
+            // queue. Starting before then lands on EADDRINUSE and the fallback port, and the Mac
+            // quietly moves off the port every saved pairing names. So this waits for it.
+            restartsWhenCancelled = true
+            state = .starting
+            return
+        }
         start(on: NWEndpoint.Port(rawValue: preferredPort) ?? .any)
     }
 
@@ -258,6 +263,7 @@ public final class RemoteHostService {
             if case .cancelled = listenerState {
                 cancelling.removeValue(forKey: source)
                 if restartsWhenCancelled, cancelling.isEmpty, self.listener == nil {
+                    restartsWhenCancelled = false
                     start()
                 }
             }
