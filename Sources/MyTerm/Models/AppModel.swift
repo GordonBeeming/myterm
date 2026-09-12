@@ -2217,16 +2217,33 @@ final class AppModel {
                 workingDirectory: workingDirectory
             )
         }
+        let resumeCommand = keepsSavedDirectory ? agentResumeCommand(
+            for: session,
+            name: tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)?.customTitle,
+            settings: settings
+        ) : nil
+        // A pane that comes back without its resume command comes back to a prompt, and a pane at
+        // its prompt has left its conversation. Keeping the handle would offer a device a
+        // conversation nothing is running, and name the tab after it.
+        if initialCommand == nil, resumeCommand == nil, session.agentSession != nil {
+            try store.updateTerminalAgentSession(
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID,
+                agentSession: nil
+            )
+            try store.updateTerminalAgentTitle(
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID,
+                agentTitle: nil
+            )
+        }
         let process = try terminalEngine.makeSession(
             configuration: TerminalSessionConfiguration(
                 shell: shellURL(for: settings.shell),
                 workingDirectory: workingDirectory,
-                initialCommand: initialCommand
-                    ?? (keepsSavedDirectory ? agentResumeCommand(
-                        for: session,
-                        name: tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)?.customTitle,
-                        settings: settings
-                    ) : nil),
+                initialCommand: initialCommand ?? resumeCommand,
                 environment: MyTermBrowserLauncher.environment(
                     executableURL: browserLauncherURL,
                     workspaceID: workspaceID,
@@ -2429,6 +2446,9 @@ final class AppModel {
             if let exitCode, exitCode != 0 {
                 errorDescription = "Terminal exited with status \(exitCode)."
             }
+            // Nothing is running in a pane whose shell has gone, whatever the last hook said.
+            forgetAgentAttention(forTab: tabID)
+            forgetAgentPresence(forTab: tabID)
         case .agentActivity(let report):
             recordAgentActivity(
                 report,
@@ -2536,6 +2556,10 @@ final class AppModel {
     private func removeTerminalRuntime(_ sessionID: TerminalSessionID) {
         terminalSnapshotTasks.removeValue(forKey: sessionID)?.cancel()
         guard let process = terminalSessions.removeValue(forKey: sessionID) else { return }
+        // Bytes the process already wrote can still be parsed after this, and a hook that fires
+        // as the agent is hung up can still reach the PTY. Neither may touch a tab that is gone,
+        // or undo the snapshot a quit has just written.
+        process.onEvent = nil
         process.setContentChangeHandler(nil)
         process.terminate()
     }
