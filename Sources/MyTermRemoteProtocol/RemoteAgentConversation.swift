@@ -334,6 +334,9 @@ public struct RemoteAgentReply: Codable, Equatable, Sendable {
 
     /// The most a person types into a phone in one go. A cap belongs here because this becomes
     /// keystrokes on someone's Mac.
+    ///
+    /// Counted in Unicode scalars, which bounds the bytes: `String.count` does not, because one
+    /// letter under any number of combining marks is one `Character`.
     public static let maximumCharacters = 4_000
 
     /// Whether this is safe to type.
@@ -342,7 +345,7 @@ public struct RemoteAgentReply: Codable, Equatable, Sendable {
     /// as one message, and an escape would drive the agent's interface rather than talk to it.
     public var isTypable: Bool {
         !text.isEmpty
-            && text.count <= Self.maximumCharacters
+            && text.unicodeScalars.count <= Self.maximumCharacters
             && !text.unicodeScalars.contains { CharacterSet.controlCharacters.contains($0) }
     }
 }

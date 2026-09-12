@@ -11,6 +11,11 @@ import Foundation
 public enum AgentSessionTitle {
     /// Long enough for the sentence-shaped topic titles agents generate, short enough that a tab
     /// label can never carry a payload.
+    ///
+    /// Counted in Unicode scalars rather than `Character`s. A grapheme cluster has no upper size:
+    /// one letter under a hundred thousand combining marks is a single `Character`, and a cap that
+    /// counted those would let a title of any size through, onto the disk and into every tree a
+    /// device is sent.
     public static let maximumLength = 128
 
     /// Agents put a status glyph in front of the name. The name is the part a tab wants.
@@ -24,7 +29,11 @@ public enum AgentSessionTitle {
         }
         let name = String(String.UnicodeScalarView(scalars))
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return nil }
-        return String(name.prefix(maximumLength))
+        // A name made only of marks (variation selectors, combining accents) draws as nothing:
+        // a tab with a blank label rather than one with no name.
+        guard name.unicodeScalars.contains(where: { $0.properties.generalCategory != .nonspacingMark }) else {
+            return nil
+        }
+        return String(String.UnicodeScalarView(name.unicodeScalars.prefix(maximumLength)))
     }
 }

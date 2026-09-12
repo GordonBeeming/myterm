@@ -335,6 +335,31 @@ public struct RemoteNotifications: Codable, Equatable, Sendable {
     }
 }
 
+/// What a device may name a tab or a workspace.
+///
+/// A name from a device is written to the Mac's disk, drawn in its sidebar, and sent back in every
+/// tree to every device. A frame's worth of text in one, or a terminal escape, would be carried
+/// to all of those places, so the host refuses a name before it is applied rather than trusting the
+/// device to have kept it short and plain.
+public enum RemoteTitle {
+    /// Longer than any name a person types, in Unicode scalars so the bytes are bounded too.
+    public static let maximumLength = 256
+
+    /// Whether a name may be applied. `nil` and blank are acceptable: they clear a tab's name.
+    ///
+    /// Controls are refused, and so are the bidirectional overrides: a name that draws reversed
+    /// is a name that says something other than what it holds. Other format characters stay,
+    /// because the joiner inside a family emoji is one.
+    public static func isAcceptable(_ title: String?) -> Bool {
+        guard let title else { return true }
+        let scalars = title.unicodeScalars
+        return scalars.count <= maximumLength
+            && !scalars.contains { $0.properties.generalCategory == .control || bidiControls.contains($0) }
+    }
+
+    private static let bidiControls = CharacterSet(charactersIn: "\u{202A}\u{202B}\u{202C}\u{202D}\u{202E}\u{2066}\u{2067}\u{2068}\u{2069}")
+}
+
 public struct RemoteRenameTab: Codable, Equatable, Sendable {
     public var tabID: String
     /// Blank or `nil` restores the automatic title, which is what clearing the Mac's rename field does.

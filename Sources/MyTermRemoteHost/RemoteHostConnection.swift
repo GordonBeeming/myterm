@@ -378,17 +378,20 @@ final class RemoteHostConnection {
             dismissScreen(tabID: request.tabID)
 
         case .renameTab(let request):
+            guard acceptsTitle(request.title, for: "rename tab") else { return }
             applyMutation("rename tab") { $0.renameTab(tabID: request.tabID, title: request.title) }
 
         case .closeTab(let request):
             applyMutation("close tab") { $0.closeTab(tabID: request.tabID) }
 
         case .renameWorkspace(let request):
+            guard acceptsTitle(request.title, for: "rename workspace") else { return }
             applyMutation("rename workspace") {
                 $0.renameWorkspace(workspaceID: request.workspaceID, title: request.title)
             }
 
         case .createWorkspace(let request):
+            guard acceptsTitle(request.title, for: "create workspace") else { return }
             applyMutation("create workspace") {
                 $0.createWorkspace(title: request.title, folderID: request.folderID)
             }
@@ -525,6 +528,18 @@ final class RemoteHostConnection {
     /// Changing workspaces reaches further than typing does, so nothing here may be allowed while
     /// typing is not. The check lives here rather than in the device's interface, because a device
     /// decides what to show and this Mac decides what to permit.
+    /// A name from a device is checked before it is written anywhere: once on the Mac's disk it is
+    /// drawn in the sidebar and sent in every tree, and a frame's worth of it would put every tree
+    /// over the frame cap for every device.
+    private func acceptsTitle(_ title: String?, for intent: String) -> Bool {
+        guard didGreet else { return false }
+        guard RemoteTitle.isAcceptable(title) else {
+            sendControl(.error(RemoteError(code: "mutate", message: "could not \(intent): the name is too long or not plain text")))
+            return false
+        }
+        return true
+    }
+
     private func applyMutation(
         _ intent: String,
         _ change: (any RemoteHostDataSource) -> Bool

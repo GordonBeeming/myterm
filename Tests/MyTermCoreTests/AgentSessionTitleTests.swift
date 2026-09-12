@@ -50,3 +50,39 @@ final class AgentSessionTitleTests: XCTestCase {
         )
     }
 }
+
+/// The title against text that is hostile in its encoding rather than merely long.
+final class AgentSessionTitleHostileTextTests: XCTestCase {
+    func testAGraphemeOfTenThousandScalarsIsCutLikeAnyOtherLongTitle() {
+        // One letter under ten thousand combining marks is a single Character, so a cap in
+        // Characters let the whole thing through: onto the disk, into the sidebar, into every tree
+        // a device is sent.
+        let zalgo = "a" + String(repeating: "\u{0301}", count: 10_000)
+        let name = AgentSessionTitle.sanitized(zalgo)
+        XCTAssertLessThanOrEqual(name?.unicodeScalars.count ?? 0, AgentSessionTitle.maximumLength)
+    }
+
+    func testBidiOverridesAndZeroWidthCharactersAreNotPartOfTheName() {
+        XCTAssertEqual(AgentSessionTitle.sanitized("\u{202E}evil.txt"), "evil.txt")
+        XCTAssertEqual(AgentSessionTitle.sanitized("\u{200F}עברית\u{200E} mixed"), "עברית mixed")
+        XCTAssertNil(AgentSessionTitle.sanitized(String(repeating: "\u{200B}", count: 5)))
+    }
+
+    func testANameThatDrawsAsNothingIsNoName() {
+        XCTAssertNil(AgentSessionTitle.sanitized(String(repeating: "\u{FE0F}", count: 5)), "variation selectors alone")
+        XCTAssertNil(AgentSessionTitle.sanitized("\u{0301}\u{0308}"), "combining marks alone")
+        XCTAssertEqual(AgentSessionTitle.sanitized("\u{0301}x"), "\u{0301}x", "a mark with a letter is a name")
+        XCTAssertEqual(AgentSessionTitle.sanitized("한글 제목"), "한글 제목")
+        XCTAssertEqual(AgentSessionTitle.sanitized("\u{1100}\u{1161}\u{11A8} jamo"), "\u{1100}\u{1161}\u{11A8} jamo")
+    }
+
+    func testAnEightBitControlIsNotPartOfTheName() {
+        XCTAssertEqual(AgentSessionTitle.sanitized("\u{9B}31mtitle"), "31mtitle")
+    }
+
+    func testACanonicallyEquivalentTitleIsTheSameTitle() {
+        // The store compares the old name to the new before writing, and Swift compares strings
+        // by canonical equivalence, so a name that arrives decomposed is not a change.
+        XCTAssertEqual(AgentSessionTitle.sanitized("Cafe\u{0301}"), AgentSessionTitle.sanitized("Café"))
+    }
+}

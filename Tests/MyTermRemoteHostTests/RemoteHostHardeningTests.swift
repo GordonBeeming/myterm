@@ -147,6 +147,37 @@ final class RemoteHostHardeningTests: XCTestCase {
         XCTAssertTrue(source.tabWrites.isEmpty, "nothing may reach the tab: \(source.tabWrites)")
     }
 
+    /// A name from a device is written to disk, drawn in the sidebar and sent back in every tree.
+    /// A frame's worth of name would put every later tree over the frame cap, disconnecting every
+    /// device on connect until someone renamed the tab on the Mac; an escape in one would be
+    /// drawn wherever the name is.
+    @MainActor
+    func testANameThatIsHugeOrNotPlainTextIsRefusedBeforeItIsWrittenAnywhere() async throws {
+        let token = RemoteTransportSecurity.makeToken()
+        let source = HardeningDataSource()
+        let (service, port) = try await startedService(token: token, dataSource: source)
+        defer { service.stop() }
+        let device = try await connectedDevice(port: port, token: token)
+
+        let huge = String(repeating: "x", count: 4 * 1024 * 1024)
+        let zalgo = "a" + String(repeating: "\u{0301}", count: 100_000)
+        let escaped = "name\u{1B}]0;other\u{07}"
+        device.send(.renameTab(RemoteRenameTab(tabID: HardeningDataSource.tabID, title: huge)))
+        device.send(.renameTab(RemoteRenameTab(tabID: HardeningDataSource.tabID, title: zalgo)))
+        device.send(.renameTab(RemoteRenameTab(tabID: HardeningDataSource.tabID, title: escaped)))
+        device.send(.renameWorkspace(RemoteRenameWorkspace(workspaceID: "workspace-1", title: huge)))
+        device.send(.createWorkspace(RemoteCreateWorkspace(title: escaped, folderID: nil)))
+        await device.wait { $0.errors.filter { $0.code == "mutate" }.count == 5 }
+        XCTAssertEqual(device.errors.filter { $0.code == "mutate" }.count, 5)
+        XCTAssertTrue(source.applied.isEmpty, "nothing may reach the store: \(source.applied)")
+
+        // A plain name still goes through, and clearing one still does.
+        device.send(.renameTab(RemoteRenameTab(tabID: HardeningDataSource.tabID, title: "👨‍👩‍👧 plain")))
+        device.send(.renameTab(RemoteRenameTab(tabID: HardeningDataSource.tabID, title: nil)))
+        await device.wait { _ in source.applied.count == 2 }
+        XCTAssertEqual(source.applied, ["renameTab", "renameTab"])
+    }
+
     @MainActor
     func testAnAnswerAndADismissalAreRefusedWhenTheMacDoesNotAllowInput() async throws {
         let token = RemoteTransportSecurity.makeToken()
