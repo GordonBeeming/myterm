@@ -27,10 +27,14 @@ public struct RemoteNotificationLogEntry: Codable, Equatable, Sendable, Identifi
     public var activity: AgentActivity
     public var date: Date
     public var isRead: Bool
+    /// True once the person has marked the entry unread by hand. The Mac's next snapshot would
+    /// otherwise read it again the moment the Mac reached the tab or forgot the entry, and a
+    /// reminder the person set on purpose would vanish on its own.
+    public var isHeldUnread: Bool
 
     public var id: ID { ID(tabID: tabID, date: date) }
 
-    public init(_ notification: RemoteNotification, isRead: Bool = false) {
+    public init(_ notification: RemoteNotification, isRead: Bool = false, isHeldUnread: Bool = false) {
         tabID = notification.tabID
         workspaceID = notification.workspaceID
         workspaceTitle = notification.workspaceTitle
@@ -38,6 +42,24 @@ public struct RemoteNotificationLogEntry: Codable, Equatable, Sendable, Identifi
         activity = notification.activity
         date = notification.date
         self.isRead = isRead
+        self.isHeldUnread = isHeldUnread
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case tabID, workspaceID, workspaceTitle, tabTitle, activity, date, isRead, isHeldUnread
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        tabID = try container.decode(String.self, forKey: .tabID)
+        workspaceID = try container.decode(String.self, forKey: .workspaceID)
+        workspaceTitle = try container.decode(String.self, forKey: .workspaceTitle)
+        tabTitle = try container.decode(String.self, forKey: .tabTitle)
+        activity = try container.decode(AgentActivity.self, forKey: .activity)
+        date = try container.decode(Date.self, forKey: .date)
+        isRead = try container.decode(Bool.self, forKey: .isRead)
+        // A log written before the hold existed has no entries held.
+        isHeldUnread = try container.decodeIfPresent(Bool.self, forKey: .isHeldUnread) ?? false
     }
 }
 
@@ -90,18 +112,20 @@ public struct RemoteNotificationLog: Codable, Equatable, Sendable {
     /// already has takes the Mac's current names, so a renamed tab renames the row, and is read if
     /// either side has read it: reading on the device is not undone by a Mac that does not know.
     /// One the device has that the Mac no longer lists was forgotten there, or the agent moved on,
-    /// so it is read: either way the person has nothing left to do about it.
+    /// so it is read: either way the person has nothing left to do about it. An entry the person
+    /// marked unread by hand is the one exception: only they can read it again.
     public mutating func merge(_ snapshot: RemoteNotifications) {
         let listed = Set(snapshot.entries.map { RemoteNotificationLogEntry.ID(tabID: $0.tabID, date: $0.date) })
         var merged = entries
-        for index in merged.indices where !listed.contains(merged[index].id) {
+        for index in merged.indices where !listed.contains(merged[index].id) && !merged[index].isHeldUnread {
             merged[index].isRead = true
         }
         for notification in snapshot.entries {
             let id = RemoteNotificationLogEntry.ID(tabID: notification.tabID, date: notification.date)
             if let index = merged.firstIndex(where: { $0.id == id }) {
-                let isRead = merged[index].isRead || notification.isRead
-                merged[index] = RemoteNotificationLogEntry(notification, isRead: isRead)
+                let isHeldUnread = merged[index].isHeldUnread
+                let isRead = !isHeldUnread && (merged[index].isRead || notification.isRead)
+                merged[index] = RemoteNotificationLogEntry(notification, isRead: isRead, isHeldUnread: isHeldUnread)
             } else {
                 merged.append(RemoteNotificationLogEntry(notification, isRead: notification.isRead))
             }
@@ -112,11 +136,13 @@ public struct RemoteNotificationLog: Codable, Equatable, Sendable {
     public mutating func markRead(_ id: RemoteNotificationLogEntry.ID, isRead: Bool = true) {
         guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
         entries[index].isRead = isRead
+        entries[index].isHeldUnread = !isRead
     }
 
     public mutating func markAllRead() {
         for index in entries.indices {
             entries[index].isRead = true
+            entries[index].isHeldUnread = false
         }
     }
 
