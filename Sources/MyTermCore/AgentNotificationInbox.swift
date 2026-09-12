@@ -58,6 +58,35 @@ public struct AgentNotificationInbox: Equatable, Sendable, Codable {
 
     public init() {}
 
+    private enum CodingKeys: String, CodingKey {
+        case entries
+    }
+
+    /// A saved history is read one entry at a time, so a row a newer build wrote with an activity
+    /// this build has no name for costs that row and not the whole file. What comes back is put in
+    /// the order and within the size the inbox keeps itself to: a file is not trusted to have been
+    /// left that way, and a device is sent the whole history in one frame.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        var list = try container.nestedUnkeyedContainer(forKey: .entries)
+        var read: [AgentInboxEntry] = []
+        var seen: Set<AgentInboxEntry.ID> = []
+        while !list.isAtEnd {
+            guard let entry = try? list.decode(AgentInboxEntry.self) else {
+                _ = try? list.superDecoder()
+                continue
+            }
+            if seen.insert(entry.id).inserted {
+                read.append(entry)
+            }
+        }
+        // Stable, so two entries in the same instant keep the order the file listed them in.
+        entries = read.enumerated()
+            .sorted { $0.element.date != $1.element.date ? $0.element.date > $1.element.date : $0.offset < $1.offset }
+            .map(\.element)
+        trimToCapacity()
+    }
+
     /// Everything, read and unread, newest first.
     public var history: [AgentInboxEntry] { entries }
 
@@ -145,6 +174,10 @@ public struct AgentNotificationInbox: Equatable, Sendable, Codable {
     private mutating func insert(_ entry: AgentInboxEntry) {
         let index = entries.firstIndex { $0.date <= entry.date } ?? entries.endIndex
         entries.insert(entry, at: index)
+        trimToCapacity()
+    }
+
+    private mutating func trimToCapacity() {
         while entries.count > Self.capacity {
             if let oldestRead = entries.lastIndex(where: \.isRead) {
                 entries.remove(at: oldestRead)
