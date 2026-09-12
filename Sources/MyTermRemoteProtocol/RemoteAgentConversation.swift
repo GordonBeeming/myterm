@@ -91,6 +91,43 @@ extension RemoteAgentConversation {
     public var currentModel: String? {
         entries.last { $0.model != nil }?.model
     }
+
+    /// Takes in what the tail sent after the backlog, once each: the file is tailed and a device
+    /// that reattaches asks for the backlog again, so a repeat is normal.
+    ///
+    /// A request the backlog marked pending is unmarked here, because the tail is the only way
+    /// its answer can arrive. The answer is a result carrying the request's identifier; or, when
+    /// the person denied it on the Mac, no result at all and the agent's next turn instead. The
+    /// host applies the same rule to a whole file: only the last turn's requests can be what
+    /// someone is stopped on.
+    public mutating func append(_ arriving: [RemoteAgentEntry]) {
+        var seen = Set(entries.map(\.id))
+        var answered = Set<String>()
+        var agentMovedOn = false
+        for entry in arriving where !seen.contains(entry.id) {
+            seen.insert(entry.id)
+            entries.append(entry)
+            for case .toolResult(let result) in entry.blocks {
+                answered.insert(result.toolUseID)
+            }
+            if entry.role == .assistant {
+                agentMovedOn = true
+            }
+        }
+        guard !answered.isEmpty || agentMovedOn else { return }
+        // The agent's newest turn keeps its own requests as they came; everything before it has
+        // been answered or passed over.
+        let lastIndex = entries.lastIndex { $0.role == .assistant }
+        for index in entries.indices {
+            for blockIndex in entries[index].blocks.indices {
+                guard case .toolUse(var use) = entries[index].blocks[blockIndex], use.isPending else { continue }
+                if answered.contains(use.id) || (agentMovedOn && index != lastIndex) {
+                    use.isPending = false
+                    entries[index].blocks[blockIndex] = .toolUse(use)
+                }
+            }
+        }
+    }
 }
 
 /// A note from the agent's own machinery rather than either side of the talk: the conversation

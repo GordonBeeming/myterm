@@ -292,11 +292,7 @@ extension RemoteSessionStore: RemoteClientDelegate {
         // A late batch for a tab the user has left is not this screen's, and applying it would show
         // one conversation's entries under another's name.
         guard var current = conversation, current.tabID == entries.tabID else { return }
-        var seen = Set(current.entries.map(\.id))
-        for entry in entries.entries where !seen.contains(entry.id) {
-            seen.insert(entry.id)
-            current.entries.append(entry)
-        }
+        current.append(entries.entries)
         conversation = current
     }
 
