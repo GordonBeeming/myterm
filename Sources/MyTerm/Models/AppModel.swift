@@ -278,6 +278,13 @@ final class AppModel {
               let host = components.host, !host.isEmpty
         else { return nil }
         components.scheme = scheme == "ws" ? "http" : scheme == "wss" ? "https" : scheme
+        // An origin is scheme, host and port. A login pasted in with the address would otherwise
+        // ride along on every socket the Mac opens to the relay.
+        components.user = nil
+        components.password = nil
+        // Names are case-insensitive on the network, and one spelling keeps the link from being
+        // torn down and rebuilt over a capital letter.
+        components.host = host.lowercased()
         components.path = ""
         components.query = nil
         components.fragment = nil

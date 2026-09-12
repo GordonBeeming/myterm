@@ -253,6 +253,25 @@ final class AppModelRemoteHostTests: XCTestCase {
         XCTAssertNil(AppModel.relayURL(from: ""))
     }
 
+    /// Every way a person pastes a relay address: with a slash, with a path, shouted, as the socket
+    /// scheme, with a login in it, as an address. Each lands on the same origin.
+    func testEveryWayOfWritingARelayAddressLandsOnItsOrigin() {
+        XCTAssertEqual(AppModel.relayURL(from: "https://relay.example.com/")?.absoluteString, "https://relay.example.com")
+        XCTAssertEqual(AppModel.relayURL(from: "https://relay.example.com/v1/device/abc")?.absoluteString, "https://relay.example.com")
+        XCTAssertEqual(AppModel.relayURL(from: "HTTPS://Relay.Example.com")?.absoluteString, "https://relay.example.com")
+        XCTAssertEqual(AppModel.relayURL(from: "ws://relay.example.com")?.absoluteString, "http://relay.example.com")
+        XCTAssertEqual(AppModel.relayURL(from: "wss://relay.example.com:8443/x")?.absoluteString, "https://relay.example.com:8443")
+        XCTAssertEqual(AppModel.relayURL(from: "https://192.168.1.20:8787")?.absoluteString, "https://192.168.1.20:8787")
+        XCTAssertEqual(AppModel.relayURL(from: "http://[::1]:8787/")?.absoluteString, "http://[::1]:8787")
+        // A login is not part of an origin, and the relay has no use for one. It is dropped rather
+        // than sent with every socket the Mac opens.
+        XCTAssertEqual(AppModel.relayURL(from: "https://user:secret@relay.example.com/")?.absoluteString, "https://relay.example.com")
+        XCTAssertEqual(AppModel.relayURL(from: "https://relay.example.com#top")?.absoluteString, "https://relay.example.com")
+        XCTAssertNil(AppModel.relayURL(from: "https://"))
+        XCTAssertNil(AppModel.relayURL(from: "https:///path"))
+        XCTAssertNil(AppModel.relayURL(from: "https://relay.example.com:notaport"))
+    }
+
     func testTurningTheRelayOnNeedsAnAddressAndTheListener() throws {
         let engine = StubTerminalEngine()
         let (model, directory) = try makeModel(engine: engine)

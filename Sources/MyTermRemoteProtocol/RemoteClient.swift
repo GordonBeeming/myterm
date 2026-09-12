@@ -325,7 +325,7 @@ public final class RemoteClient {
         case .address:
             path = .local
             let endpoint = NWEndpoint.hostPort(
-                host: NWEndpoint.Host(target.host), port: NWEndpoint.Port(rawValue: target.port) ?? .any
+                host: NWEndpoint.Host(Self.dialableHost(target.host)), port: NWEndpoint.Port(rawValue: target.port) ?? .any
             )
             // With a relay to fall back on, a Mac that is not on this network need not be waited
             // for as long: the relay is where it will be found.
@@ -424,6 +424,14 @@ public final class RemoteClient {
     }
 
     private var pendingWaitError: NWError?
+
+    /// An IPv6 literal is written `[::1]` wherever a port follows it, and that is how a person
+    /// types one. `NWEndpoint.Host` reads the brackets as part of a name, so they come off here.
+    static func dialableHost(_ host: String) -> String {
+        let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("["), trimmed.hasSuffix("]"), trimmed.count > 2 else { return trimmed }
+        return String(trimmed.dropFirst().dropLast())
+    }
 
     private static func address(of connection: NWConnection) -> RemoteAddress? {
         guard case .hostPort(let host, let port) = connection.currentPath?.remoteEndpoint else { return nil }

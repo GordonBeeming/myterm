@@ -132,6 +132,9 @@ public final class AgentTranscriptWatcher {
     @discardableResult
     private func sendBacklog(at url: URL) async -> Bool {
         let read = await Self.readAppended(at: url, from: 0)
+        // A watcher stopped while it was reading has nobody to deliver to. The device that asked
+        // has moved on, and may already be listening to a replacement for the same tab.
+        guard !Task.isCancelled else { return false }
         guard !read.lines.isEmpty else { return false }
         offset = read.length
         inode = read.inode
@@ -144,6 +147,7 @@ public final class AgentTranscriptWatcher {
 
     private func sendNewEntries(at url: URL) async {
         let read = await Self.readAppended(at: url, from: offset)
+        guard !Task.isCancelled else { return }
         // A shorter file, or another inode under the same name, was replaced rather than appended
         // to, so what this remembers is worthless.
         if read.wasReplaced || (read.inode != nil && read.inode != inode) {

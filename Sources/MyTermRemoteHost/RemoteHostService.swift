@@ -60,8 +60,16 @@ public final class RemoteHostService {
 
     /// What devices see this Mac as, and the name it advertises on the local network.
     public let hostName: String
+    /// Where the agents' transcripts are. Settable so a test can serve a transcript of its own.
+    public var agentProjectsDirectory: URL = AgentTranscriptWatcher.defaultProjectsDirectory
+    /// How long a connection that completed the handshake may stay silent before it is dropped.
+    public var helloTimeout: Duration = RemoteHostConnection.defaultHelloTimeout
     private let queue = DispatchQueue(label: "com.gordonbeeming.myterm.remote-host")
     private var listener: NWListener?
+    /// Listeners told to stop that have not yet said they did.
+    private var cancelling: [ObjectIdentifier: NWListener] = [:]
+    /// Set by a token rotation: start again once the old listener has let go of its port.
+    private var restartsWhenCancelled = false
     /// The port the current listener was asked for, so a failure knows whether a fallback is left.
     private var attemptedPort: NWEndpoint.Port?
     private var connections: [UUID: RemoteHostConnection] = [:]
@@ -87,13 +95,20 @@ public final class RemoteHostService {
 
     public func rotateToken() {
         token = RemoteTransportSecurity.makeToken()
-        if case .listening = state {
+        switch state {
+        case .listening, .starting:
+            // The old socket gives its port back only once its cancel has run on the listener's
+            // queue. Starting again before then lands on EADDRINUSE and the fallback port, and
+            // the Mac quietly moves off the port every saved pairing names.
             stop()
-            start()
+            restartsWhenCancelled = true
+        case .stopped, .failed:
+            break
         }
     }
 
     public func start() {
+        restartsWhenCancelled = false
         start(on: NWEndpoint.Port(rawValue: preferredPort) ?? .any)
     }
 
@@ -109,9 +124,10 @@ public final class RemoteHostService {
                 name: hostName,
                 type: RemoteProtocol.bonjourServiceType
             )
+            let identity = ObjectIdentifier(listener)
             listener.stateUpdateHandler = { [weak self] listenerState in
                 Task { @MainActor [weak self] in
-                    self?.handle(listenerState: listenerState)
+                    self?.handle(listenerState: listenerState, from: identity)
                 }
             }
             listener.newConnectionHandler = { [weak self] connection in
@@ -127,13 +143,22 @@ public final class RemoteHostService {
     }
 
     public func stop() {
+        // A stop the user asked for outranks a restart a rotation is waiting on.
+        restartsWhenCancelled = false
         stopWatchingTree()
         for connection in connections.values {
             connection.close()
         }
         connections.removeAll()
         connectedDevices = []
-        listener?.cancel()
+        if let listener {
+            // Nothing that arrives on a cancelled listener is a device. Its state handler stays,
+            // because its `.cancelled` is the moment its port is free again, and the listener is
+            // held until then so that report is not lost with it.
+            listener.newConnectionHandler = { $0.cancel() }
+            cancelling[ObjectIdentifier(listener)] = listener
+            listener.cancel()
+        }
         listener = nil
         state = .stopped
     }
@@ -203,7 +228,19 @@ public final class RemoteHostService {
         }
     }
 
-    private func handle(listenerState: NWListener.State) {
+    private func handle(listenerState: NWListener.State, from source: ObjectIdentifier) {
+        guard let current = listener, ObjectIdentifier(current) == source else {
+            // A listener that was stopped or replaced. A restart may have a new one up by now
+            // whose state must not be overwritten with the old one's; its cancel completing is
+            // the one thing worth hearing, because a restart that wants the same port waits on it.
+            if case .cancelled = listenerState {
+                cancelling.removeValue(forKey: source)
+                if restartsWhenCancelled, cancelling.isEmpty, self.listener == nil {
+                    start()
+                }
+            }
+            return
+        }
         switch listenerState {
         case .ready:
             state = .listening(port: listener?.port?.rawValue ?? 0)
@@ -230,7 +267,9 @@ public final class RemoteHostService {
             connection: nwConnection,
             hostName: hostName,
             allowsInput: { [weak self] in self?.allowsInput ?? false },
-            dataSource: dataSource
+            dataSource: dataSource,
+            projectsDirectory: agentProjectsDirectory,
+            helloTimeout: helloTimeout
         )
         connection.onClosed = { [weak self] in
             Task { @MainActor [weak self] in

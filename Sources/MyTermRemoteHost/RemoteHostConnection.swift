@@ -31,13 +31,21 @@ final class RemoteHostConnection {
     /// settled, submits the line.
     static let replyReturnDelay: Duration = .milliseconds(200)
     static let returnKeystroke = Array("\r".utf8)
+    /// How long a peer that finished the handshake gets to say hello before it is dropped.
+    ///
+    /// Without a limit, a peer that connects and says nothing holds a socket and its TLS state for
+    /// as long as the TCP connection lives, and fifty of them are fifty for nothing.
+    static let defaultHelloTimeout: Duration = .seconds(10)
 
     private let connection: NWConnection
+    private let helloTimeout: Duration
+    private var helloDeadline: Task<Void, Never>?
     private let hostName: String
     /// Read each time it matters, so flipping the switch on the Mac applies to a device that is
     /// already connected, not only to the next one.
     private let allowsInput: () -> Bool
     private weak var dataSource: (any RemoteHostDataSource)?
+    private let projectsDirectory: URL
 
     private var decoder = RemoteFrameDecoder()
     private var didGreet = false
@@ -67,12 +75,16 @@ final class RemoteHostConnection {
         connection: NWConnection,
         hostName: String,
         allowsInput: @escaping () -> Bool,
-        dataSource: (any RemoteHostDataSource)?
+        dataSource: (any RemoteHostDataSource)?,
+        projectsDirectory: URL = AgentTranscriptWatcher.defaultProjectsDirectory,
+        helloTimeout: Duration = RemoteHostConnection.defaultHelloTimeout
     ) {
         self.connection = connection
         self.hostName = hostName
         self.allowsInput = allowsInput
         self.dataSource = dataSource
+        self.projectsDirectory = projectsDirectory
+        self.helloTimeout = helloTimeout
     }
 
     func start(queue: DispatchQueue) {
@@ -88,9 +100,17 @@ final class RemoteHostConnection {
         }
         connection.start(queue: queue)
         receive()
+        let helloTimeout = helloTimeout
+        helloDeadline = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: helloTimeout)
+            guard !Task.isCancelled, let self, !self.didGreet else { return }
+            self.close()
+        }
     }
 
     func close() {
+        helloDeadline?.cancel()
+        helloDeadline = nil
         // Before the guard: a watcher holds no data source, so it must be stopped even when there
         // is none left to detach from.
         for watcher in agentWatchers.values {
@@ -208,6 +228,9 @@ final class RemoteHostConnection {
     private func handle(_ message: RemoteControlMessage) {
         switch message {
         case .hello(let hello):
+            // A second hello has nothing to say. Answering it would send the tree again for every
+            // repeat, which makes a hundred small frames into a hundred large ones.
+            guard !didGreet else { return }
             guard hello.protocolVersion == RemoteProtocol.version else {
                 closeAfterRefusing(RemoteError(
                     code: "version",
@@ -254,7 +277,9 @@ final class RemoteHostConnection {
                 columns: attachment.columns,
                 rows: attachment.rows
             )))
-            sendOutput(session: attachment.session, bytes: attachment.snapshot)
+            // The screen goes the way live output does: a device that is not draining what it was
+            // already sent gets one fresh screen once it has, not a screen per attach it queued.
+            forward(bytes: attachment.snapshot[...], session: attachment.session)
             onStateChanged?()
 
         case .detach(let session):
@@ -281,6 +306,7 @@ final class RemoteHostConnection {
                 // Looked up each time rather than fixed here: `/clear` gives the tab a new
                 // session, and the device should follow it rather than a file that has ended.
                 sessionID: { [weak self] in self?.dataSource?.agentSession(tabID: tabID)?.sessionID },
+                projectsDirectory: projectsDirectory,
                 onConversation: { [weak self] conversation in
                     self?.sendControl(.agentConversation(conversation))
                 },
@@ -317,8 +343,12 @@ final class RemoteHostConnection {
             // The data source is held, not the connection: a device that drops the instant it
             // sends must still get its words submitted rather than left sitting in the draft.
             let screenCommand = AgentCommandCatalog.screenCommand(typed: request.text)
+            let allowsInput = allowsInput
             Task { @MainActor [weak self] in
                 try? await Task.sleep(for: Self.replyReturnDelay)
+                // The Mac may have said no in the meantime. The words are in the draft where the
+                // person at the Mac can see them; submitting them is the part that was refused.
+                guard allowsInput() else { return }
                 // The screen the Return goes into, read first: the capture must see it move on.
                 let before = screenCommand == nil ? nil : dataSource.visibleRows(tabID: request.tabID)
                 _ = dataSource.sendInput(tabID: request.tabID, bytes: Self.returnKeystroke[...])
