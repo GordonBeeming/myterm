@@ -151,7 +151,15 @@ public final class WebSocketClient {
 
     public func send(text: String) {
         guard !isClosed else { return }
-        task.send(.string(text)) { _ in }
+        // The keepalive ping goes this way. After a night asleep the socket underneath is dead and
+        // the ping is the first thing to find out; swallowing its error left the link reporting
+        // itself connected until the receive noticed on its own.
+        task.send(.string(text)) { [weak self] error in
+            guard let error else { return }
+            Task { @MainActor [weak self] in
+                self?.finish(code: nil, reason: error.localizedDescription)
+            }
+        }
     }
 
     public func close() {
