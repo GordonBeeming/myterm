@@ -122,6 +122,23 @@ public struct SavedConnection: Codable, Equatable, Sendable, Identifiable {
     public func target(token: String) -> RemoteTarget {
         RemoteTarget(host: host, port: port, token: token, serviceName: serviceName, relay: relay)
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, displayName, host, port, serviceName, relay, lastConnectedAt
+    }
+
+    /// The optional parts are read as optional: a relay or a date that cannot be read is worth no
+    /// more than none, and the Mac's address is still worth keeping.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        displayName = try container.decode(String.self, forKey: .displayName)
+        host = try container.decode(String.self, forKey: .host)
+        port = try container.decode(UInt16.self, forKey: .port)
+        serviceName = try? container.decodeIfPresent(String.self, forKey: .serviceName)
+        relay = try? container.decodeIfPresent(RelayEndpoint.self, forKey: .relay)
+        lastConnectedAt = try? container.decodeIfPresent(Date.self, forKey: .lastConnectedAt)
+    }
 }
 
 /// The pure editing rules for a saved-connection list: no I/O, so these are exercised directly by
@@ -397,12 +414,29 @@ public final class SavedConnectionStore {
         defaults.set(data, forKey: defaultsKey)
     }
 
+    /// One row at a time: a row that cannot be read is skipped, not the list. Losing every Mac for
+    /// one bad row would also strand every token in the Keychain, with no row left to delete them by.
     private static func load(from defaults: UserDefaults, key: String) -> [SavedConnection] {
         guard let data = defaults.data(forKey: key),
-              let connections = try? JSONDecoder().decode([SavedConnection].self, from: data)
+              let rows = try? JSONDecoder().decode(LossyRows.self, from: data)
         else {
             return []
         }
-        return connections
+        return rows.connections
+    }
+
+    private struct LossyRows: Decodable {
+        var connections: [SavedConnection] = []
+
+        init(from decoder: any Decoder) throws {
+            var list = try decoder.unkeyedContainer()
+            while !list.isAtEnd {
+                if let connection = try? list.decode(SavedConnection.self) {
+                    connections.append(connection)
+                } else {
+                    _ = try? list.superDecoder()
+                }
+            }
+        }
     }
 }

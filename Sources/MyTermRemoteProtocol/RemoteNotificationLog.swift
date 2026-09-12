@@ -56,6 +56,30 @@ public struct RemoteNotificationLog: Codable, Equatable, Sendable {
         self.entries = Self.trimmed(entries)
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case entries
+    }
+
+    /// A saved log is read one entry at a time, so a row a newer build wrote with an activity this
+    /// build has no name for costs that row rather than the whole log. A row listed twice is one
+    /// row, and what comes back is ordered and trimmed as the log keeps itself.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        var list = try container.nestedUnkeyedContainer(forKey: .entries)
+        var read: [RemoteNotificationLogEntry] = []
+        var seen: Set<RemoteNotificationLogEntry.ID> = []
+        while !list.isAtEnd {
+            guard let entry = try? list.decode(RemoteNotificationLogEntry.self) else {
+                _ = try? list.superDecoder()
+                continue
+            }
+            if seen.insert(entry.id).inserted {
+                read.append(entry)
+            }
+        }
+        entries = Self.trimmed(read)
+    }
+
     public var unreadCount: Int { entries.filter { !$0.isRead }.count }
     public var isEmpty: Bool { entries.isEmpty }
 
