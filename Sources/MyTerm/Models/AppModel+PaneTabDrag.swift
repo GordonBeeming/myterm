@@ -277,6 +277,14 @@ extension AppModel {
         paneTabDragSession = nil
     }
 
+    /// Cancels the drag only when `source` is the tab being dragged. A tab strip item that leaves
+    /// the view for any other reason (a neighbour closed, a lazy strip scrolled, another pane's
+    /// tab went away) must leave a drag of a different tab alone.
+    func cancelPaneTabDrag(ifSource source: PaneTabDragSource) {
+        guard paneTabDragSession?.source == source else { return }
+        cancelPaneTabDrag()
+    }
+
     func cancelPaneTabDragUntilRelease() {
         paneTabDragSession?.isCancelled = true
         paneTabDragSession?.previewTarget = nil

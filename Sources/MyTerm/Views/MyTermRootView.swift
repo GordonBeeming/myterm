@@ -651,11 +651,15 @@ private struct WorkspaceSidebar: View {
         pendingPreviewClose = nil
         dropPreview = nil
         activeDragItem = nil
+        // A device can delete the dragged item while the drag is still in the user's hand. The
+        // drop then has nothing to move, and an "unavailable" banner would blame the user for it.
         switch preview {
         case .workspace(let sourceID, let folderID, let isPinned, let before):
+            guard model.workspaces.contains(where: { $0.id == sourceID }) else { return false }
             model.moveWorkspace(sourceID, to: folderID, before: before, isPinned: isPinned)
             return true
         case .folder(let sourceID, let before):
+            guard model.folders.contains(where: { $0.id == sourceID }) else { return false }
             model.moveFolder(sourceID, before: before)
             return true
         case nil:
@@ -1048,7 +1052,8 @@ private struct WorkspaceFolderRow: View {
     /// so the row commits it itself; everything else is the previewed order.
     private func commitDrop(_ feedback: SidebarDropFeedback) -> Bool {
         guard feedback.isHighlighted else { return dropSession.commit(feedback) }
-        guard case .workspace(let sourceID) = activeDragItem else { return false }
+        guard case .workspace(let sourceID) = activeDragItem,
+              model.workspaces.contains(where: { $0.id == sourceID }) else { return false }
         model.moveWorkspace(sourceID, to: folder.id)
         activeDragItem = nil
         return true
