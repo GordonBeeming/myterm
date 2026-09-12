@@ -58,8 +58,12 @@ public final class RemoteHostService {
     /// port and says so through `state`, so pairing still works and the address shown is right.
     public var preferredPort: UInt16 = RemoteProtocol.defaultPort
 
-    /// What devices see this Mac as, and the name it advertises on the local network.
+    /// What devices see this Mac as, and the name it asks to advertise on the local network.
     public let hostName: String
+    /// The name Bonjour actually registered, once it has. Another Mac on the network with the
+    /// same name gets there first and this one becomes "Name (2)": a device that scans a code
+    /// carrying `hostName` would then dial the other Mac, so a pairing code carries this.
+    public private(set) var advertisedName: String?
     /// Where the agents' transcripts are. Settable so a test can serve a transcript of its own.
     public var agentProjectsDirectory: URL = AgentTranscriptWatcher.defaultProjectsDirectory
     /// How long a connection that completed the handshake may stay silent before it is dropped.
@@ -130,6 +134,11 @@ public final class RemoteHostService {
                     self?.handle(listenerState: listenerState, from: identity)
                 }
             }
+            listener.serviceRegistrationUpdateHandler = { [weak self] change in
+                Task { @MainActor [weak self] in
+                    self?.handle(registration: change, from: identity)
+                }
+            }
             listener.newConnectionHandler = { [weak self] connection in
                 Task { @MainActor [weak self] in
                     self?.accept(connection)
@@ -160,7 +169,20 @@ public final class RemoteHostService {
             listener.cancel()
         }
         listener = nil
+        advertisedName = nil
         state = .stopped
+    }
+
+    private func handle(registration change: NWListener.ServiceRegistrationChange, from source: ObjectIdentifier) {
+        guard let current = listener, ObjectIdentifier(current) == source else { return }
+        switch change {
+        case .add(.service(let name, _, _, _)):
+            advertisedName = name
+        case .remove(.service(let name, _, _, _)) where name == advertisedName:
+            advertisedName = nil
+        default:
+            break
+        }
     }
 
     /// Pushes the current tree to every connected device.

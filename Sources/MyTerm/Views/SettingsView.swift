@@ -721,7 +721,7 @@ struct SettingsView: View {
             DevicePairingSheet(
                 port: port.value,
                 token: model.remoteHost.token,
-                serviceName: model.remoteHost.hostName,
+                serviceName: model.remoteHost.advertisedName ?? model.remoteHost.hostName,
                 relay: model.relayEndpoint
             ) {
                 pairingPort = nil

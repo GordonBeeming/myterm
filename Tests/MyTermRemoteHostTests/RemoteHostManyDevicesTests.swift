@@ -516,6 +516,70 @@ final class RemoteHostManyDevicesTests: XCTestCase {
         XCTAssertFalse(device.isClosed)
     }
 
+    // MARK: - Two Macs with one name
+
+    /// Two Macs called the same thing ask Bonjour for the same name. Bonjour gives the second
+    /// "Name (2)", and a device that scans the second's pairing code must dial that, or it lands
+    /// on the first Mac and fails the handshake there.
+    @MainActor
+    func testTwoMacsAdvertisingTheSameNameEachPairByTheNameTheyActuallyGot() async throws {
+        let firstToken = RemoteTransportSecurity.makeToken()
+        let secondToken = RemoteTransportSecurity.makeToken()
+        let source = ManyTabsDataSource()
+        let name = "Twin \(UUID().uuidString.prefix(8))"
+        let first = RemoteHostService(hostName: name, token: firstToken, dataSource: source)
+        first.preferredPort = 0
+        first.start()
+        defer { first.stop() }
+        await wait { first.advertisedName != nil }
+        // The first Mac has been on the network a while when the second turns up.
+        try await Task.sleep(for: .seconds(2))
+        let second = RemoteHostService(hostName: name, token: secondToken, dataSource: source)
+        second.preferredPort = 0
+        second.start()
+        defer { second.stop() }
+        await wait(seconds: 10) { second.advertisedName != nil }
+        guard let firstName = first.advertisedName, let secondName = second.advertisedName else {
+            throw XCTSkip("Bonjour did not register on this machine")
+        }
+        XCTAssertEqual(firstName, name)
+        XCTAssertNotEqual(secondName, name, "the second Mac must know Bonjour renamed it")
+        XCTAssertTrue(secondName.hasPrefix(name), secondName)
+
+        // A device paired with the second Mac scans the name that Mac advertises, and gets in.
+        let phone = RemoteClient(deviceName: "Phone")
+        phone.serviceTimeout = 8
+        phone.connect(service: secondName, token: secondToken)
+        await wait(seconds: 12) {
+            switch phone.state {
+            case .connected, .failed: true
+            default: false
+            }
+        }
+        guard case .connected = phone.state else {
+            throw XCTSkip("Bonjour is not resolving on this machine: \(phone.state)")
+        }
+        XCTAssertEqual(second.connectedDevices.map(\.name), ["Phone"])
+        XCTAssertTrue(first.connectedDevices.isEmpty)
+        phone.disconnect()
+
+        // The name it asked for belongs to the first Mac, whose token it does not hold.
+        let lost = RemoteClient(deviceName: "Lost")
+        lost.serviceTimeout = 8
+        lost.connect(service: name, token: secondToken)
+        await wait(seconds: 12) {
+            switch lost.state {
+            case .connected, .failed: true
+            default: false
+            }
+        }
+        guard case .failed(let message) = lost.state else {
+            return XCTFail("the first Mac must refuse the second Mac's token: \(lost.state)")
+        }
+        XCTAssertTrue(message.contains("token"), message)
+        lost.disconnect()
+    }
+
     // MARK: - Connections that end at every boundary
 
     @MainActor
@@ -766,12 +830,19 @@ final class RemoteHostManyDevicesTests: XCTestCase {
         }
         try await Task.sleep(for: .milliseconds(500))
         device.startReading()
-        await wait(seconds: 30) { device.resyncs > 0 && device.outputBytes >= source.snapshot.count * 2 }
-        try await Task.sleep(for: .seconds(1))
+        await wait(seconds: 30) { device.outputBytes >= source.snapshot.count + 40 }
+        try await Task.sleep(for: .seconds(2))
 
         XCTAssertFalse(device.isClosed)
-        XCTAssertEqual(device.resyncs, 1, "one repair for the burst, not one per write")
-        XCTAssertEqual(device.outputBytes, source.snapshot.count * 2, "the screen, then one fresh screen")
+        XCTAssertLessThanOrEqual(device.resyncs, 1, "one repair for the burst, not one per write")
+        // Whether the kernel's own buffers took the screen before the host felt it decides which
+        // of two coherent outcomes this is: the writes went through behind the screen, or they
+        // were dropped and one fresh screen followed. Anything else is a screen sent twice over.
+        if device.resyncs == 1 {
+            XCTAssertEqual(device.outputBytes, source.snapshot.count * 2, "the screen, then one fresh screen")
+        } else {
+            XCTAssertEqual(device.outputBytes, source.snapshot.count + 40, "the screen, then the ten writes")
+        }
         XCTAssertEqual(device.attached.count, 1)
         // And once caught up, live bytes flow again.
         source.write(session: ManyTabsDataSource.sessionID, "after")
