@@ -236,16 +236,12 @@ final class RemoteHostHardeningTests: XCTestCase {
 
     @MainActor
     func testTheHandshakeGivesForwardSecrecy() async throws {
-        // The doc says "TLS 1.3 with a pre-shared key". The platform cannot do TLS 1.3 with an
-        // external key at all (raising the floor to 1.3 leaves the handshake never completing),
-        // so what a device actually gets is TLS 1.2, and the suite the options append
-        // (AES_128_GCM_SHA256, a 1.3 suite) is never the one used: the stack falls back to its
-        // default TLS_PSK_WITH_AES_128_GCM_SHA256 (0x00A8), which has no key exchange of its own.
-        //
-        // Without one, anybody who records the ciphertext — the relay sees every byte — and later
-        // learns the token can read every past session. TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305
-        // (0xCCAC) negotiates on this platform and keeps the pre-shared key as the
-        // authentication, so it is what the suite should be.
+        // The platform cannot do TLS 1.3 with an external key (raising the floor to 1.3 leaves the
+        // handshake never completing), so what a device gets is TLS 1.2. Left to its defaults the
+        // stack picks TLS_PSK_WITH_AES_128_GCM_SHA256 (0x00A8), which has no key exchange of its
+        // own: anybody who records the ciphertext (the relay sees every byte) and later learns the
+        // token could read every past session. The suite the options append runs an ephemeral
+        // ECDH under the pre-shared key, and this pins that it is the one actually negotiated.
         let token = RemoteTransportSecurity.makeToken()
         let source = HardeningDataSource()
         let (service, port) = try await startedService(token: token, dataSource: source)
@@ -253,10 +249,11 @@ final class RemoteHostHardeningTests: XCTestCase {
         let device = try await connectedDevice(port: port, token: token)
 
         let negotiated = try XCTUnwrap(device.negotiatedTLS)
-        let ecdhePSK: [UInt16] = [0xCCAC, 0xC035, 0xC036, 0xD001, 0xD002]
-        XCTAssertTrue(
-            ecdhePSK.contains(UInt16(bitPattern: Int16(truncatingIfNeeded: negotiated.suite.rawValue))),
-            "negotiated \(negotiated.version) with suite 0x\(String(UInt16(bitPattern: Int16(truncatingIfNeeded: negotiated.suite.rawValue)), radix: 16)): no ephemeral key exchange"
+        XCTAssertEqual(negotiated.version, .TLSv12)
+        XCTAssertEqual(negotiated.suite, RemoteTransportSecurity.ecdhePreSharedKeySuite)
+        XCTAssertEqual(
+            UInt16(truncatingIfNeeded: negotiated.suite.rawValue), 0xCCAC,
+            "TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256, by value"
         )
     }
 

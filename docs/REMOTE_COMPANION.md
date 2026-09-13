@@ -569,11 +569,14 @@ This is built. The relay is a Cloudflare Worker with one Durable Object per rend
   session socket, and the relay joins the two and forwards binary frames. It is a pipe and nothing
   more.
 - Inside that pipe runs **the same TLS session with the same pre-shared key** a device uses on the
-  local network. Each end bridges its socket to a loopback port: the device dials that port with
-  TLS exactly as it dials a Mac, and the Mac connects the session to its own listener. Neither end
-  has a second authentication path, and the relay carries ciphertext from the first byte. The Noise
-  handshake the earlier design called for is not needed, because TLS-PSK already gives the same
-  guarantee with the keys pairing established.
+  local network: TLS 1.2 with an ECDHE pre-shared-key suite
+  (`TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256`). Each end bridges its socket to a loopback port:
+  the device dials that port with TLS exactly as it dials a Mac, and the Mac connects the session
+  to its own listener. Neither end has a second authentication path, and the relay carries
+  ciphertext from the first byte. The ephemeral key exchange gives forward secrecy, so the bytes a
+  relay recorded stay unreadable even to someone who later learns the token. The Noise handshake
+  the earlier design called for is not needed, because this already gives the same guarantee with
+  the key pairing established.
 - Regenerating the token on the Mac also discards the rendezvous, so a device holding an old code
   cannot even find the Mac at the relay.
 
@@ -834,10 +837,15 @@ device: it is the pre-shared key for the TLS handshake, so a wrong token cannot 
   terminal that fits the Mac's grid; browser tabs; rename, close, create and delete from the device;
   and reconnection with backoff when the connection drops or the app returns to the foreground.
 
-The transport is TLS 1.3 with a pre-shared key derived from the pairing token. Completing the
-handshake is the authentication, so a device without the token cannot connect at all, and nothing on
-the network can read terminal bytes. That is proven by a test that points a client with the wrong
-token at a live listener and requires that it never receives a tree.
+The transport is TLS 1.2 with an ECDHE pre-shared-key suite
+(`TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256`), the key derived from the pairing token. The
+pre-shared key is the authentication: completing the handshake proves the device holds the token,
+so a device without it cannot connect at all, and nothing on the network can read terminal bytes.
+The ephemeral ECDH gives forward secrecy, so a recorded session stays unreadable after the token is
+known. TLS 1.3 is not used because the platform does not offer it with an external pre-shared key.
+Both facts are proven by tests: one points a client with the wrong token at a live listener and
+requires that it never receives a tree; another reads the negotiated version and suite off a live
+connection.
 
 ### Verifying it by hand
 

@@ -113,12 +113,47 @@ final class RelayEndToEndTests: XCTestCase {
             XCTAssertFalse(crossedText.contains(secret), "the relay must never see “\(secret)”")
         }
         XCTAssertEqual(crossed.first, 0x16, "the first bytes over the relay are a TLS handshake record")
+        // The one thing the relay can read about the session is which suite it settled on, and it
+        // must be the same ECDHE pre-shared-key suite the local network gets.
+        XCTAssertEqual(
+            Self.serverHelloCipherSuite(in: crossed), 0xCCAC,
+            "the relay path must negotiate TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256 like the local one"
+        )
 
         client.disconnect()
         for _ in 0..<100 where link.sessionCount != 0 {
             try await Task.sleep(nanoseconds: 50_000_000)
         }
         XCTAssertEqual(link.sessionCount, 0, "leaving frees the relay session on the Mac")
+    }
+
+    /// The cipher suite in the first ServerHello found in a stream of TLS records, walking the
+    /// records in either direction as the relay forwarded them. Nil when there is none.
+    private static func serverHelloCipherSuite(in stream: Data) -> UInt16? {
+        let bytes = [UInt8](stream)
+        var index = 0
+        while index + 5 <= bytes.count {
+            let recordType = bytes[index]
+            let length = Int(bytes[index + 3]) << 8 | Int(bytes[index + 4])
+            let body = index + 5
+            guard recordType == 0x16 || recordType == 0x17 || recordType == 0x14 || recordType == 0x15,
+                  bytes[index + 1] == 0x03, body + length <= bytes.count else {
+                // Not a record boundary: the two directions are interleaved, so step on a byte.
+                index += 1
+                continue
+            }
+            // ServerHello: type 2, length 3, version 2, random 32, session id length 1, session
+            // id, then the suite.
+            if recordType == 0x16, length > 39, bytes[body] == 0x02 {
+                let sessionIDLength = Int(bytes[body + 38])
+                let suite = body + 39 + sessionIDLength
+                if suite + 2 <= body + length {
+                    return UInt16(bytes[suite]) << 8 | UInt16(bytes[suite + 1])
+                }
+            }
+            index = body + length
+        }
+        return nil
     }
 
     @MainActor

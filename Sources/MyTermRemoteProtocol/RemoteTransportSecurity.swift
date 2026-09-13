@@ -12,6 +12,10 @@ public enum RemoteTransportSecurity {
     /// Separates this key from any other use of the same token.
     private static let keyContext = Data("myterm-remote-psk-v1".utf8)
     private static let identity = Data("myterm-remote".utf8)
+    /// TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256 (RFC 7905). Not among the named cases of
+    /// `tls_ciphersuite_t`, but the stack negotiates it, and it is the one that pairs an
+    /// ephemeral key exchange with the pre-shared key.
+    public static let ecdhePreSharedKeySuite = tls_ciphersuite_t(rawValue: 0xCCAC)!
 
     public static func parameters(token: String) -> NWParameters {
         let options = NWProtocolTLS.Options()
@@ -26,9 +30,14 @@ public enum RemoteTransportSecurity {
                 )
             }
         }
+        // The platform does not do TLS 1.3 with an external pre-shared key, so the handshake is
+        // TLS 1.2. Its default PSK suites carry no key exchange of their own: anyone who recorded
+        // the ciphertext (the relay forwards every byte) and later learned the token could read
+        // every past session. This suite runs an ephemeral ECDH under the same key, so a session
+        // stays unreadable after the token is known, and the key is still the authentication.
         sec_protocol_options_append_tls_ciphersuite(
             options.securityProtocolOptions,
-            tls_ciphersuite_t.AES_128_GCM_SHA256
+            ecdhePreSharedKeySuite
         )
         sec_protocol_options_set_min_tls_protocol_version(
             options.securityProtocolOptions,

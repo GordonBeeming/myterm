@@ -71,8 +71,9 @@ A tool that explicitly invokes `/usr/bin/open` bypasses MyTerm and can still ope
 MyTerm Remote is a companion app in `apps/MyTermRemote`. Link a device once by scanning the code
 under **Settings → Devices → Link a Device…**, and it lists the same workspaces, shows the same cook
 beside tabs that need you, and opens any terminal tab as the live session on the Mac. Nothing runs
-on the device: it is a window onto this Mac. The connection is TLS with a key derived from the
-pairing token, and it reconnects on its own when the Mac or the device comes back. On the local
+on the device: it is a window onto this Mac. The connection is TLS 1.2 with an ECDHE pre-shared-key
+suite, the key derived from the pairing token: the key is the authentication, and the ephemeral
+exchange gives forward secrecy. It reconnects on its own when the Mac or the device comes back. On the local
 network the device finds the Mac by name or address. From anywhere else it goes through a relay
 you host yourself, a small Cloudflare Worker in `relay/` that forwards encrypted bytes and can read
 none of them. See [docs/REMOTE_COMPANION.md](docs/REMOTE_COMPANION.md) for the design and how to
