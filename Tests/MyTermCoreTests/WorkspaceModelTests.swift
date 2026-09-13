@@ -227,9 +227,11 @@ final class WorkspaceModelTests: XCTestCase {
             }
         }
         XCTAssertEqual(found?.id, deepest.id)
+        // The exponential version took 28 seconds here. Two seconds is a hundred times what a
+        // loaded CI runner needs for the linear one, and still fourteen times under the bug.
         XCTAssertLessThan(
             elapsed,
-            .milliseconds(20),
+            .seconds(2),
             "Ten lookups of the deepest of 23 groups took \(elapsed)"
         )
     }
