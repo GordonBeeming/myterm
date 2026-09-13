@@ -1264,10 +1264,7 @@ public final class WorkspaceStore {
 
         // A setting the file predates comes back as its default. That is the schema growing, not
         // the file being broken, so it must not count as a repair or leave a backup behind.
-        for key in repairedSettings.keys where originalSettings[key] == nil {
-            repairedSettings.removeValue(forKey: key)
-        }
-        repairedSnapshot["globalSettings"] = repairedSettings
+        repairedSnapshot["globalSettings"] = repairedSettings.filter { originalSettings[$0.key] != nil }
         repaired = repairedSnapshot
     }
 
