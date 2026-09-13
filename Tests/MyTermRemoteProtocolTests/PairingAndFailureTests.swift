@@ -62,16 +62,20 @@ final class PairingAndFailureTests: XCTestCase {
 
     // MARK: - Saved Macs
 
-    func testTheSameMacAtANewAddressUpdatesItsEntryRatherThanAddingOne() {
+    /// A name at a new address is another row. From the data alone this is not tellable from
+    /// one Mac whose address changed, and two Macs sharing a name on two networks is the case
+    /// that loses a row and its token if the name is trusted, so the name is not. A Mac whose
+    /// address changed is still reached: the row it has is dialled by name first.
+    func testTheSameNameAtANewAddressIsAnotherRow() {
         let (once, first) = SavedConnectionList.upserting(
             host: "192.168.1.20", port: 52130, displayName: nil, serviceName: "Big Mac", into: []
         )
         let (twice, second) = SavedConnectionList.upserting(
             host: "192.168.1.44", port: 52130, displayName: nil, serviceName: "Big Mac", into: once
         )
-        XCTAssertEqual(twice.count, 1, "one Mac, one row, whatever its address today")
-        XCTAssertEqual(first.id, second.id)
-        XCTAssertEqual(second.host, "192.168.1.44")
+        XCTAssertEqual(twice.count, 2)
+        XCTAssertNotEqual(first.id, second.id)
+        XCTAssertEqual(twice.first?.host, "192.168.1.20", "the row that was there keeps its address")
         XCTAssertEqual(second.displayName, "Big Mac", "a Mac with a name is listed by it, not by an address")
     }
 

@@ -157,9 +157,15 @@ public enum SavedConnectionList {
         into connections: [SavedConnection]
     ) -> (connections: [SavedConnection], connection: SavedConnection) {
         // The same Mac at a new address is still the same Mac when its name matches. Without
-        // this, a Mac whose address changed would pile up one entry per address.
+        // this, a Mac whose address changed would pile up one entry per address. But a name
+        // stands in for an address only where the row has none, or has this one: two Macs on
+        // two networks can share a name, and the second must not take the first one's row.
         let index = connections.firstIndex { $0.host == host && $0.port == port }
-            ?? serviceName.flatMap { name in connections.firstIndex { $0.serviceName == name } }
+            ?? serviceName.flatMap { name in
+                connections.firstIndex {
+                    $0.serviceName == name && ($0.host.isEmpty || ($0.host == host && $0.port == port))
+                }
+            }
         if let index {
             var existing = connections[index]
             existing.host = host
