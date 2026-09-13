@@ -1268,14 +1268,20 @@ public final class WorkspaceStore {
         repaired = repairedSnapshot
     }
 
+    /// Differences between what the file held and what this build re-encodes, with `lhs` the file.
+    ///
+    /// A key the file has and the encoding does not is one this build has no decoder for: a file
+    /// from a newer build, not a broken one. It is not a repair, so it neither shows the banner
+    /// nor writes a backup. The key is still absent from the next write, because nothing here can
+    /// carry a value it does not understand.
     private static func jsonDifferenceCount(_ lhs: Any, _ rhs: Any) -> Int {
         if let lhs = lhs as? [String: Any], let rhs = rhs as? [String: Any] {
-            return Set(lhs.keys).union(rhs.keys).reduce(into: 0) { count, key in
-                guard let left = lhs[key], let right = rhs[key] else {
+            return rhs.keys.reduce(into: 0) { count, key in
+                guard let left = lhs[key] else {
                     count += 1
                     return
                 }
-                count += jsonDifferenceCount(left, right)
+                count += jsonDifferenceCount(left, rhs[key]!)
             }
         }
         if let lhs = lhs as? [Any], let rhs = rhs as? [Any] {

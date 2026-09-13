@@ -1227,4 +1227,33 @@ final class WorkspaceStoreTests: XCTestCase {
             XCTAssertEqual(error as? WorkspaceStoreError, .unsupportedVersion(99))
         }
     }
+
+    func testAKeyFromANewerBuildIsNotARepairAndLeavesNoBackup() throws {
+        // A file written by a build with fields this one has no decoder for. Reading it drops
+        // those fields, which is a downgrade, not a broken file: no banner, no recovery backup.
+        let url = temporaryURL()
+        let workspace = Workspace(title: "Newer", isPinned: false)
+        let snapshot = WorkspaceStoreSnapshot(workspaces: [workspace], selectedWorkspaceID: workspace.id)
+        var json = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(snapshot)) as? [String: Any]
+        )
+        var workspaces = try XCTUnwrap(json["workspaces"] as? [[String: Any]])
+        workspaces[0]["colourTheme"] = "aurora"
+        json["workspaces"] = workspaces
+        var settings = try XCTUnwrap(json["globalSettings"] as? [String: Any])
+        settings["ligatures"] = true
+        json["globalSettings"] = settings
+        json["lastOpenedBy"] = "0.9.0"
+        try JSONSerialization.data(withJSONObject: json).write(to: url)
+
+        let store = try WorkspaceStore(persistenceURL: url)
+
+        XCTAssertEqual(store.loadReport.structuralRepairCount, 0)
+        XCTAssertEqual(store.loadReport.identifierRepairCount, 0)
+        XCTAssertEqual(store.loadReport.droppedElementCount, 0)
+        XCTAssertEqual(store.loadReport.backupURLs, [])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.recoveryBackupURL.path))
+        XCTAssertEqual(store.workspaces.map(\.title), ["Newer"])
+    }
+
 }
