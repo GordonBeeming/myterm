@@ -197,11 +197,13 @@ final class InteractionBehaviorTests: XCTestCase {
         )
     }
 
-    func testWorkspaceRowDropUsesTheWholeRowToMoveSourceAfterItsNextSibling() {
+    func testWorkspaceRowDropMovesSourceAfterItsNextSiblingOnlyPastTheMidpoint() {
         let folderID = WorkspaceFolderID()
         let source = Workspace(title: "Source", folderID: folderID, isPinned: true)
         let next = Workspace(title: "Next", folderID: folderID, isPinned: true)
 
+        // The upper half of the next row is where the source already sits, so nothing moves and
+        // an open preview stays put; only the lower half swaps past it.
         XCTAssertEqual(
             SidebarDropCalculations.workspaceRowDrop(
                 source: source,
@@ -210,7 +212,7 @@ final class InteractionBehaviorTests: XCTestCase {
                 renderedHeight: 40,
                 in: [source, next]
             ),
-            .insert(before: nil, edge: .bottom)
+            .unchanged
         )
         XCTAssertEqual(
             SidebarDropCalculations.workspaceRowDrop(
@@ -224,7 +226,7 @@ final class InteractionBehaviorTests: XCTestCase {
         )
     }
 
-    func testWorkspaceRowDropUsesTheWholeRowToMoveSourceBeforeItsPreviousSibling() {
+    func testWorkspaceRowDropMovesSourceBeforeItsPreviousSiblingOnlyPastTheMidpoint() {
         let folderID = WorkspaceFolderID()
         let previous = Workspace(title: "Previous", folderID: folderID, isPinned: true)
         let source = Workspace(title: "Source", folderID: folderID, isPinned: true)
@@ -237,7 +239,7 @@ final class InteractionBehaviorTests: XCTestCase {
                 renderedHeight: 40,
                 in: [previous, source]
             ),
-            .insert(before: previous.id, edge: .top)
+            .unchanged
         )
         XCTAssertEqual(
             SidebarDropCalculations.workspaceRowDrop(
@@ -594,7 +596,7 @@ final class InteractionBehaviorTests: XCTestCase {
         )
     }
 
-    func testFolderRowDropUsesTheWholeRowToMoveSourceBeforeItsPreviousSibling() {
+    func testFolderRowDropMovesSourceBeforeItsPreviousSiblingOnlyPastTheMidpoint() {
         let a = WorkspaceFolder(id: WorkspaceFolderID(), title: "A")
         let b = WorkspaceFolder(id: WorkspaceFolderID(), title: "B")
         let c = WorkspaceFolder(id: WorkspaceFolderID(), title: "C")
@@ -609,7 +611,7 @@ final class InteractionBehaviorTests: XCTestCase {
                 renderedHeight: 40,
                 in: folders
             ),
-            .insert(before: b.id, edge: .top)
+            .unchanged
         )
         XCTAssertEqual(
             SidebarDropCalculations.folderRowDrop(
@@ -624,7 +626,7 @@ final class InteractionBehaviorTests: XCTestCase {
         )
     }
 
-    func testFolderRowDropUsesTheWholeRowToMoveSourceAfterItsNextSibling() {
+    func testFolderRowDropMovesSourceAfterItsNextSiblingOnlyPastTheMidpoint() {
         let a = WorkspaceFolder(id: WorkspaceFolderID(), title: "A")
         let b = WorkspaceFolder(id: WorkspaceFolderID(), title: "B")
         let c = WorkspaceFolder(id: WorkspaceFolderID(), title: "C")
@@ -639,7 +641,7 @@ final class InteractionBehaviorTests: XCTestCase {
                 renderedHeight: 40,
                 in: folders
             ),
-            .insert(before: c.id, edge: .bottom)
+            .unchanged
         )
         XCTAssertEqual(
             SidebarDropCalculations.folderRowDrop(
@@ -846,11 +848,22 @@ final class InteractionBehaviorTests: XCTestCase {
         let c = Workspace(title: "C", folderID: folderID)
         let workspaces = [a, b, c]
 
-        // Hovering the next sibling swaps past it, which the sidebar then shows as [B, A, C].
+        // The upper half of the next sibling is where A already sits: nothing moves. Crossing
+        // its midpoint swaps past it, which the sidebar then shows as [B, A, C].
+        XCTAssertEqual(
+            SidebarDropCalculations.workspaceRowFeedback(
+                .workspace(a.id),
+                target: b,
+                locationY: 5,
+                renderedHeight: 30,
+                in: workspaces
+            ),
+            .keep
+        )
         let swapped = SidebarDropCalculations.workspaceRowFeedback(
             .workspace(a.id),
             target: b,
-            locationY: 5,
+            locationY: 25,
             renderedHeight: 30,
             in: workspaces
         )
@@ -870,12 +883,23 @@ final class InteractionBehaviorTests: XCTestCase {
             ),
             .keep
         )
-        // The neighbour it displaced is judged in the previewed order, so hovering it swaps back.
+        // The neighbour it displaced is judged in the previewed order: its lower half is where A
+        // now sits, and crossing back over its midpoint swaps back.
         XCTAssertEqual(
             SidebarDropCalculations.workspaceRowFeedback(
                 .workspace(a.id),
                 target: b,
                 locationY: 25,
+                renderedHeight: 30,
+                in: previewed
+            ),
+            .keep
+        )
+        XCTAssertEqual(
+            SidebarDropCalculations.workspaceRowFeedback(
+                .workspace(a.id),
+                target: b,
+                locationY: 5,
                 renderedHeight: 30,
                 in: previewed
             ),
@@ -985,11 +1009,24 @@ final class InteractionBehaviorTests: XCTestCase {
             .none
         )
 
+        // The upper half of the next folder is where A already sits; its lower half swaps past it.
+        XCTAssertEqual(
+            SidebarDropCalculations.folderRowFeedback(
+                .folder(a.id),
+                folderID: b.id,
+                nextFolderID: c.id,
+                locationY: 5,
+                renderedHeight: 30,
+                workspaces: [filedInA],
+                folders: folders
+            ),
+            .keep
+        )
         let swapped = SidebarDropCalculations.folderRowFeedback(
             .folder(a.id),
             folderID: b.id,
             nextFolderID: c.id,
-            locationY: 5,
+            locationY: 25,
             renderedHeight: 30,
             workspaces: [filedInA],
             folders: folders
@@ -1021,6 +1058,18 @@ final class InteractionBehaviorTests: XCTestCase {
                 workspaces: [filedInA],
                 folders: previewed
             ),
+            .keep
+        )
+        XCTAssertEqual(
+            SidebarDropCalculations.folderRowFeedback(
+                .folder(a.id),
+                folderID: b.id,
+                nextFolderID: a.id,
+                locationY: 5,
+                renderedHeight: 30,
+                workspaces: [filedInA],
+                folders: previewed
+            ),
             .preview(.folder(a.id, before: b.id))
         )
         XCTAssertEqual(
@@ -1041,10 +1090,10 @@ final class InteractionBehaviorTests: XCTestCase {
 
     /// A live preview is re-resolved on every drag update, including the periodic ones AppKit sends
     /// while the pointer is still. Whatever a row resolves therefore has to be a fixed point: once
-    /// the preview is applied, the same row asked at the same location must keep it. The adjacent
-    /// swap rule breaks this whenever the target row stays put after the rows slide, because the
-    /// source is then adjacent to it in the previewed order and the whole-row swap fires again in
-    /// the other direction.
+    /// the preview is applied, the same row asked at the same location must keep it. The cases
+    /// below are the ones where the target row stays put after the rows slide, so the source ends
+    /// up adjacent to it in the previewed order and any rule that swaps neighbours without the
+    /// pointer crossing the midpoint would swap it straight back.
     func testWorkspaceRowFeedbackIsAFixedPointUnderAStationaryPointer() {
         let folderID = WorkspaceFolderID()
         let a = Workspace(title: "A", folderID: folderID)
@@ -1108,7 +1157,7 @@ final class InteractionBehaviorTests: XCTestCase {
             .folder(first.id),
             folderID: second.id,
             nextFolderID: nil,
-            locationY: 5,
+            locationY: 25,
             renderedHeight: 30,
             workspaces: workspaces,
             folders: folders
@@ -1133,7 +1182,7 @@ final class InteractionBehaviorTests: XCTestCase {
             SidebarDropCalculations.workspaceRowFeedback(
                 .folder(first.id),
                 target: underPointer,
-                locationY: 5,
+                locationY: 25,
                 renderedHeight: 30,
                 in: workspaces
             ),
@@ -1360,7 +1409,9 @@ final class InteractionBehaviorTests: XCTestCase {
                         in: workspaces
                     )
                     guard case .preview(let preview) = feedback else {
-                        XCTAssertEqual(feedback, SidebarDropFeedback.none, label)
+                        // A pointer half that names the slot the source already sits in keeps
+                        // the rows still; nothing else short of a preview is expected here.
+                        XCTAssertEqual(feedback, .keep, label)
                         continue
                     }
                     guard case .workspace(let sourceID, let folderID, let isPinned, let before) = preview else {

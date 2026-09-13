@@ -177,6 +177,9 @@ enum SidebarDropCalculations {
 
     enum WorkspaceRowDrop: Equatable {
         case rejected
+        /// The pointer names the slot the source already occupies, so there is nothing to move
+        /// and nothing to close: an open preview stays exactly as it is.
+        case unchanged
         case insert(before: WorkspaceID?, edge: InsertionEdge)
     }
 
@@ -205,26 +208,17 @@ enum SidebarDropCalculations {
             return .rejected
         }
 
-        if let sourceIndex = siblings.firstIndex(where: { $0.id == source.id }) {
-            // A neighbouring row is one large swap target. Requiring the pointer to land in the
-            // "moving" half makes a common one-slot reorder needlessly precise.
-            if sourceIndex == targetIndex + 1 {
-                return .insert(before: target.id, edge: .top)
-            }
-            if targetIndex == sourceIndex + 1 {
-                return .insert(before: siblings.dropFirst(targetIndex + 1).first?.id, edge: .bottom)
-            }
-        }
-
+        // The midpoint alone decides, even for a neighbouring row. The rows are judged in the
+        // order the sidebar is showing, so any rule that moves the source without the pointer
+        // crossing something would move it again on the next update: once a swap lands the source
+        // beside the target, a whole-row swap rule would swap it straight back.
         let edge: InsertionEdge = locationY <= renderedHeight / 2 ? .top : .bottom
         let before = edge == .top ? target.id : siblings.dropFirst(targetIndex + 1).first?.id
 
-        // A drop that would land source right back where it already sits shows no line and
-        // moves nothing, rather than flickering an insertion indicator for a no-op reorder.
         if let sourceIndex = siblings.firstIndex(where: { $0.id == source.id }) {
             let sourceSuccessorID = siblings.dropFirst(sourceIndex + 1).first?.id
             if before == source.id || before == sourceSuccessorID {
-                return .rejected
+                return .unchanged
             }
         }
 
@@ -340,6 +334,8 @@ enum SidebarDropCalculations {
         ) {
         case .rejected:
             return .none
+        case .unchanged:
+            return .keep
         case .insert(let before, _):
             // The target row owns the destination folder and pinned band, so a source from
             // elsewhere previews as refiled and repinned beside it.
@@ -386,6 +382,8 @@ enum SidebarDropCalculations {
             ) {
             case .rejected:
                 return .none
+            case .unchanged:
+                return .keep
             case .insert(let before, _):
                 return .preview(.folder(sourceID, before: before))
             }
@@ -396,11 +394,13 @@ enum SidebarDropCalculations {
 
     enum FolderRowDrop: Equatable {
         case rejected
+        /// See `WorkspaceRowDrop.unchanged`.
+        case unchanged
         case insert(before: WorkspaceFolderID?, edge: InsertionEdge)
     }
 
-    /// Adjacent folders use the entire neighbouring row as a swap target. Non-adjacent folders
-    /// still use the upper and lower halves to choose an insertion boundary.
+    /// The upper and lower halves of the row choose the insertion boundary, for neighbouring
+    /// folders too, for the reason given in `workspaceRowDrop`.
     static func folderRowDrop(
         sourceID: WorkspaceFolderID,
         folderID: WorkspaceFolderID,
@@ -414,15 +414,8 @@ enum SidebarDropCalculations {
         }
 
         guard let sourceIndex = folders.firstIndex(where: { $0.id == sourceID }),
-              let targetIndex = folders.firstIndex(where: { $0.id == folderID }) else {
+              folders.contains(where: { $0.id == folderID }) else {
             return .rejected
-        }
-
-        if sourceIndex == targetIndex + 1 {
-            return .insert(before: folderID, edge: .top)
-        }
-        if targetIndex == sourceIndex + 1 {
-            return .insert(before: nextFolderID, edge: .bottom)
         }
 
         let edge: InsertionEdge = locationY <= renderedHeight / 2 ? .top : .bottom
@@ -435,7 +428,7 @@ enum SidebarDropCalculations {
 
         let sourceSuccessorID = folders.dropFirst(sourceIndex + 1).first?.id
         if before == sourceID || before == sourceSuccessorID {
-            return .rejected
+            return .unchanged
         }
 
         return .insert(before: before, edge: edge)
