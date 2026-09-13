@@ -34,7 +34,11 @@ extension AppModel {
         tabID: TabID,
         sessionID: TerminalSessionID
     ) {
+        // A title written while the shell is in front is the shell's, whatever the hooks last
+        // said: an agent killed without its SessionEnd is still on the books until the pane is
+        // seen to be at its prompt.
         guard liveAgentTabs[tabID] != nil,
+              paneHasForegroundProcess(sessionID: sessionID),
               let name = AgentSessionTitle.sanitized(title),
               let terminal = tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)?
                   .terminalSession, terminal.id == sessionID,
@@ -55,6 +59,13 @@ extension AppModel {
 
     func forgetAgentPresence(forTab tabID: TabID) {
         liveAgentTabs.removeValue(forKey: tabID)
+    }
+
+    /// Whether something other than the shell is in front of the pane. A pane with no process
+    /// known to this model, as in a test without terminals, is given the benefit of the doubt.
+    func paneHasForegroundProcess(sessionID: TerminalSessionID) -> Bool {
+        guard let process = terminalSessions[sessionID] else { return true }
+        return process.activeForegroundProcessName != nil
     }
 
     /// Puts the tabs of a workspace back to their plain labels.

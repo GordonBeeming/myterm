@@ -2449,6 +2449,18 @@ final class AppModel {
             // Nothing is running in a pane whose shell has gone, whatever the last hook said.
             forgetAgentAttention(forTab: tabID)
             forgetAgentPresence(forTab: tabID)
+        case .foregroundProcessChanged(let name):
+            // The shell back in front of a pane that held an agent means the agent left without
+            // its own hook saying so. Everything that hook would have retired is retired here.
+            guard name == nil, liveAgentTabs[tabID] != nil else { return }
+            forgetAgentAttention(forTab: tabID)
+            forgetAgentPresence(forTab: tabID)
+            forgetAgentSessionOfIdlePane(
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID,
+                sessionID: sessionID
+            )
         case .agentActivity(let report):
             recordAgentActivity(
                 report,

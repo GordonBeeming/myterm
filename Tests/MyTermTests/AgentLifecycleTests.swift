@@ -176,6 +176,70 @@ final class AgentLifecycleTests: XCTestCase {
         XCTAssertNil(fixture.model.liveAgentTabs[fixture.tabID])
     }
 
+    // MARK: - An agent killed without its SessionEnd
+
+    func testAKilledAgentsPaneDoesNotTakeTheShellsTitle() throws {
+        let fixture = try makeFixture(isActive: false)
+        fixture.session.activeForegroundProcessName = "claude"
+        fixture.emit(.ready, session: "abc")
+        fixture.title("✳ Fix the build")
+        XCTAssertEqual(fixture.displayTitle, "Fix the build")
+
+        // kill -9: no SessionEnd. The shell has the pane back and writes its own title.
+        fixture.session.activeForegroundProcessName = nil
+        fixture.title("myterm — zsh")
+
+        XCTAssertEqual(fixture.displayTitle, "Fix the build", "a shell title is never a conversation name")
+    }
+
+    func testAReplyToAPaneWhoseAgentIsGoneIsRefused() throws {
+        let fixture = try makeFixture(isActive: false)
+        fixture.session.activeForegroundProcessName = "claude"
+        fixture.emit(.working, session: "abc")
+        XCTAssertTrue(fixture.model.sendInput(tabID: fixture.tabID.description, bytes: ArraySlice("go on".utf8)))
+        XCTAssertEqual(String(decoding: fixture.session.typed, as: UTF8.self), "go on")
+
+        fixture.session.activeForegroundProcessName = nil
+
+        XCTAssertFalse(
+            fixture.model.sendInput(tabID: fixture.tabID.description, bytes: ArraySlice("yes, delete it".utf8)),
+            "with the agent gone, those words would run in the shell"
+        )
+        XCTAssertEqual(String(decoding: fixture.session.typed, as: UTF8.self), "go on", "nothing reached the pane")
+    }
+
+    func testTheShellComingBackInFrontRetiresTheAgentTheHooksNeverSaidLeft() throws {
+        let fixture = try makeFixture(isActive: false)
+        fixture.session.activeForegroundProcessName = "claude"
+        fixture.emit(.working, session: "abc")
+        fixture.title("✳ Fix the build")
+        XCTAssertEqual(fixture.model.agentSession(tabID: fixture.tabID.description)?.sessionID, "abc")
+
+        fixture.session.activeForegroundProcessName = nil
+        fixture.session.emit(.foregroundProcessChanged(nil))
+
+        XCTAssertNil(fixture.model.agentAttention(forTab: fixture.tabID), "the cook goes")
+        XCTAssertNil(fixture.model.liveAgentTabs[fixture.tabID], "so does the agent")
+        XCTAssertNil(fixture.savedSession, "and the conversation, as leaving the agent would")
+        XCTAssertNil(fixture.model.agentSession(tabID: fixture.tabID.description), "so a device is offered nothing")
+        XCTAssertEqual(fixture.displayTitle, "Terminal", "and the tab is back to its plain label")
+    }
+
+    func testTheShellInFrontOfAPaneWithNoAgentChangesNothing() throws {
+        // A relaunch types the resume command into the shell, and the shell is in front until
+        // the agent starts. Nothing has reported yet, so there is nothing to retire.
+        let fixture = try makeFixture(isActive: false)
+        fixture.session.activeForegroundProcessName = "claude"
+        fixture.emit(.working, session: "abc")
+        fixture.model.persistTerminalSnapshots()
+        let relaunched = try makeFixture(in: fixture.directory, isActive: false)
+        XCTAssertEqual(relaunched.savedSession?.sessionID, "abc")
+
+        relaunched.session.emit(.foregroundProcessChanged(nil))
+
+        XCTAssertEqual(relaunched.savedSession?.sessionID, "abc")
+    }
+
     // MARK: - Session identity
 
     func testCodexNeverLeavesAConversationBehindHoweverManyIdentifiersItReports() throws {
@@ -283,8 +347,17 @@ final class AgentLifecycleTests: XCTestCase {
             model.tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)?.terminalSession?.agentSession
         }
 
+        var displayTitle: String? {
+            model.tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)
+                .map { $0.customTitle ?? $0.automaticDisplayTitle }
+        }
+
         func emit(_ activity: AgentActivity, agent: String = "claude", session sessionID: String) {
             session.emit(.agentActivity(AgentActivityReport(agent: agent, activity: activity, sessionID: sessionID)))
+        }
+
+        func title(_ title: String) {
+            session.emit(.titleChanged(title))
         }
     }
 
@@ -340,11 +413,13 @@ private final class CapturingSession: TerminalProcessSession {
     var isRunning = false
     var activeForegroundProcessName: String?
     var onEvent: (@MainActor (TerminalSessionEvent) -> Void)?
+    private(set) var typed: [UInt8] = []
 
     func terminalView() -> NSView { NSView() }
     func start() throws { isRunning = true }
     func resize(columns: Int, rows: Int) {}
     func focus() {}
     func terminate() { isRunning = false }
+    func sendInput(_ bytes: ArraySlice<UInt8>) { typed.append(contentsOf: bytes) }
     func emit(_ event: TerminalSessionEvent) { onEvent?(event) }
 }

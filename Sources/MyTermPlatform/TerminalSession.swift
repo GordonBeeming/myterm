@@ -163,6 +163,9 @@ public enum TerminalSessionEvent: Equatable, Sendable {
     case openURL(URL)
     case processTerminated(exitCode: Int32?)
     case failed(TerminalSessionFailure)
+    /// The process in front of the pane's shell changed. `nil` means the shell has the pane
+    /// back, which is the one thing an agent killed without its own hook cannot report.
+    case foregroundProcessChanged(String?)
 }
 
 public enum TerminalLinkRouter {

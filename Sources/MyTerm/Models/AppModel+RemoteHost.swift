@@ -43,9 +43,13 @@ extension AppModel: RemoteHostDataSource {
     }
 
     /// Types into a tab without the device holding an attachment.
+    ///
+    /// This is the reply path, and a reply is for the agent. With the shell in front, the words
+    /// would run as a command, so they are refused rather than typed.
     func sendInput(tabID: String, bytes: ArraySlice<UInt8>) -> Bool {
         guard let sessionID = terminalSessionID(forRemoteTab: tabID),
-              let session = terminalSessions[sessionID] else {
+              let session = terminalSessions[sessionID],
+              session.activeForegroundProcessName != nil else {
             return false
         }
         session.sendInput(bytes)
