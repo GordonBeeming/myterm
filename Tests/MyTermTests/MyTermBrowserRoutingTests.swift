@@ -186,6 +186,45 @@ final class MyTermBrowserRoutingTests: XCTestCase {
         )
     }
 
+    func testEnvironmentKnowsAnotherBuildsShimDirectoryByItsMarkerNotByFileName() throws {
+        // A pane whose shell is not zsh never resolves MYTERM_ORIGINAL_ZDOTDIR, so a MyTerm
+        // launched from it inherits the parent's shim directory as ZDOTDIR. The launcher must
+        // recognise that directory as a shim by the first line of its _myterm_common and leave
+        // it out, while a user's own ZDOTDIR that merely holds a helper of the same name is
+        // still carried forward as theirs.
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let launcher = directory.appending(path: "myterm-browser", directoryHint: .notDirectory)
+        try Data("#!/bin/sh\nexit 0\n".utf8).write(to: launcher)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: launcher.path)
+
+        let otherShimDirectory = directory.appending(path: "OtherMyTerm.app/Contents/Resources/zsh", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: otherShimDirectory, withIntermediateDirectories: true)
+        try Data("\(MyTermBrowserLauncher.zshShimMarker)\n# shellcheck shell=bash\n".utf8)
+            .write(to: otherShimDirectory.appending(path: MyTermBrowserLauncher.zshCommonShimFileName, directoryHint: .notDirectory))
+        let otherBuild = MyTermBrowserLauncher.environment(
+            executableURL: launcher,
+            baseEnvironment: ["PATH": "/usr/bin", "ZDOTDIR": otherShimDirectory.path]
+        )
+        XCTAssertNil(otherBuild[MyTermBrowserLauncher.originalZDOTDIREnvironmentKey])
+
+        let userDirectory = directory.appending(path: "config/zsh", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: userDirectory, withIntermediateDirectories: true)
+        try Data("# my own helper, nothing to do with MyTerm\n".utf8)
+            .write(to: userDirectory.appending(path: MyTermBrowserLauncher.zshCommonShimFileName, directoryHint: .notDirectory))
+        let userHelper = MyTermBrowserLauncher.environment(
+            executableURL: launcher,
+            baseEnvironment: ["PATH": "/usr/bin", "ZDOTDIR": userDirectory.path]
+        )
+        XCTAssertEqual(userHelper[MyTermBrowserLauncher.originalZDOTDIREnvironmentKey], userDirectory.path)
+
+        // The shipped shim is what the marker has to match, or the launcher and the shim
+        // disagree about which directories are MyTerm's.
+        let shippedShim = repositoryRoot.appending(path: "Resources/zsh", directoryHint: .isDirectory)
+        XCTAssertTrue(MyTermBrowserLauncher.isZshShimDirectory(atPath: shippedShim.path))
+        XCTAssertFalse(MyTermBrowserLauncher.isZshShimDirectory(atPath: directory.path))
+    }
+
     func testBrowserRoutesRoundTripCompleteURLsIndependently() throws {
         let workspaceID = WorkspaceID()
         let tabID = TabID()

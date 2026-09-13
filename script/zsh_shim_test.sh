@@ -387,4 +387,39 @@ assert_contains "$RESOURCE_DIR/zsh/.zshenv" "$foreign_shim_output" \
 assert_contains "ORIG=$USER_ZDOTDIR_HOME" "$foreign_shim_output" \
   "MYTERM_ORIGINAL_ZDOTDIR must end up as HOME, not the other copy's shim directory"
 
+# A shim directory is known by the first line of its _myterm_common, not by
+# the file name. A user's real ZDOTDIR may hold a helper of that name, and
+# treating the name alone as proof of a shim would send that user to HOME and
+# skip every startup file in the directory they chose.
+HELPER_ZDOTDIR="$SCRATCH_DIR/helper-zdotdir"
+mkdir -p "$HELPER_ZDOTDIR"
+printf '# my own helper, nothing to do with MyTerm\nexport MY_HELPER=loaded\n' > "$HELPER_ZDOTDIR/_myterm_common"
+cat > "$HELPER_ZDOTDIR/.zshenv" <<EOF
+. "\$ZDOTDIR/_myterm_common"
+echo "helper-zdotdir.zshenv-ran" >> "$MARKER_FILE"
+EOF
+printf 'echo "helper-zdotdir.zshrc-ran" >> "%s"\n' "$MARKER_FILE" > "$HELPER_ZDOTDIR/.zshrc"
+: > "$MARKER_FILE"
+helper_output="$(
+  env -i \
+    HOME="$USER_ZDOTDIR_HOME" \
+    ZDOTDIR="$RESOURCE_DIR/zsh" \
+    MYTERM_ORIGINAL_ZDOTDIR="$HELPER_ZDOTDIR" \
+    MYTERM_RESOURCE_DIR="$RESOURCE_DIR" \
+    MYTERM_OPEN_SHIM="$RESOURCE_DIR/open" \
+    PATH="/usr/bin:/bin" \
+    zsh -ic 'type open; printf "ORIG=%s HELPER=%s\n" "$MYTERM_ORIGINAL_ZDOTDIR" "${MY_HELPER-unset}"' </dev/null 2>&1
+)"
+markers="$(cat "$MARKER_FILE")"
+expected_helper_order="$(printf 'helper-zdotdir%s-ran\n' .zshenv .zshrc)"
+if [ "$markers" != "$expected_helper_order" ]; then
+  printf 'FAIL: a user ZDOTDIR holding a helper named _myterm_common must still be honoured\nexpected:\n%s\ngot:\n%s\n' \
+    "$expected_helper_order" "$markers" >&2
+  exit 1
+fi
+assert_contains "ORIG=$HELPER_ZDOTDIR HELPER=loaded" "$helper_output" \
+  "a helper named _myterm_common in the user's ZDOTDIR is the user's own file, not a MyTerm shim"
+assert_contains "shell function" "$helper_output" \
+  "open must still be the shim function when the user's ZDOTDIR holds a helper named _myterm_common"
+
 printf 'zsh shim checks passed\n'

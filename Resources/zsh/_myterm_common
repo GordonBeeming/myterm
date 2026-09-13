@@ -1,4 +1,10 @@
+# MyTerm zsh shim
 # shellcheck shell=bash
+#
+# The first line is this directory's identity. MyTerm and this file both read
+# it, so a copy of the shim directory is recognised wherever it lives: a user's
+# own ZDOTDIR may hold a helper of this same name, and a file name alone would
+# mistake that directory for a shim and skip every startup file in it.
 #
 # The hand-off every MyTerm zsh shim performs, in one place.
 #
@@ -31,9 +37,15 @@ fi
 # is not zsh never runs this file, so it never resolves MYTERM_ORIGINAL_ZDOTDIR,
 # and a MyTerm launched from it inherits the parent's shim directory as though
 # it were the user's own. Sourcing that would run the user's files through the
-# other copy's shims instead of these.
-if [ -r "$_myterm_user_dir/_myterm_common" ]; then
-  _myterm_user_dir="$_myterm_home"
+# other copy's shims instead of these. A shim directory is known by the first
+# line of its _myterm_common, read with the builtin so startup pays no fork.
+if [ -f "$_myterm_user_dir/_myterm_common" ] && [ -r "$_myterm_user_dir/_myterm_common" ]; then
+  _myterm_first_line=""
+  IFS= read -r _myterm_first_line < "$_myterm_user_dir/_myterm_common" 2>/dev/null
+  if [ "$_myterm_first_line" = "# MyTerm zsh shim" ]; then
+    _myterm_user_dir="$_myterm_home"
+  fi
+  unset _myterm_first_line
 fi
 MYTERM_ORIGINAL_ZDOTDIR="$_myterm_user_dir"
 export MYTERM_ORIGINAL_ZDOTDIR
