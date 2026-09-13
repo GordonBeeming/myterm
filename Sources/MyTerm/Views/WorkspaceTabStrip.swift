@@ -185,6 +185,10 @@ struct WorkspaceTabStrip: View {
 
     private func release(source: PaneTabDragSource, tab: MyTermCore.Tab, at location: CGPoint) {
         let isClick = model.isPaneTabDragClick(source: source, releaseLocation: location)
+        // The mouse-up location need not match the last hover, and the finish resolves its target
+        // from the location it is given. One more hover update at that location brings the preview
+        // target in line first, so the animation is chosen from the target the drop commits.
+        model.updatePaneTabDrag(source: source, location: location)
         _ = withAnimation(releaseAnimation) {
             model.finishPaneTabDrag(source: source, finalLocation: location)
         }

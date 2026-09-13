@@ -2440,6 +2440,45 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 2)
     }
 
+    /// The strip runs one more hover update at the release location before it picks the drop
+    /// animation, so this pins the model contract it relies on: hovering at a location previews
+    /// exactly the target a finish at that same location commits, whatever the earlier hovers
+    /// pointed at.
+    func testPaneTabDragHoverAtTheReleaseLocationPreviewsTheTargetTheDropCommits() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let sourceGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.createTerminalTab(in: sourceGroupID)
+        let movedTabID = try XCTUnwrap(model.selectedTab?.id)
+        let destinationGroupID = try createPaneBesideSource(model, sourceGroupID: sourceGroupID, tabID: movedTabID)
+        model.createTerminalTab(in: sourceGroupID)
+        let draggedTabID = try XCTUnwrap(model.selectedTab?.id)
+        XCTAssertEqual(model.selectedWorkspace.group(id: sourceGroupID)?.tabs.count, 2)
+        let source = PaneTabDragSource(workspaceID: workspaceID, tabGroupID: sourceGroupID, tabID: draggedTabID)
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: sourceGroupID, origin: .zero)
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: destinationGroupID, origin: CGPoint(x: 200, y: 0))
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 140, y: 10))
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
+        XCTAssertEqual(
+            model.paneTabDragPreviewTarget,
+            .tabStrip(tabGroupID: sourceGroupID, insertionIndex: 0),
+            "The last hover previews a reorder within the source strip."
+        )
+
+        let releaseLocation = CGPoint(x: 260, y: 60)
+        model.updatePaneTabDrag(source: source, location: releaseLocation)
+        XCTAssertEqual(model.paneTabDragPreviewTarget, .paneCenter(tabGroupID: destinationGroupID))
+        let result = model.finishPaneTabDrag(source: source, finalLocation: releaseLocation)
+
+        XCTAssertEqual(result, .moved(destinationTabGroupID: destinationGroupID))
+        XCTAssertEqual(model.selectedWorkspace.groupID(containing: draggedTabID), destinationGroupID)
+        XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 2)
+        XCTAssertNil(model.paneTabDragSession)
+    }
+
     func testPaneTabDragReordersWithinItsSourceStripWithoutCreatingAPane() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
