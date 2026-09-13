@@ -97,9 +97,12 @@ assert_contains "zshrc-ran" "$markers" "the user's own .zshrc must still run"
 # would never run.
 assert_contains "zlogout-ran" "$markers" "the user's own .zlogout must still run on shell exit"
 
-original_zdotdir_output="$(run_zsh -lic 'printf %s "$MYTERM_ORIGINAL_ZDOTDIR"' 2>&1)"
-if [ "$original_zdotdir_output" != "$FAKE_HOME" ]; then
-  printf 'FAIL: MYTERM_ORIGINAL_ZDOTDIR was "%s", expected "%s"\n' "$original_zdotdir_output" "$FAKE_HOME" >&2
+# MYTERM_ORIGINAL_ZDOTDIR is present only when the user has a ZDOTDIR of their
+# own. Filling it in with HOME would leave the next shim in the chain, and any
+# nested zsh, unable to tell a user who chose HOME from one who chose nothing.
+original_zdotdir_output="$(run_zsh -lic 'printf %s "${MYTERM_ORIGINAL_ZDOTDIR-unset}"' 2>&1)"
+if [ "$original_zdotdir_output" != "unset" ]; then
+  printf 'FAIL: MYTERM_ORIGINAL_ZDOTDIR was "%s" for a user with no ZDOTDIR, expected it unset\n' "$original_zdotdir_output" >&2
   exit 1
 fi
 
@@ -271,6 +274,36 @@ assert_contains "relocated-zshrc-ran" "$markers" \
 assert_not_contains "home-zshrc-ran" "$markers" \
   "an unconditional ZDOTDIR export in .zshenv must not also run the .zshrc in HOME"
 
+# A user who explicitly set ZDOTDIR=$HOME reaches the shim with that value in
+# MYTERM_ORIGINAL_ZDOTDIR. Plain zsh shows their .zshenv a set ZDOTDIR, so the
+# guarded relocation above does not fire and the chain stays in HOME. The shim
+# must not confuse that with a user who has no ZDOTDIR at all just because the
+# two resolve to the same directory.
+cat > "$RELOCATING_HOME/.zshenv" <<EOF
+echo "zshenv-saw-ZDOTDIR=\${ZDOTDIR-unset}" >> "$MARKER_FILE"
+export ZDOTDIR="\${ZDOTDIR:-\$HOME/.config/zsh}"
+EOF
+: > "$MARKER_FILE"
+explicit_home_output="$(
+  env -i \
+    HOME="$RELOCATING_HOME" \
+    ZDOTDIR="$RESOURCE_DIR/zsh" \
+    MYTERM_ORIGINAL_ZDOTDIR="$RELOCATING_HOME" \
+    MYTERM_RESOURCE_DIR="$RESOURCE_DIR" \
+    MYTERM_OPEN_SHIM="$RESOURCE_DIR/open" \
+    PATH="/usr/bin:/bin" \
+    zsh -ic 'printf "ORIG=%s\n" "$MYTERM_ORIGINAL_ZDOTDIR"' </dev/null 2>&1
+)"
+markers="$(cat "$MARKER_FILE")"
+assert_contains "zshenv-saw-ZDOTDIR=$RELOCATING_HOME" "$markers" \
+  "a user who explicitly set ZDOTDIR=\$HOME must see it set, not unset, in their .zshenv"
+assert_contains "home-zshrc-ran" "$markers" \
+  "with ZDOTDIR explicitly set to HOME the guarded relocation must not fire, so the .zshrc in HOME runs"
+assert_not_contains "relocated-zshrc-ran" "$markers" \
+  "with ZDOTDIR explicitly set to HOME the .zshrc under .config/zsh must not run"
+assert_contains "ORIG=$RELOCATING_HOME" "$explicit_home_output" \
+  "MYTERM_ORIGINAL_ZDOTDIR must keep the user's explicit HOME"
+
 # A user who already had ZDOTDIR in their environment reaches the shim with
 # MyTermBrowserLauncher having carried it into MYTERM_ORIGINAL_ZDOTDIR. Every
 # one of their startup files has to run from that directory, in zsh's own
@@ -373,7 +406,7 @@ foreign_shim_output="$(
     MYTERM_RESOURCE_DIR="$RESOURCE_DIR" \
     MYTERM_OPEN_SHIM="$RESOURCE_DIR/open" \
     PATH="$RESOURCE_DIR:$OTHER_RESOURCE_DIR:/usr/bin:/bin" \
-    zsh -lic 'type open; printf "ORIG=%s\n" "$MYTERM_ORIGINAL_ZDOTDIR"' </dev/null 2>&1
+    zsh -lic 'type open; printf "ORIG=%s\n" "${MYTERM_ORIGINAL_ZDOTDIR-unset}"' </dev/null 2>&1
 )"
 markers="$(cat "$MARKER_FILE")"
 expected_home_order="$(printf 'home%s-ran\n' .zshenv .zprofile .zshrc .zlogin .zlogout)"
@@ -384,8 +417,8 @@ if [ "$markers" != "$expected_home_order" ]; then
 fi
 assert_contains "$RESOURCE_DIR/zsh/.zshenv" "$foreign_shim_output" \
   "open must come from this copy's shim, not the other copy's"
-assert_contains "ORIG=$USER_ZDOTDIR_HOME" "$foreign_shim_output" \
-  "MYTERM_ORIGINAL_ZDOTDIR must end up as HOME, not the other copy's shim directory"
+assert_contains "ORIG=unset" "$foreign_shim_output" \
+  "MYTERM_ORIGINAL_ZDOTDIR must end up unset, not the other copy's shim directory"
 
 # A shim directory is known by the first line of its _myterm_common, not by
 # the file name. A user's real ZDOTDIR may hold a helper of that name, and

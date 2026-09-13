@@ -77,9 +77,8 @@ enum MyTermBrowserLauncher {
         // further nested (MyTerm-in-MyTerm-in-MyTerm) inherits ZDOTDIR pointing at the parent's own
         // shim directory, not the user's real one — the parent's shim already resolved the true user
         // directory into MYTERM_ORIGINAL_ZDOTDIR before re-pointing ZDOTDIR back at itself for the
-        // rest of its own chain. Falling back to ZDOTDIR here would mirror the parent's shim directory
-        // forward as though it were the user's, and the grandchild shim would source it as real
-        // dotfiles instead of skipping straight to HOME.
+        // rest of its own chain. The parent leaves MYTERM_ORIGINAL_ZDOTDIR out for a user with no
+        // ZDOTDIR of their own, which is when the marker check on ZDOTDIR does the work.
         let originalZDOTDIRSource = baseEnvironment[originalZDOTDIREnvironmentKey].flatMap { $0.isEmpty ? nil : $0 }
             ?? baseEnvironment[zdotdirEnvironmentKey]
         if let originalZDOTDIR = originalZDOTDIRSource, !originalZDOTDIR.isEmpty,
