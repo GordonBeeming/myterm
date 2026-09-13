@@ -44,13 +44,22 @@ enum AgentPermissionMenu {
 
     /// Whether these rows are showing a permission prompt at all.
     ///
-    /// The question is required, not just the numbers: a numbered list in a command's output is not
-    /// something to answer with a keystroke.
+    /// Three things are required, not just the numbers. The question, because a numbered list in
+    /// a command's output is not something to answer with a keystroke. The options. And the
+    /// cursor: the CLI draws `❯` ahead of the option the cursor sits on, wherever it has been
+    /// moved to, and a menu with no cursor is a menu nobody is being asked. A file the agent read
+    /// that quotes one reads just like the real thing otherwise.
     static func isPrompt(rows: [String]) -> Bool {
         let text = rows.joined(separator: "\n").lowercased()
         guard text.contains("do you want to") || text.contains("do you want") else { return false }
-        return !numberedOptions(rows: rows).isEmpty
+        guard !numberedOptions(rows: rows).isEmpty else { return false }
+        return rows.contains { row in
+            row.drop { $0 == " " || $0 == "\t" }.first == selectionMarker && option(in: row) != nil
+        }
     }
+
+    /// What the CLI draws ahead of the option the cursor is on.
+    static let selectionMarker: Character = "❯"
 
     /// Every numbered option on the screen, in the order they appear.
     static func numberedOptions(rows: [String]) -> [Option] {

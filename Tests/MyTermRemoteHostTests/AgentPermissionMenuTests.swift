@@ -55,7 +55,7 @@ final class AgentPermissionMenuTests: XCTestCase {
     func testARepeatedNumberIsReadAsNotAMenu() {
         // Two options claiming the same number means this is being misread, and a misread menu is
         // the one thing that must never produce a keystroke.
-        let rows = ["Do you want to proceed?", "1. Yes", "1. No"]
+        let rows = ["Do you want to proceed?", "❯ 1. Yes", "  1. No"]
         XCTAssertTrue(AgentPermissionMenu.numberedOptions(rows: rows).isEmpty)
     }
 
@@ -76,7 +76,7 @@ final class AgentPermissionMenuTests: XCTestCase {
         // that turns off every later prompt, which is the thing this is here to prevent.
         for wording in ["don't ask again", "do not ask again", "Don\u{2019}t ask again",
                         "switch to auto mode", "always allow this", "remember this choice"] {
-            let rows = ["Do you want to proceed?", "1. Yes", "2. Yes, and \(wording)", "3. No"]
+            let rows = ["Do you want to proceed?", "❯ 1. Yes", "  2. Yes, and \(wording)", "  3. No"]
             let offered = AgentPermissionMenu.offerableOptions(rows: rows)
             XCTAssertEqual(offered.map(\.number), [1, 3], "should not offer: \(wording)")
         }

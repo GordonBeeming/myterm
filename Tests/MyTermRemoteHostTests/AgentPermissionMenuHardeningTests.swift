@@ -34,7 +34,7 @@ final class AgentPermissionMenuHardeningTests: XCTestCase {
             "Yes, and don't ask again this session",
             "auto-accept edits",
         ] {
-            let rows = ["Do you want to proceed?", "1. Yes", "2. Yes, \(wording)", "3. No"]
+            let rows = ["Do you want to proceed?", "❯ 1. Yes", "  2. Yes, \(wording)", "  3. No"]
             XCTAssertEqual(AgentPermissionMenu.offerableOptions(rows: rows).map(\.number), [1, 3], wording)
             let asked = RemoteAgentPromptOption(number: 2, label: "Yes, \(wording)")
             XCTAssertNil(AgentPermissionMenu.keystrokes(forAnswering: asked, rows: rows), wording)
@@ -68,7 +68,7 @@ final class AgentPermissionMenuHardeningTests: XCTestCase {
 
     func testACutOffLabelStillAnswersWhenNeitherSideIsRefused() {
         // The allowance the two tests above narrow must still hold for the case it exists for.
-        let rows = ["Do you want to proceed?", "1. Yes", "2. No, and tell Claude what to do diff"]
+        let rows = ["Do you want to proceed?", "❯ 1. Yes", "  2. No, and tell Claude what to do diff"]
         let no = RemoteAgentPromptOption(number: 2, label: "No, and tell Claude what to do differently (esc)")
         XCTAssertEqual(AgentPermissionMenu.keystrokes(forAnswering: no, rows: rows), Array("2\r".utf8))
     }
@@ -95,7 +95,7 @@ final class AgentPermissionMenuHardeningTests: XCTestCase {
 
     func testMalformedRowsAreNotChoices() {
         for row in ["1.", "1. ", "❯", "❯ 1.", "❯ 1", ". Yes", "1) ", "100. Yes", "one. Yes", "", "   ", "\t"] {
-            let rows = ["Do you want to proceed?", row, "2. No"]
+            let rows = ["Do you want to proceed?", row, "❯ 2. No"]
             XCTAssertEqual(AgentPermissionMenu.numberedOptions(rows: rows).map(\.number), [2], "row: \(row.debugDescription)")
         }
     }
@@ -109,19 +109,19 @@ final class AgentPermissionMenuHardeningTests: XCTestCase {
     func testTheQuestionMayBeAnywhereOnTheScreenIncludingScrolledPastTheMenu() {
         // The reader joins the rows, so the order does not matter; what matters is that a
         // numbered list with no question anywhere is never answered.
-        let rows = ["1. Yes", "2. No", "Do you want to proceed?"]
+        let rows = ["❯ 1. Yes", "  2. No", "Do you want to proceed?"]
         XCTAssertTrue(AgentPermissionMenu.isPrompt(rows: rows))
     }
 
     func testAnAnswerForANumberTheMenuDoesNotHaveIsNothing() {
-        let rows = ["Do you want to proceed?", "1. Yes", "2. No"]
+        let rows = ["Do you want to proceed?", "❯ 1. Yes", "  2. No"]
         XCTAssertNil(AgentPermissionMenu.keystrokes(forAnswering: RemoteAgentPromptOption(number: 0, label: "Yes"), rows: rows))
         XCTAssertNil(AgentPermissionMenu.keystrokes(forAnswering: RemoteAgentPromptOption(number: 3, label: "Yes"), rows: rows))
         XCTAssertNil(AgentPermissionMenu.keystrokes(forAnswering: RemoteAgentPromptOption(number: -1, label: "Yes"), rows: rows))
     }
 
     func testAnEmptyOrBlankShownLabelAnswersNothing() {
-        let rows = ["Do you want to proceed?", "1. Yes", "2. No"]
+        let rows = ["Do you want to proceed?", "❯ 1. Yes", "  2. No"]
         for label in ["", " ", "\n"] {
             XCTAssertNil(AgentPermissionMenu.keystrokes(forAnswering: RemoteAgentPromptOption(number: 1, label: label), rows: rows))
         }
@@ -130,7 +130,7 @@ final class AgentPermissionMenuHardeningTests: XCTestCase {
     func testTheKeystrokesAreOnlyEverADigitAndAReturn() {
         // Whatever the label said, what reaches the terminal is the number and a Return. A label
         // cannot smuggle bytes into the answer.
-        let rows = ["Do you want to proceed?", "1. Yes\u{1B}[31m", "2. No"]
+        let rows = ["Do you want to proceed?", "❯ 1. Yes\u{1B}[31m", "  2. No"]
         let shown = RemoteAgentPromptOption(number: 1, label: "Yes\u{1B}[31m")
         let keys = AgentPermissionMenu.keystrokes(forAnswering: shown, rows: rows)
         XCTAssertEqual(keys, Array("1\r".utf8))
