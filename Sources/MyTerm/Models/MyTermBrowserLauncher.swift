@@ -14,6 +14,9 @@ enum MyTermBrowserLauncher {
     /// holds a file of the same name is not.
     static let zshShimMarker = "# MyTerm zsh shim"
     static let bashEnvironmentFileName = "myterm-bash-env"
+    /// The first line of `Resources/myterm-bash-env`. It is the file's identity, so a shim reached
+    /// through a symlink or copied under another name is still recognised as one.
+    static let bashEnvironmentShimMarker = "# MyTerm BASH_ENV shim"
     static let workspaceRouteScheme = "myterm"
     static let workspaceRouteHost = "browser"
 
@@ -70,7 +73,7 @@ enum MyTermBrowserLauncher {
         let originalBashEnvironmentSource = baseEnvironment["MYTERM_ORIGINAL_BASH_ENV"].flatMap { $0.isEmpty ? nil : $0 }
             ?? baseEnvironment["BASH_ENV"]
         if let originalBashEnvironment = originalBashEnvironmentSource, !originalBashEnvironment.isEmpty,
-           URL(fileURLWithPath: originalBashEnvironment).lastPathComponent != bashEnvironmentFileName {
+           !isBashEnvironmentShim(atPath: originalBashEnvironment) {
             environment["MYTERM_ORIGINAL_BASH_ENV"] = originalBashEnvironment
         }
         // MyTerm can itself run from inside a MyTerm pane (developing MyTerm in MyTerm), in
@@ -119,6 +122,23 @@ enum MyTermBrowserLauncher {
         let head = (try? handle.read(upToCount: 256)) ?? Data()
         let firstLine = head.prefix { $0 != UInt8(ascii: "\n") }
         return String(decoding: firstLine, as: UTF8.self) == zshShimMarker
+    }
+
+    /// Whether the file at `path` is a copy of MyTerm's bash shim, wherever it lives and whatever
+    /// it is called. The shim's first line is its identity, and reading the file follows symlinks,
+    /// so a link to a shim and a renamed copy both count. The shim performs the same check before
+    /// sourcing `MYTERM_ORIGINAL_BASH_ENV`; keep the two in step. The basename stays as a fallback
+    /// for shims shipped before the marker existed: a released copy's shim is the parent of every
+    /// development build launched from one of its panes.
+    static func isBashEnvironmentShim(atPath path: String) -> Bool {
+        if URL(fileURLWithPath: path).lastPathComponent == bashEnvironmentFileName {
+            return true
+        }
+        guard let handle = FileHandle(forReadingAtPath: path) else { return false }
+        defer { try? handle.close() }
+        let head = (try? handle.read(upToCount: 256)) ?? Data()
+        let firstLine = head.prefix { $0 != UInt8(ascii: "\n") }
+        return String(decoding: firstLine, as: UTF8.self) == bashEnvironmentShimMarker
     }
 
     static func browserRoute(

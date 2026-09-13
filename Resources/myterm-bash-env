@@ -1,14 +1,22 @@
+# MyTerm BASH_ENV shim
 # shellcheck shell=bash
-
+#
+# The first line is this file's identity. MyTerm and this shim both read it, so a copy of the
+# shim is recognised wherever it lives and whatever it is called: through a symlink, or under
+# another name. The basename check below is for shims shipped before that line existed.
+#
 # Another MyTerm's copy of this file is never the user's own BASH_ENV. Sourcing it would come
 # straight back here, and the two files would source each other until bash ran out of stack.
 case "${MYTERM_ORIGINAL_BASH_ENV:-}" in
-  ""|*/myterm-bash-env) ;;
-  "${BASH_ENV:-}") ;;
+  ""|"${BASH_ENV:-}"|*/myterm-bash-env) ;;
   *)
-    if [ -r "$MYTERM_ORIGINAL_BASH_ENV" ]; then
-      # shellcheck disable=SC1090
-      . "$MYTERM_ORIGINAL_BASH_ENV"
+    if [ -f "$MYTERM_ORIGINAL_BASH_ENV" ] && [ -r "$MYTERM_ORIGINAL_BASH_ENV" ]; then
+      IFS= read -r _myterm_first_line < "$MYTERM_ORIGINAL_BASH_ENV"
+      if [ "$_myterm_first_line" != "# MyTerm BASH_ENV shim" ]; then
+        # shellcheck disable=SC1090
+        . "$MYTERM_ORIGINAL_BASH_ENV"
+      fi
+      unset _myterm_first_line
     fi
     ;;
 esac
