@@ -88,6 +88,19 @@ final class AgentHookCommandTests: XCTestCase {
         }
     }
 
+    func testAChildSessionInThePaneDoesNotReport() throws {
+        // A child session (`CLAUDE_CODE_CHILD_SESSION`) inherits the pane but writes no transcript
+        // and is not the pane's conversation. Its start must not replace the pane's session, and
+        // its end must not discard it.
+        let written = try run(
+            .ready,
+            stdin: #"{"session_id":"child-session-id"}"#,
+            environment: ["MYTERM_PANE_ID": "pane", "CLAUDE_CODE_CHILD_SESSION": "1"]
+        )
+        XCTAssertEqual(written, "")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+    }
+
     func testAPayloadWithNoSessionStillReportsTheEvent() throws {
         let written = try run(.awaitingInput, stdin: "{}")
         let report = try XCTUnwrap(report(in: written))

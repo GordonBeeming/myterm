@@ -89,9 +89,15 @@ final class AgentHooksController {
 
     var isInstalled: Bool { state == .installed }
 
+    /// Reads what is installed. A hook MyTerm wrote with an earlier text is reinstalled, so a
+    /// guard added later reaches a settings file the user set up before it existed.
     func refresh() {
         do {
             let settings = try readSettings()
+            if hasStaleHooks(in: settings) {
+                install()
+                return
+            }
             state = installedEvents(in: settings).count == target.events.count ? .installed : .notInstalled
         } catch {
             state = .failed(error.localizedDescription)
@@ -155,11 +161,16 @@ final class AgentHooksController {
     /// The hook payload arrives on stdin. Reading `session_id` out of it is what lets MyTerm bring
     /// the same conversation back after a restart, and the character class is what keeps a hostile
     /// payload from reaching the command line that resumes it.
+    ///
+    /// A child session (`CLAUDE_CODE_CHILD_SESSION`: an agent another agent started in the same
+    /// pane) inherits the pane's identifier but writes no transcript of its own, and it is not the
+    /// conversation the pane is in. It stays silent, so its start cannot replace the pane's
+    /// conversation and its end cannot discard it.
     static func command(agent: String, activity: AgentActivity) -> String {
         let idPattern = "s/.*\"session_id\"[[:space:]]*:[[:space:]]*\"\\([A-Za-z0-9._-]\\{1,64\\}\\)\".*/\\1/p"
         let payload = "agent=\(agent);event=\(activity.rawValue);session=%s"
         return """
-        [ -n "${MYTERM_PANE_ID:-}" ] && { __id=$(cat 2>/dev/null | tr -d '\\n' | sed -n '\(idPattern)'); \
+        [ -n "${MYTERM_PANE_ID:-}" ] && [ -z "${CLAUDE_CODE_CHILD_SESSION:-}" ] && { __id=$(cat 2>/dev/null | tr -d '\\n' | sed -n '\(idPattern)'); \
         __tty=$(ps -o tty= -p "$PPID" 2>/dev/null | tr -d '[:space:]'); \
         case "$__tty" in *[0-9]*) __tty="/dev/${__tty#/dev/}";; *) __tty="/dev/tty";; esac; \
         printf '\\033]\(AgentActivityMarker.oscCode);\(payload)\\033\\\\' "$__id" > "$__tty"; \
@@ -167,14 +178,28 @@ final class AgentHooksController {
         """
     }
 
+    /// The events whose installed hook is the one this version writes.
     func installedEvents(in settings: [String: Any]) -> [String] {
         guard let hooks = settings["hooks"] as? [String: Any] else { return [] }
         return target.events.compactMap { event in
             let entries = (hooks[event.name] as? [[String: Any]]) ?? []
-            let hasMyTermCommand = entries.contains { entry in
-                Self.commands(in: entry).contains { $0.hasSuffix(Self.marker) }
+            let current = Self.command(agent: target.agent, activity: event.activity)
+            let hasCurrentCommand = entries.contains { entry in
+                Self.commands(in: entry).contains(current)
             }
-            return hasMyTermCommand ? event.name : nil
+            return hasCurrentCommand ? event.name : nil
+        }
+    }
+
+    /// Whether any hook MyTerm wrote says something other than what this version writes.
+    func hasStaleHooks(in settings: [String: Any]) -> Bool {
+        guard let hooks = settings["hooks"] as? [String: Any] else { return false }
+        return target.events.contains { event in
+            let entries = (hooks[event.name] as? [[String: Any]]) ?? []
+            let current = Self.command(agent: target.agent, activity: event.activity)
+            return entries.contains { entry in
+                Self.commands(in: entry).contains { $0.hasSuffix(Self.marker) && $0 != current }
+            }
         }
     }
 

@@ -108,6 +108,40 @@ final class AgentHooksControllerTests: XCTestCase {
         XCTAssertNil(settings["hooks"])
     }
 
+    func testAHookInstalledByAnEarlierVersionIsReinstalledOnRefresh() throws {
+        // The child-session guard was added after the first hooks shipped. A settings file
+        // carrying the earlier text must pick it up without the user reinstalling by hand.
+        let url = try makeSettingsURL()
+        let controller = AgentHooksController(settingsURL: url)
+        controller.install()
+        var settings = try readSettings(at: url)
+        var hooks = try XCTUnwrap(settings["hooks"] as? [String: Any])
+        for event in controller.target.events {
+            var entries = try XCTUnwrap(hooks[event.name] as? [[String: Any]])
+            var inner = try XCTUnwrap(entries[0]["hooks"] as? [[String: Any]])
+            let command = try XCTUnwrap(inner[0]["command"] as? String)
+            inner[0]["command"] = command.replacingOccurrences(of: #" && [ -z "${CLAUDE_CODE_CHILD_SESSION:-}" ]"#, with: "")
+            entries[0]["hooks"] = inner
+            hooks[event.name] = entries
+        }
+        settings["hooks"] = hooks
+        settings["model"] = "opus"
+        try write(settings, to: url)
+        XCTAssertFalse(try readSettings(at: url).description.contains("CLAUDE_CODE_CHILD_SESSION"), "precondition")
+
+        let reopened = AgentHooksController(settingsURL: url)
+
+        XCTAssertEqual(reopened.state, .installed)
+        let reread = try readSettings(at: url)
+        XCTAssertEqual(reread["model"] as? String, "opus")
+        let rereadHooks = try XCTUnwrap(reread["hooks"] as? [String: Any])
+        for event in controller.target.events {
+            let commands = commands(in: rereadHooks[event.name])
+            XCTAssertEqual(commands.count, 1, event.name)
+            XCTAssertTrue(commands[0].contains(#"[ -z "${CLAUDE_CODE_CHILD_SESSION:-}" ]"#), event.name)
+        }
+    }
+
     func testAnUnreadableSettingsFileIsReportedRatherThanOverwritten() throws {
         let url = try makeSettingsURL()
         try Data("not json at all".utf8).write(to: url)
