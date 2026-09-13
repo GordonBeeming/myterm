@@ -380,7 +380,8 @@ final class InteractionBehaviorTests: XCTestCase {
             .preview(.workspace(otherFolder.id, folderID: folderA, isPinned: true, before: target.id))
         )
         // The row a drag started from is the source's own slot, so it keeps whatever preview is
-        // open instead of closing it; a folder payload never lands on a row.
+        // open instead of closing it; a folder payload never lands on a row, and leaves any folder
+        // preview open too.
         XCTAssertEqual(
             SidebarDropCalculations.workspaceRowFeedback(
                 .workspace(source.id),
@@ -399,7 +400,7 @@ final class InteractionBehaviorTests: XCTestCase {
                 renderedHeight: 40,
                 in: workspaces
             ),
-            SidebarDropFeedback.none
+            .keep
         )
         XCTAssertEqual(
             SidebarDropCalculations.workspaceRowFeedback(
@@ -954,7 +955,8 @@ final class InteractionBehaviorTests: XCTestCase {
         XCTAssertEqual(refiledWorkspaces.map(\.id), [pinned.id, other.id, source.id])
         XCTAssertEqual(refiledWorkspaces[2].folderID, folderB)
 
-        // A folder payload never lands on a workspace row, and nothing in flight means nothing.
+        // A folder payload never lands on a workspace row, but the row leaves any folder preview
+        // open rather than closing it; nothing in flight means nothing.
         XCTAssertEqual(
             SidebarDropCalculations.workspaceRowFeedback(
                 .folder(folderB),
@@ -963,7 +965,7 @@ final class InteractionBehaviorTests: XCTestCase {
                 renderedHeight: 30,
                 in: workspaces
             ),
-            .none
+            .keep
         )
         XCTAssertEqual(
             SidebarDropCalculations.workspaceRowFeedback(

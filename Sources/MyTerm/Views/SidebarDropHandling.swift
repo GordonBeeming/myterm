@@ -311,6 +311,12 @@ enum SidebarDropCalculations {
     /// What a workspace row does with the drag currently over it. `workspaces` is the previewed
     /// order, so the dragged workspace is judged against where it is shown, not where it is stored:
     /// hovering the neighbour it just swapped with swaps back, and hovering its own slot keeps it.
+    ///
+    /// A folder never lands on a workspace row, but the row still keeps whatever folder preview is
+    /// open: a folder row drags its expanded children with it, so once the rows slide, the row
+    /// under the pointer is routinely a child of the dragged folder or of its target. Closing the
+    /// preview there would put the target folder row back under the pointer and reopen it on the
+    /// next update, for as long as the pointer moves.
     static func workspaceRowFeedback(
         _ item: SidebarDragItem?,
         target: Workspace,
@@ -318,6 +324,14 @@ enum SidebarDropCalculations {
         renderedHeight: CGFloat,
         in workspaces: [Workspace]
     ) -> SidebarDropFeedback {
+        switch item {
+        case .folder:
+            return .keep
+        case nil:
+            return .none
+        case .workspace:
+            break
+        }
         guard case .workspace(let sourceID) = item,
               let source = workspaces.first(where: { $0.id == sourceID }) else {
             return .none
