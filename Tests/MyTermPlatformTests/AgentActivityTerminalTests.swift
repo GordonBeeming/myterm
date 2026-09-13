@@ -36,10 +36,10 @@ final class AgentActivityTerminalTests: XCTestCase {
 
         let marker = "\u{1B}]\(AgentActivityMarker.oscCode);agent=claude;event=finished\u{07}"
         let bytes = Array(marker.utf8)
-        for split in [1, 5, bytes.count / 2, bytes.count - 1] {
+        for split in 1..<bytes.count {
             reports = []
             view.feedBytes(bytes[..<split])
-            XCTAssertTrue(reports.isEmpty, "nothing to report until the terminator arrives")
+            XCTAssertTrue(reports.isEmpty, "nothing to report until the terminator arrives, split at \(split)")
             view.feedBytes(bytes[split...])
             XCTAssertEqual(reports, [AgentActivityReport(agent: "claude", activity: .finished)], "split at \(split)")
         }
