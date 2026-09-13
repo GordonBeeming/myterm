@@ -315,6 +315,62 @@ final class AgentNotificationBacklogTests: XCTestCase {
         XCTAssertEqual(model.agentAttention(forTab: hiddenTabID), .finished)
     }
 
+    /// Leaving full screen puts the other panes back on screen, which is as much reaching their
+    /// selected tabs as clicking them.
+    func testAPaneLeavingFullScreenHasItsSelectedTabRead() throws {
+        let harness = try makeHarness()
+        let model = harness.model
+        let workspace = model.selectedWorkspace
+        let leftGroup = try XCTUnwrap(workspace.orderedGroups.first)
+        let hiddenTabID = leftGroup.selectedTabID
+        model.createTerminalTab(in: leftGroup.id)
+        guard case .moved(let rightGroupID) = model.routeSelectedTabMovement(.newPane(.right)) else {
+            return XCTFail("precondition: the second tab moves into a pane of its own")
+        }
+        model.focusTabGroup(workspaceID: workspace.id, tabGroupID: rightGroupID)
+        model.toggleFocusedPaneFullScreen()
+        harness.record(.finished, workspaceID: workspace.id, tabGroupID: leftGroup.id, tabID: hiddenTabID)
+        XCTAssertEqual(model.agentNotificationCount, 1, "precondition: the hidden pane's agent is waiting")
+
+        model.toggleFocusedPaneFullScreen()
+
+        XCTAssertNil(model.maximizedTabGroup, "precondition: both panes are back on screen")
+        XCTAssertTrue(model.agentNotificationItems.isEmpty, "the tab is in front of the user again")
+        XCTAssertNil(model.agentAttention(forTab: hiddenTabID))
+    }
+
+    func testFocusingAnotherPaneOutOfFullScreenReadsThePanesItReveals() throws {
+        let harness = try makeHarness()
+        let model = harness.model
+        let workspace = model.selectedWorkspace
+        let leftGroup = try XCTUnwrap(workspace.orderedGroups.first)
+        let leftTabID = leftGroup.selectedTabID
+        model.createTerminalTab(in: leftGroup.id)
+        model.createTerminalTab(in: leftGroup.id)
+        guard case .moved(let rightGroupID) = model.routeSelectedTabMovement(.newPane(.right)) else {
+            return XCTFail("precondition: the third tab moves into a pane of its own")
+        }
+        let rightTabID = try XCTUnwrap(model.selectedWorkspace.group(id: rightGroupID)?.selectedTabID)
+        model.focusTabGroup(workspaceID: workspace.id, tabGroupID: leftGroup.id)
+        let leftSelectedTabID = try XCTUnwrap(model.selectedWorkspace.group(id: leftGroup.id)?.selectedTabID)
+        XCTAssertNotEqual(leftSelectedTabID, leftTabID, "precondition: the left pane shows its second tab")
+        model.toggleFocusedPaneFullScreen()
+        XCTAssertEqual(model.maximizedTabGroup?.id, leftGroup.id, "precondition: the left pane is full screen")
+        harness.record(.finished, workspaceID: workspace.id, tabGroupID: rightGroupID, tabID: rightTabID)
+        harness.record(.finished, workspaceID: workspace.id, tabGroupID: leftGroup.id, tabID: leftTabID)
+        XCTAssertEqual(model.agentNotificationCount, 2, "precondition: neither tab is on screen")
+
+        model.selectTab(rightTabID, in: rightGroupID)
+
+        XCTAssertNil(model.maximizedTabGroup)
+        XCTAssertNil(model.agentAttention(forTab: rightTabID), "the tab clicked into is read")
+        XCTAssertEqual(
+            model.agentNotificationItems.map(\.id), [leftTabID],
+            "the left pane's unselected tab is still behind its sibling, so it alone stays"
+        )
+        XCTAssertEqual(model.agentAttention(forTab: leftTabID), .finished)
+    }
+
     // MARK: - The bell and the cook
 
     /// The docs promise the bell and the tab indicator never disagree. A question answered on a

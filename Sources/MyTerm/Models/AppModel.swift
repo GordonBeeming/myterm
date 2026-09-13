@@ -529,7 +529,7 @@ final class AppModel {
                 title: nextWorkspaceTitle(),
                 folderID: targetFolderID
             )
-            maximizedTabGroupID = nil
+            exitPaneFullScreen()
             guard let createdWorkspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
                 throw AppModelError.workspaceUnavailable(workspaceID)
             }
@@ -606,11 +606,19 @@ final class AppModel {
 
     func toggleFocusedPaneFullScreen() {
         guard maximizedTabGroup == nil else {
-            maximizedTabGroupID = nil
+            exitPaneFullScreen()
             return
         }
         let focusedTabGroupID = selectedWorkspace.focusedTabGroupID
         maximizedTabGroupID = focusedTabGroupID
+    }
+
+    /// Leaving full screen brings the other panes back on screen, which is as much reaching their
+    /// selected tabs as clicking them. Safe to call when nothing is full screen.
+    private func exitPaneFullScreen() {
+        guard maximizedTabGroupID != nil else { return }
+        maximizedTabGroupID = nil
+        markVisibleTabsAsRead()
     }
 
     func beginRenamingSelectedTab() {
@@ -686,7 +694,7 @@ final class AppModel {
             let data = try Data(contentsOf: url)
             let result = try store.importWorkspaces(fromJSON: data)
             summary = result
-            maximizedTabGroupID = nil
+            exitPaneFullScreen()
             pendingStartupCommands.merge(result.startupCommands) { _, new in new }
             // Imported workspaces have no running processes yet. Selecting one restores them, but
             // the import selects a workspace itself, so start the selected one here.
@@ -1665,7 +1673,7 @@ final class AppModel {
         guard store.selectedWorkspaceID == workspaceID,
               maximizedTabGroupID != nil,
               maximizedTabGroupID != tabGroupID else { return }
-        maximizedTabGroupID = nil
+        exitPaneFullScreen()
     }
 
     func focusTerminal(direction: PaneFocusDirection) {
