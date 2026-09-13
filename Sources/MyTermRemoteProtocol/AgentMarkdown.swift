@@ -80,7 +80,8 @@ public enum AgentMarkdown {
         // "\r\n" is one Character in Swift, so a message with Windows line endings would never
         // split at all and every heading, list and fence in it would collapse into one paragraph.
         let lines = text.replacingOccurrences(of: "\r\n", with: "\n")
-            .split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .flatMap { resolvingCarriageReturns(in: String($0)) }
         var index = 0
         while index < lines.count {
             let line = lines[index]
@@ -194,6 +195,30 @@ public enum AgentMarkdown {
         }
         flush()
         return blocks
+    }
+
+    /// A line with bare carriage returns in it, as a terminal would have shown it.
+    ///
+    /// A progress bar redraws its line by returning to column zero and writing over what was
+    /// there, and a tool result holds every redraw with the returns still in. Text after a return
+    /// that is at least as long as what came before covers it, so the line shows its final state.
+    /// A shorter tail would leave a merged line on a terminal; here it starts a new line instead,
+    /// so nothing written is lost.
+    static func resolvingCarriageReturns(in line: String) -> [String] {
+        guard line.contains("\r") else { return [line] }
+        var lines: [String] = []
+        var current = ""
+        for segment in line.split(separator: "\r", omittingEmptySubsequences: false).map(String.init) {
+            if segment.isEmpty { continue }
+            if segment.count >= current.count {
+                current = segment
+            } else {
+                lines.append(current)
+                current = segment
+            }
+        }
+        lines.append(current)
+        return lines
     }
 
     private static func heading(in line: String) -> AgentMarkdownBlock? {

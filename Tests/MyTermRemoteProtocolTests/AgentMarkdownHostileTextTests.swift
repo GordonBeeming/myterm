@@ -95,6 +95,33 @@ final class AgentMarkdownHostileTextTests: XCTestCase {
         XCTAssertEqual(AgentMarkdown.blocks(in: line), [.paragraph(line)])
     }
 
+    // MARK: - Carriage returns
+
+    func testBareCarriageReturnsAreResolvedAsATerminalWouldShowThem() {
+        // Each return goes back to column zero and what follows writes over what was there, so
+        // the last write of equal or greater length is what stands. Here each line covers the
+        // one before it, and only the last survives.
+        XCTAssertEqual(AgentMarkdown.blocks(in: "# a\r- b\r- c"), [.bullets(["c"])])
+        // A shorter tail does not cover what came before, and on a terminal the two would merge
+        // into one garbled line. It starts a new line instead, so nothing is lost.
+        XCTAssertEqual(AgentMarkdown.blocks(in: "# heading\r- b"), [.heading(level: 1, "heading"), .bullets(["b"])])
+        XCTAssertEqual(AgentMarkdown.blocks(in: "\r\rlead\r"), [.paragraph("lead")])
+        XCTAssertEqual(AgentMarkdown.blocks(in: "a\r\nb"), [.paragraph("a b")], "CRLF is still one line ending")
+    }
+
+    func testAProgressBarShowsItsFinalState() {
+        // What pip writes while it downloads: one line, redrawn in place a hundred times, with the
+        // bar and the figures growing on each redraw. A device shows where it ended, not every
+        // step, and the lines around it are untouched.
+        let redraws = stride(from: 10, through: 100, by: 10).map { percent in
+            "  ━━━━━━━━━━".prefix(2 + percent / 10) + String(repeating: "╸", count: 10 - percent / 10) + " \(percent * 20) kB/2000 kB \(percent)%"
+        }
+        let text = "Collecting requests\n" + redraws.joined(separator: "\r") + "\nSuccessfully installed requests-2.32.3"
+        XCTAssertEqual(AgentMarkdown.blocks(in: text), [
+            .paragraph("Collecting requests ━━━━━━━━━━ 2000 kB/2000 kB 100% Successfully installed requests-2.32.3"),
+        ])
+    }
+
     // MARK: - Size
 
     func testAMessageOfAHundredThousandBlankLinesHasNoBlocksAndTakesNoTime() {
