@@ -185,6 +185,23 @@ final class AgentHooksControllerTests: XCTestCase {
         XCTAssertTrue(try XCTUnwrap(notification.first).contains("cat"))
     }
 
+    func testACurrentSetMissingOneHookReadsAsNotInstalledRatherThanOutdated() throws {
+        let url = try makeSettingsURL()
+        let controller = AgentHooksController(settingsURL: url)
+        controller.install()
+
+        // A person who deletes one of MyTerm's hooks by hand leaves current commands behind, and
+        // nothing an older MyTerm wrote. Calling that outdated would tell them the wrong story.
+        var settings = try readSettings(at: url)
+        var hooks = try XCTUnwrap(settings["hooks"] as? [String: Any])
+        hooks.removeValue(forKey: "Notification")
+        settings["hooks"] = hooks
+        try write(settings, to: url)
+
+        controller.refresh()
+        XCTAssertEqual(controller.state, .notInstalled)
+    }
+
     func testHooksSomebodyElseWroteAreNotMistakenForAnOldMyTerm() throws {
         let url = try makeSettingsURL()
         try write(

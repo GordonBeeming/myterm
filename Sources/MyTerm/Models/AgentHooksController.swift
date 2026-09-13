@@ -119,10 +119,15 @@ final class AgentHooksController {
     func refresh() {
         do {
             let settings = try readSettings()
-            if currentEvents(in: settings).count == target.events.count {
+            let current = currentEvents(in: settings)
+            if current.count == target.events.count {
                 state = .installed
+            } else if Set(installedEvents(in: settings)).isSubset(of: current) {
+                // A current set with a hook missing was edited by hand, not written by an older
+                // MyTerm. Only a marked command that differs from today's says the file is old.
+                state = .notInstalled
             } else {
-                state = installedEvents(in: settings).isEmpty ? .notInstalled : .outdated
+                state = .outdated
             }
         } catch {
             state = .failed(error.localizedDescription)
