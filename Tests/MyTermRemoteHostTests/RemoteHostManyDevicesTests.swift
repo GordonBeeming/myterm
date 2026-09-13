@@ -935,15 +935,9 @@ final class RemoteHostManyDevicesTests: XCTestCase {
         XCTAssertEqual(source.tabWrites.map(\.text), ["rm -rf build"], "the Return must not follow once typing is refused")
     }
 
-    // MARK: - Open findings
-    //
-    // Each of these is red on purpose. It states what the host should do and shows that it does
-    // not yet, so the fix has its proof waiting.
-
-    /// Two devices reply to the same agent inside the Return delay. Each connection sends its words
-    /// then its own Return 200 ms later, and nothing orders them across connections, so the agent
-    /// reads "yesno" as one line and an empty Return as nothing. Replies to one tab need a queue
-    /// shared by every connection, so the second waits for the first's Return.
+    /// Two devices reply to the same agent inside the Return delay. Each reply is words and then
+    /// a Return 200 ms later, and the queue the service shares between connections keeps the
+    /// second reply's words out of the first's line.
     @MainActor
     func testTwoDevicesReplyingWithinTenMillisecondsSubmitTwoLinesNotOne() async throws {
         let token = RemoteTransportSecurity.makeToken()
@@ -965,6 +959,91 @@ final class RemoteHostManyDevicesTests: XCTestCase {
             "two replies were merged into one line: \(writes)"
         )
     }
+
+    /// Three replies to one tab from three devices go in one after the other, each with its own
+    /// Return, in the order they arrived. A reply to another tab does not wait behind them.
+    @MainActor
+    func testThreeRepliesToOneTabDrainInOrderAndAnotherTabDoesNotWait() async throws {
+        let token = RemoteTransportSecurity.makeToken()
+        let source = ManyTabsDataSource()
+        let (service, port) = try await startedService(token: token, dataSource: source)
+        defer { service.stop() }
+        let devices = try await [
+            greetedDevice("A", port: port, token: token),
+            greetedDevice("B", port: port, token: token),
+            greetedDevice("C", port: port, token: token),
+        ]
+
+        // Sent in turn on three sockets; the host hears them in this order because each device
+        // waits for the one before to be heard.
+        for (device, text) in zip(devices, ["one", "two", "three"]) {
+            device.send(.agentReply(RemoteAgentReply(tabID: ManyTabsDataSource.tabID, text: text)))
+            await wait { source.tabWrites.contains { $0.text == text } }
+        }
+        devices[0].send(.agentReply(RemoteAgentReply(tabID: ManyTabsDataSource.secondTabID, text: "elsewhere")))
+        await wait(seconds: 5) { source.tabWrites.count >= 8 }
+
+        XCTAssertEqual(
+            source.tabWrites.filter { $0.tabID == ManyTabsDataSource.tabID }.map(\.text),
+            ["one", "\r", "two", "\r", "three", "\r"],
+            "each reply is its words and then its own Return, in arrival order"
+        )
+        XCTAssertEqual(
+            source.tabWrites.filter { $0.tabID == ManyTabsDataSource.secondTabID }.map(\.text),
+            ["elsewhere", "\r"]
+        )
+        // The other tab's reply did not queue behind three Returns on the first.
+        let elsewhereIndex = try XCTUnwrap(source.tabWrites.firstIndex { $0.text == "elsewhere" })
+        XCTAssertLessThan(elsewhereIndex, source.tabWrites.count - 1, "the second tab's words went in before the first tab finished")
+        XCTAssertTrue(devices.allSatisfy { $0.errors.isEmpty })
+    }
+
+    /// A reply waiting its turn is dropped, and the device told, when the Mac stops taking input
+    /// or the tab closes before it is typed. Nothing of it reaches the tab.
+    @MainActor
+    func testAQueuedReplyIsDroppedCleanlyWhenInputTurnsOffOrTheTabCloses() async throws {
+        let token = RemoteTransportSecurity.makeToken()
+        let source = ManyTabsDataSource()
+        let (service, port) = try await startedService(token: token, dataSource: source)
+        defer { service.stop() }
+        let pad = try await greetedDevice("Pad", port: port, token: token)
+        let phone = try await greetedDevice("Phone", port: port, token: token)
+
+        // Input turns off while the phone's reply waits behind the pad's.
+        pad.send(.agentReply(RemoteAgentReply(tabID: ManyTabsDataSource.tabID, text: "first")))
+        await wait { source.tabWrites.count == 1 }
+        phone.send(.agentReply(RemoteAgentReply(tabID: ManyTabsDataSource.tabID, text: "second")))
+        try await Task.sleep(for: .milliseconds(30))
+        service.allowsInput = false
+        await wait { phone.errors.contains { $0.code == "denied" } }
+        try await Task.sleep(for: RemoteHostConnection.replyReturnDelay + .milliseconds(200))
+
+        XCTAssertEqual(source.tabWrites.map(\.text), ["first"], "the pad's words stay in the draft; the phone's never arrive")
+        XCTAssertEqual(phone.errors.last?.code, "denied", "the phone is told its reply was dropped")
+        XCTAssertTrue(pad.errors.isEmpty)
+
+        // The tab closes while a reply waits behind another.
+        service.allowsInput = true
+        source.tabWrites.removeAll()
+        pad.send(.agentReply(RemoteAgentReply(tabID: ManyTabsDataSource.secondTabID, text: "third")))
+        await wait { source.tabWrites.count == 1 }
+        phone.send(.agentReply(RemoteAgentReply(tabID: ManyTabsDataSource.secondTabID, text: "fourth")))
+        try await Task.sleep(for: .milliseconds(30))
+        source.closedTabs.insert(ManyTabsDataSource.secondTabID)
+        await wait { phone.errors.filter { $0.code == "agentReply" }.count == 1 && pad.errors.count == 1 }
+        try await Task.sleep(for: RemoteHostConnection.replyReturnDelay + .milliseconds(200))
+
+        XCTAssertEqual(source.tabWrites.map(\.text), ["third"], "nothing more reaches a tab that closed")
+        XCTAssertEqual(pad.errors.last?.code, "agentReply", "the pad is told its Return had no tab to go to")
+        XCTAssertEqual(phone.errors.last?.code, "agentReply", "the phone is told its reply had no tab to go to")
+        XCTAssertFalse(pad.isClosed)
+        XCTAssertFalse(phone.isClosed)
+    }
+
+    // MARK: - Open findings
+    //
+    // Each of these is red on purpose. It states what the host should do and shows that it does
+    // not yet, so the fix has its proof waiting.
 
     /// The relay allows sixteen sessions per Mac; the Mac's own listener allows any number. A
     /// device holding the token can open as many connections as it likes, each with its own TLS
@@ -1265,7 +1344,9 @@ private final class ManyTabsDataSource: RemoteHostDataSource {
     private var taps: [UUID: [UUID: @MainActor (ArraySlice<UInt8>) -> Void]] = [:]
     private(set) var detachCount = 0
     private(set) var input: [UUID: [UInt8]] = [:]
-    private(set) var tabWrites: [Write] = []
+    var tabWrites: [Write] = []
+    /// Tabs that have gone, so writes to them fail the way a closed tab's do.
+    var closedTabs: Set<String> = []
     var snapshot = Array("SCREEN".utf8)
     var screenRows: [String: [String]] = [:]
     /// What the screen becomes once any keystroke reaches a tab, the way a menu closes on its answer.
@@ -1327,7 +1408,7 @@ private final class ManyTabsDataSource: RemoteHostDataSource {
     }
 
     func sendInput(tabID: String, bytes: ArraySlice<UInt8>) -> Bool {
-        guard session(for: tabID) != nil else { return false }
+        guard session(for: tabID) != nil, !closedTabs.contains(tabID) else { return false }
         tabWrites.append(Write(tabID: tabID, text: String(decoding: bytes, as: UTF8.self)))
         if let screenAfterInput {
             screenRows[tabID] = screenAfterInput

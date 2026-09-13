@@ -24,13 +24,9 @@ final class RemoteHostConnection {
     /// Output queued beyond this is discarded in favour of a fresh screen. A device that cannot keep
     /// up with a build wants the current screen, not every frame of one it already missed.
     static let maximumPendingBytes = 512 * 1024
-    /// How long a reply's Return waits behind its words.
-    ///
-    /// An agent's input treats bytes that land together as one paste, and a Return inside a paste
-    /// becomes a line break in the draft. Only a Return that arrives on its own, once the paste has
-    /// settled, submits the line.
-    static let replyReturnDelay: Duration = .milliseconds(200)
-    static let returnKeystroke = Array("\r".utf8)
+    /// How long a reply's Return waits behind its words. The queue owns the reason.
+    static var replyReturnDelay: Duration { AgentReplyQueue.returnDelay }
+    static var returnKeystroke: [UInt8] { AgentReplyQueue.returnKeystroke }
     /// How long a peer that finished the handshake gets to say hello before it is dropped.
     ///
     /// Without a limit, a peer that connects and says nothing holds a socket and its TLS state for
@@ -46,6 +42,8 @@ final class RemoteHostConnection {
     private let allowsInput: () -> Bool
     private weak var dataSource: (any RemoteHostDataSource)?
     private let projectsDirectory: URL
+    /// Shared with every other connection, so replies to one tab go in one at a time.
+    private let replies: AgentReplyQueue
 
     private var decoder = RemoteFrameDecoder()
     private var didGreet = false
@@ -77,7 +75,8 @@ final class RemoteHostConnection {
         allowsInput: @escaping () -> Bool,
         dataSource: (any RemoteHostDataSource)?,
         projectsDirectory: URL = AgentTranscriptWatcher.defaultProjectsDirectory,
-        helloTimeout: Duration = RemoteHostConnection.defaultHelloTimeout
+        helloTimeout: Duration = RemoteHostConnection.defaultHelloTimeout,
+        replies: AgentReplyQueue = AgentReplyQueue()
     ) {
         self.connection = connection
         self.hostName = hostName
@@ -85,6 +84,7 @@ final class RemoteHostConnection {
         self.dataSource = dataSource
         self.projectsDirectory = projectsDirectory
         self.helloTimeout = helloTimeout
+        self.replies = replies
     }
 
     func start(queue: DispatchQueue) {
@@ -333,35 +333,43 @@ final class RemoteHostConnection {
                 sendControl(.error(RemoteError(code: "agentReply", message: "would not accept that text")))
                 return
             }
-            // The Return is added here, not sent by the device. A device says words; it does not
-            // decide when a line is submitted, and it cannot smuggle control bytes through this.
-            guard let dataSource,
-                  dataSource.sendInput(tabID: request.tabID, bytes: Array(request.text.utf8)[...]) else {
+            guard let dataSource else {
                 sendControl(.error(RemoteError(code: "agentReply", message: "has no terminal for that tab")))
                 return
             }
-            // The data source is held, not the connection: a device that drops the instant it
-            // sends must still get its words submitted rather than left sitting in the draft.
+            // The Return is added by the queue, not sent by the device. A device says words; it
+            // does not decide when a line is submitted, and it cannot smuggle control bytes
+            // through this. The queue is shared, so a reply from another device to the same tab
+            // waits for this one's Return rather than landing inside its words.
             let screenCommand = AgentCommandCatalog.screenCommand(typed: request.text)
-            let allowsInput = allowsInput
-            Task { @MainActor [weak self] in
-                try? await Task.sleep(for: Self.replyReturnDelay)
-                // The Mac may have said no in the meantime. The words are in the draft where the
-                // person at the Mac can see them; submitting them is the part that was refused.
-                guard allowsInput() else { return }
-                // The screen the Return goes into, read first: the capture must see it move on.
-                let before = screenCommand == nil ? nil : dataSource.visibleRows(tabID: request.tabID)
-                _ = dataSource.sendInput(tabID: request.tabID, bytes: Self.returnKeystroke[...])
-                // The answer to this one is drawn, not written, so it is read off the screen
-                // for the device that asked. A device that has gone has nobody to read it for.
-                guard let screenCommand else { return }
-                await self?.captureScreen(
-                    drawnBy: screenCommand,
-                    tabID: request.tabID,
-                    before: before,
-                    dataSource: dataSource
-                )
-            }
+            let tabID = request.tabID
+            replies.enqueue(tabID: tabID, AgentReplyQueue.Reply(
+                text: request.text,
+                allowsInput: allowsInput,
+                dataSource: dataSource,
+                readsScreen: screenCommand != nil,
+                completion: { [weak self] outcome in
+                    switch outcome {
+                    case .refused(let error):
+                        self?.sendControl(.error(error))
+                    case .leftInDraft:
+                        break
+                    case .submitted(let before):
+                        // The answer to this one is drawn, not written, so it is read off the
+                        // screen for the device that asked. A device that has gone has nobody
+                        // to read it for.
+                        guard let screenCommand else { return }
+                        Task { @MainActor [weak self] in
+                            await self?.captureScreen(
+                                drawnBy: screenCommand,
+                                tabID: tabID,
+                                before: before,
+                                dataSource: dataSource
+                            )
+                        }
+                    }
+                }
+            ))
 
         case .agentAnswer(let request):
             guard didGreet, allowsInput() else {

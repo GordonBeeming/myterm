@@ -77,6 +77,8 @@ public final class RemoteHostService {
     /// The port the current listener was asked for, so a failure knows whether a fallback is left.
     private var attemptedPort: NWEndpoint.Port?
     private var connections: [UUID: RemoteHostConnection] = [:]
+    /// One queue for every device, so two replies to one tab cannot land as one line.
+    private let replies = AgentReplyQueue()
     private weak var dataSource: (any RemoteHostDataSource)?
     private var treeWatch: Timer?
     private var lastBroadcastRevision: Int?
@@ -297,7 +299,8 @@ public final class RemoteHostService {
             allowsInput: { [weak self] in self?.allowsInput ?? false },
             dataSource: dataSource,
             projectsDirectory: agentProjectsDirectory,
-            helloTimeout: helloTimeout
+            helloTimeout: helloTimeout,
+            replies: replies
         )
         connection.onClosed = { [weak self] in
             Task { @MainActor [weak self] in
