@@ -159,9 +159,10 @@ Click a row to go to that tab. Reaching a tab is what reads its notification, so
 whether you clicked it, clicked the tab, or switched to that workspace. **Clear All** empties the
 list without visiting anything.
 
-One tab keeps one row, so a pane that finishes several turns does not fill the list. A question
-replaces a finished turn on the same tab, because the question is what you must answer. An agent
-that starts working again takes its own row back.
+One tab keeps one row, so a pane that finishes several turns does not fill the list. The row says
+what the agent reported last: a question replaces a finished turn, and a finished turn replaces a
+question you answered from somewhere else, such as your phone. An agent that starts working again
+takes its own row back.
 
 The backlog is not saved either. After a relaunch it is empty, because an item that survived a
 restart would point at work you have moved on from.

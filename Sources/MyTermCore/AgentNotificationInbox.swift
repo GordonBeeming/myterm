@@ -122,12 +122,11 @@ public struct AgentNotificationInbox: Equatable, Sendable, Codable {
         case .ready, .working, .exited:
             return markRead(tabID: tabID)
         case .finished, .awaitingInput:
-            // A question outranks a finished turn: it is the one the user has to act on.
-            guard activity == .awaitingInput || self.activity(forTab: tabID) != .awaitingInput else {
-                return false
-            }
-            // A tab is in the backlog once. Superseding an unread entry drops it rather than
-            // reading it: the user never saw it, and the new one says the same thing more recently.
+            // A tab is in the backlog once, and the latest report is what it says. A question after
+            // a finished turn is the one the user has to act on; a finished turn after a question
+            // means the question was answered somewhere the Mac did not see, so the question is
+            // over. Superseding an unread entry drops it rather than reading it: the user never saw
+            // it, and the new one says what the tab is doing now.
             entries.removeAll { $0.tabID == tabID && !$0.isRead }
             insert(AgentInboxEntry(
                 tabID: tabID,

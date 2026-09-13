@@ -68,7 +68,7 @@ An agent that finishes a turn, or asks a question, in a tab the user cannot see 
 
 Reaching the tab is what reads an entry, whichever way the user gets there: clicking the row, clicking the tab, or making that workspace active. Clear All empties the list without visiting anything.
 
-One tab keeps one entry, because the backlog answers "which tabs need me" and a tab needs the user once. A question replaces a finished turn on the same tab. An agent that starts working again takes its own entry back, so the list only ever holds work that is still waiting.
+One tab keeps one entry, because the backlog answers "which tabs need me" and a tab needs the user once. The latest report is what the entry says: a question replaces a finished turn on the same tab, and a finished turn replaces a question, because the agent could only have moved on once the question was answered. An agent that starts working again takes its own entry back, so the list only ever holds work that is still waiting.
 
 The backlog is not saved. It is empty after a relaunch, for the same reason the tab dot is: an entry that survived a restart would point at work the user has moved on from.
 

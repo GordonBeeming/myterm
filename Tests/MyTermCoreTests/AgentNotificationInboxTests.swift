@@ -84,17 +84,18 @@ final class AgentNotificationInboxTests: XCTestCase {
         XCTAssertEqual(inbox.history.map(\.date), [Date(timeIntervalSince1970: 40), Date(timeIntervalSince1970: 10)])
     }
 
-    func testAQuestionOutranksAFinishedTurn() {
+    func testTheLatestReportIsWhatTheTabSays() {
         var inbox = AgentNotificationInbox()
         let tabID = TabID()
 
         record(&inbox, .awaitingInput, tabID: tabID, at: 10)
         record(&inbox, .finished, tabID: tabID, at: 20)
 
-        XCTAssertEqual(inbox.activity(forTab: tabID), .awaitingInput, "A question still needs an answer")
-        XCTAssertEqual(inbox.items.first?.date, Date(timeIntervalSince1970: 10))
+        XCTAssertEqual(inbox.activity(forTab: tabID), .finished, "the turn ended, so the question is over")
+        XCTAssertEqual(inbox.items.first?.date, Date(timeIntervalSince1970: 20))
 
         record(&inbox, .awaitingInput, tabID: tabID, at: 30)
+        XCTAssertEqual(inbox.activity(forTab: tabID), .awaitingInput, "and a new question is what needs answering")
         XCTAssertEqual(inbox.count, 1)
     }
 
