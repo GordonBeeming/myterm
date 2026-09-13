@@ -70,37 +70,102 @@ public struct AgentTranscriptReader {
 
     // MARK: - Projecting
 
-    /// Everything a device needs for one conversation, cut to the backlog cap.
-    ///
-    /// Entries are dropped from the front, because the end of a conversation is the part someone
-    /// away from their desk opened the screen to read.
+    /// Everything a device needs for one conversation, cut to the backlog cap. See `Backlog`.
     public func conversation(
         tabID: String,
         agent: String,
         lines: [String]
     ) -> RemoteAgentConversation {
-        var entries: [RemoteAgentEntry] = []
-        var title: String?
-        var pending = PendingTools()
-
+        var backlog = Backlog()
         for line in lines {
-            guard let object = Self.object(from: line) else { continue }
-            if let name = Self.title(from: object) {
+            backlog.take(line: line)
+        }
+        return backlog.conversation(tabID: tabID, agent: agent)
+    }
+
+    // MARK: - Reading a line at a time
+
+    /// Something that is fed a transcript one line at a time, so the file is never held whole.
+    public protocol LineSink: Sendable {
+        mutating func take(line: String)
+    }
+
+    /// The backlog of a conversation, built one line at a time and never larger than what is sent.
+    ///
+    /// A transcript is hundreds of megabytes on a long session, and the device is sent only the
+    /// tail of it under the cap. Holding the lines to cut them afterwards costs the whole file
+    /// three times over, so this keeps only what the projection keeps: the title, which tool
+    /// requests are still unanswered, and the entries under the cap, dropped from the front as
+    /// newer ones arrive.
+    public struct Backlog: LineSink {
+        private var entries: [RemoteAgentEntry] = []
+        private var weights: [Int] = []
+        private var total = 0
+        private var isTruncated = false
+        private var title: String?
+        private var pending = PendingTools()
+        /// Complete lines taken, whether or not they were part of the conversation. A file with
+        /// none yet is one the agent is still creating.
+        public private(set) var lineCount = 0
+
+        public init() {}
+
+        public mutating func take(line: String) {
+            lineCount += 1
+            guard let object = AgentTranscriptReader.object(from: line) else { return }
+            if let name = AgentTranscriptReader.title(from: object) {
                 title = name
             }
-            guard let entry = Self.entry(from: object, pending: &pending) else { continue }
-            Self.append(entry, to: &entries)
+            guard let entry = AgentTranscriptReader.entry(from: object, pending: &pending) else { return }
+            let count = entries.count
+            AgentTranscriptReader.append(entry, to: &entries)
+            if entries.count == count {
+                // Folded into the last entry, whose weight has changed.
+                total -= weights.removeLast()
+            }
+            let weight = AgentTranscriptReader.weight(of: entries[entries.count - 1])
+            weights.append(weight)
+            total += weight
+            // The newest entry stays whatever its size; older ones go from the front.
+            while total > RemoteAgentLimits.maximumBacklogCharacters, entries.count > 1 {
+                total -= weights.removeFirst()
+                entries.removeFirst()
+                isTruncated = true
+            }
         }
 
-        entries = Self.markPending(in: entries, pending: pending)
-        let (kept, isTruncated) = Self.cutToBacklog(entries)
-        return RemoteAgentConversation(
-            tabID: tabID,
-            title: title,
-            agent: agent,
-            isTruncated: isTruncated,
-            entries: kept
-        )
+        public func conversation(tabID: String, agent: String) -> RemoteAgentConversation {
+            RemoteAgentConversation(
+                tabID: tabID,
+                title: title,
+                agent: agent,
+                isTruncated: isTruncated,
+                entries: AgentTranscriptReader.markPending(in: entries, pending: pending)
+            )
+        }
+    }
+
+    /// The lines that arrived after the backlog was sent, as the entries they make.
+    ///
+    /// A batch rather than one line at a time because a local command and what it printed are two
+    /// lines that belong to one row. The agent writes both in the same instant, so they arrive in
+    /// the same read.
+    public struct Tail: LineSink {
+        public private(set) var entries: [RemoteAgentEntry] = []
+        /// The last title a line in the batch carried, if any did.
+        public private(set) var title: String?
+        private var pending = PendingTools()
+
+        public init() {}
+
+        public mutating func take(line: String) {
+            guard let object = AgentTranscriptReader.object(from: line) else { return }
+            if let name = AgentTranscriptReader.title(from: object) {
+                title = name
+            }
+            guard let entry = AgentTranscriptReader.entry(from: object, pending: &pending) else { return }
+            AgentTranscriptReader.append(entry, to: &entries)
+        }
     }
 
     /// One line, for the tail. Returns nothing for the many lines that are not part of the
@@ -111,22 +176,13 @@ public struct AgentTranscriptReader {
         return Self.entry(from: object, pending: &pending)
     }
 
-    /// The lines that arrived together, for the tail.
-    ///
-    /// Read as a batch rather than one at a time because a local command and what it printed are
-    /// two lines that belong to one row. The agent writes both in the same instant, so they arrive
-    /// in the same read.
+    /// The lines that arrived together, for the tail. See `Tail`.
     public func entries(from lines: [String]) -> [RemoteAgentEntry] {
-        var entries: [RemoteAgentEntry] = []
-        var pending = PendingTools()
+        var tail = Tail()
         for line in lines {
-            guard let object = Self.object(from: line),
-                  let entry = Self.entry(from: object, pending: &pending) else {
-                continue
-            }
-            Self.append(entry, to: &entries)
+            tail.take(line: line)
         }
-        return entries
+        return tail.entries
     }
 
     /// Appends an entry, folding a local command's output into the command that produced it.
@@ -617,20 +673,8 @@ public struct AgentTranscriptReader {
 
     // MARK: - Cutting
 
-    static func cutToBacklog(_ entries: [RemoteAgentEntry]) -> (entries: [RemoteAgentEntry], isTruncated: Bool) {
-        var total = 0
-        var kept: [RemoteAgentEntry] = []
-        for entry in entries.reversed() {
-            total += weight(of: entry)
-            if total > RemoteAgentLimits.maximumBacklogCharacters, !kept.isEmpty {
-                return (kept.reversed(), true)
-            }
-            kept.append(entry)
-        }
-        return (kept.reversed(), false)
-    }
-
-    private static func weight(of entry: RemoteAgentEntry) -> Int {
+    /// What an entry costs against the backlog cap.
+    static func weight(of entry: RemoteAgentEntry) -> Int {
         entry.blocks.reduce(0) { total, block in
             switch block {
             case .text(let value), .thinking(let value):
