@@ -68,6 +68,9 @@ public final class RemoteHostService {
     public var agentProjectsDirectory: URL = AgentTranscriptWatcher.defaultProjectsDirectory
     /// How long a connection that completed the handshake may stay silent before it is dropped.
     public var helloTimeout: Duration = RemoteHostConnection.defaultHelloTimeout
+    /// How many devices may be connected at once, counting those still saying hello. Each costs
+    /// a TLS session and a share of every poll; sixteen is the relay's number for one Mac too.
+    public static let maximumConnections = 16
     private let queue = DispatchQueue(label: "com.gordonbeeming.myterm.remote-host")
     private var listener: NWListener?
     /// Listeners told to stop that have not yet said they did.
@@ -323,6 +326,16 @@ public final class RemoteHostService {
         }
         connections[identifier] = connection
         connection.start(queue: queue)
+        // Counted after it is added, so a refused connection is held until it has been told and
+        // has hung up, and so the ones still finishing their handshake count too. The relay caps a
+        // Mac at the same number; a device meets the same answer whichever way it came.
+        guard connections.count <= Self.maximumConnections else {
+            connection.closeAfterRefusing(RemoteError(
+                code: "busy",
+                message: "has \(Self.maximumConnections) devices connected already, which is as many as it takes"
+            ))
+            return
+        }
         startWatchingTree()
     }
 

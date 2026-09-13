@@ -48,6 +48,9 @@ final class RemoteHostConnection {
     private var decoder = RemoteFrameDecoder()
     private var didGreet = false
     private var isRefusing = false
+    private var isReady = false
+    /// A refusal decided before the handshake finished, sent the moment it can be.
+    private var pendingRefusal: RemoteError?
     /// The attachment handle for each session this device is watching.
     private var attachedSessions: [UUID: UUID] = [:]
     /// One watcher per followed conversation. Held here so they die with the connection: a watcher
@@ -90,9 +93,16 @@ final class RemoteHostConnection {
     func start(queue: DispatchQueue) {
         connection.stateUpdateHandler = { [weak self] state in
             Task { @MainActor [weak self] in
+                guard let self else { return }
                 switch state {
+                case .ready:
+                    self.isReady = true
+                    if let refusal = self.pendingRefusal {
+                        self.pendingRefusal = nil
+                        self.closeAfterRefusing(refusal)
+                    }
                 case .failed, .cancelled:
-                    self?.close()
+                    self.close()
                 default:
                     break
                 }
@@ -146,9 +156,15 @@ final class RemoteHostConnection {
     ///
     /// Cancelling straight after queueing the refusal races it: the device then sees a bare close
     /// before any welcome, which it reports as a wrong token. So the hang-up waits until the
-    /// refusal has been handed to the transport.
-    private func closeAfterRefusing(_ error: RemoteError) {
+    /// refusal has been handed to the transport. Before the handshake has finished there is no
+    /// transport to hand it to, so it waits for `.ready`; a device that never gets there is
+    /// closed by the handshake failing.
+    func closeAfterRefusing(_ error: RemoteError) {
         isRefusing = true
+        guard isReady else {
+            pendingRefusal = error
+            return
+        }
         guard let frame = try? RemoteControlCodec.encode(.error(error)) else {
             close()
             return

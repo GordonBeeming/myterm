@@ -347,15 +347,19 @@ final class RemoteHostManyDevicesTests: XCTestCase {
         }
         XCTAssertTrue(service.connectedDevices.isEmpty, "a connection without a hello is not a device")
 
-        // A real device still gets through while the fifty sit there.
-        let real = try await greetedDevice("Real", port: port, token: token)
-        XCTAssertEqual(service.connectedDevices.map(\.name), ["Real"])
-
-        // And the fifty are shown the door once the grace period passes.
+        // Sixteen at a time hold the slots there are, and one past that is told so at once. As
+        // the grace period drops early ones, later ones take their slots, so how many are told
+        // busy depends on how fast the fifty were opened; that any were is the cap working.
         await wait(seconds: 5) { silent.allSatisfy(\.isClosed) }
         XCTAssertEqual(silent.filter(\.isClosed).count, 50, "a peer that never greets must not hold a socket forever")
-        XCTAssertFalse(real.isClosed, "the device that greeted keeps its connection")
+        let refused = silent.filter { $0.errors.contains { $0.code == "busy" } }
+        XCTAssertGreaterThan(refused.count, 0, "the connections past the cap are told busy, not left waiting")
+        XCTAssertTrue(service.connectedDevices.isEmpty)
+
+        // With the silent ones gone, a real device gets through.
+        let real = try await greetedDevice("Real", port: port, token: token)
         XCTAssertEqual(service.connectedDevices.map(\.name), ["Real"])
+        XCTAssertFalse(real.isClosed)
     }
 
     @MainActor
@@ -1040,15 +1044,10 @@ final class RemoteHostManyDevicesTests: XCTestCase {
         XCTAssertFalse(phone.isClosed)
     }
 
-    // MARK: - Open findings
-    //
-    // Each of these is red on purpose. It states what the host should do and shows that it does
-    // not yet, so the fix has its proof waiting.
+    // MARK: - The cap
 
-    /// The relay allows sixteen sessions per Mac; the Mac's own listener allows any number. A
-    /// device holding the token can open as many connections as it likes, each with its own TLS
-    /// session, tree poll and prompt poll, and the Settings list grows with them. The listener
-    /// should refuse the seventeenth with an error the device can show, the way the relay does.
+    /// The listener takes sixteen devices, the relay's number for one Mac. The seventeenth is
+    /// told so with an error the device can show, and the sixteen are untouched.
     @MainActor
     func testTheSeventeenthDeviceOnTheListenerIsRefusedAndTheSixteenKeepWorking() async throws {
         let token = RemoteTransportSecurity.makeToken()
