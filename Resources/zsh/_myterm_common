@@ -60,7 +60,10 @@ fi
 MYTERM_ORIGINAL_ZDOTDIR="$_myterm_user_dir"
 export MYTERM_ORIGINAL_ZDOTDIR
 
+# `unset ZDOTDIR` above also dropped the export attribute, so this has to be
+# an export, not a plain assignment: a nested zsh started from the pane must
+# inherit the shim directory or it bypasses every shim in this chain.
 if [ -n "$_myterm_shim_dir" ]; then
-  ZDOTDIR="$_myterm_shim_dir"
+  export ZDOTDIR="$_myterm_shim_dir"
 fi
 unset _myterm_shim_dir _myterm_user_dir _myterm_dotfile _myterm_home

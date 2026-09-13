@@ -103,6 +103,16 @@ if [ "$original_zdotdir_output" != "$FAKE_HOME" ]; then
   exit 1
 fi
 
+# A nested zsh started from inside a pane (a script, a tool, a plain `zsh`)
+# must inherit ZDOTDIR pointing at the shim directory, or it bypasses every
+# shim and its `open` goes to /usr/bin/open. `unset ZDOTDIR` in the shim drops
+# the export attribute, so the hand-back has to export it again.
+nested_zsh_output="$(run_zsh -ic 'zsh -c "printf \"NESTED_ZDOTDIR=%s\n\" \"\${ZDOTDIR-unset}\"; type open"' 2>&1)"
+assert_contains "NESTED_ZDOTDIR=$RESOURCE_DIR/zsh" "$nested_zsh_output" \
+  "a nested zsh started from a pane must inherit ZDOTDIR pointing at the shim directory"
+assert_contains "shell function" "$nested_zsh_output" \
+  "a nested zsh started from a pane must still get the open function from the shim"
+
 # MyTerm is developed inside MyTerm, so a pane can inherit MYTERM_ORIGINAL_ZDOTDIR
 # already equal to the shim directory (its own build's baseEnvironment ZDOTDIR was
 # the shim directory). Without the self-reference guard, .zshenv would source
