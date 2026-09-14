@@ -29,6 +29,47 @@ jobs:
       - name: Run zsh shim test
         run: bash script/zsh_shim_test.sh
 
+      - name: Type-check MyTermCore for iOS
+        run: bash script/ios_core_typecheck.sh
+
+      # The companion app is the only consumer of MyTermRemoteProtocol on iOS. `swift build` never
+      # compiles it, so without this a change that breaks the app lands unnoticed.
+      - name: Build the companion app for the iOS Simulator
+        # Without pipefail the step's status is grep's, and grep matches "error:" on a failed
+        # build just as happily as "BUILD SUCCEEDED" on a good one, so the step could never fail.
+        run: |
+          set -o pipefail
+          xcodebuild -project apps/MyTermRemote/MyTermRemote.xcodeproj \
+            -scheme MyTermRemote \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath .build/ios-derived \
+            CODE_SIGNING_ALLOWED=NO \
+            build | grep -E "error:|warning: .*apps/MyTermRemote|BUILD"
+
+  relay:
+    runs-on: ubuntu-latest
+    name: Relay Worker
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: relay/package-lock.json
+
+      # The Worker's tests start `wrangler dev` on this runner and drive the protocol over real
+      # WebSockets. No Cloudflare account is involved.
+      - name: Test the relay
+        working-directory: relay
+        run: |
+          npm ci --no-audit --no-fund
+          npx tsc --noEmit
+          npm test
+
   verify-bundle:
     runs-on: macos-15
     name: Verify App Bundle

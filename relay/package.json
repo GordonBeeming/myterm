@@ -1,0 +1,20 @@
+{
+  "name": "myterm-relay",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260831.1",
+    "typescript": "^5.6.3",
+    "wrangler": "^4.121.0"
+  },
+  "allowScripts": {
+    "workerd@1.20260831.1": true,
+    "esbuild@0.28.1": true,
+    "fsevents@2.3.3": true
+  }
+}

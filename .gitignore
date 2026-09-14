@@ -1,2 +1,7 @@
 .build/
 dist/
+xcuserdata/
+.build-dev/
+.swiftpm/
+relay/node_modules/
+relay/.wrangler/
