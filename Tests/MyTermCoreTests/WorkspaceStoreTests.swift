@@ -1256,4 +1256,32 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(store.workspaces.map(\.title), ["Newer"])
     }
 
+    func testAKnownValueTheDecoderDropsIsStillARepairWithABackup() throws {
+        // A key this build knows, holding a value it cannot read. The decoder discards it, so
+        // the next write loses it: that is a repair, and the original bytes must be kept.
+        let url = temporaryURL()
+        var overrides = TerminalPreferencesOverrides()
+        overrides.fontSize = 18
+        let workspace = Workspace(title: "Damaged", settingsOverrides: overrides)
+        let snapshot = WorkspaceStoreSnapshot(workspaces: [workspace], selectedWorkspaceID: workspace.id)
+        var json = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(snapshot)) as? [String: Any]
+        )
+        var workspaces = try XCTUnwrap(json["workspaces"] as? [[String: Any]])
+        var settingsOverrides = try XCTUnwrap(workspaces[0]["settingsOverrides"] as? [String: Any])
+        XCTAssertEqual(settingsOverrides["fontSize"] as? Double, 18)
+        settingsOverrides["fontSize"] = "large"
+        workspaces[0]["settingsOverrides"] = settingsOverrides
+        json["workspaces"] = workspaces
+        let originalData = try JSONSerialization.data(withJSONObject: json)
+        try originalData.write(to: url)
+
+        let store = try WorkspaceStore(persistenceURL: url)
+
+        XCTAssertGreaterThan(store.loadReport.structuralRepairCount, 0)
+        XCTAssertEqual(store.loadReport.backupURLs, [store.recoveryBackupURL])
+        XCTAssertEqual(try Data(contentsOf: store.recoveryBackupURL), originalData)
+        XCTAssertNil(try XCTUnwrap(store.workspaces.first).settingsOverrides?.fontSize)
+    }
+
 }

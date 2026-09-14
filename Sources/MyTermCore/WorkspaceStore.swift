@@ -240,6 +240,7 @@ public struct WorkspaceStoreSnapshot: Codable, Equatable, Sendable {
         let decodedVersion = try container.decode(Int.self, forKey: .version)
         switch decodedVersion {
         case Self.currentVersion:
+            decoder.recordKnownKeys(container.allKeys)
             version = decodedVersion
             folders = try container.decodeIfPresent(LossyArray<WorkspaceFolder>.self, forKey: .folders)?.elements ?? []
             globalSettings = (try? container.decode(TerminalPreferences.self, forKey: .globalSettings)) ?? .default
@@ -298,7 +299,8 @@ public final class WorkspaceStore {
                 if sourceVersion == WorkspaceStoreSnapshot.currentVersion {
                     let mutationCount = try Self.persistedMutationCount(
                         from: originalData,
-                        to: snapshot
+                        to: snapshot,
+                        knownKeys: tracker.knownKeysByPath
                     )
                     tracker.recordStructuralRepairs(max(
                         mutationCount - tracker.droppedElementCount - tracker.identifierRepairCount,
@@ -1236,14 +1238,15 @@ public final class WorkspaceStore {
 
     private static func persistedMutationCount(
         from originalData: Data,
-        to snapshot: WorkspaceStoreSnapshot
+        to snapshot: WorkspaceStoreSnapshot,
+        knownKeys: [[String]: Set<String>]
     ) throws -> Int {
         do {
             let encodedData = try JSONEncoder().encode(snapshot)
             let original = try JSONSerialization.jsonObject(with: originalData)
             var repaired = try JSONSerialization.jsonObject(with: encodedData)
             removeExpectedSettingsDefaultsMigration(from: original, in: &repaired)
-            return jsonDifferenceCount(original, repaired)
+            return jsonDifferenceCount(original, repaired, at: [], knownKeys: knownKeys)
         } catch {
             throw WorkspaceStoreError.invalidPersistence(
                 reason: "Could not compare repaired workspace state: \(error.localizedDescription)"
@@ -1270,24 +1273,35 @@ public final class WorkspaceStore {
 
     /// Differences between what the file held and what this build re-encodes, with `lhs` the file.
     ///
-    /// A key the file has and the encoding does not is one this build has no decoder for: a file
-    /// from a newer build, not a broken one. It is not a repair, so it neither shows the banner
-    /// nor writes a backup. The key is still absent from the next write, because nothing here can
-    /// carry a value it does not understand.
-    private static func jsonDifferenceCount(_ lhs: Any, _ rhs: Any) -> Int {
+    /// A key only the file has is either one a decoder here knows but discarded, which is a repair,
+    /// or one no decoder here knows: a file from a newer build, not a broken one. That is not a
+    /// repair, so it neither shows the banner nor writes a backup, though the key is still absent
+    /// from the next write because nothing here can carry a value it does not understand.
+    /// `knownKeys` is what the decoders recognised at each path, and tells the two apart.
+    private static func jsonDifferenceCount(
+        _ lhs: Any,
+        _ rhs: Any,
+        at path: [String],
+        knownKeys: [[String]: Set<String>]
+    ) -> Int {
         if let lhs = lhs as? [String: Any], let rhs = rhs as? [String: Any] {
-            return rhs.keys.reduce(into: 0) { count, key in
-                guard let left = lhs[key] else {
+            return Set(lhs.keys).union(rhs.keys).reduce(into: 0) { count, key in
+                switch (lhs[key], rhs[key]) {
+                case (let left?, let right?):
+                    count += jsonDifferenceCount(left, right, at: path + [key], knownKeys: knownKeys)
+                case (.some, nil):
+                    count += knownKeys[path, default: []].contains(key) ? 1 : 0
+                case (nil, .some):
                     count += 1
-                    return
+                case (nil, nil):
+                    break
                 }
-                count += jsonDifferenceCount(left, rhs[key]!)
             }
         }
         if let lhs = lhs as? [Any], let rhs = rhs as? [Any] {
             let sharedCount = min(lhs.count, rhs.count)
             let changed = (0..<sharedCount).reduce(into: 0) { count, index in
-                count += jsonDifferenceCount(lhs[index], rhs[index])
+                count += jsonDifferenceCount(lhs[index], rhs[index], at: path + [String(index)], knownKeys: knownKeys)
             }
             return changed + abs(lhs.count - rhs.count)
         }
