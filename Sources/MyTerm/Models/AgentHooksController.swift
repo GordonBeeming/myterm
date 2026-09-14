@@ -212,7 +212,10 @@ final class AgentHooksController {
             withJSONObject: settings,
             options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         )
-        try data.write(to: settingsURL, options: .atomic)
+        // The file is the user's, and a dotfiles repo often owns it through a symlink. An atomic
+        // write renames over the name it is given, which would replace the link with a copy, so
+        // the write goes to whatever the link points at.
+        try data.write(to: settingsURL.resolvingSymlinksInPath(), options: .atomic)
     }
 }
 
