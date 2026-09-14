@@ -50,7 +50,6 @@ testing, and screen-scraping terminal output.
 - Graphics: Sixel, iTerm2-style inline images, and Kitty graphics protocol
 - Selection and search with a built-in macOS find bar and programmable search APIs
 - Thread-safe ``Terminal`` instances
-- Terminal session recording and playback with `termcast`
 
 ## Topics
 

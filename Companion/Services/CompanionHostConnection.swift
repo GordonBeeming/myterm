@@ -21,6 +21,28 @@ struct RemoteCommandFailure: Error, LocalizedError, Sendable {
     var errorDescription: String? { message }
 }
 
+struct AttachedRouteRegistry {
+    private var routes: [UUID: TerminalRoute] = [:]
+
+    mutating func register(_ route: TerminalRoute,
+                           requestingFreshCheckpoint: Bool = false) -> Bool {
+        let wasAttached = routes[route.sessionID] != nil
+        routes[route.sessionID] = route
+        return requestingFreshCheckpoint || !wasAttached
+    }
+
+    func route(sessionID: UUID) -> TerminalRoute? { routes[sessionID] }
+
+    mutating func update(_ route: TerminalRoute) {
+        guard routes[route.sessionID] != nil else { return }
+        routes[route.sessionID] = route
+    }
+
+    mutating func remove(sessionID: UUID) { routes.removeValue(forKey: sessionID) }
+
+    var values: [TerminalRoute] { Array(routes.values) }
+}
+
 actor CompanionHostConnection {
     private let host: SavedHostDescriptor
     private let tokenManager: RelayTokenManager
@@ -36,7 +58,7 @@ actor CompanionHostConnection {
     private var helloChannel: SecureRelayChannel?
     private var applicationChannel: SecureRelayChannel?
     private var projection: RemoteWorkspaceProjection?
-    private var attachedRoutes: [UUID: TerminalRoute] = [:]
+    private var attachedRoutes = AttachedRouteRegistry()
     private var commandContinuations: [UUID: CheckedContinuation<Data?, Error>] = [:]
     private var commandTimeouts: [UUID: Task<Void, Never>] = [:]
 
@@ -92,9 +114,18 @@ actor CompanionHostConnection {
         finish(error: nil)
     }
 
-    func attach(_ route: TerminalRoute) async throws {
-        attachedRoutes[route.sessionID] = route
-        try await send(.attach(metadata(route: route, requestID: UUID()), AttachParameters()))
+    func attach(_ route: TerminalRoute,
+                requestingFreshCheckpoint: Bool = false) async throws {
+        guard attachedRoutes.register(route,
+                                      requestingFreshCheckpoint: requestingFreshCheckpoint) else {
+            return
+        }
+        do {
+            try await send(.attach(metadata(route: route, requestID: UUID()), AttachParameters()))
+        } catch {
+            attachedRoutes.remove(sessionID: route.sessionID)
+            throw error
+        }
     }
 
     func detach(_ route: TerminalRoute, leaseID: UUID?) async throws {
@@ -104,7 +135,7 @@ actor CompanionHostConnection {
             catch { releaseError = error }
         }
         try await send(.detach(metadata(route: route, requestID: UUID()), DetachParameters()))
-        attachedRoutes.removeValue(forKey: route.sessionID)
+        attachedRoutes.remove(sessionID: route.sessionID)
         await checkpointAssembler.cancel(sessionID: route.sessionID)
         if let releaseError { throw releaseError }
     }
@@ -313,7 +344,7 @@ actor CompanionHostConnection {
 
     private func route(for metadata: MessageMetadata) -> TerminalRoute? {
         guard let sessionID = metadata.sessionID else { return nil }
-        if let route = attachedRoutes[sessionID] {
+        if let route = attachedRoutes.route(sessionID: sessionID) {
             guard let workspaceID = metadata.workspaceID, let groupID = metadata.groupID,
                   let tabID = metadata.tabID else { return route }
             let title = projection?.workspaces.first(where: { $0.id.rawValue == workspaceID })?
@@ -322,7 +353,7 @@ actor CompanionHostConnection {
             let updated = TerminalRoute(connectionID: route.connectionID,
                                         workspaceID: workspaceID, groupID: groupID,
                                         tabID: tabID, sessionID: sessionID, title: title)
-            attachedRoutes[sessionID] = updated
+            attachedRoutes.update(updated)
             return updated
         }
         guard let workspaceID = metadata.workspaceID, let groupID = metadata.groupID,
@@ -334,20 +365,21 @@ actor CompanionHostConnection {
     }
 
     private func reconcileAttachedRoutes(using projection: RemoteWorkspaceProjection) {
-        for (sessionID, existing) in Array(attachedRoutes) {
+        for existing in attachedRoutes.values {
+            let sessionID = existing.sessionID
             for workspace in projection.workspaces {
                 for group in workspace.groups {
                     guard let tab = group.tabs.first(where: {
                         $0.terminalSessionID?.rawValue == sessionID
                     }) else { continue }
-                    attachedRoutes[sessionID] = TerminalRoute(
+                    attachedRoutes.update(TerminalRoute(
                         connectionID: existing.connectionID,
                         workspaceID: workspace.id.rawValue,
                         groupID: group.id.rawValue,
                         tabID: tab.id.rawValue,
                         sessionID: sessionID,
                         title: tab.title
-                    )
+                    ))
                 }
             }
         }

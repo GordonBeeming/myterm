@@ -5,6 +5,8 @@ import SwiftUI
 struct WorkspaceDetail: View {
     let scene: SceneModel
     var workspaceID: UUID?
+    @State private var browserRenameRoute: BrowserRoute?
+    @State private var browserRenameTitle = ""
 
     init(scene: SceneModel, workspaceID: UUID? = nil) {
         self.scene = scene
@@ -19,7 +21,7 @@ struct WorkspaceDetail: View {
                         Section("Terminal group") {
                             ForEach(group.tabs, id: \.id) { tab in
                                 Button {
-                                    open(tab: tab, group: group)
+                                    Task { await open(tab: tab, group: group) }
                                 } label: {
                                     TabProjectionRow(tab: tab)
                                 }
@@ -45,6 +47,20 @@ struct WorkspaceDetail: View {
                 ContentUnavailableView("Choose a workspace", systemImage: "terminal")
             }
         }
+        .alert("Rename browser tab", isPresented: Binding(
+            get: { browserRenameRoute != nil },
+            set: { if !$0 { browserRenameRoute = nil } }
+        )) {
+            TextField("Name", text: $browserRenameTitle)
+            Button("Rename") {
+                guard let route = browserRenameRoute else { return }
+                Task { await renameBrowser(route) }
+            }
+            .disabled(browserRenameTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Enter the name shown for this browser tab on the Mac.")
+        }
     }
 
     private var workspace: RemoteWorkspaceItem? {
@@ -52,12 +68,13 @@ struct WorkspaceDetail: View {
         return scene.projection?.workspaces.first { $0.id.rawValue == id }
     }
 
-    private func open(tab: RemoteTabProjection, group: RemoteTabGroupProjection) {
+    private func open(tab: RemoteTabProjection, group: RemoteTabGroupProjection) async {
         guard let workspace, let connectionID = scene.selectedConnectionID else { return }
+        await scene.setSecondaryTerminal(nil)
+        guard scene.selectedConnectionID == connectionID else { return }
         switch tab.kind {
         case .terminal:
             guard let sessionID = tab.terminalSessionID?.rawValue else { return }
-            scene.secondaryTerminal = nil
             scene.path.append(.terminal(TerminalRoute(
                 connectionID: connectionID, workspaceID: workspace.id.rawValue,
                 groupID: group.id.rawValue, tabID: tab.id.rawValue,
@@ -75,14 +92,32 @@ struct WorkspaceDetail: View {
     @ViewBuilder
     private func tabMenu(tab: RemoteTabProjection, group: RemoteTabGroupProjection) -> some View {
         Button("Rename") {
-            guard let sessionID = tab.terminalSessionID?.rawValue, let workspace,
-                  let connectionID = scene.selectedConnectionID else { return }
-            scene.sheet = .terminalActions(TerminalRoute(
-                connectionID: connectionID, workspaceID: workspace.id.rawValue,
-                groupID: group.id.rawValue, tabID: tab.id.rawValue,
-                sessionID: sessionID, title: tab.title
-            ))
+            guard let workspace, let connectionID = scene.selectedConnectionID else { return }
+            if tab.kind == .terminal, let sessionID = tab.terminalSessionID?.rawValue {
+                scene.sheet = .terminalActions(TerminalRoute(
+                    connectionID: connectionID, workspaceID: workspace.id.rawValue,
+                    groupID: group.id.rawValue, tabID: tab.id.rawValue,
+                    sessionID: sessionID, title: tab.title
+                ))
+            } else if tab.kind == .browser {
+                browserRenameTitle = tab.title
+                browserRenameRoute = BrowserRoute(
+                    connectionID: connectionID, workspaceID: workspace.id.rawValue,
+                    groupID: group.id.rawValue, tabID: tab.id.rawValue,
+                    title: tab.title, url: tab.browserURL
+                )
+            }
         }
+    }
+
+    private func renameBrowser(_ route: BrowserRoute) async {
+        do {
+            _ = try await scene.command(.tabRename, metadata: MessageMetadata(
+                hostID: route.hostID, workspaceID: route.workspaceID,
+                groupID: route.groupID, tabID: route.tabID
+            ), payload: try JSONEncoder().encode(RemoteRenamePayload(title: browserRenameTitle)))
+            browserRenameRoute = nil
+        } catch { scene.errorMessage = error.localizedDescription }
     }
 
     private func createTab(kind: RemoteTabKind) async {

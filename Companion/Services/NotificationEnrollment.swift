@@ -26,6 +26,8 @@ final class APNSTokenBroker {
         for waiter in waiters { waiter.resume(with: result) }
     }
 
+    func prepareForTokenRegistration() { token = nil }
+
     func receiveChallenge(_ challenge: Data) {
         guard !challengeWaiters.isEmpty else {
             if pendingChallenges.count < Self.maximumPendingChallenges {
@@ -198,26 +200,32 @@ final class NotificationEnrollmentModel {
                     throw NSError(domain: "MyTermPush", code: 2,
                                   userInfo: [NSLocalizedDescriptionKey: "Allow notifications in Settings before enabling terminal alerts."])
                 }
+                APNSTokenBroker.shared.prepareForTokenRegistration()
                 UIApplication.shared.registerForRemoteNotifications()
                 let apnsToken = try await APNSTokenBroker.shared.currentToken()
                 try await enroll(scopeID: scopeID, hosts: hosts, gateway: gateway,
                                  apnsToken: apnsToken, register: register)
                 recoveryRequired = false
                 isEnabled = true
-                statusText = "Encrypted alerts are enabled for \(hosts.count) paired Mac\(hosts.count == 1 ? "" : "s")."
-                if (try? hasRecoveryWarning(scopeID: scopeID)) == true {
-                    statusText += " Older remote grants could not be revoked and may still produce generic alerts until notifications are disabled in iOS Settings."
-                }
+                statusText = statusIncludingRecoveryWarning(
+                    "Encrypted alerts are enabled for \(hosts.count) paired Mac\(hosts.count == 1 ? "" : "s").",
+                    scopeID: scopeID
+                )
             } else {
                 try await revoke(hosts: hosts, scopeID: scopeID, gateway: gateway,
                                   register: register)
                 isEnabled = false
-                statusText = "Notifications are off."
+                statusText = statusIncludingRecoveryWarning("Notifications are off.",
+                                                            scopeID: scopeID)
             }
         } catch {
             if enabled {
-                isEnabled = false
-                statusText = error.localizedDescription
+                let remaining = await remainingPinCount(scopeID: scopeID)
+                isEnabled = remaining != 0
+                let base = isEnabled
+                    ? "Encrypted alerts remain enabled for \(remaining) Mac\(remaining == 1 ? "" : "s"), but enrollment did not finish. \(error.localizedDescription)"
+                    : "Notifications remain off because enrollment did not finish. \(error.localizedDescription)"
+                statusText = statusIncludingRecoveryWarning(base, scopeID: scopeID)
             } else {
                 if error as? RemoteError == .authenticationRequired
                     || error as? RemoteError == .authenticationRevoked {
@@ -228,9 +236,10 @@ final class NotificationEnrollmentModel {
                 }
                 let remaining = await remainingPinCount(scopeID: scopeID)
                 isEnabled = remaining != 0
-                statusText = isEnabled
+                let base = isEnabled
                     ? "Alerts remain enabled for \(remaining) Mac\(remaining == 1 ? "" : "s"). Retry, or disable notifications in iOS Settings. \(error.localizedDescription)"
                     : "Notifications are off."
+                statusText = statusIncludingRecoveryWarning(base, scopeID: scopeID)
             }
         }
     }
@@ -263,6 +272,14 @@ final class NotificationEnrollmentModel {
         let recipient: PushRecipientSession
         if let saved = try await credentials.session(gateway: gateway) {
             recipient = saved
+            let challengeID = try await client.beginAPNSTokenUpdate(
+                apnsToken: apnsToken, session: saved, signingKey: signingKey
+            )
+            let challenge = try await APNSTokenBroker.shared.tokenUpdateChallenge(id: challengeID)
+            try await client.confirmAPNSTokenUpdate(
+                challengeID: challengeID, challenge: challenge,
+                session: saved, signingKey: signingKey
+            )
         } else {
             guard DCAppAttestService.shared.isSupported else {
                 throw NSError(domain: "MyTermPush", code: 3,
@@ -427,6 +444,11 @@ final class NotificationEnrollmentModel {
                                           accessGroup: AppConfiguration.sharedKeychainGroup,
                                           accessibility: .notificationExtension)
         return try secrets.read(account: recoveryWarningAccount(scopeID: scopeID)) != nil
+    }
+
+    private func statusIncludingRecoveryWarning(_ status: String, scopeID: UUID) -> String {
+        guard (try? hasRecoveryWarning(scopeID: scopeID)) == true else { return status }
+        return status + " Older remote grants could not be revoked and may still produce generic alerts until notifications are disabled in iOS Settings."
     }
 
 

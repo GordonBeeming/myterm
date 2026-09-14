@@ -254,7 +254,7 @@ func (s *Server) authenticateDevice(next http.Handler) http.Handler {
 			return
 		}
 		timestamp, err := strconv.ParseInt(r.Header.Get("X-MyTerm-Timestamp"), 10, 64)
-		if err != nil || abs(s.now().Unix()-timestamp) > 300 {
+		if err != nil || !timestampWithin(s.now().Unix(), timestamp, 300) {
 			writeError(w, 401, "invalid_signature", "Request timestamp is outside the allowed window.")
 			return
 		}
@@ -423,7 +423,7 @@ func (s *Server) notify(w http.ResponseWriter, r *http.Request) {
 	if !decodeStrict(w, r, 8<<10, &req) {
 		return
 	}
-	if _, err = uuid.Parse(req.EventID); err != nil || abs(s.now().Unix()-req.Timestamp) > 300 {
+	if _, err = uuid.Parse(req.EventID); err != nil || !timestampWithin(s.now().Unix(), req.Timestamp, 300) {
 		bad(w, "invalid_event", "Event identifier or timestamp is invalid.")
 		return
 	}
@@ -583,11 +583,14 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 func writeError(w http.ResponseWriter, status int, code, msg string) {
 	writeJSON(w, status, map[string]any{"error": map[string]string{"code": code, "message": msg}})
 }
-func abs(v int64) int64 {
-	if v < 0 {
-		return -v
+func timestampWithin(now, candidate, window int64) bool {
+	if window < 0 {
+		return false
 	}
-	return v
+	if candidate >= now {
+		return uint64(candidate)-uint64(now) <= uint64(window)
+	}
+	return uint64(now)-uint64(candidate) <= uint64(window)
 }
 func hasCredentialQuery(values url.Values) bool {
 	for _, name := range []string{"token", "access_token", "grant_token", "device_session_token"} {

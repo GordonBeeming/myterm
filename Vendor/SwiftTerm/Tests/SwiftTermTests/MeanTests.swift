@@ -37,9 +37,5 @@ final class MeanTests {
         return true
     }
     
-    @Test func testInvalidMargins() {
-        
-        //XCTAssertTrue(loadAndRun (file: "../../crash-98ce0e0b8d286505f093cca705ac3e2230d2bd80"), "marginTest")
-    }
 }
 #endif

@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -33,6 +34,23 @@ type captureAPNS struct {
 	resultError error
 }
 type activationVerifier struct{}
+
+func TestTimestampWithinHandlesBoundsWithoutOverflow(t *testing.T) {
+	now := int64(1789470900)
+	for _, value := range []int64{now - 300, now, now + 300} {
+		if !timestampWithin(now, value, 300) {
+			t.Fatalf("valid timestamp %d rejected", value)
+		}
+	}
+	for _, value := range []int64{now - 301, now + 301, math.MinInt64, math.MaxInt64} {
+		if timestampWithin(now, value, 300) {
+			t.Fatalf("invalid timestamp %d accepted", value)
+		}
+	}
+	if timestampWithin(now, now, -1) {
+		t.Fatal("negative window accepted")
+	}
+}
 
 func (activationVerifier) VerifyAttestation([]byte, []byte, string) (attest.Attestation, error) {
 	return attest.Attestation{}, nil
@@ -105,6 +123,13 @@ func TestSignedGrantNotificationRotationCrossRecipientAndRevocation(t *testing.T
 	hostKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	hostPublic := elliptic.Marshal(elliptic.P256(), hostKey.X, hostKey.Y)
 	grantBody := marshal(t, map[string]any{"relay_origin": "https://relay.example.com", "host_id": uuid.NewString(), "host_public_key": base64.RawURLEncoding.EncodeToString(hostPublic)})
+	for _, extreme := range []int64{math.MinInt64, math.MaxInt64} {
+		rejected := signedDeviceRequestTimestamp(t, httpServer, http.MethodPost, "/v1/recipient-grants", session, deviceKey, extreme, grantBody)
+		if rejected.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("extreme device timestamp %d returned %d", extreme, rejected.StatusCode)
+		}
+		rejected.Body.Close()
+	}
 	response := signedDeviceRequest(t, httpServer, http.MethodPost, "/v1/recipient-grants", session, deviceKey, now, grantBody)
 	if response.StatusCode != 201 {
 		t.Fatalf("create grant %d: %s", response.StatusCode, read(t, response))
@@ -116,6 +141,13 @@ func TestSignedGrantNotificationRotationCrossRecipientAndRevocation(t *testing.T
 	decodeResponse(t, response, &grant)
 	eventID := uuid.NewString()
 	ciphertext := bytes.Repeat([]byte{9}, 64)
+	for _, extreme := range []int64{math.MinInt64, math.MaxInt64} {
+		rejected := grantRequest(t, httpServer, grant.GrantToken, signedEventBody(t, hostKey, grant.GrantID, recipient, uuid.NewString(), extreme, ciphertext))
+		if rejected.StatusCode != http.StatusBadRequest {
+			t.Fatalf("extreme event timestamp %d returned %d", extreme, rejected.StatusCode)
+		}
+		rejected.Body.Close()
+	}
 	eventBody := signedEventBody(t, hostKey, grant.GrantID, recipient, eventID, now.Unix(), ciphertext)
 	response = grantRequest(t, httpServer, grant.GrantToken, eventBody)
 	if response.StatusCode != 202 {
@@ -237,6 +269,9 @@ func seedHTTPDevice(t *testing.T, s *store.Store, suffix string, now time.Time) 
 	return private, session, recipient
 }
 func signedDeviceRequest(t *testing.T, server *httptest.Server, method, path, session string, key *ecdsa.PrivateKey, now time.Time, body []byte) *http.Response {
+	return signedDeviceRequestTimestamp(t, server, method, path, session, key, now.Unix(), body)
+}
+func signedDeviceRequestTimestamp(t *testing.T, server *httptest.Server, method, path, session string, key *ecdsa.PrivateKey, timestamp int64, body []byte) *http.Response {
 	t.Helper()
 	if body == nil {
 		body = []byte{}
@@ -244,12 +279,12 @@ func signedDeviceRequest(t *testing.T, server *httptest.Server, method, path, se
 	nonceRaw := make([]byte, 16)
 	rand.Read(nonceRaw)
 	nonce := base64.RawURLEncoding.EncodeToString(nonceRaw)
-	canonical := deviceCanonical(method, path, now.Unix(), nonce, body)
+	canonical := deviceCanonical(method, path, timestamp, nonce, body)
 	digest := sha256.Sum256(canonical)
 	signature, _ := ecdsa.SignASN1(rand.Reader, key, digest[:])
 	request, _ := http.NewRequest(method, server.URL+path, bytes.NewReader(body))
 	request.Header.Set("Authorization", "Device "+session)
-	request.Header.Set("X-MyTerm-Timestamp", strconv.FormatInt(now.Unix(), 10))
+	request.Header.Set("X-MyTerm-Timestamp", strconv.FormatInt(timestamp, 10))
 	request.Header.Set("X-MyTerm-Nonce", nonce)
 	request.Header.Set("X-MyTerm-Signature", base64.RawURLEncoding.EncodeToString(signature))
 	request.Header.Set("Content-Type", "application/json")

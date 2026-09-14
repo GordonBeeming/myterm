@@ -8,6 +8,116 @@ import SwiftTerm
 import XCTest
 @testable import MyTerm
 
+private final class FixtureTrustDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable
+{
+    static let challengeSelector = NSSelectorFromString(
+        "URLSession:didReceiveChallenge:completionHandler:"
+    )
+
+    private let certificate: SecCertificate
+    private let endpoint: RelayEndpoint
+    private let diagnostics: FixtureNetworkDiagnostics
+
+    init(
+        certificate: SecCertificate,
+        endpoint: RelayEndpoint,
+        diagnostics: FixtureNetworkDiagnostics
+    ) {
+        self.certificate = certificate
+        self.endpoint = endpoint
+        self.diagnostics = diagnostics
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping @Sendable (URLRequest?) -> Void
+    ) {
+        guard let url = request.url, endpoint.hasSameSecureAuthority(as: url) else {
+            completionHandler(nil)
+            return
+        }
+        var redirected = request
+        if let authorization = task.originalRequest?.value(forHTTPHeaderField: "Authorization") {
+            redirected.setValue(authorization, forHTTPHeaderField: "Authorization")
+        }
+        completionHandler(redirected)
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didCompleteWithError error: (any Error)?
+    ) {
+        guard let error else { return }
+        diagnostics.record(error)
+    }
+}
+
+private extension FixtureTrustDelegate {
+    func urlSession(
+        _ session: URLSession,
+        didReceive challenge: URLAuthenticationChallenge,
+        completionHandler: @escaping @Sendable (
+            URLSession.AuthChallengeDisposition,
+            URLCredential?
+        ) -> Void
+    ) {
+        guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+              let trust = challenge.protectionSpace.serverTrust,
+              let challengeURL = challenge.protectionSpace.protectionSpaceURL,
+              endpoint.hasSameSecureAuthority(as: challengeURL),
+              SecTrustSetAnchorCertificates(trust, [certificate] as CFArray) == errSecSuccess,
+              SecTrustSetAnchorCertificatesOnly(trust, true) == errSecSuccess else {
+            diagnostics.record("TLS challenge rejected")
+            Task { @MainActor in
+                completionHandler(.cancelAuthenticationChallenge, nil)
+            }
+            return
+        }
+        let credential = URLCredential(trust: trust)
+        diagnostics.record("TLS challenge accepted")
+        Task { @MainActor in
+            completionHandler(.useCredential, credential)
+        }
+    }
+}
+
+private final class FixtureNetworkDiagnostics: @unchecked Sendable {
+    private let lock = NSLock()
+    private var entries: [String] = []
+    private var currentStage = "launch relay fixture"
+
+    func setStage(_ stage: String) {
+        lock.withLock { currentStage = stage }
+    }
+
+    func record(_ message: String) {
+        lock.withLock {
+            if entries.count < 32 { entries.append(message) }
+        }
+    }
+
+    func record(_ error: any Error) {
+        let value = error as NSError
+        record("\(value.domain) code \(value.code)")
+    }
+
+    var summary: String {
+        lock.withLock { entries.joined(separator: ", ") }
+    }
+
+    var stage: String {
+        lock.withLock { currentStage }
+    }
+
+    func contains(_ entry: String) -> Bool {
+        lock.withLock { entries.contains(entry) }
+    }
+}
+
 @MainActor
 final class CompanionHostIntegrationTests: XCTestCase {
     private final class MemorySecrets: SecretStore, @unchecked Sendable {
@@ -29,56 +139,6 @@ final class CompanionHostIntegrationTests: XCTestCase {
 
     private final class CheckpointDelegate: TerminalDelegate {
         func send(source: Terminal, data: ArraySlice<UInt8>) {}
-    }
-
-    private final class FixtureTrustDelegate: NSObject, URLSessionDelegate,
-        URLSessionTaskDelegate, @unchecked Sendable
-    {
-        private let certificate: SecCertificate
-        private let endpoint: RelayEndpoint
-
-        init(certificate: SecCertificate, endpoint: RelayEndpoint) {
-            self.certificate = certificate
-            self.endpoint = endpoint
-        }
-
-        func urlSession(
-            _ session: URLSession,
-            didReceive challenge: URLAuthenticationChallenge,
-            completionHandler: @escaping @Sendable (
-                URLSession.AuthChallengeDisposition,
-                URLCredential?
-            ) -> Void
-        ) {
-            guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
-                  let trust = challenge.protectionSpace.serverTrust,
-                  let challengeURL = challenge.protectionSpace.protectionSpaceURL,
-                  endpoint.hasSameSecureAuthority(as: challengeURL),
-                  SecTrustSetAnchorCertificates(trust, [certificate] as CFArray) == errSecSuccess,
-                  SecTrustSetAnchorCertificatesOnly(trust, true) == errSecSuccess else {
-                completionHandler(.cancelAuthenticationChallenge, nil)
-                return
-            }
-            completionHandler(.useCredential, URLCredential(trust: trust))
-        }
-
-        func urlSession(
-            _ session: URLSession,
-            task: URLSessionTask,
-            willPerformHTTPRedirection response: HTTPURLResponse,
-            newRequest request: URLRequest,
-            completionHandler: @escaping @Sendable (URLRequest?) -> Void
-        ) {
-            guard let url = request.url, endpoint.hasSameSecureAuthority(as: url) else {
-                completionHandler(nil)
-                return
-            }
-            var redirected = request
-            if let authorization = task.originalRequest?.value(forHTTPHeaderField: "Authorization") {
-                redirected.setValue(authorization, forHTTPHeaderField: "Authorization")
-            }
-            completionHandler(redirected)
-        }
     }
 
     private final class ShellEngine: TerminalEngine {
@@ -208,6 +268,31 @@ final class CompanionHostIntegrationTests: XCTestCase {
         let sessionID: UUID
     }
 
+    func testFixtureFailureDiagnosticsPreserveStageWithoutSecrets() throws {
+        let logURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("myterm-fixture-diagnostics-\(UUID().uuidString).log")
+        defer { try? FileManager.default.removeItem(at: logURL) }
+        try Data("server started\nAuthorization: Bearer private-token\n".utf8).write(to: logURL)
+        let diagnostics = FixtureNetworkDiagnostics()
+        diagnostics.setStage("register and connect Mac host")
+        diagnostics.record(NSError(domain: NSURLErrorDomain, code: NSURLErrorCannotConnectToHost))
+
+        let error = fixtureIntegrationError(
+            stage: diagnostics.stage,
+            underlying: RemoteError.offline,
+            serverLogURL: logURL,
+            networkDiagnostics: diagnostics
+        )
+        let description = error.localizedDescription
+
+        XCTAssertTrue(description.contains("register and connect Mac host"))
+        XCTAssertTrue(description.contains("NSURLErrorDomain code -1004"))
+        XCTAssertTrue(description.contains("server started"))
+        XCTAssertTrue(description.contains("[redacted sensitive fixture log line]"))
+        XCTAssertFalse(description.contains("private-token"))
+        XCTAssertFalse(description.contains("Authorization"))
+    }
+
     func testRealRelayHostPairingCheckpointLeaseGeometryAndPTYIO() async throws {
         let launched = try await launchRelayFixture()
         let process = launched.process
@@ -218,9 +303,34 @@ final class CompanionHostIntegrationTests: XCTestCase {
             try? FileManager.default.removeItem(at: tempDirectory)
         }
 
+        let networkDiagnostics = FixtureNetworkDiagnostics()
+        do {
+            try await runCompanionHostIntegration(
+                launched: launched,
+                networkDiagnostics: networkDiagnostics
+            )
+        } catch {
+            throw fixtureIntegrationError(
+                stage: networkDiagnostics.stage,
+                underlying: error,
+                serverLogURL: launched.serverLogURL,
+                networkDiagnostics: networkDiagnostics
+            )
+        }
+    }
+
+    private func runCompanionHostIntegration(
+        launched: (process: Process, tempDirectory: URL, fixture: RelayFixture, serverLogURL: URL),
+        networkDiagnostics: FixtureNetworkDiagnostics
+    ) async throws {
+        networkDiagnostics.setStage("configure fixture TLS")
         let fixture = launched.fixture
         let endpoint = try RelayEndpoint(fixture.url)
-        let hostSession = try fixtureSession(fixture: fixture, endpoint: endpoint)
+        let hostSession = try fixtureSession(
+            fixture: fixture,
+            endpoint: endpoint,
+            diagnostics: networkDiagnostics
+        )
         let secrets = MemorySecrets()
         let reconnects = ReconnectRecorder()
         let defaultsSuite = "myterm-companion-integration-\(UUID().uuidString)"
@@ -228,8 +338,12 @@ final class CompanionHostIntegrationTests: XCTestCase {
         defaults.set(false, forKey: "automaticallyChecksForUpdates")
         defer { defaults.removePersistentDomain(forName: defaultsSuite) }
 
-        let supportDirectory = tempDirectory.appendingPathComponent("app-support", isDirectory: true)
+        let supportDirectory = launched.tempDirectory.appendingPathComponent(
+            "app-support",
+            isDirectory: true
+        )
         try FileManager.default.createDirectory(at: supportDirectory, withIntermediateDirectories: true)
+        networkDiagnostics.setStage("create scratch AppModel and PTYs")
         let model = try AppModel(
             channel: .development,
             applicationSupportDirectory: supportDirectory,
@@ -282,18 +396,34 @@ final class CompanionHostIntegrationTests: XCTestCase {
                 expiresAt: Date().addingTimeInterval(3_600)
             )
         )
+        networkDiagnostics.setStage("register and connect Mac host")
         host.startIfEnabled()
         try await waitUntil { host.status == .connected }
+        guard networkDiagnostics.contains("TLS challenge accepted") else {
+            throw NSError(
+                domain: "RelayFixtureTLSDelegate",
+                code: 2,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "The fixture connected without exercising its pinned TLS challenge handler.",
+                ]
+            )
+        }
 
         let identity = try await host.hostIdentityForTesting()
         let ticket = try await host.beginPairingForTesting()
         let clientAgreementKey = P256.KeyAgreement.PrivateKey()
         let clientSigningKey = P256.Signing.PrivateKey()
+        networkDiagnostics.setStage("connect first phone transport")
         let firstSocket = RelayWebSocketClient(
             endpoint: endpoint,
             hostID: identity.hostID,
             role: .client,
-            session: try fixtureSession(fixture: fixture, endpoint: endpoint)
+            session: try fixtureSession(
+                fixture: fixture,
+                endpoint: endpoint,
+                diagnostics: networkDiagnostics
+            )
         )
         let firstReader = RelayEventReader(try await firstSocket.connect(accessToken: fixture.clientToken))
         _ = try await requireReady(firstReader)
@@ -305,6 +435,7 @@ final class CompanionHostIntegrationTests: XCTestCase {
             clientNotificationSigningPublicKey: clientSigningKey.publicKey.x963Representation,
             clientName: "Integration Phone"
         )
+        networkDiagnostics.setStage("pair first phone")
         try await firstSocket.send(
             destinationConnectionID: RelayFrame.broadcastDestination,
             payload: RelayApplicationPacket.pairingProposal(
@@ -325,6 +456,7 @@ final class CompanionHostIntegrationTests: XCTestCase {
         )
         XCTAssertTrue(pairingResponse.approved)
 
+        networkDiagnostics.setStage("authenticate first phone")
         let first = try await authenticate(
             socket: firstSocket,
             reader: firstReader,
@@ -346,6 +478,7 @@ final class CompanionHostIntegrationTests: XCTestCase {
         )
         let targetMetadata = metadata(target: target, hostID: identity.hostID, runtimeID: first.runtimeID)
 
+        networkDiagnostics.setStage("attach first phone and import checkpoint")
         try await first.channel.send(
             .attach(targetMetadata, AttachParameters()),
             destinationConnectionID: RelayFrame.broadcastDestination,
@@ -357,6 +490,7 @@ final class CompanionHostIntegrationTests: XCTestCase {
         try restoredTerminal.importCheckpoint(checkpoint.bytes)
         XCTAssertEqual(try restoredTerminal.exportCheckpoint(), checkpoint.bytes)
 
+        networkDiagnostics.setStage("acquire first controller lease")
         try await first.channel.send(
             .controlRequest(
                 targetMetadata,
@@ -379,10 +513,15 @@ final class CompanionHostIntegrationTests: XCTestCase {
         )
         try await requireOutput(first, containing: firstMarker)
 
+        networkDiagnostics.setStage("authenticate and attach second phone")
         let second = try await makeAuthenticatedConnection(
             endpoint: endpoint,
             fixture: fixture,
-            session: try fixtureSession(fixture: fixture, endpoint: endpoint),
+            session: try fixtureSession(
+                fixture: fixture,
+                endpoint: endpoint,
+                diagnostics: networkDiagnostics
+            ),
             hostIdentity: identity,
             clientAgreementKey: clientAgreementKey,
             clientSigningKey: clientSigningKey
@@ -397,6 +536,7 @@ final class CompanionHostIntegrationTests: XCTestCase {
         )
         _ = try await requireCheckpoint(second, sessionID: target.sessionID)
 
+        networkDiagnostics.setStage("move attached terminal and continue PTY input")
         try await first.channel.send(
             .command(
                 targetMetadata,
@@ -436,6 +576,7 @@ final class CompanionHostIntegrationTests: XCTestCase {
             groupID: target.groupID,
             tabID: target.tabID
         )
+        networkDiagnostics.setStage("deny contended control without disconnect")
         try await second.channel.send(
             .controlRequest(
                 deniedMetadata,
@@ -464,6 +605,7 @@ final class CompanionHostIntegrationTests: XCTestCase {
         )
         _ = try await requireWorkspaceProjection(second)
 
+        networkDiagnostics.setStage("resize controller and broadcast geometry")
         try await first.channel.send(
             .resize(
                 targetMetadata,
@@ -500,6 +642,7 @@ final class CompanionHostIntegrationTests: XCTestCase {
         XCTAssertEqual(hostGeometry.rows, 31)
         try await requireOutput(first, containing: resizedMarker)
 
+        networkDiagnostics.setStage("reject forged lease")
         try await second.channel.send(
             .input(
                 secondMetadata,
@@ -524,10 +667,15 @@ final class CompanionHostIntegrationTests: XCTestCase {
         )
         try await requireOutput(first, containing: secondMarker)
 
+        networkDiagnostics.setStage("reject stale runtime")
         let stale = try await makeAuthenticatedConnection(
             endpoint: endpoint,
             fixture: fixture,
-            session: try fixtureSession(fixture: fixture, endpoint: endpoint),
+            session: try fixtureSession(
+                fixture: fixture,
+                endpoint: endpoint,
+                diagnostics: networkDiagnostics
+            ),
             hostIdentity: identity,
             clientAgreementKey: clientAgreementKey,
             clientSigningKey: clientSigningKey
@@ -544,6 +692,7 @@ final class CompanionHostIntegrationTests: XCTestCase {
         )
         try await requireDisconnect(stale.reader)
 
+        networkDiagnostics.setStage("detach while keeping PTY running")
         try await first.channel.send(
             .detach(targetMetadata, DetachParameters()),
             destinationConnectionID: RelayFrame.broadcastDestination,
@@ -569,6 +718,7 @@ final class CompanionHostIntegrationTests: XCTestCase {
         )
         XCTAssertTrue(host.remoteControllers.isEmpty)
 
+        networkDiagnostics.setStage("reconnect after transport loss")
         await host.disconnectTransportForTesting()
         try await waitUntilAsync {
             await reconnects.delays == [1]
@@ -896,7 +1046,8 @@ final class CompanionHostIntegrationTests: XCTestCase {
 
     private func fixtureSession(
         fixture: RelayFixture,
-        endpoint: RelayEndpoint
+        endpoint: RelayEndpoint,
+        diagnostics: FixtureNetworkDiagnostics
     ) throws -> URLSession {
         let pem = try String(
             contentsOf: URL(fileURLWithPath: fixture.certificatePath),
@@ -916,9 +1067,25 @@ final class CompanionHostIntegrationTests: XCTestCase {
         configuration.httpCookieStorage = nil
         configuration.urlCredentialStorage = nil
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        let delegate = FixtureTrustDelegate(
+            certificate: certificate,
+            endpoint: endpoint,
+            diagnostics: diagnostics
+        )
+        guard delegate.responds(to: FixtureTrustDelegate.challengeSelector) else {
+            diagnostics.record("TLS challenge selector unavailable")
+            throw NSError(
+                domain: "RelayFixtureTLSDelegate",
+                code: 1,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "The fixture URLSession delegate does not expose its TLS challenge selector.",
+                ]
+            )
+        }
         return URLSession(
             configuration: configuration,
-            delegate: FixtureTrustDelegate(certificate: certificate, endpoint: endpoint),
+            delegate: delegate,
             delegateQueue: nil
         )
     }
@@ -926,7 +1093,8 @@ final class CompanionHostIntegrationTests: XCTestCase {
     private func launchRelayFixture() async throws -> (
         process: Process,
         tempDirectory: URL,
-        fixture: RelayFixture
+        fixture: RelayFixture,
+        serverLogURL: URL
     ) {
         let repository = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -986,7 +1154,7 @@ final class CompanionHostIntegrationTests: XCTestCase {
                 if FileManager.default.fileExists(atPath: readyURL.path) {
                     if let data = try? Data(contentsOf: readyURL),
                        let fixture = try? JSONDecoder().decode(RelayFixture.self, from: data) {
-                        return (process, tempDirectory, fixture)
+                        return (process, tempDirectory, fixture, serverLogURL)
                     }
                 }
                 guard process.isRunning else {
@@ -1046,17 +1214,7 @@ final class CompanionHostIntegrationTests: XCTestCase {
     }
 
     private func fixtureProcessError(phase: String, logURL: URL, code: Int) -> NSError {
-        let log: String
-        do {
-            let handle = try FileHandle(forReadingFrom: logURL)
-            defer { try? handle.close() }
-            let end = try handle.seekToEnd()
-            let maximumBytes: UInt64 = 32 * 1_024
-            try handle.seek(toOffset: end > maximumBytes ? end - maximumBytes : 0)
-            log = String(decoding: try handle.readToEnd() ?? Data(), as: UTF8.self)
-        } catch {
-            log = "Unable to read fixture log: \(error.localizedDescription)"
-        }
+        let log = sanitizedFixtureLog(at: logURL)
         return NSError(
             domain: "RelayFixture",
             code: code,
@@ -1064,6 +1222,47 @@ final class CompanionHostIntegrationTests: XCTestCase {
                 NSLocalizedDescriptionKey: "Relay fixture \(phase).\n\(log)",
             ]
         )
+    }
+
+    private func fixtureIntegrationError(
+        stage: String,
+        underlying: any Error,
+        serverLogURL: URL,
+        networkDiagnostics: FixtureNetworkDiagnostics
+    ) -> NSError {
+        var details = [
+            "Companion host integration failed during: \(stage).",
+            "Underlying error: \(underlying.localizedDescription)",
+        ]
+        let network = networkDiagnostics.summary
+        if !network.isEmpty { details.append("URLSession diagnostics: \(network)") }
+        let server = sanitizedFixtureLog(at: serverLogURL)
+        if !server.isEmpty { details.append("Relay server log:\n\(server)") }
+        return NSError(
+            domain: "CompanionHostIntegration",
+            code: (underlying as NSError).code,
+            userInfo: [NSLocalizedDescriptionKey: details.joined(separator: "\n")]
+        )
+    }
+
+    private func sanitizedFixtureLog(at url: URL) -> String {
+        do {
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+            let end = try handle.seekToEnd()
+            let maximumBytes: UInt64 = 32 * 1_024
+            try handle.seek(toOffset: end > maximumBytes ? end - maximumBytes : 0)
+            let text = String(decoding: try handle.readToEnd() ?? Data(), as: UTF8.self)
+            let sensitive = ["authorization", "bearer", "token", "secret", "password"]
+            return text.split(separator: "\n", omittingEmptySubsequences: false).map { line in
+                let lowercase = line.lowercased()
+                return sensitive.contains(where: lowercase.contains)
+                    ? "[redacted sensitive fixture log line]"
+                    : String(line)
+            }.joined(separator: "\n")
+        } catch {
+            return "Unable to read fixture log (\((error as NSError).domain) code \((error as NSError).code))."
+        }
     }
 }
 

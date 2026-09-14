@@ -28,6 +28,8 @@ COMPANION_DEVICE_FAMILY=iPhone bash script/test_companion.sh
 COMPANION_DEVICE_FAMILY=iPad bash script/test_companion.sh
 ```
 
+The native interoperability tests also require Go. They compile a temporary relay fixture before starting its readiness check; the service modules declare the minimum Go version.
+
 The simulator script creates a dedicated device, saves an `.xcresult` under `dist`, and deletes that device afterward. `COMPANION_SIMULATOR_UDID` selects an explicitly supplied device instead; the script never deletes a supplied device. Move previous result bundles before rerunning. Set `COMPANION_KEEP_SIMULATOR=1` when an automatically created device needs further inspection.
 
 Existing desktop validation remains `swift test --parallel`, `bash script/channel_isolation_test.sh`, and `make verify`. Use `--bundle` when running the desktop build script without launching the app. Normal launches now focus the existing healthy instance. Quit it explicitly before launching a rebuilt version.

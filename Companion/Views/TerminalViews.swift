@@ -49,10 +49,18 @@ struct TerminalScreen: View {
                     Button("Smaller") { adjustFont(by: -1) }
                     Button("Reset") { setFont(13) }
                 }
-                Menu("Second terminal", systemImage: "rectangle.split.2x1") {
-                    Button("Single terminal") { setSecondary(nil) }
-                    ForEach(otherTerminals) { value in
-                        Button(value.title) { setSecondary(value) }
+                if horizontalSizeClass == .regular {
+                    Menu("Terminal", systemImage: "terminal") {
+                        ForEach(primaryTerminalChoices) { value in
+                            Button(value.title) { selectPrimary(value) }
+                        }
+                    }
+                    .disabled(primaryTerminalChoices.isEmpty)
+                    Menu("Second terminal", systemImage: "rectangle.split.2x1") {
+                        Button("Single terminal") { setSecondary(nil) }
+                        ForEach(otherTerminals) { value in
+                            Button(value.title) { setSecondary(value) }
+                        }
                     }
                 }
                 Button("Terminal actions", systemImage: "ellipsis.circle") {
@@ -60,15 +68,14 @@ struct TerminalScreen: View {
                 }
             }
         }
-        .task { await scene.attach(route) }
-        .onChange(of: horizontalSizeClass) { _, sizeClass in
-            if sizeClass != .regular { setSecondary(nil) }
+        .task(id: horizontalSizeClass) {
+            if horizontalSizeClass != .regular { await scene.setSecondaryTerminal(nil) }
+            await scene.attach(route)
         }
         .onDisappear {
             let secondary = scene.secondaryTerminal
             Task {
-                await scene.detach(route)
-                if let secondary { await scene.detach(secondary) }
+                await scene.terminalScreenDidDisappear(route, secondary: secondary)
             }
         }
     }
@@ -85,7 +92,7 @@ struct TerminalScreen: View {
                 } onResync: { error in
                     state.invalidateForCheckpoint()
                     scene.errorMessage = "The terminal view could not be restored: \(error.localizedDescription)"
-                    Task { await scene.attach(currentRoute) }
+                    Task { await scene.refreshTerminal(currentRoute) }
                 }
                 .id(currentRoute.id)
                 TerminalAccessoryBar { bytes in
@@ -114,6 +121,10 @@ struct TerminalScreen: View {
         } ?? []
     }
 
+    private var primaryTerminalChoices: [TerminalRoute] {
+        otherTerminals.filter { $0.workspaceID == route.workspaceID }
+    }
+
     private func adjustFont(by amount: CGFloat) {
         guard let state = scene.terminalStates[route.id] else { return }
         state.fontSize = min(28, max(8, state.fontSize + amount))
@@ -124,12 +135,12 @@ struct TerminalScreen: View {
     }
 
     private func setSecondary(_ value: TerminalRoute?) {
-        let previous = scene.secondaryTerminal
-        scene.secondaryTerminal = value
-        Task {
-            if let previous, previous.id != value?.id { await scene.detach(previous) }
-            if let value { await scene.attach(value) }
-        }
+        Task { await scene.setSecondaryTerminal(value) }
+    }
+
+    private func selectPrimary(_ value: TerminalRoute) {
+        let current = scene.terminalStates[route.id]?.route ?? route
+        Task { await scene.selectPrimaryTerminal(value, replacing: current) }
     }
 }
 

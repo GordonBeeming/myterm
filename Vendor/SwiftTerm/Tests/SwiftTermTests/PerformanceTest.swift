@@ -10,7 +10,7 @@ import Testing
 import os
 @testable import SwiftTerm
 
-final class PerformaceTests {
+final class PerformanceTests {
     let signposter = OSSignposter(subsystem: "SwiftTerm", category: .pointsOfInterest)
 
     @Test func testPerformance() {
@@ -105,4 +105,3 @@ final class PerformaceTests {
 
 }
 #endif
-

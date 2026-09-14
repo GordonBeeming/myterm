@@ -2,6 +2,8 @@
 
 This directory contains SwiftTerm from [v1.15.0](https://github.com/migueldeicaza/SwiftTerm/tree/v1.15.0), commit `dd2fb8ac5b861e7bf617c872895e338f38165648`. Its original [MIT license](LICENSE) is retained.
 
+This is a library-focused source subset for MyTerm. The upstream `termcast` executable and its `swift-argument-parser` dependency are omitted because MyTerm links only the `SwiftTerm` library. SwiftTerm's library sources, fuzz target, documentation relevant to the retained library, and upstream test suite remain present.
+
 The myterm additions provide a bounded, versioned terminal checkpoint and native view controls for remote presentation:
 
 - `Terminal.exportCheckpoint()` and `Terminal.importCheckpoint(_:)` preserve emulator state for late attachment.

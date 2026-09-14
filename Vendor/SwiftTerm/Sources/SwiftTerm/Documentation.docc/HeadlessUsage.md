@@ -86,26 +86,6 @@ let queue = DispatchQueue(label: "com.example.terminal")
 let headless = HeadlessTerminal(queue: queue, options: .default) { _ in }
 ```
 
-## Terminal Session Recording with Termcast
-
-SwiftTerm includes `termcast`, a command-line tool for recording and playing back
-terminal sessions in the [asciinema](https://asciinema.org/) `.cast` format. It
-uses `LocalProcess` and the terminal engine under the hood.
-
-### Recording
-
-```bash
-swift run termcast record session.cast
-swift run termcast record -c "top -l 5" top-demo.cast
-swift run termcast record --timeout 30 timed.cast
-```
-
-### Playback
-
-```bash
-swift run termcast playback session.cast
-```
-
 ## Use Cases
 
 - **Integration testing**: Verify that a CLI tool produces expected output,

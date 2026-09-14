@@ -49,6 +49,7 @@ private final class PushGatewayLimitURLProtocol: URLProtocol, @unchecked Sendabl
     let client = PushGatewayClient(endpoint: gateway, secrets: secrets,
                                    session: URLSession(configuration: configuration))
     let enrollmentID = UUID(), recipientID = UUID(), grantID = UUID()
+    let tokenChallengeID = UUID()
     let challenge = Data(repeating: 4, count: 32)
     let deviceSigning = P256.Signing.PrivateKey()
     let recipientAgreement = P256.KeyAgreement.PrivateKey()
@@ -74,15 +75,25 @@ private final class PushGatewayLimitURLProtocol: URLProtocol, @unchecked Sendabl
         case 3:
             return (response, Data("{\"recipient_id\":\"\(recipientID)\",\"device_session_token\":\"device-secret\",\"token_type\":\"Device\"}".utf8))
         case 4:
+            #expect(url.path == "/v1/apns-token-challenges")
+            try verifyDeviceSignature(request, publicKey: deviceSigning.publicKey)
+            let json = try #require(JSONSerialization.jsonObject(with: requestBody(request)) as? [String: String])
+            #expect(json["apns_token"] == String(repeating: "cd", count: 32))
+            return (response, Data("{\"challenge_id\":\"\(tokenChallengeID)\",\"status\":\"awaiting_apns_confirmation\"}".utf8))
+        case 5:
+            #expect(url.path == "/v1/apns-token-challenges/\(tokenChallengeID.uuidString.lowercased())/confirm")
+            try verifyDeviceSignature(request, publicKey: deviceSigning.publicKey)
+            return (response, Data())
+        case 6:
             try verifyDeviceSignature(request, publicKey: deviceSigning.publicKey)
             return (response, Data("{\"grant_id\":\"\(grantID)\",\"grant_token\":\"grant-secret\",\"token_type\":\"Grant\"}".utf8))
-        case 5:
+        case 7:
             #expect(request.value(forHTTPHeaderField: "Authorization") == "Grant grant-secret")
             let json = try #require(JSONSerialization.jsonObject(with: requestBody(request)) as? [String: Any])
             #expect((json["timestamp"] as? NSNumber)?.int64Value == 1_789_470_900)
             #expect((json["ciphertext"] as? String)?.contains("=") == false)
             return (response, Data("{\"event_id\":\"\(json["event_id"]!)\",\"apns_id\":\"accepted\"}".utf8))
-        case 6:
+        case 8:
             #expect(url.path == "/v1/recipient-grants/\(grantID.uuidString.lowercased())")
             try verifyDeviceSignature(request, publicKey: deviceSigning.publicKey)
             return (response, Data())
@@ -102,6 +113,14 @@ private final class PushGatewayLimitURLProtocol: URLProtocol, @unchecked Sendabl
     try await client.submitAttestation(enrollmentID: enrollmentID, submission: submission)
     let session = try await client.activate(enrollmentID: enrollmentID, assertion: Data([7]))
     #expect(try await PushCredentialStore(secrets: secrets).session(gateway: gateway) == session)
+    let returnedChallengeID = try await client.beginAPNSTokenUpdate(
+        apnsToken: Data(repeating: 0xcd, count: 32), session: session,
+        signingKey: deviceSigning
+    )
+    #expect(returnedChallengeID == tokenChallengeID)
+    try await client.confirmAPNSTokenUpdate(challengeID: tokenChallengeID,
+                                            challenge: Data(repeating: 9, count: 32),
+                                            session: session, signingKey: deviceSigning)
     let grant = try await client.createGrant(session: session, signingKey: deviceSigning,
                                              relayOrigin: relay, hostID: UUID(),
                                              hostSigningPublicKey: hostSigning.publicKey,

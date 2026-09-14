@@ -120,7 +120,6 @@ private struct HostSidebar: View {
                 Task { await scene.disconnect() }
                 return
             }
-            scene.selectedWorkspaceID = nil
             Task { await scene.connect(to: host, services: services) }
         }
     }
@@ -231,7 +230,7 @@ private struct DetailColumn: View {
         }
         .onChange(of: scene.selectedWorkspaceID) { _, id in
             guard let id else { return }
-            scene.path = [.workspace(id)]
+            scene.navigateToWorkspace(id)
         }
     }
 }

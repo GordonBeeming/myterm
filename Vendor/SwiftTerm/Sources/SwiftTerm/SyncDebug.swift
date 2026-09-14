@@ -1,7 +1,7 @@
 import Foundation
 
 /// Opt-in trace for synchronized-output (DEC 2026) flow and display scheduling.
-/// Set `SyncDebug.enabled = true` from the host app to see events on stderr.
+/// This internal compile-time switch can be enabled in SwiftTerm source to log events to stderr.
 enum SyncDebug {
     public static let enabled = false
     private static let start = DispatchTime.now().uptimeNanoseconds

@@ -158,6 +158,7 @@ final class SceneModel {
     func connect(to host: SavedHostDescriptor, services: CompanionServices,
                  resetBackoff: Bool = true) async {
         if resetBackoff { reconnectAttempt = 0 }
+        prepareNavigation(replacing: activeHost?.connectionID, with: host.connectionID)
         activeHost = host
         self.services = services
         let generation = UUID()
@@ -174,7 +175,6 @@ final class SceneModel {
         disableAllInput()
         terminalStates.removeAll()
         visibleSessionOrder.removeAll()
-        selectedWorkspaceID = nil
         if let previousConnection { await previousConnection.disconnect() }
         guard connectionGeneration == generation else { return }
         do {
@@ -216,7 +216,43 @@ final class SceneModel {
 
     func disconnect() async {
         activeHost = nil
+        clearSelectionAndNavigation()
         await stopConnection()
+    }
+
+    func prepareNavigation(replacing previous: SavedConnectionID?,
+                           with next: SavedConnectionID) {
+        guard let previous, previous != next else { return }
+        path.removeAll()
+        selectedWorkspaceID = nil
+        secondaryTerminal = nil
+    }
+
+    func clearSelectionAndNavigation() {
+        selectedConnectionID = nil
+        selectedWorkspaceID = nil
+        path.removeAll()
+        secondaryTerminal = nil
+        sheet = nil
+        projection = nil
+        terminalStates.removeAll()
+        visibleSessionOrder.removeAll()
+    }
+
+    func navigateToWorkspace(_ workspaceID: UUID) {
+        if let current = path.last {
+            switch current {
+            case .workspace(let id) where id == workspaceID:
+                return
+            case .terminal(let route) where route.workspaceID == workspaceID:
+                return
+            case .browser(let route) where route.workspaceID == workspaceID:
+                return
+            default:
+                break
+            }
+        }
+        path = [.workspace(workspaceID)]
     }
 
     func setSceneActive(_ active: Bool, services: CompanionServices) async {
@@ -243,7 +279,7 @@ final class SceneModel {
         if let previousConnection { await previousConnection.disconnect() }
     }
 
-    func attach(_ route: TerminalRoute) async {
+    func attach(_ route: TerminalRoute, requestingFreshCheckpoint: Bool = false) async {
         guard route.connectionID == selectedConnectionID else {
             errorMessage = RemoteError.wrongPeer.localizedDescription
             return
@@ -265,8 +301,12 @@ final class SceneModel {
             }
             let state = terminalStates[route.id] ?? TerminalSurfaceState(route: route)
             terminalStates[route.id] = state
-            try await connection.attach(route)
+            try await connection.attach(route, requestingFreshCheckpoint: requestingFreshCheckpoint)
         } catch { errorMessage = error.localizedDescription }
+    }
+
+    func refreshTerminal(_ route: TerminalRoute) async {
+        await attach(route, requestingFreshCheckpoint: true)
     }
 
     func detach(_ route: TerminalRoute) async {
@@ -276,11 +316,49 @@ final class SceneModel {
             return
         }
         do {
-            let lease = terminalStates[route.id]?.ownsControl == true
-                ? terminalStates[route.id]?.leaseID : nil
-            try await connection.detach(route, leaseID: lease)
+            let state = terminalStates[route.id]
+            let lease = state?.ownsControl == true ? state?.leaseID : nil
+            try await connection.detach(state?.route ?? route, leaseID: lease)
         } catch { errorMessage = error.localizedDescription }
         terminalStates.removeValue(forKey: route.id)
+    }
+
+    func setSecondaryTerminal(_ route: TerminalRoute?) async {
+        let previous = secondaryTerminal
+        guard previous?.id != route?.id else {
+            secondaryTerminal = route
+            return
+        }
+        if let previous { await detach(previous) }
+        secondaryTerminal = route
+        if let route { await attach(route) }
+    }
+
+    func selectPrimaryTerminal(_ route: TerminalRoute,
+                               replacing current: TerminalRoute) async {
+        guard route.connectionID == selectedConnectionID,
+              current.connectionID == selectedConnectionID else {
+            errorMessage = RemoteError.wrongPeer.localizedDescription
+            return
+        }
+        await setSecondaryTerminal(nil)
+        guard route.connectionID == selectedConnectionID,
+              let index = path.indices.last,
+              case .terminal(let visible) = path[index],
+              visible.id == current.id else { return }
+        path[index] = .terminal(route)
+    }
+
+    func terminalScreenDidDisappear(_ route: TerminalRoute,
+                                    secondary: TerminalRoute?) async {
+        let stableSessionIsStillRouted = path.contains { element in
+            if case .terminal(let current) = element { return current.id == route.id }
+            return false
+        }
+        if let current = terminalStates[route.id]?.route,
+           current != route, stableSessionIsStillRouted { return }
+        await detach(route)
+        if let secondary { await detach(secondary) }
     }
 
     func sendInput(_ data: Data, route: TerminalRoute) async {
@@ -322,7 +400,9 @@ final class SceneModel {
         pendingNotification = destination
         selectedConnectionID = destination.connectionID
         selectedWorkspaceID = destination.workspaceID
-        if let projection { resolveNotification(in: projection) }
+        if activeHost?.connectionID == destination.connectionID, let projection {
+            resolveNotification(in: projection)
+        }
     }
 
     private func consume(_ event: CompanionConnectionEvent, generation: UUID) async {
@@ -334,7 +414,7 @@ final class SceneModel {
         case .connectionID(let id): connectionID = id
         case .workspaces(let projection):
             self.projection = projection
-            reconcileTerminalRoutes(in: projection)
+            reconcileRoutes(in: projection)
             resolveNotification(in: projection)
         case .checkpoint(let route, let checkpoint):
             let state = terminalStates[route.id] ?? TerminalSurfaceState(route: route)
@@ -345,7 +425,7 @@ final class SceneModel {
             guard let state = terminalStates[route.id] else { return }
             state.route = route
             if !state.append(output: output) {
-                if state.invalidateForCheckpoint() { await attach(route) }
+                if state.invalidateForCheckpoint() { await refreshTerminal(route) }
             }
         case .control(let route, let control):
             let state = terminalStates[route.id] ?? TerminalSurfaceState(route: route)
@@ -353,7 +433,7 @@ final class SceneModel {
             state.route = route
             if !state.apply(control: control, ownConnectionID: connectionID),
                state.invalidateForCheckpoint() {
-                await attach(route)
+                await refreshTerminal(route)
             }
         case .activity(let sessionID, let state):
             terminalStates.first(where: { $0.key.sessionID == sessionID })?.value.activity = state
@@ -423,7 +503,7 @@ final class SceneModel {
         pendingNotification = nil
     }
 
-    private func reconcileTerminalRoutes(in projection: RemoteWorkspaceProjection) {
+    func reconcileRoutes(in projection: RemoteWorkspaceProjection) {
         var removed: [TerminalSurfaceID] = []
         for (id, state) in terminalStates {
             guard let updated = terminalRoute(sessionID: state.route.sessionID,
@@ -442,17 +522,34 @@ final class SceneModel {
             }
             if secondaryTerminal?.id == updated.id { secondaryTerminal = updated }
         }
-        guard !removed.isEmpty else { return }
-        for id in removed { terminalStates.removeValue(forKey: id) }
-        visibleSessionOrder.removeAll { removed.contains($0) }
-        path.removeAll { route in
-            if case .terminal(let terminal) = route { return removed.contains(terminal.id) }
-            return false
+        if !removed.isEmpty {
+            for id in removed { terminalStates.removeValue(forKey: id) }
+            visibleSessionOrder.removeAll { removed.contains($0) }
+            path.removeAll { route in
+                if case .terminal(let terminal) = route { return removed.contains(terminal.id) }
+                return false
+            }
+            if let secondaryTerminal, removed.contains(secondaryTerminal.id) {
+                self.secondaryTerminal = nil
+            }
+            errorMessage = "A terminal that was open here is no longer available on the Mac."
         }
-        if let secondaryTerminal, removed.contains(secondaryTerminal.id) {
-            self.secondaryTerminal = nil
+
+        var removedBrowser = false
+        path = path.compactMap { route in
+            guard case .browser(let existing) = route,
+                  existing.connectionID == selectedConnectionID else { return route }
+            guard let updated = browserRoute(tabID: existing.tabID,
+                                             connectionID: existing.connectionID,
+                                             projection: projection) else {
+                removedBrowser = true
+                return nil
+            }
+            return .browser(updated)
         }
-        errorMessage = "A terminal that was open here is no longer available on the Mac."
+        if removedBrowser {
+            errorMessage = "A browser tab that was open here is no longer available on the Mac."
+        }
     }
 
     private func terminalRoute(sessionID: UUID, connectionID: SavedConnectionID,
@@ -465,6 +562,24 @@ final class SceneModel {
                                          groupID: group.id.rawValue,
                                          tabID: tab.id.rawValue,
                                          sessionID: sessionID, title: tab.title)
+                }
+            }
+        }
+        return nil
+    }
+
+    private func browserRoute(tabID: UUID, connectionID: SavedConnectionID,
+                              projection: RemoteWorkspaceProjection) -> BrowserRoute? {
+        for workspace in projection.workspaces {
+            for group in workspace.groups {
+                if let tab = group.tabs.first(where: {
+                    $0.id.rawValue == tabID && $0.kind == .browser
+                }) {
+                    return BrowserRoute(connectionID: connectionID,
+                                        workspaceID: workspace.id.rawValue,
+                                        groupID: group.id.rawValue,
+                                        tabID: tabID, title: tab.title,
+                                        url: tab.browserURL)
                 }
             }
         }
