@@ -214,6 +214,7 @@ final class CompanionHostIntegrationTests: XCTestCase {
         let tempDirectory = launched.tempDirectory
         defer {
             if process.isRunning { process.terminate() }
+            process.waitUntilExit()
             try? FileManager.default.removeItem(at: tempDirectory)
         }
 
@@ -934,40 +935,135 @@ final class CompanionHostIntegrationTests: XCTestCase {
         let tempDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("myterm-host-integration-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = [
-            "go", "run", "./cmd/relay-test-fixture", "--temp-dir", tempDirectory.path,
-        ]
-        process.currentDirectoryURL = repository.appendingPathComponent("Services/relay", isDirectory: true)
-        let errorPipe = Pipe()
-        process.standardError = errorPipe
-        process.standardOutput = Pipe()
-        try process.run()
+        let relayDirectory = repository.appendingPathComponent("Services/relay", isDirectory: true)
+        let binaryURL = tempDirectory.appendingPathComponent("relay-test-fixture")
+        let buildLogURL = tempDirectory.appendingPathComponent("build.log")
+        let serverLogURL = tempDirectory.appendingPathComponent("server.log")
+        var runningProcess: Process?
+        do {
+            let build = Process()
+            build.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            build.arguments = [
+                "go", "build", "-o", binaryURL.path, "./cmd/relay-test-fixture",
+            ]
+            build.currentDirectoryURL = relayDirectory
+            let buildLog = try fixtureLogHandle(at: buildLogURL)
+            build.standardOutput = buildLog
+            build.standardError = buildLog
+            do { try build.run() }
+            catch {
+                try? buildLog.close()
+                throw error
+            }
+            try buildLog.close()
+            let buildCompleted = try await waitForFixtureProcess(build, iterations: 3_600)
+            if buildCompleted { build.waitUntilExit() }
+            guard buildCompleted, build.terminationStatus == 0 else {
+                throw fixtureProcessError(
+                    phase: buildCompleted ? "build exited with status \(build.terminationStatus)" : "build timed out",
+                    logURL: buildLogURL,
+                    code: Int(build.terminationStatus)
+                )
+            }
 
-        let readyURL = tempDirectory.appendingPathComponent("ready.json")
-        for _ in 0..<240 {
-            if FileManager.default.fileExists(atPath: readyURL.path) {
-                let fixture = try JSONDecoder().decode(
-                    RelayFixture.self,
-                    from: Data(contentsOf: readyURL)
-                )
-                return (process, tempDirectory, fixture)
+            let process = Process()
+            process.executableURL = binaryURL
+            process.arguments = ["--temp-dir", tempDirectory.path]
+            process.currentDirectoryURL = relayDirectory
+            let serverLog = try fixtureLogHandle(at: serverLogURL)
+            process.standardOutput = serverLog
+            process.standardError = serverLog
+            do { try process.run() }
+            catch {
+                try? serverLog.close()
+                throw error
             }
-            guard process.isRunning else {
-                let stderr = errorPipe.fileHandleForReading.readDataToEndOfFile()
-                throw NSError(
-                    domain: "RelayFixture",
-                    code: Int(process.terminationStatus),
-                    userInfo: [
-                        NSLocalizedDescriptionKey: String(decoding: stderr, as: UTF8.self),
-                    ]
-                )
+            runningProcess = process
+            try serverLog.close()
+
+            let readyURL = tempDirectory.appendingPathComponent("ready.json")
+            for _ in 0..<200 {
+                if FileManager.default.fileExists(atPath: readyURL.path) {
+                    if let data = try? Data(contentsOf: readyURL),
+                       let fixture = try? JSONDecoder().decode(RelayFixture.self, from: data) {
+                        return (process, tempDirectory, fixture)
+                    }
+                }
+                guard process.isRunning else {
+                    process.waitUntilExit()
+                    throw fixtureProcessError(
+                        phase: "server exited with status \(process.terminationStatus)",
+                        logURL: serverLogURL,
+                        code: Int(process.terminationStatus)
+                    )
+                }
+                try await Task.sleep(for: .milliseconds(50))
             }
-            try await Task.sleep(for: .milliseconds(50))
+            if process.isRunning {
+                process.terminate()
+                process.waitUntilExit()
+            }
+            throw fixtureProcessError(
+                phase: "server readiness timed out",
+                logURL: serverLogURL,
+                code: Int(process.terminationStatus)
+            )
+        } catch {
+            if let runningProcess {
+                if runningProcess.isRunning { runningProcess.terminate() }
+                runningProcess.waitUntilExit()
+            }
+            try? FileManager.default.removeItem(at: tempDirectory)
+            throw error
         }
-        process.terminate()
-        throw RemoteError.timedOut
+    }
+
+    private func waitForFixtureProcess(
+        _ process: Process,
+        iterations: Int
+    ) async throws -> Bool {
+        for _ in 0..<iterations {
+            if !process.isRunning { return true }
+            do { try await Task.sleep(for: .milliseconds(50)) }
+            catch {
+                if process.isRunning { process.terminate() }
+                process.waitUntilExit()
+                throw error
+            }
+        }
+        if process.isRunning {
+            process.terminate()
+            process.waitUntilExit()
+        }
+        return false
+    }
+
+    private func fixtureLogHandle(at url: URL) throws -> FileHandle {
+        guard FileManager.default.createFile(atPath: url.path, contents: nil) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        return try FileHandle(forWritingTo: url)
+    }
+
+    private func fixtureProcessError(phase: String, logURL: URL, code: Int) -> NSError {
+        let log: String
+        do {
+            let handle = try FileHandle(forReadingFrom: logURL)
+            defer { try? handle.close() }
+            let end = try handle.seekToEnd()
+            let maximumBytes: UInt64 = 32 * 1_024
+            try handle.seek(toOffset: end > maximumBytes ? end - maximumBytes : 0)
+            log = String(decoding: try handle.readToEnd() ?? Data(), as: UTF8.self)
+        } catch {
+            log = "Unable to read fixture log: \(error.localizedDescription)"
+        }
+        return NSError(
+            domain: "RelayFixture",
+            code: code,
+            userInfo: [
+                NSLocalizedDescriptionKey: "Relay fixture \(phase).\n\(log)",
+            ]
+        )
     }
 }
 

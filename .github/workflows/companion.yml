@@ -82,6 +82,8 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Verify actual SDK
         run: bash script/verify_companion_toolchain.sh 27.0
+      - name: Install the matching Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
       - name: Test companion on iOS 27
         env:
           COMPANION_DEVICE_FAMILY: ${{ matrix.device }}
