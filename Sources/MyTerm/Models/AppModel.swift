@@ -1,4 +1,5 @@
 import AppKit
+import CryptoKit
 import Foundation
 import MyTermCore
 import MyTermPlatform
@@ -28,6 +29,11 @@ typealias TextFileOpenCommandRunner = @MainActor (
 typealias TextFileOpenCommandAvailabilityChecker = @MainActor (_ executable: String) -> Bool
 typealias ExternalFileOpener = @MainActor (_ url: URL) -> Bool
 typealias ExternalWebOpener = @MainActor (_ url: URL, _ applicationURL: URL, _ activate: Bool) -> Bool
+typealias CompanionHostFactory = @MainActor (
+    _ model: AppModel,
+    _ channel: MyTermChannel,
+    _ storageNamespace: String
+) -> CompanionHostModel
 
 @MainActor
 @Observable
@@ -35,6 +41,7 @@ final class AppModel {
     let channel: MyTermChannel
     let store: WorkspaceStore
     let browserSettings: BrowserSettingsStore
+    let companionStorageNamespace: String
 
     private let terminalEngine: (any TerminalEngine)?
     private let startsTerminalProcesses: Bool
@@ -47,6 +54,7 @@ final class AppModel {
     private let textFileOpenCommandAvailabilityChecker: TextFileOpenCommandAvailabilityChecker
     private let externalFileOpener: ExternalFileOpener
     private let externalWebOpener: ExternalWebOpener
+    @ObservationIgnored private let makeCompanionHost: CompanionHostFactory
     private(set) var terminalSessions: [TerminalSessionID: any TerminalProcessSession] = [:]
     private(set) var browserControllers: [BrowserSessionID: BrowserSessionController] = [:]
     var browserAddressFocusRequest: BrowserAddressFocusRequest?
@@ -78,6 +86,10 @@ final class AppModel {
         guard agentNotifications.isEnabled else { return }
         _ = agentNotificationPoster
     }
+
+    func startCompanionHostIfEnabled() {
+        companionHost.startIfEnabled()
+    }
     var paneTabDragSession: PaneTabDragSession?
     var paneTabDragRegistrations: [TabGroupID: PaneTabDragRegistration] = [:]
     var nextBrowserAddressFocusToken: UInt64 = 0
@@ -104,6 +116,11 @@ final class AppModel {
     var settingsScope = TerminalSettingsScope.global
     private(set) var stateVersion = 0
     let updates: UpdateController
+    @ObservationIgnored lazy var companionHost = makeCompanionHost(
+        self,
+        channel,
+        companionStorageNamespace
+    )
 
     init(
         channel: MyTermChannel = .active,
@@ -124,10 +141,16 @@ final class AppModel {
         updates: UpdateController? = nil,
         agentNotifications: AgentNotificationSettings? = nil,
         makeAgentNotificationPoster: @escaping @MainActor () -> any AgentNotificationPosting = { UserNotificationPoster() },
-        isApplicationActive: @escaping @MainActor () -> Bool = { NSApp.isActive }
+        isApplicationActive: @escaping @MainActor () -> Bool = { NSApp.isActive },
+        makeCompanionHost: @escaping CompanionHostFactory = { model, channel, namespace in
+            CompanionHostModel(appModel: model, channel: channel, storageNamespace: namespace)
+        }
     ) throws {
         self.channel = channel
         let supportDirectory = try applicationSupportDirectory ?? Self.applicationSupportDirectory()
+        companionStorageNamespace = Data(
+            SHA256.hash(data: Data(supportDirectory.standardizedFileURL.path.utf8))
+        ).base64EncodedString()
         store = try WorkspaceStore(persistenceURL: channel.persistenceURL(applicationSupportDirectory: supportDirectory))
         recoveryNotice = WorkspaceRecoveryNotice(loadReport: store.loadReport)
         self.browserSettings = browserSettings ?? BrowserSettingsStore(channel: channel)
@@ -145,6 +168,7 @@ final class AppModel {
         self.agentNotifications = agentNotifications ?? AgentNotificationSettings(channel: channel)
         self.makeAgentNotificationPoster = makeAgentNotificationPoster
         self.isApplicationActive = isApplicationActive
+        self.makeCompanionHost = makeCompanionHost
         browserDataProfileResolver = BrowserDataProfileResolver(channel: channel)
         self.updates = updates ?? UpdateController(channel: channel)
         if browserLauncherURL == nil {
@@ -1686,6 +1710,15 @@ final class AppModel {
                     sessionID: session.id
                 )
             }
+            if let remote = process as? any TerminalRemoteSession {
+                companionHost.observe(
+                    session: remote,
+                    workspaceID: workspaceID,
+                    groupID: tabGroupID,
+                    tabID: tab.id,
+                    sessionID: session.id
+                )
+            }
         } else if let browser = tab.browserSession,
                   let controller = browserControllers[browser.id] {
             controller.onCloseRequest = { [weak self, weak controller] in
@@ -2061,8 +2094,22 @@ final class AppModel {
                 sessionID: session.id
             )
         }
-        try process.start()
+        if let remote = process as? any TerminalRemoteSession {
+            companionHost.observe(
+                session: remote,
+                workspaceID: workspaceID,
+                groupID: tabGroupID,
+                tabID: tabID,
+                sessionID: session.id
+            )
+        }
         terminalSessions[session.id] = process
+        do {
+            try process.start()
+        } catch {
+            terminalSessions.removeValue(forKey: session.id)
+            throw error
+        }
     }
 
     private func restoreBrowserController(
@@ -2220,6 +2267,7 @@ final class AppModel {
                     workingDirectory: directory
                 )
             }
+            companionHost.workspaceDidChange()
         case .openURL(let url):
             guard let tab = tab(
                 workspaceID: workspaceID,
@@ -2232,10 +2280,24 @@ final class AppModel {
             open(url, in: workspaceID, besideTabID: tabID, paneID: tab.paneID)
         case .failed(let error):
             present(error)
+            companionHost.sessionEnded(
+                sessionID: sessionID,
+                workspaceID: workspaceID,
+                groupID: tabGroupID,
+                tabID: tabID,
+                message: error.localizedDescription
+            )
         case .processTerminated(let exitCode):
             if let exitCode, exitCode != 0 {
                 errorDescription = "Terminal exited with status \(exitCode)."
             }
+            companionHost.sessionEnded(
+                sessionID: sessionID,
+                workspaceID: workspaceID,
+                groupID: tabGroupID,
+                tabID: tabID,
+                message: exitCode.map { "Terminal exited with status \($0)." } ?? "Terminal closed."
+            )
         case .agentActivity(let report):
             recordAgentActivity(
                 report,
@@ -2374,7 +2436,7 @@ final class AppModel {
         Set(store.workspaces.lazy.filter { $0.folderID == folderID }.map(\.id))
     }
 
-    private func applyResolvedRuntimeSettings(to workspaceIDs: Set<WorkspaceID>) {
+    func applyResolvedRuntimeSettings(to workspaceIDs: Set<WorkspaceID>) {
         for workspaceID in workspaceIDs {
             guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }),
                   let settings = try? store.resolvedSettings(for: workspaceID) else { continue }
@@ -2445,7 +2507,7 @@ final class AppModel {
         return URL(fileURLWithPath: expandedPath).standardizedFileURL
     }
 
-    private func runtimeConfiguration(for settings: TerminalPreferences) -> MyTermPlatform.TerminalRuntimeConfiguration {
+    func runtimeConfiguration(for settings: TerminalPreferences) -> MyTermPlatform.TerminalRuntimeConfiguration {
         MyTermPlatform.TerminalRuntimeConfiguration(
             fontName: settings.fontPostScriptName,
             fontSize: settings.fontSize,
@@ -2595,6 +2657,296 @@ final class AppModel {
             stateVersion += 1
         } catch {
             present(error)
+        }
+    }
+
+    @discardableResult
+    func performCompanionMutation<Value>(_ action: () throws -> Value) throws -> Value {
+        let value = try action()
+        stateVersion += 1
+        return value
+    }
+
+    func createCompanionWorkspace(title: String, folderID: WorkspaceFolderID?) throws -> WorkspaceID {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.utf8.count <= 256 else {
+            throw CompanionCommandError.invalidPayload
+        }
+        return try performCompanionMutation {
+            let activeDirectory = activeTerminalDirectory(in: selectedWorkspace)
+            let workspaceID = try store.createWorkspace(
+                title: trimmed,
+                folderID: folderID,
+                selectsCreatedWorkspace: false
+            )
+            guard let created = store.workspaces.first(where: { $0.id == workspaceID }) else {
+                throw AppModelError.workspaceUnavailable(workspaceID)
+            }
+            let directory = try newSessionWorkingDirectory(
+                for: workspaceID,
+                activePaneFallback: activeDirectory
+            )
+            for group in created.orderedGroups {
+                for tab in group.tabs where tab.terminalSession?.workingDirectory == nil {
+                    try store.updateTerminalWorkingDirectory(
+                        workspaceID: workspaceID,
+                        tabGroupID: group.id,
+                        tabID: tab.id,
+                        workingDirectory: directory
+                    )
+                }
+            }
+            if let workspace = store.workspaces.first(where: { $0.id == workspaceID }) {
+                restoreRuntimeObjects(in: workspace)
+            }
+            return workspaceID
+        }
+    }
+
+    func createCompanionTab(
+        workspaceID: WorkspaceID,
+        groupID: TabGroupID,
+        payload: RemoteTabCreatePayload
+    ) throws -> TabID {
+        try performCompanionMutation {
+            let tabID: TabID
+            switch payload.kind {
+            case .terminal:
+                let directory = try newSessionWorkingDirectory(for: workspaceID)
+                tabID = try store.addTerminalTab(
+                    to: workspaceID,
+                    tabGroupID: groupID,
+                    workingDirectory: directory,
+                    selectsCreatedTab: false
+                )
+            case .browser:
+                guard let url = payload.url,
+                      ["http", "https", "file"].contains(url.scheme?.lowercased() ?? "") else {
+                    throw CompanionCommandError.invalidPayload
+                }
+                tabID = try store.addBrowserTab(
+                    to: workspaceID,
+                    tabGroupID: groupID,
+                    url: url,
+                    selectsCreatedTab: false
+                )
+            }
+            if let workspace = store.workspaces.first(where: { $0.id == workspaceID }) {
+                restoreRuntimeObjects(in: workspace)
+            }
+            return tabID
+        }
+    }
+
+    func closeCompanionWorkspace(
+        _ workspaceID: WorkspaceID,
+        confirmedActiveProcesses: Bool = false
+    ) throws {
+        guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
+            throw AppModelError.workspaceUnavailable(workspaceID)
+        }
+        guard confirmedActiveProcesses || activeProcessNames(in: workspace).isEmpty else {
+            throw CompanionCommandError.activeProcessRequiresDesktopConfirmation
+        }
+        try performCompanionMutation {
+            try store.removeWorkspace(workspaceID)
+            cleanUpRuntimeObjects(in: workspace)
+            restoreRuntimeObjects(in: store.selectedWorkspace)
+        }
+    }
+
+    func closeCompanionTab(
+        workspaceID: WorkspaceID,
+        groupID: TabGroupID,
+        tabID: TabID,
+        confirmedActiveProcesses: Bool = false
+    ) throws {
+        guard let tab = tab(workspaceID: workspaceID, tabGroupID: groupID, tabID: tabID) else {
+            throw AppModelError.tabUnavailable(tabID)
+        }
+        guard confirmedActiveProcesses || activeProcessNames(in: tab).isEmpty else {
+            throw CompanionCommandError.activeProcessRequiresDesktopConfirmation
+        }
+        try performCompanionMutation {
+            try closeTab(workspaceID: workspaceID, tabGroupID: groupID, tabID: tabID)
+        }
+    }
+
+    func companionTerminalSession(_ sessionID: TerminalSessionID) -> (any TerminalRemoteSession)? {
+        terminalSessions[sessionID] as? any TerminalRemoteSession
+    }
+
+    func companionWorkspaceProcessNames(_ workspaceID: WorkspaceID) throws -> [String] {
+        guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
+            throw AppModelError.workspaceUnavailable(workspaceID)
+        }
+        return activeProcessNames(in: workspace)
+    }
+
+    func companionTabProcessInfo(
+        workspaceID: WorkspaceID,
+        groupID: TabGroupID,
+        tabID: TabID
+    ) throws -> (processNames: [String], sessionID: TerminalSessionID?) {
+        guard let tab = tab(workspaceID: workspaceID, tabGroupID: groupID, tabID: tabID) else {
+            throw AppModelError.tabUnavailable(tabID)
+        }
+        return (activeProcessNames(in: tab), tab.terminalSession?.id)
+    }
+
+    func moveCompanionTab(
+        workspaceID: WorkspaceID,
+        sourceGroupID: TabGroupID,
+        tabID: TabID,
+        destinationGroupID: TabGroupID,
+        index: Int?
+    ) throws {
+        try performCompanionMutation {
+            _ = try store.moveTab(
+                workspaceID: workspaceID,
+                sourceTabGroupID: sourceGroupID,
+                tabID: tabID,
+                to: destinationGroupID,
+                at: index,
+                selectsMovedTab: false
+            )
+            guard let moved = tab(
+                workspaceID: workspaceID,
+                tabGroupID: destinationGroupID,
+                tabID: tabID
+            ) else { throw AppModelError.tabUnavailable(tabID) }
+            rebindRuntimeCallbacks(for: moved, workspaceID: workspaceID, tabGroupID: destinationGroupID)
+        }
+    }
+
+    @discardableResult
+    func splitCompanionTab(
+        workspaceID: WorkspaceID,
+        sourceGroupID: TabGroupID,
+        tabID: TabID,
+        targetGroupID: TabGroupID,
+        edge: PaneEdge
+    ) throws -> TabGroupID {
+        try performCompanionMutation {
+            guard let created = try store.moveTabToNewGroup(
+                workspaceID: workspaceID,
+                sourceTabGroupID: sourceGroupID,
+                tabID: tabID,
+                beside: targetGroupID,
+                edge: edge,
+                selectsMovedTab: false
+            ) else { throw CompanionCommandError.invalidPayload }
+            guard let moved = tab(workspaceID: workspaceID, tabGroupID: created, tabID: tabID) else {
+                throw AppModelError.tabUnavailable(tabID)
+            }
+            rebindRuntimeCallbacks(for: moved, workspaceID: workspaceID, tabGroupID: created)
+            return created
+        }
+    }
+
+    func applyCompanionSettings(_ payload: RemoteSettingsUpdatePayload) throws {
+        let reset = Set(payload.reset)
+        guard reset.count == payload.reset.count,
+              !reset.contains(where: { companionPatch(payload.patch, contains: $0) }) else {
+            throw CompanionCommandError.invalidPayload
+        }
+        try performCompanionMutation {
+            switch payload.scope {
+            case .global:
+                guard reset.isEmpty else { throw CompanionCommandError.invalidPayload }
+                try store.updateGlobalSettings { $0 = payload.patch.applying(to: $0) }
+                applyResolvedRuntimeSettings(to: Set(store.workspaces.map(\.id)))
+            case .folder(let folderID):
+                guard store.folders.contains(where: { $0.id == folderID }) else {
+                    throw CompanionCommandError.wrongTarget
+                }
+                try store.updateFolderSettings(folderID) { overrides in
+                    mergeCompanionPatch(payload.patch, reset: reset, into: &overrides)
+                }
+                applyResolvedRuntimeSettings(to: workspaceIDs(in: folderID))
+            case .workspace(let workspaceID):
+                guard store.workspaces.contains(where: { $0.id == workspaceID }) else {
+                    throw CompanionCommandError.wrongTarget
+                }
+                try store.updateWorkspaceSettings(workspaceID) { overrides in
+                    mergeCompanionPatch(payload.patch, reset: reset, into: &overrides)
+                }
+                applyResolvedRuntimeSettings(to: [workspaceID])
+            }
+        }
+    }
+
+    private func companionPatch(
+        _ patch: TerminalPreferencesOverrides,
+        contains field: RemoteSettingField
+    ) -> Bool {
+        switch field {
+        case .browserDataScope: patch.browserDataScope != nil
+        case .webLinkDestination: patch.webLinkDestination != nil
+        case .textFileOpenCommand: patch.textFileOpenCommand != nil
+        case .nativeTextFilePatterns: patch.nativeTextFilePatterns != nil
+        case .browserFilePatterns: patch.browserFilePatterns != nil
+        case .allowsLocalFileJavaScript: patch.allowsLocalFileJavaScript != nil
+        case .compactSidebar: patch.compactSidebar != nil
+        case .fontPostScriptName: patch.fontPostScriptName != nil
+        case .fontSize: patch.fontSize != nil
+        case .terminalAppearance: patch.terminalAppearance != nil
+        case .terminalTheme: patch.terminalTheme != nil
+        case .shell: patch.shell != nil
+        case .newSessionWorkingDirectory: patch.newSessionWorkingDirectory != nil
+        case .scrollbackLines: patch.scrollbackLines != nil
+        case .cursorShape: patch.cursorShape != nil
+        case .cursorBlink: patch.cursorBlink != nil
+        case .optionAsMeta: patch.optionAsMeta != nil
+        case .lineEditingMode: patch.lineEditingMode != nil
+        }
+    }
+
+    private func mergeCompanionPatch(
+        _ patch: TerminalPreferencesOverrides,
+        reset: Set<RemoteSettingField>,
+        into overrides: inout TerminalPreferencesOverrides
+    ) {
+        if let value = patch.browserDataScope { overrides.browserDataScope = value }
+        if let value = patch.webLinkDestination { overrides.webLinkDestination = value }
+        if let value = patch.textFileOpenCommand { overrides.textFileOpenCommand = value }
+        if let value = patch.nativeTextFilePatterns { overrides.nativeTextFilePatterns = value }
+        if let value = patch.browserFilePatterns { overrides.browserFilePatterns = value }
+        if let value = patch.allowsLocalFileJavaScript { overrides.allowsLocalFileJavaScript = value }
+        if let value = patch.compactSidebar { overrides.compactSidebar = value }
+        if let value = patch.fontPostScriptName { overrides.fontPostScriptName = value }
+        if let value = patch.fontSize { overrides.fontSize = value }
+        if let value = patch.terminalAppearance { overrides.terminalAppearance = value }
+        if let value = patch.terminalTheme { overrides.terminalTheme = value }
+        if let value = patch.shell { overrides.shell = value }
+        if let value = patch.newSessionWorkingDirectory { overrides.newSessionWorkingDirectory = value }
+        if let value = patch.scrollbackLines { overrides.scrollbackLines = value }
+        if let value = patch.cursorShape { overrides.cursorShape = value }
+        if let value = patch.cursorBlink { overrides.cursorBlink = value }
+        if let value = patch.optionAsMeta { overrides.optionAsMeta = value }
+        if let value = patch.lineEditingMode { overrides.lineEditingMode = value }
+
+        for field in reset {
+            switch field {
+            case .browserDataScope: overrides.browserDataScope = nil
+            case .webLinkDestination: overrides.webLinkDestination = nil
+            case .textFileOpenCommand: overrides.textFileOpenCommand = nil
+            case .nativeTextFilePatterns: overrides.nativeTextFilePatterns = nil
+            case .browserFilePatterns: overrides.browserFilePatterns = nil
+            case .allowsLocalFileJavaScript: overrides.allowsLocalFileJavaScript = nil
+            case .compactSidebar: overrides.compactSidebar = nil
+            case .fontPostScriptName: overrides.fontPostScriptName = nil
+            case .fontSize: overrides.fontSize = nil
+            case .terminalAppearance: overrides.terminalAppearance = nil
+            case .terminalTheme: overrides.terminalTheme = nil
+            case .shell: overrides.shell = nil
+            case .newSessionWorkingDirectory: overrides.newSessionWorkingDirectory = nil
+            case .scrollbackLines: overrides.scrollbackLines = nil
+            case .cursorShape: overrides.cursorShape = nil
+            case .cursorBlink: overrides.cursorBlink = nil
+            case .optionAsMeta: overrides.optionAsMeta = nil
+            case .lineEditingMode: overrides.lineEditingMode = nil
+            }
         }
     }
 

@@ -3,8 +3,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUN_SCRIPT="$ROOT_DIR/run.sh"
-TEST_HOME="$(mktemp -d "${TMPDIR:-/tmp}/myterm-channel-isolation.XXXXXX")"
-trap 'rm -rf "$TEST_HOME"' EXIT
+TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/myterm-channel-isolation.XXXXXX")"
+trap 'rm -rf "$TEST_ROOT"' EXIT
 
 assert_line() {
   local expected="$1"
@@ -24,9 +24,8 @@ assert_no_line() {
   fi
 }
 
-development_support="$TEST_HOME/application-support"
+development_support="$TEST_ROOT/application-support"
 development_plan="$({
-  HOME="$TEST_HOME/home" \
   MYTERM_APPLICATION_SUPPORT_DIRECTORY="$development_support" \
   "$RUN_SCRIPT" --print-plan
 })"
@@ -36,7 +35,7 @@ assert_line "app_name=myterm-dev" "$development_plan"
 assert_line "bundle_id=com.gordonbeeming.myterm.dev" "$development_plan"
 assert_line "app_bundle=$ROOT_DIR/dist/myterm-dev.app" "$development_plan"
 assert_line "workspace_state_path=$development_support/myterm-dev/workspace-state.json" "$development_plan"
-assert_line "process_kill_target=myterm-dev" "$development_plan"
+assert_line "instance_policy=focus-existing" "$development_plan"
 assert_line "build_configuration=debug" "$development_plan"
 
 assert_no_line "process_kill_target=myterm" "$development_plan"
@@ -44,9 +43,8 @@ assert_no_line "bundle_id=com.gordonbeeming.myterm" "$development_plan"
 assert_no_line "app_bundle=$ROOT_DIR/dist/myterm.app" "$development_plan"
 assert_no_line "workspace_state_path=$development_support/myterm/workspace-state.json" "$development_plan"
 
-production_support="$TEST_HOME/production-support"
+production_support="$TEST_ROOT/production-support"
 production_plan="$({
-  HOME="$TEST_HOME/home" \
   MYTERM_APPLICATION_SUPPORT_DIRECTORY="$production_support" \
   "$RUN_SCRIPT" --prod --print-plan
 })"
@@ -56,7 +54,7 @@ assert_line "app_name=myterm" "$production_plan"
 assert_line "bundle_id=com.gordonbeeming.myterm" "$production_plan"
 assert_line "app_bundle=$ROOT_DIR/dist/myterm.app" "$production_plan"
 assert_line "workspace_state_path=$production_support/myterm/workspace-state.json" "$production_plan"
-assert_line "process_kill_target=myterm" "$production_plan"
+assert_line "instance_policy=focus-existing" "$production_plan"
 assert_line "build_configuration=release" "$production_plan"
 
 printf 'channel isolation plan checks passed\n'

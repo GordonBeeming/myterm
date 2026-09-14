@@ -1,0 +1,12 @@
+.git
+.env
+.env.*
+!.env.example
+**/*.p8
+**/*.p12
+**/*.key
+data
+**/*.sqlite*
+**/node_modules
+**/test-results
+**/playwright-report

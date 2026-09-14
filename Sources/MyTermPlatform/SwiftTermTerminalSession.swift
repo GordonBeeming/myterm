@@ -15,7 +15,7 @@ public final class SwiftTermTerminalEngine: TerminalEngine {
 }
 
 @MainActor
-public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
+public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, TerminalRemoteSession {
     public private(set) var isRunning = false
     public var onEvent: (@MainActor (TerminalSessionEvent) -> Void)?
 
@@ -46,6 +46,19 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
     private var lastReportedWorkingDirectory: URL?
     private var didTerminate = false
     private var contentChangeHandler: (@MainActor () -> Void)?
+    public private(set) var remoteGeneration = UUID()
+    public private(set) var remoteSequence: UInt64 = 0
+    private var remoteOutputHandler: (@MainActor (TerminalRemoteOutput) -> Void)?
+    private var remoteGeometryHandler: (@MainActor (TerminalRemoteGeometry) -> Void)?
+    public private(set) var remoteGeometry: TerminalRemoteGeometry
+    private var remoteReplayBuffer: [TerminalRemoteOutput] = []
+    private var remoteReplayHead = 0
+    private var remoteReplayBytes = 0
+    private var remoteCaptureEnabled = false
+    private var remoteTakeControlHandler: (@MainActor () -> Void)?
+    private static let maximumRemoteReplayBytes = 4 * 1_024 * 1_024
+    private static let maximumRemoteReplayFrames = 4_096
+    private static let maximumRemoteInputBytes = 1_024 * 1_024
 
     public init(configuration: TerminalSessionConfiguration) throws {
         guard configuration.shell.isFileURL,
@@ -67,6 +80,11 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
         lastReportedWorkingDirectory = configuration.workingDirectory
         terminal = MyTermLocalProcessTerminalView(
             frame: NSRect(x: 0, y: 0, width: 640, height: 480)
+        )
+        remoteGeometry = TerminalRemoteGeometry(
+            generation: remoteGeneration,
+            columns: terminal.getTerminal().cols,
+            rows: terminal.getTerminal().rows
         )
         super.init()
 
@@ -100,9 +118,19 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
         guard !isRunning else { return }
 
         didTerminate = false
+        remoteGeneration = UUID()
+        remoteGeometry = TerminalRemoteGeometry(
+            generation: remoteGeneration,
+            columns: terminal.getTerminal().cols,
+            rows: terminal.getTerminal().rows
+        )
+        remoteSequence = 0
+        remoteReplayBuffer.removeAll(keepingCapacity: true)
+        remoteReplayHead = 0
+        remoteReplayBytes = 0
         terminal.startProcess(
             executable: configuration.shell.path,
-            args: ["-l"],
+            args: configuration.shellArguments,
             environment: Self.processEnvironment(overrides: configuration.environment),
             execName: "-\(configuration.shell.lastPathComponent)",
             currentDirectory: configuration.workingDirectory.path
@@ -138,6 +166,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
         terminal.getTerminal().resize(cols: columns, rows: rows)
         terminal.sizeChanged(source: terminal, newCols: columns, newRows: rows)
         terminal.needsDisplay = true
+        recordRemoteGeometry(columns: columns, rows: rows)
     }
 
     public func focus() {
@@ -173,6 +202,109 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
         terminal.setPaneActive(isActive)
     }
 
+    public func setRemoteOutputHandler(_ handler: (@MainActor (TerminalRemoteOutput) -> Void)?) {
+        remoteOutputHandler = handler
+    }
+
+    public func setRemoteGeometryHandler(_ handler: (@MainActor (TerminalRemoteGeometry) -> Void)?) {
+        remoteGeometryHandler = handler
+    }
+
+    public func setRemoteCaptureEnabled(_ enabled: Bool) {
+        guard remoteCaptureEnabled != enabled else { return }
+        remoteCaptureEnabled = enabled
+        if enabled {
+            terminal.onRawOutput = { [weak self] bytes in
+                self?.recordRemoteOutput(bytes)
+            }
+        } else {
+            terminal.onRawOutput = nil
+            remoteReplayBuffer.removeAll(keepingCapacity: false)
+            remoteReplayHead = 0
+            remoteReplayBytes = 0
+        }
+    }
+
+    public func remoteCheckpoint() throws -> TerminalRemoteCheckpoint {
+        guard isRunning else { throw TerminalRemoteSessionError.notRunning }
+        return TerminalRemoteCheckpoint(
+            generation: remoteGeneration,
+            sequence: remoteSequence,
+            bytes: try terminal.getTerminal().exportCheckpoint()
+        )
+    }
+
+    public func remoteReplay(after sequence: UInt64) throws -> [TerminalRemoteOutput] {
+        guard sequence <= remoteSequence else { throw TerminalRemoteSessionError.staleGeneration }
+        guard sequence < remoteSequence else { return [] }
+        guard remoteCaptureEnabled,
+              remoteReplayHead < remoteReplayBuffer.count,
+              let first = remoteReplayBuffer[remoteReplayHead...].first,
+              sequence >= first.sequence - 1 else {
+            throw TerminalRemoteSessionError.replayGap
+        }
+        return remoteReplayBuffer[remoteReplayHead...].filter { $0.sequence > sequence }
+    }
+
+    public func sendRemoteInput(_ bytes: Data, generation: UUID) throws {
+        guard generation == remoteGeneration else { throw TerminalRemoteSessionError.staleGeneration }
+        guard isRunning else { throw TerminalRemoteSessionError.notRunning }
+        guard !bytes.isEmpty, bytes.count <= Self.maximumRemoteInputBytes else {
+            throw TerminalRemoteSessionError.invalidInput
+        }
+        terminal.process.send(data: [UInt8](bytes)[...])
+    }
+
+    public func resizeRemotely(columns: Int, rows: Int, generation: UUID) throws {
+        guard generation == remoteGeneration else { throw TerminalRemoteSessionError.staleGeneration }
+        guard isRunning else { throw TerminalRemoteSessionError.notRunning }
+        guard (2...1_024).contains(columns), (1...1_024).contains(rows) else {
+            throw TerminalRemoteSessionError.invalidInput
+        }
+        resize(columns: columns, rows: rows)
+    }
+
+    public func pasteRemoteImage(_ payload: RemoteTerminalImagePayload) throws {
+        guard payload.generation == remoteGeneration else {
+            throw TerminalRemoteSessionError.staleGeneration
+        }
+        guard isRunning else { throw TerminalRemoteSessionError.notRunning }
+        switch payload.contentType {
+        case .png:
+            guard payload.bytes.starts(with: [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) else {
+                throw TerminalRemoteSessionError.invalidInput
+            }
+        case .jpeg:
+            guard payload.bytes.starts(with: [0xFF, 0xD8, 0xFF]) else {
+                throw TerminalRemoteSessionError.invalidInput
+            }
+        }
+        guard let image = NSImage(data: payload.bytes), image.isValid else {
+            throw TerminalRemoteSessionError.invalidInput
+        }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        guard pasteboard.writeObjects([image]) else {
+            throw TerminalRemoteSessionError.invalidInput
+        }
+        terminal.process.send(data: [0x16][...])
+    }
+
+    public func setRemoteControllerActive(_ active: Bool) {
+        terminal.acceptsUserInput = !active
+        terminal.automaticallyResizesTerminal = !active
+        terminal.setRemoteControlBanner(active: active) { [weak self] in
+            self?.remoteTakeControlHandler?()
+        }
+        if !active {
+            terminal.resizeToFit()
+        }
+    }
+
+    public func setRemoteTakeControlHandler(_ handler: (@MainActor () -> Void)?) {
+        remoteTakeControlHandler = handler
+    }
+
     private func emitTermination(exitCode: Int32?) {
         guard !didTerminate else { return }
         didTerminate = true
@@ -197,6 +329,40 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession {
         workingDirectoryPoller = nil
     }
 
+    func recordRemoteOutput(_ bytes: Data) {
+        guard remoteCaptureEnabled, !bytes.isEmpty else { return }
+        remoteSequence &+= 1
+        let output = TerminalRemoteOutput(
+            generation: remoteGeneration,
+            sequence: remoteSequence,
+            bytes: bytes
+        )
+        remoteReplayBuffer.append(output)
+        remoteReplayBytes += bytes.count
+        while remoteReplayBytes > Self.maximumRemoteReplayBytes
+                || remoteReplayBuffer.count - remoteReplayHead > Self.maximumRemoteReplayFrames {
+            remoteReplayBytes -= remoteReplayBuffer[remoteReplayHead].bytes.count
+            remoteReplayHead += 1
+        }
+        if remoteReplayHead > 1_024,
+           remoteReplayHead * 2 > remoteReplayBuffer.count {
+            remoteReplayBuffer.removeFirst(remoteReplayHead)
+            remoteReplayHead = 0
+        }
+        remoteOutputHandler?(output)
+    }
+
+    func recordRemoteGeometry(columns: Int, rows: Int) {
+        let geometry = TerminalRemoteGeometry(
+            generation: remoteGeneration,
+            columns: columns,
+            rows: rows
+        )
+        guard geometry != remoteGeometry else { return }
+        remoteGeometry = geometry
+        remoteGeometryHandler?(geometry)
+    }
+
     private static func processEnvironment(overrides: [String: String]) -> [String] {
         var values = [String: String]()
         for entry in Terminal.getEnvironmentVariables(termName: "xterm-256color") {
@@ -214,6 +380,7 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
     var onOpenWebURL: ((URL) -> Void)?
     var onContentChanged: (() -> Void)?
     var onAgentActivity: ((AgentActivityReport) -> Void)?
+    var onRawOutput: ((Data) -> Void)?
     var currentWorkingDirectory: URL?
     private let contentChangeCoalescer = TerminalContentChangeCoalescer()
     // AppKit owns local monitor tokens and requires the opaque value again for removal.
@@ -228,6 +395,7 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
     private var wordSelectionInput = TerminalWordSelectionInputState()
     private var wordSelectionResolutionGeneration = 0
     private var emacsWordSelectionEnabled = true
+    private var remoteControlBanner: RemoteControlBannerView?
     private var pendingLinkClickRowText: String?
     private var isSelectingTextForCurrentGesture = false
 
@@ -262,7 +430,33 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
         }
     }
 
+    func setRemoteControlBanner(active: Bool, takeControl: @escaping @MainActor () -> Void) {
+        if active {
+            let banner = remoteControlBanner ?? RemoteControlBannerView()
+            banner.takeControl = takeControl
+            if banner.superview == nil { addSubview(banner) }
+            remoteControlBanner = banner
+            needsLayout = true
+        } else {
+            remoteControlBanner?.removeFromSuperview()
+            remoteControlBanner = nil
+        }
+    }
+
+    override func layout() {
+        super.layout()
+        guard let banner = remoteControlBanner else { return }
+        let width = min(max(280, bounds.width * 0.55), bounds.width)
+        banner.frame = NSRect(
+            x: max(0, (bounds.width - width) / 2),
+            y: max(0, bounds.height - 44),
+            width: width,
+            height: 36
+        )
+    }
+
     override func dataReceived(slice: ArraySlice<UInt8>) {
+        onRawOutput?(Data(slice))
         let originalMouseReporting = allowMouseReporting
         if selectionActive {
             allowMouseReporting = false
@@ -595,6 +789,42 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
     }
 }
 
+@MainActor
+private final class RemoteControlBannerView: NSVisualEffectView {
+    var takeControl: (@MainActor () -> Void)?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        material = .hudWindow
+        blendingMode = .withinWindow
+        state = .active
+        wantsLayer = true
+        layer?.cornerRadius = 8
+
+        let label = NSTextField(labelWithString: "This terminal is controlled remotely")
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.textColor = .labelColor
+        let button = NSButton(title: "Take Control", target: self, action: #selector(takeControlPressed))
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.bezelStyle = .rounded
+        addSubview(label)
+        addSubview(button)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+            button.leadingAnchor.constraint(greaterThanOrEqualTo: label.trailingAnchor, constant: 8),
+            button.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            button.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    @objc private func takeControlPressed() {
+        takeControl?()
+    }
+}
+
 enum TerminalPasteboard {
     static func containsImage(in pasteboard: NSPasteboard) -> Bool {
         if pasteboard.availableType(from: [.png, .tiff]) != nil {
@@ -660,7 +890,9 @@ private extension TerminalCursorConfiguration {
 }
 
 extension SwiftTermTerminalSession: @preconcurrency LocalProcessTerminalViewDelegate {
-    public func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
+    public func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {
+        recordRemoteGeometry(columns: newCols, rows: newRows)
+    }
 
     public func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
         onEvent?(.titleChanged(title))

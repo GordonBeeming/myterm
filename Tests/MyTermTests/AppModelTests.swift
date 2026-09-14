@@ -99,6 +99,35 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(confirmation.prompts.last?.confirmButtonTitle, "Quit")
     }
 
+    func testConfirmedInstanceReplacementDefersTeardownUntilTermination() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let confirmation = CloseConfirmationRecorder()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true,
+            confirmClosingActiveProcesses: confirmation.confirm
+        )
+        let session = try XCTUnwrap(engine.sessions.first)
+        session.activeForegroundProcessName = "running job"
+        session.snapshotText = "preserved before replacement"
+        let delegate = MyTermApplicationDelegate()
+        delegate.connect(model: model)
+
+        delegate.prepareForConfirmedInstanceReplacement()
+        XCTAssertEqual(delegate.applicationShouldTerminate(NSApplication.shared), .terminateNow)
+        XCTAssertTrue(confirmation.prompts.isEmpty)
+        XCTAssertEqual(session.terminateCallCount, 0)
+
+        delegate.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification))
+        XCTAssertEqual(session.terminateCallCount, 1)
+        XCTAssertEqual(model.selectedWorkspace.selectedTab?.terminalSession?.recentText,
+                       "preserved before replacement")
+    }
+
     func testChannelsUseSeparateNamesBundleIdentifiersAndPersistencePaths() {
         let supportDirectory = URL(fileURLWithPath: "/tmp/myterm-tests", isDirectory: true)
 

@@ -6,6 +6,7 @@ let package = Package(
     name: "MyTerm",
     platforms: [
         .macOS(.v14),
+        .iOS("27.0"),
     ],
     products: [
         .library(name: "MyTermCore", targets: ["MyTermCore"]),
@@ -13,10 +14,8 @@ let package = Package(
         .executable(name: "MyTerm", targets: ["MyTerm"]),
     ],
     dependencies: [
-        .package(
-            url: "https://github.com/migueldeicaza/SwiftTerm.git",
-            exact: "1.15.0"
-        ),
+        .package(path: "Vendor/SwiftTerm"),
+        .package(path: "Packages/MyTermRemote"),
     ],
     targets: [
         .target(name: "MyTermCore"),
@@ -25,16 +24,23 @@ let package = Package(
             dependencies: [
                 "MyTermCore",
                 .product(name: "SwiftTerm", package: "SwiftTerm"),
+                .product(name: "MyTermRemote", package: "MyTermRemote"),
             ]
         ),
         .executableTarget(
             name: "MyTerm",
-            dependencies: ["MyTermCore", "MyTermPlatform"]
+            dependencies: [
+                "MyTermCore", "MyTermPlatform",
+                .product(name: "MyTermRemote", package: "MyTermRemote"),
+            ]
         ),
         .testTarget(name: "MyTermCoreTests", dependencies: ["MyTermCore"]),
         .testTarget(
             name: "MyTermPlatformTests",
-            dependencies: ["MyTermPlatform"]
+            dependencies: [
+                "MyTermPlatform",
+                .product(name: "SwiftTerm", package: "SwiftTerm"),
+            ]
         ),
         .testTarget(
             name: "MyTermTests",

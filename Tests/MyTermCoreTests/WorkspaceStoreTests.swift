@@ -1205,4 +1205,40 @@ final class WorkspaceStoreTests: XCTestCase {
             XCTAssertEqual(error as? WorkspaceStoreError, .unsupportedVersion(99))
         }
     }
+
+    func testCreatingWorkspaceCanPreserveDesktopSelection() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let selectedID = store.selectedWorkspaceID
+
+        let createdID = try store.createWorkspace(
+            title: "Remote workspace",
+            selectsCreatedWorkspace: false
+        )
+
+        XCTAssertEqual(store.selectedWorkspaceID, selectedID)
+        XCTAssertNotNil(store.workspaces.first { $0.id == createdID })
+    }
+
+    func testCreatingTabCanPreserveDesktopTabAndGroupSelection() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let desktopWorkspaceID = store.selectedWorkspaceID
+        let remoteWorkspaceID = try store.createWorkspace(
+            title: "Remote",
+            selectsCreatedWorkspace: false
+        )
+        let workspace = try XCTUnwrap(store.workspaces.first { $0.id == remoteWorkspaceID })
+        let group = try XCTUnwrap(workspace.focusedTabGroup)
+
+        let createdID = try store.addTerminalTab(
+            to: remoteWorkspaceID,
+            tabGroupID: group.id,
+            selectsCreatedTab: false
+        )
+
+        let updated = try XCTUnwrap(store.workspaces.first { $0.id == remoteWorkspaceID })
+        XCTAssertEqual(store.selectedWorkspaceID, desktopWorkspaceID)
+        XCTAssertEqual(updated.focusedTabGroupID, workspace.focusedTabGroupID)
+        XCTAssertEqual(updated.group(id: group.id)?.selectedTabID, group.selectedTabID)
+        XCTAssertNotNil(updated.group(id: group.id)?.tabs.first { $0.id == createdID })
+    }
 }

@@ -32,6 +32,18 @@ extension AppModel {
         )
         // Setting nil removes the entry, which is how a read tab loses its cook.
         agentAttention[tabID] = isInFrontOfUser ? report.activity.afterReading : report.activity
+        if let sessionID = store.workspaces
+            .first(where: { $0.id == workspaceID })?
+            .tab(groupID: tabGroupID, tabID: tabID)?
+            .terminalSession?.id {
+            companionHost.publishAgentActivity(
+                report,
+                workspaceID: workspaceID,
+                groupID: tabGroupID,
+                tabID: tabID,
+                sessionID: sessionID
+            )
+        }
         // A banner is for being away from the app. With MyTerm in front, the cook has already said it.
         guard !isApplicationActive() else { return }
         postAgentNotification(for: report, workspaceID: workspaceID, tabID: tabID)
