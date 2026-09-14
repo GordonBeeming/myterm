@@ -6,6 +6,7 @@ DISTRIBUTION ?= 0
 CODESIGN_IDENTITY ?= $(shell if [ "$(DISTRIBUTION)" = "1" ]; then pattern='Developer ID Application'; else pattern='Apple Development'; fi; security find-identity -v -p codesigning 2>/dev/null | awk -F '"' -v pattern="$$pattern" '$$0 ~ pattern {print $$2; exit}')
 APP_BUNDLE := dist/myterm.app
 INSTALL_BUNDLE := $(HOME)/Applications/myterm.app
+BUNDLE_ID := com.gordonbeeming.myterm
 
 build:
 	swift build --product MyTerm --configuration release -Xswiftc -DMYTERM_PRODUCTION
@@ -43,8 +44,17 @@ verify: bundle
 	plutil -lint $(APP_BUNDLE)/Contents/Info.plist
 
 install: bundle
-	pkill -x myterm >/dev/null 2>&1 || true
+	# A hard kill skips applicationWillTerminate, where MyTerm writes its terminal snapshots
+	# and agent sessions, so ask the app to quit itself and wait for it to finish.
+	@osascript -e 'if application id "$(BUNDLE_ID)" is running then quit app id "$(BUNDLE_ID)"' >/dev/null 2>&1 || true
+	@for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do \
+		killall -s myterm >/dev/null 2>&1 || break; \
+		sleep 1; \
+	done
 	mkdir -p $(HOME)/Applications
+	# ditto merges into the destination, so a file the new bundle no longer ships would survive
+	# and break the code signature it is not part of. Install into an empty directory.
+	rm -rf $(INSTALL_BUNDLE)
 	ditto $(APP_BUNDLE) $(INSTALL_BUNDLE)
 
 clean:

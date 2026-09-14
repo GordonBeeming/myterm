@@ -986,7 +986,9 @@ final class AppModelTests: XCTestCase {
         session.emitContentChanged()
         session.emitContentChanged()
         session.emitContentChanged()
-        try await Task.sleep(nanoseconds: 80_000_000)
+        await waitUntil("the coalesced snapshot is taken") { session.snapshotCallCount > 0 }
+        // Let any second snapshot the debounce failed to absorb arrive before counting them.
+        try await Task.sleep(nanoseconds: 40_000_000)
 
         XCTAssertEqual(session.snapshotCallCount, 1)
         let persistedTab = try XCTUnwrap(model.selectedWorkspace.selectedTab)
@@ -3023,6 +3025,220 @@ final class AppModelTests: XCTestCase {
         model.cancelPaneTabDrag()
     }
 
+    func testPaneTabDragDroppedBackOnItsOwnSlotChangesNothing() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let groupID = model.selectedWorkspace.focusedTabGroupID
+        let firstTabID = try XCTUnwrap(model.selectedTab?.id)
+        model.createTerminalTab(in: groupID)
+        let secondTabID = try XCTUnwrap(model.selectedTab?.id)
+        model.createTerminalTab(in: groupID)
+        let thirdTabID = try XCTUnwrap(model.selectedTab?.id)
+        let source = PaneTabDragSource(workspaceID: workspaceID, tabGroupID: groupID, tabID: secondTabID)
+        let registrationID = registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: groupID, origin: .zero)
+        model.registerPaneTabDragTabStrip(
+            workspaceID: workspaceID,
+            tabGroupID: groupID,
+            registrationID: registrationID,
+            frame: CGRect(x: 0, y: 0, width: 300, height: 20)
+        )
+        let persisted = try Data(contentsOf: model.store.persistenceURL)
+
+        // Lift the middle tab, open a gap past the last tab, then wander back over its own slot.
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 150, y: 10))
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 280, y: 10))
+        XCTAssertEqual(model.paneTabReorderPreview(in: groupID)?.insertionIndex, 2)
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 140, y: 10))
+        let home = try XCTUnwrap(model.paneTabReorderPreview(in: groupID))
+        XCTAssertEqual(home.insertionIndex, 1)
+        XCTAssertEqual((0..<3).map(home.slotShift(forTabAt:)), [0, 0, 0], "Over its own slot no neighbour slides.")
+
+        XCTAssertNotNil(model.finishPaneTabDrag(source: source, finalLocation: CGPoint(x: 140, y: 10)))
+        XCTAssertEqual(model.selectedWorkspace.group(id: groupID)?.tabs.map(\.id), [firstTabID, secondTabID, thirdTabID])
+        XCTAssertNil(model.paneTabDragSession)
+        XCTAssertNil(model.errorDescription)
+        XCTAssertEqual(
+            try Data(contentsOf: model.store.persistenceURL), persisted,
+            "A drop on the tab's own slot is a no-op and must not rewrite the store."
+        )
+    }
+
+    func testPaneTabDragOnASingleTabStripNeverOpensAGap() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let groupID = model.selectedWorkspace.focusedTabGroupID
+        let onlyTabID = try XCTUnwrap(model.selectedTab?.id)
+        let source = PaneTabDragSource(workspaceID: workspaceID, tabGroupID: groupID, tabID: onlyTabID)
+        let registrationID = registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: groupID, origin: .zero)
+        model.registerPaneTabDragTabStrip(
+            workspaceID: workspaceID,
+            tabGroupID: groupID,
+            registrationID: registrationID,
+            frame: CGRect(x: 0, y: 0, width: 300, height: 20)
+        )
+
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 20, y: 10))
+        for x: CGFloat in [120, 290, 5] {
+            model.updatePaneTabDrag(source: source, location: CGPoint(x: x, y: 10))
+            let preview = try XCTUnwrap(model.paneTabReorderPreview(in: groupID), "x=\(x)")
+            XCTAssertEqual(preview.sourceIndex, 0)
+            XCTAssertEqual(preview.insertionIndex, 0, "x=\(x)")
+            XCTAssertEqual(preview.slotShift(forTabAt: 0), 0)
+            XCTAssertEqual(preview.pointerOffset, x - 20)
+        }
+
+        XCTAssertNotNil(model.finishPaneTabDrag(source: source, finalLocation: CGPoint(x: 290, y: 10)))
+        XCTAssertEqual(model.selectedWorkspace.group(id: groupID)?.tabs.map(\.id), [onlyTabID])
+        XCTAssertNil(model.errorDescription)
+        XCTAssertNil(model.paneTabDragSession)
+    }
+
+    func testPaneTabDragIntoAnotherStripMovesTheLastTabOutAndClosesItsPane() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let leftGroupID = model.selectedWorkspace.focusedTabGroupID
+        let leftTabID = try XCTUnwrap(model.selectedTab?.id)
+        model.splitFocusedTerminal(orientation: .horizontal)
+        let rightGroupID = model.selectedWorkspace.focusedTabGroupID
+        XCTAssertNotEqual(rightGroupID, leftGroupID)
+        let rightTabID = try XCTUnwrap(model.selectedWorkspace.group(id: rightGroupID)?.tabs.first?.id)
+
+        // Two strips side by side: the left one at x 0..<200, the right one at x 200..<400.
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: leftGroupID, origin: .zero)
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: rightGroupID, origin: CGPoint(x: 200, y: 0))
+
+        let source = PaneTabDragSource(workspaceID: workspaceID, tabGroupID: rightGroupID, tabID: rightTabID)
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 220, y: 10))
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 20, y: 10))
+
+        XCTAssertEqual(model.paneTabDragPreviewTarget, .tabStrip(tabGroupID: leftGroupID, insertionIndex: 0))
+        let sourcePreview = try XCTUnwrap(model.paneTabReorderPreview(in: rightGroupID))
+        XCTAssertNil(sourcePreview.insertionIndex, "The gap closes in the strip the tab left.")
+        XCTAssertEqual(sourcePreview.pointerOffset, -200)
+        XCTAssertNil(model.paneTabReorderPreview(in: leftGroupID), "Only the strip being dragged from previews.")
+
+        XCTAssertNotNil(model.finishPaneTabDrag(source: source, finalLocation: CGPoint(x: 20, y: 10)))
+        XCTAssertEqual(model.selectedWorkspace.orderedGroups.map(\.id), [leftGroupID])
+        XCTAssertEqual(model.selectedWorkspace.group(id: leftGroupID)?.tabs.map(\.id), [rightTabID, leftTabID])
+        XCTAssertEqual(model.selectedWorkspace.group(id: leftGroupID)?.selectedTabID, rightTabID)
+        XCTAssertNil(model.paneTabDragSession)
+        XCTAssertNil(model.paneTabReorderPreview(in: leftGroupID))
+        XCTAssertNil(model.paneTabReorderPreview(in: rightGroupID))
+        XCTAssertNil(model.errorDescription)
+    }
+
+    func testPaneTabDragEndsWhenTheDraggedTabOrItsWorkspaceGoesAway() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let groupID = model.selectedWorkspace.focusedTabGroupID
+        let firstTabID = try XCTUnwrap(model.selectedTab?.id)
+        model.createTerminalTab(in: groupID)
+        let secondTabID = try XCTUnwrap(model.selectedTab?.id)
+        let source = PaneTabDragSource(workspaceID: workspaceID, tabGroupID: groupID, tabID: firstTabID)
+        let registrationID = registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: groupID, origin: .zero)
+        let stripFrame = CGRect(x: 0, y: 0, width: 300, height: 20)
+        model.registerPaneTabDragTabStrip(
+            workspaceID: workspaceID, tabGroupID: groupID, registrationID: registrationID, frame: stripFrame
+        )
+
+        // The dragged tab closes under the pointer: the preview is gone at once, and the session
+        // goes with the tab's frame reporter.
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 40, y: 10))
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 160, y: 10))
+        XCTAssertEqual(model.paneTabReorderPreview(in: groupID)?.insertionIndex, 1)
+        model.closeTab(firstTabID)
+        XCTAssertEqual(model.selectedWorkspace.group(id: groupID)?.tabs.map(\.id), [secondTabID])
+        XCTAssertNil(model.paneTabReorderPreview(in: groupID))
+        // closeTab itself leaves the session (and its last pane target) in place; it is the tab's
+        // frame reporter going away that ends the drag, which is what happens in the app.
+        model.unregisterPaneTabDragTab(
+            workspaceID: workspaceID, tabGroupID: groupID, registrationID: registrationID, tabID: firstTabID
+        )
+        XCTAssertNil(model.paneTabDragSession)
+        XCTAssertNil(model.paneTabDragPreviewTarget)
+        XCTAssertNil(model.finishPaneTabDrag(source: source, finalLocation: CGPoint(x: 160, y: 10)))
+        XCTAssertEqual(model.selectedWorkspace.group(id: groupID)?.tabs.map(\.id), [secondTabID])
+
+        // Switching workspace mid-drag ends the session, and the gesture's late updates cannot
+        // revive it or move anything once the user comes back.
+        model.createTerminalTab(in: groupID)
+        let thirdTabID = try XCTUnwrap(model.selectedTab?.id)
+        let laterSource = PaneTabDragSource(workspaceID: workspaceID, tabGroupID: groupID, tabID: secondTabID)
+        registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: groupID, origin: .zero, registrationID: registrationID)
+        model.registerPaneTabDragTabStrip(
+            workspaceID: workspaceID, tabGroupID: groupID, registrationID: registrationID, frame: stripFrame
+        )
+        model.updatePaneTabDrag(source: laterSource, location: CGPoint(x: 40, y: 10))
+        model.updatePaneTabDrag(source: laterSource, location: CGPoint(x: 160, y: 10))
+        XCTAssertEqual(model.paneTabReorderPreview(in: groupID)?.insertionIndex, 1)
+        model.createWorkspace()
+        XCTAssertNil(model.paneTabDragSession)
+        model.updatePaneTabDrag(source: laterSource, location: CGPoint(x: 165, y: 10))
+        XCTAssertNil(model.paneTabDragSession)
+        model.selectWorkspace(workspaceID)
+        XCTAssertNil(model.paneTabReorderPreview(in: groupID))
+        XCTAssertNil(model.finishPaneTabDrag(source: laterSource, finalLocation: CGPoint(x: 165, y: 10)))
+        XCTAssertEqual(model.selectedWorkspace.group(id: groupID)?.tabs.map(\.id), [secondTabID, thirdTabID])
+    }
+
+    func testPaneTabDragPreviewFollowsATabClosedElsewhereInTheStrip() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let groupID = model.selectedWorkspace.focusedTabGroupID
+        let firstTabID = try XCTUnwrap(model.selectedTab?.id)
+        model.createTerminalTab(in: groupID)
+        let secondTabID = try XCTUnwrap(model.selectedTab?.id)
+        model.createTerminalTab(in: groupID)
+        let thirdTabID = try XCTUnwrap(model.selectedTab?.id)
+        let source = PaneTabDragSource(workspaceID: workspaceID, tabGroupID: groupID, tabID: thirdTabID)
+        let registrationID = registerPaneDragFrames(model, workspaceID: workspaceID, tabGroupID: groupID, origin: .zero)
+        model.registerPaneTabDragTabStrip(
+            workspaceID: workspaceID,
+            tabGroupID: groupID,
+            registrationID: registrationID,
+            frame: CGRect(x: 0, y: 0, width: 300, height: 20)
+        )
+
+        // Third is lifted and headed for the first slot.
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 250, y: 10))
+        model.updatePaneTabDrag(source: source, location: CGPoint(x: 20, y: 10))
+        var preview = try XCTUnwrap(model.paneTabReorderPreview(in: groupID))
+        XCTAssertEqual(preview.sourceIndex, 2)
+        XCTAssertEqual(preview.insertionIndex, 0)
+        XCTAssertEqual((0..<3).map(preview.slotShift(forTabAt:)), [1, 1, 0])
+
+        // The middle tab closes while the drag is in flight (its process ended, say). The strip
+        // re-lays out [First, Third] and the preview is re-resolved against what is left.
+        model.closeTab(secondTabID)
+        model.unregisterPaneTabDragTab(
+            workspaceID: workspaceID, tabGroupID: groupID, registrationID: registrationID, tabID: secondTabID
+        )
+        model.registerPaneTabDragTab(
+            workspaceID: workspaceID, tabGroupID: groupID, registrationID: registrationID, tabID: thirdTabID,
+            frame: CGRect(x: 100, y: 0, width: 100, height: 20)
+        )
+        XCTAssertEqual(model.selectedWorkspace.group(id: groupID)?.tabs.map(\.id), [firstTabID, thirdTabID])
+        preview = try XCTUnwrap(model.paneTabReorderPreview(in: groupID))
+        XCTAssertEqual(preview.sourceIndex, 1)
+        XCTAssertEqual(preview.insertionIndex, 0)
+        XCTAssertEqual((0..<2).map(preview.slotShift(forTabAt:)), [1, 0])
+
+        XCTAssertNotNil(model.finishPaneTabDrag(source: source, finalLocation: CGPoint(x: 20, y: 10)))
+        XCTAssertEqual(model.selectedWorkspace.group(id: groupID)?.tabs.map(\.id), [thirdTabID, firstTabID])
+        XCTAssertNil(model.paneTabDragSession)
+        XCTAssertNil(model.errorDescription)
+    }
+
     func testBrowserShortcutDeclarationsAreExactAndDoNotDuplicateContextualZoom() {
         XCTAssertEqual(MyTermCommandShortcuts.reloadBrowser, .init(key: "r", modifiers: [.command]))
         XCTAssertEqual(MyTermCommandShortcuts.focusBrowserAddress, .init(key: "l", modifiers: [.command]))
@@ -3411,6 +3627,230 @@ final class AppModelTests: XCTestCase {
         return registrationID
     }
 
+    // MARK: - Agent session recovery
+
+    func testAnAgentReportSavesTheConversationToComeBackTo() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let session = try XCTUnwrap(engine.sessions.first)
+
+        session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .finished, sessionID: "abc-123")))
+
+        XCTAssertEqual(
+            model.selectedWorkspace.selectedTab?.terminalSession?.agentSession,
+            AgentSessionHandle(agent: "claude", sessionID: "abc-123")
+        )
+    }
+
+    func testAResumedAgentIsNotShownAsWorkingOrNeedingYou() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let tab = try XCTUnwrap(model.selectedWorkspace.selectedTab)
+        let session = try XCTUnwrap(engine.sessions.first)
+
+        session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .ready, sessionID: "abc-123")))
+
+        XCTAssertNil(model.agentActivity(forTab: tab.id), "A resumed pane has nothing for the user to act on")
+        XCTAssertEqual(
+            model.selectedWorkspace.selectedTab?.terminalSession?.agentSession,
+            AgentSessionHandle(agent: "claude", sessionID: "abc-123"),
+            "Starting an agent is still where the conversation is captured"
+        )
+    }
+
+    func testAnAgentMyTermCannotResumeIsNotSaved() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let session = try XCTUnwrap(engine.sessions.first)
+
+        session.emit(.agentActivity(AgentActivityReport(agent: "some-other-agent", activity: .finished, sessionID: "abc")))
+
+        XCTAssertNil(model.selectedWorkspace.selectedTab?.terminalSession?.agentSession)
+    }
+
+    func testASavedConversationIsResumedOnTheNextLaunch() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let firstEngine = CapturingTerminalEngine()
+        let firstModel = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: firstEngine,
+            startsTerminalProcesses: true
+        )
+        let session = try XCTUnwrap(firstEngine.sessions.first)
+        session.activeForegroundProcessName = "claude"
+        session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .working, sessionID: "abc-123")))
+        firstModel.persistTerminalSnapshots()
+
+        let relaunchEngine = CapturingTerminalEngine()
+        _ = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: relaunchEngine,
+            startsTerminalProcesses: true
+        )
+
+        XCTAssertEqual(relaunchEngine.configurations.first?.initialCommand, "claude --resume 'abc-123'")
+    }
+
+    func testAnAgentThatStoppedLeavesNothingToResume() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let session = try XCTUnwrap(engine.sessions.first)
+        session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .finished, sessionID: "abc-123")))
+
+        session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .exited, sessionID: "abc-123")))
+
+        XCTAssertNil(model.selectedWorkspace.selectedTab?.terminalSession?.agentSession)
+    }
+
+    func testAPaneLeftAtItsShellPromptLosesItsSavedConversation() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let session = try XCTUnwrap(engine.sessions.first)
+        session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .finished, sessionID: "abc-123")))
+        session.activeForegroundProcessName = nil
+
+        model.persistTerminalSnapshots()
+
+        XCTAssertNil(model.selectedWorkspace.selectedTab?.terminalSession?.agentSession)
+    }
+
+    func testAPaneStillRunningItsAgentKeepsTheSavedConversation() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let session = try XCTUnwrap(engine.sessions.first)
+        session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .finished, sessionID: "abc-123")))
+        session.activeForegroundProcessName = "claude"
+
+        model.persistTerminalSnapshots()
+
+        XCTAssertEqual(
+            model.selectedWorkspace.selectedTab?.terminalSession?.agentSession,
+            AgentSessionHandle(agent: "claude", sessionID: "abc-123")
+        )
+    }
+
+    func testAPaneThatLostItsDirectoryDoesNotTryToRejoinTheConversation() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let workingDirectory = directory.appending(path: "project", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: workingDirectory, withIntermediateDirectories: true)
+        let firstEngine = CapturingTerminalEngine()
+        let firstModel = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: firstEngine,
+            startsTerminalProcesses: true
+        )
+        let tab = try XCTUnwrap(firstModel.selectedWorkspace.selectedTab)
+        try firstModel.store.updateTerminalWorkingDirectory(
+            workspaceID: firstModel.store.selectedWorkspaceID,
+            tabGroupID: firstModel.selectedWorkspace.focusedTabGroupID,
+            tabID: tab.id,
+            workingDirectory: workingDirectory
+        )
+        let session = try XCTUnwrap(firstEngine.sessions.first)
+        session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .working, sessionID: "abc-123")))
+        try FileManager.default.removeItem(at: workingDirectory)
+
+        let relaunchEngine = CapturingTerminalEngine()
+        _ = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: relaunchEngine,
+            startsTerminalProcesses: true
+        )
+
+        XCTAssertNil(relaunchEngine.configurations.first?.initialCommand)
+    }
+
+    func testTurningOffAgentRestoreBringsThePaneBackToAPrompt() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let firstEngine = CapturingTerminalEngine()
+        let firstModel = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: firstEngine,
+            startsTerminalProcesses: true
+        )
+        firstModel.updateGlobalSettings { $0.restoresAgentSessions = false }
+        let session = try XCTUnwrap(firstEngine.sessions.first)
+        session.activeForegroundProcessName = "claude"
+        session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .working, sessionID: "abc-123")))
+
+        let relaunchEngine = CapturingTerminalEngine()
+        _ = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: relaunchEngine,
+            startsTerminalProcesses: true
+        )
+
+        XCTAssertNil(relaunchEngine.configurations.first?.initialCommand)
+    }
+
+    /// Waits for work the app schedules on the main actor, so a loaded machine cannot fail a test
+    /// that a fixed sleep would have passed.
+    private func waitUntil(
+        _ description: String,
+        timeout: TimeInterval = 5,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        _ condition: @MainActor () -> Bool
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if condition() { return }
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        XCTFail("Timed out waiting until \(description)", file: file, line: line)
+    }
+
     private func makeModel(applicationSupportDirectory: URL) throws -> AppModel {
         let suiteName = "MyTermTests.\(applicationSupportDirectory.lastPathComponent)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {
@@ -3501,5 +3941,8 @@ private final class CapturingTerminalSession: TerminalProcessSession {
     }
     func emitContentChanged() {
         contentChangeHandler?()
+    }
+    func emit(_ event: TerminalSessionEvent) {
+        onEvent?(event)
     }
 }

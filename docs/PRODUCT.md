@@ -20,7 +20,7 @@ Native, quiet, dependable. The interface should feel dense without becoming cram
 
 ## Anti-references
 
-- Do not copy cmux's notifications, agent status, per-workspace status metadata, or other features outside the requested workflow. Folder colors are organizational, not status signals.
+- Do not copy cmux's agent status layer, per-workspace status metadata, or other features outside the requested workflow. Folder colors are organizational, not status signals. Notifications are a backlog of agents waiting for the user, not a status readout.
 - Do not use decorative terminal chrome, novelty controls, or motion that interrupts focused work.
 - Do not build terminal rendering on web technology when a native implementation is available.
 
@@ -29,6 +29,7 @@ Native, quiet, dependable. The interface should feel dense without becoming cram
 - Make workspaces scannable by title alone.
 - Let collapsible, color-coded folders separate work and personal contexts without adding metadata to workspace rows.
 - Keep sessions alive independently of which workspace or tab is visible.
+- Treat a quit as a pause. Work in progress, including an agent conversation, should survive a restart.
 - Keep tab selection local to the pane group that owns it, including Control-Tab navigation.
 - Give every frequent action a clear keyboard path and a visible interface path.
 - Prefer native macOS behavior for windows, focus, menus, tabs, accessibility, and appearance.
@@ -56,6 +57,20 @@ Browser navigation stays compact and familiar: Back, Forward, Refresh, then Addr
 ## Workspace persistence and recovery
 
 The persisted model follows the visible hierarchy: workspace, split layout, pane groups, then local tabs. Split proportions and each group's selected tab restore with the workspace. A v1 migration preserves the exact legacy bytes in an adjacent backup before its first v2 write. If decoding retains usable state but drops malformed elements, MyTerm preserves the original bytes in a separate adjacent recovery backup before saving the repaired snapshot.
+
+A terminal pane also restores the agent conversation it was in. Claude Code reports its conversation identifier through the same hooks that mark a tab needing attention, MyTerm saves it beside the pane's working directory, and the next launch runs that agent's own resume command. A pane left at its shell prompt comes back to a shell prompt, so leaving the agent is how the user says the work is finished. Only agents whose resume command MyTerm knows are restored, and only an identifier short enough and plain enough to be safe in a command is kept. A tab is named after the conversation in its pane as well, taken from the terminal title the agent already writes, so renaming the conversation renames the tab. A title is taken only while an agent has reported itself in that pane, a name the user typed still wins, and leaving the agent puts the tab back to its plain label.
+
+Codex is not restored, because its hooks report a new identifier for every turn rather than the one its resume command accepts. Restoring from that identifier would open the pane on an error, which is worse for the user than a plain prompt. Codex hooks still report activity for the tab indicator.
+
+## Agent notifications
+
+An agent that finishes a turn, or asks a question, in a tab the user cannot see files a notification. The same entry draws the dot on that tab, so the two surfaces can never disagree. A bell in the toolbar carries the count, and its popover lists the backlog newest first with the workspace and tab each entry points at.
+
+Reaching the tab is what reads an entry, whichever way the user gets there: clicking the row, clicking the tab, or making that workspace active. Clear All empties the list without visiting anything.
+
+One tab keeps one entry, because the backlog answers "which tabs need me" and a tab needs the user once. The latest report is what the entry says: a question replaces a finished turn on the same tab, and a finished turn replaces a question, because the agent could only have moved on once the question was answered. An agent that starts working again takes its own entry back, so the list only ever holds work that is still waiting.
+
+The backlog is not saved. It is empty after a relaunch, for the same reason the tab dot is: an entry that survived a restart would point at work the user has moved on from.
 
 ## Accessibility & Inclusion
 

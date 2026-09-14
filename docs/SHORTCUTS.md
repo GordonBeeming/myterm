@@ -2,6 +2,15 @@
 
 MyTerm exposes its shortcuts through native macOS menus. Pane and navigation keys follow cmux where that makes sense. The selected content decides how zoom behaves: a browser tab changes its own page zoom, while a terminal tab changes the active workspace's persisted font-size override.
 
+## Application
+
+| Action | Shortcut |
+| --- | --- |
+| Global settings | <kbd>⌘,</kbd> |
+| Show notifications | <kbd>⇧⌘I</kbd> |
+
+**Check for Updates…** and **Import Workspaces…** live in the application and Workspace menus without a shortcut.
+
 ## Workspaces
 
 | Action | Shortcut |
@@ -45,12 +54,15 @@ These commands apply only when the focused pane's selected tab is a browser. The
 
 | Action | Shortcut |
 | --- | --- |
+| Make pane full screen / restore layout | <kbd>⇧⌘↩</kbd> |
 | Split right | <kbd>⌘D</kbd> |
 | Split below | <kbd>⇧⌘D</kbd> |
 | Close focused pane or tab | <kbd>⌘W</kbd> |
 | Focus pane left / right | <kbd>⌥⌘←</kbd> / <kbd>⌥⌘→</kbd> |
 | Focus pane up / down | <kbd>⌥⌘↑</kbd> / <kbd>⌥⌘↓</kbd> |
 | Move selected tab to previous / next pane | <kbd>⇧⌥⌘←</kbd> / <kbd>⇧⌥⌘→</kbd> |
+
+**Move Tab to New Pane on Left / Right / Above / Below** are in the Pane menu and the tab's context menu. They intentionally have no shortcut.
 
 Closing a pane, tab, or workspace asks for confirmation when it would terminate a foreground process. Quitting with <kbd>⌘Q</kbd> checks every terminal in the app; idle shells do not trigger the warning.
 

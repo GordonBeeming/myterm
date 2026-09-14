@@ -1,0 +1,425 @@
+import AppKit
+import Foundation
+import MyTermCore
+import MyTermPlatform
+import XCTest
+
+@testable import MyTerm
+
+/// The life of an agent session in a pane, driven through the same path the hooks use: the
+/// terminal session's event callback. Every test here is an order of events the hooks can
+/// actually produce, or a process event that arrives around them.
+@MainActor
+final class AgentLifecycleTests: XCTestCase {
+    private var directories: [URL] = []
+
+    override func tearDown() async throws {
+        for directory in directories {
+            try? FileManager.default.removeItem(at: directory)
+        }
+    }
+
+    // MARK: - Hook order
+
+    func testAStopBeforeANotificationLeavesTheQuestionStanding() throws {
+        let fixture = try makeFixture(isActive: false)
+
+        fixture.emit(.finished, session: "abc")
+        fixture.emit(.awaitingInput, session: "abc")
+
+        XCTAssertEqual(fixture.model.agentAttention(forTab: fixture.tabID), .awaitingInput)
+        XCTAssertEqual(fixture.model.agentNotificationItems.map(\.activity), [.awaitingInput])
+    }
+
+    func testTwoNotificationsWithNoStopBetweenThemKeepOneRow() throws {
+        let fixture = try makeFixture(isActive: false)
+
+        fixture.emit(.awaitingInput, session: "abc")
+        fixture.emit(.awaitingInput, session: "abc")
+
+        XCTAssertEqual(fixture.model.agentNotificationCount, 1)
+        XCTAssertEqual(fixture.model.remoteNotifications()?.entries.count, 1, "the same question twice is one row")
+    }
+
+    func testASessionEndWithNoSessionStartChangesNothing() throws {
+        let fixture = try makeFixture(isActive: false)
+
+        fixture.emit(.exited, session: "abc")
+
+        XCTAssertNil(fixture.model.agentAttention(forTab: fixture.tabID))
+        XCTAssertTrue(fixture.model.agentAttention.isEmpty)
+        XCTAssertTrue(fixture.model.liveAgentTabs.isEmpty)
+        XCTAssertNil(fixture.savedSession)
+        XCTAssertEqual(fixture.model.remoteNotifications()?.entries.count, 0)
+    }
+
+    func testAResumeInTheSamePaneMovesTheTabToTheNewConversation() throws {
+        let fixture = try makeFixture(isActive: false)
+        fixture.emit(.ready, session: "first")
+        fixture.emit(.working, session: "first")
+        XCTAssertEqual(fixture.model.agentAttention(forTab: fixture.tabID), .working)
+
+        // The user quits the agent and runs `claude --resume <other>` in the same pane.
+        fixture.emit(.exited, session: "first")
+        XCTAssertNil(fixture.savedSession)
+        fixture.emit(.ready, session: "second")
+
+        XCTAssertEqual(fixture.savedSession?.sessionID, "second")
+        XCTAssertEqual(fixture.model.agentSession(tabID: fixture.tabID.description)?.sessionID, "second",
+                       "a device asking now is told the conversation the pane is in now")
+        XCTAssertNil(fixture.model.agentAttention(forTab: fixture.tabID), "a resumed pane is not working")
+    }
+
+    func testASecondSessionStartWithoutAnEndStillFollowsTheNewIdentifier() throws {
+        // A SessionEnd can be lost (the hook timed out, or the agent was killed). The next
+        // SessionStart in the pane is still the truth about what is running there.
+        let fixture = try makeFixture(isActive: false)
+        fixture.emit(.ready, session: "first")
+
+        fixture.emit(.ready, session: "second")
+
+        XCTAssertEqual(fixture.savedSession?.sessionID, "second")
+    }
+
+    func testAPromptWithNoSessionStartStillAdoptsTheConversation() throws {
+        // Hooks installed while an agent was already running: the first thing MyTerm hears is
+        // UserPromptSubmit.
+        let fixture = try makeFixture(isActive: false)
+
+        fixture.emit(.working, session: "abc")
+
+        XCTAssertEqual(fixture.savedSession?.sessionID, "abc")
+        XCTAssertEqual(fixture.model.liveAgentTabs[fixture.tabID], "claude")
+        XCTAssertEqual(fixture.model.agentAttention(forTab: fixture.tabID), .working)
+    }
+
+    func testAHookThatArrivesAfterTheTabMovedLandsOnThePaneTheTabIsInNow() throws {
+        let fixture = try makeFixture(isActive: true)
+        fixture.model.createTerminalTab()
+        guard case .moved(let newGroupID) = fixture.model.moveTabToNewGroup(
+            workspaceID: fixture.workspaceID,
+            sourceTabGroupID: fixture.tabGroupID,
+            tabID: fixture.tabID,
+            beside: fixture.tabGroupID,
+            edge: .right
+        ) else {
+            return XCTFail("precondition: the tab moves into a new pane")
+        }
+        XCTAssertEqual(fixture.model.selectedWorkspace.group(id: newGroupID)?.selectedTabID, fixture.tabID)
+
+        // The moved tab is selected in its new pane and the app is in front, so a finish there
+        // has already been seen. A callback still bound to the old pane would file it unread.
+        fixture.emit(.finished, session: "abc")
+
+        XCTAssertTrue(fixture.model.agentNotificationItems.isEmpty)
+        XCTAssertNil(fixture.model.agentAttention(forTab: fixture.tabID))
+    }
+
+    // MARK: - Hooks around the tab's own lifecycle
+
+    func testAHookThatArrivesAfterTheTabClosedTouchesNothing() throws {
+        let fixture = try makeFixture(isActive: false)
+        fixture.model.createTerminalTab()
+        try fixture.model.closeTab(workspaceID: fixture.workspaceID, tabGroupID: fixture.tabGroupID, tabID: fixture.tabID)
+
+        // The process was told to stop, but bytes it already wrote can still be parsed.
+        fixture.emit(.awaitingInput, session: "abc")
+
+        XCTAssertTrue(fixture.model.agentAttention.isEmpty, "a closed tab cannot hold a cook")
+        XCTAssertTrue(fixture.model.liveAgentTabs.isEmpty, "a closed tab cannot hold an agent")
+        XCTAssertTrue(fixture.model.agentInbox.history.isEmpty,
+                      "nothing about a tab that is gone is filed, saved, or sent to a device")
+    }
+
+    func testAHookThatArrivesAfterTheWorkspaceWasDeletedTouchesNothing() throws {
+        let fixture = try makeFixture(isActive: false)
+        fixture.model.createWorkspace()
+        XCTAssertTrue(fixture.model.deleteWorkspace(workspaceID: fixture.workspaceID.description))
+
+        fixture.emit(.awaitingInput, session: "abc")
+
+        XCTAssertTrue(fixture.model.agentAttention.isEmpty)
+        XCTAssertTrue(fixture.model.liveAgentTabs.isEmpty)
+        XCTAssertTrue(fixture.model.agentInbox.history.isEmpty)
+    }
+
+    func testASessionEndThatArrivesAsTheAppQuitsCannotForgetTheConversation() throws {
+        // Quitting sends the agent SIGHUP, and its SessionEnd hook can still write to the PTY
+        // before it goes. That hook must not undo the snapshot the quit just wrote, or the
+        // conversation the doc promises will survive a restart comes back as a bare prompt.
+        let fixture = try makeFixture(isActive: false)
+        fixture.session.activeForegroundProcessName = "claude"
+        fixture.emit(.working, session: "abc")
+        XCTAssertEqual(fixture.savedSession?.sessionID, "abc")
+
+        fixture.model.persistTerminalSnapshots()
+        fixture.model.terminateTerminalSessions()
+        fixture.emit(.exited, session: "abc")
+
+        XCTAssertEqual(fixture.savedSession?.sessionID, "abc", "the quit already decided what to keep")
+
+        let relaunched = try makeFixture(in: fixture.directory, isActive: false)
+        XCTAssertEqual(relaunched.engine.configurations.first?.initialCommand, "claude --resume 'abc'")
+    }
+
+    func testTheShellExitingTakesTheCookAndTheAgentWithIt() throws {
+        // The agent was killed without its SessionEnd hook running, then the shell exited too.
+        // A dead pane cannot be waiting for anyone, and the bell must not point at it.
+        let fixture = try makeFixture(isActive: false)
+        fixture.emit(.awaitingInput, session: "abc")
+        XCTAssertEqual(fixture.model.agentNotificationCount, 1)
+
+        fixture.session.emit(.processTerminated(exitCode: 0))
+
+        XCTAssertNil(fixture.model.agentAttention(forTab: fixture.tabID))
+        XCTAssertEqual(fixture.model.agentNotificationCount, 0)
+        XCTAssertNil(fixture.model.liveAgentTabs[fixture.tabID])
+    }
+
+    // MARK: - An agent killed without its SessionEnd
+
+    func testAKilledAgentsPaneDoesNotTakeTheShellsTitle() throws {
+        let fixture = try makeFixture(isActive: false)
+        fixture.session.activeForegroundProcessName = "claude"
+        fixture.emit(.ready, session: "abc")
+        fixture.title("✳ Fix the build")
+        XCTAssertEqual(fixture.displayTitle, "Fix the build")
+
+        // kill -9: no SessionEnd. The shell has the pane back and writes its own title.
+        fixture.session.activeForegroundProcessName = nil
+        fixture.title("myterm — zsh")
+
+        XCTAssertEqual(fixture.displayTitle, "Fix the build", "a shell title is never a conversation name")
+    }
+
+    func testAReplyToAPaneWhoseAgentIsGoneIsRefused() throws {
+        let fixture = try makeFixture(isActive: false)
+        fixture.session.activeForegroundProcessName = "claude"
+        fixture.emit(.working, session: "abc")
+        XCTAssertTrue(fixture.model.sendInput(tabID: fixture.tabID.description, bytes: ArraySlice("go on".utf8)))
+        XCTAssertEqual(String(decoding: fixture.session.typed, as: UTF8.self), "go on")
+
+        fixture.session.activeForegroundProcessName = nil
+
+        XCTAssertFalse(
+            fixture.model.sendInput(tabID: fixture.tabID.description, bytes: ArraySlice("yes, delete it".utf8)),
+            "with the agent gone, those words would run in the shell"
+        )
+        XCTAssertEqual(String(decoding: fixture.session.typed, as: UTF8.self), "go on", "nothing reached the pane")
+    }
+
+    func testTheShellComingBackInFrontRetiresTheAgentTheHooksNeverSaidLeft() throws {
+        let fixture = try makeFixture(isActive: false)
+        fixture.session.activeForegroundProcessName = "claude"
+        fixture.emit(.working, session: "abc")
+        fixture.title("✳ Fix the build")
+        XCTAssertEqual(fixture.model.agentSession(tabID: fixture.tabID.description)?.sessionID, "abc")
+
+        fixture.session.activeForegroundProcessName = nil
+        fixture.session.emit(.foregroundProcessChanged(nil))
+
+        XCTAssertNil(fixture.model.agentAttention(forTab: fixture.tabID), "the cook goes")
+        XCTAssertNil(fixture.model.liveAgentTabs[fixture.tabID], "so does the agent")
+        XCTAssertNil(fixture.savedSession, "and the conversation, as leaving the agent would")
+        XCTAssertNil(fixture.model.agentSession(tabID: fixture.tabID.description), "so a device is offered nothing")
+        XCTAssertEqual(fixture.displayTitle, "Terminal", "and the tab is back to its plain label")
+    }
+
+    func testTheShellInFrontOfAPaneWithNoAgentChangesNothing() throws {
+        // A relaunch types the resume command into the shell, and the shell is in front until
+        // the agent starts. Nothing has reported yet, so there is nothing to retire.
+        let fixture = try makeFixture(isActive: false)
+        fixture.session.activeForegroundProcessName = "claude"
+        fixture.emit(.working, session: "abc")
+        fixture.model.persistTerminalSnapshots()
+        let relaunched = try makeFixture(in: fixture.directory, isActive: false)
+        XCTAssertEqual(relaunched.savedSession?.sessionID, "abc")
+
+        relaunched.session.emit(.foregroundProcessChanged(nil))
+
+        XCTAssertEqual(relaunched.savedSession?.sessionID, "abc")
+    }
+
+    // MARK: - Session identity
+
+    func testCodexNeverLeavesAConversationBehindHoweverManyIdentifiersItReports() throws {
+        let fixture = try makeFixture(isActive: false)
+
+        fixture.emit(.ready, agent: "codex", session: "turn-1")
+        fixture.emit(.working, agent: "codex", session: "turn-2")
+        fixture.emit(.finished, agent: "codex", session: "turn-3")
+
+        XCTAssertEqual(fixture.model.agentAttention(forTab: fixture.tabID), .finished, "the indicator still works")
+        XCTAssertNil(fixture.savedSession, "nothing is saved to resume from")
+        XCTAssertNil(fixture.model.agentSession(tabID: fixture.tabID.description), "so no watcher is ever created")
+        let tab = fixture.model.remoteTree().workspaces.flatMap(\.tabs).first { $0.id == fixture.tabID.description }
+        XCTAssertEqual(tab?.hasAgentConversation, false)
+    }
+
+    func testCodexEndingCannotDiscardAClaudeConversationInTheSamePane() throws {
+        let fixture = try makeFixture(isActive: false)
+        fixture.emit(.working, session: "abc")
+
+        fixture.emit(.exited, agent: "codex", session: "turn-9")
+
+        XCTAssertEqual(fixture.savedSession?.sessionID, "abc")
+        XCTAssertEqual(fixture.model.liveAgentTabs[fixture.tabID], "claude")
+    }
+
+    func testTheSameConversationInTwoPanesIsOfferedFromBoth() throws {
+        // `claude --resume <id>` in a second pane. Each pane holds the handle; closing one must
+        // not take the conversation off the other.
+        let fixture = try makeFixture(isActive: false)
+        fixture.emit(.ready, session: "shared")
+        fixture.model.createTerminalTab()
+        let second = try XCTUnwrap(fixture.engine.sessions.last)
+        let secondTabID = try XCTUnwrap(fixture.model.selectedWorkspace.group(id: fixture.tabGroupID)?.selectedTabID)
+        XCTAssertNotEqual(secondTabID, fixture.tabID)
+        second.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .ready, sessionID: "shared")))
+
+        XCTAssertEqual(fixture.model.agentSession(tabID: fixture.tabID.description)?.sessionID, "shared")
+        XCTAssertEqual(fixture.model.agentSession(tabID: secondTabID.description)?.sessionID, "shared")
+
+        try fixture.model.closeTab(workspaceID: fixture.workspaceID, tabGroupID: fixture.tabGroupID, tabID: secondTabID)
+        XCTAssertEqual(fixture.model.agentSession(tabID: fixture.tabID.description)?.sessionID, "shared")
+    }
+
+    // MARK: - Recovery
+
+    func testAPaneRestoredWithoutItsResumeCommandHasNoConversationToOffer() throws {
+        // "Restore agent sessions" is off. The pane comes back to a prompt, and the doc says a
+        // pane at its prompt has left its conversation. A device must not be offered one, because
+        // a reply typed into it would go to the shell.
+        let fixture = try makeFixture(isActive: false)
+        fixture.model.updateGlobalSettings { $0.restoresAgentSessions = false }
+        fixture.session.activeForegroundProcessName = "claude"
+        fixture.emit(.working, session: "abc")
+        fixture.model.persistTerminalSnapshots()
+
+        let relaunched = try makeFixture(in: fixture.directory, isActive: false)
+
+        XCTAssertNil(relaunched.engine.configurations.first?.initialCommand)
+        XCTAssertNil(relaunched.model.agentSession(tabID: fixture.tabID.description))
+        XCTAssertNil(relaunched.savedSession)
+    }
+
+    func testTheRestoreSettingIsReadAtRelaunchNotAtQuit() throws {
+        let fixture = try makeFixture(isActive: false)
+        fixture.model.updateGlobalSettings { $0.restoresAgentSessions = false }
+        fixture.session.activeForegroundProcessName = "claude"
+        fixture.emit(.working, session: "abc")
+        fixture.model.persistTerminalSnapshots()
+
+        // Turned back on before the relaunch, in Settings or by editing the file.
+        fixture.model.updateGlobalSettings { $0.restoresAgentSessions = true }
+        let relaunched = try makeFixture(in: fixture.directory, isActive: false)
+
+        XCTAssertEqual(relaunched.engine.configurations.first?.initialCommand, "claude --resume 'abc'")
+    }
+
+    func testAConversationComesBackNamedAndReadyRatherThanWorking() throws {
+        let fixture = try makeFixture(isActive: false)
+        fixture.session.activeForegroundProcessName = "claude"
+        fixture.emit(.working, session: "abc")
+        fixture.model.renameTab(fixture.tabID, in: fixture.tabGroupID, title: "Fix the build")
+        fixture.model.persistTerminalSnapshots()
+
+        let relaunched = try makeFixture(in: fixture.directory, isActive: false)
+
+        XCTAssertEqual(relaunched.engine.configurations.first?.initialCommand, "claude --resume 'abc' --name 'Fix the build'")
+        XCTAssertNil(relaunched.model.agentAttention(forTab: fixture.tabID), "a cook that survived a relaunch would point at nothing")
+        XCTAssertTrue(relaunched.model.liveAgentTabs.isEmpty, "nothing has reported yet")
+    }
+
+    // MARK: - Fixture
+
+    @MainActor
+    private struct Fixture {
+        let model: AppModel
+        let engine: CapturingEngine
+        let session: CapturingSession
+        let directory: URL
+        let workspaceID: WorkspaceID
+        let tabGroupID: TabGroupID
+        let tabID: TabID
+
+        var savedSession: AgentSessionHandle? {
+            model.tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)?.terminalSession?.agentSession
+        }
+
+        var displayTitle: String? {
+            model.tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)
+                .map { $0.customTitle ?? $0.automaticDisplayTitle }
+        }
+
+        func emit(_ activity: AgentActivity, agent: String = "claude", session sessionID: String) {
+            session.emit(.agentActivity(AgentActivityReport(agent: agent, activity: activity, sessionID: sessionID)))
+        }
+
+        func title(_ title: String) {
+            session.emit(.titleChanged(title))
+        }
+    }
+
+    private func makeFixture(in existing: URL? = nil, isActive: Bool) throws -> Fixture {
+        let directory: URL
+        if let existing {
+            directory = existing
+        } else {
+            directory = FileManager.default.temporaryDirectory
+                .appending(path: "myterm-agent-lifecycle-\(UUID().uuidString)", directoryHint: .isDirectory)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            directories.append(directory)
+        }
+        let engine = CapturingEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true,
+            makeAgentNotificationPoster: { RecordingNotificationPoster() },
+            isApplicationActive: { isActive }
+        )
+        let workspace = model.selectedWorkspace
+        let group = try XCTUnwrap(workspace.orderedGroups.first)
+        let session = try XCTUnwrap(engine.sessions.first)
+        return Fixture(
+            model: model,
+            engine: engine,
+            session: session,
+            directory: directory,
+            workspaceID: workspace.id,
+            tabGroupID: group.id,
+            tabID: group.selectedTabID
+        )
+    }
+}
+
+@MainActor
+private final class CapturingEngine: TerminalEngine {
+    private(set) var configurations: [TerminalSessionConfiguration] = []
+    private(set) var sessions: [CapturingSession] = []
+
+    func makeSession(configuration: TerminalSessionConfiguration) throws -> any TerminalProcessSession {
+        configurations.append(configuration)
+        let session = CapturingSession()
+        sessions.append(session)
+        return session
+    }
+}
+
+@MainActor
+private final class CapturingSession: TerminalProcessSession {
+    var isRunning = false
+    var activeForegroundProcessName: String?
+    var onEvent: (@MainActor (TerminalSessionEvent) -> Void)?
+    private(set) var typed: [UInt8] = []
+
+    func terminalView() -> NSView { NSView() }
+    func start() throws { isRunning = true }
+    func resize(columns: Int, rows: Int) {}
+    func focus() {}
+    func terminate() { isRunning = false }
+    func sendInput(_ bytes: ArraySlice<UInt8>) { typed.append(contentsOf: bytes) }
+    func emit(_ event: TerminalSessionEvent) { onEvent?(event) }
+}

@@ -70,7 +70,7 @@ MyTerm is flat by default. Depth comes from macOS window materials, source-list 
 - **Width:** 220–480 pt, ideally 280 pt.
 - **Rows:** One title line only, using native source-list selection. Renaming is an explicit command or context-menu action.
 - **Folders:** Native disclosure rows with one semantic folder color. Folders collapse and accept dragged workspaces.
-- **Drag and drop:** A drag either files a workspace or reorders it, never both. Folder rows and the Unfiled header tint across their whole width and take the workspace at the bottom; a workspace row in the same folder draws an insertion line at the nearer edge instead, and rows in other folders refuse the drop. Folders reorder against each other the same way, and pinned rows never cross into the unpinned band.
+- **Drag and drop:** A drag either files a workspace or reorders it, never both. Folder rows and the Unfiled header tint across their whole width and take the workspace at the bottom; a workspace row previews the reorder instead: the rows slide to open the slot the drop would fill, so the order on screen is the order the drop commits. Folders reorder against each other the same way, and pinned rows never cross into the unpinned band.
 - **Actions:** Compact plus and minus icons at the bottom, with tooltips and accessibility labels.
 
 ### Tab Strip
@@ -94,11 +94,21 @@ MyTerm is flat by default. Depth comes from macOS window materials, source-list 
 - **Behavior:** Browser and terminal panes can share horizontal and vertical split groups.
 - **Commands:** Reload, address focus, history, find, and page zoom target only the selected browser tab. Reload From Origin and Stop Loading live in the Browser menu without overriding rename or cancel keys.
 
+### Notifications
+
+- **Entry point:** One bell in the primary toolbar. It stays in place when nothing is waiting, so the toolbar never reflows, and it carries a count only when there is one.
+- **List:** A 320 pt popover, newest first, scrolling at 320 pt so a long backlog stays a popover rather than a panel.
+- **Row:** One line saying what the agent did, then a caption with the workspace, the tab, and how long ago. Names are resolved from the live workspace, so renaming a tab renames the row.
+- **States:** A finished turn and a question use different glyphs as well as different colors, so the two never read alike.
+- **Reading:** Clicking a row goes to its tab, which is also what clears it. A Clear All in the header empties the list without visiting anything.
+- **Empty:** Say plainly that nothing is waiting. Do not hide the control.
+
 ### Settings
 
 - **Scene:** A native macOS Settings window, separate from the workspace window.
 - **Browser data:** One picker with four plain-language choices, ordered from widest to narrowest: Across all workspaces, Per MyTerm folder, Per workspace, and Per project directory. "Folder" always means a sidebar folder and "directory" always means a path on disk, so the two never read as the same thing.
 - **Expectation:** Say that the choice affects new browser panes and that existing panes keep their current profile.
+- **Agents:** One section covers agent hooks and agent recovery together, because the hooks are what make recovery possible. Name the file each button writes, say that only MyTerm's own hooks are added or removed, say that restoring rejoins the pane's last conversation with the agent's own resume command, and say that naming a tab after a conversation takes the name the agent writes and gives way to a name the user typed.
 - **Passkeys:** Show whether the signed build has Apple's managed browser entitlement and browser access. Request access from a clear button, never on launch. State that MyTerm passes requests to macOS, does not store passkeys, and leaves the choice of credential provider to the user.
 
 ### App Icon
@@ -118,7 +128,7 @@ MyTerm is flat by default. Depth comes from macOS window materials, source-list 
 ### Commands
 
 - **Visible path:** Toolbar, contextual menu, or local action button for every frequent task.
-- **Keyboard path:** Native menu commands for workspace creation, terminal and browser tabs, splits, close, and sidebar visibility.
+- **Keyboard path:** Native menu commands for workspace creation, terminal and browser tabs, splits, close, sidebar visibility, and the notifications backlog.
 - **Contextual zoom:** Command-Minus and Command-Equals change browser page zoom when a browser is selected, or the active workspace's terminal font size when a terminal is selected. Command-0 resets browser page zoom.
 
 ### Persistence and Recovery
@@ -128,6 +138,9 @@ MyTerm is flat by default. Depth comes from macOS window materials, source-list 
 - **Migration:** Before the first v2 write, atomically preserve the exact v1 file at a deterministic adjacent backup path.
 - **Lossy recovery:** If malformed array elements must be discarded, preserve the original bytes in a separate adjacent recovery backup before committing repaired state.
 - **Identity:** Keep already-unique workspace, group, tab, pane, split, terminal-session, and browser-session identifiers stable across migration and repair.
+- **Agent tab names:** Name a tab after the agent conversation running in its pane, taken from the terminal title the agent already writes. Take a title only while an agent has reported itself in the pane, so a shell's title is never mistaken for a conversation name, and never over a title the user typed. Keep only a plain short name out of what arrives: the title is terminal bytes, which any program in the pane can write.
+- **Agent notifications:** Keep the backlog of waiting agents in memory only, and derive the tab dot from the same entries so the two surfaces cannot disagree. Reaching the tab reads the entry, one tab holds one entry, and the latest report is what the entry says.
+- **Agent sessions:** Persist the agent conversation a terminal pane was in, and re-enter it on the next launch with that agent's own resume command. Save only what an agent hook reports, keep the identifier out of the interface, and drop it when the pane is left at a shell prompt. Restore an agent only when its reported identifier is one its resume command accepts: a pane that opens on a resume error is worse than a pane that opens on a prompt.
 
 ## Do's and Don'ts
 
@@ -142,7 +155,7 @@ MyTerm is flat by default. Depth comes from macOS window materials, source-list 
 
 ### Don't:
 
-- **Don't** copy cmux's notifications, agent status, per-workspace status metadata, or other features outside the requested workflow.
+- **Don't** copy cmux's notifications, agent status, per-workspace status metadata, or other features outside the requested workflow. Restoring an agent session is persistence, not a status layer: it belongs in the pane's saved state and in Settings, never in workspace chrome.
 - **Don't** use decorative terminal chrome, novelty controls, or motion that interrupts focused work.
 - **Don't** build terminal rendering on web technology when a native implementation is available.
 - **Don't** turn workspaces, tabs, or terminal panes into floating cards.

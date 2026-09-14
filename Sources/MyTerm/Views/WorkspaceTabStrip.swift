@@ -156,7 +156,7 @@ struct WorkspaceTabStrip: View {
             close: { model.closeTab(tab.id) },
             dragChanged: { location in model.updatePaneTabDrag(source: source, location: location) },
             dragEnded: { location in release(source: source, tab: tab, at: location) },
-            dragCancelled: { model.cancelPaneTabDrag() },
+            dragCancelled: { model.cancelPaneTabDrag(ifSource: source) },
             moveToPreviousPane: { move(tab, relativeTo: tabGroup.id, offset: -1) },
             moveToNextPane: { move(tab, relativeTo: tabGroup.id, offset: 1) },
             moveToNewPane: { edge in move(tab, toNewPaneBeside: tabGroup.id, edge: edge) }

@@ -13,6 +13,10 @@ struct SettingsView: View {
     @State private var claudeHooks = AgentHooksController(target: .claude)
     @State private var codexHooks = AgentHooksController(target: .codex)
     @State private var installedBrowsers = ExternalBrowserCatalog.installedBrowsers()
+    /// The port the pairing sheet is showing. Non-nil is what presents the sheet, so the sheet can
+    /// never be open for a listener that has since stopped.
+    @State private var pairingPort: PairingPort?
+    @State private var relayURLText = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -31,6 +35,9 @@ struct SettingsView: View {
 
                 browserSettings
                     .tabItem { Label("Browser", systemImage: "globe") }
+
+                devicesSettings
+                    .tabItem { Label("Devices", systemImage: "macbook.and.iphone") }
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 12)
@@ -214,6 +221,38 @@ struct SettingsView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+
+            Section("Agent sessions") {
+                ScopedSettingRow(
+                    model: model,
+                    scope: scope,
+                    title: "Restore agent sessions",
+                    global: \TerminalPreferences.restoresAgentSessions,
+                    override: \TerminalPreferencesOverrides.restoresAgentSessions
+                ) { value in
+                    Toggle("Restore agent sessions", isOn: value)
+                        .labelsHidden()
+                }
+
+                Text("A pane that was in a Claude Code conversation rejoins it on the next launch, using Claude Code's own resume command. A pane left at its shell prompt comes back to a shell prompt. This needs the hooks above, because the conversation is what they report. Codex panes are not restored: it reports a new identifier every turn rather than the one its resume command takes.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                ScopedSettingRow(
+                    model: model,
+                    scope: scope,
+                    title: "Name tabs after agent sessions",
+                    global: \TerminalPreferences.namesTabsFromAgentSessions,
+                    override: \TerminalPreferencesOverrides.namesTabsFromAgentSessions
+                ) { value in
+                    Toggle("Name tabs after agent sessions", isOn: value)
+                        .labelsHidden()
+                }
+
+                Text("A tab takes the name the agent gives its conversation, so /rename in the pane names the tab as well. Until you rename it, the name is the topic Claude Code writes for itself. A tab you named stays as you named it, and that name goes back to Claude Code when the pane rejoins the conversation. Leaving the agent puts the tab back to Terminal. This needs the hooks above.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
     }
@@ -227,17 +266,6 @@ struct SettingsView: View {
                 Label("Installed in \(hooks.target.fileDescription)", systemImage: "checkmark.circle.fill")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-            case .outdated:
-                // Hooks an older MyTerm wrote keep reporting the old way, so say so and offer the
-                // rewrite. Removing stays available, because an update is not the only answer.
-                Button("Update \(hooks.target.displayName) Hooks") { hooks.install() }
-                Button("Remove from \(hooks.target.displayName)") { hooks.remove() }
-                Label(
-                    "Hooks in \(hooks.target.fileDescription) are from an older MyTerm",
-                    systemImage: "arrow.triangle.2.circlepath"
-                )
-                .font(.footnote)
-                .foregroundStyle(.secondary)
             case .notInstalled, .failed:
                 Button("Set Up \(hooks.target.displayName) Hooks") { hooks.install() }
             }
@@ -596,6 +624,151 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    private var devicesSettings: some View {
+        Form {
+            Section("Devices") {
+                Toggle("Allow my devices to reach this Mac", isOn: remoteHostAllowedBinding)
+
+                LabeledContent("Status") {
+                    Text(remoteHostStatusText)
+                        .foregroundStyle(.secondary)
+                }
+
+                if case .failed(let message) = model.remoteHost.state {
+                    Label(message, systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .accessibilityLabel("Remote listener error: \(message)")
+                }
+
+                LabeledContent("Pairing token") {
+                    HStack(spacing: 8) {
+                        Text(model.remoteHost.token)
+                            .font(.system(.body, design: .monospaced))
+                            .textSelection(.enabled)
+
+                        Button("Copy") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(model.remoteHost.token, forType: .string)
+                        }
+
+                        Button("Regenerate") {
+                            model.regenerateRemoteHostToken()
+                        }
+                    }
+                }
+
+                Text("A device needs this token once, to pair. It does not need it again.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                if case .listening(let port) = model.remoteHost.state {
+                    Button("Link a Device…") { pairingPort = PairingPort(value: port) }
+                } else {
+                    Button("Link a Device…") {}
+                        .disabled(true)
+                        .help("Turn on \"Allow my devices to reach this Mac\" first.")
+                }
+
+                Toggle("Allow devices to type", isOn: Binding(
+                    get: { model.remoteHost.allowsInput },
+                    set: { model.remoteHost.allowsInput = $0 }
+                ))
+
+                connectedDevicesList
+
+                Text("A sleeping Mac cannot be reached.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                Text("MyTerm sends terminal content only to devices holding this token, and never to any server.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Reach from anywhere") {
+                TextField("Relay address", text: $relayURLText, prompt: Text("https://myterm-relay.example.workers.dev"))
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { model.setRelay(urlText: relayURLText, enabled: model.isRelayEnabled) }
+
+                Toggle("Reach this Mac through the relay", isOn: Binding(
+                    get: { model.isRelayEnabled },
+                    set: { model.setRelay(urlText: relayURLText, enabled: $0) }
+                ))
+                .disabled(AppModel.relayURL(from: relayURLText) == nil)
+
+                LabeledContent("Relay") {
+                    Text(relayStatusText)
+                        .foregroundStyle(.secondary)
+                }
+
+                Text("The relay joins a device to this Mac when they are not on the same network. It carries the same encrypted bytes a device would receive here, so it can see that a device and this Mac are talking, when, and how much, and nothing else. Devices linked while this is on can use it.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear { relayURLText = model.relayURLText }
+        .sheet(item: $pairingPort) { port in
+            DevicePairingSheet(
+                port: port.value,
+                token: model.remoteHost.token,
+                serviceName: model.remoteHost.advertisedName ?? model.remoteHost.hostName,
+                relay: model.relayEndpoint
+            ) {
+                pairingPort = nil
+            }
+        }
+    }
+
+    private var relayStatusText: String {
+        guard model.isRelayEnabled else { return "Off" }
+        guard let link = model.relayLink else { return "Waiting for the listener" }
+        switch link.state {
+        case .off: return "Off"
+        case .connecting: return "Connecting…"
+        case .connected:
+            return link.sessionCount == 0
+                ? "Connected"
+                : "Connected, \(link.sessionCount) device\(link.sessionCount == 1 ? "" : "s") through it"
+        case .retrying(let message): return "Retrying. \(message)"
+        }
+    }
+
+    @ViewBuilder
+    private var connectedDevicesList: some View {
+        if model.remoteHost.connectedDevices.isEmpty {
+            Text("No devices connected")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        } else {
+            ForEach(model.remoteHost.connectedDevices) { device in
+                Text(device.name)
+            }
+        }
+    }
+
+    private var remoteHostAllowedBinding: Binding<Bool> {
+        Binding(
+            get: {
+                switch model.remoteHost.state {
+                case .stopped, .failed: false
+                case .starting, .listening: true
+                }
+            },
+            set: { model.setRemoteHostEnabled($0) }
+        )
+    }
+
+    private var remoteHostStatusText: String {
+        switch model.remoteHost.state {
+        case .stopped: "Off"
+        case .starting: "Starting…"
+        case .listening(let port): "Listening on port \(port)"
+        case .failed: "Failed"
+        }
     }
 
     private var passkeyDescription: String {
@@ -1004,6 +1177,44 @@ private extension TerminalLineEditingMode {
         switch self {
         case .emacs: return "Emacs"
         case .vi: return "Vi"
+        }
+    }
+}
+
+/// One agent's hook install state, with the button that changes it.
+private struct AgentHooksRow: View {
+    @Bindable var controller: AgentHooksController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 12) {
+                Button(controller.isInstalled
+                    ? "Remove from \(controller.target.displayName)"
+                    : "Set Up \(controller.target.displayName) Hooks") {
+                    if controller.isInstalled {
+                        controller.remove()
+                    } else {
+                        controller.install()
+                    }
+                }
+
+                if controller.isInstalled {
+                    Label("Installed in \(controller.target.fileDescription)", systemImage: "checkmark.circle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(controller.target.fileDescription)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if case .failed(let message) = controller.state {
+                Label(message, systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .accessibilityLabel("\(controller.target.displayName) hooks error: \(message)")
+            }
         }
     }
 }

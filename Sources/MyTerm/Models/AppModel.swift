@@ -2,6 +2,8 @@ import AppKit
 import Foundation
 import MyTermCore
 import MyTermPlatform
+import MyTermRemoteHost
+import MyTermRemoteProtocol
 import Observation
 import OSLog
 import UniformTypeIdentifiers
@@ -78,6 +80,21 @@ final class AppModel {
         guard agentNotifications.isEnabled else { return }
         _ = agentNotificationPoster
     }
+    /// The agents that finished, or asked a question, while the user was looking somewhere else,
+    /// and the history of what they did before. Saved beside the workspace state; what comes back
+    /// after a relaunch comes back read, because the agents it pointed at went with the processes.
+    var agentInbox = AgentNotificationInbox() {
+        // Every tab switch reads the tab it lands on, which is a mutating call whether or not the
+        // tab had anything waiting. Only a real change is worth a file write on the main thread.
+        didSet { if oldValue != agentInbox { persistAgentInbox() } }
+    }
+    /// Where the history lives between launches, beside the workspace state.
+    @ObservationIgnored let agentInboxURL: URL
+    /// Whether the notifications popover is open. The toolbar bell and the menu command share it.
+    var isAgentNotificationsPresented = false
+    /// Tabs that have an agent in them, by agent name, as the hooks last reported.
+    /// Runtime only: it says what is running now, which is the one thing a saved answer cannot say.
+    var liveAgentTabs: [TabID: String] = [:]
     var paneTabDragSession: PaneTabDragSession?
     var paneTabDragRegistrations: [TabGroupID: PaneTabDragRegistration] = [:]
     var nextBrowserAddressFocusToken: UInt64 = 0
@@ -104,6 +121,24 @@ final class AppModel {
     var settingsScope = TerminalSettingsScope.global
     private(set) var stateVersion = 0
     let updates: UpdateController
+    let remoteHost: RemoteHostService
+    /// Every device watching a terminal, by session then by attachment. One tap on the session
+    /// fans out to all of them, so a second device attaching never silences the first.
+    @ObservationIgnored var remoteOutputTaps: [TerminalSessionID: [UUID: @MainActor (ArraySlice<UInt8>) -> Void]] = [:]
+    /// Where the pairing token lives between launches. Kept separate from `remoteHost` itself so
+    /// rotating the token has one place to write it back to.
+    @ObservationIgnored private let remoteHostDefaults: UserDefaults
+    private static let remoteHostTokenDefaultsKey = "remote.token"
+    private static let listenerEnabledDefaultsKey = "remote.listenerEnabled"
+    private static let relayURLDefaultsKey = "remote.relayURL"
+    private static let relayEnabledDefaultsKey = "remote.relayEnabled"
+    private static let relayIdentifierDefaultsKey = "remote.relayIdentifier"
+    private static let relayHostKeyDefaultsKey = "remote.relayHostKey"
+    /// The Mac's outbound link to the relay, while reach from anywhere is on and the listener is up.
+    private(set) var relayLink: RelayHostLink?
+    /// What the user typed as the relay's address. Kept even while the relay is off.
+    private(set) var relayURLText: String
+    private(set) var isRelayEnabled: Bool
 
     init(
         channel: MyTermChannel = .active,
@@ -124,11 +159,18 @@ final class AppModel {
         updates: UpdateController? = nil,
         agentNotifications: AgentNotificationSettings? = nil,
         makeAgentNotificationPoster: @escaping @MainActor () -> any AgentNotificationPosting = { UserNotificationPoster() },
-        isApplicationActive: @escaping @MainActor () -> Bool = { NSApp.isActive }
+        isApplicationActive: @escaping @MainActor () -> Bool = { NSApp?.isActive ?? false },
+        remoteHostDefaultsOverride: UserDefaults? = nil
     ) throws {
         self.channel = channel
         let supportDirectory = try applicationSupportDirectory ?? Self.applicationSupportDirectory()
-        store = try WorkspaceStore(persistenceURL: channel.persistenceURL(applicationSupportDirectory: supportDirectory))
+        let persistenceURL = channel.persistenceURL(applicationSupportDirectory: supportDirectory)
+        store = try WorkspaceStore(persistenceURL: persistenceURL)
+        agentInboxURL = persistenceURL.deletingLastPathComponent()
+            .appending(path: "agent-notifications.json", directoryHint: .notDirectory)
+        var savedInbox = Self.loadAgentInbox(from: agentInboxURL)
+        savedInbox.markAllRead()
+        agentInbox = savedInbox
         recoveryNotice = WorkspaceRecoveryNotice(loadReport: store.loadReport)
         self.browserSettings = browserSettings ?? BrowserSettingsStore(channel: channel)
         recentWorkspaceEmojis = self.browserSettings.recentWorkspaceEmojis
@@ -147,6 +189,21 @@ final class AppModel {
         self.isApplicationActive = isApplicationActive
         browserDataProfileResolver = BrowserDataProfileResolver(channel: channel)
         self.updates = updates ?? UpdateController(channel: channel)
+        // Injected by tests, which must never rotate the token or rewrite the relay address the
+        // developer's own paired devices depend on.
+        let remoteHostSuiteName = ProcessInfo.processInfo.environment["MYTERM_USER_DEFAULTS_SUITE"] ?? channel.bundleIdentifier
+        remoteHostDefaults = remoteHostDefaultsOverride ?? UserDefaults(suiteName: remoteHostSuiteName) ?? .standard
+        let remoteHostToken = remoteHostDefaults.string(forKey: Self.remoteHostTokenDefaultsKey).flatMap { $0.isEmpty ? nil : $0 }
+            ?? RemoteTransportSecurity.makeToken()
+        remoteHostDefaults.set(remoteHostToken, forKey: Self.remoteHostTokenDefaultsKey)
+        // Off until the user turns it on in Settings → Devices. A listener that starts by default is
+        // a remote shell that exists by default.
+        remoteHost = RemoteHostService(
+            hostName: Host.current().localizedName ?? "Mac",
+            token: remoteHostToken
+        )
+        relayURLText = remoteHostDefaults.string(forKey: Self.relayURLDefaultsKey) ?? ""
+        isRelayEnabled = remoteHostDefaults.bool(forKey: Self.relayEnabledDefaultsKey)
         if browserLauncherURL == nil {
             // Without the launcher every pane starts with an empty MyTerm environment, so BROWSER,
             // the open shim and the zsh chain are all absent and web links leave for the system
@@ -179,6 +236,118 @@ final class AppModel {
         if let sessionID = selectedTab?.terminalSession?.id {
             terminalSessions[sessionID]?.focus()
         }
+        // Handing over the data source does not open a port. The listener still waits for the user.
+        remoteHost.connect(dataSource: self)
+        remoteHost.onStateChanged = { [weak self] _ in
+            self?.updateRelayLink()
+        }
+        // The switch is the user's standing answer, not a per-launch one. A Mac that forgot it
+        // after every restart would be unreachable exactly when the user is away from it.
+        if remoteHostDefaults.bool(forKey: Self.listenerEnabledDefaultsKey) {
+            remoteHost.start()
+        }
+    }
+
+    /// Turns the listener on or off and remembers the choice across launches.
+    func setRemoteHostEnabled(_ isEnabled: Bool) {
+        remoteHostDefaults.set(isEnabled, forKey: Self.listenerEnabledDefaultsKey)
+        if isEnabled {
+            remoteHost.start()
+        } else {
+            remoteHost.stop()
+        }
+    }
+
+    // MARK: - Reach from anywhere
+
+    /// The relay this Mac can be reached through, for the pairing code. Nil while the relay is off.
+    var relayEndpoint: RelayEndpoint? {
+        guard isRelayEnabled, let url = Self.relayURL(from: relayURLText) else { return nil }
+        return RelayEndpoint(url: url, rendezvousID: relayIdentifier)
+    }
+
+    func setRelay(urlText: String, enabled: Bool) {
+        relayURLText = urlText.trimmingCharacters(in: .whitespacesAndNewlines)
+        isRelayEnabled = enabled && Self.relayURL(from: relayURLText) != nil
+        remoteHostDefaults.set(relayURLText, forKey: Self.relayURLDefaultsKey)
+        remoteHostDefaults.set(isRelayEnabled, forKey: Self.relayEnabledDefaultsKey)
+        updateRelayLink()
+    }
+
+    /// A relay address is an origin. Anything else the user pastes is trimmed to one.
+    static func relayURL(from text: String) -> URL? {
+        guard var components = URLComponents(string: text.trimmingCharacters(in: .whitespacesAndNewlines)),
+              let scheme = components.scheme?.lowercased(), ["https", "http", "wss", "ws"].contains(scheme),
+              let host = components.host, !host.isEmpty
+        else { return nil }
+        components.scheme = scheme == "ws" ? "http" : scheme == "wss" ? "https" : scheme
+        // An origin is scheme, host and port. A login pasted in with the address would otherwise
+        // ride along on every socket the Mac opens to the relay.
+        components.user = nil
+        components.password = nil
+        // Names are case-insensitive on the network, and one spelling keeps the link from being
+        // torn down and rebuilt over a capital letter.
+        components.host = host.lowercased()
+        components.path = ""
+        components.query = nil
+        components.fragment = nil
+        return components.url
+    }
+
+    /// The rendezvous the relay knows this Mac by. Made once, kept until the token is regenerated,
+    /// because the pairing code carries it and every paired device holds it.
+    private var relayIdentifier: String {
+        if let existing = remoteHostDefaults.string(forKey: Self.relayIdentifierDefaultsKey),
+           RelayRendezvous.isValidIdentifier(existing) {
+            return existing
+        }
+        let made = RelayRendezvous.makeIdentifier()
+        remoteHostDefaults.set(made, forKey: Self.relayIdentifierDefaultsKey)
+        return made
+    }
+
+    /// Known to this Mac and the relay only. It is what stops another Mac from taking this
+    /// Mac's rendezvous.
+    private var relayHostKey: String {
+        if let existing = remoteHostDefaults.string(forKey: Self.relayHostKeyDefaultsKey),
+           RelayRendezvous.isValidIdentifier(existing) {
+            return existing
+        }
+        let made = RelayRendezvous.makeIdentifier()
+        remoteHostDefaults.set(made, forKey: Self.relayHostKeyDefaultsKey)
+        return made
+    }
+
+    /// The link exists only while both the switch and the listener are on. There is nothing to
+    /// relay to a listener that is off.
+    private func updateRelayLink() {
+        guard let endpoint = relayEndpoint, remoteHost.listeningPort != nil else {
+            relayLink?.stop()
+            relayLink = nil
+            return
+        }
+        if relayLink?.endpointDescription == endpoint.url.absoluteString {
+            return
+        }
+        relayLink?.stop()
+        let link = RelayHostLink(endpoint: endpoint, hostKey: relayHostKey) { [weak self] in
+            self?.remoteHost.listeningPort
+        }
+        relayLink = link
+        link.start()
+    }
+
+    /// A device that already holds the old token can no longer connect once this returns.
+    func regenerateRemoteHostToken() {
+        remoteHost.rotateToken()
+        remoteHostDefaults.set(remoteHost.token, forKey: Self.remoteHostTokenDefaultsKey)
+        // A new token is a new pairing. The rendezvous goes with it, so a device holding the old
+        // code cannot even find this Mac at the relay, let alone fail its handshake there.
+        remoteHostDefaults.removeObject(forKey: Self.relayIdentifierDefaultsKey)
+        remoteHostDefaults.removeObject(forKey: Self.relayHostKeyDefaultsKey)
+        relayLink?.stop()
+        relayLink = nil
+        updateRelayLink()
     }
 
     var workspaces: [Workspace] {
@@ -360,7 +529,7 @@ final class AppModel {
                 title: nextWorkspaceTitle(),
                 folderID: targetFolderID
             )
-            maximizedTabGroupID = nil
+            exitPaneFullScreen()
             guard let createdWorkspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
                 throw AppModelError.workspaceUnavailable(workspaceID)
             }
@@ -437,11 +606,19 @@ final class AppModel {
 
     func toggleFocusedPaneFullScreen() {
         guard maximizedTabGroup == nil else {
-            maximizedTabGroupID = nil
+            exitPaneFullScreen()
             return
         }
         let focusedTabGroupID = selectedWorkspace.focusedTabGroupID
         maximizedTabGroupID = focusedTabGroupID
+    }
+
+    /// Leaving full screen brings the other panes back on screen, which is as much reaching their
+    /// selected tabs as clicking them. Safe to call when nothing is full screen.
+    private func exitPaneFullScreen() {
+        guard maximizedTabGroupID != nil else { return }
+        maximizedTabGroupID = nil
+        markVisibleTabsAsRead()
     }
 
     func beginRenamingSelectedTab() {
@@ -517,7 +694,7 @@ final class AppModel {
             let data = try Data(contentsOf: url)
             let result = try store.importWorkspaces(fromJSON: data)
             summary = result
-            maximizedTabGroupID = nil
+            exitPaneFullScreen()
             pendingStartupCommands.merge(result.startupCommands) { _, new in new }
             // Imported workspaces have no running processes yet. Selecting one restores them, but
             // the import selects a workspace itself, so start the selected one here.
@@ -681,10 +858,11 @@ final class AppModel {
     func moveWorkspace(
         _ workspaceID: WorkspaceID,
         to folderID: WorkspaceFolderID?,
-        before targetID: WorkspaceID?
+        before targetID: WorkspaceID?,
+        isPinned: Bool? = nil
     ) {
         perform {
-            try store.moveWorkspace(workspaceID, to: folderID, before: targetID)
+            try store.moveWorkspace(workspaceID, to: folderID, before: targetID, isPinned: isPinned)
             applyResolvedRuntimeSettings(to: [workspaceID])
         }
     }
@@ -1047,7 +1225,8 @@ final class AppModel {
         }
     }
 
-    private func createTerminalTab(
+    /// The only create-tab path that can target a workspace other than the selected one.
+    func createTerminalTab(
         workingDirectory: URL,
         initialCommand: String?,
         workspaceID: WorkspaceID,
@@ -1494,7 +1673,7 @@ final class AppModel {
         guard store.selectedWorkspaceID == workspaceID,
               maximizedTabGroupID != nil,
               maximizedTabGroupID != tabGroupID else { return }
-        maximizedTabGroupID = nil
+        exitPaneFullScreen()
     }
 
     func focusTerminal(direction: PaneFocusDirection) {
@@ -1820,6 +1999,12 @@ final class AppModel {
                 tabID: tabID,
                 sessionID: sessionID
             )
+            forgetAgentSessionOfIdlePane(
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID,
+                sessionID: sessionID
+            )
         }
     }
 
@@ -1931,7 +2116,7 @@ final class AppModel {
         try store.updateBrowserDataProfiles(updates)
     }
 
-    private func restoreRuntimeObjects(in workspace: Workspace) {
+    func restoreRuntimeObjects(in workspace: Workspace) {
         restoreTerminalSessions(in: workspace)
         guard workspace.id == store.selectedWorkspaceID else { return }
         restoreBrowserControllers(in: workspace)
@@ -2021,7 +2206,10 @@ final class AppModel {
         } else {
             workingDirectory = try newSessionWorkingDirectory(for: workspaceID)
         }
-        if session.workingDirectory?.standardizedFileURL != workingDirectory {
+        // An agent conversation belongs to the directory it ran in, so a pane that had to fall back
+        // to another directory has nothing there to rejoin.
+        let keepsSavedDirectory = session.workingDirectory?.standardizedFileURL == workingDirectory
+        if !keepsSavedDirectory {
             try store.updateTerminalWorkingDirectory(
                 workspaceID: workspaceID,
                 tabGroupID: tabGroupID,
@@ -2029,11 +2217,33 @@ final class AppModel {
                 workingDirectory: workingDirectory
             )
         }
+        let resumeCommand = keepsSavedDirectory ? agentResumeCommand(
+            for: session,
+            name: tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)?.customTitle,
+            settings: settings
+        ) : nil
+        // A pane that comes back without its resume command comes back to a prompt, and a pane at
+        // its prompt has left its conversation. Keeping the handle would offer a device a
+        // conversation nothing is running, and name the tab after it.
+        if initialCommand == nil, resumeCommand == nil, session.agentSession != nil {
+            try store.updateTerminalAgentSession(
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID,
+                agentSession: nil
+            )
+            try store.updateTerminalAgentTitle(
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID,
+                agentTitle: nil
+            )
+        }
         let process = try terminalEngine.makeSession(
             configuration: TerminalSessionConfiguration(
                 shell: shellURL(for: settings.shell),
                 workingDirectory: workingDirectory,
-                initialCommand: initialCommand,
+                initialCommand: initialCommand ?? resumeCommand,
                 environment: MyTermBrowserLauncher.environment(
                     executableURL: browserLauncherURL,
                     workspaceID: workspaceID,
@@ -2239,6 +2449,21 @@ final class AppModel {
             if let exitCode, exitCode != 0 {
                 errorDescription = "Terminal exited with status \(exitCode)."
             }
+            // Nothing is running in a pane whose shell has gone, whatever the last hook said.
+            forgetAgentAttention(forTab: tabID)
+            forgetAgentPresence(forTab: tabID)
+        case .foregroundProcessChanged(let name):
+            // The shell back in front of a pane that held an agent means the agent left without
+            // its own hook saying so. Everything that hook would have retired is retired here.
+            guard name == nil, liveAgentTabs[tabID] != nil else { return }
+            forgetAgentAttention(forTab: tabID)
+            forgetAgentPresence(forTab: tabID)
+            forgetAgentSessionOfIdlePane(
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID,
+                sessionID: sessionID
+            )
         case .agentActivity(let report):
             recordAgentActivity(
                 report,
@@ -2246,12 +2471,31 @@ final class AppModel {
                 tabGroupID: tabGroupID,
                 tabID: tabID
             )
-        case .titleChanged:
-            break
+            recordAgentSession(
+                report,
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID,
+                sessionID: sessionID
+            )
+            recordAgentPresence(
+                report,
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID
+            )
+        case .titleChanged(let title):
+            recordAgentTitle(
+                title,
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID,
+                sessionID: sessionID
+            )
         }
     }
 
-    private func cleanUpRuntimeObjects(in workspace: Workspace) {
+    func cleanUpRuntimeObjects(in workspace: Workspace) {
         for tab in workspace.allTabs {
             cleanUpRuntimeObjects(in: tab)
         }
@@ -2262,12 +2506,18 @@ final class AppModel {
             browserControllers.removeValue(forKey: browser.id)?.webView.stopLoading()
         }
         if let sessionID = tab.terminalSession?.id {
+            remoteOutputTaps.removeValue(forKey: sessionID)
             removeTerminalRuntime(sessionID)
         }
         forgetAgentAttention(forTab: tab.id)
+        forgetAgentPresence(forTab: tab.id)
     }
 
-    private func closeTab(
+    /// Closes a tab in any workspace and ends its process, asking the user nothing.
+    ///
+    /// `closeTab(_:)` is the one that prompts. This is for callers that already have the user's
+    /// answer, or that must not raise a modal on a Mac nobody is sitting at.
+    func closeTab(
         workspaceID: WorkspaceID,
         tabGroupID: TabGroupID,
         tabID: TabID
@@ -2311,11 +2561,20 @@ final class AppModel {
         }) {
             restoreRuntimeObjects(in: selectedWorkspace)
         }
+        // Closing moves the selection to a neighbour, which is as much reaching a tab as clicking
+        // it. Only while MyTerm is in front, though: a device can close a tab on a Mac nobody is at.
+        if isApplicationActive() {
+            markVisibleTabsAsRead()
+        }
     }
 
     private func removeTerminalRuntime(_ sessionID: TerminalSessionID) {
         terminalSnapshotTasks.removeValue(forKey: sessionID)?.cancel()
         guard let process = terminalSessions.removeValue(forKey: sessionID) else { return }
+        // Bytes the process already wrote can still be parsed after this, and a hook that fires
+        // as the agent is hung up can still reach the PTY. Neither may touch a tab that is gone,
+        // or undo the snapshot a quit has just written.
+        process.onEvent = nil
         process.setContentChangeHandler(nil)
         process.terminate()
     }
@@ -2381,6 +2640,9 @@ final class AppModel {
         for workspaceID in workspaceIDs {
             guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }),
                   let settings = try? store.resolvedSettings(for: workspaceID) else { continue }
+            if !settings.namesTabsFromAgentSessions {
+                clearAgentTitles(in: workspace)
+            }
             let configuration = runtimeConfiguration(for: settings)
             for tab in workspace.allTabs {
                 if let sessionID = tab.terminalSession?.id {
@@ -2393,7 +2655,7 @@ final class AppModel {
         }
     }
 
-    private func newSessionWorkingDirectory(
+    func newSessionWorkingDirectory(
         for workspaceID: WorkspaceID,
         activePaneFallback: URL? = nil
     ) throws -> URL {

@@ -29,7 +29,7 @@ When MyTerm upgrades legacy workspace state, it keeps the original file in an ad
 
 ## The workflow
 
-- **Workspaces** have a title, can be pinned and reordered, and live inside collapsible color-coded folders. Drag one onto a folder to file it there, or onto another workspace to reorder it inside the folder it already lives in.
+- **Workspaces** have a title, can be pinned and reordered, and live inside collapsible color-coded folders. Drag one onto a folder row to file it at the end of that folder, or between two workspace rows to drop it at that exact position. A drop between rows also refiles the workspace into the folder it lands in, and pins or unpins it to match the band it lands in. Drag a folder onto another folder to reorder the folders. While the drag is in flight the other rows slide apart to show where the item will land, and a highlighted folder row means the item will land inside that folder.
 - **Pane groups** own their own terminal and browser tabs. Every group keeps an independent selected tab, and browser tabs keep their URL, cookies, and website data across app restarts.
 - **Panes** split right with <kbd>⌘D</kbd> and down with <kbd>⇧⌘D</kbd>. Their dividers can be dragged, and the saved proportions restore on the next launch.
 - **One app instance** handles launch requests. Opening a folder, script, SSH link, or web URL reuses the existing window instead of creating another app process.
@@ -65,6 +65,19 @@ The link arrives without pulling MyTerm to the front, so an agent working in a w
 Reaching the shim takes more than `PATH`. Your own shell startup files run after MyTerm sets `PATH` and normally push the bundle behind `/usr/bin`, which would send every `open` to your default browser instead. So the app also loads a startup file of its own: `BASH_ENV` for bash, and a `ZDOTDIR` chain for zsh. Each one defines an `open` function, and a function is found before anything on `PATH`. The zsh chain runs your `.zshenv`, `.zprofile`, `.zshrc`, and `.zlogin` in their usual order and leaves `MYTERM_ORIGINAL_ZDOTDIR` holding your real `ZDOTDIR` when you have one. Panes that are already open keep the environment they started with, so restart a pane after updating the app.
 
 A tool that explicitly invokes `/usr/bin/open` bypasses MyTerm and can still open externally. Non-web `open` requests retain their normal system handling. Terminal links to configured text files use the scoped **Open text files with** command in Browser Settings, which defaults to `ide browse {file}`. Use suffix patterns such as `*.json` for Markdown, JSON, source, and config files; literal names such as `README`, `Dockerfile`, and `.gitignore` match exactly. Unsupported files and failed or empty text-file commands open in their macOS application instead of MyTerm's browser.
+
+### Reach your terminals from an iPad or iPhone
+
+MyTerm Remote is a companion app in `apps/MyTermRemote`. Link a device once by scanning the code
+under **Settings → Devices → Link a Device…**, and it lists the same workspaces, shows the same cook
+beside tabs that need you, and opens any terminal tab as the live session on the Mac. Nothing runs
+on the device: it is a window onto this Mac. The connection is TLS 1.2 with an ECDHE pre-shared-key
+suite, the key derived from the pairing token: the key is the authentication, and the ephemeral
+exchange gives forward secrecy. It reconnects on its own when the Mac or the device comes back. On the local
+network the device finds the Mac by name or address. From anywhere else it goes through a relay
+you host yourself, a small Cloudflare Worker in `relay/` that forwards encrypted bytes and can read
+none of them. See [docs/REMOTE_COMPANION.md](docs/REMOTE_COMPANION.md) for the design and how to
+try it.
 
 ### Know when an agent needs you
 
@@ -102,10 +115,9 @@ These files are shared with other tools. MyTerm marks its own commands with a tr
 `# myterm-managed-hook` comment, adds nothing else, and removes only what carries that mark.
 
 What a hook reports can change between MyTerm versions. When Settings finds hooks an older MyTerm
-wrote, it says so and offers **Update**, which rewrites MyTerm's own commands and leaves the rest of
-the file alone. Until then the old hooks keep reporting the old way.
+wrote, it rewrites MyTerm's own commands the next time it looks, and leaves the rest of the file alone.
 
-Each hook writes an escape sequence to its own terminal, `ESC ]7337;agent=claude;event=finished ESC \`,
+Each hook writes an escape sequence to its own terminal, `ESC ]7337;agent=claude;event=finished;session=<id> ESC \`,
 and does nothing unless `MYTERM_PANE_ID` is set. Only MyTerm's terminals set it, so the hooks stay
 silent in every other terminal, and terminals that do not know the code ignore it. Restart the agent
 session after installing the hooks.
@@ -114,6 +126,26 @@ Any agent can drive the cook by writing that sequence itself, with its own name 
 name is what the notification says, so a Codex report reads "Codex finished its turn."
 
 The state is not saved. After a relaunch, no tab carries a cook until its agent reports again.
+
+### Come back to a live agent
+
+A pane that was in a Claude Code conversation rejoins that same conversation when MyTerm starts
+again. The pane restores its working directory and its recent output as before, then runs
+`claude --resume <id>`, so quitting is no longer the end of the work in progress.
+
+The conversation identifier comes from the hooks above, so agent recovery needs them installed.
+Nothing else about the agent is read: MyTerm keeps the identifier the agent reports, and only if it
+is short and free of shell characters.
+
+Codex panes are not resumed. Its hooks report a new identifier for every turn rather than the one
+`codex resume` accepts, so a restored pane would open on an error instead of the conversation. Codex
+hooks still drive the tab indicator above.
+
+A pane left at its shell prompt when you quit comes back to a shell prompt. Leaving the agent is how
+you tell MyTerm the work is finished.
+
+Turn the whole behavior off with **Restore agent sessions** in General Settings. Like the other
+terminal settings, it can be overridden for one folder or one workspace.
 
 ### Notifications when you are somewhere else
 
@@ -124,6 +156,24 @@ said it when the window is on screen.
 The banner is named after the workspace, the tab, or both, whichever you pick, and it carries a
 swatch of the workspace's folder colour, so a glance is enough to tell which project wants you.
 A workspace outside a folder uses its own colour. Clicking the banner opens that tab.
+
+### Work through a backlog of waiting agents
+
+The same events fill a notifications backlog. A bell in the toolbar carries the number of agents
+waiting for you, and opening it lists them newest first, with the workspace and tab each one is in.
+Press **Show Notifications** (Command-Shift-I) to open the list from the keyboard.
+
+Click a row to go to that tab. Reaching a tab is what reads its notification, so the row disappears
+whether you clicked it, clicked the tab, or switched to that workspace. **Clear All** empties the
+list without visiting anything.
+
+One tab keeps one row, so a pane that finishes several turns does not fill the list. The row says
+what the agent reported last: a question replaces a finished turn, and a finished turn replaces a
+question you answered from somewhere else, such as your phone. An agent that starts working again
+takes its own row back.
+
+The backlog is not saved either. After a relaunch it is empty, because an item that survived a
+restart would point at work you have moved on from.
 
 ### Send web links to Safari instead
 
@@ -136,6 +186,26 @@ It applies to command-clicked terminal links, to links from tools that use the `
 The browser you choose comes forward only for a link from the workspace you are looking at, while MyTerm is the active app. So a link you command-click in the pane in front of you still jumps straight to it, while one an agent opened somewhere else loads in the background and waits for you.
 
 MyTerm never sends a link to itself. If the chosen browser is missing, or if MyTerm is the default browser, the link opens in MyTerm and the app reports why.
+### Name a tab after the conversation in it
+
+A tab takes the name Claude Code gives the conversation running in it, so `/rename` in the pane
+names the tab as well. Until you rename it, the name is the topic Claude Code writes for itself as
+the conversation goes.
+
+The name comes from the terminal title, which is where Claude Code already writes it. MyTerm takes a
+title only while an agent has reported itself in that pane, so a shell's own title never becomes a
+tab name, and only the name is kept: the status glyph in front of it, and anything that is not plain
+short text, is dropped.
+
+A tab you renamed yourself keeps your name. That name is also carried back into the conversation
+when the pane rejoins it, as `claude --resume <id> --name <your name>`, so the tab and the
+conversation agree from the first line.
+
+Leaving the agent puts the tab back to **Terminal**.
+
+Turn it off with **Name tabs after agent sessions** in General Settings. Turning it off puts the
+tabs that already carry a conversation name back to their plain labels. Like the other terminal
+settings, it can be overridden for one folder or one workspace.
 
 ## Browser sessions and passkeys
 
