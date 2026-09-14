@@ -1,4 +1,4 @@
-.PHONY: build test bundle verify install clean channel-isolation-test zsh-shim-test
+.PHONY: build test bundle verify install clean channel-isolation-test zsh-shim-test ios-core-typecheck ui-test relay-test
 
 VERSION ?= 0.1.0
 BUILD ?= 1
@@ -18,6 +18,18 @@ channel-isolation-test:
 
 zsh-shim-test:
 	bash script/zsh_shim_test.sh
+
+ios-core-typecheck:
+	bash script/ios_core_typecheck.sh
+
+# Drives the companion app in the iOS Simulator against a live host. SIMULATOR names the device.
+ui-test:
+	bash script/ui_test.sh $(SIMULATOR)
+
+# The relay's own protocol tests, then the Swift ends pushed through the real Worker running locally.
+relay-test:
+	cd relay && npm install --no-audit --no-fund && npm test
+	swift test --filter RelayEndToEndTests
 
 bundle:
 	MYTERM_VERSION="$(VERSION)" \

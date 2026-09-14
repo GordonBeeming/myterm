@@ -1,0 +1,2 @@
+{"type":"user","uuid":"t1","timestamp":"2026-09-11T04:00:00.000Z","message":{"role":"user","content":"Summarise the test suites"}}
+{"type":"assistant","uuid":"t2","timestamp":"2026-09-11T04:00:10.000Z","message":{"model":"claude-opus-5","role":"assistant","content":[{"type":"text","text":"Here is where the suites stand.\n\n| Suite | Tests | Result |\n|---|---:|---|\n| `AgentMarkdownTests` | 1 | passed |\n| `CompanionFlowTests` | 14 | passed |\n| `AgentCommandTests` | 4 | passed |\n\n---\n\n- [x] splitter recognises pipe tables\n- [ ] cells keep inline markdown"}]}}

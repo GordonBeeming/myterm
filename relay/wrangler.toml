@@ -1,0 +1,11 @@
+name = "myterm-relay"
+main = "src/index.ts"
+compatibility_date = "2026-06-01"
+
+[[durable_objects.bindings]]
+name = "RENDEZVOUS"
+class_name = "Rendezvous"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Rendezvous"]
