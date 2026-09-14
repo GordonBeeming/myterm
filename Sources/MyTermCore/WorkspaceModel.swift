@@ -378,8 +378,16 @@ public indirect enum WorkspaceLayout: Codable, Equatable, Hashable, Sendable {
 
     public func group(id: TabGroupID) -> TabGroup? {
         switch self {
-        case .group(let group): group.id == id ? group : nil
-        case .split(_, _, let children, _): children.lazy.compactMap { $0.group(id: id) }.first
+        case .group(let group):
+            return group.id == id ? group : nil
+        case .split(_, _, let children, _):
+            // A plain loop, not `lazy.compactMap { }.first`: the lazy collection evaluates the
+            // recursive lookup once to find its start index and again to read the element, which
+            // doubles the cost at every level of nesting.
+            for child in children {
+                if let found = child.group(id: id) { return found }
+            }
+            return nil
         }
     }
 
