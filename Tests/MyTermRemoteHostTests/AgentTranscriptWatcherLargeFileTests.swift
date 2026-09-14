@@ -12,14 +12,14 @@ final class AgentTranscriptWatcherLargeFileTests: XCTestCase {
     private var project: URL!
     private let session = "87d84ef0-4227-42d8-92e3-3dafcf13979f"
 
-    override func setUpWithError() throws {
+    override func setUp() async throws {
         root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("watcher-large-\(UUID().uuidString)")
         project = root.appendingPathComponent("-Users-someone-code")
         try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
     }
 
-    override func tearDownWithError() throws {
+    override func tearDown() async throws {
         try? FileManager.default.removeItem(at: root)
     }
 

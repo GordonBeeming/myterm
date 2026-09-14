@@ -145,8 +145,15 @@ public final class RemoteHostService {
                 }
             }
             listener.serviceRegistrationUpdateHandler = { [weak self] change in
+                // The change is not Sendable, so only the name and direction cross to the main actor.
+                let registration: (name: String, added: Bool)? = switch change {
+                case .add(.service(let name, _, _, _)): (name, true)
+                case .remove(.service(let name, _, _, _)): (name, false)
+                default: nil
+                }
+                guard let registration else { return }
                 Task { @MainActor [weak self] in
-                    self?.handle(registration: change, from: identity)
+                    self?.handle(registration: registration, from: identity)
                 }
             }
             listener.newConnectionHandler = { [weak self] connection in
@@ -183,15 +190,12 @@ public final class RemoteHostService {
         state = .stopped
     }
 
-    private func handle(registration change: NWListener.ServiceRegistrationChange, from source: ObjectIdentifier) {
+    private func handle(registration: (name: String, added: Bool), from source: ObjectIdentifier) {
         guard let current = listener, ObjectIdentifier(current) == source else { return }
-        switch change {
-        case .add(.service(let name, _, _, _)):
-            advertisedName = name
-        case .remove(.service(let name, _, _, _)) where name == advertisedName:
+        if registration.added {
+            advertisedName = registration.name
+        } else if registration.name == advertisedName {
             advertisedName = nil
-        default:
-            break
         }
     }
 
