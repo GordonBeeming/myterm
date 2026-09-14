@@ -2,6 +2,24 @@ import Foundation
 import MyTermCore
 import Observation
 
+/// One event an agent reports, and what MyTerm makes of it.
+struct AgentHookEvent: Sendable {
+    /// The agent's own name for the event, which is the key its hooks file is organised by.
+    let name: String
+    let activity: AgentActivity
+    /// Text in the agent's own hook payload that means this report is not worth passing on.
+    ///
+    /// The payload arrives on the hook's standard input, and it is the only thing that separates
+    /// two different things an agent reports under one event name.
+    let ignoredMessage: String?
+
+    init(_ name: String, _ activity: AgentActivity, ignoring ignoredMessage: String? = nil) {
+        self.name = name
+        self.activity = activity
+        self.ignoredMessage = ignoredMessage
+    }
+}
+
 /// One agent MyTerm installs hooks for, and where that agent keeps them.
 ///
 /// Codex reads the same hook format Claude Code does, from its own file, so one controller serves
@@ -14,7 +32,7 @@ struct AgentHookTarget: Equatable, Sendable {
     let fileDescription: String
     let settingsURL: URL
     /// Each event MyTerm listens to, and the activity it reports.
-    let events: [(event: String, activity: AgentActivity)]
+    let events: [AgentHookEvent]
 
     static func == (lhs: AgentHookTarget, rhs: AgentHookTarget) -> Bool {
         lhs.agent == rhs.agent && lhs.settingsURL == rhs.settingsURL
@@ -27,9 +45,12 @@ struct AgentHookTarget: Equatable, Sendable {
         settingsURL: FileManager.default.homeDirectoryForCurrentUser
             .appending(path: ".claude/settings.json", directoryHint: .notDirectory),
         events: [
-            ("UserPromptSubmit", .working),
-            ("Stop", .finished),
-            ("Notification", .awaitingInput),
+            AgentHookEvent("UserPromptSubmit", .working),
+            AgentHookEvent("Stop", .finished),
+            // Claude Code sends `Notification` for a question it cannot go on without, and again
+            // for a prompt left alone for a minute. The second is nothing to answer, and it arrives
+            // after every finished turn, so passing it on would leave the cook purple for good.
+            AgentHookEvent("Notification", .awaitingInput, ignoring: "waiting for your input"),
         ]
     )
 
@@ -41,9 +62,9 @@ struct AgentHookTarget: Equatable, Sendable {
         settingsURL: FileManager.default.homeDirectoryForCurrentUser
             .appending(path: ".codex/hooks.json", directoryHint: .notDirectory),
         events: [
-            ("UserPromptSubmit", .working),
-            ("Stop", .finished),
-            ("PermissionRequest", .awaitingInput),
+            AgentHookEvent("UserPromptSubmit", .working),
+            AgentHookEvent("Stop", .finished),
+            AgentHookEvent("PermissionRequest", .awaitingInput),
         ]
     )
 
@@ -68,6 +89,8 @@ struct AgentHookTarget: Equatable, Sendable {
 final class AgentHooksController {
     enum State: Equatable {
         case notInstalled
+        /// MyTerm's own hooks are in the file, but an older MyTerm wrote them.
+        case outdated
         case installed
         case failed(String)
     }
@@ -96,7 +119,16 @@ final class AgentHooksController {
     func refresh() {
         do {
             let settings = try readSettings()
-            state = installedEvents(in: settings).count == target.events.count ? .installed : .notInstalled
+            let current = currentEvents(in: settings)
+            if current.count == target.events.count {
+                state = .installed
+            } else if Set(installedEvents(in: settings)).isSubset(of: current) {
+                // A current set with a hook missing was edited by hand, not written by an older
+                // MyTerm. Only a marked command that differs from today's says the file is old.
+                state = .notInstalled
+            } else {
+                state = .outdated
+            }
         } catch {
             state = .failed(error.localizedDescription)
         }
@@ -106,16 +138,20 @@ final class AgentHooksController {
         do {
             var settings = try readSettings()
             var hooks = settings["hooks"] as? [String: Any] ?? [:]
-            for (event, activity) in target.events {
-                var entries = Self.entriesWithoutMyTerm(hooks[event])
+            for event in target.events {
+                var entries = Self.entriesWithoutMyTerm(hooks[event.name])
                 entries.append([
                     "hooks": [[
                         "type": "command",
-                        "command": Self.command(agent: target.agent, activity: activity),
+                        "command": Self.command(
+                            agent: target.agent,
+                            activity: event.activity,
+                            ignoring: event.ignoredMessage
+                        ),
                         "timeout": 5,
                     ]],
                 ])
-                hooks[event] = entries
+                hooks[event.name] = entries
             }
             settings["hooks"] = hooks
             try writeSettings(settings)
@@ -132,13 +168,13 @@ final class AgentHooksController {
                 state = .notInstalled
                 return
             }
-            for (event, _) in target.events {
-                let entries = Self.entriesWithoutMyTerm(hooks[event])
+            for event in target.events {
+                let entries = Self.entriesWithoutMyTerm(hooks[event.name])
                 // Dropping the key entirely keeps the file as it was before MyTerm touched it.
                 if entries.isEmpty {
-                    hooks.removeValue(forKey: event)
+                    hooks.removeValue(forKey: event.name)
                 } else {
-                    hooks[event] = entries
+                    hooks[event.name] = entries
                 }
             }
             if hooks.isEmpty {
@@ -155,23 +191,62 @@ final class AgentHooksController {
 
     /// The shell one hook runs. It reports to the pane's TTY and never writes to stdout, which
     /// Claude Code reads as the hook's own JSON reply.
-    static func command(agent: String, activity: AgentActivity) -> String {
+    ///
+    /// An ignored message is matched against the agent's own payload, which the agent pipes to the
+    /// hook. Reading that input is the only way to tell a question from a prompt left sitting, and
+    /// a hook with nothing to ignore never reads it. The installed entry carries a five second
+    /// timeout, so an agent that pipes nothing cannot leave the read waiting.
+    static func command(
+        agent: String,
+        activity: AgentActivity,
+        ignoring ignoredMessage: String? = nil
+    ) -> String {
         let payload = "agent=\(agent);event=\(activity.rawValue)"
+        let filter = Self.stdinFilter(ignoring: ignoredMessage)
         return """
-        [ -n "${MYTERM_PANE_ID:-}" ] && { __tty=$(ps -o tty= -p "$PPID" 2>/dev/null | tr -d '[:space:]'); \
+        [ -n "${MYTERM_PANE_ID:-}" ] && { \(filter)__tty=$(ps -o tty= -p "$PPID" 2>/dev/null | tr -d '[:space:]'); \
         case "$__tty" in *[0-9]*) __tty="/dev/${__tty#/dev/}";; *) __tty="/dev/tty";; esac; \
         printf '\\033]\(AgentActivityMarker.oscCode);\(payload)\\033\\\\' > "$__tty"; } >/dev/null 2>&1 || true \(marker)
         """
     }
 
+    /// The guard that drops a report the agent's own payload says is not worth passing on.
+    ///
+    /// The payload is read from standard input, which is where the agent pipes it. A hook with
+    /// nothing to ignore gets no guard at all, so it never reads its input.
+    static func stdinFilter(ignoring ignoredMessage: String?) -> String {
+        guard let ignoredMessage else { return "" }
+        return "case \"$(cat)\" in *'\(ignoredMessage)'*) exit 0;; esac; "
+    }
+
+    /// Events carrying a hook of MyTerm's, whichever version of MyTerm wrote it.
     func installedEvents(in settings: [String: Any]) -> [String] {
         guard let hooks = settings["hooks"] as? [String: Any] else { return [] }
-        return target.events.compactMap { event, _ in
-            let entries = (hooks[event] as? [[String: Any]]) ?? []
+        return target.events.compactMap { event in
+            let entries = (hooks[event.name] as? [[String: Any]]) ?? []
             let hasMyTermCommand = entries.contains { entry in
                 Self.commands(in: entry).contains { $0.hasSuffix(Self.marker) }
             }
-            return hasMyTermCommand ? event : nil
+            return hasMyTermCommand ? event.name : nil
+        }
+    }
+
+    /// Events carrying the hook this version of MyTerm writes.
+    ///
+    /// A hook an older MyTerm wrote still carries the mark, so the mark alone cannot say whether
+    /// the file is current. What the hook reports changes between versions, and a file left on the
+    /// old command keeps reporting the old way, so the whole command is what gets compared.
+    func currentEvents(in settings: [String: Any]) -> [String] {
+        guard let hooks = settings["hooks"] as? [String: Any] else { return [] }
+        return target.events.compactMap { event in
+            let expected = Self.command(
+                agent: target.agent,
+                activity: event.activity,
+                ignoring: event.ignoredMessage
+            )
+            let entries = (hooks[event.name] as? [[String: Any]]) ?? []
+            let isCurrent = entries.contains { Self.commands(in: $0).contains(expected) }
+            return isCurrent ? event.name : nil
         }
     }
 

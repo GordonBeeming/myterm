@@ -221,20 +221,25 @@ struct SettingsView: View {
     @ViewBuilder
     private func hookButton(for hooks: AgentHooksController) -> some View {
         HStack(spacing: 12) {
-            Button(hooks.isInstalled
-                ? "Remove from \(hooks.target.displayName)"
-                : "Set Up \(hooks.target.displayName) Hooks") {
-                if hooks.isInstalled {
-                    hooks.remove()
-                } else {
-                    hooks.install()
-                }
-            }
-
-            if hooks.isInstalled {
+            switch hooks.state {
+            case .installed:
+                Button("Remove from \(hooks.target.displayName)") { hooks.remove() }
                 Label("Installed in \(hooks.target.fileDescription)", systemImage: "checkmark.circle.fill")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+            case .outdated:
+                // Hooks an older MyTerm wrote keep reporting the old way, so say so and offer the
+                // rewrite. Removing stays available, because an update is not the only answer.
+                Button("Update \(hooks.target.displayName) Hooks") { hooks.install() }
+                Button("Remove from \(hooks.target.displayName)") { hooks.remove() }
+                Label(
+                    "Hooks in \(hooks.target.fileDescription) are from an older MyTerm",
+                    systemImage: "arrow.triangle.2.circlepath"
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            case .notInstalled, .failed:
+                Button("Set Up \(hooks.target.displayName) Hooks") { hooks.install() }
             }
         }
 
