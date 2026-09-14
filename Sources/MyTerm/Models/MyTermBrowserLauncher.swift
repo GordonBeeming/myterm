@@ -8,6 +8,11 @@ enum MyTermBrowserLauncher {
     static let zdotdirEnvironmentKey = "ZDOTDIR"
     static let resourceDirectoryEnvironmentKey = "MYTERM_RESOURCE_DIR"
     static let originalZDOTDIREnvironmentKey = "MYTERM_ORIGINAL_ZDOTDIR"
+    static let zshCommonShimFileName = "_myterm_common"
+    /// The first line of `Resources/zsh/_myterm_common`. It is the shim directory's identity, so
+    /// another MyTerm's copy is recognised wherever it lives, and a user's own ZDOTDIR that merely
+    /// holds a file of the same name is not.
+    static let zshShimMarker = "# MyTerm zsh shim"
     static let workspaceRouteScheme = "myterm"
     static let workspaceRouteHost = "browser"
 
@@ -60,9 +65,10 @@ enum MyTermBrowserLauncher {
             environment["MYTERM_ORIGINAL_BASH_ENV"] = originalBashEnvironment
         }
         // MyTerm can itself run from inside a MyTerm pane (developing MyTerm in MyTerm), in
-        // which case baseEnvironment's ZDOTDIR is already this same shim directory. Mirroring
-        // it as MYTERM_ORIGINAL_ZDOTDIR would then point .zshenv at itself and it would source
-        // itself forever, so drop it when the two resolve to the same directory.
+        // which case baseEnvironment's ZDOTDIR is already a MyTerm shim directory: this same one,
+        // or another build's. Mirroring it as MYTERM_ORIGINAL_ZDOTDIR would point .zshenv at
+        // itself, or run the user's files through the other copy's shims, so drop it when it
+        // resolves to this shim directory or carries the shim marker.
         // Compare the standardized paths rather than the URLs. A trailing slash makes a file URL a
         // directory URL, which keeps the slash in absoluteString, so two spellings of one directory
         // are unequal as URLs while their paths match.
@@ -71,14 +77,14 @@ enum MyTermBrowserLauncher {
         // further nested (MyTerm-in-MyTerm-in-MyTerm) inherits ZDOTDIR pointing at the parent's own
         // shim directory, not the user's real one — the parent's shim already resolved the true user
         // directory into MYTERM_ORIGINAL_ZDOTDIR before re-pointing ZDOTDIR back at itself for the
-        // rest of its own chain. Falling back to ZDOTDIR here would mirror the parent's shim directory
-        // forward as though it were the user's, and the grandchild shim would source it as real
-        // dotfiles instead of skipping straight to HOME.
+        // rest of its own chain. The parent leaves MYTERM_ORIGINAL_ZDOTDIR out for a user with no
+        // ZDOTDIR of their own, which is when the marker check on ZDOTDIR does the work.
         let originalZDOTDIRSource = baseEnvironment[originalZDOTDIREnvironmentKey].flatMap { $0.isEmpty ? nil : $0 }
             ?? baseEnvironment[zdotdirEnvironmentKey]
         if let originalZDOTDIR = originalZDOTDIRSource, !originalZDOTDIR.isEmpty,
            URL(fileURLWithPath: originalZDOTDIR).standardizedFileURL.path
-             != URL(fileURLWithPath: zdotdir).standardizedFileURL.path {
+             != URL(fileURLWithPath: zdotdir).standardizedFileURL.path,
+           !isZshShimDirectory(atPath: originalZDOTDIR) {
             environment[originalZDOTDIREnvironmentKey] = originalZDOTDIR
         }
         if let workspaceID {
@@ -91,6 +97,19 @@ enum MyTermBrowserLauncher {
             environment[paneIDEnvironmentKey] = paneID.description
         }
         return environment
+    }
+
+    /// Whether the directory at `path` is a copy of MyTerm's zsh shim directory, wherever it
+    /// lives. The first line of its `_myterm_common` is the identity, so a user's own ZDOTDIR
+    /// that happens to hold a helper of that name does not count. The shim performs the same
+    /// check before sourcing from `MYTERM_ORIGINAL_ZDOTDIR`; keep the two in step.
+    static func isZshShimDirectory(atPath path: String) -> Bool {
+        let commonShim = URL(fileURLWithPath: path).appending(path: zshCommonShimFileName, directoryHint: .notDirectory)
+        guard let handle = FileHandle(forReadingAtPath: commonShim.path) else { return false }
+        defer { try? handle.close() }
+        let head = (try? handle.read(upToCount: 256)) ?? Data()
+        let firstLine = head.prefix { $0 != UInt8(ascii: "\n") }
+        return String(decoding: firstLine, as: UTF8.self) == zshShimMarker
     }
 
     static func browserRoute(

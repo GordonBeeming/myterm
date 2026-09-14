@@ -1,4 +1,10 @@
+# MyTerm zsh shim
 # shellcheck shell=bash
+#
+# The first line is this directory's identity. MyTerm and this file both read
+# it, so a copy of the shim directory is recognised wherever it lives: a user's
+# own ZDOTDIR may hold a helper of this same name, and a file name alone would
+# mistake that directory for a shim and skip every startup file in it.
 #
 # The hand-off every MyTerm zsh shim performs, in one place.
 #
@@ -20,29 +26,68 @@
 # itself forever, so every resolved directory is checked against the shim
 # directory first. HOME gets a sentinel rather than an empty fallback, so an
 # unset HOME can never resolve the user directory to the filesystem root.
+#
+# MYTERM_ORIGINAL_ZDOTDIR is present only when the user has a ZDOTDIR of their
+# own. The launcher leaves it out for a user who has none, and this file keeps
+# it that way rather than filling in HOME: a value of HOME cannot say whether
+# the user chose it, and a user who did set ZDOTDIR=$HOME must see it set in
+# their files, exactly as plain zsh would show it.
 
 _myterm_shim_dir="${ZDOTDIR:-}"
-_myterm_user_dir="${MYTERM_ORIGINAL_ZDOTDIR:-${HOME:-/nonexistent}}"
+_myterm_home="${HOME:-/nonexistent}"
+_myterm_user_dir="${MYTERM_ORIGINAL_ZDOTDIR:-}"
 if [ -n "$_myterm_shim_dir" ] && [ "$_myterm_user_dir" = "$_myterm_shim_dir" ]; then
-  _myterm_user_dir="${HOME:-/nonexistent}"
+  _myterm_user_dir=""
 fi
-MYTERM_ORIGINAL_ZDOTDIR="$_myterm_user_dir"
-export MYTERM_ORIGINAL_ZDOTDIR
+# Another MyTerm's shim directory is not the user's either. A pane whose shell
+# is not zsh never runs this file, so it never resolves MYTERM_ORIGINAL_ZDOTDIR,
+# and a MyTerm launched from it inherits the parent's shim directory as though
+# it were the user's own. Sourcing that would run the user's files through the
+# other copy's shims instead of these. A shim directory is known by the first
+# line of its _myterm_common, read with the builtin so startup pays no fork.
+if [ -n "$_myterm_user_dir" ] && [ -f "$_myterm_user_dir/_myterm_common" ] && [ -r "$_myterm_user_dir/_myterm_common" ]; then
+  _myterm_first_line=""
+  IFS= read -r _myterm_first_line < "$_myterm_user_dir/_myterm_common" 2>/dev/null
+  if [ "$_myterm_first_line" = "# MyTerm zsh shim" ]; then
+    _myterm_user_dir=""
+  fi
+  unset _myterm_first_line
+fi
 
-ZDOTDIR="$_myterm_user_dir"
-if [ -n "${_myterm_dotfile:-}" ] && [ -r "$ZDOTDIR/$_myterm_dotfile" ]; then
-  . "$ZDOTDIR/$_myterm_dotfile"
+# A user without a ZDOTDIR of their own must not see one while their file
+# runs. Plain zsh leaves it unset, and the usual relocation in a .zshenv,
+# `ZDOTDIR="${ZDOTDIR:-$HOME/.config/zsh}"`, only fires when it is. Set to
+# HOME here it would read as already chosen, and the dotfiles under
+# .config/zsh would silently give way to whatever sits in HOME.
+if [ -n "$_myterm_user_dir" ]; then
+  MYTERM_ORIGINAL_ZDOTDIR="$_myterm_user_dir"
+  export MYTERM_ORIGINAL_ZDOTDIR
+  export ZDOTDIR="$_myterm_user_dir"
+else
+  _myterm_user_dir="$_myterm_home"
+  unset MYTERM_ORIGINAL_ZDOTDIR
+  unset ZDOTDIR
+fi
+if [ -n "${_myterm_dotfile:-}" ] && [ -r "$_myterm_user_dir/$_myterm_dotfile" ]; then
+  . "$_myterm_user_dir/$_myterm_dotfile"
 fi
 
 # The user's own file may have repointed ZDOTDIR; that new value wins.
-_myterm_user_dir="${ZDOTDIR:-${HOME:-/nonexistent}}"
+_myterm_user_dir="${ZDOTDIR:-}"
 if [ -n "$_myterm_shim_dir" ] && [ "$_myterm_user_dir" = "$_myterm_shim_dir" ]; then
-  _myterm_user_dir="${HOME:-/nonexistent}"
+  _myterm_user_dir=""
 fi
-MYTERM_ORIGINAL_ZDOTDIR="$_myterm_user_dir"
-export MYTERM_ORIGINAL_ZDOTDIR
+if [ -n "$_myterm_user_dir" ]; then
+  MYTERM_ORIGINAL_ZDOTDIR="$_myterm_user_dir"
+  export MYTERM_ORIGINAL_ZDOTDIR
+else
+  unset MYTERM_ORIGINAL_ZDOTDIR
+fi
 
+# `unset ZDOTDIR` above also dropped the export attribute, so this has to be
+# an export, not a plain assignment: a nested zsh started from the pane must
+# inherit the shim directory or it bypasses every shim in this chain.
 if [ -n "$_myterm_shim_dir" ]; then
-  ZDOTDIR="$_myterm_shim_dir"
+  export ZDOTDIR="$_myterm_shim_dir"
 fi
-unset _myterm_shim_dir _myterm_user_dir _myterm_dotfile
+unset _myterm_shim_dir _myterm_user_dir _myterm_dotfile _myterm_home
