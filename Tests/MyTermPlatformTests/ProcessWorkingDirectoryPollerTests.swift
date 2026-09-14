@@ -44,6 +44,10 @@ final class ProcessWorkingDirectoryPollerTests: XCTestCase {
     func testPollerStopsWithoutEmittingLaterValues() {
         let provider = StubProcessWorkingDirectoryProvider(values: ["/workspace", "/later"])
         let changed = expectation(description: "first working directory change")
+        // A second poll can land before stop() does. Over-fulfilling aborts the whole test process,
+        // which hides every other result; the directories assertion below is what catches a real
+        // regression here.
+        changed.assertForOverFulfill = false
         let directories = LockedDirectories()
 
         let poller = ProcessWorkingDirectoryPoller(

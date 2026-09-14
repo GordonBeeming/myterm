@@ -26,6 +26,13 @@ public protocol TerminalProcessSession: AnyObject {
     func contentSnapshot(maximumCharacters: Int) -> String
     func setContentChangeHandler(_ handler: (@MainActor () -> Void)?)
     func setPaneActive(_ isActive: Bool)
+    func setOutputTap(_ tap: (@MainActor (ArraySlice<UInt8>) -> Void)?)
+    func sendInput(_ bytes: ArraySlice<UInt8>)
+    /// The screen as it stands, for a viewer that joined after the output that drew it.
+    func gridSnapshot() -> TerminalGridSnapshot?
+
+    /// The visible screen as plain rows, for reading a menu a program is drawing.
+    func visibleRows() -> [String]?
 }
 
 public extension TerminalProcessSession {
@@ -38,6 +45,14 @@ public extension TerminalProcessSession {
     func setContentChangeHandler(_ handler: (@MainActor () -> Void)?) {}
 
     func setPaneActive(_ isActive: Bool) {}
+
+    func setOutputTap(_ tap: (@MainActor (ArraySlice<UInt8>) -> Void)?) {}
+
+    func sendInput(_ bytes: ArraySlice<UInt8>) {}
+
+    func gridSnapshot() -> TerminalGridSnapshot? { nil }
+
+    func visibleRows() -> [String]? { nil }
 }
 
 public struct TerminalColor: Equatable, Sendable {
@@ -148,6 +163,9 @@ public enum TerminalSessionEvent: Equatable, Sendable {
     case openURL(URL)
     case processTerminated(exitCode: Int32?)
     case failed(TerminalSessionFailure)
+    /// The process in front of the pane's shell changed. `nil` means the shell has the pane
+    /// back, which is the one thing an agent killed without its own hook cannot report.
+    case foregroundProcessChanged(String?)
 }
 
 public enum TerminalLinkRouter {

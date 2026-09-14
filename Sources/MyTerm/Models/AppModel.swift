@@ -2232,6 +2232,9 @@ final class AppModel {
             open(url, in: workspaceID, besideTabID: tabID, paneID: tab.paneID)
         case .failed(let error):
             present(error)
+        case .foregroundProcessChanged:
+            // Reported for the remote host; the Mac side does not act on it yet.
+            break
         case .processTerminated(let exitCode):
             if let exitCode, exitCode != 0 {
                 errorDescription = "Terminal exited with status \(exitCode)."
