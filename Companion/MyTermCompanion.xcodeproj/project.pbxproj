@@ -13,6 +13,7 @@
 		27A4019177A7B85550F44A22 /* MyTermCompanionApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15CE946E75B4FCF6C271546A /* MyTermCompanionApp.swift */; };
 		29E51B24BD60A38234E2A73E /* MyTermRemote in Frameworks */ = {isa = PBXBuildFile; productRef = A12C7E6D850FFBB09585EAF2 /* MyTermRemote */; };
 		2FB7A0308973F49DC950FED3 /* NotificationEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D3ECF4B3194B81DF0DA4E1 /* NotificationEnvelope.swift */; };
+		3610251539859561DE72ED80 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = D02D7C3B605BC41C6D6B704D /* PrivacyInfo.xcprivacy */; };
 		3BD17EF126C1CC0BD162D44F /* MyTermNotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 167672F5922523F7E84346F5 /* MyTermNotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		62023C04E4A2B662B40F6398 /* NotificationEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D3ECF4B3194B81DF0DA4E1 /* NotificationEnvelope.swift */; };
 		64E399E0F3FB05E2B1E0139B /* AdaptiveWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E81C624FBFF3B575146385EC /* AdaptiveWorkspaceView.swift */; };
@@ -99,6 +100,7 @@
 		B2EA22602077EEAC436C98E8 /* MyTermCompanionTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MyTermCompanionTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B34593A3693A9FE889079CF3 /* LiveDeviceLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveDeviceLayoutTests.swift; sourceTree = "<group>"; };
 		BFA88151878C429986196266 /* RemoteSettingsDraftTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSettingsDraftTests.swift; sourceTree = "<group>"; };
+		D02D7C3B605BC41C6D6B704D /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		D4D3ECF4B3194B81DF0DA4E1 /* NotificationEnvelope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationEnvelope.swift; sourceTree = "<group>"; };
 		DAF28873A55DB620FA995481 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		DB31F13A0F11454C01C5C166 /* MyTermCompanion.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = MyTermCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -214,6 +216,7 @@
 			isa = PBXGroup;
 			children = (
 				97E4B3C98E1DE16DF3D63DEE /* Assets.xcassets */,
+				D02D7C3B605BC41C6D6B704D /* PrivacyInfo.xcprivacy */,
 				AABD4DF6F0105A47014429F0 /* Signing.xcconfig */,
 			);
 			path = Support;
@@ -397,6 +400,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				8FD92ED5F4F7DF7794C3D1A9 /* Assets.xcassets in Resources */,
+				3610251539859561DE72ED80 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -511,6 +515,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = "$(TEAM_ID)";
 				ENABLE_NS_ASSERTIONS = NO;
@@ -524,6 +529,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				MARKETING_VERSION = 0.28;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -599,6 +605,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.gordonbeeming.myterm.companion.notifications;
+				PROVISIONING_PROFILE_SPECIFIER = "$(MYTERM_NOTIFICATION_PROVISIONING_PROFILE)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -641,6 +648,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = "$(TEAM_ID)";
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -660,6 +668,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				MARKETING_VERSION = 0.28;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -702,7 +711,9 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MYTERM_DISPLAY_NAME = MyTerm;
 				PRODUCT_BUNDLE_IDENTIFIER = com.gordonbeeming.myterm.companion;
+				PROVISIONING_PROFILE_SPECIFIER = "$(MYTERM_APP_PROVISIONING_PROFILE)";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -738,6 +749,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MYTERM_DISPLAY_NAME = "MyTerm Dev";
 				PRODUCT_BUNDLE_IDENTIFIER = com.gordonbeeming.myterm.companion;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";

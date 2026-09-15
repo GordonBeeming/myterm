@@ -3,8 +3,40 @@ name: Companion
 on:
   pull_request:
     branches: [main]
+    paths:
+      - '.github/workflows/companion.yml'
+      - 'Companion/**'
+      - 'Package.swift'
+      - 'Package.resolved'
+      - 'Packages/MyTermRemote/**'
+      - 'Services/push-gateway/**'
+      - 'Services/relay/**'
+      - 'Sources/MyTerm/Companion/**'
+      - 'Sources/MyTermCore/**'
+      - 'Sources/MyTermPlatform/**'
+      - 'Vendor/SwiftTerm/**'
+      - 'script/deploy_companion_testflight.sh'
+      - 'script/test_companion.sh'
+      - 'script/test_companion_testflight_helper.sh'
+      - 'script/verify_companion_toolchain.sh'
   push:
     branches: [main]
+    paths:
+      - '.github/workflows/companion.yml'
+      - 'Companion/**'
+      - 'Package.swift'
+      - 'Package.resolved'
+      - 'Packages/MyTermRemote/**'
+      - 'Services/push-gateway/**'
+      - 'Services/relay/**'
+      - 'Sources/MyTerm/Companion/**'
+      - 'Sources/MyTermCore/**'
+      - 'Sources/MyTermPlatform/**'
+      - 'Vendor/SwiftTerm/**'
+      - 'script/deploy_companion_testflight.sh'
+      - 'script/test_companion.sh'
+      - 'script/test_companion_testflight_helper.sh'
+      - 'script/verify_companion_toolchain.sh'
   workflow_dispatch:
 
 permissions:
@@ -25,6 +57,8 @@ jobs:
           cache-dependency-path: Services/relay/go.sum
       - name: Test native remote protocol and cryptography
         run: swift test --package-path Packages/MyTermRemote --parallel
+      - name: Test TestFlight configuration renderer
+        run: bash script/test_companion_testflight_helper.sh
 
   relay-browser:
     runs-on: macos-15
@@ -95,3 +129,43 @@ jobs:
           name: companion-${{ matrix.device }}-results
           path: dist/companion-${{ matrix.device }}.xcresult
           if-no-files-found: warn
+
+  deploy-beta:
+    name: Deploy to TestFlight
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    needs: [remote-core, relay-browser, services, ios]
+    runs-on: xcode-27
+    timeout-minutes: 90
+    environment: beta
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Verify actual SDK
+        run: bash script/verify_companion_toolchain.sh 27.0
+      - name: Install the matching Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
+      - name: Install XcodeGen
+        run: command -v xcodegen >/dev/null || brew install xcodegen
+      - name: Archive, validate, and upload
+        env:
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          CODE_SIGN_IDENTITY: ${{ vars.CODE_SIGN_IDENTITY }}
+          PROVISIONING_PROFILE_NAME: ${{ vars.PROVISIONING_PROFILE_NAME }}
+          NOTIFICATION_PROVISIONING_PROFILE_NAME: ${{ vars.NOTIFICATION_PROVISIONING_PROFILE_NAME }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ vars.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
+          MYTERM_PUSH_GATEWAY_ORIGIN: ${{ vars.MYTERM_PUSH_GATEWAY_ORIGIN }}
+          CERTIFICATES_P12: ${{ secrets.CERTIFICATES_P12 }}
+          CERTIFICATES_PASSWORD: ${{ secrets.CERTIFICATES_PASSWORD }}
+          PROVISIONING_PROFILE: ${{ secrets.PROVISIONING_PROFILE }}
+          NOTIFICATION_PROVISIONING_PROFILE: ${{ secrets.NOTIFICATION_PROVISIONING_PROFILE }}
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: bash script/deploy_companion_testflight.sh
+      - name: Preserve exported IPA
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: MyTermCompanion-${{ github.run_number }}.ipa
+          path: ${{ runner.temp }}/myterm-testflight/export/*.ipa
+          if-no-files-found: warn
+          retention-days: 90

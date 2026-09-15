@@ -220,13 +220,15 @@ WebAuthn requests are passed to macOS and the user's chosen credential provider,
 
 ## iPhone and iPad companion
 
+MyTerm Companion is coming to the App Store. Interested in trying it before the public release? Email [appstore@gordonbeeming.com](mailto:appstore@gordonbeeming.com) and I can look at adding you as a TestFlight tester.
+
 To host the relay, follow [the Cloudflare Tunnel and Linux proxy setup guide](docs/PROXY_SETUP.md), including separate dev and prod environments on one server.
 
 The native companion connects to your running Macs through an HTTPS relay you host. Save multiple Macs and relays, check which hosts are reachable, and open their workspaces and terminals from your phone or iPad. Each Mac remains responsible for its processes; a sleeping or closed host is unavailable.
 
 Pairing combines relay passkey sign-in with a one-use QR code and approval on the Mac. Terminal traffic is encrypted between the devices. Wider screens mirror the Mac pane layout; narrow screens use a terminal picker. A per-device setting restores the terminal list. One connection controls input and terminal size at a time.
 
-The companion targets iOS and iPadOS 27. Browser tabs currently expose their titles and URLs. Device push delivery and TestFlight distribution require the Apple configuration described in [the companion setup guide](docs/COMPANION.md).
+The companion targets iOS and iPadOS 27. Browser tabs currently expose their titles and URLs. See [the companion setup guide](docs/COMPANION.md) for pairing, layouts, and notification configuration, and [the TestFlight deployment guide](docs/TESTFLIGHT.md) for building and uploading through GitHub Actions.
 
 ## Everyday shortcuts
 
