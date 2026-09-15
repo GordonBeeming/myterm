@@ -401,7 +401,9 @@ private struct WorkspaceContentView: View {
                     Button("Split Below") { model.splitFocusedTerminal(orientation: .vertical) }
                 }
 
-                AgentNotificationsButton(model: model)
+                if model.showsAgentNotificationBell {
+                    AgentNotificationsButton(model: model)
+                }
             }
         }
     }

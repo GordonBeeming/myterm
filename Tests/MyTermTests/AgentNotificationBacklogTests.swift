@@ -237,6 +237,30 @@ final class AgentNotificationBacklogTests: XCTestCase {
         XCTAssertEqual(model.agentNotificationItems.map(\.id), [secondTabID, firstTabID])
     }
 
+    // MARK: - The bell setting
+
+    /// Hiding the bell is about the toolbar, not the backlog. The inbox goes on filing, so turning
+    /// the bell back on shows what was missed, and the cook and the banner are untouched.
+    func testTheInboxStillFilesAnEntryWithTheBellHidden() throws {
+        let harness = try makeHarness()
+        let model = harness.model
+        let workspace = model.selectedWorkspace
+        let group = try XCTUnwrap(workspace.orderedGroups.first)
+        let tabID = group.selectedTabID
+        model.createWorkspace()
+        model.updateGlobalSettings { $0.showsAgentNotificationBell = false }
+        XCTAssertFalse(model.showsAgentNotificationBell, "precondition: the toolbar has no bell")
+
+        harness.record(.awaitingInput, workspaceID: workspace.id, tabGroupID: group.id, tabID: tabID)
+
+        XCTAssertEqual(model.agentNotificationItems.map(\.id), [tabID])
+        XCTAssertEqual(model.agentAttention(forTab: tabID), .awaitingInput, "the cook is not the bell's to hide")
+
+        model.updateGlobalSettings { $0.showsAgentNotificationBell = true }
+        XCTAssertTrue(model.showsAgentNotificationBell)
+        XCTAssertEqual(model.agentNotificationItems.map(\.id), [tabID], "what was missed is still listed")
+    }
+
     // MARK: - What counts as in front of the user
 
     /// With one pane full screen, the other panes are not drawn at all. An agent finishing in one

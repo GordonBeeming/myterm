@@ -169,6 +169,9 @@ What the bell has listed is kept as history in `agent-notifications.json`, besid
 state. After a relaunch the list is empty, because an entry that survived a restart would point at
 work you have moved on from, but the history is still there to read.
 
+**Show the agent bell in the toolbar**, in General Settings, takes the bell out of the toolbar; the
+list is kept either way, so turning it back on shows what was missed.
+
 ### Send web links to Safari instead
 
 MyTerm's own browser is the default destination for web links. To use a real browser, set **Open web links in** in Browser Settings to **Default browser** or to a specific application, such as Safari or Google Chrome. The picker lists the browsers installed on this Mac.

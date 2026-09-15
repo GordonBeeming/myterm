@@ -731,6 +731,23 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: recoveryBackupURL), existingBackup)
     }
 
+    func testTheAgentBellSettingRoundTripsAndIsGlobalOnly() throws {
+        let url = temporaryURL()
+        let store = try WorkspaceStore(persistenceURL: url)
+        XCTAssertTrue(store.globalSettings.showsAgentNotificationBell, "the bell is on until the user says otherwise")
+        let folderID = try store.createFolder(title: "Work", color: .teal)
+        let workspaceID = try store.createWorkspace(title: "API", folderID: folderID)
+        try store.updateGlobalSettings { $0.showsAgentNotificationBell = false }
+        try store.updateFolderSettings(folderID) { $0.fontSize = 15 }
+
+        let restored = try WorkspaceStore(persistenceURL: url)
+        XCTAssertFalse(restored.globalSettings.showsAgentNotificationBell)
+        XCTAssertFalse(
+            try restored.resolvedSettings(for: workspaceID).showsAgentNotificationBell,
+            "the toolbar is the app's, so a folder override carries the global answer through"
+        )
+    }
+
     func testASettingTheFilePredatesIsADefaultNotARepair() throws {
         let url = temporaryURL()
         let workspace = Workspace(title: "Older file", isPinned: false)
@@ -741,6 +758,7 @@ final class WorkspaceStoreTests: XCTestCase {
         var settings = try XCTUnwrap(json["globalSettings"] as? [String: Any])
         XCTAssertNotNil(settings.removeValue(forKey: "compactSidebar"))
         XCTAssertNotNil(settings.removeValue(forKey: "cursorBlink"))
+        XCTAssertNotNil(settings.removeValue(forKey: "showsAgentNotificationBell"))
         json["globalSettings"] = settings
         try JSONSerialization.data(withJSONObject: json).write(to: url)
 
@@ -751,6 +769,7 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(store.loadReport.backupURLs, [])
         XCTAssertTrue(store.globalSettings.compactSidebar)
         XCTAssertTrue(store.globalSettings.cursorBlink)
+        XCTAssertTrue(store.globalSettings.showsAgentNotificationBell)
     }
 
     func testNumericBooleanValuesTriggerStructuralRepairAndExactByteBackup() throws {

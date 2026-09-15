@@ -70,7 +70,7 @@ Reaching the tab is what reads an entry, whichever way the user gets there: clic
 
 One tab keeps one entry, because the backlog answers "which tabs need me" and a tab needs the user once. The latest report is what the entry says: a question replaces a finished turn on the same tab, and a finished turn replaces a question, because the agent could only have moved on once the question was answered. An agent that starts working again takes its own entry back, and an entry follows its tab into another pane.
 
-The tab in front of the user is read as it arrives, but still remembered. Everything the bell has listed is kept as history beside the workspace state, deduplicated and newest first, and comes back read after a relaunch: an entry that survived a restart would point at work the user has moved on from.
+A global setting hides the bell from the toolbar without stopping the inbox, so turning it back on shows what was missed. The tab in front of the user is read as it arrives, but still remembered. Everything the bell has listed is kept as history beside the workspace state, deduplicated and newest first, and comes back read after a relaunch: an entry that survived a restart would point at work the user has moved on from.
 
 ## Accessibility & Inclusion
 

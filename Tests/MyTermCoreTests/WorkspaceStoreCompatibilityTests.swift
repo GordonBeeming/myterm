@@ -23,7 +23,9 @@ final class WorkspaceStoreCompatibilityTests: XCTestCase {
     private var stateURL: URL { directory.appendingPathComponent("workspace-state.json") }
 
     /// The keys this build added after `466ed05` (origin/main), by the object they live in.
-    private static let settingsKeysAddedSinceMain = ["restoresAgentSessions", "namesTabsFromAgentSessions"]
+    private static let settingsKeysAddedSinceMain = [
+        "restoresAgentSessions", "namesTabsFromAgentSessions", "showsAgentNotificationBell",
+    ]
     private static let sessionKeysAddedSinceMain = ["agentSession", "agentTitle"]
 
     private func snapshotWithAnAgentSession() throws -> (WorkspaceStoreSnapshot, [String: Any]) {
@@ -88,6 +90,7 @@ final class WorkspaceStoreCompatibilityTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.recoveryBackupURL.path))
         XCTAssertTrue(store.globalSettings.restoresAgentSessions, "a setting the file predates is its default")
         XCTAssertTrue(store.globalSettings.namesTabsFromAgentSessions)
+        XCTAssertTrue(store.globalSettings.showsAgentNotificationBell)
         let session = try XCTUnwrap(store.selectedWorkspace.orderedGroups.first?.tabs.first?.terminalSession)
         XCTAssertNil(session.agentSession)
         XCTAssertNil(session.agentTitle)

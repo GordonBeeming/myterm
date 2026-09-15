@@ -216,6 +216,15 @@ struct SettingsView: View {
                 Text("A banner arrives only while MyTerm is not the app in front, and carries a swatch of the workspace's folder colour. Clicking it opens the tab. This applies to the whole app and is not inherited by folders or workspaces.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+
+                Toggle("Show the agent bell in the toolbar", isOn: Binding(
+                    get: { model.store.globalSettings.showsAgentNotificationBell },
+                    set: { isShown in model.updateGlobalSettings { $0.showsAgentNotificationBell = isShown } }
+                ))
+
+                Text("The list of tabs whose agent needs you is kept either way, so turning the bell back on shows what was missed.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Agent sessions") {

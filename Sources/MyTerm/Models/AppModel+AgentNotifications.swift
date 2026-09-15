@@ -19,6 +19,12 @@ extension AppModel {
         return agentInbox.containsTab(in: workspace.allTabs.map(\.id))
     }
 
+    /// Whether the toolbar shows the bell. The inbox is kept either way, so turning the bell back
+    /// on shows what was missed while it was hidden.
+    var showsAgentNotificationBell: Bool {
+        store.globalSettings.showsAgentNotificationBell
+    }
+
     /// The backlog as the popover shows it: what is unread, newest first.
     var agentNotificationItems: [AgentNotificationItem] {
         resolve(agentInbox.items)

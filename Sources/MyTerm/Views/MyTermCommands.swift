@@ -150,6 +150,8 @@ struct MyTermCommands: Commands {
                 startup.model?.isAgentNotificationsPresented = true
             }
             .shortcut(MyTermCommandShortcuts.showNotifications)
+            // The popover hangs off the bell, so without the bell there is nothing to show.
+            .disabled(startup.model?.showsAgentNotificationBell != true)
         }
 
         CommandMenu("Tabs") {
