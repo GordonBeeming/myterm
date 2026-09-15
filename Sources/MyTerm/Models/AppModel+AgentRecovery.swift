@@ -28,14 +28,10 @@ extension AppModel {
         let handle: AgentSessionHandle?
         switch report.activity {
         case .exited:
+            guard !isExitOfAnotherConversation(report, in: terminal) else { return }
             if liveAgentTabs[tabID] == report.agent {
                 liveAgentTabs.removeValue(forKey: tabID)
             }
-            // Only the agent holding the pane's saved conversation can retire it, so a second agent
-            // in the same pane cannot discard the first one's session.
-            guard let saved = terminal.agentSession,
-                  saved.agent == report.agent,
-                  report.sessionID == nil || report.sessionID == saved.sessionID else { return }
             handle = nil
         case .ready, .working, .finished, .awaitingInput:
             liveAgentTabs[tabID] = report.agent
@@ -53,6 +49,31 @@ extension AppModel {
         )
     }
 
+    /// Whether an exit report is about a conversation the pane no longer holds.
+    ///
+    /// Only the agent holding the pane's saved conversation can retire it: a second agent in the
+    /// same pane cannot discard the first one's session, and a SessionEnd that arrives late, after
+    /// the pane has already moved to another conversation, says nothing about the one it is in now.
+    /// A pane with no saved conversation has nothing such a report could be wrong about.
+    func isExitOfAnotherConversation(_ report: AgentActivityReport, in terminal: TerminalSession) -> Bool {
+        guard report.activity == .exited, let saved = terminal.agentSession else { return false }
+        return saved.agent != report.agent
+            || (report.sessionID != nil && report.sessionID != saved.sessionID)
+    }
+
+    /// Retires everything a pane's agent left behind when it went without its own hook saying so:
+    /// the cook, the agent, and the saved conversation.
+    func forgetAgent(
+        workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
+        tabID: TabID,
+        sessionID: TerminalSessionID
+    ) {
+        forgetAgentAttention(forTab: tabID)
+        liveAgentTabs.removeValue(forKey: tabID)
+        forgetAgentSession(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID, sessionID: sessionID)
+    }
+
     /// Drops the saved conversation of a pane that has nothing running in it.
     ///
     /// A pane sitting at its shell prompt has already left its agent, so restoring it would resume
@@ -63,12 +84,21 @@ extension AppModel {
         tabID: TabID,
         sessionID: TerminalSessionID
     ) {
+        guard let process = terminalSessions[sessionID],
+              process.activeForegroundProcessName == nil else { return }
+        forgetAgentSession(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID, sessionID: sessionID)
+    }
+
+    private func forgetAgentSession(
+        workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
+        tabID: TabID,
+        sessionID: TerminalSessionID
+    ) {
         guard let terminal = tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)?
             .terminalSession,
             terminal.id == sessionID,
-            terminal.agentSession != nil,
-            let process = terminalSessions[sessionID],
-            process.activeForegroundProcessName == nil else { return }
+            terminal.agentSession != nil else { return }
 
         updateAgentSession(
             nil,

@@ -99,7 +99,7 @@ MyTerm is flat by default. Depth comes from macOS window materials, source-list 
 - **Scene:** A native macOS Settings window, separate from the workspace window.
 - **Browser data:** One picker with four plain-language choices, ordered from widest to narrowest: Across all workspaces, Per MyTerm folder, Per workspace, and Per project directory. "Folder" always means a sidebar folder and "directory" always means a path on disk, so the two never read as the same thing.
 - **Expectation:** Say that the choice affects new browser panes and that existing panes keep their current profile.
-- **Agents:** One section covers agent hooks and agent recovery together, because the hooks are what make recovery possible. Name the file each button writes, say that only MyTerm's own hooks are added or removed, and say that restoring rejoins the pane's last conversation with the agent's own resume command.
+- **Agents:** Agent activity, agent notifications, and agent sessions are three sections in that order. The hook buttons live under activity, since the cook is what they were made for; name the file each button writes and say that only MyTerm's own hooks are added or removed. The sessions section holds one scoped toggle, says that restoring rejoins the pane's last conversation with the agent's own resume command, and points back at the hooks above rather than repeating them, because the hooks are what make recovery possible.
 - **Passkeys:** Show whether the signed build has Apple's managed browser entitlement and browser access. Request access from a clear button, never on launch. State that MyTerm passes requests to macOS, does not store passkeys, and leaves the choice of credential provider to the user.
 
 ### App Icon

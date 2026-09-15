@@ -2322,19 +2322,21 @@ final class AppModel {
                 tabID: tabID,
                 message: exitCode.map { "Terminal exited with status \($0)." } ?? "Terminal closed."
             )
+            // Nothing is running in a pane whose shell has gone, whatever the last hook said, and
+            // the foreground poll that would have noticed an agent killed before it has stopped.
+            forgetAgent(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID, sessionID: sessionID)
         case .foregroundProcessChanged(let name):
             // The shell back in front of a pane that held an agent means the agent left without
             // its own hook saying so. What that hook would have retired is retired here.
             guard name == nil, liveAgentTabs[tabID] != nil else { return }
-            forgetAgentAttention(forTab: tabID)
-            liveAgentTabs.removeValue(forKey: tabID)
-            forgetAgentSessionOfIdlePane(
-                workspaceID: workspaceID,
-                tabGroupID: tabGroupID,
-                tabID: tabID,
-                sessionID: sessionID
-            )
+            forgetAgent(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID, sessionID: sessionID)
         case .agentActivity(let report):
+            // A SessionEnd from a conversation the pane has already left says nothing about the
+            // one it is in now, so neither the cook nor the session hears it.
+            if let terminal = tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)?.terminalSession,
+               isExitOfAnotherConversation(report, in: terminal) {
+                return
+            }
             recordAgentActivity(
                 report,
                 workspaceID: workspaceID,

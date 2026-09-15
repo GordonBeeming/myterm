@@ -58,6 +58,22 @@ final class AgentLifecycleTests: XCTestCase {
         XCTAssertEqual(fixture.savedSession?.sessionID, "second")
     }
 
+    func testALateSessionEndFromTheConversationBeforeLeavesTheCurrentOneAlone() throws {
+        // The user quits conversation A and starts B in the same pane, but A's SessionEnd hook is
+        // slow and lands after B's SessionStart. It is about a conversation the pane has left.
+        let fixture = try makeFixture(isActive: false)
+        fixture.emit(.ready, session: "a")
+        fixture.emit(.ready, session: "b")
+        fixture.emit(.working, session: "b")
+        XCTAssertEqual(fixture.model.agentAttention(forTab: fixture.tabID), .working)
+
+        fixture.emit(.exited, session: "a")
+
+        XCTAssertEqual(fixture.savedSession?.sessionID, "b", "the handle is B's")
+        XCTAssertEqual(fixture.model.liveAgentTabs[fixture.tabID], "claude", "B is still live")
+        XCTAssertEqual(fixture.model.agentAttention(forTab: fixture.tabID), .working, "and still working")
+    }
+
     func testAPromptWithNoSessionStartStillAdoptsTheConversation() throws {
         // Hooks installed while an agent was already running: the first thing MyTerm hears is
         // UserPromptSubmit.
@@ -114,6 +130,25 @@ final class AgentLifecycleTests: XCTestCase {
 
         let relaunched = try makeFixture(in: fixture.directory, isActive: false)
         XCTAssertEqual(relaunched.engine.configurations.first?.initialCommand, "claude --resume 'abc'")
+    }
+
+    func testTheShellExitingTakesTheAgentAndItsConversationWithIt() throws {
+        // The agent was killed without its SessionEnd hook running, then the shell exited too.
+        // The foreground poll stops with the shell, so nothing else can notice the agent is gone,
+        // and a pane whose terminal has ended has no conversation to come back to.
+        let fixture = try makeFixture(isActive: false)
+        fixture.session.activeForegroundProcessName = "claude"
+        fixture.emit(.awaitingInput, session: "abc")
+        XCTAssertEqual(fixture.savedSession?.sessionID, "abc")
+
+        fixture.session.emit(.processTerminated(exitCode: 0))
+
+        XCTAssertNil(fixture.model.agentAttention(forTab: fixture.tabID), "the cook goes")
+        XCTAssertNil(fixture.model.liveAgentTabs[fixture.tabID], "so does the agent")
+        XCTAssertNil(fixture.savedSession, "and the conversation")
+
+        let relaunched = try makeFixture(in: fixture.directory, isActive: false)
+        XCTAssertNil(relaunched.engine.configurations.first?.initialCommand, "the pane comes back to a prompt")
     }
 
     // MARK: - An agent killed without its SessionEnd

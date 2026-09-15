@@ -59,9 +59,10 @@ public enum AgentSessionResume {
     /// Only agents MyTerm knows the resume syntax for are restored. An unknown agent gets a normal
     /// prompt rather than a guessed command.
     ///
-    /// Codex is deliberately absent. Its hooks report a fresh identifier for each turn rather than
-    /// the session identifier `codex resume` takes, so a pane restored from one would open on an
-    /// error instead of the conversation. Codex hooks still drive the attention indicator.
+    /// Codex is deliberately absent: it is activity-only. Its hooks drive the cook beside the tab,
+    /// but they report a fresh identifier for each turn rather than the session identifier
+    /// `codex resume` takes, so a pane restored from one would open on an error instead of the
+    /// conversation. A Codex pane always comes back to a prompt.
     public static func command(for handle: AgentSessionHandle) -> String? {
         switch handle.agent {
         case "claude":
