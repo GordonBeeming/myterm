@@ -2112,23 +2112,6 @@ final class AppModel {
             name: tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)?.customTitle,
             settings: settings
         ) : nil
-        // A pane that comes back without its resume command comes back to a prompt, and a pane at
-        // its prompt has left its conversation. The name goes with it, whether or not there was a
-        // handle to resume: a Codex pane carries a name and nothing to resume.
-        if initialCommand == nil, resumeCommand == nil, session.agentSession != nil || session.agentTitle != nil {
-            try store.updateTerminalAgentSession(
-                workspaceID: workspaceID,
-                tabGroupID: tabGroupID,
-                tabID: tabID,
-                agentSession: nil
-            )
-            try store.updateTerminalAgentTitle(
-                workspaceID: workspaceID,
-                tabGroupID: tabGroupID,
-                tabID: tabID,
-                agentTitle: nil
-            )
-        }
         let process = try terminalEngine.makeSession(
             configuration: TerminalSessionConfiguration(
                 shell: shellURL(for: settings.shell),
@@ -2176,6 +2159,30 @@ final class AppModel {
         } catch {
             terminalSessions.removeValue(forKey: session.id)
             throw error
+        }
+        // A pane that comes back without its resume command comes back to a prompt, and a pane at
+        // its prompt has left its conversation. The name goes with it, whether or not there was a
+        // handle to resume: a Codex pane carries a name and nothing to resume. Cleared only once
+        // the pane is running: a pane that failed to start has no prompt either, and keeps its
+        // conversation for the next attempt.
+        if initialCommand == nil, resumeCommand == nil, session.agentSession != nil || session.agentTitle != nil {
+            do {
+                try store.updateTerminalAgentSession(
+                    workspaceID: workspaceID,
+                    tabGroupID: tabGroupID,
+                    tabID: tabID,
+                    agentSession: nil
+                )
+                try store.updateTerminalAgentTitle(
+                    workspaceID: workspaceID,
+                    tabGroupID: tabGroupID,
+                    tabID: tabID,
+                    agentTitle: nil
+                )
+            } catch {
+                removeTerminalRuntime(session.id)
+                throw error
+            }
         }
     }
 

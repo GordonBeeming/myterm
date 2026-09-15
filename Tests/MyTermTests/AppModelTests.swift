@@ -3621,6 +3621,37 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(relaunchEngine.configurations.first?.initialCommand)
     }
 
+    func testAPaneThatFailsToStartKeepsItsConversationForTheNextAttempt() throws {
+        // Restore is off, so a pane that starts would drop its handle on the way to a prompt. One
+        // that never starts has no prompt, and must not lose the conversation as well.
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let firstEngine = CapturingTerminalEngine()
+        let firstModel = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: firstEngine,
+            startsTerminalProcesses: true
+        )
+        firstModel.updateGlobalSettings { $0.restoresAgentSessions = false }
+        let session = try XCTUnwrap(firstEngine.sessions.first)
+        session.activeForegroundProcessName = "claude"
+        session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .working, sessionID: "abc-123")))
+
+        let relaunched = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: FailingTerminalEngine(),
+            startsTerminalProcesses: true
+        )
+
+        XCTAssertNotNil(relaunched.errorDescription, "the failure is reported")
+        XCTAssertEqual(
+            relaunched.selectedWorkspace.selectedTab?.terminalSession?.agentSession,
+            AgentSessionHandle(agent: "claude", sessionID: "abc-123")
+        )
+    }
+
     func testTurningOffAgentRestoreBringsThePaneBackToAPrompt() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
@@ -3689,6 +3720,15 @@ private final class CloseConfirmationRecorder {
     func confirm(_ prompt: ActiveProcessClosePrompt) -> Bool {
         prompts.append(prompt)
         return allowsClose
+    }
+}
+
+@MainActor
+private final class FailingTerminalEngine: TerminalEngine {
+    struct Failure: Error {}
+
+    func makeSession(configuration: TerminalSessionConfiguration) throws -> any TerminalProcessSession {
+        throw Failure()
     }
 }
 

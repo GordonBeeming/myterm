@@ -134,6 +134,30 @@ final class AgentLifecycleTests: XCTestCase {
         XCTAssertEqual(fixture.model.agentAttention(forTab: fixture.tabID), .working)
     }
 
+    func testASessionEndStillInFlightFromTheEarlierLifeCannotEndTheRejoinedOne() throws {
+        // The user quits A and resumes it straight away. A's first SessionEnd hook is slow, and its
+        // report lands after the rejoin's SessionStart. Nothing in the report says which life it is
+        // from, so until the new life's first turn reports, an end for A is taken for the old one.
+        let fixture = try makeFixture(isActive: false)
+        fixture.emit(.ready, session: "a")
+        fixture.emit(.exited, session: "a")
+        fixture.emit(.ready, session: "a")
+        XCTAssertEqual(fixture.savedSession?.sessionID, "a", "rejoined")
+
+        fixture.emit(.exited, session: "a")
+        XCTAssertEqual(fixture.savedSession?.sessionID, "a", "the stale end is dropped")
+        XCTAssertEqual(fixture.model.liveAgentTabs[fixture.tabID], "claude")
+
+        fixture.emit(.working, session: "a")
+        XCTAssertEqual(fixture.savedSession?.sessionID, "a")
+        XCTAssertEqual(fixture.model.agentAttention(forTab: fixture.tabID), .working)
+
+        // Once the new life has spoken, its own end is heard.
+        fixture.emit(.exited, session: "a")
+        XCTAssertNil(fixture.savedSession)
+        XCTAssertNil(fixture.model.liveAgentTabs[fixture.tabID])
+    }
+
     func testAPromptWithNoSessionStartStillAdoptsTheConversation() throws {
         // Hooks installed while an agent was already running: the first thing MyTerm hears is
         // UserPromptSubmit.
