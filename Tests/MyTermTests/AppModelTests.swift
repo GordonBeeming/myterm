@@ -395,6 +395,7 @@ final class AppModelTests: XCTestCase {
             store.selectedWorkspace.tab(groupID: inactiveGroupID, tabID: inactiveSecondID)?.browserSession?.id
         )
         try store.selectWorkspace(selectedWorkspaceID)
+        try store.flush()
 
         let model = try AppModel(
             channel: .development,
@@ -854,6 +855,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(secondSession.appliedRuntimeConfigurations.last?.fontSize, 72)
 
         let persistenceURL = MyTermChannel.development.persistenceURL(applicationSupportDirectory: directory)
+        model.persistWorkspaceStore()
         let restored = try WorkspaceStore(persistenceURL: persistenceURL)
         XCTAssertEqual(
             restored.workspaces.first { $0.id == secondWorkspaceID }?.settingsOverrides?.fontSize,
@@ -954,6 +956,7 @@ final class AppModelTests: XCTestCase {
             recentText: "session id: 1234"
         )
         let engine = CapturingTerminalEngine()
+        try store.flush()
 
         _ = try AppModel(
             channel: .development,
@@ -3516,6 +3519,7 @@ final class AppModelTests: XCTestCase {
         session.activeForegroundProcessName = "claude"
         session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .working, sessionID: "abc-123")))
         firstModel.persistTerminalSnapshots()
+        firstModel.persistWorkspaceStore()
 
         let relaunchEngine = CapturingTerminalEngine()
         _ = try AppModel(

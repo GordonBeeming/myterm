@@ -289,6 +289,7 @@ final class AgentLifecycleTests: XCTestCase {
 
         XCTAssertEqual(fixture.savedSession?.sessionID, "abc", "the quit already decided what to keep")
 
+        fixture.model.persistWorkspaceStore()
         let relaunched = try makeFixture(in: fixture.directory, isActive: false)
         XCTAssertEqual(relaunched.engine.configurations.first?.initialCommand, "claude --resume 'abc'")
     }
@@ -310,6 +311,7 @@ final class AgentLifecycleTests: XCTestCase {
         XCTAssertNil(fixture.model.liveAgentTabs[fixture.tabID], "so does the agent")
         XCTAssertNil(fixture.savedSession, "and the conversation")
 
+        fixture.model.persistWorkspaceStore()
         let relaunched = try makeFixture(in: fixture.directory, isActive: false)
         XCTAssertNil(relaunched.engine.configurations.first?.initialCommand, "the pane comes back to a prompt")
     }
@@ -370,6 +372,7 @@ final class AgentLifecycleTests: XCTestCase {
         fixture.session.activeForegroundProcessName = "claude"
         fixture.emit(.working, session: "abc")
         fixture.model.persistTerminalSnapshots()
+        fixture.model.persistWorkspaceStore()
         let relaunched = try makeFixture(in: fixture.directory, isActive: false)
         XCTAssertEqual(relaunched.savedSession?.sessionID, "abc")
 
@@ -429,6 +432,7 @@ final class AgentLifecycleTests: XCTestCase {
         fixture.session.activeForegroundProcessName = "claude"
         fixture.emit(.working, session: "abc")
         fixture.model.persistTerminalSnapshots()
+        fixture.model.persistWorkspaceStore()
 
         let relaunched = try makeFixture(in: fixture.directory, isActive: false)
 
@@ -445,6 +449,7 @@ final class AgentLifecycleTests: XCTestCase {
 
         // Turned back on before the relaunch, in Settings or by editing the file.
         fixture.model.updateGlobalSettings { $0.restoresAgentSessions = true }
+        fixture.model.persistWorkspaceStore()
         let relaunched = try makeFixture(in: fixture.directory, isActive: false)
 
         XCTAssertEqual(relaunched.engine.configurations.first?.initialCommand, "claude --resume 'abc'")
@@ -460,6 +465,7 @@ final class AgentLifecycleTests: XCTestCase {
         XCTAssertEqual(fixture.displayTitle, "Fix the build")
         XCTAssertNil(fixture.savedSession)
         fixture.model.persistTerminalSnapshots()
+        fixture.model.persistWorkspaceStore()
 
         let relaunched = try makeFixture(in: fixture.directory, isActive: false)
 
@@ -473,6 +479,7 @@ final class AgentLifecycleTests: XCTestCase {
         fixture.emit(.working, session: "abc")
         fixture.model.renameTab(fixture.tabID, in: fixture.tabGroupID, title: "Fix the build")
         fixture.model.persistTerminalSnapshots()
+        fixture.model.persistWorkspaceStore()
 
         let relaunched = try makeFixture(in: fixture.directory, isActive: false)
 

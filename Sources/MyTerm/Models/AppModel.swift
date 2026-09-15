@@ -230,6 +230,11 @@ final class AppModel {
         if let sessionID = selectedTab?.terminalSession?.id {
             terminalSessions[sessionID]?.focus()
         }
+        // A mutation no longer writes the file itself; the write lands on the next run loop turn,
+        // so this is the only place a failed write can reach the banner.
+        store.onPersistenceFailure = { [weak self] error in
+            self?.present(error)
+        }
     }
 
     var workspaces: [Workspace] {
@@ -2517,6 +2522,12 @@ final class AppModel {
         process.onEvent = nil
         process.setContentChangeHandler(nil)
         process.terminate()
+    }
+
+    /// Writes whatever the coalesced store has not written yet. Quitting is the one moment the
+    /// next run loop turn never comes.
+    func persistWorkspaceStore() {
+        perform { try store.flush() }
     }
 
     /// Quitting never routes through the per-tab close path, so it relies on the kernel's SIGHUP when the

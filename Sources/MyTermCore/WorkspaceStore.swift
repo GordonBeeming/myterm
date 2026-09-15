@@ -269,6 +269,21 @@ public final class WorkspaceStore {
     public private(set) var snapshot: WorkspaceStoreSnapshot
     public private(set) var loadReport: WorkspaceStoreLoadReport
 
+    /// Whether the in-memory snapshot is ahead of the file.
+    ///
+    /// A mutation changes the snapshot at once and leaves the file for the next turn of the main
+    /// run loop, so a burst of small writes (an agent retitling its conversation, a loop pinning
+    /// every workspace) costs one encode rather than one per change. `flush()` brings the file up
+    /// to date on demand; the app calls it before it quits.
+    public private(set) var hasUnsavedChanges = false
+
+    /// Told about a write the scheduled flush could not make. A mutation itself cannot throw for
+    /// the file any more, so this is where an unwritable disk or an unencodable value surfaces.
+    /// The snapshot keeps the change and stays dirty, so the next flush tries again.
+    public var onPersistenceFailure: ((Error) -> Void)?
+
+    private var isFlushScheduled = false
+
     /// Whether the store keeps its state in memory only.
     ///
     /// A repair rewrites the state file, and the backup beside it is the only copy of what the file
@@ -367,7 +382,19 @@ public final class WorkspaceStore {
         try write(snapshot, fileManager: fileManager)
     }
 
-    public func save() throws { try write(snapshot, fileManager: .default) }
+    /// Writes the snapshot whether or not anything changed.
+    public func save() throws {
+        try write(snapshot, fileManager: .default)
+        hasUnsavedChanges = false
+    }
+
+    /// Writes the snapshot now if a mutation has left the file behind. Nothing to write is not an
+    /// error. A failure leaves the store dirty so a later flush can succeed.
+    public func flush() throws {
+        guard hasUnsavedChanges else { return }
+        try write(snapshot, fileManager: .default)
+        hasUnsavedChanges = false
+    }
 
     public func resolvedSettings(for workspaceID: WorkspaceID) throws -> TerminalPreferences {
         let workspace = try workspace(workspaceID)
@@ -1188,8 +1215,28 @@ public final class WorkspaceStore {
         var next = snapshot
         try body(&next)
         next.repair()
-        try write(next, fileManager: .default)
         snapshot = next
+        hasUnsavedChanges = true
+        scheduleFlush()
+    }
+
+    /// One write per turn of the main run loop, however many mutations land in that turn.
+    private func scheduleFlush() {
+        guard !isFlushScheduled, !isPersistenceSuspended else { return }
+        isFlushScheduled = true
+        let store = WeakStore(self)
+        DispatchQueue.main.async {
+            store.value?.performScheduledFlush()
+        }
+    }
+
+    private func performScheduledFlush() {
+        isFlushScheduled = false
+        do {
+            try flush()
+        } catch {
+            onPersistenceFailure?(error)
+        }
     }
 
     private struct WorkspaceRemoval {
@@ -2018,5 +2065,16 @@ private struct LegacyBrowserSession: Decodable {
             url: url,
             profile: profile
         )
+    }
+}
+
+/// The store is used from one thread (the main actor in the app), so a weak reference to it can
+/// cross the dispatch boundary without a lock. Marked rather than proven because the store itself
+/// is deliberately not `Sendable`.
+private final class WeakStore: @unchecked Sendable {
+    private(set) weak var value: WorkspaceStore?
+
+    init(_ value: WorkspaceStore) {
+        self.value = value
     }
 }

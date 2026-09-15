@@ -40,6 +40,7 @@ final class WorkspaceStoreCompatibilityTests: XCTestCase {
             workspaceID: workspace.id, tabGroupID: group.id, tabID: group.selectedTabID, agentTitle: "Fix the build"
         )
         try store.updateGlobalSettings { $0.restoresAgentSessions = false }
+        try store.flush()
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: stateURL)) as? [String: Any])
         return (store.snapshot, json)
     }
@@ -100,6 +101,7 @@ final class WorkspaceStoreCompatibilityTests: XCTestCase {
         let store = try WorkspaceStore(persistenceURL: stateURL)
         let workspace = store.selectedWorkspace
         try store.updateWorkspaceSettings(workspace.id) { $0.scrollbackLines = 5_000 }
+        try store.flush()
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: stateURL)) as? [String: Any])
         try JSONSerialization.data(withJSONObject: reshapedToMain(json)).write(to: stateURL)
 
