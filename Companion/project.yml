@@ -22,6 +22,8 @@ settings:
     TARGETED_DEVICE_FAMILY: "1,2"
     DEVELOPMENT_TEAM: "$(TEAM_ID)"
     CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: "0.28"
+    CURRENT_PROJECT_VERSION: "1"
 targets:
   MyTermCompanion:
     type: application
@@ -33,6 +35,8 @@ targets:
       - path: Views
       - path: Shared
       - path: Support/Assets.xcassets
+        buildPhase: resources
+      - path: Support/PrivacyInfo.xcprivacy
         buildPhase: resources
     dependencies:
       - package: MyTerm
@@ -46,7 +50,9 @@ targets:
     info:
       path: Support/MyTermCompanion-Info.plist
       properties:
-        CFBundleDisplayName: MyTerm
+        CFBundleDisplayName: "$(MYTERM_DISPLAY_NAME)"
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
@@ -84,9 +90,12 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       configs:
         Debug:
+          MYTERM_DISPLAY_NAME: MyTerm Dev
           APS_ENVIRONMENT: development
           APP_ATTEST_ENVIRONMENT: development
         Release:
+          PROVISIONING_PROFILE_SPECIFIER: "$(MYTERM_APP_PROVISIONING_PROFILE)"
+          MYTERM_DISPLAY_NAME: MyTerm
           APS_ENVIRONMENT: production
           APP_ATTEST_ENVIRONMENT: production
   MyTermNotificationService:
@@ -103,6 +112,8 @@ targets:
       path: Support/MyTermNotificationService-Info.plist
       properties:
         CFBundleDisplayName: MyTerm Notification Service
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.usernotifications.service
           NSExtensionPrincipalClass: "$(PRODUCT_MODULE_NAME).NotificationService"
@@ -123,6 +134,7 @@ targets:
         Debug:
           APS_ENVIRONMENT: development
         Release:
+          PROVISIONING_PROFILE_SPECIFIER: "$(MYTERM_NOTIFICATION_PROVISIONING_PROFILE)"
           APS_ENVIRONMENT: production
   MyTermCompanionTests:
     type: bundle.unit-test
