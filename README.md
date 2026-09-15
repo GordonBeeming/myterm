@@ -149,6 +149,26 @@ The banner is named after the workspace, the tab, or both, whichever you pick, a
 swatch of the workspace's folder colour, so a glance is enough to tell which project wants you.
 A workspace outside a folder uses its own colour. Clicking the banner opens that tab.
 
+### Work through a backlog of waiting agents
+
+The same events fill a notifications backlog. A bell in the toolbar carries the number of agents
+waiting for you, and opening it lists them newest first, with the workspace and tab each one is in.
+Press **Show Notifications** (<kbd>⇧⌘I</kbd>) to open the list from the keyboard.
+
+Click a row to go to that tab. Reaching a tab is what reads its notification, so the row disappears
+whether you clicked it, clicked the tab, switched to its workspace, or landed on it by closing the
+tab beside it. A pane hidden behind a full-screen pane counts as out of sight until the layout comes
+back. **Clear All** reads every tab in the list at once, so the cooks go quiet with the bell.
+
+One tab keeps one row, so a pane that finishes several turns does not fill the list. The row says
+what the agent reported last: a question replaces a finished turn, and a finished turn replaces a
+question you answered somewhere MyTerm did not see. An agent that starts working again takes its
+own row back, and a row follows its tab into another pane.
+
+What the bell has listed is kept as history in `agent-notifications.json`, beside the workspace
+state. After a relaunch the list is empty, because an entry that survived a restart would point at
+work you have moved on from, but the history is still there to read.
+
 ### Send web links to Safari instead
 
 MyTerm's own browser is the default destination for web links. To use a real browser, set **Open web links in** in Browser Settings to **Default browser** or to a specific application, such as Safari or Google Chrome. The picker lists the browsers installed on this Mac.
@@ -227,6 +247,7 @@ The companion targets iOS and iPadOS 27. Browser tabs currently expose their tit
 | Split focused pane down | <kbd>⇧⌘D</kbd> |
 | Close focused pane or tab | <kbd>⌘W</kbd> |
 | Toggle workspace sidebar | <kbd>⌘B</kbd> |
+| Show notifications | <kbd>⇧⌘I</kbd> |
 
 [docs/SHORTCUTS.md](docs/SHORTCUTS.md) lists every supported shortcut and its native menu path.
 

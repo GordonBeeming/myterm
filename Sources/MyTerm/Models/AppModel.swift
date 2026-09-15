@@ -98,6 +98,19 @@ final class AppModel {
     func startCompanionHostIfEnabled() {
         companionHost.startIfEnabled()
     }
+
+    /// The agents that finished, or asked a question, while the user was looking somewhere else,
+    /// and the history of what they did before. Saved beside the workspace state; what comes back
+    /// after a relaunch comes back read, because the agents it pointed at went with the processes.
+    var agentInbox = AgentNotificationInbox() {
+        // Every tab switch reads the tab it lands on, which is a mutating call whether or not the
+        // tab had anything waiting. Only a real change is worth a file write on the main thread.
+        didSet { if oldValue != agentInbox { persistAgentInbox() } }
+    }
+    /// Where the history lives between launches, beside the workspace state.
+    @ObservationIgnored let agentInboxURL: URL
+    /// Whether the notifications popover is open. The toolbar bell and the menu command share it.
+    var isAgentNotificationsPresented = false
     var paneTabDragSession: PaneTabDragSession?
     var paneTabDragRegistrations: [TabGroupID: PaneTabDragRegistration] = [:]
     var nextBrowserAddressFocusToken: UInt64 = 0
@@ -159,7 +172,13 @@ final class AppModel {
         companionStorageNamespace = Data(
             SHA256.hash(data: Data(supportDirectory.standardizedFileURL.path.utf8))
         ).base64EncodedString()
-        store = try WorkspaceStore(persistenceURL: channel.persistenceURL(applicationSupportDirectory: supportDirectory))
+        let persistenceURL = channel.persistenceURL(applicationSupportDirectory: supportDirectory)
+        store = try WorkspaceStore(persistenceURL: persistenceURL)
+        agentInboxURL = persistenceURL.deletingLastPathComponent()
+            .appending(path: "agent-notifications.json", directoryHint: .notDirectory)
+        var savedInbox = Self.loadAgentInbox(from: agentInboxURL)
+        savedInbox.markAllRead()
+        agentInbox = savedInbox
         recoveryNotice = WorkspaceRecoveryNotice(loadReport: store.loadReport)
         self.browserSettings = browserSettings ?? BrowserSettingsStore(channel: channel)
         recentWorkspaceEmojis = self.browserSettings.recentWorkspaceEmojis
@@ -392,7 +411,7 @@ final class AppModel {
                 title: nextWorkspaceTitle(),
                 folderID: targetFolderID
             )
-            maximizedTabGroupID = nil
+            exitPaneFullScreen()
             guard let createdWorkspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
                 throw AppModelError.workspaceUnavailable(workspaceID)
             }
@@ -469,11 +488,19 @@ final class AppModel {
 
     func toggleFocusedPaneFullScreen() {
         guard maximizedTabGroup == nil else {
-            maximizedTabGroupID = nil
+            exitPaneFullScreen()
             return
         }
         let focusedTabGroupID = selectedWorkspace.focusedTabGroupID
         maximizedTabGroupID = focusedTabGroupID
+    }
+
+    /// Leaving full screen brings the other panes back on screen, which is as much reaching their
+    /// selected tabs as clicking them. Safe to call when nothing is full screen.
+    private func exitPaneFullScreen() {
+        guard maximizedTabGroupID != nil else { return }
+        maximizedTabGroupID = nil
+        markVisibleTabsAsRead()
     }
 
     func beginRenamingSelectedTab() {
@@ -549,7 +576,7 @@ final class AppModel {
             let data = try Data(contentsOf: url)
             let result = try store.importWorkspaces(fromJSON: data)
             summary = result
-            maximizedTabGroupID = nil
+            exitPaneFullScreen()
             pendingStartupCommands.merge(result.startupCommands) { _, new in new }
             // Imported workspaces have no running processes yet. Selecting one restores them, but
             // the import selects a workspace itself, so start the selected one here.
@@ -1527,7 +1554,7 @@ final class AppModel {
         guard store.selectedWorkspaceID == workspaceID,
               maximizedTabGroupID != nil,
               maximizedTabGroupID != tabGroupID else { return }
-        maximizedTabGroupID = nil
+        exitPaneFullScreen()
     }
 
     func focusTerminal(direction: PaneFocusDirection) {
@@ -2447,6 +2474,12 @@ final class AppModel {
             $0.id == lifecycle.selectedWorkspaceID
         }) {
             restoreRuntimeObjects(in: selectedWorkspace)
+        }
+        // Closing moves the selection to a neighbour, which is as much reaching a tab as clicking
+        // it. Only while MyTerm is in front, though: a page can close its own tab with nobody at
+        // the Mac.
+        if isApplicationActive() {
+            markVisibleTabsAsRead()
         }
     }
 

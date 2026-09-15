@@ -45,6 +45,7 @@ enum MyTermCommandShortcuts {
     static let previousWorkspace = KeyChord(key: "[", modifiers: [.command, .control])
     static let nextWorkspace = KeyChord(key: "]", modifiers: [.command, .control])
     static let toggleSidebar = KeyChord(key: "b", modifiers: [.command])
+    static let showNotifications = KeyChord(key: "i", modifiers: [.command, .shift])
 
     // Tabs
     static let newTerminalTab = KeyChord(key: "t", modifiers: [.command])
@@ -84,7 +85,7 @@ enum MyTermCommandShortcuts {
         globalSettings,
         newWorkspace, newFolder, renameWorkspace,
         decreaseWorkspaceFontSize, increaseWorkspaceFontSize,
-        closeWorkspace, previousWorkspace, nextWorkspace, toggleSidebar,
+        closeWorkspace, previousWorkspace, nextWorkspace, toggleSidebar, showNotifications,
         newTerminalTab, newBrowserTab, renameTab, previousTab, nextTab,
         togglePaneFullScreen, splitRight, splitBelow, closeFocusedPaneOrTab,
         focusPaneLeft, focusPaneUp, focusPaneRight, focusPaneDown,
@@ -145,6 +146,10 @@ struct MyTermCommands: Commands {
             Divider()
             Button("Toggle Sidebar") { startup.model?.toggleSidebar() }
                 .shortcut(MyTermCommandShortcuts.toggleSidebar)
+            Button("Show Notifications") {
+                startup.model?.isAgentNotificationsPresented = true
+            }
+            .shortcut(MyTermCommandShortcuts.showNotifications)
         }
 
         CommandMenu("Tabs") {

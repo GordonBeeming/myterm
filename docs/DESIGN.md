@@ -94,6 +94,15 @@ MyTerm is flat by default. Depth comes from macOS window materials, source-list 
 - **Behavior:** Browser and terminal panes can share horizontal and vertical split groups.
 - **Commands:** Reload, address focus, history, find, and page zoom target only the selected browser tab. Reload From Origin and Stop Loading live in the Browser menu without overriding rename or cancel keys.
 
+### Notifications
+
+- **Entry point:** One bell in the primary toolbar. It stays in place when nothing is waiting, so the toolbar never reflows, and it carries a count only when there is one.
+- **List:** A 320 pt popover, newest first, showing five rows and a sliver of the sixth so a long backlog reads as "scroll for more" rather than a hard cutoff.
+- **Row:** One line saying what the agent did, then a caption with the workspace, the tab, and how long ago. Names are resolved from the live workspace, so renaming a tab renames the row.
+- **States:** A finished turn and a question use different glyphs as well as different colors, so the two never read alike.
+- **Reading:** Clicking a row goes to its tab, which is also what clears it. A Clear All in the header reads every tab in the list.
+- **Empty:** Say plainly that nothing is waiting. Do not hide the control.
+
 ### Settings
 
 - **Scene:** A native macOS Settings window, separate from the workspace window.
@@ -119,7 +128,7 @@ MyTerm is flat by default. Depth comes from macOS window materials, source-list 
 ### Commands
 
 - **Visible path:** Toolbar, contextual menu, or local action button for every frequent task.
-- **Keyboard path:** Native menu commands for workspace creation, terminal and browser tabs, splits, close, and sidebar visibility.
+- **Keyboard path:** Native menu commands for workspace creation, terminal and browser tabs, splits, close, sidebar visibility, and the notifications backlog.
 - **Contextual zoom:** Command-Minus and Command-Equals change browser page zoom when a browser is selected, or the active workspace's terminal font size when a terminal is selected. Command-0 resets browser page zoom.
 
 ### Persistence and Recovery
@@ -130,6 +139,7 @@ MyTerm is flat by default. Depth comes from macOS window materials, source-list 
 - **Lossy recovery:** If malformed array elements must be discarded, preserve the original bytes in a separate adjacent recovery backup before committing repaired state.
 - **Identity:** Keep already-unique workspace, group, tab, pane, split, terminal-session, and browser-session identifiers stable across migration and repair.
 - **Agent tab names:** Name a tab after the agent conversation running in its pane, taken from the terminal title the agent already writes. Take a title only while an agent has reported itself in the pane, so a shell's title is never mistaken for a conversation name, and never over a title the user typed. Keep only a plain short name out of what arrives: the title is terminal bytes, which any program in the pane can write.
+- **Agent notifications:** Derive the tab cook, the bell, and the banner from one inbox fed by the same hook event, so the three cannot disagree. Reaching the tab reads the entry, one tab holds one entry, and the latest report is what the entry says. Keep what the bell has listed as history in its own file beside the workspace state, read one row at a time so a bad row cannot lose the file, deduplicated, newest first, capped on load, and written only when it changes. It comes back read: the agents it pointed at went with the processes.
 - **Agent sessions:** Persist the agent conversation a terminal pane was in, and re-enter it on the next launch with that agent's own resume command. Save only what an agent hook reports, keep the identifier out of the interface, and drop it when the pane is left at a shell prompt. Restore an agent only when its reported identifier is one its resume command accepts: a pane that opens on a resume error is worse than a pane that opens on a prompt.
 
 ## Do's and Don'ts

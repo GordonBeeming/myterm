@@ -21,6 +21,26 @@ final class AgentLifecycleTests: XCTestCase {
 
     // MARK: - Hook order
 
+    func testAStopBeforeANotificationLeavesTheQuestionStanding() throws {
+        let fixture = try makeFixture(isActive: false)
+
+        fixture.emit(.finished, session: "abc")
+        fixture.emit(.awaitingInput, session: "abc")
+
+        XCTAssertEqual(fixture.model.agentAttention(forTab: fixture.tabID), .awaitingInput)
+        XCTAssertEqual(fixture.model.agentNotificationItems.map(\.activity), [.awaitingInput])
+    }
+
+    func testTwoNotificationsWithNoStopBetweenThemKeepOneRow() throws {
+        let fixture = try makeFixture(isActive: false)
+
+        fixture.emit(.awaitingInput, session: "abc")
+        fixture.emit(.awaitingInput, session: "abc")
+
+        XCTAssertEqual(fixture.model.agentNotificationCount, 1)
+        XCTAssertEqual(fixture.model.agentInbox.history.count, 1, "the same question twice is one row")
+    }
+
     func testASessionEndWithNoSessionStartChangesNothing() throws {
         let fixture = try makeFixture(isActive: false)
 
@@ -30,6 +50,7 @@ final class AgentLifecycleTests: XCTestCase {
         XCTAssertTrue(fixture.model.agentAttention.isEmpty)
         XCTAssertTrue(fixture.model.liveAgentTabs.isEmpty)
         XCTAssertNil(fixture.savedSession)
+        XCTAssertTrue(fixture.model.agentInbox.history.isEmpty)
     }
 
     func testAResumeInTheSamePaneMovesTheTabToTheNewConversation() throws {
@@ -143,6 +164,28 @@ final class AgentLifecycleTests: XCTestCase {
         XCTAssertEqual(fixture.savedSession?.sessionID, "second", "or the conversation")
     }
 
+    func testAHookThatArrivesAfterTheTabMovedLandsOnThePaneTheTabIsInNow() throws {
+        let fixture = try makeFixture(isActive: true)
+        fixture.model.createTerminalTab()
+        guard case .moved(let newGroupID) = fixture.model.moveTabToNewGroup(
+            workspaceID: fixture.workspaceID,
+            sourceTabGroupID: fixture.tabGroupID,
+            tabID: fixture.tabID,
+            beside: fixture.tabGroupID,
+            edge: .right
+        ) else {
+            return XCTFail("precondition: the tab moves into a new pane")
+        }
+        XCTAssertEqual(fixture.model.selectedWorkspace.group(id: newGroupID)?.selectedTabID, fixture.tabID)
+
+        // The moved tab is selected in its new pane and the app is in front, so a finish there
+        // has already been seen. A callback still bound to the old pane would file it unread.
+        fixture.emit(.finished, session: "abc")
+
+        XCTAssertTrue(fixture.model.agentNotificationItems.isEmpty)
+        XCTAssertNil(fixture.model.agentAttention(forTab: fixture.tabID))
+    }
+
     // MARK: - Hooks around the tab's own lifecycle
 
     func testAHookThatArrivesAfterTheTabClosedTouchesNothing() throws {
@@ -156,6 +199,7 @@ final class AgentLifecycleTests: XCTestCase {
 
         XCTAssertTrue(fixture.model.agentAttention.isEmpty, "a closed tab cannot hold a cook")
         XCTAssertTrue(fixture.model.liveAgentTabs.isEmpty, "a closed tab cannot hold an agent")
+        XCTAssertTrue(fixture.model.agentInbox.history.isEmpty, "nothing about a tab that is gone is filed or saved")
     }
 
     func testAHookThatArrivesAfterTheWorkspaceWasDeletedTouchesNothing() throws {
@@ -168,6 +212,7 @@ final class AgentLifecycleTests: XCTestCase {
 
         XCTAssertTrue(fixture.model.agentAttention.isEmpty)
         XCTAssertTrue(fixture.model.liveAgentTabs.isEmpty)
+        XCTAssertTrue(fixture.model.agentInbox.history.isEmpty)
     }
 
     func testASessionEndThatArrivesAsTheAppQuitsCannotForgetTheConversation() throws {
@@ -197,10 +242,12 @@ final class AgentLifecycleTests: XCTestCase {
         fixture.session.activeForegroundProcessName = "claude"
         fixture.emit(.awaitingInput, session: "abc")
         XCTAssertEqual(fixture.savedSession?.sessionID, "abc")
+        XCTAssertEqual(fixture.model.agentNotificationCount, 1)
 
         fixture.session.emit(.processTerminated(exitCode: 0))
 
         XCTAssertNil(fixture.model.agentAttention(forTab: fixture.tabID), "the cook goes")
+        XCTAssertEqual(fixture.model.agentNotificationCount, 0, "a dead pane cannot be waiting for anyone")
         XCTAssertNil(fixture.model.liveAgentTabs[fixture.tabID], "so does the agent")
         XCTAssertNil(fixture.savedSession, "and the conversation")
 
