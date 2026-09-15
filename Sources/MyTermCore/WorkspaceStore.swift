@@ -579,17 +579,21 @@ public final class WorkspaceStore {
         try moveWorkspace(workspaceID, to: folderID, before: nil)
     }
 
+    /// Passing `isPinned` moves the workspace into that pinned band as part of the same write, so a
+    /// drag that crosses the pin boundary does not have to land in an intermediate invalid order.
     public func moveWorkspace(
         _ workspaceID: WorkspaceID,
         to folderID: WorkspaceFolderID?,
-        before targetID: WorkspaceID?
+        before targetID: WorkspaceID?,
+        isPinned: Bool? = nil
     ) throws {
         let source = try workspace(workspaceID)
+        let destinationPinned = isPinned ?? source.isPinned
         if let folderID { _ = try folderIndex(folderID, in: snapshot) }
         guard workspaceID != targetID else { return }
         if let targetID {
             let target = try workspace(targetID)
-            guard target.folderID == folderID, target.isPinned == source.isPinned else {
+            guard target.folderID == folderID, target.isPinned == destinationPinned else {
                 throw WorkspaceStoreError.invariantViolation(
                     reason: "Workspace \(targetID) is not in the requested destination and pinned band."
                 )
@@ -603,13 +607,14 @@ public final class WorkspaceStore {
                 insertionIndex = try workspaceIndex(targetID, in: snapshot)
             } else {
                 let band = snapshot.workspaces.indices.filter {
-                    snapshot.workspaces[$0].folderID == folderID && snapshot.workspaces[$0].isPinned == source.isPinned
+                    snapshot.workspaces[$0].folderID == folderID
+                        && snapshot.workspaces[$0].isPinned == destinationPinned
                 }
                 if let last = band.last {
                     insertionIndex = last + 1
                 } else {
                     let destination = snapshot.workspaces.indices.filter { snapshot.workspaces[$0].folderID == folderID }
-                    if let first = destination.first, source.isPinned {
+                    if let first = destination.first, destinationPinned {
                         insertionIndex = first
                     } else if let last = destination.last {
                         insertionIndex = last + 1
@@ -620,6 +625,7 @@ public final class WorkspaceStore {
             }
             var moved = source
             moved.folderID = folderID
+            moved.isPinned = destinationPinned
             snapshot.workspaces.insert(moved, at: insertionIndex)
         }
     }
