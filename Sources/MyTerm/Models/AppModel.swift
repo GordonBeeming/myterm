@@ -62,6 +62,9 @@ final class AppModel {
     /// What each tab's agent is doing. A tab with nothing to say is simply absent.
     /// Runtime only: an indicator that survived a relaunch would point at work the user has moved on from.
     var agentAttention: [TabID: AgentActivity] = [:]
+    /// Tabs that have an agent in them, by agent name, as the hooks last reported.
+    /// Runtime only: it says what is running now, which is the one thing a saved handle cannot say.
+    var liveAgentTabs: [TabID: String] = [:]
     let agentNotifications: AgentNotificationSettings
     /// Whether MyTerm is the app the user is looking at. Injected so tests can be either.
     let isApplicationActive: @MainActor () -> Bool
@@ -141,7 +144,7 @@ final class AppModel {
         updates: UpdateController? = nil,
         agentNotifications: AgentNotificationSettings? = nil,
         makeAgentNotificationPoster: @escaping @MainActor () -> any AgentNotificationPosting = { UserNotificationPoster() },
-        isApplicationActive: @escaping @MainActor () -> Bool = { NSApp.isActive },
+        isApplicationActive: @escaping @MainActor () -> Bool = { NSApp?.isActive ?? false },
         makeCompanionHost: @escaping CompanionHostFactory = { model, channel, namespace in
             CompanionHostModel(appModel: model, channel: channel, storageNamespace: namespace)
         }
@@ -1854,6 +1857,12 @@ final class AppModel {
                 tabID: tabID,
                 sessionID: sessionID
             )
+            forgetAgentSessionOfIdlePane(
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID,
+                sessionID: sessionID
+            )
         }
     }
 
@@ -2055,7 +2064,10 @@ final class AppModel {
         } else {
             workingDirectory = try newSessionWorkingDirectory(for: workspaceID)
         }
-        if session.workingDirectory?.standardizedFileURL != workingDirectory {
+        // An agent conversation belongs to the directory it ran in, so a pane that had to fall back
+        // to another directory has nothing there to rejoin.
+        let keepsSavedDirectory = session.workingDirectory?.standardizedFileURL == workingDirectory
+        if !keepsSavedDirectory {
             try store.updateTerminalWorkingDirectory(
                 workspaceID: workspaceID,
                 tabGroupID: tabGroupID,
@@ -2063,11 +2075,22 @@ final class AppModel {
                 workingDirectory: workingDirectory
             )
         }
+        let resumeCommand = keepsSavedDirectory ? agentResumeCommand(for: session, settings: settings) : nil
+        // A pane that comes back without its resume command comes back to a prompt, and a pane at
+        // its prompt has left its conversation.
+        if initialCommand == nil, resumeCommand == nil, session.agentSession != nil {
+            try store.updateTerminalAgentSession(
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID,
+                agentSession: nil
+            )
+        }
         let process = try terminalEngine.makeSession(
             configuration: TerminalSessionConfiguration(
                 shell: shellURL(for: settings.shell),
                 workingDirectory: workingDirectory,
-                initialCommand: initialCommand,
+                initialCommand: initialCommand ?? resumeCommand,
                 environment: MyTermBrowserLauncher.environment(
                     executableURL: browserLauncherURL,
                     workspaceID: workspaceID,
@@ -2299,12 +2322,31 @@ final class AppModel {
                 tabID: tabID,
                 message: exitCode.map { "Terminal exited with status \($0)." } ?? "Terminal closed."
             )
+        case .foregroundProcessChanged(let name):
+            // The shell back in front of a pane that held an agent means the agent left without
+            // its own hook saying so. What that hook would have retired is retired here.
+            guard name == nil, liveAgentTabs[tabID] != nil else { return }
+            forgetAgentAttention(forTab: tabID)
+            liveAgentTabs.removeValue(forKey: tabID)
+            forgetAgentSessionOfIdlePane(
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID,
+                sessionID: sessionID
+            )
         case .agentActivity(let report):
             recordAgentActivity(
                 report,
                 workspaceID: workspaceID,
                 tabGroupID: tabGroupID,
                 tabID: tabID
+            )
+            recordAgentSession(
+                report,
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID,
+                sessionID: sessionID
             )
         case .titleChanged:
             break
@@ -2325,6 +2367,7 @@ final class AppModel {
             removeTerminalRuntime(sessionID)
         }
         forgetAgentAttention(forTab: tab.id)
+        liveAgentTabs.removeValue(forKey: tab.id)
     }
 
     private func closeTab(
@@ -2376,6 +2419,10 @@ final class AppModel {
     private func removeTerminalRuntime(_ sessionID: TerminalSessionID) {
         terminalSnapshotTasks.removeValue(forKey: sessionID)?.cancel()
         guard let process = terminalSessions.removeValue(forKey: sessionID) else { return }
+        // Bytes the process already wrote can still be parsed after this, and a hook that fires
+        // as the agent is hung up can still reach the PTY. Neither may touch a tab that is gone,
+        // or undo the snapshot a quit has just written.
+        process.onEvent = nil
         process.setContentChangeHandler(nil)
         process.terminate()
     }

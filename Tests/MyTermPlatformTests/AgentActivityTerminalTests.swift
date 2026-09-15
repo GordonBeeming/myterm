@@ -34,14 +34,14 @@ final class AgentActivityTerminalTests: XCTestCase {
         var reports: [AgentActivityReport] = []
         view.onAgentActivity = { reports.append($0) }
 
-        let marker = "\u{1B}]\(AgentActivityMarker.oscCode);agent=claude;event=finished\u{07}"
+        let marker = "\u{1B}]\(AgentActivityMarker.oscCode);agent=claude;event=finished;session=abc-123\u{07}"
         let bytes = Array(marker.utf8)
         for split in 1..<bytes.count {
             reports = []
             view.feedBytes(bytes[..<split])
             XCTAssertTrue(reports.isEmpty, "nothing to report until the terminator arrives, split at \(split)")
             view.feedBytes(bytes[split...])
-            XCTAssertEqual(reports, [AgentActivityReport(agent: "claude", activity: .finished)], "split at \(split)")
+            XCTAssertEqual(reports, [AgentActivityReport(agent: "claude", activity: .finished, sessionID: "abc-123")], "split at \(split)")
         }
     }
 
@@ -54,17 +54,17 @@ final class AgentActivityTerminalTests: XCTestCase {
         XCTAssertEqual(reports.map(\.activity), [.working, .finished])
     }
 
-    func testAMarkerInsideAMarkerReportsBothWithTheOuterCutShort() {
+    func testAMarkerInsideAMarkerReportsTheOuterWithoutTheInnersSession() {
         let view = MyTermLocalProcessTerminalView(frame: NSRect(x: 0, y: 0, width: 200, height: 100))
         var reports: [AgentActivityReport] = []
         view.onAgentActivity = { reports.append($0) }
 
         // The inner ESC ends the outer string, so what the outer reports is what stood before it;
         // the inner one is then a marker of its own.
-        view.feed("\u{1B}]\(AgentActivityMarker.oscCode);agent=claude;event=finished;session=\u{1B}]\(AgentActivityMarker.oscCode);agent=codex;event=working\u{07}")
+        view.feed("\u{1B}]\(AgentActivityMarker.oscCode);agent=claude;event=finished;session=\u{1B}]\(AgentActivityMarker.oscCode);agent=codex;event=exited\u{07}")
         XCTAssertEqual(reports, [
             AgentActivityReport(agent: "claude", activity: .finished),
-            AgentActivityReport(agent: "codex", activity: .working),
+            AgentActivityReport(agent: "codex", activity: .exited),
         ])
     }
 

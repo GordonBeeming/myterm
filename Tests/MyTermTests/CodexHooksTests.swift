@@ -13,7 +13,7 @@ final class CodexHooksTests: XCTestCase {
         XCTAssertTrue(controller.isInstalled)
 
         let hooks = try readHooks(at: url)
-        XCTAssertEqual(Set(hooks.keys), ["UserPromptSubmit", "Stop", "PermissionRequest"])
+        XCTAssertEqual(Set(hooks.keys), ["SessionStart", "UserPromptSubmit", "Stop", "PermissionRequest"])
         XCTAssertNil(hooks["Notification"], "Notification is Claude's name for it, not Codex's")
 
         let stop = try XCTUnwrap(command(in: hooks, event: "Stop"))

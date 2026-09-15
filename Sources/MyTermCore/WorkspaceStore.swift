@@ -1049,6 +1049,21 @@ public final class WorkspaceStore {
         }
     }
 
+    public func updateTerminalAgentSession(
+        workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
+        tabID: TabID,
+        agentSession: AgentSessionHandle?
+    ) throws {
+        try updateTab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID) { tab in
+            guard case .terminal(var session) = tab.content else {
+                throw WorkspaceStoreError.terminalTabRequired(tabID)
+            }
+            session.agentSession = agentSession
+            tab.content = .terminal(session)
+        }
+    }
+
     public func updateBrowserURL(
         workspaceID: WorkspaceID,
         tabGroupID: TabGroupID,

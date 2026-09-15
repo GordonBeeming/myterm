@@ -99,6 +99,7 @@ MyTerm is flat by default. Depth comes from macOS window materials, source-list 
 - **Scene:** A native macOS Settings window, separate from the workspace window.
 - **Browser data:** One picker with four plain-language choices, ordered from widest to narrowest: Across all workspaces, Per MyTerm folder, Per workspace, and Per project directory. "Folder" always means a sidebar folder and "directory" always means a path on disk, so the two never read as the same thing.
 - **Expectation:** Say that the choice affects new browser panes and that existing panes keep their current profile.
+- **Agents:** One section covers agent hooks and agent recovery together, because the hooks are what make recovery possible. Name the file each button writes, say that only MyTerm's own hooks are added or removed, and say that restoring rejoins the pane's last conversation with the agent's own resume command.
 - **Passkeys:** Show whether the signed build has Apple's managed browser entitlement and browser access. Request access from a clear button, never on launch. State that MyTerm passes requests to macOS, does not store passkeys, and leaves the choice of credential provider to the user.
 
 ### App Icon
@@ -128,6 +129,7 @@ MyTerm is flat by default. Depth comes from macOS window materials, source-list 
 - **Migration:** Before the first v2 write, atomically preserve the exact v1 file at a deterministic adjacent backup path.
 - **Lossy recovery:** If malformed array elements must be discarded, preserve the original bytes in a separate adjacent recovery backup before committing repaired state.
 - **Identity:** Keep already-unique workspace, group, tab, pane, split, terminal-session, and browser-session identifiers stable across migration and repair.
+- **Agent sessions:** Persist the agent conversation a terminal pane was in, and re-enter it on the next launch with that agent's own resume command. Save only what an agent hook reports, keep the identifier out of the interface, and drop it when the pane is left at a shell prompt. Restore an agent only when its reported identifier is one its resume command accepts: a pane that opens on a resume error is worse than a pane that opens on a prompt.
 
 ## Do's and Don'ts
 
@@ -142,7 +144,7 @@ MyTerm is flat by default. Depth comes from macOS window materials, source-list 
 
 ### Don't:
 
-- **Don't** copy cmux's notifications, agent status, per-workspace status metadata, or other features outside the requested workflow.
+- **Don't** copy cmux's notifications, agent status, per-workspace status metadata, or other features outside the requested workflow. Restoring an agent session is persistence, not a status layer: it belongs in the pane's saved state and in Settings, never in workspace chrome.
 - **Don't** use decorative terminal chrome, novelty controls, or motion that interrupts focused work.
 - **Don't** build terminal rendering on web technology when a native implementation is available.
 - **Don't** turn workspaces, tabs, or terminal panes into floating cards.

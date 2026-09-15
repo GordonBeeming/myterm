@@ -3440,6 +3440,213 @@ final class AppModelTests: XCTestCase {
         return registrationID
     }
 
+    // MARK: - Agent session recovery
+
+    func testAnAgentReportSavesTheConversationToComeBackTo() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let session = try XCTUnwrap(engine.sessions.first)
+
+        session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .finished, sessionID: "abc-123")))
+
+        XCTAssertEqual(
+            model.selectedWorkspace.selectedTab?.terminalSession?.agentSession,
+            AgentSessionHandle(agent: "claude", sessionID: "abc-123")
+        )
+    }
+
+    func testAResumedAgentIsNotShownAsWorkingOrNeedingYou() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let tab = try XCTUnwrap(model.selectedWorkspace.selectedTab)
+        let session = try XCTUnwrap(engine.sessions.first)
+
+        session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .ready, sessionID: "abc-123")))
+
+        XCTAssertNil(model.agentAttention(forTab: tab.id), "A resumed pane has nothing for the user to act on")
+        XCTAssertEqual(
+            model.selectedWorkspace.selectedTab?.terminalSession?.agentSession,
+            AgentSessionHandle(agent: "claude", sessionID: "abc-123"),
+            "Starting an agent is still where the conversation is captured"
+        )
+    }
+
+    func testAnAgentMyTermCannotResumeIsNotSaved() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let session = try XCTUnwrap(engine.sessions.first)
+
+        session.emit(.agentActivity(AgentActivityReport(agent: "some-other-agent", activity: .finished, sessionID: "abc")))
+
+        XCTAssertNil(model.selectedWorkspace.selectedTab?.terminalSession?.agentSession)
+    }
+
+    func testASavedConversationIsResumedOnTheNextLaunch() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let firstEngine = CapturingTerminalEngine()
+        let firstModel = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: firstEngine,
+            startsTerminalProcesses: true
+        )
+        let session = try XCTUnwrap(firstEngine.sessions.first)
+        session.activeForegroundProcessName = "claude"
+        session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .working, sessionID: "abc-123")))
+        firstModel.persistTerminalSnapshots()
+
+        let relaunchEngine = CapturingTerminalEngine()
+        _ = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: relaunchEngine,
+            startsTerminalProcesses: true
+        )
+
+        XCTAssertEqual(relaunchEngine.configurations.first?.initialCommand, "claude --resume 'abc-123'")
+    }
+
+    func testAnAgentThatStoppedLeavesNothingToResume() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let session = try XCTUnwrap(engine.sessions.first)
+        session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .finished, sessionID: "abc-123")))
+
+        session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .exited, sessionID: "abc-123")))
+
+        XCTAssertNil(model.selectedWorkspace.selectedTab?.terminalSession?.agentSession)
+    }
+
+    func testAPaneLeftAtItsShellPromptLosesItsSavedConversation() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let session = try XCTUnwrap(engine.sessions.first)
+        session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .finished, sessionID: "abc-123")))
+        session.activeForegroundProcessName = nil
+
+        model.persistTerminalSnapshots()
+
+        XCTAssertNil(model.selectedWorkspace.selectedTab?.terminalSession?.agentSession)
+    }
+
+    func testAPaneStillRunningItsAgentKeepsTheSavedConversation() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let session = try XCTUnwrap(engine.sessions.first)
+        session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .finished, sessionID: "abc-123")))
+        session.activeForegroundProcessName = "claude"
+
+        model.persistTerminalSnapshots()
+
+        XCTAssertEqual(
+            model.selectedWorkspace.selectedTab?.terminalSession?.agentSession,
+            AgentSessionHandle(agent: "claude", sessionID: "abc-123")
+        )
+    }
+
+    func testAPaneThatLostItsDirectoryDoesNotTryToRejoinTheConversation() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let workingDirectory = directory.appending(path: "project", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: workingDirectory, withIntermediateDirectories: true)
+        let firstEngine = CapturingTerminalEngine()
+        let firstModel = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: firstEngine,
+            startsTerminalProcesses: true
+        )
+        let tab = try XCTUnwrap(firstModel.selectedWorkspace.selectedTab)
+        try firstModel.store.updateTerminalWorkingDirectory(
+            workspaceID: firstModel.store.selectedWorkspaceID,
+            tabGroupID: firstModel.selectedWorkspace.focusedTabGroupID,
+            tabID: tab.id,
+            workingDirectory: workingDirectory
+        )
+        let session = try XCTUnwrap(firstEngine.sessions.first)
+        session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .working, sessionID: "abc-123")))
+        try FileManager.default.removeItem(at: workingDirectory)
+
+        let relaunchEngine = CapturingTerminalEngine()
+        _ = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: relaunchEngine,
+            startsTerminalProcesses: true
+        )
+
+        XCTAssertNil(relaunchEngine.configurations.first?.initialCommand)
+    }
+
+    func testTurningOffAgentRestoreBringsThePaneBackToAPrompt() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let firstEngine = CapturingTerminalEngine()
+        let firstModel = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: firstEngine,
+            startsTerminalProcesses: true
+        )
+        firstModel.updateGlobalSettings { $0.restoresAgentSessions = false }
+        let session = try XCTUnwrap(firstEngine.sessions.first)
+        session.activeForegroundProcessName = "claude"
+        session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .working, sessionID: "abc-123")))
+
+        let relaunchEngine = CapturingTerminalEngine()
+        _ = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: relaunchEngine,
+            startsTerminalProcesses: true
+        )
+
+        XCTAssertNil(relaunchEngine.configurations.first?.initialCommand)
+    }
+
     private func makeModel(applicationSupportDirectory: URL) throws -> AppModel {
         let suiteName = "MyTermTests.\(applicationSupportDirectory.lastPathComponent)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {
@@ -3530,5 +3737,8 @@ private final class CapturingTerminalSession: TerminalProcessSession {
     }
     func emitContentChanged() {
         contentChangeHandler?()
+    }
+    func emit(_ event: TerminalSessionEvent) {
+        onEvent?(event)
     }
 }

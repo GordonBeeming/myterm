@@ -30,8 +30,10 @@ extension AppModel {
             tabGroupID: tabGroupID,
             tabID: tabID
         )
-        // Setting nil removes the entry, which is how a read tab loses its cook.
-        agentAttention[tabID] = isInFrontOfUser ? report.activity.afterReading : report.activity
+        // Setting nil removes the entry, which is how a read tab loses its cook. A session that
+        // only started, or has ended, has no cook to show and clears the tab the same way.
+        let shown: AgentActivity? = report.activity.showsCook ? report.activity : nil
+        agentAttention[tabID] = isInFrontOfUser ? shown.flatMap(\.afterReading) : shown
         if let sessionID = store.workspaces
             .first(where: { $0.id == workspaceID })?
             .tab(groupID: tabGroupID, tabID: tabID)?

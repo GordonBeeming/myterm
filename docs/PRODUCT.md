@@ -29,6 +29,7 @@ Native, quiet, dependable. The interface should feel dense without becoming cram
 - Make workspaces scannable by title alone.
 - Let collapsible, color-coded folders separate work and personal contexts without adding metadata to workspace rows.
 - Keep sessions alive independently of which workspace or tab is visible.
+- Treat a quit as a pause. Work in progress, including an agent conversation, should survive a restart.
 - Keep tab selection local to the pane group that owns it, including Control-Tab navigation.
 - Give every frequent action a clear keyboard path and a visible interface path.
 - Prefer native macOS behavior for windows, focus, menus, tabs, accessibility, and appearance.
@@ -56,6 +57,10 @@ Browser navigation stays compact and familiar: Back, Forward, Refresh, then Addr
 ## Workspace persistence and recovery
 
 The persisted model follows the visible hierarchy: workspace, split layout, pane groups, then local tabs. Split proportions and each group's selected tab restore with the workspace. A v1 migration preserves the exact legacy bytes in an adjacent backup before its first v2 write. If decoding retains usable state but drops malformed elements, MyTerm preserves the original bytes in a separate adjacent recovery backup before saving the repaired snapshot.
+
+A terminal pane also restores the agent conversation it was in. Claude Code reports its conversation identifier through the same hooks that mark a tab needing attention, MyTerm saves it beside the pane's working directory, and the next launch runs that agent's own resume command. A pane left at its shell prompt comes back to a shell prompt, so leaving the agent is how the user says the work is finished. Only agents whose resume command MyTerm knows are restored, and only an identifier short enough and plain enough to be safe in a command is kept.
+
+Codex is not restored, because its hooks report a new identifier for every turn rather than the one its resume command accepts. Restoring from that identifier would open the pane on an error, which is worse for the user than a plain prompt. Codex hooks still report activity for the tab indicator.
 
 ## Accessibility & Inclusion
 
