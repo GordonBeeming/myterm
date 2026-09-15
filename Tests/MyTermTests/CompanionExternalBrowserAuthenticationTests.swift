@@ -133,7 +133,7 @@ private final class RecordingURLHandler: MyTermURLHandling {
 }
 
 @MainActor
-private func XCTAssertThrowsErrorAsync<T>(
+private func XCTAssertThrowsErrorAsync<T: Sendable>(
     _ expression: @autoclosure () async throws -> T,
     _ handler: (Error) -> Void
 ) async {
