@@ -366,18 +366,23 @@ enum SidebarDropCalculations {
     /// folder, so the row highlights. Another folder lands beside it, so the folders preview.
     /// `folders` and `nextFolderID` describe the previewed order, for the same reason as
     /// `workspaceRowFeedback`.
+    ///
+    /// `storedWorkspaces` is the model's list, not the previewed one. Filing asks where the
+    /// workspace lives, and a preview that slid it across folders already shows it living here:
+    /// judged on the previewed list, this folder's row would refuse the very drop it is the target
+    /// of.
     static func folderRowFeedback(
         _ item: SidebarDragItem?,
         folderID: WorkspaceFolderID,
         nextFolderID: WorkspaceFolderID?,
         locationY: CGFloat,
         renderedHeight: CGFloat,
-        workspaces: [Workspace],
+        storedWorkspaces: [Workspace],
         folders: [WorkspaceFolder]
     ) -> SidebarDropFeedback {
         switch item {
         case .workspace(let sourceID):
-            guard let source = workspaces.first(where: { $0.id == sourceID }),
+            guard let source = storedWorkspaces.first(where: { $0.id == sourceID }),
                   containerAcceptsWorkspace(source: source, folderID: folderID) else {
                 return .none
             }

@@ -109,7 +109,7 @@ final class DesktopStressTests: XCTestCase {
                 nextFolderID: nil,
                 locationY: 5,
                 renderedHeight: 22,
-                workspaces: [source],
+                storedWorkspaces: [source],
                 folders: [empty]
             )
             XCTAssertEqual(feedback, .highlight, "expanded=\(isExpanded)")

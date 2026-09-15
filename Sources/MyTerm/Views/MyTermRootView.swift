@@ -218,11 +218,14 @@ private struct WorkspaceContentView: View {
 }
 
 /// What a sidebar row needs to take part in the drag in flight: the rows as they are currently
-/// shown (the model with any open preview applied) and the sidebar's handling of what the row
-/// resolves under the pointer.
+/// shown (the model with any open preview applied), the workspaces as the model stores them, and
+/// the sidebar's handling of what the row resolves under the pointer.
 private struct SidebarDropSession {
     let workspaces: [Workspace]
     let folders: [WorkspaceFolder]
+    /// The model's workspaces with no preview applied. A folder row files against these, because
+    /// a preview can already be showing the dragged workspace inside that folder.
+    let storedWorkspaces: [Workspace]
     let previewing: SidebarDropPreviewing
     let commit: (SidebarDropFeedback) -> Bool
 }
@@ -255,6 +258,7 @@ private struct WorkspaceSidebar: View {
         SidebarDropSession(
             workspaces: previewedWorkspaces,
             folders: previewedFolders,
+            storedWorkspaces: model.workspaces,
             previewing: SidebarDropPreviewing(apply: applyDropFeedback, exited: rowDropExited),
             commit: commitDrop
         )
@@ -848,7 +852,7 @@ private struct WorkspaceFolderRow: View {
                     nextFolderID: nextFolderID,
                     locationY: location.y,
                     renderedHeight: renderedRowHeightValue,
-                    workspaces: dropSession.workspaces,
+                    storedWorkspaces: dropSession.storedWorkspaces,
                     folders: dropSession.folders
                 )
             },

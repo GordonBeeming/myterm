@@ -428,7 +428,7 @@ final class InteractionBehaviorTests: XCTestCase {
                 nextFolderID: nil,
                 locationY: 10,
                 renderedHeight: 40,
-                workspaces: [workspace],
+                storedWorkspaces: [workspace],
                 folders: folders
             ),
             .highlight
@@ -440,7 +440,7 @@ final class InteractionBehaviorTests: XCTestCase {
                 nextFolderID: folderB.id,
                 locationY: 10,
                 renderedHeight: 40,
-                workspaces: [workspace],
+                storedWorkspaces: [workspace],
                 folders: folders
             ),
             SidebarDropFeedback.none
@@ -453,7 +453,7 @@ final class InteractionBehaviorTests: XCTestCase {
                 nextFolderID: folderB.id,
                 locationY: 10,
                 renderedHeight: 40,
-                workspaces: [workspace],
+                storedWorkspaces: [workspace],
                 folders: folders
             ),
             .preview(.folder(folderB.id, before: folderA.id))
@@ -466,7 +466,7 @@ final class InteractionBehaviorTests: XCTestCase {
                 nextFolderID: folderB.id,
                 locationY: 10,
                 renderedHeight: 40,
-                workspaces: [workspace],
+                storedWorkspaces: [workspace],
                 folders: folders
             ),
             .keep
@@ -478,7 +478,7 @@ final class InteractionBehaviorTests: XCTestCase {
                 nextFolderID: folderB.id,
                 locationY: 10,
                 renderedHeight: 40,
-                workspaces: [workspace],
+                storedWorkspaces: [workspace],
                 folders: folders
             ),
             SidebarDropFeedback.none
@@ -993,7 +993,7 @@ final class InteractionBehaviorTests: XCTestCase {
                 nextFolderID: c.id,
                 locationY: 5,
                 renderedHeight: 30,
-                workspaces: [filedInA],
+                storedWorkspaces: [filedInA],
                 folders: folders
             ),
             .highlight
@@ -1005,7 +1005,7 @@ final class InteractionBehaviorTests: XCTestCase {
                 nextFolderID: b.id,
                 locationY: 5,
                 renderedHeight: 30,
-                workspaces: [filedInA],
+                storedWorkspaces: [filedInA],
                 folders: folders
             ),
             .none
@@ -1019,7 +1019,7 @@ final class InteractionBehaviorTests: XCTestCase {
                 nextFolderID: c.id,
                 locationY: 5,
                 renderedHeight: 30,
-                workspaces: [filedInA],
+                storedWorkspaces: [filedInA],
                 folders: folders
             ),
             .keep
@@ -1030,7 +1030,7 @@ final class InteractionBehaviorTests: XCTestCase {
             nextFolderID: c.id,
             locationY: 25,
             renderedHeight: 30,
-            workspaces: [filedInA],
+            storedWorkspaces: [filedInA],
             folders: folders
         )
         XCTAssertEqual(swapped, .preview(.folder(a.id, before: c.id)))
@@ -1045,7 +1045,7 @@ final class InteractionBehaviorTests: XCTestCase {
                 nextFolderID: c.id,
                 locationY: 5,
                 renderedHeight: 30,
-                workspaces: [filedInA],
+                storedWorkspaces: [filedInA],
                 folders: previewed
             ),
             .keep
@@ -1057,7 +1057,7 @@ final class InteractionBehaviorTests: XCTestCase {
                 nextFolderID: a.id,
                 locationY: 25,
                 renderedHeight: 30,
-                workspaces: [filedInA],
+                storedWorkspaces: [filedInA],
                 folders: previewed
             ),
             .keep
@@ -1069,7 +1069,7 @@ final class InteractionBehaviorTests: XCTestCase {
                 nextFolderID: a.id,
                 locationY: 5,
                 renderedHeight: 30,
-                workspaces: [filedInA],
+                storedWorkspaces: [filedInA],
                 folders: previewed
             ),
             .preview(.folder(a.id, before: b.id))
@@ -1081,12 +1081,68 @@ final class InteractionBehaviorTests: XCTestCase {
                 nextFolderID: c.id,
                 locationY: 5,
                 renderedHeight: 30,
-                workspaces: [filedInA],
+                storedWorkspaces: [filedInA],
                 folders: folders
             ),
             .none
         )
     }
+
+    /// A workspace previewed across folders is shown inside the destination folder, so the rows
+    /// the sidebar renders already say it lives there. The destination folder's own row must still
+    /// take it: filing asks where the workspace is stored, not where the preview is showing it.
+    func testFolderRowStillTakesAWorkspacePreviewedIntoItFromAnotherFolder() {
+        let a = WorkspaceFolder(id: WorkspaceFolderID(), title: "A")
+        let b = WorkspaceFolder(id: WorkspaceFolderID(), title: "B")
+        let folders = [a, b]
+        let source = Workspace(title: "Source", folderID: a.id)
+        let target = Workspace(title: "Target", folderID: b.id)
+        let stored = [source, target]
+
+        let feedback = SidebarDropCalculations.workspaceRowFeedback(
+            .workspace(source.id),
+            target: target,
+            locationY: 5,
+            renderedHeight: 30,
+            in: stored
+        )
+        XCTAssertEqual(
+            feedback,
+            .preview(.workspace(source.id, folderID: b.id, isPinned: false, before: target.id))
+        )
+        guard case .preview(let preview) = feedback else { return XCTFail("expected a preview") }
+        let shown = SidebarDropCalculations.previewedWorkspaces(stored, applying: preview)
+        XCTAssertEqual(shown.map(\.folderID), [b.id, b.id], "The preview shows the source filed in B")
+
+        // The pointer moves up onto B's own row while that preview is open. The row files against
+        // the stored list, where the source still lives in A, so it takes the drop.
+        XCTAssertEqual(
+            SidebarDropCalculations.folderRowFeedback(
+                .workspace(source.id),
+                folderID: b.id,
+                nextFolderID: nil,
+                locationY: 15,
+                renderedHeight: 30,
+                storedWorkspaces: stored,
+                folders: folders
+            ),
+            .highlight
+        )
+        XCTAssertEqual(
+            SidebarDropCalculations.folderRowFeedback(
+                .workspace(source.id),
+                folderID: b.id,
+                nextFolderID: nil,
+                locationY: 15,
+                renderedHeight: 30,
+                storedWorkspaces: shown,
+                folders: folders
+            ),
+            .none,
+            "Judged on the previewed rows the folder refuses its own drop, which is why it is never given them"
+        )
+    }
+
 
     // MARK: - Live preview stability
 
@@ -1161,7 +1217,7 @@ final class InteractionBehaviorTests: XCTestCase {
             nextFolderID: nil,
             locationY: 25,
             renderedHeight: 30,
-            workspaces: workspaces,
+            storedWorkspaces: workspaces,
             folders: folders
         )
         XCTAssertEqual(feedback, .preview(.folder(first.id, before: nil)))
@@ -1257,7 +1313,7 @@ final class InteractionBehaviorTests: XCTestCase {
             nextFolderID: next(after: target.id, in: folders),
             locationY: locationY,
             renderedHeight: 30,
-            workspaces: [],
+            storedWorkspaces: [],
             folders: folders
         )
         guard case .preview(let preview) = first else {
@@ -1277,7 +1333,7 @@ final class InteractionBehaviorTests: XCTestCase {
             nextFolderID: next(after: target.id, in: previewed),
             locationY: locationY,
             renderedHeight: 30,
-            workspaces: [],
+            storedWorkspaces: [],
             folders: previewed
         )
         switch again {
