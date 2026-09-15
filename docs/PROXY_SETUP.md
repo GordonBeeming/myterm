@@ -90,19 +90,20 @@ curl --fail --show-error --location --output "$RELAY_ASSET.sha256" \
 sha256sum --check "$RELAY_ASSET.sha256" && sudo docker load --input "$RELAY_ASSET"
 RELAY_IMAGE="myterm-relay:${RELAY_VERSION}-linux-${RELAY_ARCH}"
 sudo docker image inspect "$RELAY_IMAGE" --format '{{.RepoTags}} {{.Architecture}}'
-printf 'Use this image in dev.env and prod.env: %s\n' "$RELAY_IMAGE"
+printf 'Use this image in each new environment file: %s\n' "$RELAY_IMAGE"
 ```
 
 Stop on a failed download or checksum check. Expect `OK` from the checksum check and the matching architecture from image inspection. The checksum detects corruption; download both files from the official release over HTTPS. Keep the printed image tag for the next step. Private forks need authenticated release downloads.
 
-## 4. Configure the two relay instances
+## 4. Configure the relay instances
 
 Choose the configuration layout before creating directories. UID 65532 is the non-root account used by the relay image.
 
 For a fresh two-instance setup, create the shared configuration directory and both data directories:
 
 ```bash
-sudo install -d -m 0755 /opt/myterm-relay
+RELAY_CONFIG_DIR=/opt/myterm-relay
+sudo install -d -m 0755 "$RELAY_CONFIG_DIR"
 sudo install -d -m 0700 -o 65532 -g 65532 \
   /srv/myterm-relay-dev /srv/myterm-relay-prod
 ```
@@ -110,7 +111,8 @@ sudo install -d -m 0700 -o 65532 -g 65532 \
 If `/opt/myterm-relay` already belongs to a separately managed dev installation, leave its configuration and data unchanged. Create only the isolated prod configuration and data directories:
 
 ```bash
-sudo install -d -m 0755 /opt/myterm-relay-prod
+RELAY_CONFIG_DIR=/opt/myterm-relay-prod
+sudo install -d -m 0755 "$RELAY_CONFIG_DIR"
 sudo install -d -m 0700 -o 65532 -g 65532 /srv/myterm-relay-prod
 ```
 
@@ -126,12 +128,17 @@ sudo docker network inspect $(sudo docker network ls -q) \
   --format '{{range .IPAM.Config}}{{println .Subnet}}{{end}}'
 ```
 
-If `172.30.87.0/24` or `172.30.88.0/24` is already present, choose two unused private `/24` networks. Keep each gateway as the first address in its subnet and update the matching environment file below. Do not widen the trusted value to the whole Docker subnet: connections through the host's published loopback port appear from the gateway. Any process on the server can reach that loopback listener and supply headers, so the server itself remains part of the trusted administrative boundary.
+For a fresh two-instance setup, both proposed subnets must be unused. If either is already present, choose two unused private `/24` networks, keep each gateway as the first address in its subnet, and update both environment files below.
 
-Create `/opt/myterm-relay/compose.yaml`:
+For an isolated prod setup, check and choose only the prod subnet. Any existing dev network, including one at `172.30.88.0/24`, must remain unchanged. If `172.30.87.0/24` conflicts, choose one unused private `/24`, keep its gateway as the first address, and update only `/opt/myterm-relay-prod/prod.env`.
+
+Do not widen a trusted value to the whole Docker subnet: connections through the host's published loopback port appear from the gateway. Any process on the server can reach that loopback listener and supply headers, so the server itself remains part of the trusted administrative boundary.
+
+Save the following Compose template in the configuration directory for the selected layout:
 
 ```bash
-sudo tee /opt/myterm-relay/compose.yaml > /dev/null <<'YAML'
+sudo tee "${RELAY_CONFIG_DIR:?Choose a configuration layout first}/compose.yaml" \
+  > /dev/null <<'YAML'
 services:
   relay:
     image: ${RELAY_IMAGE:?Set RELAY_IMAGE}
@@ -175,7 +182,7 @@ networks:
 YAML
 ```
 
-Create these two files with `sudoedit`. Replace the image placeholder with the exact tag printed after loading the release image, and replace the hostnames.
+For a fresh two-instance setup, create both files below with `sudoedit`. For an isolated prod setup, skip `dev.env` and create only `/opt/myterm-relay-prod/prod.env`. Replace the image placeholder with the exact tag printed after loading the release image, and replace each new hostname.
 
 `/opt/myterm-relay/dev.env`:
 
@@ -189,7 +196,7 @@ RELAY_GATEWAY=172.30.88.1
 RELAY_IMAGE=myterm-relay:REPLACE_WITH_RELEASE_VERSION-linux-REPLACE_WITH_ARCH
 ```
 
-`/opt/myterm-relay/prod.env`:
+`${RELAY_CONFIG_DIR}/prod.env`, which is `/opt/myterm-relay/prod.env` for a fresh setup or `/opt/myterm-relay-prod/prod.env` for an isolated prod setup:
 
 ```dotenv
 RELAY_ENV=prod
@@ -203,7 +210,7 @@ RELAY_IMAGE=myterm-relay:REPLACE_WITH_RELEASE_VERSION-linux-REPLACE_WITH_ARCH
 
 These files contain deployment settings only. Do not add passkeys or tunnel tokens. They are outside the checkout and should remain outside Git.
 
-Start dev first:
+For a fresh two-instance setup, start and verify dev first. Skip this startup and its limiter probe in an isolated prod setup; the existing dev container must keep running unchanged.
 
 ```bash
 cd /opt/myterm-relay
@@ -251,10 +258,7 @@ Then start prod:
 Run this from `/opt/myterm-relay` for the fresh two-instance setup, or `/opt/myterm-relay-prod` when preserving an existing separately managed dev installation.
 
 ```bash
-RELAY_CONFIG_DIR=/opt/myterm-relay
-# For an isolated existing-dev installation, use this instead:
-# RELAY_CONFIG_DIR=/opt/myterm-relay-prod
-cd "$RELAY_CONFIG_DIR"
+cd "${RELAY_CONFIG_DIR:?Choose a configuration layout first}"
 sudo docker compose --env-file prod.env -p myterm-relay-prod config --quiet
 sudo docker compose --env-file prod.env -p myterm-relay-prod up -d
 curl --fail http://127.0.0.1:8787/healthz
@@ -265,13 +269,17 @@ sudo docker ps --filter name=myterm-relay
 
 Run the same limiter probe against prod after it starts, replacing `relay-dev.example.com` with the prod hostname and port `8788` with `8787`. The first ten client A requests must return 400, its next request must return 429, and client B must return 400.
 
-Both health checks should return HTTP 200. `/healthz` proves the HTTP service responds; it does not check database health or successful authentication. The published ports should show `127.0.0.1`, not `0.0.0.0` or `[::]`. Each inspect command must print the `RELAY_GATEWAY` from its environment file. Stop and fix the network when it differs; otherwise the relay will ignore forwarded client addresses and share one limiter bucket.
+Each health check you ran should return HTTP 200. `/healthz` proves the HTTP service responds; it does not check database health or successful authentication. The published ports should show `127.0.0.1`, not `0.0.0.0` or `[::]`. Each inspect command must print the `RELAY_GATEWAY` from its environment file. Stop and fix the network when it differs; otherwise the relay will ignore forwarded client addresses and share one limiter bucket.
 
 Always pass the matching `--env-file` and `-p` arguments. They keep Compose operations scoped to one environment.
 
 ## 5. Create or reuse the Cloudflare Tunnel
 
 Use the [Cloudflare dashboard tunnel instructions](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/get-started/create-remote-tunnel/). Dashboard labels can change; look for **Networking → Tunnels** and a **cloudflared** connector.
+
+For a fresh two-instance setup, create or reuse a tunnel and configure both environments in the next section. For an isolated prod setup, reuse the healthy tunnel and connector already serving dev without reinstalling or restarting it. If prod requires a separate tunnel, create one for prod only and leave the existing dev connector and route unchanged.
+
+When a tunnel must be created, follow these steps. An isolated prod setup that reuses the existing healthy tunnel skips its creation and installation and only verifies step 4.
 
 1. Create a remotely managed tunnel, for example `myterm-server`. If this server already has a healthy cloudflared tunnel, reuse it and skip installing another service.
 2. Select the Linux distribution and architecture matching the server.
@@ -291,35 +299,49 @@ If it fails, inspect `sudo journalctl -u cloudflared -n 100 --no-pager` locally.
 
 Do not use an ephemeral Quick Tunnel: passkeys and saved connections need a stable public hostname. If you run cloudflared inside Docker instead, `127.0.0.1` points at that container; the route addresses in this guide assume a host service.
 
-## 6. Publish both routes in Cloudflare
+## 6. Publish the required Cloudflare routes
 
-In the tunnel's **Routes** tab, choose **Add route → Published application** and add both entries:
+For a fresh two-instance setup, open the tunnel's **Routes** tab, choose **Add route → Published application**, and add both entries:
 
 | Public hostname | Service type | Service URL | Path |
 |---|---|---|---|
 | `relay-dev.example.com` | HTTP | `127.0.0.1:8788` | Leave empty |
 | `relay.example.com` | HTTP | `127.0.0.1:8787` | Leave empty |
 
+For an isolated prod setup, leave the existing dev route unchanged and add only the prod entry:
+
+| Public hostname | Service type | Service URL | Path |
+|---|---|---|---|
+| `relay.example.com` | HTTP | `127.0.0.1:8787` | Leave empty |
+
 If the dashboard uses a single service URL field, enter `http://127.0.0.1:8788` or `http://127.0.0.1:8787`. Keep origin settings at their defaults; no origin TLS or hostname override is needed.
 
 The published routes create tunnel DNS records. Do not add A/AAAA records pointing these names at the server. If a chosen name already has a DNS record, check what uses it before replacing it. Use a different unused name when in doubt.
 
-The current MyTerm clients authenticate with the relay's passkeys and do not implement an extra Cloudflare Access session or service-token exchange. Do not put an Access login in front of these two routes. Keep unrelated Access applications unchanged.
+The current MyTerm clients authenticate with the relay's passkeys and do not implement an extra Cloudflare Access session or service-token exchange. Do not put an Access login in front of the relay routes. Keep unrelated Access applications unchanged.
 
-For these hostnames, ensure existing cache rules do not cache relay responses and browser-challenge rules do not interrupt native API requests. Check that WebSockets are enabled for the zone; they carry terminal traffic. Scope any rule adjustment to these relay hostnames. See [Cloudflare WebSockets](https://developers.cloudflare.com/network/websockets/).
+For each new hostname, ensure existing cache rules do not cache relay responses and browser-challenge rules do not interrupt native API requests. Check that WebSockets are enabled for the zone; they carry terminal traffic. Scope any rule adjustment to the new relay hostname. In an isolated prod setup, leave rules for the existing dev hostname unchanged. See [Cloudflare WebSockets](https://developers.cloudflare.com/network/websockets/).
 
-From your Mac, check the public endpoints, using your own hostnames:
+From your Mac, check both public endpoints after a fresh two-instance setup, using your own hostnames:
 
 ```bash
 curl --fail --show-error https://relay-dev.example.com/healthz
 curl --fail --show-error https://relay.example.com/healthz
 ```
 
-Expect HTTP 200 from both, with no Access login page, browser challenge, or redirect. Do not use `curl -k`. Cloudflare handles public HTTPS; the relay's configured public origin remains `https://...` even though the local service uses HTTP.
+After an isolated prod setup, check only the new prod endpoint:
+
+```bash
+curl --fail --show-error https://relay.example.com/healthz
+```
+
+Expect HTTP 200 from each endpoint you checked, with no Access login page, browser challenge, or redirect. Do not use `curl -k`. Cloudflare handles public HTTPS; the relay's configured public origin remains `https://...` even though the local service uses HTTP.
 
 Cloudflare supplies `X-Forwarded-For` to HTTP origins. The relay accepts that header here because Docker presents the configured gateway `/32` as the immediate peer. It then walks the address chain from right to left and uses the first untrusted address, so a visitor cannot choose the limiter key by adding a value on the left. Keep Cloudflare's visitor-IP headers enabled for these routes. Do not add `CF-Connecting-IP` rewriting at the relay, and do not trust arbitrary bridge or Cloudflare address ranges for this host-local tunnel topology.
 
 ## 7. Enroll the owner and connect the Mac
+
+### Fresh two-instance setup
 
 On the Linux server, generate a dev enrollment link:
 
@@ -343,22 +365,41 @@ sudo docker exec myterm-relay-prod \
   /app/myterm-relay bootstrap-owner --expires 15m
 ```
 
+### Isolated prod setup
+
+Reuse the existing dev owner, passkeys, route, and connected Macs without changing them. Do not run `bootstrap-owner`, `add-passkey`, or `recover-owner` against `myterm-relay-dev`.
+
+Generate an enrollment link only for the new prod relay:
+
+```bash
+sudo docker exec myterm-relay-prod \
+  /app/myterm-relay bootstrap-owner --expires 15m
+```
+
+Open the compatible **myterm** build on the Mac, paste the complete generated prod URL into **Relay address or setup link**, and complete passkey registration. Confirm that prod connects without signing out, re-enrolling, or otherwise changing the existing dev connection.
+
 For another Mac on an existing environment, enter the relay address in **Relay address or setup link** and choose **Continue** using that environment's passkey. You do not bootstrap the account again. Each Mac registers its own host identity.
 
 ## 8. Install and pair the companion
 
-Use compatible desktop and mobile builds from the same release. For source builds, follow [Build and test](COMPANION.md#build-and-test). On the Mac, these commands create separate dev and prod bundles:
+Use compatible desktop and mobile builds from the same release. For source builds, follow [Build and test](COMPANION.md#build-and-test). For a fresh two-instance setup, these commands create separate dev and prod Mac bundles:
 
 ```bash
 bash script/build_and_run.sh --bundle
 bash script/build_and_run.sh --prod --bundle
 ```
 
-Open `dist/myterm-dev.app` or `dist/myterm.app`. Quit an existing instance of that channel before opening a rebuilt bundle; a second normal launch focuses the existing instance.
+For an isolated prod setup, build or install only the prod bundle and leave the existing dev app and connection unchanged:
+
+```bash
+bash script/build_and_run.sh --prod --bundle
+```
+
+After a fresh setup, open the bundle for the environment being configured: `dist/myterm-dev.app` or `dist/myterm.app`. After an isolated prod setup, open only `dist/myterm.app` and leave the existing dev app running. Quit an existing instance of the chosen channel before opening a rebuilt bundle; a second normal launch focuses the existing instance.
 
 Open `Companion/MyTermCompanion.xcodeproj` in Xcode, select the `MyTermCompanion` scheme, configure your Apple development team for the app and notification extension, and run on your iPhone or iPad. Both targets need their shared Keychain and App Group configuration. The current app requires iOS/iPadOS 27.
 
-Pair each Mac:
+Pair each newly configured Mac. Complete both environments after a fresh setup; in an isolated prod setup, pair only the new prod connection:
 
 1. In the connected Mac's Companion settings, choose **Start Pair Mode**.
 2. In the phone app, choose **Add Mac** and scan its QR code.
@@ -372,6 +413,8 @@ The QR code refreshes every 30 seconds. Each code stays valid for 60 seconds, so
 
 Use synthetic terminal output and disposable folders during testing.
 
+For a fresh two-instance setup, test both environments and switching between them. For an isolated prod setup, run the prod tests only. Do not restart, re-pair, or modify dev; observe that its existing container and client connection remain available while prod is tested.
+
 | Test | Expected result |
 |---|---|
 | Disable phone Wi-Fi and connect over cellular | The Mac is reachable through the cloud relay. |
@@ -381,7 +424,7 @@ Use synthetic terminal output and disposable folders during testing.
 | Switch between dev, prod, and another Mac | Workspace and terminal identities stay with the selected host. |
 | Rename, move, or split a test terminal | The Mac reflects changes and the shell continues running. |
 | Rotate the phone or resize the iPad scene | Navigation adapts to the available width. |
-| Restart the dev relay | Prod stays connected; dev can reconnect without pairing again. |
+| Restart the relay being tested | It reconnects without pairing again. In a fresh setup, the other relay stays connected. |
 | Sleep or quit one Mac | That host becomes unavailable; other hosts remain reachable. |
 | Revoke a paired device on the Mac | The device loses access to that host. |
 
@@ -389,17 +432,27 @@ Use synthetic terminal output and disposable folders during testing.
 
 ### Inspect or restart one environment
 
+For a fresh two-instance setup, choose the environment you intend to operate. This example restarts dev:
+
 ```bash
 sudo docker logs --tail 100 myterm-relay-dev
 sudo docker restart myterm-relay-dev
 curl --fail http://127.0.0.1:8788/healthz
 ```
 
-For prod, use `myterm-relay-prod` and port `8787`. Restarting a relay interrupts that environment's sockets. Restarting cloudflared interrupts both environments.
+For prod, use `myterm-relay-prod` and port `8787`. In an isolated prod setup, operate only prod:
+
+```bash
+sudo docker logs --tail 100 myterm-relay-prod
+sudo docker restart myterm-relay-prod
+curl --fail http://127.0.0.1:8787/healthz
+```
+
+Restarting a relay interrupts that environment's sockets. Restarting cloudflared interrupts both environments.
 
 ### Back up the database
 
-Keep each environment's backup separate. A brief stopped-container backup avoids copying SQLite database and WAL files at inconsistent points. For dev:
+Keep each environment's backup separate. A brief stopped-container backup avoids copying SQLite database and WAL files at inconsistent points. For a fresh two-instance setup, this example backs up dev:
 
 ```bash
 sudo install -d -m 0700 /srv/myterm-relay-backups
@@ -411,9 +464,25 @@ sudo docker start myterm-relay-dev
 sudo test -s "/srv/myterm-relay-backups/dev-${BACKUP_STAMP}.tar.gz"
 ```
 
-Check every command's result. If archiving fails, restart the container and investigate before upgrading. Repeat separately for prod, changing the container, directory, and archive prefix. Store an encrypted copy off the server and test restoration using an isolated test deployment. Never start a restored prod database as a second live prod relay.
+Check every command's result. If archiving fails, restart the container and investigate before upgrading. In a fresh two-instance setup, repeat separately for prod, changing the container, directory, and archive prefix.
 
-### Upgrade dev, then prod
+In an isolated prod setup, leave dev running and back up only prod:
+
+```bash
+sudo install -d -m 0700 /srv/myterm-relay-backups
+BACKUP_STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+sudo docker stop myterm-relay-prod
+sudo tar -C /srv -czf "/srv/myterm-relay-backups/prod-${BACKUP_STAMP}.tar.gz" \
+  myterm-relay-prod
+sudo docker start myterm-relay-prod
+sudo test -s "/srv/myterm-relay-backups/prod-${BACKUP_STAMP}.tar.gz"
+```
+
+Store an encrypted copy off the server and test restoration using an isolated test deployment. Never start a restored prod database as a second live prod relay.
+
+### Upgrade one or both environments
+
+For a fresh two-instance setup:
 
 1. Back up the environment being upgraded and record its current `RELAY_IMAGE`.
 2. Download, verify, and load the chosen release using step 3. Keep the current image available for rollback.
@@ -427,13 +496,36 @@ sudo docker compose --env-file dev.env -p myterm-relay-dev up -d
 curl --fail http://127.0.0.1:8788/healthz
 ```
 
-Repeat the pairing/sign-in and terminal checks before changing prod's image tag and running the equivalent prod command. For the fresh shared setup, edit `/opt/myterm-relay/prod.env` and run Compose from `/opt/myterm-relay`. For an isolated existing-dev installation, edit `/opt/myterm-relay-prod/prod.env` and run Compose from `/opt/myterm-relay-prod`. Keep previous images until the upgrade is verified. Do not delete persistent directories during upgrades.
+Repeat the pairing/sign-in and terminal checks before changing `RELAY_IMAGE` in `/opt/myterm-relay/prod.env`, then apply and verify prod:
+
+```bash
+cd /opt/myterm-relay
+sudo docker compose --env-file prod.env -p myterm-relay-prod config --quiet
+sudo docker compose --env-file prod.env -p myterm-relay-prod up -d
+curl --fail http://127.0.0.1:8787/healthz
+```
+
+For an isolated prod setup, skip every dev upgrade step above:
+
+1. Back up prod and record its current `RELAY_IMAGE`.
+2. Download, verify, and load the chosen release using step 3. Keep the current prod image available for rollback.
+3. Change only `RELAY_IMAGE` in `/opt/myterm-relay-prod/prod.env`.
+4. Apply and verify prod from its isolated configuration directory:
+
+```bash
+cd /opt/myterm-relay-prod
+sudo docker compose --env-file prod.env -p myterm-relay-prod config --quiet
+sudo docker compose --env-file prod.env -p myterm-relay-prod up -d
+curl --fail http://127.0.0.1:8787/healthz
+```
+
+Keep previous images until the upgrade is verified. Do not delete persistent directories during upgrades.
 
 If a release has no incompatible database migration, restore the previous image tag and run `up -d`. If database compatibility changed, follow that release's rollback instructions and restore the matching backup while the relay is stopped. A backup restore can discard changes made after the backup, so plan the rollback before upgrading.
 
 ### Add or recover a passkey
 
-To add a passkey while preserving existing credentials:
+In a fresh two-instance setup, these examples operate dev. To add a passkey while preserving existing credentials:
 
 ```bash
 sudo docker exec myterm-relay-dev \
@@ -447,7 +539,21 @@ sudo docker exec myterm-relay-dev \
   /app/myterm-relay recover-owner --expires 15m
 ```
 
-Choose **Change relay or recover passkey…**, paste the generated link into **Relay address or setup link**, and choose **Continue**. Recovery replaces the credential set and revokes relay sessions only after the new credential is verified. Sign apps in again afterward. Substitute the prod container only when recovering prod.
+Choose **Change relay or recover passkey…**, paste the generated link into **Relay address or setup link**, and choose **Continue**. Recovery replaces the credential set and revokes relay sessions only after the new credential is verified. Sign apps in again afterward. Substitute the prod container for either credential operation when operating prod.
+
+In an isolated prod setup, leave dev credentials and sessions unchanged. Run the required command only against `myterm-relay-prod`:
+
+```bash
+sudo docker exec myterm-relay-prod \
+  /app/myterm-relay add-passkey --expires 15m
+```
+
+Only if all prod owner passkeys are lost, run recovery instead:
+
+```bash
+sudo docker exec myterm-relay-prod \
+  /app/myterm-relay recover-owner --expires 15m
+```
 
 ## Troubleshooting
 
