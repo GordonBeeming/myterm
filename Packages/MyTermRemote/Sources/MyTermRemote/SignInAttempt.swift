@@ -1,6 +1,20 @@
 import CryptoKit
 import Foundation
 
+public enum AuthorizationCallbackValidationFailure: String, Equatable, Sendable {
+    case tooLarge = "too_large"
+    case malformedURL = "malformed_url"
+    case redirectMismatch = "redirect_mismatch"
+    case unexpectedAuthority = "unexpected_authority"
+    case fragmentPresent = "fragment_present"
+    case missingQuery = "missing_query"
+    case errorResponse = "error_response"
+    case invalidStateCount = "invalid_state_count"
+    case invalidCodeCount = "invalid_code_count"
+    case stateMismatch = "state_mismatch"
+    case invalidCode = "invalid_code"
+}
+
 public struct SignInAttempt: Sendable {
     public let state: String
     public let verifier: String
@@ -61,21 +75,43 @@ public struct SignInAttempt: Sendable {
     }
 
     public func authorizationCode(from callback: URL) throws -> String {
-        guard callback.absoluteString.utf8.count <= 8192,
-              let components = URLComponents(url: callback, resolvingAgainstBaseURL: false),
-              let expected = URLComponents(url: redirectURI, resolvingAgainstBaseURL: false),
-              components.scheme == expected.scheme, components.host == expected.host,
-              components.path == expected.path, components.port == nil,
-              components.user == nil, components.password == nil, components.fragment == nil,
-              let items = components.queryItems,
-              items.filter({ $0.name == "state" }).count == 1,
-              items.filter({ $0.name == "code" }).count == 1,
-              items.first(where: { $0.name == "state" })?.value == state,
-              let code = items.first(where: { $0.name == "code" })?.value,
-              !code.isEmpty, code.utf8.count <= 1024,
-              !items.contains(where: { $0.name == "error" }) else {
+        guard callbackValidationFailure(from: callback) == nil,
+              let items = URLComponents(url: callback,
+                                        resolvingAgainstBaseURL: false)?.queryItems,
+              let code = items.first(where: { $0.name == "code" })?.value else {
             throw RemoteError.invalidCallback
         }
         return code
+    }
+
+    public func callbackValidationFailure(
+        from callback: URL
+    ) -> AuthorizationCallbackValidationFailure? {
+        guard callback.absoluteString.utf8.count <= 8_192 else { return .tooLarge }
+        guard let components = URLComponents(url: callback, resolvingAgainstBaseURL: false),
+              let expected = URLComponents(url: redirectURI,
+                                           resolvingAgainstBaseURL: false) else {
+            return .malformedURL
+        }
+        guard components.scheme == expected.scheme,
+              components.host == expected.host,
+              components.path == expected.path else { return .redirectMismatch }
+        guard components.port == nil, components.user == nil,
+              components.password == nil else { return .unexpectedAuthority }
+        guard components.fragment == nil else { return .fragmentPresent }
+        guard let items = components.queryItems else { return .missingQuery }
+        guard !items.contains(where: { $0.name == "error" }) else { return .errorResponse }
+        guard items.filter({ $0.name == "state" }).count == 1 else {
+            return .invalidStateCount
+        }
+        guard items.filter({ $0.name == "code" }).count == 1 else {
+            return .invalidCodeCount
+        }
+        guard items.first(where: { $0.name == "state" })?.value == state else {
+            return .stateMismatch
+        }
+        guard let code = items.first(where: { $0.name == "code" })?.value,
+              !code.isEmpty, code.utf8.count <= 1_024 else { return .invalidCode }
+        return nil
     }
 }

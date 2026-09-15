@@ -20,6 +20,8 @@ The checked-in Xcode project is generated from `Companion/project.yml`. After ch
 xcodegen generate --spec Companion/project.yml --project Companion
 ```
 
+For a physical device, copy `Companion/Support/Local.xcconfig.example` to `Companion/Support/Local.xcconfig` and set `TEAM_ID` to your Apple development team ID. Both the app and notification extension use this local, Git-ignored configuration. Select your Apple account in Xcode and allow automatic signing to create the required provisioning profiles. The extension needs the shared App Group as well as the app.
+
 Run the native protocol tests and the phone/tablet suites:
 
 ```sh
@@ -36,9 +38,11 @@ Existing desktop validation remains `swift test --parallel`, `bash script/channe
 
 ## Deploy a relay
 
+For dev and prod on one Linux server behind cloudflared, follow [the Cloudflare proxy setup guide](PROXY_SETUP.md). It covers containers, tunnel routes, passkeys, pairing, backups, and upgrades without managing certificates on the server.
+
 Follow [the relay deployment instructions](../Services/relay/README.md). The service needs a stable DNS name, trusted HTTPS, and persistent SQLite storage. Its container and Caddy example are included with its source. Keep the relay's HTTP listener behind the HTTPS proxy.
 
-Run `bootstrap-owner` on the relay server to create an expiring enrollment link. Enter the relay origin and that link in the Mac app's Companion settings, then complete passkey registration in the system browser. The link's secret stays in its URL fragment and is sent only to the registration endpoint over HTTPS.
+Run `bootstrap-owner` on the relay server to create an expiring enrollment link. Paste it into the Mac app's Companion settings; MyTerm fills the relay address from the link. Check the address, then complete passkey registration in the system browser. The link's secret stays in its URL fragment and is sent only to the registration endpoint over HTTPS.
 
 Subsequent sign-ins use the passkey stored by Apple Passwords or another credential provider. The relay stores public credential records, not passkey private keys. `add-passkey` creates an additional enrollment link. `recover-owner` replaces the owner's credentials and revokes existing relay sessions after the new credential is verified; sign the apps in again afterward.
 
@@ -48,9 +52,9 @@ LAN-only hosting uses the same flow. It still requires a hostname and a certific
 
 Connect the Mac to its relay and start Pair Mode in Companion settings. Scan that QR code in the phone app, or paste the pairing link when using a simulator. Complete relay sign-in, then approve the phone on the Mac.
 
-The pairing ticket is generated and consumed on the Mac. The relay forwards encrypted pairing messages. Paired devices retain the peer's public keys and establish a fresh authenticated session on each connection.
+The QR code refreshes every 30 seconds; each code remains valid for 60 seconds so sign-in can finish across a refresh. The pairing ticket is generated and consumed on the Mac. The relay forwards encrypted pairing messages. Paired devices retain the peer's public keys and establish a fresh authenticated session on each connection.
 
-Save several Macs, including Macs using different relays. The connection picker checks reachability independently. The expanded layout includes a workspace sidebar; compact layouts navigate into a workspace and then a terminal. The desktop's workspace and pane-group identities remain authoritative while each companion scene keeps its own selection.
+Save several Macs, including Macs using different relays. The connection picker checks reachability independently. By default, wider screens mirror the Mac's pane arrangement and split proportions. Narrow screens open the selected terminal with a picker for other tabs in the workspace. Settings → Workspace view can switch this device back to the terminal list. The desktop's workspace and pane-group identities remain authoritative while each companion scene keeps its own tab and focus selection. Extra terminal-key rows are hidden by default. The keyboard button in the terminal toolbar shows or hides them and remembers the choice on this device.
 
 One connection controls a terminal's input and dimensions. Other connections can view it. Take Control explicitly transfers that lease. Detaching a mobile view leaves the process running on the Mac. Disconnecting disables input; uncertain keystrokes are never queued for replay.
 

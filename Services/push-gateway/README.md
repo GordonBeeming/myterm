@@ -43,6 +43,8 @@ Caddy runs on the Linux host and connects through the loopback-only published po
 
 `GET /livez` reports process liveness. `GET /readyz` checks SQLite availability. Neither response includes configuration or credential data.
 
+Enrollment and notification rate limits use `X-Forwarded-For` only when the immediate peer matches `MYTERM_PUSH_TRUSTED_PROXY_CIDRS`. Loopback proxies are trusted by default. For a containerized Caddy or Cloudflare Tunnel chain, configure the narrow CIDRs for every proxy hop that can connect directly to the gateway. Use `none` for a direct deployment without a reverse proxy. The service walks the chain from right to left, so an address supplied by an untrusted client cannot override the real peer. Broad trust ranges such as `0.0.0.0/0` and `::/0` are rejected at startup.
+
 ## APNs behavior
 
 The provider uses Apple's HTTP/2 API directly. Its ES256 provider JWT is cached for 30 minutes, within Apple's 20-to-60-minute refresh window. Requests set the configured topic, `alert` push type, priority 10, expiration 0, and an event collapse ID. The complete uncompressed JSON body is checked against Apple's 4096-byte limit before sending.

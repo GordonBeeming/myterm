@@ -6,52 +6,83 @@ import SwiftUI
 struct AddHostView: View {
     let services: CompanionServices
     @Environment(\.dismiss) private var dismiss
-    @State private var pairingURL = ""
+    @State private var scannedCode: String?
     @State private var showingScanner = false
     @State private var isPairing = false
+    @State private var pairingTask: Task<Void, Never>?
     @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Pairing code") {
-                    Button("Scan QR code", systemImage: "qrcode.viewfinder") { showingScanner = true }
-                    TextField("Paste pairing URL", text: $pairingURL, axis: .vertical)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .accessibilityIdentifier("pairing-url")
-                    Button("Pair Mac") { Task { await pair() } }
-                        .disabled(pairingURL.isEmpty || isPairing)
-                        .accessibilityIdentifier("pair-mac")
+                Section("Pairing") {
+                    Menu {
+                        Button("Scan QR code", systemImage: "qrcode.viewfinder") {
+                            showingScanner = true
+                        }
+                        PasteButton(payloadType: String.self) { values in
+                            guard let value = values.first else { return }
+                            startPairing(value)
+                        }
+                    } label: {
+                        Label(isPairing ? "Pairing…" : "Pair Mac", systemImage: "qrcode.viewfinder")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .disabled(isPairing)
+                    .accessibilityIdentifier("pair-mac")
+                    if isPairing { ProgressView("Complete sign-in and approve this phone on your Mac.") }
                 }
                 Section {
-                    Text("Pairing opens your relay's passkey sign-in page. MyTerm then verifies the Mac key pinned in the QR code before saving it.")
+                    Text("Show the pairing code in MyTerm on your Mac. Sign in with your passkey if asked, then approve this phone on the Mac.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
             }
             .navigationTitle("Add Mac")
-            .toolbar { Button("Cancel", role: .cancel) { dismiss() } }
-            .sheet(isPresented: $showingScanner) {
-                QRScannerView { value in
-                    pairingURL = value
-                    showingScanner = false
-                    Task { await pair() }
-                } onError: { message in
-                    showingScanner = false
-                    errorMessage = message
+            .toolbar { Button("Cancel", role: .cancel) {
+                pairingTask?.cancel()
+                services.cancelSignIn()
+                dismiss()
+            } }
+            .sheet(isPresented: $showingScanner, onDismiss: {
+                guard let value = scannedCode else { return }
+                scannedCode = nil
+                startPairing(value)
+            }) {
+                NavigationStack {
+                    QRScannerView { value in
+                        scannedCode = value
+                        showingScanner = false
+                    } onError: { message in
+                        scannedCode = nil
+                        showingScanner = false
+                        errorMessage = message
+                    }
+                    .navigationTitle("Scan pairing code")
+                    .toolbar {
+                        Button("Cancel", role: .cancel) {
+                            scannedCode = nil
+                            showingScanner = false
+                        }
+                    }
                 }
-                .ignoresSafeArea()
             }
             .alert("Pairing failed", isPresented: Binding(
                 get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } }
             )) { Button("OK", role: .cancel) {} } message: { Text(errorMessage ?? "Unknown error") }
         }
+        .interactiveDismissDisabled(isPairing)
     }
 
-    private func pair() async {
+    private func startPairing(_ value: String) {
         guard !isPairing else { return }
-        guard let url = URL(string: pairingURL) else {
+        pairingTask = Task { await pair(value) }
+    }
+
+    private func pair(_ value: String) async {
+        guard !isPairing else { return }
+        guard let url = URL(string: value.trimmingCharacters(in: .whitespacesAndNewlines)) else {
             errorMessage = invalidPairingMessage
             return
         }
@@ -65,11 +96,13 @@ struct AddHostView: View {
         do {
             _ = try await services.pair(url: url)
             dismiss()
+        } catch is CancellationError {
+            return
         } catch { errorMessage = error.localizedDescription }
     }
 
     private var invalidPairingMessage: String {
-        "This pairing code is invalid or expired. Start Pair Mode on the Mac and scan the new code."
+        "This pairing code is invalid or expired. Scan the current code shown by MyTerm on your Mac."
     }
 }
 
@@ -122,12 +155,24 @@ struct HostActionsView: View {
 }
 
 struct CompanionSettingsView: View {
+    @AppStorage("workspacePresentation") private var workspacePresentation = WorkspacePresentationStyle.adaptive.rawValue
+    @Environment(\.dismiss) private var dismiss
     let services: CompanionServices
     let scene: SceneModel
     @State private var confirmsNotificationReset = false
 
     var body: some View {
         Form {
+            Section("Workspace view") {
+                Picker("Open workspaces", selection: $workspacePresentation) {
+                    ForEach(WorkspacePresentationStyle.allCases, id: \.rawValue) { style in
+                        Text(style.title).tag(style.rawValue)
+                    }
+                }
+                Text("Adaptive panes mirrors the Mac layout on wider screens and uses a terminal picker on narrow screens. This setting applies only to this device.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
             Section("Notifications") {
                 Toggle("Allow terminal alerts", isOn: Binding(
                     get: { services.notificationEnrollment.isEnabled },
@@ -163,6 +208,13 @@ struct CompanionSettingsView: View {
             }
         }
         .navigationTitle("Settings")
+        .accessibilityIdentifier("companion-settings")
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done") { dismiss() }
+                    .accessibilityIdentifier("close-settings")
+            }
+        }
         .alert("Reset local notification setup?", isPresented: $confirmsNotificationReset) {
             Button("Reset local setup", role: .destructive) {
                 Task { await services.resetLocalNotificationSetup() }

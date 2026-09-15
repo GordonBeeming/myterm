@@ -44,9 +44,12 @@ extension AppModel {
                     color: workspace.color,
                     emoji: workspace.emoji,
                     preferences: try? store.resolvedSettings(for: workspace.id),
+                    layout: workspace.layout.remotePaneLayout,
+                    focusedGroupID: workspace.focusedTabGroupID,
                     groups: workspace.orderedGroups.map { group in
                         RemoteTabGroupProjection(
                             id: group.id,
+                            selectedTabID: group.selectedTabID,
                             tabs: group.tabs.map { tab in
                                 let kind: RemoteTabKind = tab.terminalSession == nil ? .browser : .terminal
                                 return RemoteTabProjection(
@@ -379,5 +382,21 @@ extension AppModel {
         let data = try JSONEncoder().encode(value)
         guard data.count <= 256 * 1_024 else { throw CompanionCommandError.invalidPayload }
         return data
+    }
+}
+
+private extension WorkspaceLayout {
+    var remotePaneLayout: RemotePaneLayout {
+        switch self {
+        case .group(let group):
+            .group(group.id)
+        case .split(let id, let orientation, let children, let weights):
+            .split(
+                id: id,
+                orientation: orientation,
+                children: children.map(\.remotePaneLayout),
+                weights: WorkspaceLayout.normalizedWeights(weights, count: children.count)
+            )
+        }
     }
 }

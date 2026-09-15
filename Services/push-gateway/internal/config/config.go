@@ -2,6 +2,8 @@ package config
 
 import (
 	"errors"
+	"fmt"
+	"net/netip"
 	"net/url"
 	"os"
 	"strings"
@@ -21,6 +23,7 @@ type Config struct {
 	APNSEnvironment      string
 	ChallengeTTL         time.Duration
 	DeviceSessionTTL     time.Duration
+	TrustedProxyCIDRs    []netip.Prefix
 }
 
 func Load() (Config, error) {
@@ -38,6 +41,10 @@ func Load() (Config, error) {
 		APNSTopic: strings.TrimSpace(os.Getenv("MYTERM_PUSH_APNS_TOPIC")), APNSEnvironment: env("MYTERM_PUSH_APNS_ENVIRONMENT", "production"),
 		ChallengeTTL: 5 * time.Minute, DeviceSessionTTL: 180 * 24 * time.Hour,
 	}
+	cfg.TrustedProxyCIDRs, err = parseCIDRs("MYTERM_PUSH_TRUSTED_PROXY_CIDRS", env("MYTERM_PUSH_TRUSTED_PROXY_CIDRS", "127.0.0.0/8,::1/128"))
+	if err != nil {
+		return Config{}, err
+	}
 	if cfg.TeamID == "" || cfg.BundleID == "" || cfg.APNSKeyID == "" || cfg.APNSKeyFile == "" || cfg.APNSTopic == "" {
 		return Config{}, errors.New("Team ID, bundle ID, APNs key ID, key file, and topic are required")
 	}
@@ -51,6 +58,34 @@ func Load() (Config, error) {
 		return Config{}, errors.New("APNs environment must be production or sandbox")
 	}
 	return cfg, nil
+}
+
+func parseCIDRs(name, value string) ([]netip.Prefix, error) {
+	if strings.EqualFold(strings.TrimSpace(value), "none") {
+		return nil, nil
+	}
+	var result []netip.Prefix
+	for _, part := range strings.Split(value, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		prefix, err := netip.ParsePrefix(part)
+		if err != nil {
+			address, addressErr := netip.ParseAddr(part)
+			if addressErr != nil {
+				return nil, fmt.Errorf("%s contains invalid address or CIDR %q", name, part)
+			}
+			prefix = netip.PrefixFrom(address, address.BitLen())
+		}
+		prefix = prefix.Masked()
+		bits := prefix.Bits()
+		if (prefix.Addr().Is4() && bits < 8) || (prefix.Addr().Is6() && bits < 24) {
+			return nil, fmt.Errorf("%s contains dangerously broad CIDR %q", name, part)
+		}
+		result = append(result, prefix)
+	}
+	return result, nil
 }
 
 func env(name, fallback string) string {

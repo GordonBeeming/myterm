@@ -18,6 +18,10 @@ struct SceneRootView: View {
         .accessibilityIdentifier("host-picker")
         .sheet(item: $scene.sheet) { sheet in
             switch sheet {
+            case .settings:
+                NavigationStack {
+                    CompanionSettingsView(services: services, scene: scene)
+                }
             case .addHost:
                 AddHostView(services: services)
             case .hostActions(let connectionID):
@@ -111,7 +115,8 @@ private struct HostSidebar: View {
                 }
             }
             ToolbarItem(placement: .bottomBar) {
-                Button("Settings", systemImage: "gear") { scene.path.append(.settings) }
+                Button("Settings", systemImage: "gear") { scene.sheet = .settings }
+                    .accessibilityIdentifier("open-settings")
             }
         }
         .onChange(of: scene.selectedConnectionID) { _, connectionID in
@@ -221,10 +226,8 @@ private struct DetailColumn: View {
             WorkspaceDetail(scene: scene)
                 .navigationDestination(for: CompanionRoute.self) { route in
                     switch route {
-                    case .workspace(let id): WorkspaceDetail(scene: scene, workspaceID: id)
                     case .terminal(let route): TerminalScreen(scene: scene, route: route)
                     case .browser(let route): BrowserMetadataView(scene: scene, route: route)
-                    case .settings: CompanionSettingsView(services: services, scene: scene)
                     }
                 }
         }

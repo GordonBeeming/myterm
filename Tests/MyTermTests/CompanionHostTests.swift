@@ -7,6 +7,74 @@ import XCTest
 
 @MainActor
 final class CompanionHostTests: XCTestCase {
+    func testBootstrapLinkDerivesCanonicalRelayWithoutLeakingTokenIntoOrigin() throws {
+        let parsed = try CompanionHostModel.parseBootstrapLink(
+            "  https://RELAY.example.com:8443/auth/register?state=test#bootstrap_token=example-token\n"
+        )
+        XCTAssertEqual(parsed.endpoint.canonicalOrigin, "https://relay.example.com:8443")
+        XCTAssertEqual(parsed.token, "example-token")
+    }
+
+    func testRecoveryEnrollmentLinkDerivesRelayAndToken() throws {
+        let parsed = try CompanionHostModel.parseBootstrapLink(
+            "https://relay.example.com/auth/register#enrollment_token=recovery-test"
+        )
+        XCTAssertEqual(parsed.endpoint.canonicalOrigin, "https://relay.example.com")
+        XCTAssertEqual(parsed.token, "recovery-test")
+        XCTAssertThrowsError(try CompanionHostModel.parseBootstrapLink(
+            "https://relay.example.com/auth/register#enrollment_token=one&bootstrap_token=two"
+        ))
+    }
+
+    func testBootstrapLinkRejectsUnsafeOrIncompleteInput() {
+        for value in [
+            "http://relay.example.com/auth/register#bootstrap_token=test",
+            "https://user:password@relay.example.com/auth/register#bootstrap_token=test",
+            "https://relay.example.com/other#bootstrap_token=test",
+            "https://relay.example.com/auth/register",
+            "https://relay.example.com/auth/register#bootstrap_token=",
+            "https://relay.example.com/auth/register#bootstrap_token=one&bootstrap_token=two"
+        ] {
+            XCTAssertThrowsError(try CompanionHostModel.parseBootstrapLink(value))
+        }
+    }
+
+    func testPastedBootstrapLinkUpdatesRelayAndInvalidEditsPreserveIt() throws {
+        let host = try model().companionHost
+        host.relayText = "https://old.example.com"
+        host.updateRelayFromBootstrapLink("https://new.example.com/auth/register#bootstrap_token=test")
+        XCTAssertEqual(host.relayText, "https://new.example.com")
+        host.updateRelayFromBootstrapLink("incomplete")
+        XCTAssertEqual(host.relayText, "https://new.example.com")
+    }
+
+    func testLinkedRelayStatePersistsOnlyAfterAuthReferenceIsSaved() async throws {
+        let suite = "myterm-linked-relay-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let app = try model()
+        let secrets = MemorySecrets()
+        let host = CompanionHostModel(
+            appModel: app, channel: .development, storageNamespace: "linked-relay",
+            secrets: secrets, defaults: defaults
+        )
+        XCTAssertFalse(host.hasLinkedRelay)
+        let relay = try RelayEndpoint(XCTUnwrap(URL(string: "https://relay.example.test")))
+        let record = TokenRecord(
+            relay: relay, accountID: UUID(), deviceID: UUID(),
+            accessToken: "access", refreshToken: "refresh", expiresAt: .distantFuture
+        )
+
+        try await host.installAuthenticatedSessionForTesting(record)
+
+        XCTAssertTrue(host.hasLinkedRelay)
+        let restored = CompanionHostModel(
+            appModel: app, channel: .development, storageNamespace: "linked-relay",
+            secrets: secrets, defaults: defaults
+        )
+        XCTAssertTrue(restored.hasLinkedRelay)
+    }
+
     private final class MemorySecrets: SecretStore, @unchecked Sendable {
         private let lock = NSLock()
         private var values: [String: Data] = [:]
@@ -158,6 +226,23 @@ final class CompanionHostTests: XCTestCase {
         XCTAssertEqual(model.store.selectedWorkspaceID, desktopID)
         XCTAssertEqual(updated.focusedTabGroupID, group.id)
         XCTAssertEqual(updated.orderedGroups.count, 2)
+        let projected = try XCTUnwrap(
+            model.companionWorkspaceProjection().workspaces.first { $0.id == remoteID }
+        )
+        XCTAssertEqual(projected.focusedGroupID, updated.focusedTabGroupID)
+        XCTAssertEqual(projected.layout?.orderedGroupIDs, updated.orderedGroups.map(\.id))
+        XCTAssertEqual(
+            projected.groups.map(\.selectedTabID),
+            updated.orderedGroups.map { Optional($0.selectedTabID) }
+        )
+        guard let projectedLayout = projected.layout,
+              case .split(let projectedID, let projectedOrientation, _, let projectedWeights) = projectedLayout,
+              case .split(let sourceID, let sourceOrientation, _, let sourceWeights) = updated.layout else {
+            return XCTFail("Expected the projected workspace to preserve its split root")
+        }
+        XCTAssertEqual(projectedID, sourceID)
+        XCTAssertEqual(projectedOrientation, sourceOrientation)
+        XCTAssertEqual(projectedWeights, sourceWeights)
     }
 
     func testProjectionCarriesRuntimeMetadataWithoutRecentTerminalText() throws {

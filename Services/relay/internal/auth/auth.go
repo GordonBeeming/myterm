@@ -135,6 +135,18 @@ func (m *Manager) BeginRegistration(ctx context.Context, oauth store.OAuthContex
 		if loadErr != nil {
 			return nil, "", loadErr
 		}
+		ownerName = strings.TrimSpace(ownerName)
+		displayName = strings.TrimSpace(displayName)
+		if len(ownerName) > 100 || len(displayName) > 100 {
+			return nil, "", errors.New("passkey labels must contain at most 100 characters")
+		}
+		// Credential labels can change without changing the owner's stable user handle.
+		if ownerName != "" {
+			user.owner.Name = ownerName
+		}
+		if displayName != "" {
+			user.owner.DisplayName = displayName
+		}
 		oauth.OwnerID = user.owner.ID
 		oauth.WebAuthnID = user.owner.WebAuthnID
 		oauth.OwnerName = user.owner.Name

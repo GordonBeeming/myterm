@@ -1,0 +1,2 @@
+// Each developer supplies their team without changing the shared project.
+#include? "Local.xcconfig"

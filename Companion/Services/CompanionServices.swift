@@ -3,7 +3,72 @@ import CryptoKit
 import Foundation
 import MyTermRemote
 import Observation
+import OSLog
 import UIKit
+
+enum CompanionClientSignInStage: String, Sendable {
+    case callbackConfiguration = "callback_configuration"
+    case authorizationURL = "authorization_url"
+    case browserSession = "browser_session"
+    case callbackValidation = "callback_validation"
+    case tokenExchange = "token_exchange"
+    case persistence = "persistence"
+
+    var description: String {
+        switch self {
+        case .callbackConfiguration: "preparing the app callback"
+        case .authorizationURL: "preparing the sign-in page"
+        case .browserSession: "opening the sign-in page"
+        case .callbackValidation: "checking the browser response"
+        case .tokenExchange: "finishing sign-in with the relay"
+        case .persistence: "saving the relay sign-in"
+        }
+    }
+}
+
+struct CompanionClientSignInFailure: Error, LocalizedError, Sendable {
+    let stage: CompanionClientSignInStage
+    let reason: String
+    let message: String
+    var errorDescription: String? { message }
+}
+
+enum BrowserAuthenticationError: String, Equatable, Error, LocalizedError, Sendable {
+    case alreadyRunning = "already_running"
+    case noPresentationWindow = "no_presentation_window"
+    case missingCallback = "missing_callback"
+    case couldNotStart = "could_not_start"
+
+    var errorDescription: String? {
+        switch self {
+        case .alreadyRunning:
+            "A sign-in page is already open. Complete or cancel it before trying again."
+        case .noPresentationWindow:
+            "MyTerm could not find the active app window for sign-in. Return to the app and try again."
+        case .missingCallback:
+            "The sign-in page closed without returning a response. Start pairing again."
+        case .couldNotStart:
+            "iOS could not open the sign-in page. Return to MyTerm and try again."
+        }
+    }
+}
+
+struct BrowserAuthenticationAttemptState {
+    private(set) var activeID: UUID?
+
+    mutating func begin() throws -> UUID {
+        guard activeID == nil else { throw BrowserAuthenticationError.alreadyRunning }
+        let id = UUID()
+        activeID = id
+        return id
+    }
+
+    mutating func complete(_ id: UUID) -> Bool {
+        guard activeID == id else { return false }
+        activeID = nil
+        return true
+    }
+}
 
 struct CompanionIdentity: Sendable {
     let localDeviceID: UUID
@@ -35,6 +100,10 @@ private actor CredentialCatalog {
     func reference(relay: RelayEndpoint, accountID: UUID) throws -> CredentialReference? {
         try load().filter { $0.relay == relay && $0.accountID == accountID }
             .max { $0.createdAt < $1.createdAt }
+    }
+
+    func latestReference(relay: RelayEndpoint) throws -> CredentialReference? {
+        try load().filter { $0.relay == relay }.max { $0.createdAt < $1.createdAt }
     }
 
     private func load() throws -> [CredentialReference] {
@@ -78,6 +147,8 @@ private actor HostCatalog {
 @MainActor
 @Observable
 final class CompanionServices {
+    private static let logger = Logger(subsystem: AppConfiguration.bundleIdentifier,
+                                       category: "SignIn")
     private let secrets: any SecretStore
     private let tokenStore: TokenStore
     private let credentialCatalog: CredentialCatalog
@@ -153,19 +224,44 @@ final class CompanionServices {
     }
 
     func signIn(relay: RelayEndpoint, deviceName: String = UIDevice.current.name) async throws -> TokenRecord {
-        guard let redirect = URL(string: "myterm-companion://auth/callback") else {
-            throw RemoteError.invalidCallback
+        var stage = CompanionClientSignInStage.callbackConfiguration
+        var callbackFailure: AuthorizationCallbackValidationFailure?
+        do {
+            guard let redirect = URL(string: "myterm-companion://auth/callback") else {
+                throw RemoteError.invalidCallback
+            }
+            let attempt = try SignInAttempt(relay: relay, redirectURI: redirect)
+            stage = .authorizationURL
+            let loginURL = try attempt.loginURL(deviceName: deviceName, deviceKind: "client")
+            stage = .browserSession
+            let callback = try await browserAuthentication.authenticate(
+                url: loginURL, callbackScheme: "myterm-companion"
+            )
+            stage = .callbackValidation
+            if let failure = attempt.callbackValidationFailure(from: callback) {
+                callbackFailure = failure
+                throw RemoteError.invalidCallback
+            }
+            stage = .tokenExchange
+            let client = RelayHTTPClient(endpoint: relay)
+            let record = try await RelayAuthenticator(client: client, store: tokenStore)
+                .exchange(attempt: attempt, callback: callback)
+            stage = .persistence
+            try await credentialCatalog.save(record)
+            _ = try tokenManager(for: record)
+            return record
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            let reason = callbackFailure?.rawValue ?? Self.sanitizedSignInReason(error)
+            Self.logger.error("Companion sign-in failed at \(stage.rawValue, privacy: .public): \(reason, privacy: .public)")
+            throw CompanionClientSignInFailure(
+                stage: stage, reason: reason,
+                message: Self.signInFailureDescription(
+                    error: error, stage: stage, callbackFailure: callbackFailure
+                )
+            )
         }
-        let attempt = try SignInAttempt(relay: relay, redirectURI: redirect)
-        let loginURL = try attempt.loginURL(deviceName: deviceName, deviceKind: "client")
-        let callback = try await browserAuthentication.authenticate(url: loginURL,
-                                                                    callbackScheme: "myterm-companion")
-        let client = RelayHTTPClient(endpoint: relay)
-        let record = try await RelayAuthenticator(client: client, store: tokenStore)
-            .exchange(attempt: attempt, callback: callback)
-        try await credentialCatalog.save(record)
-        _ = try tokenManager(for: record)
-        return record
     }
 
     func credentials(for host: SavedHostDescriptor) async throws -> TokenRecord {
@@ -198,9 +294,18 @@ final class CompanionServices {
         }
     }
 
+    func cancelSignIn() {
+        browserAuthentication.cancelActiveAttempt()
+    }
+
     func pair(url: URL) async throws -> SavedHostDescriptor {
         let ticket = try PairingTicket.decode(qrURL: url)
-        let record = try await signIn(relay: ticket.relay)
+        let record: TokenRecord
+        if let cached = try await cachedPairingCredentials(for: ticket) {
+            record = cached
+        } else {
+            record = try await signIn(relay: ticket.relay)
+        }
         let identity = try await identity()
         let host = try await PairingCoordinator.pair(
             ticket: ticket, accountID: record.accountID,
@@ -211,6 +316,49 @@ final class CompanionServices {
         if notificationEnrollment.isEnabled { await setNotificationsEnabled(true) }
         await refreshHostStatuses()
         return host
+    }
+
+    private func cachedPairingCredentials(for ticket: PairingTicket) async throws -> TokenRecord? {
+        if let saved = savedHosts.first(where: {
+            $0.relay == ticket.relay && $0.hostID == ticket.hostID
+        }) {
+            do {
+                if let record = try await validateCachedPairingCredentials(
+                    try await credentials(for: saved)
+                ) { return record }
+            } catch let error as RemoteError where error == .authenticationRequired
+                || error == .authenticationRevoked {
+                // Continue to the most recent relay login before opening a new sign-in page.
+            }
+        }
+        guard let reference = try await credentialCatalog.latestReference(relay: ticket.relay),
+              let record = try await tokenStore.load(partition: TokenPartition(
+                relay: reference.relay,
+                accountID: reference.accountID,
+                deviceID: reference.deviceID
+              )) else { return nil }
+        return try await validateCachedPairingCredentials(record)
+    }
+
+    private func validateCachedPairingCredentials(_ record: TokenRecord) async throws -> TokenRecord? {
+        let manager = try tokenManager(for: record)
+        let client = RelayHTTPClient(endpoint: record.relay)
+        do {
+            let accessToken = try await manager.accessToken()
+            _ = try await client.devices(bearer: accessToken)
+            return record
+        } catch let error as RemoteError where error == .authenticationRequired {
+            do {
+                let refreshed = try await manager.refresh()
+                _ = try await client.devices(bearer: refreshed.accessToken)
+                return refreshed
+            } catch let refreshError as RemoteError where refreshError == .authenticationRequired
+                || refreshError == .authenticationRevoked {
+                return nil
+            }
+        } catch let error as RemoteError where error == .authenticationRevoked {
+            return nil
+        }
     }
 
     func remove(_ host: SavedHostDescriptor) async {
@@ -360,6 +508,67 @@ final class CompanionServices {
             throw error
         }
     }
+
+    private static func signInFailureDescription(
+        error: Error,
+        stage: CompanionClientSignInStage,
+        callbackFailure: AuthorizationCallbackValidationFailure?
+    ) -> String {
+        if let callbackFailure {
+            return "The sign-in response was rejected because \(callbackFailure.clientDescription). Start pairing again."
+        }
+        let detail: String
+        if let browser = error as? BrowserAuthenticationError {
+            detail = browser.localizedDescription
+        } else if let remote = error as? RemoteError {
+            detail = remote.localizedDescription
+        } else {
+            detail = switch stage {
+            case .callbackConfiguration, .authorizationURL:
+                "MyTerm could not prepare a secure sign-in request. Try again."
+            case .browserSession:
+                "The sign-in page did not complete. Return to MyTerm and try again."
+            case .callbackValidation:
+                "The sign-in response was invalid. Start pairing again."
+            case .tokenExchange:
+                "The relay could not finish sign-in. Try again."
+            case .persistence:
+                "MyTerm could not save this relay sign-in. Try again."
+            }
+        }
+        return "Sign-in failed while \(stage.description): \(detail)"
+    }
+
+    private static func sanitizedSignInReason(_ error: Error) -> String {
+        if let browser = error as? BrowserAuthenticationError { return browser.rawValue }
+        guard let remote = error as? RemoteError else {
+            let value = error as NSError
+            return "\(value.domain)#\(value.code)"
+        }
+        return switch remote {
+        case .invalidEndpoint: "invalid_endpoint"
+        case .invalidMessage: "invalid_message"
+        case .unsupportedVersion: "unsupported_version"
+        case .messageTooLarge: "message_too_large"
+        case .wrongPeer: "wrong_peer"
+        case .replayedMessage: "replayed_message"
+        case .sequenceExhausted: "sequence_exhausted"
+        case .expiredPairing: "expired_pairing"
+        case .unknownPairing: "unknown_pairing"
+        case .invalidCallback: "invalid_callback"
+        case .authenticationRequired: "authentication_required"
+        case .authenticationRevoked: "authentication_revoked"
+        case .disconnected: "disconnected"
+        case .offline: "offline"
+        case .timedOut: "timed_out"
+        case .unsafeRedirect: "unsafe_redirect"
+        case .invalidResponse: "invalid_response"
+        case .checkpointIncomplete: "checkpoint_incomplete"
+        case .checkpointExpired: "checkpoint_expired"
+        case .controlDenied: "control_denied"
+        case .server(let status): "server_http_\(status)"
+        }
+    }
 }
 
 private final class EphemeralSecretStore: SecretStore, @unchecked Sendable {
@@ -375,32 +584,86 @@ private final class EphemeralSecretStore: SecretStore, @unchecked Sendable {
 private final class BrowserAuthenticationSession: NSObject, ASWebAuthenticationPresentationContextProviding {
     private var session: ASWebAuthenticationSession?
     private var anchor: ASPresentationAnchor?
+    private var continuation: CheckedContinuation<URL, Error>?
+    private var attempts = BrowserAuthenticationAttemptState()
 
     func authenticate(url: URL, callbackScheme: String) async throws -> URL {
-        guard session == nil else { throw RemoteError.authenticationRequired }
-        guard let anchor = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
-            .flatMap(\.windows).first(where: \.isKeyWindow) else {
-            throw RemoteError.authenticationRequired
+        let attemptID = try attempts.begin()
+        guard let anchor = Self.presentationWindow() else {
+            _ = attempts.complete(attemptID)
+            throw BrowserAuthenticationError.noPresentationWindow
         }
         self.anchor = anchor
-        return try await withCheckedThrowingContinuation { continuation in
-            let session = ASWebAuthenticationSession(url: url, callbackURLScheme: callbackScheme) {
-                [weak self] callback, error in
-                self?.session = nil
-                self?.anchor = nil
-                if let callback { continuation.resume(returning: callback) }
-                else { continuation.resume(throwing: error ?? RemoteError.invalidCallback) }
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                guard !Task.isCancelled else {
+                    _ = attempts.complete(attemptID)
+                    self.anchor = nil
+                    continuation.resume(throwing: CancellationError())
+                    return
+                }
+                self.continuation = continuation
+                let session = ASWebAuthenticationSession(
+                    url: url, callback: .customScheme(callbackScheme)
+                ) { [weak self] callback, error in
+                    Task { @MainActor in
+                        guard let self else { return }
+                        if let callback {
+                            self.finish(attemptID, with: .success(callback))
+                        } else {
+                            self.finish(attemptID, with: .failure(
+                                error ?? BrowserAuthenticationError.missingCallback
+                            ))
+                        }
+                    }
+                }
+                session.presentationContextProvider = self
+                session.prefersEphemeralWebBrowserSession = true
+                self.session = session
+                guard session.start() else {
+                    finish(attemptID, with: .failure(BrowserAuthenticationError.couldNotStart))
+                    return
+                }
             }
-            session.presentationContextProvider = self
-            session.prefersEphemeralWebBrowserSession = true
-            self.session = session
-            guard session.start() else {
-                self.session = nil
-                self.anchor = nil
-                continuation.resume(throwing: RemoteError.authenticationRequired)
-                return
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.cancel(attemptID)
             }
         }
+    }
+
+    private func finish(_ id: UUID, with result: Result<URL, Error>) {
+        guard attempts.complete(id) else { return }
+        let continuation = continuation
+        self.continuation = nil
+        session = nil
+        anchor = nil
+        continuation?.resume(with: result)
+    }
+
+    private func cancel(_ id: UUID) {
+        guard attempts.complete(id) else { return }
+        let continuation = continuation
+        let session = session
+        self.continuation = nil
+        self.session = nil
+        anchor = nil
+        session?.cancel()
+        continuation?.resume(throwing: CancellationError())
+    }
+
+    func cancelActiveAttempt() {
+        guard let id = attempts.activeID else { return }
+        cancel(id)
+    }
+
+    private static func presentationWindow() -> UIWindow? {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .filter { $0.activationState == .foregroundActive }
+        return scenes.lazy.compactMap { scene in
+            scene.windows.first(where: \.isKeyWindow)
+                ?? scene.windows.first(where: { !$0.isHidden && $0.windowLevel == .normal })
+        }.first
     }
 
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
@@ -408,5 +671,23 @@ private final class BrowserAuthenticationSession: NSObject, ASWebAuthenticationP
             preconditionFailure("Authentication started without a presentation window.")
         }
         return anchor
+    }
+}
+
+private extension AuthorizationCallbackValidationFailure {
+    var clientDescription: String {
+        switch self {
+        case .tooLarge: "it was too large"
+        case .malformedURL: "its URL was malformed"
+        case .redirectMismatch: "it returned to a different app address"
+        case .unexpectedAuthority: "it contained an unexpected authority"
+        case .fragmentPresent: "it contained an unexpected fragment"
+        case .missingQuery: "it did not contain response parameters"
+        case .errorResponse: "the relay returned an authentication error"
+        case .invalidStateCount: "its state parameter was missing or repeated"
+        case .invalidCodeCount: "its authorization code was missing or repeated"
+        case .stateMismatch: "it belonged to a different sign-in attempt"
+        case .invalidCode: "its authorization code was invalid"
+        }
     }
 }

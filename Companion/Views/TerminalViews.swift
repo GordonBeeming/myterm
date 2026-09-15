@@ -22,6 +22,7 @@ struct TerminalUITestFixture: UIViewRepresentable {
 }
 
 struct TerminalScreen: View {
+    @AppStorage("showTerminalKeys") private var showTerminalKeys = false
     let scene: SceneModel
     let route: TerminalRoute
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -44,6 +45,11 @@ struct TerminalScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
+                Button(showTerminalKeys ? "Hide terminal keys" : "Show terminal keys", systemImage: "keyboard") {
+                    showTerminalKeys.toggle()
+                }
+                .accessibilityIdentifier("toggle-terminal-keys")
+                .accessibilityValue(showTerminalKeys ? "Shown" : "Hidden")
                 Menu("Text size", systemImage: "textformat.size") {
                     Button("Larger") { adjustFont(by: 1) }
                     Button("Smaller") { adjustFont(by: -1) }
@@ -80,30 +86,8 @@ struct TerminalScreen: View {
         }
     }
 
-    @ViewBuilder
     private func terminalPane(_ value: TerminalRoute) -> some View {
-        if let state = scene.terminalStates[value.id] {
-            let currentRoute = state.route
-            VStack(spacing: 0) {
-                RemoteTerminalView(state: state) { data in
-                    Task { await scene.sendInput(data, route: currentRoute) }
-                } onResize: { columns, rows in
-                    Task { await scene.resize(columns: columns, rows: rows, route: currentRoute) }
-                } onResync: { error in
-                    state.invalidateForCheckpoint()
-                    scene.errorMessage = "The terminal view could not be restored: \(error.localizedDescription)"
-                    Task { await scene.refreshTerminal(currentRoute) }
-                }
-                .id(currentRoute.id)
-                TerminalAccessoryBar { bytes in
-                    Task { await scene.sendInput(bytes, route: currentRoute) }
-                }
-                .disabled(!state.ownsControl)
-            }
-        } else {
-            ProgressView("Attaching terminal")
-                .task { await scene.attach(value) }
-            }
+        CompanionTerminalPane(scene: scene, route: value, showTerminalKeys: showTerminalKeys)
     }
 
     private var otherTerminals: [TerminalRoute] {
@@ -144,8 +128,91 @@ struct TerminalScreen: View {
     }
 }
 
+struct CompanionTerminalPane: View {
+    let scene: SceneModel
+    let route: TerminalRoute
+    let showTerminalKeys: Bool
+    var requestsKeyboardFocus = true
+
+    var body: some View {
+        if let state = scene.terminalStates[route.id] {
+            let currentRoute = state.route
+            VStack(spacing: 0) {
+                TerminalControlBar(state: state) { action in
+                    Task { await scene.requestControl(action, route: currentRoute) }
+                }
+                RemoteTerminalView(state: state, showTerminalKeys: showTerminalKeys, requestsKeyboardFocus: requestsKeyboardFocus) { data in
+                    Task { await scene.sendInput(data, route: currentRoute) }
+                } onResize: { columns, rows in
+                    Task { await scene.resize(columns: columns, rows: rows, route: currentRoute) }
+                } onResync: { error in
+                    state.invalidateForCheckpoint()
+                    scene.errorMessage = "The terminal view could not be restored: \(error.localizedDescription)"
+                    Task { await scene.refreshTerminal(currentRoute) }
+                }
+                .id(currentRoute.id)
+                if showTerminalKeys {
+                    TerminalAccessoryBar { bytes in
+                        Task { await scene.sendInput(bytes, route: currentRoute) }
+                    }
+                    .disabled(!state.ownsControl)
+                    .accessibilityIdentifier("terminal-keys")
+                }
+            }
+        } else {
+            ProgressView("Attaching terminal")
+        }
+    }
+}
+
+private struct TerminalControlBar: View {
+    let state: TerminalSurfaceState
+    let request: (ControlAction) -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: state.ownsControl ? "keyboard.fill" : "eye")
+            Text(status)
+                .font(.footnote)
+                .lineLimit(1)
+            Spacer()
+            if state.isAwaitingCheckpoint {
+                ProgressView().controlSize(.small)
+            } else if state.isControlRequestPending {
+                ProgressView().controlSize(.small)
+            } else if state.ownsControl {
+                Button("Release") { request(.release) }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+            } else if state.controllerConnectionID == nil {
+                Button("Request control") { request(.acquire) }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+            } else {
+                Button("Take control") { request(.takeover) }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(.bar)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var status: String {
+        if state.isAwaitingCheckpoint { return "Restoring terminal…" }
+        if state.isControlRequestPending { return "Requesting control…" }
+        if state.ownsControl { return "You have control" }
+        if state.controllerConnectionID != nil { return "View only — another device has control" }
+        return "View only"
+    }
+}
+
 private struct RemoteTerminalView: UIViewRepresentable {
     let state: TerminalSurfaceState
+    let showTerminalKeys: Bool
+    var requestsKeyboardFocus = true
     let onInput: (Data) -> Void
     let onResize: (Int, Int) -> Void
     let onResync: (Error) -> Void
@@ -159,16 +226,27 @@ private struct RemoteTerminalView: UIViewRepresentable {
         view.acceptsUserInput = false
         view.automaticallyResizesTerminal = false
         view.linkReporting = .none
+        view.accessibilityIdentifier = "remote-terminal"
+        context.coordinator.defaultInputAccessoryView = view.inputAccessoryView
+        if !showTerminalKeys { view.inputAccessoryView = nil }
         return view
     }
 
     func updateUIView(_ view: TerminalView, context: Context) {
         context.coordinator.parent = self
+        let accessory = showTerminalKeys ? context.coordinator.defaultInputAccessoryView : nil
+        if view.inputAccessoryView !== accessory {
+            view.inputAccessoryView = accessory
+            view.reloadInputViews()
+        }
         let gainedControl = !view.acceptsUserInput && state.ownsControl
+        let gainedFocus = requestsKeyboardFocus && !context.coordinator.requestedFocus
+        context.coordinator.requestedFocus = requestsKeyboardFocus
         if view.font.pointSize != state.fontSize {
             view.font = .monospacedSystemFont(ofSize: state.fontSize, weight: .regular)
         }
-        view.automaticallyResizesTerminal = state.ownsControl
+        let acceptsControl = state.ownsControl && !state.isAwaitingCheckpoint
+        view.automaticallyResizesTerminal = acceptsControl
         if context.coordinator.gridRevision != state.gridRevision {
             context.coordinator.gridRevision = state.gridRevision
             context.coordinator.lastAppliedAuthoritativeSize = (
@@ -201,8 +279,30 @@ private struct RemoteTerminalView: UIViewRepresentable {
         } else {
             feedPendingOutput(into: view, coordinator: context.coordinator)
         }
-        view.acceptsUserInput = state.ownsControl
+        view.acceptsUserInput = acceptsControl
         if gainedControl { view.resizeToFit() }
+        if requestsKeyboardFocus && (gainedControl || gainedFocus) {
+            let coordinator = context.coordinator
+            Task { @MainActor in
+                guard state.ownsControl, !state.isAwaitingCheckpoint,
+                      coordinator.parent.requestsKeyboardFocus, view.window != nil else { return }
+                _ = view.becomeFirstResponder()
+            }
+        } else if (!acceptsControl || !requestsKeyboardFocus), view.isFirstResponder,
+                  !context.coordinator.resignRequested {
+            let coordinator = context.coordinator
+            coordinator.resignRequested = true
+            // UIKit can ask the hosting view for focus while resigning. Defer that
+            // work until SwiftUI has finished its representable update.
+            Task { @MainActor in
+                defer { coordinator.resignRequested = false }
+                let current = coordinator.parent
+                guard view.window != nil, view.isFirstResponder,
+                      !current.state.ownsControl || current.state.isAwaitingCheckpoint
+                        || !current.requestsKeyboardFocus else { return }
+                _ = view.resignFirstResponder()
+            }
+        }
     }
 
     private func feedPendingOutput(into view: TerminalView, coordinator: Coordinator) {
@@ -221,6 +321,9 @@ private struct RemoteTerminalView: UIViewRepresentable {
 
     final class Coordinator: NSObject, TerminalViewDelegate, @unchecked Sendable {
         var parent: RemoteTerminalView
+        var defaultInputAccessoryView: UIView?
+        var requestedFocus = false
+        var resignRequested = false
         var checkpointRevision = -1
         var outputIndex = 0
         var gridRevision = -1
@@ -302,9 +405,31 @@ struct TerminalActionsView: View {
         NavigationStack {
             Form {
                 Section("Control") {
-                    Button("Request control") { Task { await scene.requestControl(.acquire, route: route) } }
-                    Button("Take control") { Task { await scene.requestControl(.takeover, route: route) } }
-                    Button("Release control") { Task { await scene.requestControl(.release, route: route) } }
+                    if let surface {
+                        Text(surface.ownsControl ? "You have control." : "This terminal is view only.")
+                            .foregroundStyle(.secondary)
+                        if surface.isControlRequestPending {
+                            ProgressView("Requesting control")
+                        } else if surface.ownsControl {
+                            Button("Release control") {
+                                Task { await scene.requestControl(.release, route: surface.route) }
+                            }
+                        } else if surface.controllerConnectionID == nil {
+                            Button("Request control") {
+                                Task { await scene.requestControl(.acquire, route: surface.route) }
+                            }
+                        } else {
+                            Button("Take control") {
+                                Task { await scene.requestControl(.takeover, route: surface.route) }
+                            }
+                            Text("Taking control makes the other device view only.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Text("Open this terminal before requesting control.")
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Section("Tab") {
                     TextField("Title", text: $title)

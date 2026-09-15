@@ -144,7 +144,12 @@ public typealias PairingApproval = @Sendable (PairingProposal) async -> Bool
 
 /// The ticket secret is consumed on the Mac; successful relay login cannot authorize a new peer.
 public actor PairingRegistry {
-    private var active: PairingTicket?
+    private struct ActiveTicket {
+        let ticket: PairingTicket
+        let seriesID: UUID?
+    }
+
+    private var active: [UUID: ActiveTicket] = [:]
     private var peers: [UUID: PairedPeer] = [:]
     private let persistence: (any PairedPeerPersistence)?
 
@@ -166,23 +171,45 @@ public actor PairingRegistry {
     }
 
     public func begin(relay: RelayEndpoint, hostID: UUID, hostName: String,
-                      hostPublicKey: P256.KeyAgreement.PublicKey, now: Date = .now) throws -> PairingTicket {
-        guard hostName.utf8.count <= 256 else { throw RemoteError.invalidMessage }
+                      hostPublicKey: P256.KeyAgreement.PublicKey, now: Date = .now,
+                      lifetime: TimeInterval = 300, seriesID: UUID? = nil,
+                      retainsPreviousTickets: Bool = false) throws -> PairingTicket {
+        guard hostName.utf8.count <= 256, lifetime.isFinite,
+              lifetime > 0, lifetime <= 300,
+              !retainsPreviousTickets || seriesID != nil else {
+            throw RemoteError.invalidMessage
+        }
+        active = active.filter { $0.value.ticket.expiresAt > now }
+        if retainsPreviousTickets {
+            active = active.filter { $0.value.seriesID == seriesID }
+        } else {
+            active.removeAll()
+        }
         let secret = SymmetricKey(size: .bits256).withUnsafeBytes { Data($0) }
         let ticket = PairingTicket(version: 1, relay: relay, hostID: hostID, hostName: hostName,
                                    hostPublicKey: hostPublicKey.x963Representation, ticketID: UUID(),
-                                   secret: secret, expiresAt: now.addingTimeInterval(300))
-        active = ticket
+                                   secret: secret, expiresAt: now.addingTimeInterval(lifetime))
+        active[ticket.ticketID] = ActiveTicket(ticket: ticket, seriesID: seriesID)
+        while active.count > 2,
+              let oldest = active.min(by: { $0.value.ticket.expiresAt < $1.value.ticket.expiresAt }) {
+            active.removeValue(forKey: oldest.key)
+        }
         return ticket
     }
 
-    public func cancel() { active = nil }
+    public func cancel() { active.removeAll() }
+
+    public func cancel(ticketID: UUID) {
+        guard let entry = active[ticketID] else { return }
+        active = active.filter { $0.value.seriesID != entry.seriesID }
+    }
 
     public func consume(ticketID: UUID, secret: Data, peerPublicKey: Data,
                         now: Date = .now) throws -> PairingCandidate {
-        guard let ticket = active, ticket.ticketID == ticketID else { throw RemoteError.unknownPairing }
+        guard let entry = active[ticketID] else { throw RemoteError.unknownPairing }
+        let ticket = entry.ticket
         guard ticket.expiresAt > now else {
-            active = nil
+            active.removeValue(forKey: ticketID)
             throw RemoteError.expiredPairing
         }
         guard secret.count == ticket.secret.count else { throw RemoteError.unknownPairing }
@@ -190,7 +217,7 @@ public actor PairingRegistry {
         guard difference == 0 else { throw RemoteError.unknownPairing }
         do { _ = try P256.KeyAgreement.PublicKey(x963Representation: peerPublicKey) }
         catch { throw RemoteError.invalidMessage }
-        active = nil
+        active = active.filter { $0.value.seriesID != entry.seriesID }
         return PairingCandidate(peerPublicKey: peerPublicKey, ticketID: ticketID)
     }
 

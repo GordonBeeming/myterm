@@ -12,8 +12,24 @@ private final class TestSecretStore: SecretStore, @unchecked Sendable {
     func delete(account: String) throws { _ = lock.withLock { values.removeValue(forKey: account) } }
 }
 
+private actor VisibilityEventRecorder {
+    private var values: [String] = []
+    func append(_ value: String) { values.append(value) }
+    func snapshot() -> [String] { values }
+}
+
 @MainActor
 final class SceneStateTests: XCTestCase {
+    func testSelectingWorkspaceUsesDetailRootWithoutPushingDuplicate() {
+        let scene = SceneModel()
+        let workspaceID = UUID()
+        scene.navigateToWorkspace(workspaceID)
+        XCTAssertEqual(scene.selectedWorkspaceID, workspaceID)
+        XCTAssertTrue(scene.path.isEmpty)
+        scene.navigateToWorkspace(workspaceID)
+        XCTAssertTrue(scene.path.isEmpty)
+    }
+
     func testTerminalOutputRequiresCheckpointGenerationAndSequence() async throws {
         let route = TerminalRoute(connectionID: testConnection(), workspaceID: UUID(), groupID: UUID(),
                                   tabID: UUID(), sessionID: UUID(), title: "Shell")
@@ -43,21 +59,138 @@ final class SceneStateTests: XCTestCase {
         XCTAssertEqual(state.outputChunks, [Data("accepted".utf8)])
     }
 
-    func testControllerOwnershipUsesConnectionID() {
+    func testControllerOwnershipUsesConnectionID() async throws {
         let route = TerminalRoute(connectionID: testConnection(), workspaceID: UUID(), groupID: UUID(),
                                   tabID: UUID(), sessionID: UUID(), title: "Shell")
         let state = TerminalSurfaceState(route: route)
+        let generation = UUID()
+        let checkpoint = try await CheckpointAssembler().ingest(
+            metadata: MessageMetadata(hostID: route.hostID, runtimeID: UUID(),
+                                      sessionID: route.sessionID),
+            chunk: CheckpointChunkParameters(
+                transferID: UUID(), generation: generation, sequence: 0,
+                chunkIndex: 0, chunkCount: 1, totalBytes: 1, bytes: Data([0])
+            )
+        )
+        state.apply(checkpoint: try XCTUnwrap(checkpoint))
         let ownConnection = UUID()
         state.apply(control: ControlStateParameters(controllerConnectionID: ownConnection,
                                                     leaseID: UUID(), expiresAt: .now,
-                                                    generation: UUID(), columns: 80, rows: 24),
+                                                    generation: generation, columns: 80, rows: 24),
                     ownConnectionID: ownConnection)
         XCTAssertTrue(state.ownsControl)
         state.apply(control: ControlStateParameters(controllerConnectionID: UUID(),
                                                     leaseID: UUID(), expiresAt: .now,
-                                                    generation: UUID(), columns: 80, rows: 24),
+                                                    generation: generation, columns: 80, rows: 24),
                     ownConnectionID: ownConnection)
         XCTAssertFalse(state.ownsControl)
+    }
+
+    func testFreeTerminalAutomaticallyRequestsControlOnlyOnceAfterCheckpoint() async throws {
+        let route = testTerminalRoute(connectionID: testConnection())
+        let state = TerminalSurfaceState(route: route)
+        XCTAssertFalse(state.beginAutomaticControlRequest())
+
+        let generation = UUID()
+        let checkpoint = try await CheckpointAssembler().ingest(
+            metadata: MessageMetadata(hostID: route.hostID, runtimeID: UUID(),
+                                      sessionID: route.sessionID),
+            chunk: CheckpointChunkParameters(
+                transferID: UUID(), generation: generation, sequence: 0,
+                chunkIndex: 0, chunkCount: 1, totalBytes: 1, bytes: Data([0])
+            )
+        )
+        state.apply(checkpoint: try XCTUnwrap(checkpoint))
+        XCTAssertTrue(state.apply(control: ControlStateParameters(
+            controllerConnectionID: nil, leaseID: nil, expiresAt: nil,
+            generation: generation, columns: 80, rows: 24
+        ), ownConnectionID: UUID()))
+
+        XCTAssertTrue(state.beginAutomaticControlRequest())
+        XCTAssertTrue(state.isControlRequestPending)
+        XCTAssertFalse(state.beginAutomaticControlRequest())
+        state.controlRequestFailed()
+        XCTAssertFalse(state.beginAutomaticControlRequest(),
+                       "A failure or explicit release must not silently reacquire")
+        state.beginUserControlRequest()
+        XCTAssertTrue(state.isControlRequestPending)
+    }
+
+    func testRenewableControlIsBoundToConnectionLeaseGenerationAndExpiry() async throws {
+        let route = testTerminalRoute(connectionID: testConnection())
+        let state = TerminalSurfaceState(route: route)
+        let generation = UUID()
+        let checkpoint = try await CheckpointAssembler().ingest(
+            metadata: MessageMetadata(hostID: route.hostID, runtimeID: UUID(),
+                                      sessionID: route.sessionID),
+            chunk: CheckpointChunkParameters(
+                transferID: UUID(), generation: generation, sequence: 0,
+                chunkIndex: 0, chunkCount: 1, totalBytes: 1, bytes: Data([0])
+            )
+        )
+        state.apply(checkpoint: try XCTUnwrap(checkpoint))
+        let connectionID = UUID()
+        let leaseID = UUID()
+        let now = Date(timeIntervalSince1970: 100)
+        XCTAssertTrue(state.apply(control: ControlStateParameters(
+            controllerConnectionID: connectionID, leaseID: leaseID,
+            expiresAt: now.addingTimeInterval(30), generation: generation,
+            columns: 80, rows: 24
+        ), ownConnectionID: connectionID))
+
+        XCTAssertTrue(state.hasRenewableControl(
+            connectionID: connectionID, leaseID: leaseID,
+            generation: generation, now: now
+        ))
+        XCTAssertFalse(state.hasRenewableControl(
+            connectionID: UUID(), leaseID: leaseID,
+            generation: generation, now: now
+        ))
+        XCTAssertFalse(state.hasRenewableControl(
+            connectionID: connectionID, leaseID: UUID(),
+            generation: generation, now: now
+        ))
+        XCTAssertFalse(state.hasRenewableControl(
+            connectionID: connectionID, leaseID: leaseID,
+            generation: UUID(), now: now
+        ))
+        XCTAssertFalse(state.hasRenewableControl(
+            connectionID: connectionID, leaseID: leaseID,
+            generation: generation, now: now.addingTimeInterval(31)
+        ))
+    }
+
+    func testControlBroadcastCannotReenableInputWhileCheckpointIsPending() async throws {
+        let route = testTerminalRoute(connectionID: testConnection())
+        let state = TerminalSurfaceState(route: route)
+        let generation = UUID()
+        let checkpoint = try await CheckpointAssembler().ingest(
+            metadata: MessageMetadata(hostID: route.hostID, runtimeID: UUID(),
+                                      sessionID: route.sessionID),
+            chunk: CheckpointChunkParameters(
+                transferID: UUID(), generation: generation, sequence: 0,
+                chunkIndex: 0, chunkCount: 1, totalBytes: 1, bytes: Data([0])
+            )
+        )
+        state.apply(checkpoint: try XCTUnwrap(checkpoint))
+        let connectionID = UUID()
+        let leaseID = UUID()
+        let control = ControlStateParameters(
+            controllerConnectionID: connectionID, leaseID: leaseID,
+            expiresAt: .now.addingTimeInterval(30), generation: generation,
+            columns: 80, rows: 24
+        )
+        XCTAssertTrue(state.apply(control: control, ownConnectionID: connectionID))
+        XCTAssertTrue(state.ownsControl)
+
+        XCTAssertTrue(state.invalidateForCheckpoint())
+        XCTAssertTrue(state.apply(control: control, ownConnectionID: connectionID))
+
+        XCTAssertTrue(state.isAwaitingCheckpoint)
+        XCTAssertFalse(state.ownsControl)
+        XCTAssertFalse(state.hasRenewableControl(
+            connectionID: connectionID, leaseID: leaseID, generation: generation
+        ))
     }
 
     func testGapInvalidatesSurfaceAndDisablesControlUntilFreshCheckpoint() async throws {
@@ -241,7 +374,8 @@ final class SceneStateTests: XCTestCase {
 
         let otherWorkspace = UUID()
         scene.navigateToWorkspace(otherWorkspace)
-        XCTAssertEqual(scene.path, [.workspace(otherWorkspace)])
+        XCTAssertTrue(scene.path.isEmpty)
+        XCTAssertEqual(scene.selectedWorkspaceID, otherWorkspace)
     }
 
     func testAttachmentRegistryDeduplicatesImplicitAttachAndAllowsExplicitRefresh() {
@@ -281,7 +415,7 @@ final class SceneStateTests: XCTestCase {
         XCTAssertNil(scene.terminalStates[original.id])
     }
 
-    func testBrowserRouteReconcilesAfterMovingGroups() throws {
+    func testBrowserRouteReconcilesAfterMovingGroups() async throws {
         let scene = SceneModel()
         let connectionID = testConnection()
         let tabID = UUID()
@@ -306,7 +440,7 @@ final class SceneStateTests: XCTestCase {
             )
         ])
 
-        scene.reconcileRoutes(in: projection)
+        await scene.reconcileRoutes(in: projection)
 
         guard case .browser(let updated) = try XCTUnwrap(scene.path.last) else {
             return XCTFail("Expected the browser route to remain selected")
@@ -347,17 +481,129 @@ final class SceneStateTests: XCTestCase {
         XCTAssertEqual(scene.path, [.terminal(replacement)])
     }
 
+    func testWorkspaceVisibilitySupportsFourPanesAndDetachesRemovedRoutes() async {
+        let scene = SceneModel()
+        let connectionID = testConnection()
+        scene.selectedConnectionID = connectionID
+        let routes = (0..<4).map { _ in testTerminalRoute(connectionID: connectionID) }
+        let ownerID = UUID()
+
+        await scene.configureVisibleWorkspaceTerminals(routes, ownerID: ownerID)
+
+        XCTAssertEqual(scene.configuredWorkspaceTerminalIDs, Set(routes.map(\.id)))
+        for route in routes {
+            scene.terminalStates[route.id] = TerminalSurfaceState(route: route)
+        }
+
+        await scene.configureVisibleWorkspaceTerminals(
+            Array(routes.prefix(2)), ownerID: ownerID
+        )
+
+        XCTAssertEqual(scene.configuredWorkspaceTerminalIDs, Set(routes.prefix(2).map(\.id)))
+        XCTAssertNotNil(scene.terminalStates[routes[0].id])
+        XCTAssertNotNil(scene.terminalStates[routes[1].id])
+        XCTAssertNil(scene.terminalStates[routes[2].id])
+        XCTAssertNil(scene.terminalStates[routes[3].id])
+    }
+
+    func testWorkspaceVisibilityRejectsForeignConnectionWithoutChangingCurrentSet() async {
+        let scene = SceneModel()
+        let connectionID = testConnection()
+        scene.selectedConnectionID = connectionID
+        let current = testTerminalRoute(connectionID: connectionID)
+        let ownerID = UUID()
+        await scene.configureVisibleWorkspaceTerminals([current], ownerID: ownerID)
+        let foreign = testTerminalRoute(connectionID: testConnection())
+
+        await scene.configureVisibleWorkspaceTerminals([foreign], ownerID: ownerID)
+
+        XCTAssertEqual(scene.configuredWorkspaceTerminalIDs, Set([current.id]))
+    }
+
+    func testStaleWorkspaceOwnerCannotClearReplacementVisibility() async {
+        let scene = SceneModel()
+        let connectionID = testConnection()
+        scene.selectedConnectionID = connectionID
+        let first = testTerminalRoute(connectionID: connectionID)
+        let replacement = testTerminalRoute(connectionID: connectionID)
+        let firstOwner = UUID()
+        let replacementOwner = UUID()
+        await scene.configureVisibleWorkspaceTerminals([first], ownerID: firstOwner)
+        await scene.configureVisibleWorkspaceTerminals(
+            [replacement], ownerID: replacementOwner
+        )
+
+        await scene.clearVisibleWorkspaceTerminals(ownerID: firstOwner)
+
+        XCTAssertEqual(scene.configuredWorkspaceTerminalIDs, Set([replacement.id]))
+    }
+
+    func testLegacyAttachRevokesAdaptiveVisibilityOwnership() async {
+        let scene = SceneModel()
+        let connectionID = testConnection()
+        scene.selectedConnectionID = connectionID
+        let adaptive = (0..<4).map { _ in testTerminalRoute(connectionID: connectionID) }
+        await scene.configureVisibleWorkspaceTerminals(adaptive, ownerID: UUID())
+        let legacy = testTerminalRoute(connectionID: connectionID)
+
+        await scene.attach(legacy)
+
+        XCTAssertTrue(scene.configuredWorkspaceTerminalIDs.isEmpty)
+    }
+
+    func testLegacyScreenDisappearanceCannotDetachAdaptiveSameSession() async {
+        let scene = SceneModel()
+        let connectionID = testConnection()
+        scene.selectedConnectionID = connectionID
+        let route = testTerminalRoute(connectionID: connectionID)
+        await scene.configureVisibleWorkspaceTerminals([route], ownerID: UUID())
+        let state = TerminalSurfaceState(route: route)
+        scene.terminalStates[route.id] = state
+
+        await scene.terminalScreenDidDisappear(route, secondary: nil)
+
+        XCTAssertTrue(scene.terminalStates[route.id] === state)
+        XCTAssertEqual(scene.configuredWorkspaceTerminalIDs, Set([route.id]))
+    }
+
+    func testWorkspaceVisibilityGateSerializesOverlappingWireOperations() async {
+        let gate = WorkspaceVisibilityGate()
+        let events = VisibilityEventRecorder()
+        let first = Task {
+            await gate.acquire()
+            await events.append("first-start")
+            try? await Task.sleep(for: .milliseconds(50))
+            await events.append("first-end")
+            await gate.release()
+        }
+        await Task.yield()
+        let second = Task {
+            await gate.acquire()
+            await events.append("second-start")
+            await gate.release()
+        }
+
+        await first.value
+        await second.value
+
+        let recorded = await events.snapshot()
+        XCTAssertEqual(recorded, ["first-start", "first-end", "second-start"])
+    }
+
     func testPrimarySelectionDoesNotAppendAfterNavigationChanges() async {
         let scene = SceneModel()
         let connectionID = testConnection()
         let current = testTerminalRoute(connectionID: connectionID)
         let replacement = testTerminalRoute(connectionID: connectionID)
         scene.selectedConnectionID = connectionID
-        scene.path = [.settings]
+        let workspaceID = UUID()
+        scene.selectedWorkspaceID = workspaceID
+        scene.path = []
 
         await scene.selectPrimaryTerminal(replacement, replacing: current)
 
-        XCTAssertEqual(scene.path, [.settings])
+        XCTAssertTrue(scene.path.isEmpty)
+        XCTAssertEqual(scene.selectedWorkspaceID, workspaceID)
     }
 }
 

@@ -402,6 +402,7 @@ final class CompanionHostIntegrationTests: XCTestCase {
 
         let identity = try await host.hostIdentityForTesting()
         let ticket = try await host.beginPairingForTesting()
+        XCTAssertEqual(ticket.expiresAt.timeIntervalSinceNow, 60, accuracy: 1)
         let clientAgreementKey = P256.KeyAgreement.PrivateKey()
         let clientSigningKey = P256.Signing.PrivateKey()
         networkDiagnostics.setStage("connect first phone transport")

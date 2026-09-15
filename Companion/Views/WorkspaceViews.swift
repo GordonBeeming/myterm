@@ -3,32 +3,22 @@ import MyTermRemote
 import SwiftUI
 
 struct WorkspaceDetail: View {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @AppStorage("workspacePresentation") private var workspacePresentation = WorkspacePresentationStyle.adaptive.rawValue
     let scene: SceneModel
-    var workspaceID: UUID?
     @State private var browserRenameRoute: BrowserRoute?
     @State private var browserRenameTitle = ""
-
-    init(scene: SceneModel, workspaceID: UUID? = nil) {
-        self.scene = scene
-        self.workspaceID = workspaceID
-    }
 
     var body: some View {
         Group {
             if let workspace {
-                List {
-                    ForEach(workspace.groups, id: \.id) { group in
-                        Section("Terminal group") {
-                            ForEach(group.tabs, id: \.id) { tab in
-                                Button {
-                                    Task { await open(tab: tab, group: group) }
-                                } label: {
-                                    TabProjectionRow(tab: tab)
-                                }
-                                .buttonStyle(.plain)
-                                .contextMenu { tabMenu(tab: tab, group: group) }
-                            }
-                        }
+                Group {
+                    if workspacePresentation != WorkspacePresentationStyle.terminalList.rawValue,
+                       horizontalSizeClass != .regular || workspace.layout != nil {
+                        AdaptiveWorkspaceView(scene: scene, workspace: workspace)
+                            .id(workspace.id)
+                    } else {
+                        terminalList(workspace)
                     }
                 }
                 .navigationTitle(workspace.title)
@@ -47,6 +37,9 @@ struct WorkspaceDetail: View {
                 ContentUnavailableView("Choose a workspace", systemImage: "terminal")
             }
         }
+        .onChange(of: workspacePresentation) { _, _ in
+            scene.path.removeAll()
+        }
         .alert("Rename browser tab", isPresented: Binding(
             get: { browserRenameRoute != nil },
             set: { if !$0 { browserRenameRoute = nil } }
@@ -63,8 +56,27 @@ struct WorkspaceDetail: View {
         }
     }
 
+    private func terminalList(_ workspace: RemoteWorkspaceItem) -> some View {
+        List {
+            ForEach(workspace.groups, id: \.id) { group in
+                Section("Terminal group") {
+                    ForEach(group.tabs, id: \.id) { tab in
+                        Button {
+                            Task { await open(tab: tab, group: group) }
+                        } label: {
+                            TabProjectionRow(tab: tab)
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu { tabMenu(tab: tab, group: group) }
+                    }
+                }
+            }
+        }
+    }
+
+
     private var workspace: RemoteWorkspaceItem? {
-        let id = workspaceID ?? scene.selectedWorkspaceID
+        let id = scene.selectedWorkspaceID
         return scene.projection?.workspaces.first { $0.id.rawValue == id }
     }
 

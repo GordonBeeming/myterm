@@ -5,6 +5,9 @@ options:
     iOS: "27.0"
   createIntermediateGroups: true
   generateEmptyDirectories: true
+configFiles:
+  Debug: Support/Signing.xcconfig
+  Release: Support/Signing.xcconfig
 packages:
   MyTerm:
     path: ..
@@ -114,7 +117,7 @@ targets:
           - "$(AppIdentifierPrefix)com.gordonbeeming.myterm.companion.shared"
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.gordonbeeming.myterm.companion.notification-service
+        PRODUCT_BUNDLE_IDENTIFIER: com.gordonbeeming.myterm.companion.notifications
         SKIP_INSTALL: YES
       configs:
         Debug:
@@ -130,6 +133,7 @@ targets:
       - target: MyTermCompanion
     settings:
       base:
+        GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.gordonbeeming.myterm.companion.tests
   MyTermCompanionUITests:
     type: bundle.ui-testing
@@ -140,6 +144,7 @@ targets:
       - target: MyTermCompanion
     settings:
       base:
+        GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.gordonbeeming.myterm.companion.uitests
         TEST_TARGET_NAME: MyTermCompanion
 schemes:

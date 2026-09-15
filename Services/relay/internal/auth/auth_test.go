@@ -154,9 +154,13 @@ func TestAddPasskeyAndRecoveryArePurposeBoundAndTransactional(t *testing.T) {
 		t.Fatal(err)
 	}
 	third := newTestAuthenticator(t, "relay.example.com", "https://relay.example.com")
-	options, ceremony, err := manager.BeginRegistration(context.Background(), oauth, recovery, "", "")
+	options, ceremony, err := manager.BeginRegistration(context.Background(), oauth, recovery, "MyTerm Dev", "MyTerm Dev")
 	if err != nil {
 		t.Fatal(err)
+	}
+	creation := options.(*protocol.CredentialCreation)
+	if creation.Response.User.Name != "MyTerm Dev" || creation.Response.User.DisplayName != "MyTerm Dev" {
+		t.Fatal("recovery ignored the requested passkey label")
 	}
 	replayOptions, replayCeremony, err := manager.BeginRegistration(context.Background(), oauth, recovery, "", "")
 	if err != nil {
@@ -171,6 +175,10 @@ func TestAddPasskeyAndRecoveryArePurposeBoundAndTransactional(t *testing.T) {
 	recovered, err := finish(options, ceremony, third)
 	if err != nil {
 		t.Fatal(err)
+	}
+	ownerAfterRecovery, err := storage.Owner(context.Background())
+	if err != nil || ownerAfterRecovery.ID != owner.ID || !bytes.Equal(ownerAfterRecovery.WebAuthnID, owner.WebAuthnID) || ownerAfterRecovery.Name != owner.Name || ownerAfterRecovery.DisplayName != owner.DisplayName {
+		t.Fatal("passkey relabel changed the stored owner identity or labels")
 	}
 	if len(recovered.RevokedDeviceIDs) != 1 || recovered.RevokedDeviceIDs[0] != device.ID {
 		t.Fatalf("revoked devices %+v", recovered.RevokedDeviceIDs)

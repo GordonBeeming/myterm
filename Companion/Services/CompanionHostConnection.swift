@@ -11,7 +11,7 @@ enum CompanionConnectionEvent: Sendable {
     case output(TerminalRoute, OutputParameters)
     case control(TerminalRoute, ControlStateParameters)
     case activity(UUID, String)
-    case error(String)
+    case error(MessageMetadata, ErrorParameters)
 }
 
 struct RemoteCommandFailure: Error, LocalizedError, Sendable {
@@ -322,8 +322,8 @@ actor CompanionHostConnection {
         case .activity(let metadata, let activity):
             guard let sessionID = metadata.sessionID else { throw RemoteError.invalidMessage }
             try emit(.activity(sessionID, activity.state))
-        case .error(_, let error):
-            try emit(.error(error.message))
+        case .error(let metadata, let error):
+            try emit(.error(metadata, error))
         default:
             throw RemoteError.invalidMessage
         }

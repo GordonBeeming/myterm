@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"net/url"
 	"os"
 	"strconv"
@@ -26,6 +27,7 @@ type Config struct {
 	WebSocketQueueDepth int
 	HeartbeatInterval   time.Duration
 	HeartbeatTimeout    time.Duration
+	TrustedProxyCIDRs   []netip.Prefix
 }
 
 func Load() (Config, error) {
@@ -58,6 +60,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	trustedProxies, err := parseCIDRs("MYTERM_RELAY_TRUSTED_PROXY_CIDRS", envString("MYTERM_RELAY_TRUSTED_PROXY_CIDRS", "127.0.0.0/8,::1/128"))
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
 		ListenAddress:       envString("MYTERM_RELAY_LISTEN", "127.0.0.1:8787"),
@@ -74,7 +80,36 @@ func Load() (Config, error) {
 		WebSocketQueueDepth: queueDepth,
 		HeartbeatInterval:   20 * time.Second,
 		HeartbeatTimeout:    10 * time.Second,
+		TrustedProxyCIDRs:   trustedProxies,
 	}, nil
+}
+
+func parseCIDRs(name, value string) ([]netip.Prefix, error) {
+	if strings.EqualFold(strings.TrimSpace(value), "none") {
+		return nil, nil
+	}
+	var result []netip.Prefix
+	for _, part := range strings.Split(value, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		prefix, err := netip.ParsePrefix(part)
+		if err != nil {
+			address, addressErr := netip.ParseAddr(part)
+			if addressErr != nil {
+				return nil, fmt.Errorf("%s contains invalid address or CIDR %q", name, part)
+			}
+			prefix = netip.PrefixFrom(address, address.BitLen())
+		}
+		prefix = prefix.Masked()
+		bits := prefix.Bits()
+		if (prefix.Addr().Is4() && bits < 8) || (prefix.Addr().Is6() && bits < 24) {
+			return nil, fmt.Errorf("%s contains dangerously broad CIDR %q", name, part)
+		}
+		result = append(result, prefix)
+	}
+	return result, nil
 }
 
 func envString(name, fallback string) string {

@@ -30,10 +30,13 @@ public struct RemoteWorkspaceItem: Codable, Equatable, Sendable {
     public let color: WorkspaceColor?
     public let emoji: String?
     public let preferences: TerminalPreferences?
+    public let layout: RemotePaneLayout?
+    public let focusedGroupID: TabGroupID?
     public let groups: [RemoteTabGroupProjection]
 
     public init(id: WorkspaceID, title: String, folderID: WorkspaceFolderID?, isPinned: Bool,
                 color: WorkspaceColor?, emoji: String?, preferences: TerminalPreferences? = nil,
+                layout: RemotePaneLayout? = nil, focusedGroupID: TabGroupID? = nil,
                 groups: [RemoteTabGroupProjection]) {
         self.id = id
         self.title = title
@@ -42,17 +45,80 @@ public struct RemoteWorkspaceItem: Codable, Equatable, Sendable {
         self.color = color
         self.emoji = emoji
         self.preferences = preferences
+        self.layout = layout
+        self.focusedGroupID = focusedGroupID
         self.groups = groups
     }
 }
 
 public struct RemoteTabGroupProjection: Codable, Equatable, Sendable {
     public let id: TabGroupID
+    public let selectedTabID: TabID?
     public let tabs: [RemoteTabProjection]
 
-    public init(id: TabGroupID, tabs: [RemoteTabProjection]) {
+    public init(id: TabGroupID, selectedTabID: TabID? = nil,
+                tabs: [RemoteTabProjection]) {
         self.id = id
+        self.selectedTabID = selectedTabID
         self.tabs = tabs
+    }
+}
+
+public indirect enum RemotePaneLayout: Codable, Equatable, Hashable, Sendable {
+    case group(TabGroupID)
+    case split(id: SplitNodeID, orientation: SplitOrientation,
+               children: [RemotePaneLayout], weights: [Double])
+
+    private enum CodingKeys: String, CodingKey {
+        case type, groupID, id, orientation, children, weights
+    }
+
+    private enum NodeType: String, Codable {
+        case group, split
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        switch try container.decode(NodeType.self, forKey: .type) {
+        case .group:
+            self = .group(try container.decode(TabGroupID.self, forKey: .groupID))
+        case .split:
+            let children = try container.decode([RemotePaneLayout].self, forKey: .children)
+            self = .split(
+                id: try container.decode(SplitNodeID.self, forKey: .id),
+                orientation: try container.decode(SplitOrientation.self, forKey: .orientation),
+                children: children,
+                weights: WorkspaceLayout.normalizedWeights(
+                    (try? container.decode([Double].self, forKey: .weights)) ?? [],
+                    count: children.count
+                )
+            )
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .group(let groupID):
+            try container.encode(NodeType.group, forKey: .type)
+            try container.encode(groupID, forKey: .groupID)
+        case .split(let id, let orientation, let children, let weights):
+            try container.encode(NodeType.split, forKey: .type)
+            try container.encode(id, forKey: .id)
+            try container.encode(orientation, forKey: .orientation)
+            try container.encode(children, forKey: .children)
+            try container.encode(
+                WorkspaceLayout.normalizedWeights(weights, count: children.count),
+                forKey: .weights
+            )
+        }
+    }
+
+    public var orderedGroupIDs: [TabGroupID] {
+        switch self {
+        case .group(let id): [id]
+        case .split(_, _, let children, _): children.flatMap(\.orderedGroupIDs)
+        }
     }
 }
 

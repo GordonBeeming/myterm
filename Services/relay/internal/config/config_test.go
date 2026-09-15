@@ -32,13 +32,31 @@ func TestLoadRequiresFixedHTTPSWebAuthnOrigin(t *testing.T) {
 			if !test.wantError && cfg.ListenAddress != "127.0.0.1:8787" {
 				t.Fatalf("unsafe default listener %q", cfg.ListenAddress)
 			}
+			if !test.wantError && len(cfg.TrustedProxyCIDRs) != 2 {
+				t.Fatalf("trusted proxy defaults: %v", cfg.TrustedProxyCIDRs)
+			}
 		})
 	}
 }
 
 func setCleanEnvironment(t *testing.T) {
 	t.Helper()
-	for _, name := range []string{"MYTERM_RELAY_PUBLIC_URL", "MYTERM_RELAY_RP_ID", "MYTERM_RELAY_RP_NAME", "MYTERM_RELAY_LISTEN", "MYTERM_RELAY_DATABASE", "MYTERM_RELAY_WS_FRAME_LIMIT", "MYTERM_RELAY_WS_QUEUE_DEPTH"} {
+	for _, name := range []string{"MYTERM_RELAY_PUBLIC_URL", "MYTERM_RELAY_RP_ID", "MYTERM_RELAY_RP_NAME", "MYTERM_RELAY_LISTEN", "MYTERM_RELAY_DATABASE", "MYTERM_RELAY_WS_FRAME_LIMIT", "MYTERM_RELAY_WS_QUEUE_DEPTH", "MYTERM_RELAY_TRUSTED_PROXY_CIDRS"} {
 		t.Setenv(name, "")
+	}
+}
+
+func TestTrustedProxyCIDRsRejectInvalidAndBroadRanges(t *testing.T) {
+	for _, value := range []string{"not-a-network", "0.0.0.0/0", "::/0"} {
+		if _, err := parseCIDRs("TEST", value); err == nil {
+			t.Fatalf("accepted %q", value)
+		}
+	}
+	values, err := parseCIDRs("TEST", "127.0.0.1, 172.16.0.0/12, 2606:4700::/32")
+	if err != nil || len(values) != 3 {
+		t.Fatalf("parse proxies: %v %v", values, err)
+	}
+	if values, err := parseCIDRs("TEST", "none"); err != nil || len(values) != 0 {
+		t.Fatalf("none proxies: %v %v", values, err)
 	}
 }

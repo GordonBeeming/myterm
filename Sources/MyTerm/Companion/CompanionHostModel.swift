@@ -32,6 +32,32 @@ struct CompanionRemoteController: Identifiable, Equatable {
 @MainActor
 @Observable
 final class CompanionHostModel {
+    private enum SignInStage: String {
+        case setupLink = "setup_link"
+        case relayEndpoint = "relay_endpoint"
+        case callbackConfiguration = "callback_configuration"
+        case authorizationURL = "authorization_url"
+        case browserSession = "browser_session"
+        case callbackValidation = "callback_validation"
+        case tokenExchange = "token_exchange"
+        case persistence = "persistence"
+        case connection = "connection"
+
+        var description: String {
+            switch self {
+            case .setupLink: "reading the setup link"
+            case .relayEndpoint: "checking the relay address"
+            case .callbackConfiguration: "preparing the app callback"
+            case .authorizationURL: "preparing the sign-in page"
+            case .browserSession: "opening the sign-in page"
+            case .callbackValidation: "checking the browser response"
+            case .tokenExchange: "finishing sign-in with the relay"
+            case .persistence: "saving the linked relay"
+            case .connection: "connecting to the relay"
+            }
+        }
+    }
+
     private struct SessionRoute: Equatable {
         let workspaceID: WorkspaceID
         let groupID: TabGroupID
@@ -74,6 +100,7 @@ final class CompanionHostModel {
     private let sleep: @Sendable (TimeInterval) async throws -> Void
     private let jitter: @Sendable () -> Double
     private let now: @Sendable () -> Date
+    private let pairingRotation: CompanionPairingRotation
     private let makeHTTPClient: @Sendable (RelayEndpoint) -> RelayHTTPClient
     private let makeTransport: @Sendable (RelayEndpoint, UUID, RelayRole) -> RelayWebSocketClient
     private var identity: CompanionHostIdentity?
@@ -86,6 +113,8 @@ final class CompanionHostModel {
     private var connectionFence = CompanionConnectionFence()
     private var pairingRegistry: PairingRegistry?
     private var activeTicket: PairingTicket?
+    private var isPairingModeActive = false
+    private var pairingModeID: UUID?
     private var peersByConnection: [UUID: PeerConnection] = [:]
     private var workQueues: [UUID: CompanionConnectionWorkQueue] = [:]
     private var approvalContinuations: [UUID: CheckedContinuation<Bool, Never>] = [:]
@@ -103,8 +132,10 @@ final class CompanionHostModel {
 
     var relayText: String
     private(set) var status: CompanionConnectionStatus
+    private(set) var hasLinkedRelay: Bool
     private(set) var pairedPeers: [PairedPeer] = []
     private(set) var pairingQRCode: NSImage?
+    private(set) var pairingRefreshesAt: Date?
     private(set) var pairingExpiresAt: Date?
     private(set) var pendingPairing: CompanionPairingPrompt?
     private(set) var remoteControllers: [CompanionRemoteController] = []
@@ -119,6 +150,9 @@ final class CompanionHostModel {
         },
         jitter: @escaping @Sendable () -> Double = { Double.random(in: 0...1) },
         now: @escaping @Sendable () -> Date = Date.init,
+        pairingSleep: @escaping @Sendable (TimeInterval) async throws -> Void = { seconds in
+            try await Task.sleep(for: .seconds(seconds))
+        },
         secrets injectedSecrets: (any SecretStore)? = nil,
         defaults: UserDefaults = .standard,
         makeHTTPClient: @escaping @Sendable (RelayEndpoint) -> RelayHTTPClient = {
@@ -134,6 +168,7 @@ final class CompanionHostModel {
         self.sleep = sleep
         self.jitter = jitter
         self.now = now
+        pairingRotation = CompanionPairingRotation(sleep: pairingSleep)
         self.makeHTTPClient = makeHTTPClient
         self.makeTransport = makeTransport
         configuration = CompanionConfigurationStore(
@@ -144,6 +179,7 @@ final class CompanionHostModel {
         let savedRelay = configuration.relayText
         relayText = savedRelay
         status = savedRelay.isEmpty ? .notConfigured : .signedOut
+        hasLinkedRelay = (try? configuration.loadAuthReference()) != nil
         let service = "\(channel.bundleIdentifier).companion.\(storageNamespace)"
         let secrets = injectedSecrets ?? KeychainSecretStore(service: service)
         self.secrets = secrets
@@ -153,8 +189,16 @@ final class CompanionHostModel {
         pushJournalStore = CompanionPushJournalStore(secrets: secrets)
     }
 
+    private(set) var isSigningIn = false
+
     func signIn(bootstrapURLText: String? = nil) {
-        Task { await runSignIn(bootstrapURLText: bootstrapURLText) }
+        guard !isSigningIn else { return }
+        disconnect()
+        isSigningIn = true
+        Task {
+            defer { isSigningIn = false }
+            await runSignIn(bootstrapURLText: bootstrapURLText)
+        }
     }
 
     func connect() {
@@ -171,6 +215,7 @@ final class CompanionHostModel {
     }
 
     func disconnect() {
+        cancelPairing()
         configuration.connectionEnabled = false
         connectionFence.invalidate()
         reconnectTask?.cancel()
@@ -184,6 +229,9 @@ final class CompanionHostModel {
     }
 
     func beginPairing() {
+        guard !isPairingModeActive else { return }
+        isPairingModeActive = true
+        pairingModeID = UUID()
         Task { await createPairingTicket() }
     }
 
@@ -197,6 +245,7 @@ final class CompanionHostModel {
                 deviceID: record.deviceID
             )
         )
+        hasLinkedRelay = true
         try await tokenStore.save(record)
         configuration.connectionEnabled = true
     }
@@ -206,7 +255,33 @@ final class CompanionHostModel {
     }
 
     func beginPairingForTesting() async throws -> PairingTicket {
-        try await makePairingTicket()
+        isPairingModeActive = true
+        pairingModeID = UUID()
+        return try await makePairingTicket()
+    }
+
+    func configurePairingForTesting(endpoint: RelayEndpoint) async throws {
+        configuration.relayText = endpoint.canonicalOrigin
+        try configuration.saveAuthReference(CompanionAuthReference(
+            relay: endpoint,
+            accountID: UUID(),
+            deviceID: UUID()
+        ))
+        let identity = try await identityStore.loadOrCreate()
+        self.identity = identity
+        pairingRegistry = PairingRegistry()
+        status = .connected
+    }
+
+    var activePairingTicketForTesting: PairingTicket? { activeTicket }
+    var isPairingRotationScheduledForTesting: Bool { pairingRotation.isScheduled }
+
+    func suspendPairingForApprovalTesting() {
+        suspendPairingDisplayForApproval()
+    }
+
+    func resumePairingAfterAttemptForTesting() async {
+        await resumePairingModeAfterAttempt()
     }
 
     func disconnectTransportForTesting() async {
@@ -214,11 +289,31 @@ final class CompanionHostModel {
     }
 
     func cancelPairing() {
+        isPairingModeActive = false
+        pairingModeID = nil
+        pairingRotation.cancel()
+        let ticketID = activeTicket?.ticketID
         activeTicket = nil
         pairingQRCode = nil
+        pairingRefreshesAt = nil
         pairingExpiresAt = nil
         cancelPendingPairingApproval()
-        Task { await pairingRegistry?.cancel() }
+        if let ticketID {
+            Task { await pairingRegistry?.cancel(ticketID: ticketID) }
+        }
+    }
+
+    func copyPairingLink() throws {
+        guard isPairingModeActive, pendingPairing == nil,
+              let ticket = activeTicket, ticket.expiresAt > now() else {
+            throw RemoteError.expiredPairing
+        }
+        let value = try ticket.qrURL().absoluteString
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        guard pasteboard.setString(value, forType: .string) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
     }
 
     func answerPairing(approved: Bool) {
@@ -240,6 +335,11 @@ final class CompanionHostModel {
 
     func takeControl(sessionID: TerminalSessionID) {
         clearLease(sessionID: sessionID)
+        guard let route = routesBySession[sessionID],
+              let session = appModel?.companionTerminalSession(sessionID) else { return }
+        broadcastControlState(target: (
+            route.workspaceID, route.groupID, route.tabID, sessionID, session
+        ))
     }
 
     func workspaceDidChange() {
@@ -348,33 +448,59 @@ final class CompanionHostModel {
     }
 
     private func runSignIn(bootstrapURLText: String?) async {
+        var stage = SignInStage.setupLink
+        var callbackFailure: AuthorizationCallbackValidationFailure?
         do {
-            let endpoint = try configuredEndpoint()
+            let enrollment = try bootstrapURLText.flatMap { raw in
+                raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? nil : try Self.parseBootstrapLink(raw)
+            }
+            stage = .relayEndpoint
+            let endpoint = try enrollment?.endpoint ?? configuredEndpoint()
+            if enrollment != nil { relayText = endpoint.canonicalOrigin }
             let redirectScheme = channel == .production ? "myterm" : "myterm-dev"
+            stage = .callbackConfiguration
             let redirect = try validatedURL("\(redirectScheme)://companion-auth/callback")
             let attempt = try SignInAttempt(relay: endpoint, redirectURI: redirect)
             let deviceName = Host.current().localizedName ?? channel.displayName
+            stage = .authorizationURL
             let authorizationURL: URL
-            if let bootstrapURLText,
-               !bootstrapURLText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                let token = try bootstrapToken(from: bootstrapURLText)
+            if let enrollment {
                 authorizationURL = try attempt.registrationURL(
-                    bootstrapToken: token,
+                    bootstrapToken: enrollment.token,
                     deviceName: deviceName,
                     deviceKind: "host"
                 )
             } else {
                 authorizationURL = try attempt.loginURL(deviceName: deviceName, deviceKind: "host")
             }
+            stage = .browserSession
             let callback = try await authenticationSession.authenticate(
                 url: authorizationURL,
-                callbackScheme: redirectScheme
+                callbackScheme: redirectScheme,
+                attempt: attempt
             )
+            stage = .callbackValidation
+            if let failure = attempt.callbackValidationFailure(from: callback) {
+                let parts = URLComponents(url: callback, resolvingAgainstBaseURL: false)
+                let safeScheme = ["myterm", "myterm-dev", "myterm-companion", "https", "http"].contains(parts?.scheme ?? "") ? (parts?.scheme ?? "missing") : "other"
+                let safeHost = ["auth", "companion-auth"].contains(parts?.host ?? "") ? (parts?.host ?? "missing") : "other"
+                let safePath = parts?.path == "/callback" ? "/callback" : (parts?.path.isEmpty == true ? "empty" : "other")
+                let isRelay = attempt.relay.hasSameOrigin(as: callback)
+                let isLogin = parts?.path == "/auth/login"
+                let isRegister = parts?.path == "/auth/register"
+                let isInitialURL = callback == authorizationURL
+                logger.error("Rejected callback destination scheme=\(safeScheme, privacy: .public) host=\(safeHost, privacy: .public) path=\(safePath, privacy: .public) relay=\(isRelay) login=\(isLogin) register=\(isRegister) initialURL=\(isInitialURL)")
+                callbackFailure = failure
+                throw RemoteError.invalidCallback
+            }
+            stage = .tokenExchange
             let client = makeHTTPClient(endpoint)
             let record = try await RelayAuthenticator(client: client, store: tokenStore).exchange(
                 attempt: attempt,
                 callback: callback
             )
+            stage = .persistence
             configuration.relayText = endpoint.canonicalOrigin
             relayText = endpoint.canonicalOrigin
             try configuration.saveAuthReference(CompanionAuthReference(
@@ -382,11 +508,17 @@ final class CompanionHostModel {
                 accountID: record.accountID,
                 deviceID: record.deviceID
             ))
+            hasLinkedRelay = true
             configuration.connectionEnabled = true
             reconnectAttempt = 0
+            stage = .connection
             await connectConfiguredRelay()
         } catch {
-            status = .failed(error.localizedDescription)
+            let reason = callbackFailure?.rawValue ?? Self.sanitizedSignInReason(error)
+            logger.error("Companion sign-in failed at \(stage.rawValue, privacy: .public): \(reason, privacy: .public)")
+            status = .failed(Self.signInFailureDescription(
+                error: error, stage: stage, callbackFailure: callbackFailure
+            ))
         }
     }
 
@@ -559,17 +691,26 @@ final class CompanionHostModel {
             hostID: identity.hostID,
             hostIdentity: identity.agreementKey
         )
-        let response = try await registry.authorize(
-            proposal,
-            hostPublicKey: identity.agreementKey.publicKey.x963Representation,
-            hostNotificationSigningPublicKey: identity.notificationSigningKey.publicKey.x963Representation
-        ) { [weak self] proposal in
-            guard let self else { return false }
-            return await self.requestPairingApproval(
+        if isPairingModeActive {
+            pairingRotation.cancel()
+        }
+        let response: PairingResponse
+        do {
+            response = try await registry.authorize(
                 proposal,
-                connectionID: connectionID,
-                generation: generation
-            )
+                hostPublicKey: identity.agreementKey.publicKey.x963Representation,
+                hostNotificationSigningPublicKey: identity.notificationSigningKey.publicKey.x963Representation
+            ) { [weak self] proposal in
+                guard let self else { return false }
+                return await self.requestPairingApproval(
+                    proposal,
+                    connectionID: connectionID,
+                    generation: generation
+                )
+            }
+        } catch {
+            await resumePairingModeAfterAttempt()
+            throw error
         }
         guard connectionFence.accepts(generation) else {
             if response.approved {
@@ -594,7 +735,11 @@ final class CompanionHostModel {
             destinationConnectionID: connectionID,
             payload: RelayApplicationPacket.pairingResponse(sealedResponse).encoded()
         )
-        cancelPairing()
+        if response.approved {
+            cancelPairing()
+        } else {
+            await resumePairingModeAfterAttempt()
+        }
     }
 
     private func requestPairingApproval(
@@ -610,6 +755,7 @@ final class CompanionHostModel {
             approvalContinuations[proposal.ticketID] = continuation
             pairingApprovalConnectionID = connectionID
             pairingApprovalGeneration = generation
+            suspendPairingDisplayForApproval()
             pendingPairing = CompanionPairingPrompt(
                 id: proposal.ticketID,
                 deviceName: proposal.clientName
@@ -1424,8 +1570,10 @@ final class CompanionHostModel {
         if cancelWorkQueues {
             workQueues.removeValue(forKey: connectionID)?.cancel()
         }
-        if pairingApprovalConnectionID == connectionID {
+        let interruptedPairingApproval = pairingApprovalConnectionID == connectionID
+        if interruptedPairingApproval {
             cancelPendingPairingApproval()
+            Task { [weak self] in await self?.resumePairingModeAfterAttempt() }
         }
         let removedPeer = peersByConnection.removeValue(forKey: connectionID)
         var affectedSessions = removedPeer?.attachedSessions ?? []
@@ -1514,6 +1662,7 @@ final class CompanionHostModel {
 
     private func transportEnded(error: Error?, generation: UUID) {
         guard connectionFence.accepts(generation) else { return }
+        cancelPairing()
         transportTask = nil
         transport = nil
         clearConnectedPeers()
@@ -1540,28 +1689,83 @@ final class CompanionHostModel {
     }
 
     private func createPairingTicket() async {
+        guard isPairingModeActive else { return }
         do {
             _ = try await makePairingTicket()
+        } catch is CancellationError {
+            return
         } catch {
+            cancelPairing()
             status = .failed(error.localizedDescription)
         }
     }
 
     private func makePairingTicket() async throws -> PairingTicket {
         guard status == .connected, let identity, let registry = pairingRegistry,
-              let endpoint = try configuration.loadAuthReference()?.relay else {
+              let endpoint = try configuration.loadAuthReference()?.relay,
+              let pairingModeID else {
             throw RemoteError.disconnected
         }
+        let issuedAt = now()
         let ticket = try await registry.begin(
             relay: endpoint,
             hostID: identity.hostID,
             hostName: Host.current().localizedName ?? channel.displayName,
-            hostPublicKey: identity.agreementKey.publicKey
+            hostPublicKey: identity.agreementKey.publicKey,
+            now: issuedAt,
+            lifetime: CompanionPairingRotation.ticketLifetime,
+            seriesID: pairingModeID,
+            retainsPreviousTickets: true
         )
+        guard isPairingModeActive, self.pairingModeID == pairingModeID else {
+            await registry.cancel(ticketID: ticket.ticketID)
+            throw CancellationError()
+        }
         activeTicket = ticket
         pairingQRCode = try Self.qrImage(for: ticket.qrURL())
+        pairingRefreshesAt = issuedAt.addingTimeInterval(
+            CompanionPairingRotation.rotationInterval
+        )
         pairingExpiresAt = ticket.expiresAt
+        schedulePairingRotation(for: ticket)
         return ticket
+    }
+
+    private func schedulePairingRotation(for ticket: PairingTicket) {
+        guard isPairingModeActive, pendingPairing == nil,
+              activeTicket?.ticketID == ticket.ticketID else { return }
+        pairingRotation.schedule(
+            ticketID: ticket.ticketID,
+            delay: max(
+                0,
+                (pairingRefreshesAt ?? now()).timeIntervalSince(now())
+            )
+        ) { [weak self] ticketID in
+            await self?.rotatePairingTicket(ticketID: ticketID)
+        }
+    }
+
+    private func rotatePairingTicket(ticketID: UUID) async {
+        guard isPairingModeActive, pendingPairing == nil,
+              activeTicket?.ticketID == ticketID else { return }
+        await createPairingTicket()
+    }
+
+    private func suspendPairingDisplayForApproval() {
+        pairingRotation.cancel()
+        activeTicket = nil
+        pairingQRCode = nil
+        pairingRefreshesAt = nil
+        pairingExpiresAt = nil
+    }
+
+    private func resumePairingModeAfterAttempt() async {
+        guard isPairingModeActive, pendingPairing == nil, status == .connected else { return }
+        if let activeTicket, activeTicket.expiresAt > now() {
+            schedulePairingRotation(for: activeTicket)
+        } else {
+            await createPairingTicket()
+        }
     }
 
     private func publishPushNotification(
@@ -1660,17 +1864,27 @@ final class CompanionHostModel {
         return try RelayEndpoint(url)
     }
 
-    private func bootstrapToken(from raw: String) throws -> String {
-        guard let url = URL(string: raw),
-              let fragment = URLComponents(url: url, resolvingAgainstBaseURL: false)?.fragment,
+    func updateRelayFromBootstrapLink(_ raw: String) {
+        guard let enrollment = try? Self.parseBootstrapLink(raw) else { return }
+        relayText = enrollment.endpoint.canonicalOrigin
+    }
+
+    static func parseBootstrapLink(_ raw: String) throws -> (endpoint: RelayEndpoint, token: String) {
+        guard var origin = URLComponents(string: raw.trimmingCharacters(in: .whitespacesAndNewlines)),
+              origin.path == "/auth/register",
+              let fragment = origin.fragment,
               let components = URLComponents(string: "?\(fragment)"),
               let items = components.queryItems,
-              items.filter({ $0.name == "bootstrap_token" }).count == 1,
-              let token = items.first(where: { $0.name == "bootstrap_token" })?.value,
+              items.filter({ ["bootstrap_token", "enrollment_token"].contains($0.name) }).count == 1,
+              let token = items.first(where: { ["bootstrap_token", "enrollment_token"].contains($0.name) })?.value,
               !token.isEmpty else {
             throw RemoteError.invalidMessage
         }
-        return token
+        origin.path = ""
+        origin.query = nil
+        origin.fragment = nil
+        guard let url = origin.url else { throw RemoteError.invalidEndpoint }
+        return (try RelayEndpoint(url), token)
     }
 
     private func makeMetadata(
@@ -1717,5 +1931,64 @@ final class CompanionHostModel {
     private func validatedURL(_ value: String) throws -> URL {
         guard let url = URL(string: value) else { throw RemoteError.invalidCallback }
         return url
+    }
+
+    private static func signInFailureDescription(
+        error: Error,
+        stage: SignInStage,
+        callbackFailure: AuthorizationCallbackValidationFailure?
+    ) -> String {
+        if let callbackFailure {
+            return "The browser response was rejected because \(callbackFailure.userDescription). Start a new sign-in attempt."
+        }
+        return "Sign-in failed while \(stage.description): \(error.localizedDescription)"
+    }
+
+    private static func sanitizedSignInReason(_ error: Error) -> String {
+        guard let remote = error as? RemoteError else {
+            let value = error as NSError
+            return "\(value.domain)#\(value.code)"
+        }
+        return switch remote {
+        case .invalidEndpoint: "invalid_endpoint"
+        case .invalidMessage: "invalid_message"
+        case .unsupportedVersion: "unsupported_version"
+        case .messageTooLarge: "message_too_large"
+        case .wrongPeer: "wrong_peer"
+        case .replayedMessage: "replayed_message"
+        case .sequenceExhausted: "sequence_exhausted"
+        case .expiredPairing: "expired_pairing"
+        case .unknownPairing: "unknown_pairing"
+        case .invalidCallback: "invalid_callback"
+        case .authenticationRequired: "authentication_required"
+        case .authenticationRevoked: "authentication_revoked"
+        case .disconnected: "disconnected"
+        case .offline: "offline"
+        case .timedOut: "timed_out"
+        case .unsafeRedirect: "unsafe_redirect"
+        case .invalidResponse: "invalid_response"
+        case .checkpointIncomplete: "checkpoint_incomplete"
+        case .checkpointExpired: "checkpoint_expired"
+        case .controlDenied: "control_denied"
+        case .server(let status): "server_http_\(status)"
+        }
+    }
+}
+
+private extension AuthorizationCallbackValidationFailure {
+    var userDescription: String {
+        switch self {
+        case .tooLarge: "it was too large"
+        case .malformedURL: "its URL was malformed"
+        case .redirectMismatch: "it returned to a different app address"
+        case .unexpectedAuthority: "it contained an unexpected authority"
+        case .fragmentPresent: "it contained an unexpected fragment"
+        case .missingQuery: "it did not contain response parameters"
+        case .errorResponse: "the relay returned an authentication error"
+        case .invalidStateCount: "its state parameter was missing or repeated"
+        case .invalidCodeCount: "its authorization code was missing or repeated"
+        case .stateMismatch: "it belonged to a different sign-in attempt"
+        case .invalidCode: "its authorization code was invalid"
+        }
     }
 }

@@ -6,12 +6,20 @@ The relay stores WebAuthn public credential records, token hashes, host public k
 
 ## Requirements
 
+For a complete deployment through Cloudflare Tunnel, follow [the proxy setup guide](../../docs/PROXY_SETUP.md). Cloudflare handles public HTTPS and cloudflared connects to local HTTP; the Caddy instructions below are an alternative.
+
 - Go 1.26.6 or the supplied container image
 - A DNS name with an HTTPS certificate
 - Caddy or another reverse proxy that supports WebSocket upgrades
 - A persistent volume for the SQLite database
 
 WebAuthn requires a secure origin and a DNS RP ID. An IP address, plain HTTP origin, or public URL inferred from a request is rejected. The server listens on `127.0.0.1:8787` by default so TLS can terminate at Caddy on the same machine.
+
+## Release distribution
+
+The relay packaging workflow builds Linux amd64 and arm64 Docker image archives and SHA-256 checksum files for product releases. Follow [the proxy setup guide](../../docs/PROXY_SETUP.md) to download and load a published image. Source builds below are for relay development.
+
+Each architecture is smoke-tested on a matching Linux runner before publication. Release uploads deliberately refuse to overwrite existing assets. If an upload is interrupted, inspect the release's assets and compare their checksums with the retained workflow artifacts, then upload only the missing files from that same run. Publish a new version for changed binaries instead of replacing an existing release's images.
 
 ## Configure and run
 
@@ -77,6 +85,8 @@ Recovery preserves the owner account ID. It replaces the credential set and revo
 `GET /healthz` returns a small readiness response. It does not inspect the database, so use a separate SQLite backup check if storage health needs monitoring.
 
 The service deliberately avoids request logging. Caddy access logs are optional; if you enable them, configure retention and avoid logging authorization headers. Bootstrap tokens remain absent because URL fragments never reach the server.
+
+Rate limits use the original client address from `X-Forwarded-For` only when the immediate socket peer belongs to `MYTERM_RELAY_TRUSTED_PROXY_CIDRS`. The default trusts loopback Caddy. If Caddy or `cloudflared` runs on a container network, replace this value with the narrow CIDRs for every proxy hop that can connect directly to the relay. Use `none` for a direct deployment without a reverse proxy. The resolver walks the forwarded chain from right to left and ignores client-supplied entries before the first untrusted address. It rejects dangerously broad proxy ranges such as `0.0.0.0/0` and `::/0`.
 
 Access tokens expire after 15 minutes. Refresh tokens expire after 30 days and rotate on every use. A refresh rotates away the previous access token. Revoking either token or deleting a device revokes its device session and closes its active WebSockets. A socket also closes when its access token expires. Authentication routes have per-source-IP token-bucket limits. The relay reads the socket peer address and does not trust forwarded IP headers.
 

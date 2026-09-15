@@ -25,7 +25,7 @@ Create `KeychainSecretStore` instances with `.terminalIdentity` for app-only ide
 
 ## Pairing over the relay socket
 
-The Mac calls `PairingRegistry.begin(...)` and displays `PairingTicket.qrURL()`. The QR contains the relay origin, host ID, pinned host agreement key, public ticket ID, 256-bit secret, and five-minute expiry. The relay never receives the secret.
+The Mac calls `PairingRegistry.begin(...)` and displays `PairingTicket.qrURL()`. The QR contains the relay origin, host ID, pinned host agreement key, public ticket ID, 256-bit secret, and expiry. The registry keeps its five-minute replacement default for ordinary callers; Mac Pair Mode explicitly rotates the displayed code every 30 seconds while retaining at most two same-series tickets for their individual 60-second lifetimes. The relay never receives the secret.
 
 After passkey login, the phone opens `RelayWebSocketClient` and sends a proposal:
 

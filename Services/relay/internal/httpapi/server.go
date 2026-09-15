@@ -9,7 +9,6 @@ import (
 	"html/template"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -191,7 +190,7 @@ func (s *Server) renderAuthPage(w http.ResponseWriter, r *http.Request, mode str
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'nonce-"+nonce+"'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
-	data := struct{ Nonce, Mode string }{Nonce: nonce, Mode: mode}
+	data := authPageData{Nonce: nonce, Mode: mode, RPName: s.config.RPDisplayName}
 	if err := authPage.Execute(w, data); err != nil {
 		slog.Error("render authentication page", "request_id", middleware.GetReqID(r.Context()))
 	}
@@ -576,7 +575,7 @@ func (s *Server) authRateLimit(next http.Handler) http.Handler {
 
 func (s *Server) rateLimit(limiter *ipLimiter, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !limiter.Allow(remoteIP(r.RemoteAddr)) {
+		if !limiter.Allow(clientAddress(r, s.config.TrustedProxyCIDRs)) {
 			w.Header().Set("Retry-After", "10")
 			writeError(w, http.StatusTooManyRequests, "rate_limited", "Too many requests. Try again later.")
 			return
@@ -607,14 +606,6 @@ func (l *ipLimiter) Allow(ip string) bool {
 		}
 	}
 	return entry.limiter.AllowN(now, 1)
-}
-
-func remoteIP(address string) string {
-	host, _, err := net.SplitHostPort(address)
-	if err == nil {
-		return host
-	}
-	return address
 }
 
 func (r oauthBrowserRequest) oauthContext() (store.OAuthContext, error) {
@@ -662,16 +653,20 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, map[string]any{"error": map[string]string{"code": code, "message": message}})
 }
 
+type authPageData struct {
+	Nonce, Mode, RPName string
+}
+
 var authPage = template.Must(template.New("auth").Parse(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MyTerm relay</title><style>
+<title>{{.RPName}}</title><style>
 :root{color-scheme:light dark;font:16px system-ui,sans-serif}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#111827;color:#f9fafb}.card{width:min(30rem,calc(100% - 2rem));box-sizing:border-box;padding:2rem;border:1px solid #374151;border-radius:1rem;background:#1f2937}h1{margin-top:0}label{display:block;margin:.9rem 0 .3rem}input,button{box-sizing:border-box;width:100%;font:inherit;padding:.75rem;border-radius:.5rem}button{margin-top:1rem;border:0;background:#38bdf8;color:#082f49;font-weight:700}button:disabled{opacity:.5}.error{color:#fca5a5;white-space:pre-wrap}</style></head>
 <body><main class="card"><h1>{{if eq .Mode "register"}}Register owner passkey{{else}}Sign in with a passkey{{end}}</h1>
-{{if eq .Mode "register"}}<label for="owner">Account name</label><input id="owner" autocomplete="username" value="owner" maxlength="100"><label for="display">Display name</label><input id="display" autocomplete="name" value="MyTerm owner" maxlength="100">{{end}}
+{{if eq .Mode "register"}}<label for="display">Passkey name</label><input id="display" aria-describedby="passkey-help" value="{{.RPName}}" maxlength="100"><p id="passkey-help">A name to help you recognise this relay in your password manager. You can keep the suggested name. This is shared across your devices.</p>{{end}}
 <button id="continue">Continue</button><p id="status" role="status"></p><p id="error" class="error" role="alert"></p></main>
 <script nonce="{{.Nonce}}">
 const mode={{.Mode}};const button=document.querySelector('#continue');const status=document.querySelector('#status');const error=document.querySelector('#error');
 const q=new URLSearchParams(location.search);const fragment=new URLSearchParams(location.hash.slice(1));history.replaceState(null,'',location.pathname+location.search);
-const payload=()=>({redirect_uri:q.get('redirect_uri'),state:q.get('state'),code_challenge:q.get('code_challenge'),code_challenge_method:q.get('code_challenge_method'),device_name:q.get('device_name'),device_kind:q.get('device_kind'),...(mode==='register'?{bootstrap_token:fragment.get('enrollment_token')||fragment.get('bootstrap_token'),owner_name:document.querySelector('#owner').value,display_name:document.querySelector('#display').value}:{})});
+const payload=()=>({redirect_uri:q.get('redirect_uri'),state:q.get('state'),code_challenge:q.get('code_challenge'),code_challenge_method:q.get('code_challenge_method'),device_name:q.get('device_name'),device_kind:q.get('device_kind'),...(mode==='register'?{bootstrap_token:fragment.get('enrollment_token')||fragment.get('bootstrap_token'),owner_name:document.querySelector('#display').value,display_name:document.querySelector('#display').value}:{})});
 button.addEventListener('click',async()=>{button.disabled=true;error.textContent='';status.textContent='Waiting for your passkey…';try{const optionsResponse=await fetch('/v1/webauthn/'+mode+'/options',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload()),credentials:'same-origin'});const options=await optionsResponse.json();if(!optionsResponse.ok)throw new Error(options.error?.message||'Could not begin authentication.');const publicKey=mode==='register'?PublicKeyCredential.parseCreationOptionsFromJSON(options.publicKey):PublicKeyCredential.parseRequestOptionsFromJSON(options.publicKey);const credential=mode==='register'?await navigator.credentials.create({publicKey}):await navigator.credentials.get({publicKey});const finishResponse=await fetch('/v1/webauthn/'+mode+'/finish',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(credential.toJSON()),credentials:'same-origin'});const result=await finishResponse.json();if(!finishResponse.ok)throw new Error(result.error?.message||'Authentication failed.');const callback=new URL(q.get('redirect_uri'));callback.searchParams.set('code',result.code);callback.searchParams.set('state',result.state);location.assign(callback.toString());}catch(e){status.textContent='';error.textContent=e instanceof Error?e.message:'Authentication failed.';button.disabled=false;}});
 </script></body></html>`))

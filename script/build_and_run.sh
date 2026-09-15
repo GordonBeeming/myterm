@@ -125,6 +125,9 @@ if [[ "$CHANNEL" == "development" ]]; then
   /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:3:CFBundleURLName string $BUNDLE_ID.authentication" "$INFO_PLIST"
   /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:3:CFBundleURLSchemes array" "$INFO_PLIST"
   /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:3:CFBundleURLSchemes:0 string myterm-dev" "$INFO_PLIST"
+  # A development browser registration makes macOS 27 return the initial HTTPS
+  # auth page as the callback. Keep web handlers on the installed production app.
+  /usr/libexec/PlistBuddy -c "Delete :CFBundleURLTypes:0" "$INFO_PLIST"
 fi
 /usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion $MIN_SYSTEM_VERSION" "$INFO_PLIST"
 

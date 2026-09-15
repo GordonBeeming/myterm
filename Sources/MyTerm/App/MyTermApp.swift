@@ -34,6 +34,8 @@ struct MyTermApp: App {
                 ContentUnavailableView("Settings unavailable", systemImage: "exclamationmark.triangle")
             }
         }
+        // The main scene owns the Global Settings command and its scope selection.
+        .commandsRemoved()
     }
 }
 
@@ -244,6 +246,9 @@ final class MyTermURLDispatcher {
     }
 
     func dispatch(_ urls: [URL]) {
+        let urls = CompanionExternalBrowserAuthentication.shared
+            .consumeAuthenticationCallbacks(from: urls)
+        guard !urls.isEmpty else { return }
         guard let handler else {
             pendingURLs.append(contentsOf: urls)
             return

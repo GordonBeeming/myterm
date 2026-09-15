@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -643,11 +642,7 @@ func (l *ipLimiter) allow(ip string) bool {
 func (s *Server) limit(l *ipLimiter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			host, _, err := net.SplitHostPort(r.RemoteAddr)
-			if err != nil {
-				host = r.RemoteAddr
-			}
-			if !l.allow(host) {
+			if !l.allow(clientAddress(r, s.cfg.TrustedProxyCIDRs)) {
 				writeError(w, 429, "rate_limited", "Too many requests.")
 				return
 			}
