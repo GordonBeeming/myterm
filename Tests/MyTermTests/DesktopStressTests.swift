@@ -620,9 +620,11 @@ final class DesktopStressTests: XCTestCase {
             updates: updates
         )
 
+        // The request behind the gate never completes on its own, so a blocking implementation
+        // would sit here indefinitely. The bound only has to tell "returned" from "stuck".
         let clock = ContinuousClock()
         let elapsed = clock.measure { model.checkForUpdates() }
-        XCTAssertLessThan(elapsed, .milliseconds(50), "checkForUpdates returned in \(elapsed)")
+        XCTAssertLessThan(elapsed, .seconds(1), "checkForUpdates returned in \(elapsed)")
         // Main-actor work proceeds while the request hangs.
         model.createWorkspace()
         XCTAssertEqual(model.workspaces.count, 2)
