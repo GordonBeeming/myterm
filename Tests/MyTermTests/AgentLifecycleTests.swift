@@ -74,6 +74,45 @@ final class AgentLifecycleTests: XCTestCase {
         XCTAssertEqual(fixture.model.agentAttention(forTab: fixture.tabID), .working, "and still working")
     }
 
+    func testALateSessionStartFromTheConversationBeforeLeavesTheCurrentOneAlone() throws {
+        // A's SessionStart hook was slow enough to land after B, which replaced A, had started.
+        let fixture = try makeFixture(isActive: false)
+        fixture.emit(.ready, session: "a")
+        fixture.emit(.ready, session: "b")
+
+        fixture.emit(.ready, session: "a")
+        fixture.emit(.working, session: "a")
+
+        XCTAssertEqual(fixture.savedSession?.sessionID, "b", "the handle is B's")
+        XCTAssertEqual(fixture.model.liveAgentTabs[fixture.tabID], "claude")
+        XCTAssertNil(fixture.model.agentAttention(forTab: fixture.tabID), "B has not started working")
+    }
+
+    func testAThirdConversationInThePaneBecomesTheCurrentOne() throws {
+        let fixture = try makeFixture(isActive: false)
+        fixture.emit(.ready, session: "a")
+        fixture.emit(.ready, session: "b")
+
+        fixture.emit(.ready, session: "c")
+
+        XCTAssertEqual(fixture.savedSession?.sessionID, "c")
+    }
+
+    func testRejoiningAConversationThePaneLeftIsNotAStaleReport() throws {
+        // The user quits A, then runs `claude --resume <a>` in the same pane. Its SessionStart
+        // carries an id the pane has retired, and it is the one report that may bring it back.
+        let fixture = try makeFixture(isActive: false)
+        fixture.emit(.ready, session: "a")
+        fixture.emit(.exited, session: "a")
+        XCTAssertNil(fixture.savedSession)
+
+        fixture.emit(.ready, session: "a")
+        fixture.emit(.working, session: "a")
+
+        XCTAssertEqual(fixture.savedSession?.sessionID, "a")
+        XCTAssertEqual(fixture.model.agentAttention(forTab: fixture.tabID), .working)
+    }
+
     func testAPromptWithNoSessionStartStillAdoptsTheConversation() throws {
         // Hooks installed while an agent was already running: the first thing MyTerm hears is
         // UserPromptSubmit.
@@ -149,6 +188,22 @@ final class AgentLifecycleTests: XCTestCase {
 
         let relaunched = try makeFixture(in: fixture.directory, isActive: false)
         XCTAssertNil(relaunched.engine.configurations.first?.initialCommand, "the pane comes back to a prompt")
+    }
+
+    func testAReportQueuedBehindTheShellsExitTouchesNothing() throws {
+        // Markers are forwarded asynchronously, so one the agent wrote before it died can be
+        // delivered after the shell's own exit has been handled.
+        let fixture = try makeFixture(isActive: false)
+        fixture.session.activeForegroundProcessName = "claude"
+        fixture.emit(.working, session: "abc")
+        fixture.session.emit(.processTerminated(exitCode: 0))
+        XCTAssertNil(fixture.savedSession, "precondition")
+
+        fixture.emit(.working, session: "abc")
+
+        XCTAssertNil(fixture.model.agentAttention(forTab: fixture.tabID), "no cook for a dead pane")
+        XCTAssertNil(fixture.model.liveAgentTabs[fixture.tabID], "no agent in it")
+        XCTAssertNil(fixture.savedSession, "and nothing to resume into a shell that has ended")
     }
 
     // MARK: - An agent killed without its SessionEnd

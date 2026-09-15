@@ -65,6 +65,11 @@ final class AppModel {
     /// Tabs that have an agent in them, by agent name, as the hooks last reported.
     /// Runtime only: it says what is running now, which is the one thing a saved handle cannot say.
     var liveAgentTabs: [TabID: String] = [:]
+    /// The conversations each tab has left this run, by session id: ended by their own SessionEnd,
+    /// replaced by another conversation, or taken away with a killed agent. Hooks report late, and
+    /// a report about one of these is about a conversation the pane is no longer in.
+    /// Runtime only, like `liveAgentTabs`: a relaunch starts with nothing left behind.
+    var retiredAgentSessions: [TabID: Set<String>] = [:]
     let agentNotifications: AgentNotificationSettings
     /// Whether MyTerm is the app the user is looking at. Injected so tests can be either.
     let isApplicationActive: @MainActor () -> Bool
@@ -2324,6 +2329,9 @@ final class AppModel {
             )
             // Nothing is running in a pane whose shell has gone, whatever the last hook said, and
             // the foreground poll that would have noticed an agent killed before it has stopped.
+            // Markers are forwarded asynchronously, so one can still be queued behind this event;
+            // dropping the callback keeps it from putting an agent back into a dead pane.
+            terminalSessions[sessionID]?.onEvent = nil
             forgetAgent(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID, sessionID: sessionID)
         case .foregroundProcessChanged(let name):
             // The shell back in front of a pane that held an agent means the agent left without
@@ -2331,10 +2339,10 @@ final class AppModel {
             guard name == nil, liveAgentTabs[tabID] != nil else { return }
             forgetAgent(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID, sessionID: sessionID)
         case .agentActivity(let report):
-            // A SessionEnd from a conversation the pane has already left says nothing about the
-            // one it is in now, so neither the cook nor the session hears it.
+            // A report about a conversation the pane has already left says nothing about the one
+            // it is in now, so neither the cook nor the session hears it.
             if let terminal = tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)?.terminalSession,
-               isExitOfAnotherConversation(report, in: terminal) {
+               isReportOfALeftConversation(report, tabID: tabID, in: terminal) {
                 return
             }
             recordAgentActivity(
@@ -2370,6 +2378,7 @@ final class AppModel {
         }
         forgetAgentAttention(forTab: tab.id)
         liveAgentTabs.removeValue(forKey: tab.id)
+        retiredAgentSessions.removeValue(forKey: tab.id)
     }
 
     private func closeTab(
