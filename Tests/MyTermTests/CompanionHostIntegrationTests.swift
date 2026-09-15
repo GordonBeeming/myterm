@@ -59,12 +59,8 @@ private final class FixtureTrustDelegate: NSObject, URLSessionTaskDelegate, @unc
 private extension FixtureTrustDelegate {
     func urlSession(
         _ session: URLSession,
-        didReceive challenge: URLAuthenticationChallenge,
-        completionHandler: @escaping @Sendable (
-            URLSession.AuthChallengeDisposition,
-            URLCredential?
-        ) -> Void
-    ) {
+        didReceive challenge: URLAuthenticationChallenge
+    ) async -> (URLSession.AuthChallengeDisposition, URLCredential?) {
         guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
               let trust = challenge.protectionSpace.serverTrust,
               let challengeURL = challenge.protectionSpace.protectionSpaceURL,
@@ -72,16 +68,10 @@ private extension FixtureTrustDelegate {
               SecTrustSetAnchorCertificates(trust, [certificate] as CFArray) == errSecSuccess,
               SecTrustSetAnchorCertificatesOnly(trust, true) == errSecSuccess else {
             diagnostics.record("TLS challenge rejected")
-            Task { @MainActor in
-                completionHandler(.cancelAuthenticationChallenge, nil)
-            }
-            return
+            return (.cancelAuthenticationChallenge, nil)
         }
-        let credential = URLCredential(trust: trust)
         diagnostics.record("TLS challenge accepted")
-        Task { @MainActor in
-            completionHandler(.useCredential, credential)
-        }
+        return (.useCredential, URLCredential(trust: trust))
     }
 }
 
