@@ -135,6 +135,7 @@ final class BrowserDataProfilesTests: XCTestCase {
         try store.moveWorkspace(store.selectedWorkspaceID, to: folderID)
         try store.updateGlobalSettings { $0.browserDataScope = .folder }
 
+        try store.flush()
         let model = try AppModel(
             channel: .development,
             applicationSupportDirectory: directory,
@@ -282,6 +283,7 @@ final class BrowserDataProfilesTests: XCTestCase {
         try store.updateFolderSettings(folderID) { $0.cursorShape = .beam }
         try store.updateWorkspaceSettings(workspaceID) { $0.cursorShape = .beam }
 
+        try store.flush()
         let model = try AppModel(
             channel: .development,
             applicationSupportDirectory: directory,
@@ -295,6 +297,7 @@ final class BrowserDataProfilesTests: XCTestCase {
         XCTAssertEqual(model.workspaces.first?.settingsOverrides?.cursorShape, .beam)
         XCTAssertEqual(model.resolvedSettings(for: .workspace(workspaceID))?.cursorShape, .beam)
 
+        model.persistWorkspaceStore()
         let restored = try AppModel(
             channel: .development,
             applicationSupportDirectory: directory,
@@ -321,6 +324,7 @@ final class BrowserDataProfilesTests: XCTestCase {
         try store.updateFolderSettings(folderID) { $0.nativeTextFilePatterns = ["*.ps1"] }
         try store.updateWorkspaceSettings(workspaceID) { $0.nativeTextFilePatterns = ["*.ps1", "*.psm1"] }
 
+        try store.flush()
         let first = try AppModel(
             channel: .development,
             applicationSupportDirectory: directory,
@@ -336,6 +340,7 @@ final class BrowserDataProfilesTests: XCTestCase {
         }
 
         first.updateGlobalSettings { $0.nativeTextFilePatterns.removeAll { $0 == "*.psm1" } }
+        first.persistWorkspaceStore()
         let restored = try AppModel(
             channel: .development,
             applicationSupportDirectory: directory,
@@ -391,6 +396,7 @@ final class BrowserDataProfilesTests: XCTestCase {
             url: try XCTUnwrap(URL(string: "https://example.org")),
             profile: nil
         )
+        try initial.store.flush()
         let restored = try AppModel(
             channel: .development,
             applicationSupportDirectory: directory,

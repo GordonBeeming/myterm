@@ -230,6 +230,11 @@ final class AppModel {
         if let sessionID = selectedTab?.terminalSession?.id {
             terminalSessions[sessionID]?.focus()
         }
+        // A mutation no longer writes the file itself; the write lands on the next run loop turn,
+        // so this is the only place a failed write can reach the banner.
+        store.onPersistenceFailure = { [weak self] error in
+            self?.present(error)
+        }
     }
 
     var workspaces: [Workspace] {
@@ -2106,29 +2111,29 @@ final class AppModel {
                 tabID: tabID,
                 workingDirectory: workingDirectory
             )
+            // The conversation and its name go with the directory, whether or not the pane then
+            // starts. Left beside the fallback path, a later attempt would see a directory that
+            // exists and rejoin a conversation from one that does not.
+            if session.agentSession != nil || session.agentTitle != nil {
+                try store.updateTerminalAgentSession(
+                    workspaceID: workspaceID,
+                    tabGroupID: tabGroupID,
+                    tabID: tabID,
+                    agentSession: nil
+                )
+                try store.updateTerminalAgentTitle(
+                    workspaceID: workspaceID,
+                    tabGroupID: tabGroupID,
+                    tabID: tabID,
+                    agentTitle: nil
+                )
+            }
         }
         let resumeCommand = keepsSavedDirectory ? agentResumeCommand(
             for: session,
             name: tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)?.customTitle,
             settings: settings
         ) : nil
-        // A pane that comes back without its resume command comes back to a prompt, and a pane at
-        // its prompt has left its conversation. The name goes with it, whether or not there was a
-        // handle to resume: a Codex pane carries a name and nothing to resume.
-        if initialCommand == nil, resumeCommand == nil, session.agentSession != nil || session.agentTitle != nil {
-            try store.updateTerminalAgentSession(
-                workspaceID: workspaceID,
-                tabGroupID: tabGroupID,
-                tabID: tabID,
-                agentSession: nil
-            )
-            try store.updateTerminalAgentTitle(
-                workspaceID: workspaceID,
-                tabGroupID: tabGroupID,
-                tabID: tabID,
-                agentTitle: nil
-            )
-        }
         let process = try terminalEngine.makeSession(
             configuration: TerminalSessionConfiguration(
                 shell: shellURL(for: settings.shell),
@@ -2176,6 +2181,31 @@ final class AppModel {
         } catch {
             terminalSessions.removeValue(forKey: session.id)
             throw error
+        }
+        // A pane that comes back without its resume command comes back to a prompt, and a pane at
+        // its prompt has left its conversation. The name goes with it, whether or not there was a
+        // handle to resume: a Codex pane carries a name and nothing to resume. Cleared only once
+        // the pane is running: a pane that failed to start has no prompt either, and keeps its
+        // conversation for the next attempt.
+        if keepsSavedDirectory, initialCommand == nil, resumeCommand == nil,
+           session.agentSession != nil || session.agentTitle != nil {
+            do {
+                try store.updateTerminalAgentSession(
+                    workspaceID: workspaceID,
+                    tabGroupID: tabGroupID,
+                    tabID: tabID,
+                    agentSession: nil
+                )
+                try store.updateTerminalAgentTitle(
+                    workspaceID: workspaceID,
+                    tabGroupID: tabGroupID,
+                    tabID: tabID,
+                    agentTitle: nil
+                )
+            } catch {
+                removeTerminalRuntime(session.id)
+                throw error
+            }
         }
     }
 
@@ -2492,6 +2522,12 @@ final class AppModel {
         process.onEvent = nil
         process.setContentChangeHandler(nil)
         process.terminate()
+    }
+
+    /// Writes whatever the coalesced store has not written yet. Quitting is the one moment the
+    /// next run loop turn never comes.
+    func persistWorkspaceStore() {
+        perform { try store.flush() }
     }
 
     /// Quitting never routes through the per-tab close path, so it relies on the kernel's SIGHUP when the

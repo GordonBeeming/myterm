@@ -40,13 +40,17 @@ public struct TerminalSession: Codable, Equatable, Hashable, Sendable, Identifia
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        decoder.recordKnownKeys(container.allKeys)
+        // A handle this build refuses is one a newer build wrote, not a broken file. Leaving its key
+        // out of the known set is what keeps the drop from reading as a repair and writing a backup.
+        let agentSession = try? container.decodeIfPresent(AgentSessionHandle.self, forKey: .agentSession)
+        let refusedAgentSession = agentSession == nil && container.contains(.agentSession)
+        decoder.recordKnownKeys(container.allKeys.filter { $0 != .agentSession || !refusedAgentSession })
         id = try container.decode(TerminalSessionID.self, forKey: .id)
         paneID = try container.decodeIfPresent(PaneID.self, forKey: .paneID)
             ?? PaneID(rawValue: repairedUUID(seed: "terminal:\(id):missing-pane"))
         workingDirectory = try container.decodeIfPresent(URL.self, forKey: .workingDirectory)
         recentText = Self.boundedRecentText(try? container.decodeIfPresent(String.self, forKey: .recentText))
-        agentSession = try? container.decodeIfPresent(AgentSessionHandle.self, forKey: .agentSession)
+        self.agentSession = agentSession
         agentTitle = AgentSessionTitle.sanitized(try? container.decodeIfPresent(String.self, forKey: .agentTitle))
     }
 

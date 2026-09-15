@@ -662,6 +662,7 @@ final class DesktopStressTests: XCTestCase {
         XCTAssertEqual(model.settingsOverrides(for: .workspace(workspaceID))?.fontSize, 1_000)
         XCTAssertNil(model.errorDescription)
 
+        model.persistWorkspaceStore()
         let reloaded = try makeModel(applicationSupportDirectory: directory)
         XCTAssertEqual(reloaded.store.globalSettings.fontSize, TerminalPreferences.fontSizeRange.upperBound)
         XCTAssertEqual(reloaded.store.globalSettings.scrollbackLines, TerminalPreferences.scrollbackLinesRange.upperBound)
@@ -669,15 +670,18 @@ final class DesktopStressTests: XCTestCase {
         XCTAssertEqual(reloaded.settingsOverrides(for: .workspace(workspaceID))?.fontSize, 1_000)
     }
 
-    func testANonFiniteFontSizeOverrideIsRefusedWithABannerNotACrash() throws {
+    func testANonFiniteFontSizeOverrideIsRefusedWithABannerNotACrash() async throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let model = try makeModel(applicationSupportDirectory: directory)
         let workspaceID = model.store.selectedWorkspaceID
         model.setSetting(Double.nan, at: .workspace(workspaceID), global: \.fontSize, override: \.fontSize)
-        XCTAssertNotNil(model.errorDescription, "JSON cannot carry NaN, so the write fails loudly")
-        XCTAssertNil(model.settingsOverrides(for: .workspace(workspaceID))?.fontSize)
+        // The mutation lands in memory; the coalesced write fails on the next run loop turn.
+        XCTAssertNil(model.errorDescription)
+        await waitUntil("the failed write reaches the banner") { model.errorDescription != nil }
+        XCTAssertTrue(model.store.hasUnsavedChanges, "The store stays dirty until a writable value replaces the NaN")
         XCTAssertEqual(model.resolvedSettings(for: .workspace(workspaceID))?.fontSize, TerminalPreferences.defaultFontSize)
+        XCTAssertNil(try WorkspaceStore(persistenceURL: model.store.persistenceURL).selectedWorkspace.settingsOverrides?.fontSize)
     }
 }
 

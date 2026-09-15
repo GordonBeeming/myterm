@@ -395,6 +395,7 @@ final class AppModelTests: XCTestCase {
             store.selectedWorkspace.tab(groupID: inactiveGroupID, tabID: inactiveSecondID)?.browserSession?.id
         )
         try store.selectWorkspace(selectedWorkspaceID)
+        try store.flush()
 
         let model = try AppModel(
             channel: .development,
@@ -854,6 +855,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(secondSession.appliedRuntimeConfigurations.last?.fontSize, 72)
 
         let persistenceURL = MyTermChannel.development.persistenceURL(applicationSupportDirectory: directory)
+        model.persistWorkspaceStore()
         let restored = try WorkspaceStore(persistenceURL: persistenceURL)
         XCTAssertEqual(
             restored.workspaces.first { $0.id == secondWorkspaceID }?.settingsOverrides?.fontSize,
@@ -954,6 +956,7 @@ final class AppModelTests: XCTestCase {
             recentText: "session id: 1234"
         )
         let engine = CapturingTerminalEngine()
+        try store.flush()
 
         _ = try AppModel(
             channel: .development,
@@ -3516,6 +3519,7 @@ final class AppModelTests: XCTestCase {
         session.activeForegroundProcessName = "claude"
         session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .working, sessionID: "abc-123")))
         firstModel.persistTerminalSnapshots()
+        firstModel.persistWorkspaceStore()
 
         let relaunchEngine = CapturingTerminalEngine()
         _ = try AppModel(
@@ -3621,6 +3625,86 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(relaunchEngine.configurations.first?.initialCommand)
     }
 
+    func testAPaneThatFailsToStartKeepsItsConversationForTheNextAttempt() throws {
+        // Restore is off, so a pane that starts would drop its handle on the way to a prompt. One
+        // that never starts has no prompt, and must not lose the conversation as well.
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let firstEngine = CapturingTerminalEngine()
+        let firstModel = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: firstEngine,
+            startsTerminalProcesses: true
+        )
+        firstModel.updateGlobalSettings { $0.restoresAgentSessions = false }
+        let session = try XCTUnwrap(firstEngine.sessions.first)
+        session.activeForegroundProcessName = "claude"
+        session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .working, sessionID: "abc-123")))
+        firstModel.persistWorkspaceStore()
+
+        let relaunched = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: FailingTerminalEngine(),
+            startsTerminalProcesses: true
+        )
+
+        XCTAssertNotNil(relaunched.errorDescription, "the failure is reported")
+        XCTAssertEqual(
+            relaunched.selectedWorkspace.selectedTab?.terminalSession?.agentSession,
+            AgentSessionHandle(agent: "claude", sessionID: "abc-123")
+        )
+    }
+
+    func testAPaneThatLostItsDirectoryAndFailsToStartDoesNotRejoinOnALaterAttempt() throws {
+        // The conversation belongs to the directory it ran in. Once that directory is gone, the
+        // handle goes with it even if the pane then fails to start, or a later attempt would see
+        // the fallback directory and rejoin a conversation from a directory that no longer exists.
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let workingDirectory = directory.appending(path: "project", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: workingDirectory, withIntermediateDirectories: true)
+        let firstEngine = CapturingTerminalEngine()
+        let firstModel = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: firstEngine,
+            startsTerminalProcesses: true
+        )
+        let tab = try XCTUnwrap(firstModel.selectedWorkspace.selectedTab)
+        try firstModel.store.updateTerminalWorkingDirectory(
+            workspaceID: firstModel.store.selectedWorkspaceID,
+            tabGroupID: firstModel.selectedWorkspace.focusedTabGroupID,
+            tabID: tab.id,
+            workingDirectory: workingDirectory
+        )
+        let session = try XCTUnwrap(firstEngine.sessions.first)
+        session.activeForegroundProcessName = "claude"
+        session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .working, sessionID: "abc-123")))
+        try FileManager.default.removeItem(at: workingDirectory)
+        firstModel.persistWorkspaceStore()
+
+        let failed = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: FailingTerminalEngine(),
+            startsTerminalProcesses: true
+        )
+        XCTAssertNotNil(failed.errorDescription)
+        XCTAssertNil(failed.selectedWorkspace.selectedTab?.terminalSession?.agentSession)
+        failed.persistWorkspaceStore()
+
+        let retryEngine = CapturingTerminalEngine()
+        _ = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: retryEngine,
+            startsTerminalProcesses: true
+        )
+        XCTAssertNil(retryEngine.configurations.first?.initialCommand)
+    }
+
     func testTurningOffAgentRestoreBringsThePaneBackToAPrompt() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
@@ -3689,6 +3773,15 @@ private final class CloseConfirmationRecorder {
     func confirm(_ prompt: ActiveProcessClosePrompt) -> Bool {
         prompts.append(prompt)
         return allowsClose
+    }
+}
+
+@MainActor
+private final class FailingTerminalEngine: TerminalEngine {
+    struct Failure: Error {}
+
+    func makeSession(configuration: TerminalSessionConfiguration) throws -> any TerminalProcessSession {
+        throw Failure()
     }
 }
 

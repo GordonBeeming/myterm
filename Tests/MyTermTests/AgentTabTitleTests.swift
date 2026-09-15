@@ -87,6 +87,7 @@ final class AgentTabTitleTests: XCTestCase {
         title("✳ Rename the tabs", to: model, at: location)
         XCTAssertEqual(displayTitle(in: model, at: location), "Rename the tabs")
 
+        model.persistWorkspaceStore()
         let relaunched = try makeModel(in: directory)
         XCTAssertEqual(displayTitle(in: relaunched, at: location), "Rename the tabs")
     }

@@ -134,6 +134,65 @@ final class AgentLifecycleTests: XCTestCase {
         XCTAssertEqual(fixture.model.agentAttention(forTab: fixture.tabID), .working)
     }
 
+    func testASessionEndStillInFlightFromTheEarlierLifeCannotEndTheRejoinedOne() throws {
+        // The user quits A and resumes it straight away. A's first SessionEnd hook is slow, and its
+        // report lands after the rejoin's SessionStart. Nothing in the report says which life it is
+        // from, so until the new life's first turn reports, an end for A is taken for the old one.
+        let fixture = try makeFixture(isActive: false)
+        fixture.emit(.ready, session: "a")
+        fixture.emit(.exited, session: "a")
+        fixture.emit(.ready, session: "a")
+        XCTAssertEqual(fixture.savedSession?.sessionID, "a", "rejoined")
+
+        fixture.emit(.exited, session: "a")
+        XCTAssertEqual(fixture.savedSession?.sessionID, "a", "the stale end is dropped")
+        XCTAssertEqual(fixture.model.liveAgentTabs[fixture.tabID], "claude")
+
+        fixture.emit(.working, session: "a")
+        XCTAssertEqual(fixture.savedSession?.sessionID, "a")
+        XCTAssertEqual(fixture.model.agentAttention(forTab: fixture.tabID), .working)
+
+        // Once the new life has spoken, its own end is heard.
+        fixture.emit(.exited, session: "a")
+        XCTAssertNil(fixture.savedSession)
+        XCTAssertNil(fixture.model.liveAgentTabs[fixture.tabID])
+    }
+
+    func testAStaleSessionEndWithNoIdentifierCannotEndAPendingRejoin() throws {
+        // The same slow SessionEnd, but its payload had no usable session id. It still lands
+        // between the rejoin's SessionStart and the new life's first turn.
+        let fixture = try makeFixture(isActive: false)
+        fixture.emit(.ready, session: "a")
+        fixture.emit(.exited, session: "a")
+        fixture.emit(.ready, session: "a")
+        XCTAssertEqual(fixture.savedSession?.sessionID, "a", "rejoined")
+
+        fixture.session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .exited)))
+
+        XCTAssertEqual(fixture.savedSession?.sessionID, "a", "an end that names no conversation is the old one's")
+        XCTAssertEqual(fixture.model.liveAgentTabs[fixture.tabID], "claude")
+
+        fixture.emit(.working, session: "a")
+        fixture.session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .exited)))
+        XCTAssertNil(fixture.savedSession, "once the new life has spoken, an unnamed end is its own")
+    }
+
+    func testAnotherAgentCannotSpeakForAPendingRejoin() throws {
+        // A Claude conversation was rejoined and is waiting for its first turn. A report under
+        // another agent's name that happens to carry the same id is not that turn.
+        let fixture = try makeFixture(isActive: false)
+        fixture.emit(.ready, session: "a")
+        fixture.emit(.exited, session: "a")
+        fixture.emit(.ready, session: "a")
+        XCTAssertEqual(fixture.savedSession, AgentSessionHandle(agent: "claude", sessionID: "a"))
+
+        fixture.emit(.working, agent: "codex", session: "a")
+
+        XCTAssertNil(fixture.model.agentAttention(forTab: fixture.tabID), "no cook")
+        XCTAssertEqual(fixture.model.liveAgentTabs[fixture.tabID], "claude", "the pane still holds Claude")
+        XCTAssertEqual(fixture.savedSession, AgentSessionHandle(agent: "claude", sessionID: "a"))
+    }
+
     func testAPromptWithNoSessionStartStillAdoptsTheConversation() throws {
         // Hooks installed while an agent was already running: the first thing MyTerm hears is
         // UserPromptSubmit.
@@ -230,6 +289,7 @@ final class AgentLifecycleTests: XCTestCase {
 
         XCTAssertEqual(fixture.savedSession?.sessionID, "abc", "the quit already decided what to keep")
 
+        fixture.model.persistWorkspaceStore()
         let relaunched = try makeFixture(in: fixture.directory, isActive: false)
         XCTAssertEqual(relaunched.engine.configurations.first?.initialCommand, "claude --resume 'abc'")
     }
@@ -251,6 +311,7 @@ final class AgentLifecycleTests: XCTestCase {
         XCTAssertNil(fixture.model.liveAgentTabs[fixture.tabID], "so does the agent")
         XCTAssertNil(fixture.savedSession, "and the conversation")
 
+        fixture.model.persistWorkspaceStore()
         let relaunched = try makeFixture(in: fixture.directory, isActive: false)
         XCTAssertNil(relaunched.engine.configurations.first?.initialCommand, "the pane comes back to a prompt")
     }
@@ -311,6 +372,7 @@ final class AgentLifecycleTests: XCTestCase {
         fixture.session.activeForegroundProcessName = "claude"
         fixture.emit(.working, session: "abc")
         fixture.model.persistTerminalSnapshots()
+        fixture.model.persistWorkspaceStore()
         let relaunched = try makeFixture(in: fixture.directory, isActive: false)
         XCTAssertEqual(relaunched.savedSession?.sessionID, "abc")
 
@@ -370,6 +432,7 @@ final class AgentLifecycleTests: XCTestCase {
         fixture.session.activeForegroundProcessName = "claude"
         fixture.emit(.working, session: "abc")
         fixture.model.persistTerminalSnapshots()
+        fixture.model.persistWorkspaceStore()
 
         let relaunched = try makeFixture(in: fixture.directory, isActive: false)
 
@@ -386,6 +449,7 @@ final class AgentLifecycleTests: XCTestCase {
 
         // Turned back on before the relaunch, in Settings or by editing the file.
         fixture.model.updateGlobalSettings { $0.restoresAgentSessions = true }
+        fixture.model.persistWorkspaceStore()
         let relaunched = try makeFixture(in: fixture.directory, isActive: false)
 
         XCTAssertEqual(relaunched.engine.configurations.first?.initialCommand, "claude --resume 'abc'")
@@ -401,6 +465,7 @@ final class AgentLifecycleTests: XCTestCase {
         XCTAssertEqual(fixture.displayTitle, "Fix the build")
         XCTAssertNil(fixture.savedSession)
         fixture.model.persistTerminalSnapshots()
+        fixture.model.persistWorkspaceStore()
 
         let relaunched = try makeFixture(in: fixture.directory, isActive: false)
 
@@ -414,6 +479,7 @@ final class AgentLifecycleTests: XCTestCase {
         fixture.emit(.working, session: "abc")
         fixture.model.renameTab(fixture.tabID, in: fixture.tabGroupID, title: "Fix the build")
         fixture.model.persistTerminalSnapshots()
+        fixture.model.persistWorkspaceStore()
 
         let relaunched = try makeFixture(in: fixture.directory, isActive: false)
 

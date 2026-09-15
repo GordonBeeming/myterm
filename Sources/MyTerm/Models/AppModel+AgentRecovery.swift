@@ -40,9 +40,12 @@ extension AppModel {
         case .ready, .working, .finished, .awaitingInput:
             guard let reported = AgentSessionHandle(agent: report.agent, sessionID: report.sessionID),
                   AgentSessionResume.canResume(reported) else { return }
-            // Rejoining a conversation the pane left takes it back out of the left set, and moving
-            // to another one puts the current one in.
-            retiredAgentSessions[tabID]?.remove(reported.sessionID)
+            // Moving to another conversation puts the current one in the left set. A rejoined one
+            // comes back out only with its first turn, not with the SessionStart that rejoined it,
+            // so that a SessionEnd still in flight from its earlier life cannot end its new one.
+            if report.activity != .ready {
+                retiredAgentSessions[tabID]?.remove(reported.sessionID)
+            }
             if let current = terminal.agentSession, current != reported {
                 retiredAgentSessions[tabID, default: []].insert(current.sessionID)
             }
@@ -67,16 +70,37 @@ extension AppModel {
     /// exception: a SessionStart for such an id while the pane has no live agent is the user
     /// rejoining that conversation (`claude --resume`), and it establishes it again. A SessionStart
     /// for an id the pane has never seen is a new conversation and always goes through.
+    ///
+    /// A report carries no lifecycle identity: it is terminal bytes a hook wrote, and the hook knows
+    /// only the session id. So a rejoined id stays in the left set until the new life's first turn
+    /// reports, and a SessionEnd that lands in between is taken for the earlier life's and dropped.
+    /// If it was in fact the new life's, an agent that started and ended within one report, the
+    /// pane keeps a handle that resumes into a prompt, which is the safe way to be wrong.
     func isReportOfALeftConversation(
         _ report: AgentActivityReport,
         tabID: TabID,
         in terminal: TerminalSession
     ) -> Bool {
         if isExitOfAnotherConversation(report, in: terminal) { return true }
-        guard let sessionID = report.sessionID,
-              retiredAgentSessions[tabID, default: []].contains(sessionID) else { return false }
-        let isRejoin = report.activity == .ready && liveAgentTabs[tabID] == nil
-        return !isRejoin
+        let left = retiredAgentSessions[tabID, default: []]
+        // While a rejoined conversation waits for its first turn, an end that could not say which
+        // conversation it is about is taken for the earlier life's, like one that names it.
+        if report.activity == .exited, report.sessionID == nil,
+           let saved = terminal.agentSession, left.contains(saved.sessionID) {
+            return true
+        }
+        guard let sessionID = report.sessionID, left.contains(sessionID) else { return false }
+        switch report.activity {
+        case .ready:
+            return liveAgentTabs[tabID] != nil
+        case .working, .finished, .awaitingInput:
+            // The rejoined conversation's first turn, and only from the agent that holds it: the
+            // same id under another agent's name is not that turn.
+            guard let reported = AgentSessionHandle(agent: report.agent, sessionID: sessionID) else { return true }
+            return terminal.agentSession != reported
+        case .exited:
+            return true
+        }
     }
 
     /// Whether an exit report is about a conversation the pane no longer holds.

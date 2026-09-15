@@ -276,6 +276,7 @@ final class WorkspaceImportTests: XCTestCase {
             homeDirectory: home
         )
 
+        try store.flush()
         let reloaded = try WorkspaceStore(persistenceURL: url)
         XCTAssertEqual(reloaded.workspaces.last?.title, "API")
         XCTAssertEqual(reloaded.selectedWorkspace.title, "API")

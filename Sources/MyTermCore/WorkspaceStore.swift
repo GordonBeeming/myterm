@@ -269,6 +269,21 @@ public final class WorkspaceStore {
     public private(set) var snapshot: WorkspaceStoreSnapshot
     public private(set) var loadReport: WorkspaceStoreLoadReport
 
+    /// Whether the in-memory snapshot is ahead of the file.
+    ///
+    /// A mutation changes the snapshot at once and leaves the file for the next turn of the main
+    /// run loop, so a burst of small writes (an agent retitling its conversation, a loop pinning
+    /// every workspace) costs one encode rather than one per change. `flush()` brings the file up
+    /// to date on demand; the app calls it before it quits.
+    public private(set) var hasUnsavedChanges = false
+
+    /// Told about a write the scheduled flush could not make. A mutation itself cannot throw for
+    /// the file any more, so this is where an unwritable disk or an unencodable value surfaces.
+    /// The snapshot keeps the change and stays dirty, so the next flush tries again.
+    public var onPersistenceFailure: ((Error) -> Void)?
+
+    private var isFlushScheduled = false
+
     /// Whether the store keeps its state in memory only.
     ///
     /// A repair rewrites the state file, and the backup beside it is the only copy of what the file
@@ -367,7 +382,22 @@ public final class WorkspaceStore {
         try write(snapshot, fileManager: fileManager)
     }
 
-    public func save() throws { try write(snapshot, fileManager: .default) }
+    /// Writes the snapshot whether or not anything changed.
+    public func save() throws {
+        if try write(snapshot, fileManager: .default) {
+            hasUnsavedChanges = false
+        }
+    }
+
+    /// Writes the snapshot now if a mutation has left the file behind. Nothing to write is not an
+    /// error. A failure leaves the store dirty so a later flush can succeed, and so does a store
+    /// whose persistence is suspended: the file still holds the older snapshot.
+    public func flush() throws {
+        guard hasUnsavedChanges else { return }
+        if try write(snapshot, fileManager: .default) {
+            hasUnsavedChanges = false
+        }
+    }
 
     public func resolvedSettings(for workspaceID: WorkspaceID) throws -> TerminalPreferences {
         let workspace = try workspace(workspaceID)
@@ -1188,8 +1218,35 @@ public final class WorkspaceStore {
         var next = snapshot
         try body(&next)
         next.repair()
-        try write(next, fileManager: .default)
         snapshot = next
+        hasUnsavedChanges = true
+        scheduleFlush()
+    }
+
+    /// One write per turn of the main run loop, however many mutations land in that turn.
+    ///
+    /// The block holds the store strongly on purpose. A mutation made just before the last
+    /// reference goes would otherwise be lost with it; a store with a pending flush lives one
+    /// more turn, until the write has been attempted.
+    private func scheduleFlush() {
+        guard !isFlushScheduled, !isPersistenceSuspended else { return }
+        isFlushScheduled = true
+        // The store is used from one thread (the main actor in the app), so the reference can
+        // cross the dispatch boundary without a lock. Marked rather than proven because the store
+        // itself is deliberately not `Sendable`.
+        nonisolated(unsafe) let store = self
+        DispatchQueue.main.async {
+            store.performScheduledFlush()
+        }
+    }
+
+    private func performScheduledFlush() {
+        isFlushScheduled = false
+        do {
+            try flush()
+        } catch {
+            onPersistenceFailure?(error)
+        }
     }
 
     private struct WorkspaceRemoval {
@@ -1284,11 +1341,13 @@ public final class WorkspaceStore {
         workspace.folderID.flatMap { folderID in snapshot.folders.firstIndex { $0.id == folderID } }
     }
 
-    private func write(_ snapshot: WorkspaceStoreSnapshot, fileManager: FileManager) throws {
+    /// Returns whether the file was written. A suspended store declines without error.
+    @discardableResult
+    private func write(_ snapshot: WorkspaceStoreSnapshot, fileManager: FileManager) throws -> Bool {
         // A repair with a failed backup has no copy of the original bytes anywhere. Writing here
         // would overwrite the only surviving copy of the pre-repair state, so the store stays
         // in-memory-only for the rest of the session instead.
-        guard !isPersistenceSuspended else { return }
+        guard !isPersistenceSuspended else { return false }
         do {
             try fileManager.createDirectory(
                 at: persistenceURL.deletingLastPathComponent(),
@@ -1301,6 +1360,7 @@ public final class WorkspaceStore {
             if let error = error as? WorkspaceStoreError { throw error }
             throw WorkspaceStoreError.saveFailed(path: persistenceURL.path, reason: error.localizedDescription)
         }
+        return true
     }
 
     private static func persistedVersion(in data: Data) -> Int? {

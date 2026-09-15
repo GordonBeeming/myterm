@@ -47,9 +47,57 @@ final class WorkspaceStoreStressTests: XCTestCase {
         XCTAssertEqual(store.workspaces.count, 500)
         XCTAssertEqual(store.folders.count, 50)
 
+        try store.flush()
         let reloaded = try WorkspaceStore(persistenceURL: store.persistenceURL)
         XCTAssertEqual(reloaded.workspaces.map(\.id), store.workspaces.map(\.id))
         XCTAssertEqual(reloaded.folders.map(\.id), store.folders.map(\.id))
+    }
+
+    /// A burst of mutations costs one encode of the whole snapshot, not one per change. An agent
+    /// that retitles its conversation is the fastest writer the store has, so it is the burst
+    /// that matters. The proof is what the file holds, not a stopwatch: nothing during the burst,
+    /// the last title after the flush.
+    func testABurstOfTitleWritesReachesTheFileOnceAtTheFlush() throws {
+        let store = try makeLargeStore()
+        let (workspaceID, groupID, tabID) = try firstTerminal(in: store)
+        try store.updateTerminalAgentTitle(
+            workspaceID: workspaceID, tabGroupID: groupID, tabID: tabID, agentTitle: "Before the burst"
+        )
+        try store.flush()
+        XCTAssertFalse(store.hasUnsavedChanges)
+
+        let iterations = 20
+        let clock = ContinuousClock()
+        let elapsed = try clock.measure {
+            for index in 0..<iterations {
+                try store.updateTerminalAgentTitle(
+                    workspaceID: workspaceID,
+                    tabGroupID: groupID,
+                    tabID: tabID,
+                    agentTitle: "Title \(index)"
+                )
+            }
+        }
+        // No write happened during the burst: the file still holds the title from before it.
+        XCTAssertTrue(store.hasUnsavedChanges)
+        XCTAssertEqual(titleOnDisk(store), "Before the burst")
+        // A blocking detector only. Per write the burst costs a copy and a repair of the
+        // snapshot, well under a millisecond, but a shared debug CI runner is noisy, so the bound
+        // is loose enough that only a write per mutation (about 7 ms each) could trip it.
+        XCTAssertLessThan(
+            elapsed / iterations,
+            .milliseconds(100),
+            "One agent-title mutation on a 500-workspace store took \(elapsed / iterations); is it writing the file again?"
+        )
+
+        // The one write the run loop would make after the burst.
+        try store.flush()
+        XCTAssertFalse(store.hasUnsavedChanges)
+        XCTAssertEqual(titleOnDisk(store), "Title \(iterations - 1)")
+    }
+
+    private func titleOnDisk(_ store: WorkspaceStore) -> String? {
+        (try? WorkspaceStore(persistenceURL: store.persistenceURL))?.selectedWorkspace.selectedTab?.terminalSession?.agentTitle
     }
 
     func testOneHundredTabsInOnePaneGroupMoveAndPersist() throws {
@@ -73,6 +121,7 @@ final class WorkspaceStoreStressTests: XCTestCase {
         )
         XCTAssertEqual(store.selectedWorkspace.group(id: groupID)?.tabs.first?.id, last.id)
 
+        try store.flush()
         let reloaded = try WorkspaceStore(persistenceURL: url)
         XCTAssertEqual(reloaded.selectedWorkspace.group(id: groupID)?.tabs.count, 100)
         XCTAssertEqual(reloaded.selectedWorkspace.group(id: groupID)?.tabs.first?.id, last.id)
@@ -93,6 +142,7 @@ final class WorkspaceStoreStressTests: XCTestCase {
         }
         XCTAssertEqual(store.selectedWorkspace.orderedGroups.count, 20)
 
+        try store.flush()
         let reloaded = try WorkspaceStore(persistenceURL: url)
         XCTAssertEqual(reloaded.selectedWorkspace.orderedGroups.count, 20)
         XCTAssertEqual(
@@ -120,6 +170,7 @@ final class WorkspaceStoreStressTests: XCTestCase {
         let store = try WorkspaceStore(persistenceURL: url)
         let title = String(repeating: "x", count: 10_000)
         try store.renameWorkspace(store.selectedWorkspaceID, title: title)
+        try store.flush()
         let reloaded = try WorkspaceStore(persistenceURL: url)
         XCTAssertEqual(reloaded.selectedWorkspace.title.count, 10_000)
     }
@@ -132,10 +183,13 @@ final class WorkspaceStoreStressTests: XCTestCase {
         // Each title is read back through a fresh load, so the round trip through JSON is what
         // is asserted, not the in-memory value the rename just wrote.
         try store.renameWorkspace(store.selectedWorkspaceID, title: "🚀🎉")
+        try store.flush()
         XCTAssertEqual(try WorkspaceStore(persistenceURL: url).selectedWorkspace.title, "🚀🎉")
         try store.renameWorkspace(store.selectedWorkspaceID, title: "\n\n")
+        try store.flush()
         XCTAssertEqual(try WorkspaceStore(persistenceURL: url).selectedWorkspace.title, "\n\n")
         try store.renameWorkspace(store.selectedWorkspaceID, title: "")
+        try store.flush()
         XCTAssertEqual(try WorkspaceStore(persistenceURL: url).selectedWorkspace.title, "")
     }
 
@@ -153,6 +207,7 @@ final class WorkspaceStoreStressTests: XCTestCase {
         ] {
             try store.updateGlobalSettings { $0.fontSize = input }
             XCTAssertEqual(store.globalSettings.fontSize, expected, "fontSize \(input)")
+            try store.flush()
             let reloaded = try WorkspaceStore(persistenceURL: url)
             XCTAssertEqual(reloaded.globalSettings.fontSize, expected, "fontSize \(input) after reload")
         }
@@ -170,6 +225,7 @@ final class WorkspaceStoreStressTests: XCTestCase {
         ] {
             try store.updateGlobalSettings { $0.scrollbackLines = input }
             XCTAssertEqual(store.globalSettings.scrollbackLines, expected, "scrollback \(input)")
+            try store.flush()
             let reloaded = try WorkspaceStore(persistenceURL: url)
             XCTAssertEqual(reloaded.globalSettings.scrollbackLines, expected, "scrollback \(input) after reload")
         }
@@ -187,24 +243,31 @@ final class WorkspaceStoreStressTests: XCTestCase {
         XCTAssertEqual(resolved.fontSize, TerminalPreferences.fontSizeRange.upperBound)
         XCTAssertEqual(resolved.scrollbackLines, TerminalPreferences.scrollbackLinesRange.upperBound)
 
+        try store.flush()
         let reloaded = try WorkspaceStore(persistenceURL: url)
         XCTAssertEqual(reloaded.selectedWorkspace.settingsOverrides?.fontSize, 1_000)
         XCTAssertEqual(reloaded.selectedWorkspace.settingsOverrides?.scrollbackLines, 10_000_000)
     }
 
-    /// A non-finite override cannot be written as JSON, so the store refuses the whole mutation
-    /// and keeps the previous value rather than corrupting the file or crashing.
-    func testNonFiniteFontSizeOverrideIsRejectedWithoutLosingTheStore() throws {
+    /// A non-finite override cannot be written as JSON. The mutation lands in memory and the
+    /// flush fails, leaving the store dirty; putting a finite value back lets the next flush
+    /// through, and the file is never left half-written.
+    func testNonFiniteFontSizeOverrideFailsTheFlushWithoutLosingTheStore() throws {
         let url = temporaryURL()
         let store = try WorkspaceStore(persistenceURL: url)
         let workspaceID = store.selectedWorkspaceID
         try store.updateWorkspaceSettings(workspaceID) { $0.fontSize = 20 }
+        try store.flush()
 
-        XCTAssertThrowsError(try store.updateWorkspaceSettings(workspaceID) { $0.fontSize = .nan })
-        XCTAssertEqual(store.selectedWorkspace.settingsOverrides?.fontSize, 20)
+        try store.updateWorkspaceSettings(workspaceID) { $0.fontSize = .nan }
+        XCTAssertThrowsError(try store.flush())
+        XCTAssertTrue(store.hasUnsavedChanges)
+        XCTAssertEqual(try WorkspaceStore(persistenceURL: url).selectedWorkspace.settingsOverrides?.fontSize, 20)
 
-        let reloaded = try WorkspaceStore(persistenceURL: url)
-        XCTAssertEqual(reloaded.selectedWorkspace.settingsOverrides?.fontSize, 20)
+        try store.updateWorkspaceSettings(workspaceID) { $0.fontSize = 21 }
+        try store.flush()
+        XCTAssertFalse(store.hasUnsavedChanges)
+        XCTAssertEqual(try WorkspaceStore(persistenceURL: url).selectedWorkspace.settingsOverrides?.fontSize, 21)
     }
 
     func testMissingShellPathRoundTripsAndResolvesAsCustom() throws {
@@ -212,6 +275,7 @@ final class WorkspaceStoreStressTests: XCTestCase {
         let store = try WorkspaceStore(persistenceURL: url)
         let path = "/nonexistent/\(UUID().uuidString)/zsh"
         try store.updateGlobalSettings { $0.shell = .custom(path: path) }
+        try store.flush()
         let reloaded = try WorkspaceStore(persistenceURL: url)
         XCTAssertEqual(reloaded.globalSettings.shell, .custom(path: path))
     }
@@ -223,6 +287,7 @@ final class WorkspaceStoreStressTests: XCTestCase {
         // In memory the store holds what it was given...
         XCTAssertEqual(store.globalSettings.shell, .custom(path: "   "))
         // ...and the decoder normalises it away on the next launch. The two disagree until then.
+        try store.flush()
         let reloaded = try WorkspaceStore(persistenceURL: url)
         XCTAssertEqual(reloaded.globalSettings.shell, .loginShell)
     }
@@ -235,6 +300,7 @@ final class WorkspaceStoreStressTests: XCTestCase {
             $0.fontPostScriptName = long
             $0.textFileOpenCommand = long
         }
+        try store.flush()
         let reloaded = try WorkspaceStore(persistenceURL: url)
         XCTAssertEqual(reloaded.globalSettings.fontPostScriptName, long)
         XCTAssertEqual(reloaded.globalSettings.textFileOpenCommand, long)
