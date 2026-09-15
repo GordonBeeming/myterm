@@ -560,6 +560,64 @@ final class CompanionHostTests: XCTestCase {
         ))
     }
 
+    func testOutboundQueueDrainsLargeBurstInOrderAndReclaimsCapacity() async throws {
+        let queue = CompanionConnectionWorkQueue(limits: .outbound)
+        let drained = expectation(description: "burst drained")
+        var received: [Int] = []
+        for index in 0..<4_096 {
+            try queue.enqueue(cost: 256) {
+                received.append(index)
+                if index == 4_095 { drained.fulfill() }
+            }
+        }
+        XCTAssertThrowsError(try queue.enqueue(cost: 1) {}) { error in
+            let overflow = error as? CompanionConnectionWorkQueue.Overflow
+            XCTAssertEqual(overflow?.reason, .itemCount)
+            XCTAssertEqual(overflow?.queuedItems, 4_096)
+            XCTAssertEqual(overflow?.queuedBytes, 4_096 * 256)
+        }
+        await fulfillment(of: [drained], timeout: 5)
+        XCTAssertEqual(received, Array(0..<4_096))
+        XCTAssertNoThrow(try queue.enqueue(cost: 32 * 1_024 * 1_024) {})
+        queue.cancel()
+    }
+
+    func testOutboundQueueKeepsByteBudgetAndReportsOverflowReason() throws {
+        let queue = CompanionConnectionWorkQueue(limits: .outbound)
+        defer { queue.cancel() }
+        let limit = 32 * 1_024 * 1_024
+        for _ in 0..<32 { try queue.enqueue(cost: 1_024 * 1_024) {} }
+        XCTAssertThrowsError(try queue.enqueue(cost: 1) {}) { error in
+            let overflow = error as? CompanionConnectionWorkQueue.Overflow
+            XCTAssertEqual(overflow?.reason, .totalBytes)
+            XCTAssertEqual(overflow?.queuedItems, 32)
+            XCTAssertEqual(overflow?.queuedBytes, limit)
+            XCTAssertEqual(overflow?.incomingBytes, 1)
+            XCTAssertTrue(error.localizedDescription.contains("pending byte limit"))
+        }
+        queue.cancel()
+        XCTAssertThrowsError(try queue.enqueue(cost: limit + 1) {}) { error in
+            XCTAssertEqual((error as? CompanionConnectionWorkQueue.Overflow)?.reason, .messageSize)
+        }
+        XCTAssertThrowsError(try queue.enqueue(cost: -1) {}) { error in
+            XCTAssertEqual((error as? CompanionConnectionWorkQueue.Overflow)?.reason, .invalidCost)
+        }
+        XCTAssertNoThrow(try queue.enqueue(cost: limit) {})
+    }
+
+    func testIncomingQueueRetainsItsSmallerLimits() throws {
+        let queue = CompanionConnectionWorkQueue()
+        defer { queue.cancel() }
+        for _ in 0..<64 { try queue.enqueue(cost: 1) {} }
+        XCTAssertThrowsError(try queue.enqueue(cost: 1) {}) { error in
+            XCTAssertEqual((error as? CompanionConnectionWorkQueue.Overflow)?.reason, .itemCount)
+        }
+        queue.cancel()
+        XCTAssertThrowsError(try queue.enqueue(cost: 8 * 1_024 * 1_024 + 1) {}) { error in
+            XCTAssertEqual((error as? CompanionConnectionWorkQueue.Overflow)?.reason, .messageSize)
+        }
+    }
+
     func testSlowPeerQueueDoesNotBlockAnotherPeerAndKeepsItsOwnOrder() async throws {
         let slow = CompanionConnectionWorkQueue()
         let fast = CompanionConnectionWorkQueue()

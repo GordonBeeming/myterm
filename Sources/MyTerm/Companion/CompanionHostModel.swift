@@ -74,7 +74,7 @@ final class CompanionHostModel {
         var attachedSessions: Set<TerminalSessionID> = []
         var attachingSessions: [TerminalSessionID: [TerminalRemoteOutput]] = [:]
         var attachingOverflow: Set<TerminalSessionID> = []
-        let outboundQueue = CompanionConnectionWorkQueue()
+        let outboundQueue = CompanionConnectionWorkQueue(limits: .outbound)
 
         init(connectionID: UUID, peer: PairedPeer, helloChannel: SecureRelayChannel,
              clientHello: HelloParameters, hostHello: HelloParameters) {

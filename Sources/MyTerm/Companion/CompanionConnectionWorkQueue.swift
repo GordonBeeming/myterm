@@ -1,10 +1,36 @@
 import Foundation
-import MyTermRemote
 
 @MainActor
 final class CompanionConnectionWorkQueue {
-    static let maximumItems = 64
-    static let maximumBytes = 8 * 1_024 * 1_024
+    struct Limits: Sendable {
+        let maximumItems: Int
+        let maximumBytes: Int
+
+        static let incoming = Limits(maximumItems: 64, maximumBytes: 8 * 1_024 * 1_024)
+        static let outbound = Limits(maximumItems: 4_096, maximumBytes: 32 * 1_024 * 1_024)
+    }
+
+    struct Overflow: LocalizedError {
+        enum Reason: String {
+            case invalidCost = "invalid message size"
+            case messageSize = "individual message byte limit"
+            case itemCount = "pending message count limit"
+            case totalBytes = "pending byte limit"
+        }
+
+        let reason: Reason
+        let queuedItems: Int
+        let queuedBytes: Int
+        let incomingBytes: Int
+        let limits: Limits
+
+        var errorDescription: String? {
+            "\(reason.rawValue): queued messages \(queuedItems)/\(limits.maximumItems), "
+                + "queued bytes \(queuedBytes)/\(limits.maximumBytes), incoming bytes \(incomingBytes)"
+        }
+    }
+
+    private let limits: Limits
 
     private struct Item {
         let cost: Int
@@ -15,11 +41,20 @@ final class CompanionConnectionWorkQueue {
     private var queuedBytes = 0
     private var worker: Task<Void, Never>?
 
+    nonisolated init(limits: Limits = .incoming) {
+        self.limits = limits
+    }
+
     func enqueue(cost: Int, operation: @escaping @MainActor () async -> Void) throws {
-        guard cost >= 0, cost <= Self.maximumBytes,
-              items.count < Self.maximumItems,
-              queuedBytes <= Self.maximumBytes - cost else {
-            throw RemoteError.messageTooLarge
+        let reason: Overflow.Reason?
+        if cost < 0 { reason = .invalidCost }
+        else if cost > limits.maximumBytes { reason = .messageSize }
+        else if items.count >= limits.maximumItems { reason = .itemCount }
+        else if queuedBytes > limits.maximumBytes - cost { reason = .totalBytes }
+        else { reason = nil }
+        if let reason {
+            throw Overflow(reason: reason, queuedItems: items.count, queuedBytes: queuedBytes,
+                           incomingBytes: cost, limits: limits)
         }
         items.append(Item(cost: cost, operation: operation))
         queuedBytes += cost
