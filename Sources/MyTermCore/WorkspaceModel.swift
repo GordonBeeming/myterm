@@ -30,6 +30,7 @@ public struct TerminalSession: Codable, Equatable, Hashable, Sendable, Identifia
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        decoder.recordKnownKeys(container.allKeys)
         id = try container.decode(TerminalSessionID.self, forKey: .id)
         paneID = try container.decodeIfPresent(PaneID.self, forKey: .paneID)
             ?? PaneID(rawValue: repairedUUID(seed: "terminal:\(id):missing-pane"))
@@ -277,6 +278,7 @@ public struct TabGroup: Codable, Equatable, Hashable, Sendable, Identifiable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        decoder.recordKnownKeys(container.allKeys)
         let id = try container.decode(TabGroupID.self, forKey: .id)
         let tabs = try container.decodeIfPresent(LossyArray<Tab>.self, forKey: .tabs)?.elements ?? []
         let selectedTabID = try? container.decodeIfPresent(TabID.self, forKey: .selectedTabID)
@@ -378,8 +380,16 @@ public indirect enum WorkspaceLayout: Codable, Equatable, Hashable, Sendable {
 
     public func group(id: TabGroupID) -> TabGroup? {
         switch self {
-        case .group(let group): group.id == id ? group : nil
-        case .split(_, _, let children, _): children.lazy.compactMap { $0.group(id: id) }.first
+        case .group(let group):
+            return group.id == id ? group : nil
+        case .split(_, _, let children, _):
+            // A plain loop, not `lazy.compactMap { }.first`: the lazy collection evaluates the
+            // recursive lookup once to find its start index and again to read the element, which
+            // doubles the cost at every level of nesting.
+            for child in children {
+                if let found = child.group(id: id) { return found }
+            }
+            return nil
         }
     }
 
@@ -946,6 +956,7 @@ public struct Workspace: Codable, Equatable, Hashable, Sendable, Identifiable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        decoder.recordKnownKeys(container.allKeys)
         id = try container.decode(WorkspaceID.self, forKey: .id)
         title = try container.decode(String.self, forKey: .title)
         emoji = try? container.decodeIfPresent(String.self, forKey: .emoji)
@@ -983,9 +994,19 @@ internal final class RecoveryDecodingTracker: @unchecked Sendable {
     private(set) var droppedElementCount = 0
     private(set) var identifierRepairCount = 0
     private(set) var structuralRepairCount = 0
+    /// The keys each lenient decoder recognised in the file's object at its coding path, with array
+    /// indices as decimal strings. A key the file has that no decoder recognised is one from a newer
+    /// build; only this map lets the repair comparison tell that from a known key whose value the
+    /// decoder discarded.
+    private(set) var knownKeysByPath: [[String]: Set<String>] = [:]
 
     func recordDroppedElement() {
         droppedElementCount += 1
+    }
+
+    func recordKnownKeys<Key: CodingKey>(_ keys: [Key], at codingPath: [CodingKey]) {
+        let path = codingPath.map { $0.intValue.map(String.init) ?? $0.stringValue }
+        knownKeysByPath[path, default: []].formUnion(keys.map(\.stringValue))
     }
 
     func recordIdentifierRepair() {
@@ -994,6 +1015,14 @@ internal final class RecoveryDecodingTracker: @unchecked Sendable {
 
     func recordStructuralRepairs(_ count: Int) {
         structuralRepairCount += count
+    }
+}
+
+internal extension Decoder {
+    /// Every `init(from:)` that swallows a bad value with `try?` calls this first, so the keys it
+    /// knows reach the recovery tracker when one is loading.
+    func recordKnownKeys<Key: CodingKey>(_ keys: [Key]) {
+        (userInfo[.recoveryDecodingTracker] as? RecoveryDecodingTracker)?.recordKnownKeys(keys, at: codingPath)
     }
 }
 

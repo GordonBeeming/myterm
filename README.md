@@ -62,7 +62,7 @@ Every terminal process also receives a `BROWSER` launcher and a narrow `open` sh
 
 The link arrives without pulling MyTerm to the front, so an agent working in a workspace you are not watching cannot interrupt you.
 
-Reaching the shim takes more than `PATH`. Your own shell startup files run after MyTerm sets `PATH` and normally push the bundle behind `/usr/bin`, which would send every `open` to your default browser instead. So the app also loads a startup file of its own: `BASH_ENV` for bash, and a `ZDOTDIR` chain for zsh. Each one defines an `open` function, and a function is found before anything on `PATH`. The zsh chain runs your `.zshenv`, `.zprofile`, `.zshrc`, and `.zlogin` in their usual order and leaves `MYTERM_ORIGINAL_ZDOTDIR` holding your real `ZDOTDIR`. Panes that are already open keep the environment they started with, so restart a pane after updating the app.
+Reaching the shim takes more than `PATH`. Your own shell startup files run after MyTerm sets `PATH` and normally push the bundle behind `/usr/bin`, which would send every `open` to your default browser instead. So the app also loads a startup file of its own: `BASH_ENV` for bash, and a `ZDOTDIR` chain for zsh. Each one defines an `open` function, and a function is found before anything on `PATH`. The zsh chain runs your `.zshenv`, `.zprofile`, `.zshrc`, and `.zlogin` in their usual order and leaves `MYTERM_ORIGINAL_ZDOTDIR` holding your real `ZDOTDIR` when you have one. Panes that are already open keep the environment they started with, so restart a pane after updating the app.
 
 A tool that explicitly invokes `/usr/bin/open` bypasses MyTerm and can still open externally. Non-web `open` requests retain their normal system handling. Terminal links to configured text files use the scoped **Open text files with** command in Browser Settings, which defaults to `ide browse {file}`. Use suffix patterns such as `*.json` for Markdown, JSON, source, and config files; literal names such as `README`, `Dockerfile`, and `.gitignore` match exactly. Unsupported files and failed or empty text-file commands open in their macOS application instead of MyTerm's browser.
 
@@ -85,6 +85,10 @@ Reading a tab is what quietens it. Reaching the tab, switching to its workspace,
 MyTerm from another app all count. A question is the exception, because reading a question does not
 answer it: the cook stays purple until you reply and the agent goes back to work.
 
+A prompt you have not typed into for a while is not a question. Claude Code reports both under the
+same event, so MyTerm reads the report's own payload and passes on only the one that asks for
+something. Without that, every finished turn would turn purple a minute later and stay there.
+
 The indicator is off until you press **Set Up Claude Code Hooks** or **Set Up Codex Hooks** in
 General Settings. Each writes three hooks to that agent's own file, and the same button removes them
 again:
@@ -96,6 +100,10 @@ again:
 
 These files are shared with other tools. MyTerm marks its own commands with a trailing
 `# myterm-managed-hook` comment, adds nothing else, and removes only what carries that mark.
+
+What a hook reports can change between MyTerm versions. When Settings finds hooks an older MyTerm
+wrote, it says so and offers **Update**, which rewrites MyTerm's own commands and leaves the rest of
+the file alone. Until then the old hooks keep reporting the old way.
 
 Each hook writes an escape sequence to its own terminal, `ESC ]7337;agent=claude;event=finished ESC \`,
 and does nothing unless `MYTERM_PANE_ID` is set. Only MyTerm's terminals set it, so the hooks stay

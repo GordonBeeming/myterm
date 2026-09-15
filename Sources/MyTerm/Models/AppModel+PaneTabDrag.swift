@@ -45,6 +45,14 @@ struct PaneTabDragSession: Equatable {
     let startLocation: CGPoint
     var location: CGPoint
     var previewTarget: PaneTabDropTarget?
+    /// Latched the first time the pointer travels past the drag threshold. A press that only
+    /// wobbles never lifts the tab, and a lifted tab stays lifted even if the pointer wanders back
+    /// near where it started, so the preview cannot flicker between "click" and "drag".
+    var isLifted = false
+    /// The gesture that started the drag keeps delivering pointer movement until the mouse goes
+    /// up, so an Escape press cannot simply drop the session: the next movement would start a new
+    /// one. A cancelled session lingers, inert, until release.
+    var isCancelled = false
 }
 
 struct PaneTabInsertionFrame: Equatable {
@@ -79,6 +87,39 @@ extension AppModel {
 
     var paneTabDragPreviewTarget: PaneTabDropTarget? {
         paneTabDragSession?.previewTarget
+    }
+
+    func paneTabReorderPreview(in tabGroupID: TabGroupID) -> PaneTabReorderPreview? {
+        guard let session = paneTabDragSession,
+              session.isLifted,
+              !session.isCancelled,
+              session.source.tabGroupID == tabGroupID,
+              let group = store.workspaces
+                .first(where: { $0.id == session.source.workspaceID })?
+                .group(id: tabGroupID),
+              let sourceIndex = group.tabs.firstIndex(where: { $0.id == session.source.tabID }) else {
+            return nil
+        }
+        var insertionIndex: Int?
+        if case .tabStrip(let targetGroupID, let index) = session.previewTarget, targetGroupID == tabGroupID {
+            insertionIndex = index
+        }
+        return PaneTabReorderPreview(
+            draggedTabID: session.source.tabID,
+            sourceIndex: sourceIndex,
+            insertionIndex: insertionIndex,
+            pointerOffset: session.location.x - session.startLocation.x
+        )
+    }
+
+    /// A press that never travelled past the drag threshold is a click on the tab. The strip
+    /// selects on release rather than on press so selecting (which scrolls the strip to the
+    /// selected tab) can never move the strip underneath a drag that is about to begin.
+    func isPaneTabDragClick(source: PaneTabDragSource, releaseLocation: CGPoint) -> Bool {
+        guard let session = paneTabDragSession, session.source == source else { return false }
+        return !session.isLifted
+            && !session.isCancelled
+            && releaseLocation.distance(to: session.startLocation) < Self.paneTabDragThreshold
     }
 
     func registerPaneTabDragPaneBody(
@@ -175,8 +216,12 @@ extension AppModel {
             return
         }
 
-        if paneTabDragSession?.source == source {
+        if let session = paneTabDragSession, session.source == source {
+            guard !session.isCancelled else { return }
             paneTabDragSession?.location = location
+            if location.distance(to: session.startLocation) >= Self.paneTabDragThreshold {
+                paneTabDragSession?.isLifted = true
+            }
         } else {
             paneTabDragSession = PaneTabDragSession(
                 source: source,
@@ -232,6 +277,11 @@ extension AppModel {
         paneTabDragSession = nil
     }
 
+    func cancelPaneTabDragUntilRelease() {
+        paneTabDragSession?.isCancelled = true
+        paneTabDragSession?.previewTarget = nil
+    }
+
     private func cancelPaneTabDragIfSource(tabGroupID: TabGroupID, tabID: TabID) {
         guard paneTabDragSession?.source.tabGroupID == tabGroupID,
               paneTabDragSession?.source.tabID == tabID else { return }
@@ -247,13 +297,14 @@ extension AppModel {
         for session: PaneTabDragSession,
         at location: CGPoint
     ) -> PaneTabDropTarget? {
-        guard session.source.workspaceID == store.selectedWorkspaceID,
+        guard !session.isCancelled,
+              session.source.workspaceID == store.selectedWorkspaceID,
               tab(
                 workspaceID: session.source.workspaceID,
                 tabGroupID: session.source.tabGroupID,
                 tabID: session.source.tabID
               ) != nil,
-              location.distance(to: session.startLocation) >= Self.paneTabDragThreshold else {
+              session.isLifted || location.distance(to: session.startLocation) >= Self.paneTabDragThreshold else {
             return nil
         }
 

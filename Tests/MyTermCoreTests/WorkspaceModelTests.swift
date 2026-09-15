@@ -208,4 +208,31 @@ final class WorkspaceModelTests: XCTestCase {
         XCTAssertEqual(first.selectedTabID, first.tabs[0].id)
         XCTAssertEqual(first.selectedTab, first.tabs[0])
     }
+
+    func testGroupLookupInADeeplyNestedLayoutStaysLinear() throws {
+        var layout = WorkspaceLayout.group(TabGroup(tab: .terminal()))
+        var deepest = try XCTUnwrap(layout.orderedGroups.first)
+        for level in 0..<22 {
+            let group = TabGroup(tab: .terminal())
+            XCTAssertTrue(layout.insertGroup(group, beside: deepest.id, edge: level.isMultiple(of: 2) ? .right : .bottom))
+            deepest = group
+        }
+        XCTAssertEqual(layout.orderedGroups.count, 23)
+
+        let clock = ContinuousClock()
+        var found: TabGroup?
+        let elapsed = clock.measure {
+            for _ in 0..<10 {
+                found = layout.group(id: deepest.id)
+            }
+        }
+        XCTAssertEqual(found?.id, deepest.id)
+        // The exponential version took 28 seconds here. Two seconds is a hundred times what a
+        // loaded CI runner needs for the linear one, and still fourteen times under the bug.
+        XCTAssertLessThan(
+            elapsed,
+            .seconds(2),
+            "Ten lookups of the deepest of 23 groups took \(elapsed)"
+        )
+    }
 }
