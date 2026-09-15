@@ -186,6 +186,8 @@ final class MyTermApplicationDelegate: NSObject, NSApplicationDelegate {
         // Snapshots read live session content, so they have to be captured before the sessions are torn down.
         model?.persistTerminalSnapshots()
         model?.terminateTerminalSessions()
+        // Last, so it carries the snapshots and browser URLs the lines above just recorded.
+        model?.persistWorkspaceStore()
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {

@@ -62,6 +62,14 @@ final class AppModel {
     /// What each tab's agent is doing. A tab with nothing to say is simply absent.
     /// Runtime only: an indicator that survived a relaunch would point at work the user has moved on from.
     var agentAttention: [TabID: AgentActivity] = [:]
+    /// Tabs that have an agent in them, by agent name, as the hooks last reported.
+    /// Runtime only: it says what is running now, which is the one thing a saved handle cannot say.
+    var liveAgentTabs: [TabID: String] = [:]
+    /// The conversations each tab has left this run, by session id: ended by their own SessionEnd,
+    /// replaced by another conversation, or taken away with a killed agent. Hooks report late, and
+    /// a report about one of these is about a conversation the pane is no longer in.
+    /// Runtime only, like `liveAgentTabs`: a relaunch starts with nothing left behind.
+    var retiredAgentSessions: [TabID: Set<String>] = [:]
     let agentNotifications: AgentNotificationSettings
     /// Whether MyTerm is the app the user is looking at. Injected so tests can be either.
     let isApplicationActive: @MainActor () -> Bool
@@ -90,6 +98,19 @@ final class AppModel {
     func startCompanionHostIfEnabled() {
         companionHost.startIfEnabled()
     }
+
+    /// The agents that finished, or asked a question, while the user was looking somewhere else,
+    /// and the history of what they did before. Saved beside the workspace state; what comes back
+    /// after a relaunch comes back read, because the agents it pointed at went with the processes.
+    var agentInbox = AgentNotificationInbox() {
+        // Every tab switch reads the tab it lands on, which is a mutating call whether or not the
+        // tab had anything waiting. Only a real change is worth a file write on the main thread.
+        didSet { if oldValue != agentInbox { persistAgentInbox() } }
+    }
+    /// Where the history lives between launches, beside the workspace state.
+    @ObservationIgnored let agentInboxURL: URL
+    /// Whether the notifications popover is open. The toolbar bell and the menu command share it.
+    var isAgentNotificationsPresented = false
     var paneTabDragSession: PaneTabDragSession?
     var paneTabDragRegistrations: [TabGroupID: PaneTabDragRegistration] = [:]
     var nextBrowserAddressFocusToken: UInt64 = 0
@@ -141,7 +162,7 @@ final class AppModel {
         updates: UpdateController? = nil,
         agentNotifications: AgentNotificationSettings? = nil,
         makeAgentNotificationPoster: @escaping @MainActor () -> any AgentNotificationPosting = { UserNotificationPoster() },
-        isApplicationActive: @escaping @MainActor () -> Bool = { NSApp.isActive },
+        isApplicationActive: @escaping @MainActor () -> Bool = { NSApp?.isActive ?? false },
         makeCompanionHost: @escaping CompanionHostFactory = { model, channel, namespace in
             CompanionHostModel(appModel: model, channel: channel, storageNamespace: namespace)
         }
@@ -151,7 +172,13 @@ final class AppModel {
         companionStorageNamespace = Data(
             SHA256.hash(data: Data(supportDirectory.standardizedFileURL.path.utf8))
         ).base64EncodedString()
-        store = try WorkspaceStore(persistenceURL: channel.persistenceURL(applicationSupportDirectory: supportDirectory))
+        let persistenceURL = channel.persistenceURL(applicationSupportDirectory: supportDirectory)
+        store = try WorkspaceStore(persistenceURL: persistenceURL)
+        agentInboxURL = persistenceURL.deletingLastPathComponent()
+            .appending(path: "agent-notifications.json", directoryHint: .notDirectory)
+        var savedInbox = Self.loadAgentInbox(from: agentInboxURL)
+        savedInbox.markAllRead()
+        agentInbox = savedInbox
         recoveryNotice = WorkspaceRecoveryNotice(loadReport: store.loadReport)
         self.browserSettings = browserSettings ?? BrowserSettingsStore(channel: channel)
         recentWorkspaceEmojis = self.browserSettings.recentWorkspaceEmojis
@@ -202,6 +229,11 @@ final class AppModel {
         restoreRuntimeObjects()
         if let sessionID = selectedTab?.terminalSession?.id {
             terminalSessions[sessionID]?.focus()
+        }
+        // A mutation no longer writes the file itself; the write lands on the next run loop turn,
+        // so this is the only place a failed write can reach the banner.
+        store.onPersistenceFailure = { [weak self] error in
+            self?.present(error)
         }
     }
 
@@ -384,7 +416,7 @@ final class AppModel {
                 title: nextWorkspaceTitle(),
                 folderID: targetFolderID
             )
-            maximizedTabGroupID = nil
+            exitPaneFullScreen()
             guard let createdWorkspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
                 throw AppModelError.workspaceUnavailable(workspaceID)
             }
@@ -461,11 +493,19 @@ final class AppModel {
 
     func toggleFocusedPaneFullScreen() {
         guard maximizedTabGroup == nil else {
-            maximizedTabGroupID = nil
+            exitPaneFullScreen()
             return
         }
         let focusedTabGroupID = selectedWorkspace.focusedTabGroupID
         maximizedTabGroupID = focusedTabGroupID
+    }
+
+    /// Leaving full screen brings the other panes back on screen, which is as much reaching their
+    /// selected tabs as clicking them. Safe to call when nothing is full screen.
+    private func exitPaneFullScreen() {
+        guard maximizedTabGroupID != nil else { return }
+        maximizedTabGroupID = nil
+        markVisibleTabsAsRead()
     }
 
     func beginRenamingSelectedTab() {
@@ -541,7 +581,7 @@ final class AppModel {
             let data = try Data(contentsOf: url)
             let result = try store.importWorkspaces(fromJSON: data)
             summary = result
-            maximizedTabGroupID = nil
+            exitPaneFullScreen()
             pendingStartupCommands.merge(result.startupCommands) { _, new in new }
             // Imported workspaces have no running processes yet. Selecting one restores them, but
             // the import selects a workspace itself, so start the selected one here.
@@ -705,10 +745,11 @@ final class AppModel {
     func moveWorkspace(
         _ workspaceID: WorkspaceID,
         to folderID: WorkspaceFolderID?,
-        before targetID: WorkspaceID?
+        before targetID: WorkspaceID?,
+        isPinned: Bool? = nil
     ) {
         perform {
-            try store.moveWorkspace(workspaceID, to: folderID, before: targetID)
+            try store.moveWorkspace(workspaceID, to: folderID, before: targetID, isPinned: isPinned)
             applyResolvedRuntimeSettings(to: [workspaceID])
         }
     }
@@ -1518,7 +1559,7 @@ final class AppModel {
         guard store.selectedWorkspaceID == workspaceID,
               maximizedTabGroupID != nil,
               maximizedTabGroupID != tabGroupID else { return }
-        maximizedTabGroupID = nil
+        exitPaneFullScreen()
     }
 
     func focusTerminal(direction: PaneFocusDirection) {
@@ -1853,6 +1894,12 @@ final class AppModel {
                 tabID: tabID,
                 sessionID: sessionID
             )
+            forgetAgentSessionOfIdlePane(
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID,
+                sessionID: sessionID
+            )
         }
     }
 
@@ -2054,19 +2101,44 @@ final class AppModel {
         } else {
             workingDirectory = try newSessionWorkingDirectory(for: workspaceID)
         }
-        if session.workingDirectory?.standardizedFileURL != workingDirectory {
+        // An agent conversation belongs to the directory it ran in, so a pane that had to fall back
+        // to another directory has nothing there to rejoin.
+        let keepsSavedDirectory = session.workingDirectory?.standardizedFileURL == workingDirectory
+        if !keepsSavedDirectory {
             try store.updateTerminalWorkingDirectory(
                 workspaceID: workspaceID,
                 tabGroupID: tabGroupID,
                 tabID: tabID,
                 workingDirectory: workingDirectory
             )
+            // The conversation and its name go with the directory, whether or not the pane then
+            // starts. Left beside the fallback path, a later attempt would see a directory that
+            // exists and rejoin a conversation from one that does not.
+            if session.agentSession != nil || session.agentTitle != nil {
+                try store.updateTerminalAgentSession(
+                    workspaceID: workspaceID,
+                    tabGroupID: tabGroupID,
+                    tabID: tabID,
+                    agentSession: nil
+                )
+                try store.updateTerminalAgentTitle(
+                    workspaceID: workspaceID,
+                    tabGroupID: tabGroupID,
+                    tabID: tabID,
+                    agentTitle: nil
+                )
+            }
         }
+        let resumeCommand = keepsSavedDirectory ? agentResumeCommand(
+            for: session,
+            name: tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)?.customTitle,
+            settings: settings
+        ) : nil
         let process = try terminalEngine.makeSession(
             configuration: TerminalSessionConfiguration(
                 shell: shellURL(for: settings.shell),
                 workingDirectory: workingDirectory,
-                initialCommand: initialCommand,
+                initialCommand: initialCommand ?? resumeCommand,
                 environment: MyTermBrowserLauncher.environment(
                     executableURL: browserLauncherURL,
                     workspaceID: workspaceID,
@@ -2109,6 +2181,31 @@ final class AppModel {
         } catch {
             terminalSessions.removeValue(forKey: session.id)
             throw error
+        }
+        // A pane that comes back without its resume command comes back to a prompt, and a pane at
+        // its prompt has left its conversation. The name goes with it, whether or not there was a
+        // handle to resume: a Codex pane carries a name and nothing to resume. Cleared only once
+        // the pane is running: a pane that failed to start has no prompt either, and keeps its
+        // conversation for the next attempt.
+        if keepsSavedDirectory, initialCommand == nil, resumeCommand == nil,
+           session.agentSession != nil || session.agentTitle != nil {
+            do {
+                try store.updateTerminalAgentSession(
+                    workspaceID: workspaceID,
+                    tabGroupID: tabGroupID,
+                    tabID: tabID,
+                    agentSession: nil
+                )
+                try store.updateTerminalAgentTitle(
+                    workspaceID: workspaceID,
+                    tabGroupID: tabGroupID,
+                    tabID: tabID,
+                    agentTitle: nil
+                )
+            } catch {
+                removeTerminalRuntime(session.id)
+                throw error
+            }
         }
     }
 
@@ -2298,15 +2395,51 @@ final class AppModel {
                 tabID: tabID,
                 message: exitCode.map { "Terminal exited with status \($0)." } ?? "Terminal closed."
             )
+            // Nothing is running in a pane whose shell has gone, whatever the last hook said, and
+            // the foreground poll that would have noticed an agent killed before it has stopped.
+            // Markers are forwarded asynchronously, so one can still be queued behind this event;
+            // dropping the callback keeps it from putting an agent back into a dead pane.
+            terminalSessions[sessionID]?.onEvent = nil
+            forgetAgent(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID, sessionID: sessionID)
+        case .foregroundProcessChanged(let name):
+            // The shell back in front of a pane that held an agent means the agent left without
+            // its own hook saying so. Everything that hook would have retired is retired here.
+            guard name == nil, liveAgentTabs[tabID] != nil else { return }
+            forgetAgent(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID, sessionID: sessionID)
         case .agentActivity(let report):
+            // A report about a conversation the pane has already left says nothing about the one
+            // it is in now, so neither the cook nor the session hears it.
+            if let terminal = tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)?.terminalSession,
+               isReportOfALeftConversation(report, tabID: tabID, in: terminal) {
+                return
+            }
             recordAgentActivity(
                 report,
                 workspaceID: workspaceID,
                 tabGroupID: tabGroupID,
                 tabID: tabID
             )
-        case .titleChanged:
-            break
+            recordAgentSession(
+                report,
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID,
+                sessionID: sessionID
+            )
+            recordAgentPresence(
+                report,
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID
+            )
+        case .titleChanged(let title):
+            recordAgentTitle(
+                title,
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID,
+                sessionID: sessionID
+            )
         }
     }
 
@@ -2324,6 +2457,8 @@ final class AppModel {
             removeTerminalRuntime(sessionID)
         }
         forgetAgentAttention(forTab: tab.id)
+        forgetAgentPresence(forTab: tab.id)
+        retiredAgentSessions.removeValue(forKey: tab.id)
     }
 
     private func closeTab(
@@ -2370,13 +2505,29 @@ final class AppModel {
         }) {
             restoreRuntimeObjects(in: selectedWorkspace)
         }
+        // Closing moves the selection to a neighbour, which is as much reaching a tab as clicking
+        // it. Only while MyTerm is in front, though: a page can close its own tab with nobody at
+        // the Mac.
+        if isApplicationActive() {
+            markVisibleTabsAsRead()
+        }
     }
 
     private func removeTerminalRuntime(_ sessionID: TerminalSessionID) {
         terminalSnapshotTasks.removeValue(forKey: sessionID)?.cancel()
         guard let process = terminalSessions.removeValue(forKey: sessionID) else { return }
+        // Bytes the process already wrote can still be parsed after this, and a hook that fires
+        // as the agent is hung up can still reach the PTY. Neither may touch a tab that is gone,
+        // or undo the snapshot a quit has just written.
+        process.onEvent = nil
         process.setContentChangeHandler(nil)
         process.terminate()
+    }
+
+    /// Writes whatever the coalesced store has not written yet. Quitting is the one moment the
+    /// next run loop turn never comes.
+    func persistWorkspaceStore() {
+        perform { try store.flush() }
     }
 
     /// Quitting never routes through the per-tab close path, so it relies on the kernel's SIGHUP when the
@@ -2440,6 +2591,9 @@ final class AppModel {
         for workspaceID in workspaceIDs {
             guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }),
                   let settings = try? store.resolvedSettings(for: workspaceID) else { continue }
+            if !settings.namesTabsFromAgentSessions {
+                clearAgentTitles(in: workspace)
+            }
             let configuration = runtimeConfiguration(for: settings)
             for tab in workspace.allTabs {
                 if let sessionID = tab.terminalSession?.id {

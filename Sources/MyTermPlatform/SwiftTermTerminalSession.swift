@@ -44,6 +44,8 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
     private let terminal: MyTermLocalProcessTerminalView
     private var workingDirectoryPoller: ProcessWorkingDirectoryPoller?
     private var lastReportedWorkingDirectory: URL?
+    private var foregroundProcessTimer: Timer?
+    private var lastReportedForegroundProcessName: String?
     private var didTerminate = false
     private var contentChangeHandler: (@MainActor () -> Void)?
     public private(set) var remoteGeneration = UUID()
@@ -155,6 +157,28 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
             }
         )
         workingDirectoryPoller?.start(initialDirectory: configuration.workingDirectory)
+        startForegroundProcessPolling()
+    }
+
+    /// Asks the kernel who is in front of the shell, on the same cadence as the working directory.
+    ///
+    /// An agent that is killed never runs its SessionEnd hook, so the pane would keep saying it
+    /// holds an agent. The shell coming back to the front is the one signal that survives a kill.
+    private func startForegroundProcessPolling() {
+        lastReportedForegroundProcessName = activeForegroundProcessName
+        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.pollForegroundProcess() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        foregroundProcessTimer = timer
+    }
+
+    private func pollForegroundProcess() {
+        guard isRunning else { return }
+        let name = activeForegroundProcessName
+        guard name != lastReportedForegroundProcessName else { return }
+        lastReportedForegroundProcessName = name
+        onEvent?(.foregroundProcessChanged(name))
     }
 
     public func resize(columns: Int, rows: Int) {
@@ -327,6 +351,8 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
     private func stopWorkingDirectoryPolling() {
         workingDirectoryPoller?.stop()
         workingDirectoryPoller = nil
+        foregroundProcessTimer?.invalidate()
+        foregroundProcessTimer = nil
     }
 
     func recordRemoteOutput(_ bytes: Data) {

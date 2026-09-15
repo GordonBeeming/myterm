@@ -8,17 +8,25 @@ public struct TerminalSession: Codable, Equatable, Hashable, Sendable, Identifia
     public let paneID: PaneID
     public var workingDirectory: URL?
     public var recentText: String?
+    /// The agent conversation this pane was in, so a relaunch can re-enter it.
+    public var agentSession: AgentSessionHandle?
+    /// What the agent calls that conversation, so the tab can carry the name the user gave it.
+    public var agentTitle: String?
 
     public init(
         id: TerminalSessionID = TerminalSessionID(),
         paneID: PaneID = PaneID(),
         workingDirectory: URL? = nil,
-        recentText: String? = nil
+        recentText: String? = nil,
+        agentSession: AgentSessionHandle? = nil,
+        agentTitle: String? = nil
     ) {
         self.id = id
         self.paneID = paneID
         self.workingDirectory = workingDirectory
         self.recentText = Self.boundedRecentText(recentText)
+        self.agentSession = agentSession
+        self.agentTitle = AgentSessionTitle.sanitized(agentTitle)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -26,16 +34,24 @@ public struct TerminalSession: Codable, Equatable, Hashable, Sendable, Identifia
         case paneID
         case workingDirectory
         case recentText
+        case agentSession
+        case agentTitle
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        decoder.recordKnownKeys(container.allKeys)
+        // A handle this build refuses is one a newer build wrote, not a broken file. Leaving its key
+        // out of the known set is what keeps the drop from reading as a repair and writing a backup.
+        let agentSession = try? container.decodeIfPresent(AgentSessionHandle.self, forKey: .agentSession)
+        let refusedAgentSession = agentSession == nil && container.contains(.agentSession)
+        decoder.recordKnownKeys(container.allKeys.filter { $0 != .agentSession || !refusedAgentSession })
         id = try container.decode(TerminalSessionID.self, forKey: .id)
         paneID = try container.decodeIfPresent(PaneID.self, forKey: .paneID)
             ?? PaneID(rawValue: repairedUUID(seed: "terminal:\(id):missing-pane"))
         workingDirectory = try container.decodeIfPresent(URL.self, forKey: .workingDirectory)
         recentText = Self.boundedRecentText(try? container.decodeIfPresent(String.self, forKey: .recentText))
+        self.agentSession = agentSession
+        agentTitle = AgentSessionTitle.sanitized(try? container.decodeIfPresent(String.self, forKey: .agentTitle))
     }
 
     public static func boundedRecentText(_ value: String?) -> String? {
@@ -637,7 +653,9 @@ private extension TabGroup {
                         id: sessionID,
                         paneID: paneID,
                         workingDirectory: session.workingDirectory,
-                        recentText: session.recentText
+                        recentText: session.recentText,
+                        agentSession: session.agentSession,
+                        agentTitle: session.agentTitle
                     )),
                     customTitle: tab.customTitle
                 )

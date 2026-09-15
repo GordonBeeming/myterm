@@ -203,6 +203,7 @@ final class WorkspaceStoreTests: XCTestCase {
         try store.updateFolderSettings(folderID) { $0.textFileOpenCommand = "folder-editor {file}" }
         try store.updateWorkspaceSettings(workspaceID) { $0.textFileOpenCommand = "workspace-editor {file}" }
 
+        try store.flush()
         let snapshot = try XCTUnwrap(
             JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
         )
@@ -565,6 +566,34 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: url), source)
     }
 
+    func testASuspendedStoreStaysDirtyBecauseAFlushWritesNothing() throws {
+        // Persistence is suspended, so flush and save decline to touch the file. The store must
+        // say so: a clean bit over a file that holds the older snapshot would be a lie.
+        let directory = try temporaryDirectory()
+        let url = directory.appendingPathComponent("workspace-state.json")
+        let source = try snapshotNeedingStructuralRepair()
+        try source.write(to: url)
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: directory.path)
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: 0o700],
+                ofItemAtPath: directory.path
+            )
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        let store = try WorkspaceStore(persistenceURL: url, now: Self.fixedBackupDate)
+        XCTAssertTrue(store.isPersistenceSuspended)
+
+        try store.createWorkspace(title: "x")
+        XCTAssertTrue(store.hasUnsavedChanges)
+        try store.flush()
+        XCTAssertTrue(store.hasUnsavedChanges, "nothing was written, so nothing is saved")
+        try store.save()
+        XCTAssertTrue(store.hasUnsavedChanges)
+        XCTAssertEqual(try Data(contentsOf: url), source)
+    }
+
     func testACleanLoadIsNotSuspendedAndWritesNormally() throws {
         let url = temporaryURL()
 
@@ -573,6 +602,24 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertFalse(store.isPersistenceSuspended)
         try store.createWorkspace(title: "x")
         XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    func testAMutationMadeJustBeforeTheLastReferenceGoesStillReachesTheFile() throws {
+        // The flush is queued for the next turn of the main run loop. A store released before
+        // that turn must still be there when it comes, or the last thing the user did is lost.
+        let url = temporaryURL()
+        do {
+            let store = try WorkspaceStore(persistenceURL: url)
+            try store.renameWorkspace(store.selectedWorkspaceID, title: "Pending title")
+            XCTAssertEqual(try WorkspaceStore(persistenceURL: url).selectedWorkspace.title, "Workspace")
+        }
+
+        // Queued behind the flush, so the main queue has drained past it once this runs.
+        let drained = expectation(description: "main queue drained")
+        DispatchQueue.main.async { drained.fulfill() }
+        wait(for: [drained], timeout: 5)
+
+        XCTAssertEqual(try WorkspaceStore(persistenceURL: url).selectedWorkspace.title, "Pending title")
     }
 
     func testOneBackupSucceedingKeepsPersistenceEnabledEvenWhenTheOtherFails() throws {
@@ -600,6 +647,7 @@ final class WorkspaceStoreTests: XCTestCase {
         // costs nothing and the store keeps writing.
         XCTAssertFalse(store.isPersistenceSuspended)
         XCTAssertNoThrow(try store.createWorkspace(title: "later"))
+        try store.flush()
         XCTAssertEqual(try WorkspaceStore(persistenceURL: url).workspaces.map(\.title), ["Current", "later"])
     }
 
@@ -731,6 +779,24 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: recoveryBackupURL), existingBackup)
     }
 
+    func testTheAgentBellSettingRoundTripsAndIsGlobalOnly() throws {
+        let url = temporaryURL()
+        let store = try WorkspaceStore(persistenceURL: url)
+        XCTAssertTrue(store.globalSettings.showsAgentNotificationBell, "the bell is on until the user says otherwise")
+        let folderID = try store.createFolder(title: "Work", color: .teal)
+        let workspaceID = try store.createWorkspace(title: "API", folderID: folderID)
+        try store.updateGlobalSettings { $0.showsAgentNotificationBell = false }
+        try store.updateFolderSettings(folderID) { $0.fontSize = 15 }
+        try store.flush()
+
+        let restored = try WorkspaceStore(persistenceURL: url)
+        XCTAssertFalse(restored.globalSettings.showsAgentNotificationBell)
+        XCTAssertFalse(
+            try restored.resolvedSettings(for: workspaceID).showsAgentNotificationBell,
+            "the toolbar is the app's, so a folder override carries the global answer through"
+        )
+    }
+
     func testASettingTheFilePredatesIsADefaultNotARepair() throws {
         let url = temporaryURL()
         let workspace = Workspace(title: "Older file", isPinned: false)
@@ -741,6 +807,7 @@ final class WorkspaceStoreTests: XCTestCase {
         var settings = try XCTUnwrap(json["globalSettings"] as? [String: Any])
         XCTAssertNotNil(settings.removeValue(forKey: "compactSidebar"))
         XCTAssertNotNil(settings.removeValue(forKey: "cursorBlink"))
+        XCTAssertNotNil(settings.removeValue(forKey: "showsAgentNotificationBell"))
         json["globalSettings"] = settings
         try JSONSerialization.data(withJSONObject: json).write(to: url)
 
@@ -751,6 +818,7 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(store.loadReport.backupURLs, [])
         XCTAssertTrue(store.globalSettings.compactSidebar)
         XCTAssertTrue(store.globalSettings.cursorBlink)
+        XCTAssertTrue(store.globalSettings.showsAgentNotificationBell)
     }
 
     func testNumericBooleanValuesTriggerStructuralRepairAndExactByteBackup() throws {
@@ -839,6 +907,7 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(store.selectedWorkspace.orderedGroups.map(\.id), [firstGroupID])
         XCTAssertEqual(store.selectedWorkspace.focusedTabGroup?.tabs.map(\.id), [originalTabID, terminalTabID, browserTabID])
 
+        try store.flush()
         let restored = try WorkspaceStore(persistenceURL: url)
         XCTAssertEqual(restored.selectedWorkspace, store.selectedWorkspace)
     }
@@ -900,6 +969,7 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(weights, [0.5, 0.5])
 
         try store.updateSplitWeights(workspaceID: workspaceID, splitID: splitID, weights: [1, 3])
+        try store.flush()
         let restored = try WorkspaceStore(persistenceURL: url)
         guard case .split(let restoredID, .vertical, _, let restoredWeights) = restored.selectedWorkspace.layout else {
             return XCTFail("Expected the split to persist")
@@ -953,6 +1023,7 @@ final class WorkspaceStoreTests: XCTestCase {
             profile: profile
         )
 
+        try store.flush()
         let restored = try WorkspaceStore(persistenceURL: url)
         let terminal = try XCTUnwrap(restored.selectedWorkspace.tab(groupID: groupID, tabID: terminalTabID)?.terminalSession)
         let browser = try XCTUnwrap(restored.selectedWorkspace.tab(groupID: groupID, tabID: browserTabID)?.browserSession)
@@ -1006,6 +1077,7 @@ final class WorkspaceStoreTests: XCTestCase {
             (workspaceID, groupID, firstBrowserTabID, try XCTUnwrap(URL(string: "https://first.example/new"))),
             (workspaceID, groupID, secondBrowserTabID, try XCTUnwrap(URL(string: "https://second.example/new")))
         ])
+        try store.flush()
         let restored = try WorkspaceStore(persistenceURL: url)
         XCTAssertEqual(
             restored.selectedWorkspace.tab(groupID: groupID, tabID: firstBrowserTabID)?.browserSession?.url,
@@ -1192,6 +1264,79 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertNotEqual(store.selectedWorkspaceID, removedID)
     }
 
+    func testMovingAWorkspaceAcrossFoldersPlacesItBeforeTheTarget() throws {
+        let url = temporaryURL()
+        let store = try WorkspaceStore(persistenceURL: url)
+        let source = try store.createFolder(title: "Source", color: .teal)
+        let destination = try store.createFolder(title: "Destination", color: .blue)
+        let moved = try store.createWorkspace(title: "Moved", folderID: source)
+        let first = try store.createWorkspace(title: "First", folderID: destination)
+        let second = try store.createWorkspace(title: "Second", folderID: destination)
+
+        try store.moveWorkspace(moved, to: destination, before: second)
+
+        XCTAssertEqual(
+            store.workspaces.filter { $0.folderID == destination }.map(\.id),
+            [first, moved, second]
+        )
+        XCTAssertTrue(store.workspaces.filter { $0.folderID == source }.isEmpty)
+
+        try store.flush()
+        let restored = try WorkspaceStore(persistenceURL: url)
+        XCTAssertEqual(
+            restored.workspaces.filter { $0.folderID == destination }.map(\.id),
+            [first, moved, second]
+        )
+    }
+
+    func testMovingAWorkspaceIntoThePinnedBandRepinsItInTheSameWrite() throws {
+        let url = temporaryURL()
+        let store = try WorkspaceStore(persistenceURL: url)
+        let folderID = try store.createFolder(title: "Work", color: .teal)
+        let pinned = try store.createWorkspace(title: "Pinned", folderID: folderID)
+        let loose = try store.createWorkspace(title: "Loose", folderID: folderID)
+        try store.setWorkspacePinned(pinned, isPinned: true)
+
+        try store.moveWorkspace(loose, to: folderID, before: pinned, isPinned: true)
+
+        let filed = store.workspaces.filter { $0.folderID == folderID }
+        XCTAssertEqual(filed.map(\.id), [loose, pinned])
+        XCTAssertTrue(filed.allSatisfy(\.isPinned))
+
+        try store.flush()
+        let restored = try WorkspaceStore(persistenceURL: url)
+        XCTAssertEqual(restored.workspaces.filter { $0.folderID == folderID }.map(\.isPinned), [true, true])
+    }
+
+    func testMovingAWorkspaceOutOfThePinnedBandAppendsToTheLooseBand() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let folderID = try store.createFolder(title: "Work", color: .teal)
+        let pinned = try store.createWorkspace(title: "Pinned", folderID: folderID)
+        let loose = try store.createWorkspace(title: "Loose", folderID: folderID)
+        try store.setWorkspacePinned(pinned, isPinned: true)
+
+        try store.moveWorkspace(pinned, to: folderID, before: nil, isPinned: false)
+
+        let filed = store.workspaces.filter { $0.folderID == folderID }
+        XCTAssertEqual(filed.map(\.id), [loose, pinned])
+        XCTAssertTrue(filed.allSatisfy { !$0.isPinned })
+    }
+
+    func testMovingBeforeATargetInAnotherPinnedBandIsRejected() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let folderID = try store.createFolder(title: "Work", color: .teal)
+        let pinned = try store.createWorkspace(title: "Pinned", folderID: folderID)
+        let loose = try store.createWorkspace(title: "Loose", folderID: folderID)
+        try store.setWorkspacePinned(pinned, isPinned: true)
+
+        XCTAssertThrowsError(try store.moveWorkspace(loose, to: folderID, before: pinned)) { error in
+            guard case .invariantViolation = error as? WorkspaceStoreError else {
+                return XCTFail("Expected an invariant violation, got \(error)")
+            }
+        }
+        XCTAssertEqual(store.workspaces.filter { $0.folderID == folderID }.map(\.id), [pinned, loose])
+    }
+
     func testFoldersWorkspaceOrderingAndScopedSettingsStillPersist() throws {
         let url = temporaryURL()
         let store = try WorkspaceStore(persistenceURL: url)
@@ -1207,6 +1352,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         XCTAssertEqual(try store.resolvedSettings(for: firstID).fontSize, 18)
         XCTAssertEqual(try store.resolvedSettings(for: secondID).fontSize, 15)
+        try store.flush()
         let restored = try WorkspaceStore(persistenceURL: url)
         XCTAssertEqual(restored.workspaces.filter { $0.folderID == folderID }.map(\.id), [secondID, firstID])
         XCTAssertEqual(try restored.resolvedSettings(for: firstID).fontSize, 18)

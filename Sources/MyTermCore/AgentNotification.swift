@@ -90,10 +90,11 @@ public enum AgentNotificationBuilder {
         }
     }
 
-    /// A working agent has nothing to announce. It is the finish, or the question, that interrupts.
+    /// Only a finish or a question interrupts. An agent that is working, has only started, or has
+    /// ended has nothing to announce.
     private static func body(for report: AgentActivityReport) -> String? {
         switch report.activity {
-        case .working:
+        case .working, .ready, .exited:
             nil
         case .finished:
             "\(agentName(report.agent)) finished its turn."
