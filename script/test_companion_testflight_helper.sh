@@ -134,4 +134,31 @@ bash -c '
   }
 ' _ "$ROOT_DIR/script/deploy_companion_testflight.sh" "$CREATED_KEY_DIR"
 
+# Exercise conversion with disposable keys, including rejection of a wrong password.
+# shellcheck disable=SC2016
+bash -c '
+  source "$1"
+  TASK_TEMP="$2/p12"
+  mkdir -m 700 "$TASK_TEMP"
+  TASK_TEMP_CREATED=true
+  P12_PATH="$TASK_TEMP/input.p12"
+  P12_PEM_PATH="$TASK_TEMP/decoded.pem"
+  P12_IMPORT_PATH="$TASK_TEMP/import.p12"
+  export CERTIFICATES_PASSWORD="disposable-test-password"
+  openssl req -x509 -newkey rsa:2048 -nodes -keyout "$TASK_TEMP/key.pem" \
+    -out "$TASK_TEMP/cert.pem" -days 1 -subj /CN=MyTerm-P12-Test >/dev/null 2>&1
+  openssl pkcs12 -export -inkey "$TASK_TEMP/key.pem" -in "$TASK_TEMP/cert.pem" \
+    -passout env:CERTIFICATES_PASSWORD -out "$P12_PATH"
+  prepare_keychain_p12
+  [[ ! -e "$P12_PEM_PATH" && -s "$P12_IMPORT_PATH" ]]
+  openssl pkcs12 -in "$P12_IMPORT_PATH" -passin env:CERTIFICATES_PASSWORD \
+    -nokeys -out "$TASK_TEMP/recovered.pem"
+  [[ "$(openssl x509 -in "$TASK_TEMP/cert.pem" -noout -fingerprint)" == \
+     "$(openssl x509 -in "$TASK_TEMP/recovered.pem" -noout -fingerprint)" ]]
+  rm -f "$P12_IMPORT_PATH"
+  CERTIFICATES_PASSWORD="incorrect"
+  if prepare_keychain_p12 >/dev/null 2>&1; then exit 1; fi
+  [[ ! -e "$P12_PEM_PATH" && ! -e "$P12_IMPORT_PATH" ]]
+' _ "$ROOT_DIR/script/deploy_companion_testflight.sh" "$TEST_ROOT"
+
 echo "TestFlight helper tests passed."

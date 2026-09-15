@@ -14,6 +14,8 @@ EXPORT_PATH="$TASK_TEMP/export"
 EXPORT_OPTIONS="$TASK_TEMP/ExportOptions.plist"
 KEYCHAIN_PATH="$TASK_TEMP/app-signing.keychain-db"
 P12_PATH="$TASK_TEMP/distribution-certificate.p12"
+P12_PEM_PATH="$TASK_TEMP/distribution-certificate.pem"
+P12_IMPORT_PATH="$TASK_TEMP/distribution-import.p12"
 PROFILE_PLIST="$TASK_TEMP/profile.plist"
 PROFILE_DIR="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
 ASC_KEY_DIR="$HOME/.appstoreconnect/private_keys"
@@ -53,7 +55,7 @@ cleanup() {
   [[ "$ASC_KEY_DIR_CREATED" == true ]] && rmdir "$ASC_KEY_DIR" 2>/dev/null || true
   [[ "$ASC_PARENT_DIR_CREATED" == true ]] && rmdir "$(dirname "$ASC_KEY_DIR")" 2>/dev/null || true
   if [[ "$TASK_TEMP_CREATED" == true ]]; then
-    rm -f "$P12_PATH" "$PROFILE_PLIST" "$APP_PROFILE_SOURCE" "$NOTIFICATION_PROFILE_SOURCE"
+    rm -f "$P12_PATH" "$P12_PEM_PATH" "$P12_IMPORT_PATH" "$PROFILE_PLIST" "$APP_PROFILE_SOURCE" "$NOTIFICATION_PROFILE_SOURCE"
   fi
   if [[ "$KEYCHAIN_CREATED" == true && ${#ORIGINAL_KEYCHAINS[@]} -gt 0 ]]; then
     security list-keychains -d user -s "${ORIGINAL_KEYCHAINS[@]}" >/dev/null 2>&1 || true
@@ -244,6 +246,27 @@ prepare_app_store_connect_key() {
   ASC_KEY_CREATED=true
 }
 
+prepare_keychain_p12() {
+  local -a read_options=()
+  if openssl version | grep -q '^OpenSSL 3\.'; then
+    read_options=(-legacy)
+  fi
+  # Keychain rejects OpenSSL 3's default PKCS#12 encryption/MAC format.
+  # Keep the decoded key within the mode-700 task directory (umask 077).
+  if ! openssl pkcs12 "${read_options[@]}" -in "$P12_PATH" -passin env:CERTIFICATES_PASSWORD \
+      -nodes -out "$P12_PEM_PATH"; then
+    rm -f "$P12_PEM_PATH"
+    return 1
+  fi
+  if ! openssl pkcs12 -export -in "$P12_PEM_PATH" \
+      -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1 \
+      -passout env:CERTIFICATES_PASSWORD -out "$P12_IMPORT_PATH"; then
+    rm -f "$P12_PEM_PATH" "$P12_IMPORT_PATH"
+    return 1
+  fi
+  rm -f "$P12_PEM_PATH"
+}
+
 main() {
   trap cleanup EXIT
   trap 'exit 130' INT
@@ -292,7 +315,8 @@ RUBY
   security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
   security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
   printf '%s' "$CERTIFICATES_P12" | base64 --decode > "$P12_PATH"
-  security import "$P12_PATH" -k "$KEYCHAIN_PATH" -P "$CERTIFICATES_PASSWORD" -T /usr/bin/codesign
+  prepare_keychain_p12
+  security import "$P12_IMPORT_PATH" -k "$KEYCHAIN_PATH" -P "$CERTIFICATES_PASSWORD" -T /usr/bin/codesign
   security list-keychains -d user -s "$KEYCHAIN_PATH"
   security set-key-partition-list -S apple-tool:,apple:,codesign: -s \
     -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" >/dev/null
@@ -300,7 +324,7 @@ RUBY
     echo "The imported certificate does not contain $CODE_SIGN_IDENTITY." >&2
     exit 1
   }
-  rm -f "$P12_PATH"
+  rm -f "$P12_PATH" "$P12_IMPORT_PATH"
 
   APP_PROFILE_DEST=$(install_profile "$PROVISIONING_PROFILE" "$PROVISIONING_PROFILE_NAME" \
     "$APP_BUNDLE_ID" "$APP_PROFILE_SOURCE")
