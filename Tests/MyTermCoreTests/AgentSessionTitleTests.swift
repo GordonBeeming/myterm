@@ -77,6 +77,12 @@ final class AgentSessionTitleTests: XCTestCase {
             AgentSessionResume.command(for: handle, name: "   "),
             "claude --resume 'abc-123'"
         )
+        // The name is the user's own, and reaches the agent as typed rather than as a tab would
+        // show an agent's title: the glyph stays.
+        XCTAssertEqual(
+            AgentSessionResume.command(for: handle, name: "🚀 Fix"),
+            "claude --resume 'abc-123' --name '🚀 Fix'"
+        )
     }
 }
 
@@ -100,6 +106,9 @@ final class AgentSessionTitleHostileTextTests: XCTestCase {
     func testANameThatDrawsAsNothingIsNoName() {
         XCTAssertNil(AgentSessionTitle.sanitized(String(repeating: "\u{FE0F}", count: 5)), "variation selectors alone")
         XCTAssertNil(AgentSessionTitle.sanitized("\u{0301}\u{0308}"), "combining marks alone")
+        // The one letter sits past the cap, so what would be kept is marks alone.
+        let marksThenLetter = String(repeating: "\u{0301}", count: AgentSessionTitle.maximumLength) + "x"
+        XCTAssertNil(AgentSessionTitle.sanitized(marksThenLetter), "a letter the cap cuts off does not make a name")
         XCTAssertEqual(AgentSessionTitle.sanitized("\u{0301}x"), "\u{0301}x", "a mark with a letter is a name")
         XCTAssertEqual(AgentSessionTitle.sanitized("한글 제목"), "한글 제목")
         XCTAssertEqual(AgentSessionTitle.sanitized("\u{1100}\u{1161}\u{11A8} jamo"), "\u{1100}\u{1161}\u{11A8} jamo")

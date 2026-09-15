@@ -65,11 +65,12 @@ public enum AgentSessionResume {
     /// conversation. A Codex pane always comes back to a prompt.
     ///
     /// A name is carried back into the conversation when the user gave the tab one, so the tab the
-    /// user named and the conversation it holds agree from the first line.
+    /// user named and the conversation it holds agree from the first line. It is the user's own
+    /// text and reaches the agent as typed: the quoting is what makes it safe on a command line.
     public static func command(for handle: AgentSessionHandle, name: String? = nil) -> String? {
         switch handle.agent {
         case "claude":
-            if let name = AgentSessionTitle.sanitized(name) {
+            if let name, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 "claude --resume \(shellQuoted(handle.sessionID)) --name \(shellQuoted(name))"
             } else {
                 "claude --resume \(shellQuoted(handle.sessionID))"

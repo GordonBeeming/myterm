@@ -23,17 +23,21 @@ public enum AgentSessionTitle {
 
     public static func sanitized(_ raw: String?) -> String? {
         guard let raw else { return nil }
+        // `controlCharacters` is Unicode categories Cc and Cf, so this drops the C0 and C1 controls
+        // and the format characters with them: bidi overrides and isolates, zero-width joiners and
+        // spaces, and the byte order mark.
         var scalars = Array(raw.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) })
         while let first = scalars.first, decoration.contains(first) {
             scalars.removeFirst()
         }
-        let name = String(String.UnicodeScalarView(scalars))
+        let name = String(String.UnicodeScalarView(scalars.prefix(maximumLength)))
             .trimmingCharacters(in: .whitespacesAndNewlines)
         // A name made only of marks (variation selectors, combining accents) draws as nothing:
-        // a tab with a blank label rather than one with no name.
+        // a tab with a blank label rather than one with no name. This is judged on what is kept,
+        // because the cap can cut a letter off the end of a run of marks.
         guard name.unicodeScalars.contains(where: { $0.properties.generalCategory != .nonspacingMark }) else {
             return nil
         }
-        return String(String.UnicodeScalarView(name.unicodeScalars.prefix(maximumLength)))
+        return name
     }
 }

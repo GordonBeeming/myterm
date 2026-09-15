@@ -2086,8 +2086,9 @@ final class AppModel {
             settings: settings
         ) : nil
         // A pane that comes back without its resume command comes back to a prompt, and a pane at
-        // its prompt has left its conversation. Keeping the handle would name the tab after it.
-        if initialCommand == nil, resumeCommand == nil, session.agentSession != nil {
+        // its prompt has left its conversation. The name goes with it, whether or not there was a
+        // handle to resume: a Codex pane carries a name and nothing to resume.
+        if initialCommand == nil, resumeCommand == nil, session.agentSession != nil || session.agentTitle != nil {
             try store.updateTerminalAgentSession(
                 workspaceID: workspaceID,
                 tabGroupID: tabGroupID,

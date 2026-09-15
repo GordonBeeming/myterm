@@ -125,6 +125,24 @@ final class AgentLifecycleTests: XCTestCase {
         XCTAssertEqual(fixture.model.agentAttention(forTab: fixture.tabID), .working)
     }
 
+    func testALateSessionEndFromTheLastConversationLeavesTheNewOnesName() throws {
+        let fixture = try makeFixture(isActive: false)
+        fixture.session.activeForegroundProcessName = "claude"
+        fixture.emit(.ready, session: "first")
+        fixture.title("✳ First topic")
+        fixture.emit(.exited, session: "first")
+        fixture.emit(.ready, session: "second")
+        fixture.title("✳ Second topic")
+        XCTAssertEqual(fixture.displayTitle, "Second topic")
+
+        // The first conversation's SessionEnd hook was slow, and lands after the second started.
+        fixture.emit(.exited, session: "first")
+
+        XCTAssertEqual(fixture.displayTitle, "Second topic", "a conversation the pane left cannot take the new name")
+        XCTAssertEqual(fixture.model.liveAgentTabs[fixture.tabID], "claude", "or the agent")
+        XCTAssertEqual(fixture.savedSession?.sessionID, "second", "or the conversation")
+    }
+
     // MARK: - Hooks around the tab's own lifecycle
 
     func testAHookThatArrivesAfterTheTabClosedTouchesNothing() throws {
@@ -324,6 +342,23 @@ final class AgentLifecycleTests: XCTestCase {
         let relaunched = try makeFixture(in: fixture.directory, isActive: false)
 
         XCTAssertEqual(relaunched.engine.configurations.first?.initialCommand, "claude --resume 'abc'")
+    }
+
+    func testANamedPaneWithNothingToResumeComesBackToItsPlainLabel() throws {
+        // Codex names its conversation but never saves a handle, so the pane comes back to a
+        // prompt. A prompt with last week's topic over it would say the wrong thing.
+        let fixture = try makeFixture(isActive: false)
+        fixture.session.activeForegroundProcessName = "codex"
+        fixture.emit(.ready, agent: "codex", session: "abc")
+        fixture.title("✳ Fix the build")
+        XCTAssertEqual(fixture.displayTitle, "Fix the build")
+        XCTAssertNil(fixture.savedSession)
+        fixture.model.persistTerminalSnapshots()
+
+        let relaunched = try makeFixture(in: fixture.directory, isActive: false)
+
+        XCTAssertNil(relaunched.engine.configurations.first?.initialCommand)
+        XCTAssertEqual(relaunched.displayTitle, "Terminal")
     }
 
     func testAConversationComesBackNamedAndReadyRatherThanWorking() throws {
