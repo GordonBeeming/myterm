@@ -6,7 +6,7 @@ MyTerm Companion is archived, validated, and uploaded from the GitHub Actions `C
 
 Create the iOS app in App Store Connect before the first workflow run. App Store Connect does not provide an API for creating the app record, so this step must be completed in the App Store Connect website.
 
-- App name: `MyTerm`
+- App name: `MyTerm Companion`
 - Primary bundle ID: `com.gordonbeeming.myterm.companion`
 - Notification service bundle ID: `com.gordonbeeming.myterm.companion.notifications`
 
