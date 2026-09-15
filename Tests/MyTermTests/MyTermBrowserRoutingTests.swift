@@ -144,32 +144,92 @@ final class MyTermBrowserRoutingTests: XCTestCase {
         XCTAssertNil(onlyShim["MYTERM_ORIGINAL_BASH_ENV"])
     }
 
+    func testEnvironmentRecognisesASymlinkToAnotherMyTermBashShim() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let launcher = directory.appending(path: "myterm-browser", directoryHint: .notDirectory)
+        try Data("#!/bin/sh\nexit 0\n".utf8).write(to: launcher)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: launcher.path)
+
+        // The other copy's shim is reached through a link whose name gives nothing away. It is
+        // still a shim, and mirroring it as the original would loop the two shims.
+        let otherCopy = directory.appending(path: "other/myterm-bash-env", directoryHint: .notDirectory)
+        try FileManager.default.createDirectory(at: otherCopy.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: repositoryShim, to: otherCopy)
+        let link = directory.appending(path: "bash-env-link", directoryHint: .notDirectory)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: otherCopy)
+
+        let environment = MyTermBrowserLauncher.environment(
+            executableURL: launcher,
+            baseEnvironment: ["PATH": "/usr/bin", "BASH_ENV": link.path]
+        )
+        XCTAssertNil(environment["MYTERM_ORIGINAL_BASH_ENV"])
+    }
+
+    func testEnvironmentRecognisesARenamedCopyOfAnotherMyTermBashShim() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let launcher = directory.appending(path: "myterm-browser", directoryHint: .notDirectory)
+        try Data("#!/bin/sh\nexit 0\n".utf8).write(to: launcher)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: launcher.path)
+
+        let renamedCopy = directory.appending(path: "other/bash_env", directoryHint: .notDirectory)
+        try FileManager.default.createDirectory(at: renamedCopy.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: repositoryShim, to: renamedCopy)
+
+        let environment = MyTermBrowserLauncher.environment(
+            executableURL: launcher,
+            baseEnvironment: ["PATH": "/usr/bin", "BASH_ENV": renamedCopy.path]
+        )
+        XCTAssertNil(environment["MYTERM_ORIGINAL_BASH_ENV"])
+
+        // A user's own file under the same directory is not a shim, whatever it is called, so it
+        // is still carried through.
+        let usersFile = directory.appending(path: "other/users-bash-env", directoryHint: .notDirectory)
+        try Data("export MYTERM_TEST_USER_FILE=1\n".utf8).write(to: usersFile)
+        let usersEnvironment = MyTermBrowserLauncher.environment(
+            executableURL: launcher,
+            baseEnvironment: ["PATH": "/usr/bin", "BASH_ENV": usersFile.path]
+        )
+        XCTAssertEqual(usersEnvironment["MYTERM_ORIGINAL_BASH_ENV"], usersFile.path)
+    }
+
+    func testBashShimRefusesToSourceASymlinkToAnotherCopyOfItself() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let otherCopy = directory.appending(path: "other/myterm-bash-env", directoryHint: .notDirectory)
+        try FileManager.default.createDirectory(at: otherCopy.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: repositoryShim, to: otherCopy)
+        let link = directory.appending(path: "bash-env-link", directoryHint: .notDirectory)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: otherCopy)
+
+        XCTAssertEqual(try runBashShim(original: link), 0)
+    }
+
+    func testBashShimRefusesToSourceARenamedCopyOfItself() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let renamedCopy = directory.appending(path: "other/bash_env", directoryHint: .notDirectory)
+        try FileManager.default.createDirectory(at: renamedCopy.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: repositoryShim, to: renamedCopy)
+
+        XCTAssertEqual(try runBashShim(original: renamedCopy), 0)
+    }
+
     func testBashShimRefusesToSourceAnotherCopyOfItself() throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let shim = repositoryRoot.appending(path: "Resources/myterm-bash-env", directoryHint: .notDirectory)
         let otherCopy = directory.appending(path: "other/myterm-bash-env", directoryHint: .notDirectory)
         try FileManager.default.createDirectory(at: otherCopy.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try FileManager.default.copyItem(at: shim, to: otherCopy)
+        try FileManager.default.copyItem(at: repositoryShim, to: otherCopy)
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = ["-c", "exit 0"]
-        process.environment = [
-            "PATH": "/usr/bin:/bin",
-            "BASH_ENV": shim.path,
-            "MYTERM_ORIGINAL_BASH_ENV": otherCopy.path,
-        ]
-        try process.run()
-        process.waitUntilExit()
-
-        XCTAssertEqual(process.terminationStatus, 0)
+        XCTAssertEqual(try runBashShim(original: otherCopy), 0)
     }
 
     func testBashShimRunsTheUsersOwnBashEnvOnceAndStillDefinesOpen() throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let shim = repositoryRoot.appending(path: "Resources/myterm-bash-env", directoryHint: .notDirectory)
+        let shim = repositoryShim
         let marker = directory.appending(path: "marker", directoryHint: .notDirectory)
         let usersFile = directory.appending(path: "users-bash-env", directoryHint: .notDirectory)
         // The user's file defines its own open too. The shim's function has to be the one that
@@ -522,6 +582,28 @@ final class MyTermBrowserRoutingTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
+    }
+
+    private var repositoryShim: URL {
+        repositoryRoot.appending(path: "Resources/myterm-bash-env", directoryHint: .notDirectory)
+    }
+
+    /// Runs a real bash with the repository's shim as BASH_ENV and `original` as the file the
+    /// shim is told is the user's own, and returns bash's termination status. A shim that sources
+    /// another copy of itself never comes back with 0: the two source each other until bash runs
+    /// out of stack.
+    private func runBashShim(original: URL) throws -> Int32 {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = ["-c", "exit 0"]
+        process.environment = [
+            "PATH": "/usr/bin:/bin",
+            "BASH_ENV": repositoryShim.path,
+            "MYTERM_ORIGINAL_BASH_ENV": original.path,
+        ]
+        try process.run()
+        process.waitUntilExit()
+        return process.terminationStatus
     }
 
     private func makeTemporaryDirectory() throws -> URL {

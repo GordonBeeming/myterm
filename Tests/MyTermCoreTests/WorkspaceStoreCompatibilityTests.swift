@@ -114,7 +114,7 @@ final class WorkspaceStoreCompatibilityTests: XCTestCase {
     /// against a key from a build newer than this one, so this is the downgrade seen from the
     /// other side: the file this build writes gives the previous build a "state repaired" banner,
     /// a recovery backup, and a rewrite that drops the agent sessions.
-    func testAKeyFromANewerBuildCountsAsARepairAndIsDroppedOnRewrite() throws {
+    func testAKeyFromANewerBuildIsNotARepair() throws {
         var (_, json) = try snapshotWithAnAgentSession()
         var workspaces = try XCTUnwrap(json["workspaces"] as? [[String: Any]])
         workspaces[0]["colourTheme"] = "aurora"
@@ -125,12 +125,11 @@ final class WorkspaceStoreCompatibilityTests: XCTestCase {
         try JSONSerialization.data(withJSONObject: json).write(to: stateURL)
 
         let store = try WorkspaceStore(persistenceURL: stateURL)
-        XCTAssertEqual(store.loadReport.structuralRepairCount, 2,
-                       "each unknown key is counted as a repair, which is what the banner and the backup are keyed on")
-        XCTAssertEqual(store.loadReport.backupURLs, [store.recoveryBackupURL])
-        let rewritten = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: stateURL)) as? [String: Any])
-        XCTAssertNil((rewritten["workspaces"] as? [[String: Any]])?.first?["colourTheme"], "the older build drops the key on its first write")
-        XCTAssertNotNil(try Data(contentsOf: store.recoveryBackupURL), "but the original bytes are beside the file")
+        // A key no decoder in this build knows is a newer file, not a broken one: no banner, no
+        // backup, and the file loads.
+        XCTAssertEqual(store.loadReport.structuralRepairCount, 0)
+        XCTAssertEqual(store.loadReport.backupURLs, [])
+        XCTAssertEqual(store.workspaces.count, 1)
     }
 
     func testAnAgentSessionThisBuildRefusesIsDroppedWithoutARepairNotice() throws {
