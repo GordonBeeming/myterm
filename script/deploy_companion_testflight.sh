@@ -247,13 +247,13 @@ prepare_app_store_connect_key() {
 }
 
 prepare_keychain_p12() {
-  local -a read_options=()
+  local -a read_options=(-in "$P12_PATH")
   if openssl version | grep -q '^OpenSSL 3\.'; then
-    read_options=(-legacy)
+    read_options+=(-legacy)
   fi
   # Keychain rejects OpenSSL 3's default PKCS#12 encryption/MAC format.
   # Keep the decoded key within the mode-700 task directory (umask 077).
-  if ! openssl pkcs12 "${read_options[@]}" -in "$P12_PATH" -passin env:CERTIFICATES_PASSWORD \
+  if ! openssl pkcs12 "${read_options[@]}" -passin env:CERTIFICATES_PASSWORD \
       -nodes -out "$P12_PEM_PATH"; then
     rm -f "$P12_PEM_PATH"
     return 1
