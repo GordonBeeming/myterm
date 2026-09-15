@@ -1192,6 +1192,77 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertNotEqual(store.selectedWorkspaceID, removedID)
     }
 
+    func testMovingAWorkspaceAcrossFoldersPlacesItBeforeTheTarget() throws {
+        let url = temporaryURL()
+        let store = try WorkspaceStore(persistenceURL: url)
+        let source = try store.createFolder(title: "Source", color: .teal)
+        let destination = try store.createFolder(title: "Destination", color: .blue)
+        let moved = try store.createWorkspace(title: "Moved", folderID: source)
+        let first = try store.createWorkspace(title: "First", folderID: destination)
+        let second = try store.createWorkspace(title: "Second", folderID: destination)
+
+        try store.moveWorkspace(moved, to: destination, before: second)
+
+        XCTAssertEqual(
+            store.workspaces.filter { $0.folderID == destination }.map(\.id),
+            [first, moved, second]
+        )
+        XCTAssertTrue(store.workspaces.filter { $0.folderID == source }.isEmpty)
+
+        let restored = try WorkspaceStore(persistenceURL: url)
+        XCTAssertEqual(
+            restored.workspaces.filter { $0.folderID == destination }.map(\.id),
+            [first, moved, second]
+        )
+    }
+
+    func testMovingAWorkspaceIntoThePinnedBandRepinsItInTheSameWrite() throws {
+        let url = temporaryURL()
+        let store = try WorkspaceStore(persistenceURL: url)
+        let folderID = try store.createFolder(title: "Work", color: .teal)
+        let pinned = try store.createWorkspace(title: "Pinned", folderID: folderID)
+        let loose = try store.createWorkspace(title: "Loose", folderID: folderID)
+        try store.setWorkspacePinned(pinned, isPinned: true)
+
+        try store.moveWorkspace(loose, to: folderID, before: pinned, isPinned: true)
+
+        let filed = store.workspaces.filter { $0.folderID == folderID }
+        XCTAssertEqual(filed.map(\.id), [loose, pinned])
+        XCTAssertTrue(filed.allSatisfy(\.isPinned))
+
+        let restored = try WorkspaceStore(persistenceURL: url)
+        XCTAssertEqual(restored.workspaces.filter { $0.folderID == folderID }.map(\.isPinned), [true, true])
+    }
+
+    func testMovingAWorkspaceOutOfThePinnedBandAppendsToTheLooseBand() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let folderID = try store.createFolder(title: "Work", color: .teal)
+        let pinned = try store.createWorkspace(title: "Pinned", folderID: folderID)
+        let loose = try store.createWorkspace(title: "Loose", folderID: folderID)
+        try store.setWorkspacePinned(pinned, isPinned: true)
+
+        try store.moveWorkspace(pinned, to: folderID, before: nil, isPinned: false)
+
+        let filed = store.workspaces.filter { $0.folderID == folderID }
+        XCTAssertEqual(filed.map(\.id), [loose, pinned])
+        XCTAssertTrue(filed.allSatisfy { !$0.isPinned })
+    }
+
+    func testMovingBeforeATargetInAnotherPinnedBandIsRejected() throws {
+        let store = try WorkspaceStore(persistenceURL: temporaryURL())
+        let folderID = try store.createFolder(title: "Work", color: .teal)
+        let pinned = try store.createWorkspace(title: "Pinned", folderID: folderID)
+        let loose = try store.createWorkspace(title: "Loose", folderID: folderID)
+        try store.setWorkspacePinned(pinned, isPinned: true)
+
+        XCTAssertThrowsError(try store.moveWorkspace(loose, to: folderID, before: pinned)) { error in
+            guard case .invariantViolation = error as? WorkspaceStoreError else {
+                return XCTFail("Expected an invariant violation, got \(error)")
+            }
+        }
+        XCTAssertEqual(store.workspaces.filter { $0.folderID == folderID }.map(\.id), [pinned, loose])
+    }
+
     func testFoldersWorkspaceOrderingAndScopedSettingsStillPersist() throws {
         let url = temporaryURL()
         let store = try WorkspaceStore(persistenceURL: url)

@@ -681,10 +681,11 @@ final class AppModel {
     func moveWorkspace(
         _ workspaceID: WorkspaceID,
         to folderID: WorkspaceFolderID?,
-        before targetID: WorkspaceID?
+        before targetID: WorkspaceID?,
+        isPinned: Bool? = nil
     ) {
         perform {
-            try store.moveWorkspace(workspaceID, to: folderID, before: targetID)
+            try store.moveWorkspace(workspaceID, to: folderID, before: targetID, isPinned: isPinned)
             applyResolvedRuntimeSettings(to: [workspaceID])
         }
     }
