@@ -13,6 +13,10 @@ enum MyTermBrowserLauncher {
     /// another MyTerm's copy is recognised wherever it lives, and a user's own ZDOTDIR that merely
     /// holds a file of the same name is not.
     static let zshShimMarker = "# MyTerm zsh shim"
+    static let bashEnvironmentFileName = "myterm-bash-env"
+    /// The first line of `Resources/myterm-bash-env`. It is the file's identity, so a shim reached
+    /// through a symlink or copied under another name is still recognised as one.
+    static let bashEnvironmentShimMarker = "# MyTerm BASH_ENV shim"
     static let workspaceRouteScheme = "myterm"
     static let workspaceRouteHost = "browser"
 
@@ -54,14 +58,22 @@ enum MyTermBrowserLauncher {
         let basePath = baseEnvironment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
         let zdotdir = "\(resourceDirectory)/zsh"
         var environment = [
-            "BASH_ENV": "\(resourceDirectory)/myterm-bash-env",
+            "BASH_ENV": "\(resourceDirectory)/\(bashEnvironmentFileName)",
             "BROWSER": executableURL.path,
             "MYTERM_OPEN_SHIM": "\(resourceDirectory)/open",
             "PATH": "\(resourceDirectory):\(basePath)",
             zdotdirEnvironmentKey: zdotdir,
             resourceDirectoryEnvironmentKey: resourceDirectory,
         ]
-        if let originalBashEnvironment = baseEnvironment["BASH_ENV"], !originalBashEnvironment.isEmpty {
+        // The same nesting rules as ZDOTDIR below apply to BASH_ENV: prefer the original a parent
+        // MyTerm already resolved, and never mirror a MyTerm shim as though it were the user's own
+        // file. This matters across bundles too. An app launched from a pane of an older copy
+        // inherits that copy's shim, and two shims pointing at each other source one another
+        // until bash runs out of stack.
+        let originalBashEnvironmentSource = baseEnvironment["MYTERM_ORIGINAL_BASH_ENV"].flatMap { $0.isEmpty ? nil : $0 }
+            ?? baseEnvironment["BASH_ENV"]
+        if let originalBashEnvironment = originalBashEnvironmentSource, !originalBashEnvironment.isEmpty,
+           !isBashEnvironmentShim(atPath: originalBashEnvironment) {
             environment["MYTERM_ORIGINAL_BASH_ENV"] = originalBashEnvironment
         }
         // MyTerm can itself run from inside a MyTerm pane (developing MyTerm in MyTerm), in
@@ -110,6 +122,23 @@ enum MyTermBrowserLauncher {
         let head = (try? handle.read(upToCount: 256)) ?? Data()
         let firstLine = head.prefix { $0 != UInt8(ascii: "\n") }
         return String(decoding: firstLine, as: UTF8.self) == zshShimMarker
+    }
+
+    /// Whether the file at `path` is a copy of MyTerm's bash shim, wherever it lives and whatever
+    /// it is called. The shim's first line is its identity, and reading the file follows symlinks,
+    /// so a link to a shim and a renamed copy both count. The shim performs the same check before
+    /// sourcing `MYTERM_ORIGINAL_BASH_ENV`; keep the two in step. The basename stays as a fallback
+    /// for shims shipped before the marker existed: a released copy's shim is the parent of every
+    /// development build launched from one of its panes.
+    static func isBashEnvironmentShim(atPath path: String) -> Bool {
+        if URL(fileURLWithPath: path).lastPathComponent == bashEnvironmentFileName {
+            return true
+        }
+        guard let handle = FileHandle(forReadingAtPath: path) else { return false }
+        defer { try? handle.close() }
+        let head = (try? handle.read(upToCount: 256)) ?? Data()
+        let firstLine = head.prefix { $0 != UInt8(ascii: "\n") }
+        return String(decoding: firstLine, as: UTF8.self) == bashEnvironmentShimMarker
     }
 
     static func browserRoute(

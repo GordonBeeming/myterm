@@ -456,6 +456,8 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         self.init()
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let legacyContainer = try decoder.container(keyedBy: LegacyCodingKeys.self)
+        decoder.recordKnownKeys(container.allKeys)
+        decoder.recordKnownKeys(legacyContainer.allKeys)
         browserDataScope = try? container.decodeIfPresent(BrowserDataScope.self, forKey: .browserDataScope)
         webLinkDestination = try? container.decodeIfPresent(WebLinkDestination.self, forKey: .webLinkDestination)
         textFileOpenCommand = (try? container.decodeIfPresent(String.self, forKey: .textFileOpenCommand))
