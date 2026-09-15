@@ -13,7 +13,7 @@ final class RemoteHostPersistenceTests: XCTestCase {
     private var defaults: UserDefaults!
     private var suiteName: String!
 
-    override func setUpWithError() throws {
+    override func setUp() async throws {
         directory = FileManager.default.temporaryDirectory
             .appending(path: "myterm-remote-persist-\(UUID().uuidString)", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -21,7 +21,7 @@ final class RemoteHostPersistenceTests: XCTestCase {
         defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
     }
 
-    override func tearDownWithError() throws {
+    override func tearDown() async throws {
         defaults.removePersistentDomain(forName: suiteName)
         try? FileManager.default.removeItem(at: directory)
     }

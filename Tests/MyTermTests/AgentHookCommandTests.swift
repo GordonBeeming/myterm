@@ -15,7 +15,7 @@ final class AgentHookCommandTests: XCTestCase {
     private var directory: URL!
     private var output: URL!
 
-    override func setUpWithError() throws {
+    override func setUp() async throws {
         directory = FileManager.default.temporaryDirectory
             .appending(path: "myterm-hook-command-\(UUID().uuidString)", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: directory.appending(path: "bin"), withIntermediateDirectories: true)
@@ -28,7 +28,7 @@ final class AgentHookCommandTests: XCTestCase {
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: ps.path)
     }
 
-    override func tearDownWithError() throws {
+    override func tearDown() async throws {
         try? FileManager.default.removeItem(at: directory)
     }
 

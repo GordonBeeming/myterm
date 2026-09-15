@@ -14,7 +14,7 @@ final class AgentInboxPersistenceTests: XCTestCase {
     private let workspaceID = WorkspaceID()
     private let tabGroupID = TabGroupID()
 
-    override func setUpWithError() throws {
+    override func setUp() async throws {
         directory = FileManager.default.temporaryDirectory
             .appending(path: "myterm-inbox-\(UUID().uuidString)", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -24,7 +24,7 @@ final class AgentInboxPersistenceTests: XCTestCase {
         try FileManager.default.createDirectory(at: inboxURL.deletingLastPathComponent(), withIntermediateDirectories: true)
     }
 
-    override func tearDownWithError() throws {
+    override func tearDown() async throws {
         try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: inboxURL.deletingLastPathComponent().path)
         try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: inboxURL.path)
         try? FileManager.default.removeItem(at: directory)
