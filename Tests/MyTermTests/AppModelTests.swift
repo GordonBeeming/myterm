@@ -3641,6 +3641,7 @@ final class AppModelTests: XCTestCase {
         let session = try XCTUnwrap(firstEngine.sessions.first)
         session.activeForegroundProcessName = "claude"
         session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .working, sessionID: "abc-123")))
+        firstModel.persistWorkspaceStore()
 
         let relaunched = try AppModel(
             channel: .development,
@@ -3682,6 +3683,7 @@ final class AppModelTests: XCTestCase {
         session.activeForegroundProcessName = "claude"
         session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .working, sessionID: "abc-123")))
         try FileManager.default.removeItem(at: workingDirectory)
+        firstModel.persistWorkspaceStore()
 
         let failed = try AppModel(
             channel: .development,
@@ -3691,6 +3693,7 @@ final class AppModelTests: XCTestCase {
         )
         XCTAssertNotNil(failed.errorDescription)
         XCTAssertNil(failed.selectedWorkspace.selectedTab?.terminalSession?.agentSession)
+        failed.persistWorkspaceStore()
 
         let retryEngine = CapturingTerminalEngine()
         _ = try AppModel(

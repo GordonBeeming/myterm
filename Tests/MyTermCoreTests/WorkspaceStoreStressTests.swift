@@ -54,12 +54,17 @@ final class WorkspaceStoreStressTests: XCTestCase {
     }
 
     /// A burst of mutations costs one encode of the whole snapshot, not one per change. An agent
-    /// that retitles its conversation is the fastest writer the store has, so its per-write cost
-    /// is the one that matters. Measured here so a regression shows up as a number rather than a
-    /// laggy sidebar.
-    func testAgentTitleWriteOnALargeStoreStaysCheap() throws {
+    /// that retitles its conversation is the fastest writer the store has, so it is the burst
+    /// that matters. The proof is what the file holds, not a stopwatch: nothing during the burst,
+    /// the last title after the flush.
+    func testABurstOfTitleWritesReachesTheFileOnceAtTheFlush() throws {
         let store = try makeLargeStore()
         let (workspaceID, groupID, tabID) = try firstTerminal(in: store)
+        try store.updateTerminalAgentTitle(
+            workspaceID: workspaceID, tabGroupID: groupID, tabID: tabID, agentTitle: "Before the burst"
+        )
+        try store.flush()
+        XCTAssertFalse(store.hasUnsavedChanges)
 
         let iterations = 20
         let clock = ContinuousClock()
@@ -72,22 +77,27 @@ final class WorkspaceStoreStressTests: XCTestCase {
                     agentTitle: "Title \(index)"
                 )
             }
-            // The one write the run loop would make after the burst.
-            try store.flush()
         }
-        let perWrite = elapsed / iterations
-        // A change every 10 ms (100 Hz) must leave the main thread mostly idle; anything above
-        // 5 ms per write means the sidebar stalls behind the agent.
+        // No write happened during the burst: the file still holds the title from before it.
+        XCTAssertTrue(store.hasUnsavedChanges)
+        XCTAssertEqual(titleOnDisk(store), "Before the burst")
+        // A blocking detector only. Per write the burst costs a copy and a repair of the
+        // snapshot, well under a millisecond, but a shared debug CI runner is noisy, so the bound
+        // is loose enough that only a write per mutation (about 7 ms each) could trip it.
         XCTAssertLessThan(
-            perWrite,
-            .milliseconds(5),
-            "One agent-title write on a 500-workspace store took \(perWrite); at 100 Hz that is a stalled main thread"
+            elapsed / iterations,
+            .milliseconds(100),
+            "One agent-title mutation on a 500-workspace store took \(elapsed / iterations); is it writing the file again?"
         )
+
+        // The one write the run loop would make after the burst.
+        try store.flush()
         XCTAssertFalse(store.hasUnsavedChanges)
-        XCTAssertEqual(
-            try WorkspaceStore(persistenceURL: store.persistenceURL).selectedWorkspace.selectedTab?.terminalSession?.agentTitle,
-            "Title \(iterations - 1)"
-        )
+        XCTAssertEqual(titleOnDisk(store), "Title \(iterations - 1)")
+    }
+
+    private func titleOnDisk(_ store: WorkspaceStore) -> String? {
+        (try? WorkspaceStore(persistenceURL: store.persistenceURL))?.selectedWorkspace.selectedTab?.terminalSession?.agentTitle
     }
 
     func testOneHundredTabsInOnePaneGroupMoveAndPersist() throws {

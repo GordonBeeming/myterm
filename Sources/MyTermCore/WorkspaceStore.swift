@@ -384,16 +384,19 @@ public final class WorkspaceStore {
 
     /// Writes the snapshot whether or not anything changed.
     public func save() throws {
-        try write(snapshot, fileManager: .default)
-        hasUnsavedChanges = false
+        if try write(snapshot, fileManager: .default) {
+            hasUnsavedChanges = false
+        }
     }
 
     /// Writes the snapshot now if a mutation has left the file behind. Nothing to write is not an
-    /// error. A failure leaves the store dirty so a later flush can succeed.
+    /// error. A failure leaves the store dirty so a later flush can succeed, and so does a store
+    /// whose persistence is suspended: the file still holds the older snapshot.
     public func flush() throws {
         guard hasUnsavedChanges else { return }
-        try write(snapshot, fileManager: .default)
-        hasUnsavedChanges = false
+        if try write(snapshot, fileManager: .default) {
+            hasUnsavedChanges = false
+        }
     }
 
     public func resolvedSettings(for workspaceID: WorkspaceID) throws -> TerminalPreferences {
@@ -1221,12 +1224,19 @@ public final class WorkspaceStore {
     }
 
     /// One write per turn of the main run loop, however many mutations land in that turn.
+    ///
+    /// The block holds the store strongly on purpose. A mutation made just before the last
+    /// reference goes would otherwise be lost with it; a store with a pending flush lives one
+    /// more turn, until the write has been attempted.
     private func scheduleFlush() {
         guard !isFlushScheduled, !isPersistenceSuspended else { return }
         isFlushScheduled = true
-        let store = WeakStore(self)
+        // The store is used from one thread (the main actor in the app), so the reference can
+        // cross the dispatch boundary without a lock. Marked rather than proven because the store
+        // itself is deliberately not `Sendable`.
+        nonisolated(unsafe) let store = self
         DispatchQueue.main.async {
-            store.value?.performScheduledFlush()
+            store.performScheduledFlush()
         }
     }
 
@@ -1331,11 +1341,13 @@ public final class WorkspaceStore {
         workspace.folderID.flatMap { folderID in snapshot.folders.firstIndex { $0.id == folderID } }
     }
 
-    private func write(_ snapshot: WorkspaceStoreSnapshot, fileManager: FileManager) throws {
+    /// Returns whether the file was written. A suspended store declines without error.
+    @discardableResult
+    private func write(_ snapshot: WorkspaceStoreSnapshot, fileManager: FileManager) throws -> Bool {
         // A repair with a failed backup has no copy of the original bytes anywhere. Writing here
         // would overwrite the only surviving copy of the pre-repair state, so the store stays
         // in-memory-only for the rest of the session instead.
-        guard !isPersistenceSuspended else { return }
+        guard !isPersistenceSuspended else { return false }
         do {
             try fileManager.createDirectory(
                 at: persistenceURL.deletingLastPathComponent(),
@@ -1348,6 +1360,7 @@ public final class WorkspaceStore {
             if let error = error as? WorkspaceStoreError { throw error }
             throw WorkspaceStoreError.saveFailed(path: persistenceURL.path, reason: error.localizedDescription)
         }
+        return true
     }
 
     private static func persistedVersion(in data: Data) -> Int? {
@@ -2065,16 +2078,5 @@ private struct LegacyBrowserSession: Decodable {
             url: url,
             profile: profile
         )
-    }
-}
-
-/// The store is used from one thread (the main actor in the app), so a weak reference to it can
-/// cross the dispatch boundary without a lock. Marked rather than proven because the store itself
-/// is deliberately not `Sendable`.
-private final class WeakStore: @unchecked Sendable {
-    private(set) weak var value: WorkspaceStore?
-
-    init(_ value: WorkspaceStore) {
-        self.value = value
     }
 }

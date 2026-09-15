@@ -566,6 +566,34 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: url), source)
     }
 
+    func testASuspendedStoreStaysDirtyBecauseAFlushWritesNothing() throws {
+        // Persistence is suspended, so flush and save decline to touch the file. The store must
+        // say so: a clean bit over a file that holds the older snapshot would be a lie.
+        let directory = try temporaryDirectory()
+        let url = directory.appendingPathComponent("workspace-state.json")
+        let source = try snapshotNeedingStructuralRepair()
+        try source.write(to: url)
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: directory.path)
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: 0o700],
+                ofItemAtPath: directory.path
+            )
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        let store = try WorkspaceStore(persistenceURL: url, now: Self.fixedBackupDate)
+        XCTAssertTrue(store.isPersistenceSuspended)
+
+        try store.createWorkspace(title: "x")
+        XCTAssertTrue(store.hasUnsavedChanges)
+        try store.flush()
+        XCTAssertTrue(store.hasUnsavedChanges, "nothing was written, so nothing is saved")
+        try store.save()
+        XCTAssertTrue(store.hasUnsavedChanges)
+        XCTAssertEqual(try Data(contentsOf: url), source)
+    }
+
     func testACleanLoadIsNotSuspendedAndWritesNormally() throws {
         let url = temporaryURL()
 
@@ -574,6 +602,24 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertFalse(store.isPersistenceSuspended)
         try store.createWorkspace(title: "x")
         XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    func testAMutationMadeJustBeforeTheLastReferenceGoesStillReachesTheFile() throws {
+        // The flush is queued for the next turn of the main run loop. A store released before
+        // that turn must still be there when it comes, or the last thing the user did is lost.
+        let url = temporaryURL()
+        do {
+            let store = try WorkspaceStore(persistenceURL: url)
+            try store.renameWorkspace(store.selectedWorkspaceID, title: "Pending title")
+            XCTAssertEqual(try WorkspaceStore(persistenceURL: url).selectedWorkspace.title, "Workspace")
+        }
+
+        // Queued behind the flush, so the main queue has drained past it once this runs.
+        let drained = expectation(description: "main queue drained")
+        DispatchQueue.main.async { drained.fulfill() }
+        wait(for: [drained], timeout: 5)
+
+        XCTAssertEqual(try WorkspaceStore(persistenceURL: url).selectedWorkspace.title, "Pending title")
     }
 
     func testOneBackupSucceedingKeepsPersistenceEnabledEvenWhenTheOtherFails() throws {
