@@ -97,15 +97,27 @@ validate_public_configuration() {
     echo "BUILD_NUMBER must be a positive integer." >&2
     exit 2
   }
-  if [[ -n "${MYTERM_PUSH_GATEWAY_ORIGIN:-}" ]]; then
-    [[ "$MYTERM_PUSH_GATEWAY_ORIGIN" == https://* ]] || {
-      echo "MYTERM_PUSH_GATEWAY_ORIGIN must be empty or an HTTPS origin." >&2
-      exit 2
-    }
-    [[ "$MYTERM_PUSH_GATEWAY_ORIGIN" != *$'\n'* && "$MYTERM_PUSH_GATEWAY_ORIGIN" != *$'\r'* ]] || {
-      echo "MYTERM_PUSH_GATEWAY_ORIGIN must be a single-line HTTPS origin." >&2
-      exit 2
-    }
+  validate_optional_push_origin
+}
+
+validate_optional_push_origin() {
+  local origin="${MYTERM_PUSH_GATEWAY_ORIGIN:-}"
+  [[ -z "$origin" ]] && return
+  if ! ruby -ruri -e '
+    begin
+      endpoint = URI.parse(ARGV.fetch(0))
+      valid = endpoint.is_a?(URI::HTTPS) &&
+        !endpoint.host.nil? && !endpoint.host.empty? &&
+        endpoint.userinfo.nil? && endpoint.query.nil? && endpoint.fragment.nil? &&
+        (endpoint.path.nil? || endpoint.path.empty? || endpoint.path == "/") &&
+        endpoint.port.between?(1, 65_535)
+      exit(valid ? 0 : 1)
+    rescue URI::Error
+      exit 1
+    end
+  ' "$origin"; then
+    echo "MYTERM_PUSH_GATEWAY_ORIGIN must be empty or an HTTPS origin without credentials, a path, query, or fragment." >&2
+    exit 2
   fi
 }
 
@@ -280,7 +292,7 @@ RUBY
   security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
   security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
   printf '%s' "$CERTIFICATES_P12" | base64 --decode > "$P12_PATH"
-  security import "$P12_PATH" -k "$KEYCHAIN_PATH" -P "$CERTIFICATES_PASSWORD" -A
+  security import "$P12_PATH" -k "$KEYCHAIN_PATH" -P "$CERTIFICATES_PASSWORD" -T /usr/bin/codesign
   security list-keychains -d user -s "$KEYCHAIN_PATH"
   security set-key-partition-list -S apple-tool:,apple:,codesign: -s \
     -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" >/dev/null
@@ -296,7 +308,7 @@ RUBY
     "$NOTIFICATION_PROVISIONING_PROFILE_NAME" "$NOTIFICATION_BUNDLE_ID" \
     "$NOTIFICATION_PROFILE_SOURCE")
 
-  xcodegen --spec "$CI_SPEC" --project "$CI_COMPANION" --project-root "$CI_COMPANION" --quiet
+  xcodegen generate --spec "$CI_SPEC" --project "$CI_COMPANION" --project-root "$CI_COMPANION" --quiet
 
   xcodebuild archive \
     -project "$CI_PROJECT" \

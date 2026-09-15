@@ -30,7 +30,7 @@ Variables:
 | `NOTIFICATION_PROVISIONING_PROFILE_NAME` | Exact `Name` from the notification service provisioning profile |
 | `APP_STORE_CONNECT_API_KEY_ID` | App Store Connect API key ID |
 | `APP_STORE_CONNECT_ISSUER_ID` | App Store Connect API issuer UUID |
-| `MYTERM_PUSH_GATEWAY_ORIGIN` | Optional HTTPS push gateway origin; leave empty until the gateway is deployed |
+| `MYTERM_PUSH_GATEWAY_ORIGIN` | Optional HTTPS origin without credentials, a path, query, or fragment; leave empty until the gateway is deployed |
 
 Secrets:
 

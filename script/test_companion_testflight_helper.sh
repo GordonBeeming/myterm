@@ -38,13 +38,10 @@ abort "push origin missing" unless spec.dig("settings", "base", "MYTERM_PUSH_GAT
 abort "app package is not absolute" unless spec.dig("packages", "MyTerm", "path").start_with?("/")
 RUBY
 
-ruby -rrexml/document - "$TEST_ROOT/output/ExportOptions.plist" <<'RUBY'
-document = REXML::Document.new(File.read(ARGV[0]))
-text = document.to_s
-abort "wrong export method" unless text.include?("app-store-connect")
-abort "app mapping missing" unless text.include?("com.gordonbeeming.myterm.companion") && text.include?("MyTerm App &amp; Store")
-abort "extension mapping missing" unless text.include?("com.gordonbeeming.myterm.companion.notifications") && text.include?("MyTerm Notification &lt;Store&gt;")
-RUBY
+EXPORT_OPTIONS="$TEST_ROOT/output/ExportOptions.plist"
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :method' "$EXPORT_OPTIONS")" == "app-store-connect" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :provisioningProfiles:com.gordonbeeming.myterm.companion' "$EXPORT_OPTIONS")" == "MyTerm App & Store" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :provisioningProfiles:com.gordonbeeming.myterm.companion.notifications' "$EXPORT_OPTIONS")" == "MyTerm Notification <Store>" ]]
 
 if render_configuration "$TEST_ROOT/invalid-build" "0" "" >"$TEST_ROOT/invalid-build.log" 2>&1; then
   echo "The renderer accepted an invalid build number." >&2
@@ -52,14 +49,34 @@ if render_configuration "$TEST_ROOT/invalid-build" "0" "" >"$TEST_ROOT/invalid-b
 fi
 grep -F "BUILD_NUMBER must be a positive integer." "$TEST_ROOT/invalid-build.log" >/dev/null
 
-if render_configuration "$TEST_ROOT/invalid-origin" "43" "http://push.example.test" >"$TEST_ROOT/invalid-origin.log" 2>&1; then
-  echo "The renderer accepted an insecure push gateway origin." >&2
-  exit 1
-fi
-grep -F "MYTERM_PUSH_GATEWAY_ORIGIN must be empty or an HTTPS origin." "$TEST_ROOT/invalid-origin.log" >/dev/null
+invalid_origin_index=0
+for invalid_origin in \
+  "http://push.example.test" \
+  "https://user:password@push.example.test" \
+  "https://push.example.test/path" \
+  "https://push.example.test?token=x" \
+  "https://push.example.test?" \
+  "https://push.example.test/#fragment" \
+  "https://push.example.test/#" \
+  "https:///" \
+  "https://push.example.test:0" \
+  "https://push.example.test:65536" \
+  "https://push.example.test:invalid"; do
+  invalid_origin_index=$((invalid_origin_index + 1))
+  invalid_output="$TEST_ROOT/invalid-origin-$invalid_origin_index"
+  invalid_log="$TEST_ROOT/invalid-origin-$invalid_origin_index.log"
+  if render_configuration "$invalid_output" "43" "$invalid_origin" >"$invalid_log" 2>&1; then
+    echo "The renderer accepted invalid push gateway origin: $invalid_origin" >&2
+    exit 1
+  fi
+  grep -F "MYTERM_PUSH_GATEWAY_ORIGIN must be empty or an HTTPS origin without credentials, a path, query, or fragment." "$invalid_log" >/dev/null
+done
 
 render_configuration "$TEST_ROOT/no-push" "44" "" >/dev/null
 ruby -ryaml -e 'abort unless YAML.load_file(ARGV[0]).dig("settings", "base", "MYTERM_PUSH_GATEWAY_ORIGIN") == ""' "$TEST_ROOT/no-push/Companion/project-ci.yml"
+
+render_configuration "$TEST_ROOT/normalized-push" "47" "HTTPS://PUSH.EXAMPLE.TEST:443/" >/dev/null
+ruby -ryaml -e 'abort unless YAML.load_file(ARGV[0]).dig("settings", "base", "MYTERM_PUSH_GATEWAY_ORIGIN") == "HTTPS://PUSH.EXAMPLE.TEST:443/"' "$TEST_ROOT/normalized-push/Companion/project-ci.yml"
 
 if render_configuration "$TEST_ROOT/invalid-key" "45" "" "App" "Notification" "../BADKEY" >"$TEST_ROOT/invalid-key.log" 2>&1; then
   echo "The renderer accepted an unsafe App Store Connect key identifier." >&2
