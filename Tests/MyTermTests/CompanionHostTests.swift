@@ -582,6 +582,39 @@ final class CompanionHostTests: XCTestCase {
         queue.cancel()
     }
 
+    func testQueueReusesConsumedSlotsWhileAnOperationIsSuspended() async throws {
+        let queue = CompanionConnectionWorkQueue(limits: .init(maximumItems: 4, maximumBytes: 16))
+        let started = expectation(description: "first operation started")
+        let finished = expectation(description: "refilled queue drained")
+        var release: CheckedContinuation<Void, Never>?
+        var order: [Int] = []
+        defer { release?.resume(); queue.cancel() }
+        try queue.enqueue(cost: 4) {
+            order.append(0)
+            await withCheckedContinuation {
+                release = $0
+                started.fulfill()
+            }
+        }
+        for index in 1..<4 {
+            try queue.enqueue(cost: 4) { order.append(index) }
+        }
+        await fulfillment(of: [started], timeout: 1)
+        try queue.enqueue(cost: 4) {
+            order.append(4)
+            finished.fulfill()
+        }
+        XCTAssertThrowsError(try queue.enqueue(cost: 1) {}) { error in
+            let overflow = error as? CompanionConnectionWorkQueue.Overflow
+            XCTAssertEqual(overflow?.queuedItems, 4)
+            XCTAssertEqual(overflow?.queuedBytes, 16)
+        }
+        release?.resume()
+        release = nil
+        await fulfillment(of: [finished], timeout: 1)
+        XCTAssertEqual(order, Array(0...4))
+    }
+
     func testOutboundQueueKeepsByteBudgetAndReportsOverflowReason() throws {
         let queue = CompanionConnectionWorkQueue(limits: .outbound)
         defer { queue.cancel() }

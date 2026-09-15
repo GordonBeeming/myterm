@@ -37,7 +37,9 @@ final class CompanionConnectionWorkQueue {
         let operation: @MainActor () async -> Void
     }
 
-    private var items: [Item] = []
+    private var items: [Item?] = []
+    private var head = 0
+    private var queuedItems: Int { items.count - head }
     private var queuedBytes = 0
     private var worker: Task<Void, Never>?
 
@@ -49,11 +51,11 @@ final class CompanionConnectionWorkQueue {
         let reason: Overflow.Reason?
         if cost < 0 { reason = .invalidCost }
         else if cost > limits.maximumBytes { reason = .messageSize }
-        else if items.count >= limits.maximumItems { reason = .itemCount }
+        else if queuedItems >= limits.maximumItems { reason = .itemCount }
         else if queuedBytes > limits.maximumBytes - cost { reason = .totalBytes }
         else { reason = nil }
         if let reason {
-            throw Overflow(reason: reason, queuedItems: items.count, queuedBytes: queuedBytes,
+            throw Overflow(reason: reason, queuedItems: queuedItems, queuedBytes: queuedBytes,
                            incomingBytes: cost, limits: limits)
         }
         items.append(Item(cost: cost, operation: operation))
@@ -67,6 +69,7 @@ final class CompanionConnectionWorkQueue {
         worker?.cancel()
         worker = nil
         items.removeAll()
+        head = 0
         queuedBytes = 0
     }
 
@@ -77,13 +80,24 @@ final class CompanionConnectionWorkQueue {
     }
 
     private func drain() async {
-        while !Task.isCancelled, !items.isEmpty {
-            let item = items.removeFirst()
+        while !Task.isCancelled, queuedItems > 0 {
+            guard let item = items[head] else {
+                preconditionFailure("Pending queue entry is missing")
+            }
+            items[head] = nil
+            head += 1
             queuedBytes -= item.cost
+            if head == items.count {
+                items.removeAll(keepingCapacity: true)
+                head = 0
+            } else if head >= 1_024, head >= items.count / 2 {
+                items.removeFirst(head)
+                head = 0
+            }
             await item.operation()
         }
         worker = nil
-        if !items.isEmpty, !Task.isCancelled {
+        if queuedItems > 0, !Task.isCancelled {
             worker = Task { [weak self] in await self?.drain() }
         }
     }
