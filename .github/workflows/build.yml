@@ -49,6 +49,9 @@ jobs:
   relay:
     runs-on: ubuntu-latest
     name: Relay Worker
+    # `wrangler dev` has been seen to sit forever on this runner. Fail the job rather than hold
+    # the whole run open.
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository
