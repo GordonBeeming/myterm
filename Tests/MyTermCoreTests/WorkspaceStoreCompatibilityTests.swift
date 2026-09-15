@@ -23,8 +23,8 @@ final class WorkspaceStoreCompatibilityTests: XCTestCase {
     private var stateURL: URL { directory.appendingPathComponent("workspace-state.json") }
 
     /// The keys this build added after `466ed05` (origin/main), by the object they live in.
-    private static let settingsKeysAddedSinceMain = ["restoresAgentSessions"]
-    private static let sessionKeysAddedSinceMain = ["agentSession"]
+    private static let settingsKeysAddedSinceMain = ["restoresAgentSessions", "namesTabsFromAgentSessions"]
+    private static let sessionKeysAddedSinceMain = ["agentSession", "agentTitle"]
 
     private func snapshotWithAnAgentSession() throws -> (WorkspaceStoreSnapshot, [String: Any]) {
         let store = try WorkspaceStore(persistenceURL: stateURL)
@@ -33,6 +33,9 @@ final class WorkspaceStoreCompatibilityTests: XCTestCase {
         try store.updateTerminalAgentSession(
             workspaceID: workspace.id, tabGroupID: group.id, tabID: group.selectedTabID,
             agentSession: AgentSessionHandle(agent: "claude", sessionID: "87d84ef0-4227-42d8-92e3-3dafcf13979f")
+        )
+        try store.updateTerminalAgentTitle(
+            workspaceID: workspace.id, tabGroupID: group.id, tabID: group.selectedTabID, agentTitle: "Fix the build"
         )
         try store.updateGlobalSettings { $0.restoresAgentSessions = false }
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: stateURL)) as? [String: Any])
@@ -84,8 +87,10 @@ final class WorkspaceStoreCompatibilityTests: XCTestCase {
         XCTAssertEqual(store.loadReport.backupURLs, [])
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.recoveryBackupURL.path))
         XCTAssertTrue(store.globalSettings.restoresAgentSessions, "a setting the file predates is its default")
+        XCTAssertTrue(store.globalSettings.namesTabsFromAgentSessions)
         let session = try XCTUnwrap(store.selectedWorkspace.orderedGroups.first?.tabs.first?.terminalSession)
         XCTAssertNil(session.agentSession)
+        XCTAssertNil(session.agentTitle)
     }
 
     func testAFileFromOriginMainWithScopedOverridesLoadsClean() throws {
@@ -141,6 +146,7 @@ final class WorkspaceStoreCompatibilityTests: XCTestCase {
         let store = try WorkspaceStore(persistenceURL: stateURL)
         let session = try XCTUnwrap(store.selectedWorkspace.orderedGroups.first?.tabs.first?.terminalSession)
         XCTAssertNil(session.agentSession)
+        XCTAssertEqual(session.agentTitle, "Fix the build")
     }
 
     func testAnUnknownTabKindFromANewerBuildIsDroppedAndBackedUp() throws {

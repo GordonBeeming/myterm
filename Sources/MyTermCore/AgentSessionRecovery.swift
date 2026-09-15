@@ -63,10 +63,17 @@ public enum AgentSessionResume {
     /// but they report a fresh identifier for each turn rather than the session identifier
     /// `codex resume` takes, so a pane restored from one would open on an error instead of the
     /// conversation. A Codex pane always comes back to a prompt.
-    public static func command(for handle: AgentSessionHandle) -> String? {
+    ///
+    /// A name is carried back into the conversation when the user gave the tab one, so the tab the
+    /// user named and the conversation it holds agree from the first line.
+    public static func command(for handle: AgentSessionHandle, name: String? = nil) -> String? {
         switch handle.agent {
         case "claude":
-            "claude --resume \(shellQuoted(handle.sessionID))"
+            if let name = AgentSessionTitle.sanitized(name) {
+                "claude --resume \(shellQuoted(handle.sessionID)) --name \(shellQuoted(name))"
+            } else {
+                "claude --resume \(shellQuoted(handle.sessionID))"
+            }
         default:
             nil
         }

@@ -161,6 +161,27 @@ The browser you choose comes forward only for a link from the workspace you are 
 
 MyTerm never sends a link to itself. If the chosen browser is missing, or if MyTerm is the default browser, the link opens in MyTerm and the app reports why.
 
+### Name a tab after the conversation in it
+
+A tab takes the name Claude Code gives the conversation running in it, so `/rename` in the pane
+names the tab as well. Until you rename it, the name is the topic Claude Code writes for itself as
+the conversation goes.
+
+The name comes from the terminal title, which is where Claude Code already writes it. MyTerm takes a
+title only while an agent has reported itself in that pane, so a shell's own title never becomes a
+tab name, and only the name is kept: the status glyph in front of it, and anything that is not plain
+short text, is dropped.
+
+A tab you renamed yourself keeps your name. That name is also carried back into the conversation
+when the pane rejoins it, as `claude --resume <id> --name <your name>`, so the tab and the
+conversation agree from the first line.
+
+Leaving the agent puts the tab back to **Terminal**.
+
+Turn it off with **Name tabs after agent sessions** in General Settings. Turning it off puts the
+tabs that already carry a conversation name back to their plain labels. Like the other terminal
+settings, it can be overridden for one folder or one workspace.
+
 ## Browser sessions and passkeys
 
 New browser tabs can remember cookies and website data at one of four scopes, selected in Settings:

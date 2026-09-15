@@ -208,10 +208,25 @@ final class AgentLifecycleTests: XCTestCase {
 
     // MARK: - An agent killed without its SessionEnd
 
+    func testAKilledAgentsPaneDoesNotTakeTheShellsTitle() throws {
+        let fixture = try makeFixture(isActive: false)
+        fixture.session.activeForegroundProcessName = "claude"
+        fixture.emit(.ready, session: "abc")
+        fixture.title("✳ Fix the build")
+        XCTAssertEqual(fixture.displayTitle, "Fix the build")
+
+        // kill -9: no SessionEnd. The shell has the pane back and writes its own title.
+        fixture.session.activeForegroundProcessName = nil
+        fixture.title("myterm — zsh")
+
+        XCTAssertEqual(fixture.displayTitle, "Fix the build", "a shell title is never a conversation name")
+    }
+
     func testTheShellComingBackInFrontRetiresTheAgentTheHooksNeverSaidLeft() throws {
         let fixture = try makeFixture(isActive: false)
         fixture.session.activeForegroundProcessName = "claude"
         fixture.emit(.working, session: "abc")
+        fixture.title("✳ Fix the build")
         XCTAssertEqual(fixture.savedSession?.sessionID, "abc")
 
         // kill -9: no SessionEnd. The shell has the pane back.
@@ -221,6 +236,7 @@ final class AgentLifecycleTests: XCTestCase {
         XCTAssertNil(fixture.model.agentAttention(forTab: fixture.tabID), "the cook goes")
         XCTAssertNil(fixture.model.liveAgentTabs[fixture.tabID], "so does the agent")
         XCTAssertNil(fixture.savedSession, "and the conversation, as leaving the agent would")
+        XCTAssertEqual(fixture.displayTitle, "Terminal", "and the tab is back to its plain label")
     }
 
     func testTheShellInFrontOfAPaneWithNoAgentChangesNothing() throws {
@@ -310,15 +326,16 @@ final class AgentLifecycleTests: XCTestCase {
         XCTAssertEqual(relaunched.engine.configurations.first?.initialCommand, "claude --resume 'abc'")
     }
 
-    func testAConversationComesBackReadyRatherThanWorking() throws {
+    func testAConversationComesBackNamedAndReadyRatherThanWorking() throws {
         let fixture = try makeFixture(isActive: false)
         fixture.session.activeForegroundProcessName = "claude"
         fixture.emit(.working, session: "abc")
+        fixture.model.renameTab(fixture.tabID, in: fixture.tabGroupID, title: "Fix the build")
         fixture.model.persistTerminalSnapshots()
 
         let relaunched = try makeFixture(in: fixture.directory, isActive: false)
 
-        XCTAssertEqual(relaunched.engine.configurations.first?.initialCommand, "claude --resume 'abc'")
+        XCTAssertEqual(relaunched.engine.configurations.first?.initialCommand, "claude --resume 'abc' --name 'Fix the build'")
         XCTAssertNil(relaunched.model.agentAttention(forTab: fixture.tabID), "a cook that survived a relaunch would point at nothing")
         XCTAssertTrue(relaunched.model.liveAgentTabs.isEmpty, "nothing has reported yet")
     }
@@ -343,8 +360,17 @@ final class AgentLifecycleTests: XCTestCase {
             model.tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)?.terminalSession?.agentSession
         }
 
+        var displayTitle: String? {
+            model.tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)
+                .map { $0.customTitle ?? $0.automaticDisplayTitle }
+        }
+
         func emit(_ activity: AgentActivity, agent: String = "claude", session sessionID: String) {
             session.emit(.agentActivity(AgentActivityReport(agent: agent, activity: activity, sessionID: sessionID)))
+        }
+
+        func title(_ title: String) {
+            session.emit(.titleChanged(title))
         }
     }
 

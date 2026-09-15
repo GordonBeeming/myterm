@@ -195,6 +195,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
     public var shell: TerminalShell
     public var newSessionWorkingDirectory: NewSessionWorkingDirectoryPolicy
     public var restoresAgentSessions: Bool
+    public var namesTabsFromAgentSessions: Bool
     public var scrollbackLines: Int
     public var cursorShape: TerminalCursorShape
     public var cursorBlink: Bool
@@ -216,6 +217,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         shell: TerminalShell = .loginShell,
         newSessionWorkingDirectory: NewSessionWorkingDirectoryPolicy = .home,
         restoresAgentSessions: Bool = true,
+        namesTabsFromAgentSessions: Bool = true,
         scrollbackLines: Int = TerminalPreferences.defaultScrollbackLines,
         cursorShape: TerminalCursorShape = .block,
         cursorBlink: Bool = true,
@@ -236,6 +238,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         self.shell = shell
         self.newSessionWorkingDirectory = newSessionWorkingDirectory
         self.restoresAgentSessions = restoresAgentSessions
+        self.namesTabsFromAgentSessions = namesTabsFromAgentSessions
         self.scrollbackLines = Self.clampedScrollbackLines(scrollbackLines)
         self.cursorShape = cursorShape
         self.cursorBlink = cursorBlink
@@ -261,6 +264,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
             shell: shell,
             newSessionWorkingDirectory: newSessionWorkingDirectory,
             restoresAgentSessions: restoresAgentSessions,
+            namesTabsFromAgentSessions: namesTabsFromAgentSessions,
             scrollbackLines: scrollbackLines,
             cursorShape: cursorShape,
             cursorBlink: cursorBlink,
@@ -286,6 +290,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         try container.encode(shell, forKey: .shell)
         try container.encode(newSessionWorkingDirectory, forKey: .newSessionWorkingDirectory)
         try container.encode(restoresAgentSessions, forKey: .restoresAgentSessions)
+        try container.encode(namesTabsFromAgentSessions, forKey: .namesTabsFromAgentSessions)
         try container.encode(scrollbackLines, forKey: .scrollbackLines)
         try container.encode(cursorShape, forKey: .cursorShape)
         try container.encode(cursorBlink, forKey: .cursorBlink)
@@ -308,6 +313,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         case shell
         case newSessionWorkingDirectory
         case restoresAgentSessions
+        case namesTabsFromAgentSessions
         case scrollbackLines
         case cursorShape
         case cursorBlink
@@ -339,6 +345,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
             shell: (try? container.decode(TerminalShell.self, forKey: .shell)) ?? .loginShell,
             newSessionWorkingDirectory: (try? container.decode(NewSessionWorkingDirectoryPolicy.self, forKey: .newSessionWorkingDirectory)) ?? .home,
             restoresAgentSessions: (try? container.decode(Bool.self, forKey: .restoresAgentSessions)) ?? true,
+            namesTabsFromAgentSessions: (try? container.decode(Bool.self, forKey: .namesTabsFromAgentSessions)) ?? true,
             scrollbackLines: (try? container.decode(Int.self, forKey: .scrollbackLines)) ?? Self.defaultScrollbackLines,
             cursorShape: (try? container.decode(TerminalCursorShape.self, forKey: .cursorShape)) ?? .block,
             cursorBlink: (try? container.decode(Bool.self, forKey: .cursorBlink)) ?? true,
@@ -409,6 +416,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
     public var shell: TerminalShell?
     public var newSessionWorkingDirectory: NewSessionWorkingDirectoryPolicy?
     public var restoresAgentSessions: Bool?
+    public var namesTabsFromAgentSessions: Bool?
     public var scrollbackLines: Int?
     public var cursorShape: TerminalCursorShape?
     public var cursorBlink: Bool?
@@ -432,6 +440,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         case shell
         case newSessionWorkingDirectory
         case restoresAgentSessions
+        case namesTabsFromAgentSessions
         case scrollbackLines
         case cursorShape
         case cursorBlink
@@ -464,6 +473,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         shell = try? container.decodeIfPresent(TerminalShell.self, forKey: .shell)
         newSessionWorkingDirectory = try? container.decodeIfPresent(NewSessionWorkingDirectoryPolicy.self, forKey: .newSessionWorkingDirectory)
         restoresAgentSessions = try? container.decodeIfPresent(Bool.self, forKey: .restoresAgentSessions)
+        namesTabsFromAgentSessions = try? container.decodeIfPresent(Bool.self, forKey: .namesTabsFromAgentSessions)
         scrollbackLines = try? container.decodeIfPresent(Int.self, forKey: .scrollbackLines)
         cursorShape = try? container.decodeIfPresent(TerminalCursorShape.self, forKey: .cursorShape)
         cursorBlink = try? container.decodeIfPresent(Bool.self, forKey: .cursorBlink)
@@ -488,6 +498,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         try container.encodeIfPresent(shell, forKey: .shell)
         try container.encodeIfPresent(newSessionWorkingDirectory, forKey: .newSessionWorkingDirectory)
         try container.encodeIfPresent(restoresAgentSessions, forKey: .restoresAgentSessions)
+        try container.encodeIfPresent(namesTabsFromAgentSessions, forKey: .namesTabsFromAgentSessions)
         try container.encodeIfPresent(scrollbackLines, forKey: .scrollbackLines)
         try container.encodeIfPresent(cursorShape, forKey: .cursorShape)
         try container.encodeIfPresent(cursorBlink, forKey: .cursorBlink)
@@ -511,6 +522,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
             shell: shell ?? base.shell,
             newSessionWorkingDirectory: newSessionWorkingDirectory ?? base.newSessionWorkingDirectory,
             restoresAgentSessions: restoresAgentSessions ?? base.restoresAgentSessions,
+            namesTabsFromAgentSessions: namesTabsFromAgentSessions ?? base.namesTabsFromAgentSessions,
             scrollbackLines: scrollbackLines ?? base.scrollbackLines,
             cursorShape: cursorShape ?? base.cursorShape,
             cursorBlink: cursorBlink ?? base.cursorBlink,

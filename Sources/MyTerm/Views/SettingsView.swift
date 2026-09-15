@@ -233,6 +233,21 @@ struct SettingsView: View {
                 Text("A pane that was in a Claude Code conversation rejoins it on the next launch, using Claude Code's own resume command. A pane left at its shell prompt comes back to a shell prompt. This needs the hooks above, because the conversation is what they report. Codex panes are not restored: it reports a new identifier every turn rather than the one its resume command takes.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+
+                ScopedSettingRow(
+                    model: model,
+                    scope: scope,
+                    title: "Name tabs after agent sessions",
+                    global: \TerminalPreferences.namesTabsFromAgentSessions,
+                    override: \TerminalPreferencesOverrides.namesTabsFromAgentSessions
+                ) { value in
+                    Toggle("Name tabs after agent sessions", isOn: value)
+                        .labelsHidden()
+                }
+
+                Text("A tab takes the name the agent gives its conversation, so /rename in the pane names the tab as well. Until you rename it, the name is the topic Claude Code writes for itself. A tab you named stays as you named it, and that name goes back to Claude Code when the pane rejoins the conversation. Leaving the agent puts the tab back to Terminal. This needs the hooks above.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

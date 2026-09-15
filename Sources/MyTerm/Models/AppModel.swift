@@ -2080,15 +2080,25 @@ final class AppModel {
                 workingDirectory: workingDirectory
             )
         }
-        let resumeCommand = keepsSavedDirectory ? agentResumeCommand(for: session, settings: settings) : nil
+        let resumeCommand = keepsSavedDirectory ? agentResumeCommand(
+            for: session,
+            name: tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)?.customTitle,
+            settings: settings
+        ) : nil
         // A pane that comes back without its resume command comes back to a prompt, and a pane at
-        // its prompt has left its conversation.
+        // its prompt has left its conversation. Keeping the handle would name the tab after it.
         if initialCommand == nil, resumeCommand == nil, session.agentSession != nil {
             try store.updateTerminalAgentSession(
                 workspaceID: workspaceID,
                 tabGroupID: tabGroupID,
                 tabID: tabID,
                 agentSession: nil
+            )
+            try store.updateTerminalAgentTitle(
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID,
+                agentTitle: nil
             )
         }
         let process = try terminalEngine.makeSession(
@@ -2335,7 +2345,7 @@ final class AppModel {
             forgetAgent(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID, sessionID: sessionID)
         case .foregroundProcessChanged(let name):
             // The shell back in front of a pane that held an agent means the agent left without
-            // its own hook saying so. What that hook would have retired is retired here.
+            // its own hook saying so. Everything that hook would have retired is retired here.
             guard name == nil, liveAgentTabs[tabID] != nil else { return }
             forgetAgent(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID, sessionID: sessionID)
         case .agentActivity(let report):
@@ -2358,8 +2368,20 @@ final class AppModel {
                 tabID: tabID,
                 sessionID: sessionID
             )
-        case .titleChanged:
-            break
+            recordAgentPresence(
+                report,
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID
+            )
+        case .titleChanged(let title):
+            recordAgentTitle(
+                title,
+                workspaceID: workspaceID,
+                tabGroupID: tabGroupID,
+                tabID: tabID,
+                sessionID: sessionID
+            )
         }
     }
 
@@ -2377,7 +2399,7 @@ final class AppModel {
             removeTerminalRuntime(sessionID)
         }
         forgetAgentAttention(forTab: tab.id)
-        liveAgentTabs.removeValue(forKey: tab.id)
+        forgetAgentPresence(forTab: tab.id)
         retiredAgentSessions.removeValue(forKey: tab.id)
     }
 
@@ -2499,6 +2521,9 @@ final class AppModel {
         for workspaceID in workspaceIDs {
             guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }),
                   let settings = try? store.resolvedSettings(for: workspaceID) else { continue }
+            if !settings.namesTabsFromAgentSessions {
+                clearAgentTitles(in: workspace)
+            }
             let configuration = runtimeConfiguration(for: settings)
             for tab in workspace.allTabs {
                 if let sessionID = tab.terminalSession?.id {
