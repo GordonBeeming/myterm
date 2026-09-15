@@ -78,6 +78,194 @@ private struct DismissibleBanner: View {
     }
 }
 
+/// The backlog of agents waiting for the user, reached from a bell in the toolbar.
+///
+/// The bell stays in place when nothing is waiting, so the toolbar never reflows, and it carries a
+/// count only when there is one. Opening a row goes to that tab, which is also what reads the entry.
+private struct AgentNotificationsButton: View {
+    @Bindable var model: AppModel
+
+    var body: some View {
+        let items = model.agentNotificationItems
+        Button {
+            model.isAgentNotificationsPresented.toggle()
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: items.isEmpty ? "bell" : "bell.badge.fill")
+                    .symbolRenderingMode(.hierarchical)
+                if !items.isEmpty {
+                    Text("\(items.count)")
+                        .font(.caption.monospacedDigit())
+                }
+            }
+        }
+        .accessibilityLabel(accessibilityLabel(count: items.count))
+        .help(items.isEmpty ? "Notifications" : "Notifications (\(items.count) waiting)")
+        .popover(isPresented: $model.isAgentNotificationsPresented, arrowEdge: .bottom) {
+            AgentNotificationsList(model: model)
+        }
+    }
+
+    private func accessibilityLabel(count: Int) -> String {
+        switch count {
+        case 0: "Notifications, none waiting"
+        case 1: "Notifications, 1 waiting"
+        default: "Notifications, \(count) waiting"
+        }
+    }
+}
+
+/// Pure geometry for sizing the notification list's scroll area from measured row heights.
+///
+/// Kept free of SwiftUI so the "how tall" math is unit-testable without hosting a view.
+enum AgentNotificationsScrollLayout {
+    /// A glance should cover a working set of agents without the popover turning into a window.
+    static let maxVisibleRows = 5
+
+    /// How much of the next row to reveal below the visible set, as a fraction of a row's height,
+    /// so a longer backlog reads as "scroll for more" rather than a hard, unexplained cutoff.
+    private static let nextRowPeekFraction: CGFloat = 0.4
+
+    /// - Parameters:
+    ///   - rowHeights: Measured heights of the rows, in display order. Rows not yet measured are
+    ///     simply absent; only a leading run of measured heights is used.
+    ///   - dividerHeight: Measured height of the divider drawn between rows.
+    ///   - totalRowCount: Total number of rows in the list, including any not yet measured.
+    static func scrollHeight(
+        rowHeights: [CGFloat],
+        dividerHeight: CGFloat,
+        totalRowCount: Int
+    ) -> CGFloat {
+        let visibleRows = rowHeights.prefix(maxVisibleRows)
+        guard !visibleRows.isEmpty else { return 0 }
+
+        let rowsHeight = visibleRows.reduce(0, +)
+        let dividersHeight = dividerHeight * CGFloat(visibleRows.count - 1)
+        let hasMoreRows = totalRowCount > visibleRows.count
+        guard hasMoreRows else { return rowsHeight + dividersHeight }
+
+        let averageRowHeight = rowsHeight / CGFloat(visibleRows.count)
+        return rowsHeight + dividersHeight + dividerHeight + averageRowHeight * nextRowPeekFraction
+    }
+}
+
+private struct AgentNotificationsList: View {
+    @Bindable var model: AppModel
+
+    @State private var rowHeights: [AgentNotificationItem.ID: CGFloat] = [:]
+    @State private var dividerHeight: CGFloat = 0
+
+    var body: some View {
+        // Read here rather than taking a copy from the bell, so an agent that reports while the
+        // popover is open changes the list the user is looking at.
+        let items = model.agentNotificationItems
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Notifications")
+                    .font(.headline)
+                Spacer()
+                Button("Clear All") { model.clearAgentNotifications() }
+                    .buttonStyle(.borderless)
+                    .disabled(items.isEmpty)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+
+            Divider()
+
+            if items.isEmpty {
+                Text("Nothing is waiting for you.")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 14)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(items) { item in
+                            if item.id != items.first?.id {
+                                Divider()
+                                    .padding(.leading, 12)
+                                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+                                        dividerHeight = $0
+                                    }
+                            }
+                            AgentNotificationRow(item: item) {
+                                model.isAgentNotificationsPresented = false
+                                model.openAgentNotification(item)
+                            }
+                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+                                rowHeights[item.id] = $0
+                            }
+                        }
+                    }
+                }
+                .frame(
+                    maxHeight: AgentNotificationsScrollLayout.scrollHeight(
+                        rowHeights: items.prefix(AgentNotificationsScrollLayout.maxVisibleRows)
+                            .compactMap { rowHeights[$0.id] },
+                        dividerHeight: dividerHeight,
+                        totalRowCount: items.count
+                    )
+                )
+            }
+        }
+        .frame(width: 320)
+    }
+}
+
+private struct AgentNotificationRow: View {
+    let item: AgentNotificationItem
+    let open: () -> Void
+
+    @State private var isHovering = false
+
+    private var isQuestion: Bool { item.activity == .awaitingInput }
+
+    var body: some View {
+        Button(action: open) {
+            HStack(alignment: .top, spacing: 8) {
+                // The glyph differs as well as the color, so the two states never read alike.
+                Image(systemName: isQuestion ? "questionmark.circle.fill" : "checkmark.circle.fill")
+                    .foregroundStyle(isQuestion ? Color.orange : Color.accentColor)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.activity.attentionDescription)
+                        // Capped so a long tab title or agent message can't blow a single row out
+                        // to the point it dominates the five-row budget below.
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack(spacing: 8) {
+                        Text("\(item.workspaceTitle) · \(item.tabTitle)")
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer(minLength: 0)
+                        (Text(item.date, style: .relative) + Text(" ago"))
+                            // The elapsed time is short and grows as it counts, so it keeps its
+                            // width and the tab name gives way instead.
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+            .background(
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(isHovering ? Color.primary.opacity(0.06) : .clear)
+                    .padding(.horizontal, 6)
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .accessibilityLabel(
+            "\(item.activity.attentionDescription), \(item.workspaceTitle), \(item.tabTitle)"
+        )
+        .accessibilityHint("Opens the tab and clears the notification")
+    }
+}
+
 private struct WorkspaceContentView: View {
     @Bindable var model: AppModel
 
@@ -211,6 +399,10 @@ private struct WorkspaceContentView: View {
                 Menu("Split", systemImage: "rectangle.split.2x1") {
                     Button("Split Right") { model.splitFocusedTerminal(orientation: .horizontal) }
                     Button("Split Below") { model.splitFocusedTerminal(orientation: .vertical) }
+                }
+
+                if model.showsAgentNotificationBell {
+                    AgentNotificationsButton(model: model)
                 }
             }
         }

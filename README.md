@@ -90,30 +90,54 @@ same event, so MyTerm reads the report's own payload and passes on only the one 
 something. Without that, every finished turn would turn purple a minute later and stay there.
 
 The indicator is off until you press **Set Up Claude Code Hooks** or **Set Up Codex Hooks** in
-General Settings. Each writes three hooks to that agent's own file, and the same button removes them
+General Settings. Each writes its hooks to that agent's own file, and the same button removes them
 again:
 
-| Agent | File | Working | Finished | Question |
-| --- | --- | --- | --- | --- |
-| Claude Code | `~/.claude/settings.json` | `UserPromptSubmit` | `Stop` | `Notification` |
-| Codex | `~/.codex/hooks.json` | `UserPromptSubmit` | `Stop` | `PermissionRequest` |
+| Agent | File | Ready | Working | Finished | Question | Stopped |
+| --- | --- | --- | --- | --- | --- | --- |
+| Claude Code | `~/.claude/settings.json` | `SessionStart` | `UserPromptSubmit` | `Stop` | `Notification` | `SessionEnd` |
+| Codex | `~/.codex/hooks.json` | `SessionStart` | `UserPromptSubmit` | `Stop` | `PermissionRequest` | |
+
+Ready and Stopped put no cook on the tab. They are what tell MyTerm which conversation a pane is
+in, for the section below.
 
 These files are shared with other tools. MyTerm marks its own commands with a trailing
 `# myterm-managed-hook` comment, adds nothing else, and removes only what carries that mark.
 
 What a hook reports can change between MyTerm versions. When Settings finds hooks an older MyTerm
-wrote, it says so and offers **Update**, which rewrites MyTerm's own commands and leaves the rest of
-the file alone. Until then the old hooks keep reporting the old way.
+wrote, it rewrites MyTerm's own commands to the current ones and leaves the rest of the file alone.
 
-Each hook writes an escape sequence to its own terminal, `ESC ]7337;agent=claude;event=finished ESC \`,
+Each hook writes an escape sequence to its own terminal, `ESC ]7337;agent=claude;event=finished;session=<id> ESC \`,
 and does nothing unless `MYTERM_PANE_ID` is set. Only MyTerm's terminals set it, so the hooks stay
-silent in every other terminal, and terminals that do not know the code ignore it. Restart the agent
-session after installing the hooks.
+silent in every other terminal, and terminals that do not know the code ignore it. Every hook reads
+the payload the agent pipes to it, for the session identifier, and carries a five second timeout.
+Restart the agent session after installing the hooks.
 
 Any agent can drive the cook by writing that sequence itself, with its own name in `agent=`. The
 name is what the notification says, so a Codex report reads "Codex finished its turn."
 
 The state is not saved. After a relaunch, no tab carries a cook until its agent reports again.
+
+### Come back to a live agent
+
+A pane that was in a Claude Code conversation rejoins that same conversation when MyTerm starts
+again. The pane restores its working directory and its recent output as before, then runs
+`claude --resume <id>`, so quitting is no longer the end of the work in progress.
+
+The conversation identifier comes from the hooks above, so agent recovery needs them installed.
+Nothing else about the agent is read: MyTerm keeps the identifier the agent reports, and only if it
+is short and free of shell characters.
+
+Codex panes are not resumed. Its hooks report a new identifier for every turn rather than the one
+`codex resume` accepts, so a restored pane would open on an error instead of the conversation. Codex
+hooks still drive the tab indicator above.
+
+A pane left at its shell prompt when you quit comes back to a shell prompt. Leaving the agent is how
+you tell MyTerm the work is finished. An agent killed without the chance to say so counts as left
+too: the shell coming back in front of the pane retires the conversation the way its own hook would.
+
+Turn the whole behavior off with **Restore agent sessions** in General Settings. Like the other
+terminal settings, it can be overridden for one folder or one workspace.
 
 ### Notifications when you are somewhere else
 
@@ -124,6 +148,29 @@ said it when the window is on screen.
 The banner is named after the workspace, the tab, or both, whichever you pick, and it carries a
 swatch of the workspace's folder colour, so a glance is enough to tell which project wants you.
 A workspace outside a folder uses its own colour. Clicking the banner opens that tab.
+
+### Work through a backlog of waiting agents
+
+The same events fill a notifications backlog. A bell in the toolbar carries the number of agents
+waiting for you, and opening it lists them newest first, with the workspace and tab each one is in.
+Press **Show Notifications** (<kbd>⇧⌘I</kbd>) to open the list from the keyboard.
+
+Click a row to go to that tab. Reaching a tab is what reads its notification, so the row disappears
+whether you clicked it, clicked the tab, switched to its workspace, or landed on it by closing the
+tab beside it. A pane hidden behind a full-screen pane counts as out of sight until the layout comes
+back. **Clear All** reads every tab in the list at once, so the cooks go quiet with the bell.
+
+One tab keeps one row, so a pane that finishes several turns does not fill the list. The row says
+what the agent reported last: a question replaces a finished turn, and a finished turn replaces a
+question you answered somewhere MyTerm did not see. An agent that starts working again takes its
+own row back, and a row follows its tab into another pane.
+
+What the bell has listed is kept as history in `agent-notifications.json`, beside the workspace
+state. After a relaunch the list is empty, because an entry that survived a restart would point at
+work you have moved on from, but the history is still there to read.
+
+**Show the agent bell in the toolbar**, in General Settings, takes the bell out of the toolbar; the
+list is kept either way, so turning it back on shows what was missed.
 
 ### Send web links to Safari instead
 
@@ -136,6 +183,27 @@ It applies to command-clicked terminal links, to links from tools that use the `
 The browser you choose comes forward only for a link from the workspace you are looking at, while MyTerm is the active app. So a link you command-click in the pane in front of you still jumps straight to it, while one an agent opened somewhere else loads in the background and waits for you.
 
 MyTerm never sends a link to itself. If the chosen browser is missing, or if MyTerm is the default browser, the link opens in MyTerm and the app reports why.
+
+### Name a tab after the conversation in it
+
+A tab takes the name Claude Code gives the conversation running in it, so `/rename` in the pane
+names the tab as well. Until you rename it, the name is the topic Claude Code writes for itself as
+the conversation goes.
+
+The name comes from the terminal title, which is where Claude Code already writes it. MyTerm takes a
+title only while an agent has reported itself in that pane, so a shell's own title never becomes a
+tab name, and only the name is kept: the status glyph in front of it, and anything that is not plain
+short text, is dropped.
+
+A tab you renamed yourself keeps your name. That name is also carried back into the conversation
+when the pane rejoins it, as `claude --resume <id> --name <your name>`, so the tab and the
+conversation agree from the first line.
+
+Leaving the agent puts the tab back to **Terminal**.
+
+Turn it off with **Name tabs after agent sessions** in General Settings. Turning it off puts the
+tabs that already carry a conversation name back to their plain labels. Like the other terminal
+settings, it can be overridden for one folder or one workspace.
 
 ## Browser sessions and passkeys
 
@@ -182,6 +250,7 @@ The companion targets iOS and iPadOS 27. Browser tabs currently expose their tit
 | Split focused pane down | <kbd>⇧⌘D</kbd> |
 | Close focused pane or tab | <kbd>⌘W</kbd> |
 | Toggle workspace sidebar | <kbd>⌘B</kbd> |
+| Show notifications | <kbd>⇧⌘I</kbd> |
 
 [docs/SHORTCUTS.md](docs/SHORTCUTS.md) lists every supported shortcut and its native menu path.
 

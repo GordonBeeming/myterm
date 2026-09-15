@@ -23,7 +23,9 @@ struct AgentChefBadge: View {
             .blue
         case .awaitingInput:
             .purple
-        case .working:
+        // A cook is never shown for these, so the colour is only a fallback. See
+        // `AgentActivity.showsCook`, which is what keeps them off a tab.
+        case .working, .ready, .exited:
             .secondary
         }
     }

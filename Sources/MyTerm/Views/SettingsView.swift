@@ -185,7 +185,7 @@ struct SettingsView: View {
                 hookButton(for: claudeHooks)
                 hookButton(for: codexHooks)
 
-                Text("Each agent gets three hooks in its own file. They report through the pane's terminal and stay silent outside MyTerm, so other terminals are unaffected. Other tools' hooks in the same file are left alone, and removing takes out only what MyTerm wrote. Restart an agent session for the change to take effect.")
+                Text("Each agent gets its hooks in its own file: five for Claude Code, four for Codex. They report through the pane's terminal and stay silent outside MyTerm, so other terminals are unaffected. Other tools' hooks in the same file are left alone, and removing takes out only what MyTerm wrote. Restart an agent session for the change to take effect.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -216,6 +216,47 @@ struct SettingsView: View {
                 Text("A banner arrives only while MyTerm is not the app in front, and carries a swatch of the workspace's folder colour. Clicking it opens the tab. This applies to the whole app and is not inherited by folders or workspaces.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+
+                Toggle("Show the agent bell in the toolbar", isOn: Binding(
+                    get: { model.store.globalSettings.showsAgentNotificationBell },
+                    set: { isShown in model.updateGlobalSettings { $0.showsAgentNotificationBell = isShown } }
+                ))
+
+                Text("The list of tabs whose agent needs you is kept either way, so turning the bell back on shows what was missed.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Agent sessions") {
+                ScopedSettingRow(
+                    model: model,
+                    scope: scope,
+                    title: "Restore agent sessions",
+                    global: \TerminalPreferences.restoresAgentSessions,
+                    override: \TerminalPreferencesOverrides.restoresAgentSessions
+                ) { value in
+                    Toggle("Restore agent sessions", isOn: value)
+                        .labelsHidden()
+                }
+
+                Text("A pane that was in a Claude Code conversation rejoins it on the next launch, using Claude Code's own resume command. A pane left at its shell prompt comes back to a shell prompt. This needs the hooks above, because the conversation is what they report. Codex panes are not restored: it reports a new identifier every turn rather than the one its resume command takes.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                ScopedSettingRow(
+                    model: model,
+                    scope: scope,
+                    title: "Name tabs after agent sessions",
+                    global: \TerminalPreferences.namesTabsFromAgentSessions,
+                    override: \TerminalPreferencesOverrides.namesTabsFromAgentSessions
+                ) { value in
+                    Toggle("Name tabs after agent sessions", isOn: value)
+                        .labelsHidden()
+                }
+
+                Text("A tab takes the name the agent gives its conversation, so /rename in the pane names the tab as well. Until you rename it, the name is the topic Claude Code writes for itself. A tab you named stays as you named it, and that name goes back to Claude Code when the pane rejoins the conversation. Leaving the agent puts the tab back to Terminal. This needs the hooks above.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -230,17 +271,6 @@ struct SettingsView: View {
                 Label("Installed in \(hooks.target.fileDescription)", systemImage: "checkmark.circle.fill")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-            case .outdated:
-                // Hooks an older MyTerm wrote keep reporting the old way, so say so and offer the
-                // rewrite. Removing stays available, because an update is not the only answer.
-                Button("Update \(hooks.target.displayName) Hooks") { hooks.install() }
-                Button("Remove from \(hooks.target.displayName)") { hooks.remove() }
-                Label(
-                    "Hooks in \(hooks.target.fileDescription) are from an older MyTerm",
-                    systemImage: "arrow.triangle.2.circlepath"
-                )
-                .font(.footnote)
-                .foregroundStyle(.secondary)
             case .notInstalled, .failed:
                 Button("Set Up \(hooks.target.displayName) Hooks") { hooks.install() }
             }

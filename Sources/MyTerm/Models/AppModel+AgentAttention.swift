@@ -30,8 +30,10 @@ extension AppModel {
             tabGroupID: tabGroupID,
             tabID: tabID
         )
-        // Setting nil removes the entry, which is how a read tab loses its cook.
-        agentAttention[tabID] = isInFrontOfUser ? report.activity.afterReading : report.activity
+        // Setting nil removes the entry, which is how a read tab loses its cook. A session that
+        // only started, or has ended, has no cook to show and clears the tab the same way.
+        let shown: AgentActivity? = report.activity.showsCook ? report.activity : nil
+        agentAttention[tabID] = isInFrontOfUser ? shown.flatMap(\.afterReading) : shown
         if let sessionID = store.workspaces
             .first(where: { $0.id == workspaceID })?
             .tab(groupID: tabGroupID, tabID: tabID)?
@@ -44,18 +46,27 @@ extension AppModel {
                 sessionID: sessionID
             )
         }
+        // The bell keeps the same answer as the cook: a tab in front of the user has nothing to file.
+        agentInbox.record(
+            report.activity,
+            workspaceID: workspaceID,
+            tabGroupID: tabGroupID,
+            tabID: tabID,
+            isTabVisible: isInFrontOfUser
+        )
         // A banner is for being away from the app. With MyTerm in front, the cook has already said it.
         guard !isApplicationActive() else { return }
         postAgentNotification(for: report, workspaceID: workspaceID, tabID: tabID)
     }
 
-    /// Called when the user reaches a tab, switches workspace, or comes back to the app.
+    /// Called when the user reaches a tab, switches workspace, leaves a pane's full screen, or
+    /// comes back to the app.
     func markVisibleTabsAsRead(in workspaceID: WorkspaceID) {
         guard !agentAttention.isEmpty,
               let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
             return
         }
-        for group in workspace.orderedGroups {
+        for group in workspace.orderedGroups where isPaneOnScreen(group.id, in: workspaceID) {
             markAsRead(tabID: group.selectedTabID)
         }
     }
@@ -65,11 +76,13 @@ extension AppModel {
     }
 
     func markAsRead(tabID: TabID) {
+        agentInbox.markRead(tabID: tabID)
         guard let activity = agentAttention[tabID] else { return }
         agentAttention[tabID] = activity.afterReading
     }
 
     func forgetAgentAttention(forTab tabID: TabID) {
+        agentInbox.markRead(tabID: tabID)
         agentAttention.removeValue(forKey: tabID)
     }
 
@@ -117,8 +130,9 @@ extension AppModel {
         return workspace.color
     }
 
-    /// In front of the user means the app is active, the workspace is selected, and so is the tab.
-    /// A finished turn behind another window is still news, even in the selected tab.
+    /// In front of the user means the app is active, the workspace is selected, the pane is on
+    /// screen, and so is the tab. A finished turn behind another window is still news, even in the
+    /// selected tab.
     private func isTabInFrontOfUser(
         workspaceID: WorkspaceID,
         tabGroupID: TabGroupID,
@@ -126,10 +140,17 @@ extension AppModel {
     ) -> Bool {
         guard isApplicationActive(),
               workspaceID == store.selectedWorkspaceID,
+              isPaneOnScreen(tabGroupID, in: workspaceID),
               let workspace = store.workspaces.first(where: { $0.id == workspaceID }),
               let group = workspace.orderedGroups.first(where: { $0.id == tabGroupID }) else {
             return false
         }
         return group.selectedTabID == tabID
+    }
+
+    /// A pane full screen is the only pane drawn; the others are as hidden as another workspace.
+    private func isPaneOnScreen(_ tabGroupID: TabGroupID, in workspaceID: WorkspaceID) -> Bool {
+        guard workspaceID == store.selectedWorkspaceID, let maximizedTabGroupID else { return true }
+        return maximizedTabGroupID == tabGroupID
     }
 }
