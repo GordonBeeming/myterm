@@ -2106,6 +2106,23 @@ final class AppModel {
                 tabID: tabID,
                 workingDirectory: workingDirectory
             )
+            // The conversation and its name go with the directory, whether or not the pane then
+            // starts. Left beside the fallback path, a later attempt would see a directory that
+            // exists and rejoin a conversation from one that does not.
+            if session.agentSession != nil || session.agentTitle != nil {
+                try store.updateTerminalAgentSession(
+                    workspaceID: workspaceID,
+                    tabGroupID: tabGroupID,
+                    tabID: tabID,
+                    agentSession: nil
+                )
+                try store.updateTerminalAgentTitle(
+                    workspaceID: workspaceID,
+                    tabGroupID: tabGroupID,
+                    tabID: tabID,
+                    agentTitle: nil
+                )
+            }
         }
         let resumeCommand = keepsSavedDirectory ? agentResumeCommand(
             for: session,
@@ -2165,7 +2182,8 @@ final class AppModel {
         // handle to resume: a Codex pane carries a name and nothing to resume. Cleared only once
         // the pane is running: a pane that failed to start has no prompt either, and keeps its
         // conversation for the next attempt.
-        if initialCommand == nil, resumeCommand == nil, session.agentSession != nil || session.agentTitle != nil {
+        if keepsSavedDirectory, initialCommand == nil, resumeCommand == nil,
+           session.agentSession != nil || session.agentTitle != nil {
             do {
                 try store.updateTerminalAgentSession(
                     workspaceID: workspaceID,

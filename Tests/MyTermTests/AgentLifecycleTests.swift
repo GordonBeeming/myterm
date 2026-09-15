@@ -158,6 +158,41 @@ final class AgentLifecycleTests: XCTestCase {
         XCTAssertNil(fixture.model.liveAgentTabs[fixture.tabID])
     }
 
+    func testAStaleSessionEndWithNoIdentifierCannotEndAPendingRejoin() throws {
+        // The same slow SessionEnd, but its payload had no usable session id. It still lands
+        // between the rejoin's SessionStart and the new life's first turn.
+        let fixture = try makeFixture(isActive: false)
+        fixture.emit(.ready, session: "a")
+        fixture.emit(.exited, session: "a")
+        fixture.emit(.ready, session: "a")
+        XCTAssertEqual(fixture.savedSession?.sessionID, "a", "rejoined")
+
+        fixture.session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .exited)))
+
+        XCTAssertEqual(fixture.savedSession?.sessionID, "a", "an end that names no conversation is the old one's")
+        XCTAssertEqual(fixture.model.liveAgentTabs[fixture.tabID], "claude")
+
+        fixture.emit(.working, session: "a")
+        fixture.session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .exited)))
+        XCTAssertNil(fixture.savedSession, "once the new life has spoken, an unnamed end is its own")
+    }
+
+    func testAnotherAgentCannotSpeakForAPendingRejoin() throws {
+        // A Claude conversation was rejoined and is waiting for its first turn. A report under
+        // another agent's name that happens to carry the same id is not that turn.
+        let fixture = try makeFixture(isActive: false)
+        fixture.emit(.ready, session: "a")
+        fixture.emit(.exited, session: "a")
+        fixture.emit(.ready, session: "a")
+        XCTAssertEqual(fixture.savedSession, AgentSessionHandle(agent: "claude", sessionID: "a"))
+
+        fixture.emit(.working, agent: "codex", session: "a")
+
+        XCTAssertNil(fixture.model.agentAttention(forTab: fixture.tabID), "no cook")
+        XCTAssertEqual(fixture.model.liveAgentTabs[fixture.tabID], "claude", "the pane still holds Claude")
+        XCTAssertEqual(fixture.savedSession, AgentSessionHandle(agent: "claude", sessionID: "a"))
+    }
+
     func testAPromptWithNoSessionStartStillAdoptsTheConversation() throws {
         // Hooks installed while an agent was already running: the first thing MyTerm hears is
         // UserPromptSubmit.

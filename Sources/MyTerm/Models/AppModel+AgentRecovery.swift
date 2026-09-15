@@ -82,13 +82,22 @@ extension AppModel {
         in terminal: TerminalSession
     ) -> Bool {
         if isExitOfAnotherConversation(report, in: terminal) { return true }
-        guard let sessionID = report.sessionID,
-              retiredAgentSessions[tabID, default: []].contains(sessionID) else { return false }
+        let left = retiredAgentSessions[tabID, default: []]
+        // While a rejoined conversation waits for its first turn, an end that could not say which
+        // conversation it is about is taken for the earlier life's, like one that names it.
+        if report.activity == .exited, report.sessionID == nil,
+           let saved = terminal.agentSession, left.contains(saved.sessionID) {
+            return true
+        }
+        guard let sessionID = report.sessionID, left.contains(sessionID) else { return false }
         switch report.activity {
         case .ready:
             return liveAgentTabs[tabID] != nil
         case .working, .finished, .awaitingInput:
-            return terminal.agentSession?.sessionID != sessionID
+            // The rejoined conversation's first turn, and only from the agent that holds it: the
+            // same id under another agent's name is not that turn.
+            guard let reported = AgentSessionHandle(agent: report.agent, sessionID: sessionID) else { return true }
+            return terminal.agentSession != reported
         case .exited:
             return true
         }
