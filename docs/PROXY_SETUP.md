@@ -97,13 +97,24 @@ Stop on a failed download or checksum check. Expect `OK` from the checksum check
 
 ## 4. Configure the two relay instances
 
-Create separate persistent directories. UID 65532 is the non-root account used by the relay image.
+Choose the configuration layout before creating directories. UID 65532 is the non-root account used by the relay image.
+
+For a fresh two-instance setup, create the shared configuration directory and both data directories:
 
 ```bash
 sudo install -d -m 0755 /opt/myterm-relay
 sudo install -d -m 0700 -o 65532 -g 65532 \
   /srv/myterm-relay-dev /srv/myterm-relay-prod
 ```
+
+If `/opt/myterm-relay` already belongs to a separately managed dev installation, leave its configuration and data unchanged. Create only the isolated prod configuration and data directories:
+
+```bash
+sudo install -d -m 0755 /opt/myterm-relay-prod
+sudo install -d -m 0700 -o 65532 -g 65532 /srv/myterm-relay-prod
+```
+
+For this isolated layout, use `/opt/myterm-relay-prod/compose.yaml` instead of the path in the next command, and create `/opt/myterm-relay-prod/prod.env` instead of the prod path shown below. Skip the `dev.env`, dev startup, and dev limiter-probe steps. Do not recreate or restart dev. The prod port, project, container, and network names remain the values shown below.
 
 The host-to-container connection reaches the relay from Docker's bridge gateway, not from `127.0.0.1`. The relay may trust `X-Forwarded-For` only for that socket peer. This guide assigns a separate bridge and fixed gateway to each environment so the trusted `/32` remains stable across container recreation.
 
@@ -203,7 +214,7 @@ sudo docker inspect myterm-relay-dev \
   --format '{{range .NetworkSettings.Networks}}{{println .Gateway}}{{end}}'
 ```
 
-Verify that the relay uses separate limiter keys behind the published port. These requests deliberately omit the required login parameters, so HTTP 400 means the request reached normal validation. Ten requests consume the burst for one reserved test address; the different address on the last request must still return 400:
+Verify that the relay uses separate limiter keys behind the published port. These requests deliberately omit the required login parameters, so HTTP 400 means the request reached normal validation. Ten requests consume the burst for one reserved test address. Its next request must return 429, while the different address must still return 400:
 
 ```bash
 (
@@ -219,6 +230,13 @@ done
 
 STATUS=$(curl --silent --output /dev/null --write-out '%{http_code}' \
   --header 'Host: relay-dev.example.com' \
+  --header 'X-Forwarded-For: 192.0.2.10' \
+  http://127.0.0.1:8788/auth/login)
+printf 'test client A rate-limit request: HTTP %s\n' "$STATUS"
+test "$STATUS" = 429
+
+STATUS=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --header 'Host: relay-dev.example.com' \
   --header 'X-Forwarded-For: 198.51.100.20' \
   http://127.0.0.1:8788/auth/login)
 printf 'test client B: HTTP %s\n' "$STATUS"
@@ -226,11 +244,17 @@ test "$STATUS" = 400
 )
 ```
 
-Replace the example hostname in these headers with your dev hostname. If the last request returns 429, stop and inspect the container gateway. Do not continue to owner enrollment until it returns 400.
+Replace the example hostname in these headers with your dev hostname. Client A's rate-limit request must return 429. If client B returns 429, stop and inspect the container gateway. Do not continue to owner enrollment until client B returns 400.
 
 Then start prod:
 
+Run this from `/opt/myterm-relay` for the fresh two-instance setup, or `/opt/myterm-relay-prod` when preserving an existing separately managed dev installation.
+
 ```bash
+RELAY_CONFIG_DIR=/opt/myterm-relay
+# For an isolated existing-dev installation, use this instead:
+# RELAY_CONFIG_DIR=/opt/myterm-relay-prod
+cd "$RELAY_CONFIG_DIR"
 sudo docker compose --env-file prod.env -p myterm-relay-prod config --quiet
 sudo docker compose --env-file prod.env -p myterm-relay-prod up -d
 curl --fail http://127.0.0.1:8787/healthz
@@ -238,6 +262,8 @@ sudo docker inspect myterm-relay-prod \
   --format '{{range .NetworkSettings.Networks}}{{println .Gateway}}{{end}}'
 sudo docker ps --filter name=myterm-relay
 ```
+
+Run the same limiter probe against prod after it starts, replacing `relay-dev.example.com` with the prod hostname and port `8788` with `8787`. The first ten client A requests must return 400, its next request must return 429, and client B must return 400.
 
 Both health checks should return HTTP 200. `/healthz` proves the HTTP service responds; it does not check database health or successful authentication. The published ports should show `127.0.0.1`, not `0.0.0.0` or `[::]`. Each inspect command must print the `RELAY_GATEWAY` from its environment file. Stop and fix the network when it differs; otherwise the relay will ignore forwarded client addresses and share one limiter bucket.
 
@@ -401,7 +427,7 @@ sudo docker compose --env-file dev.env -p myterm-relay-dev up -d
 curl --fail http://127.0.0.1:8788/healthz
 ```
 
-Repeat the pairing/sign-in and terminal checks before changing prod's image tag and running the equivalent prod command. Keep previous images until the upgrade is verified. Do not delete persistent directories during upgrades.
+Repeat the pairing/sign-in and terminal checks before changing prod's image tag and running the equivalent prod command. For the fresh shared setup, edit `/opt/myterm-relay/prod.env` and run Compose from `/opt/myterm-relay`. For an isolated existing-dev installation, edit `/opt/myterm-relay-prod/prod.env` and run Compose from `/opt/myterm-relay-prod`. Keep previous images until the upgrade is verified. Do not delete persistent directories during upgrades.
 
 If a release has no incompatible database migration, restore the previous image tag and run `up -d`. If database compatibility changed, follow that release's rollback instructions and restore the matching backup while the relay is stopped. A backup restore can discard changes made after the backup, so plan the rollback before upgrading.
 
