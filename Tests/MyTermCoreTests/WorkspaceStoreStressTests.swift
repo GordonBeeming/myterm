@@ -129,12 +129,14 @@ final class WorkspaceStoreStressTests: XCTestCase {
         // future "helpful" trim in the store cannot silently change what a device or import wrote.
         let url = temporaryURL()
         let store = try WorkspaceStore(persistenceURL: url)
+        // Each title is read back through a fresh load, so the round trip through JSON is what
+        // is asserted, not the in-memory value the rename just wrote.
         try store.renameWorkspace(store.selectedWorkspaceID, title: "🚀🎉")
-        XCTAssertEqual(store.selectedWorkspace.title, "🚀🎉")
+        XCTAssertEqual(try WorkspaceStore(persistenceURL: url).selectedWorkspace.title, "🚀🎉")
         try store.renameWorkspace(store.selectedWorkspaceID, title: "\n\n")
-        XCTAssertEqual(store.selectedWorkspace.title, "\n\n")
+        XCTAssertEqual(try WorkspaceStore(persistenceURL: url).selectedWorkspace.title, "\n\n")
         try store.renameWorkspace(store.selectedWorkspaceID, title: "")
-        XCTAssertEqual(store.selectedWorkspace.title, "")
+        XCTAssertEqual(try WorkspaceStore(persistenceURL: url).selectedWorkspace.title, "")
     }
 
     // MARK: - Settings round trips
@@ -306,7 +308,7 @@ final class WorkspaceStoreStressTests: XCTestCase {
     func testImportMatchesAnExistingFolderByTitleWhenTwoShareIt() throws {
         // Two existing folders called "Dup": an import naming "Dup" has to pick one, and must pick
         // the same one every time so repeat imports do not scatter across both. Today the importer
-        // builds a title-keyed dictionary in sidebar order, so the lowest folder wins.
+        // builds a title-keyed dictionary in sidebar order, so the last matching folder wins.
         let url = temporaryURL()
         let store = try WorkspaceStore(persistenceURL: url)
         _ = try store.createFolder(title: "Dup")
