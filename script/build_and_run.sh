@@ -82,22 +82,24 @@ if [[ "$MODE" == "--print-plan" ]]; then
   printf 'bundle_id=%s\n' "$BUNDLE_ID"
   printf 'app_bundle=%s\n' "$APP_BUNDLE"
   printf 'workspace_state_path=%s\n' "$WORKSPACE_STATE_PATH"
-  printf 'process_kill_target=%s\n' "$APP_NAME"
+  printf 'instance_policy=focus-existing\n'
   printf 'build_configuration=%s\n' "$BUILD_CONFIGURATION"
   exit 0
-fi
-
-if [[ "$MODE" != "--bundle" ]]; then
-  pkill -x "$APP_NAME" >/dev/null 2>&1 || true
 fi
 
 cd "$ROOT_DIR"
 swift build --product MyTerm "${BUILD_ARGS[@]}"
 BUILD_BINARY="$(swift build --show-bin-path "${BUILD_ARGS[@]}")/MyTerm"
+RESOURCE_BUNDLE="$(dirname "$BUILD_BINARY")/SwiftTerm_SwiftTerm.bundle"
+if [[ ! -d "$RESOURCE_BUNDLE" ]]; then
+  echo "SwiftTerm's compiled resource bundle is missing: $RESOURCE_BUNDLE" >&2
+  exit 1
+fi
 
 rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_MACOS" "$APP_RESOURCES"
 cp "$BUILD_BINARY" "$APP_BINARY"
+cp -R "$RESOURCE_BUNDLE" "$APP_RESOURCES/"
 cp "$ROOT_DIR/Resources/MyTerm.icns" "$APP_RESOURCES/MyTerm.icns"
 cp "$ROOT_DIR/Resources/myterm-browser" "$APP_RESOURCES/myterm-browser"
 cp "$ROOT_DIR/Resources/open" "$APP_RESOURCES/open"
@@ -117,6 +119,16 @@ cp "$ROOT_DIR/Packaging/Info.plist" "$INFO_PLIST"
 /usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:0:CFBundleURLName $BUNDLE_ID.web" "$INFO_PLIST"
 /usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:1:CFBundleURLName $BUNDLE_ID.terminal" "$INFO_PLIST"
 /usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:2:CFBundleURLName $BUNDLE_ID.workspace" "$INFO_PLIST"
+if [[ "$CHANNEL" == "development" ]]; then
+  /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:3 dict" "$INFO_PLIST"
+  /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:3:CFBundleTypeRole string Viewer" "$INFO_PLIST"
+  /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:3:CFBundleURLName string $BUNDLE_ID.authentication" "$INFO_PLIST"
+  /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:3:CFBundleURLSchemes array" "$INFO_PLIST"
+  /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:3:CFBundleURLSchemes:0 string myterm-dev" "$INFO_PLIST"
+  # A development browser registration makes macOS 27 return the initial HTTPS
+  # auth page as the callback. Keep web handlers on the installed production app.
+  /usr/libexec/PlistBuddy -c "Delete :CFBundleURLTypes:0" "$INFO_PLIST"
+fi
 /usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion $MIN_SYSTEM_VERSION" "$INFO_PLIST"
 
 SIGNING_IDENTITY="${CODESIGN_IDENTITY:-}"

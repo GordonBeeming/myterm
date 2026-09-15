@@ -1,0 +1,832 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0157D830911F9926A63C676B /* ManagementViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01E2B01D02870D4686EFFA95 /* ManagementViews.swift */; };
+		1D5706A804D75DFBCB0E4D2E /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A017877BD2AA19E348F092AB /* AppConfiguration.swift */; };
+		1E0A6809BCEDF532C1B58F3B /* TerminalViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D0EC6293C786897DA204B4C /* TerminalViews.swift */; };
+		27A4019177A7B85550F44A22 /* MyTermCompanionApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15CE946E75B4FCF6C271546A /* MyTermCompanionApp.swift */; };
+		29E51B24BD60A38234E2A73E /* MyTermRemote in Frameworks */ = {isa = PBXBuildFile; productRef = A12C7E6D850FFBB09585EAF2 /* MyTermRemote */; };
+		2FB7A0308973F49DC950FED3 /* NotificationEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D3ECF4B3194B81DF0DA4E1 /* NotificationEnvelope.swift */; };
+		3BD17EF126C1CC0BD162D44F /* MyTermNotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 167672F5922523F7E84346F5 /* MyTermNotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		62023C04E4A2B662B40F6398 /* NotificationEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D3ECF4B3194B81DF0DA4E1 /* NotificationEnvelope.swift */; };
+		64E399E0F3FB05E2B1E0139B /* AdaptiveWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E81C624FBFF3B575146385EC /* AdaptiveWorkspaceView.swift */; };
+		6B5E55B92FDC88FB3693C7A0 /* AppModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53A2B5E6871C55271FDA9849 /* AppModels.swift */; };
+		6C5AF092D0549ADBD160EC65 /* PairingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15A442D19CA92622A5D83225 /* PairingCoordinator.swift */; };
+		73724AA07F1C9372E0D766F0 /* WorkspaceViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC518A242E689D2C1E5C96EC /* WorkspaceViews.swift */; };
+		75D613545B3FC0EC994D616B /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = 01505EAD249CF45C6DEC8167 /* SwiftTerm */; };
+		8FD92ED5F4F7DF7794C3D1A9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97E4B3C98E1DE16DF3D63DEE /* Assets.xcassets */; };
+		941ECD6CF20B3D428F38FDC0 /* SceneStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C16667DB8CC7675CEFC6E88 /* SceneStateTests.swift */; };
+		A380269948EFFCE07E4D5ADC /* NotificationEnrollment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5811AA28711A02FA8FBCF85D /* NotificationEnrollment.swift */; };
+		ABEE012D67BB90EA48F1A195 /* CompanionServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 242FCDCEC5B800E20925A07C /* CompanionServices.swift */; };
+		AF605616EF994E353DC4BCFA /* CompanionLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F652502288C33AA2EDD07BE2 /* CompanionLaunchTests.swift */; };
+		BA2AAC2DBE9036DCE44948D8 /* LiveDeviceLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34593A3693A9FE889079CF3 /* LiveDeviceLayoutTests.swift */; };
+		C02C1C6A561DA12CF3651A52 /* MyTermCore in Frameworks */ = {isa = PBXBuildFile; productRef = DB541F4E37BA4B0764BADCD6 /* MyTermCore */; };
+		C3E364CB2489742AC305E98E /* RemoteSettingsDraftTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFA88151878C429986196266 /* RemoteSettingsDraftTests.swift */; };
+		C7DF90F7100F4909BACE2CAB /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAF28873A55DB620FA995481 /* NotificationService.swift */; };
+		C969AA6967BCD48E5B445384 /* CompanionHostConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE42220FFB1AF6F3FFB21CE2 /* CompanionHostConnection.swift */; };
+		D18392ED534EC36B00C240F2 /* LiveDeviceTerminalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABE4FD21D0CF4787337BDC5D /* LiveDeviceTerminalTests.swift */; };
+		D45BD972D0DEC52E2E4E5EA9 /* BrowserAuthenticationStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE96CF8557994DF7FEAAB5A /* BrowserAuthenticationStateTests.swift */; };
+		E46E2FEB1BC74E27FE30B5CE /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A017877BD2AA19E348F092AB /* AppConfiguration.swift */; };
+		EEA6608C6ED4757BC7B0120C /* MyTermRemote in Frameworks */ = {isa = PBXBuildFile; productRef = 9516E10CB2B00AC3CE7185FA /* MyTermRemote */; };
+		EF15BAB06B72B6593A67C359 /* RemoteSettingsEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69775211DDE86AF39BD85C5F /* RemoteSettingsEditor.swift */; };
+		F192A2A9C31134D2CFCAE42F /* SceneRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EABF08F1180E6CF131038913 /* SceneRootView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		5FF9FBA07A65B9ED928EAB12 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 37D423CCF78DDACC2A5E47A2 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F185EE16894EE02B5476AFF7;
+			remoteInfo = MyTermNotificationService;
+		};
+		9CCB1605B4BC3800C45022FD /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 37D423CCF78DDACC2A5E47A2 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 636B2E5E2F15AB2DF7B8BC21;
+			remoteInfo = MyTermCompanion;
+		};
+		E71993211C3700F372BB8937 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 37D423CCF78DDACC2A5E47A2 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 636B2E5E2F15AB2DF7B8BC21;
+			remoteInfo = MyTermCompanion;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		7C418A99A432E2CFBFEB2356 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				3BD17EF126C1CC0BD162D44F /* MyTermNotificationService.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		01E2B01D02870D4686EFFA95 /* ManagementViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagementViews.swift; sourceTree = "<group>"; };
+		15A442D19CA92622A5D83225 /* PairingCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingCoordinator.swift; sourceTree = "<group>"; };
+		15CE946E75B4FCF6C271546A /* MyTermCompanionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyTermCompanionApp.swift; sourceTree = "<group>"; };
+		167672F5922523F7E84346F5 /* MyTermNotificationService.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = MyTermNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		242FCDCEC5B800E20925A07C /* CompanionServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionServices.swift; sourceTree = "<group>"; };
+		3845513B3D02FB7B6F8F371B /* 20260915-quiet-tern */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "20260915-quiet-tern"; path = ..; sourceTree = SOURCE_ROOT; };
+		4C16667DB8CC7675CEFC6E88 /* SceneStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneStateTests.swift; sourceTree = "<group>"; };
+		4E8E6E39688D735FBB9DCCC2 /* SwiftTerm */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SwiftTerm; path = ../Vendor/SwiftTerm; sourceTree = SOURCE_ROOT; };
+		53A2B5E6871C55271FDA9849 /* AppModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModels.swift; sourceTree = "<group>"; };
+		5811AA28711A02FA8FBCF85D /* NotificationEnrollment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationEnrollment.swift; sourceTree = "<group>"; };
+		69775211DDE86AF39BD85C5F /* RemoteSettingsEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSettingsEditor.swift; sourceTree = "<group>"; };
+		6C515C5438F75556A2FB4710 /* MyTermCompanionUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MyTermCompanionUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		6D0EC6293C786897DA204B4C /* TerminalViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalViews.swift; sourceTree = "<group>"; };
+		97E4B3C98E1DE16DF3D63DEE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		9EFF5F814F79AFC4FE808CBD /* MyTermRemote */ = {isa = PBXFileReference; lastKnownFileType = folder; name = MyTermRemote; path = ../Packages/MyTermRemote; sourceTree = SOURCE_ROOT; };
+		A017877BD2AA19E348F092AB /* AppConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfiguration.swift; sourceTree = "<group>"; };
+		AABD4DF6F0105A47014429F0 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
+		ABE4FD21D0CF4787337BDC5D /* LiveDeviceTerminalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveDeviceTerminalTests.swift; sourceTree = "<group>"; };
+		AC518A242E689D2C1E5C96EC /* WorkspaceViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceViews.swift; sourceTree = "<group>"; };
+		B2EA22602077EEAC436C98E8 /* MyTermCompanionTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MyTermCompanionTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B34593A3693A9FE889079CF3 /* LiveDeviceLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveDeviceLayoutTests.swift; sourceTree = "<group>"; };
+		BFA88151878C429986196266 /* RemoteSettingsDraftTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSettingsDraftTests.swift; sourceTree = "<group>"; };
+		D4D3ECF4B3194B81DF0DA4E1 /* NotificationEnvelope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationEnvelope.swift; sourceTree = "<group>"; };
+		DAF28873A55DB620FA995481 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
+		DB31F13A0F11454C01C5C166 /* MyTermCompanion.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = MyTermCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		DDE96CF8557994DF7FEAAB5A /* BrowserAuthenticationStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserAuthenticationStateTests.swift; sourceTree = "<group>"; };
+		DE42220FFB1AF6F3FFB21CE2 /* CompanionHostConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionHostConnection.swift; sourceTree = "<group>"; };
+		E81C624FBFF3B575146385EC /* AdaptiveWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveWorkspaceView.swift; sourceTree = "<group>"; };
+		EABF08F1180E6CF131038913 /* SceneRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneRootView.swift; sourceTree = "<group>"; };
+		F652502288C33AA2EDD07BE2 /* CompanionLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionLaunchTests.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		06EA04E019EE918CA5CBAC79 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EEA6608C6ED4757BC7B0120C /* MyTermRemote in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8D3987914D8C0E9059B1BB4A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C02C1C6A561DA12CF3651A52 /* MyTermCore in Frameworks */,
+				29E51B24BD60A38234E2A73E /* MyTermRemote in Frameworks */,
+				75D613545B3FC0EC994D616B /* SwiftTerm in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0807ED9A8622DD9209B8F2D6 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				DE42220FFB1AF6F3FFB21CE2 /* CompanionHostConnection.swift */,
+				242FCDCEC5B800E20925A07C /* CompanionServices.swift */,
+				5811AA28711A02FA8FBCF85D /* NotificationEnrollment.swift */,
+				15A442D19CA92622A5D83225 /* PairingCoordinator.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		151807644C0A3B63A24DE571 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				E81C624FBFF3B575146385EC /* AdaptiveWorkspaceView.swift */,
+				01E2B01D02870D4686EFFA95 /* ManagementViews.swift */,
+				69775211DDE86AF39BD85C5F /* RemoteSettingsEditor.swift */,
+				EABF08F1180E6CF131038913 /* SceneRootView.swift */,
+				6D0EC6293C786897DA204B4C /* TerminalViews.swift */,
+				AC518A242E689D2C1E5C96EC /* WorkspaceViews.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		272C80B914C7920071DF9610 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				53A2B5E6871C55271FDA9849 /* AppModels.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		74787029B8F005F4BB5B25A8 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				3845513B3D02FB7B6F8F371B /* 20260915-quiet-tern */,
+				9EFF5F814F79AFC4FE808CBD /* MyTermRemote */,
+				4E8E6E39688D735FBB9DCCC2 /* SwiftTerm */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		8817CA4791355292697F202F /* UITests */ = {
+			isa = PBXGroup;
+			children = (
+				F652502288C33AA2EDD07BE2 /* CompanionLaunchTests.swift */,
+				B34593A3693A9FE889079CF3 /* LiveDeviceLayoutTests.swift */,
+				ABE4FD21D0CF4787337BDC5D /* LiveDeviceTerminalTests.swift */,
+			);
+			path = UITests;
+			sourceTree = "<group>";
+		};
+		8B5D47F696817337A3B3DD36 /* NotificationService */ = {
+			isa = PBXGroup;
+			children = (
+				DAF28873A55DB620FA995481 /* NotificationService.swift */,
+			);
+			path = NotificationService;
+			sourceTree = "<group>";
+		};
+		94E7ABF36E6BB51934FE79B4 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				DB31F13A0F11454C01C5C166 /* MyTermCompanion.app */,
+				B2EA22602077EEAC436C98E8 /* MyTermCompanionTests.xctest */,
+				6C515C5438F75556A2FB4710 /* MyTermCompanionUITests.xctest */,
+				167672F5922523F7E84346F5 /* MyTermNotificationService.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		95A3FE929F426B6B5138E778 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				15CE946E75B4FCF6C271546A /* MyTermCompanionApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		B22848C8362E408678EB4C8D /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				97E4B3C98E1DE16DF3D63DEE /* Assets.xcassets */,
+				AABD4DF6F0105A47014429F0 /* Signing.xcconfig */,
+			);
+			path = Support;
+			sourceTree = "<group>";
+		};
+		CB14DFFBD3AB87B825934BE4 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				A017877BD2AA19E348F092AB /* AppConfiguration.swift */,
+				D4D3ECF4B3194B81DF0DA4E1 /* NotificationEnvelope.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		EBDF73C8C08714D6CD7C9816 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				DDE96CF8557994DF7FEAAB5A /* BrowserAuthenticationStateTests.swift */,
+				BFA88151878C429986196266 /* RemoteSettingsDraftTests.swift */,
+				4C16667DB8CC7675CEFC6E88 /* SceneStateTests.swift */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		FF06C7DF2F0BCC57B6C00943 = {
+			isa = PBXGroup;
+			children = (
+				95A3FE929F426B6B5138E778 /* App */,
+				272C80B914C7920071DF9610 /* Models */,
+				8B5D47F696817337A3B3DD36 /* NotificationService */,
+				74787029B8F005F4BB5B25A8 /* Packages */,
+				0807ED9A8622DD9209B8F2D6 /* Services */,
+				CB14DFFBD3AB87B825934BE4 /* Shared */,
+				B22848C8362E408678EB4C8D /* Support */,
+				EBDF73C8C08714D6CD7C9816 /* Tests */,
+				8817CA4791355292697F202F /* UITests */,
+				151807644C0A3B63A24DE571 /* Views */,
+				94E7ABF36E6BB51934FE79B4 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		636B2E5E2F15AB2DF7B8BC21 /* MyTermCompanion */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = ADFEC5DE695740824DC357F0 /* Build configuration list for PBXNativeTarget "MyTermCompanion" */;
+			buildPhases = (
+				88F6D76139362C4508FE90A3 /* Sources */,
+				D30FA130C3A321BDFC5196FB /* Resources */,
+				8D3987914D8C0E9059B1BB4A /* Frameworks */,
+				7C418A99A432E2CFBFEB2356 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				743ABB1C2E3BCB3143EE04D3 /* PBXTargetDependency */,
+			);
+			name = MyTermCompanion;
+			packageProductDependencies = (
+				DB541F4E37BA4B0764BADCD6 /* MyTermCore */,
+				A12C7E6D850FFBB09585EAF2 /* MyTermRemote */,
+				01505EAD249CF45C6DEC8167 /* SwiftTerm */,
+			);
+			productName = MyTermCompanion;
+			productReference = DB31F13A0F11454C01C5C166 /* MyTermCompanion.app */;
+			productType = "com.apple.product-type.application";
+		};
+		6B528D5093DC8BD4C4920E2D /* MyTermCompanionTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D31FAF1B210180BD97C0DB7B /* Build configuration list for PBXNativeTarget "MyTermCompanionTests" */;
+			buildPhases = (
+				CE9373E4523FA0500D9B8E63 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				461FDA0EF81FAC7CC704F461 /* PBXTargetDependency */,
+			);
+			name = MyTermCompanionTests;
+			packageProductDependencies = (
+			);
+			productName = MyTermCompanionTests;
+			productReference = B2EA22602077EEAC436C98E8 /* MyTermCompanionTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		99F1F3EEA84E62B048C62609 /* MyTermCompanionUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4ABD435CE8E8F924EE9BA540 /* Build configuration list for PBXNativeTarget "MyTermCompanionUITests" */;
+			buildPhases = (
+				267C58546CEEBED6819A33F1 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				709C32E9767E1BE8F5CBC402 /* PBXTargetDependency */,
+			);
+			name = MyTermCompanionUITests;
+			packageProductDependencies = (
+			);
+			productName = MyTermCompanionUITests;
+			productReference = 6C515C5438F75556A2FB4710 /* MyTermCompanionUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		F185EE16894EE02B5476AFF7 /* MyTermNotificationService */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0A01DD95995B9646D84B44FA /* Build configuration list for PBXNativeTarget "MyTermNotificationService" */;
+			buildPhases = (
+				7D639911632F0F6B44B68F0F /* Sources */,
+				06EA04E019EE918CA5CBAC79 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MyTermNotificationService;
+			packageProductDependencies = (
+				9516E10CB2B00AC3CE7185FA /* MyTermRemote */,
+			);
+			productName = MyTermNotificationService;
+			productReference = 167672F5922523F7E84346F5 /* MyTermNotificationService.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		37D423CCF78DDACC2A5E47A2 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					636B2E5E2F15AB2DF7B8BC21 = {
+						DevelopmentTeam = "$(TEAM_ID)";
+						ProvisioningStyle = Automatic;
+					};
+					6B528D5093DC8BD4C4920E2D = {
+						DevelopmentTeam = "$(TEAM_ID)";
+						ProvisioningStyle = Automatic;
+					};
+					99F1F3EEA84E62B048C62609 = {
+						DevelopmentTeam = "$(TEAM_ID)";
+						ProvisioningStyle = Automatic;
+						TestTargetID = 636B2E5E2F15AB2DF7B8BC21;
+					};
+					F185EE16894EE02B5476AFF7 = {
+						DevelopmentTeam = "$(TEAM_ID)";
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 2EA6C6BB7C6519E643609D0E /* Build configuration list for PBXProject "MyTermCompanion" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = FF06C7DF2F0BCC57B6C00943;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				3AF906229546C658ECF1EA83 /* XCLocalSwiftPackageReference ".." */,
+				4355CA6C0EA21B35DC9D9C43 /* XCLocalSwiftPackageReference "../Packages/MyTermRemote" */,
+				6E0E23867C14381B80F5D0F9 /* XCLocalSwiftPackageReference "../Vendor/SwiftTerm" */,
+			);
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				636B2E5E2F15AB2DF7B8BC21 /* MyTermCompanion */,
+				6B528D5093DC8BD4C4920E2D /* MyTermCompanionTests */,
+				99F1F3EEA84E62B048C62609 /* MyTermCompanionUITests */,
+				F185EE16894EE02B5476AFF7 /* MyTermNotificationService */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		D30FA130C3A321BDFC5196FB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8FD92ED5F4F7DF7794C3D1A9 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		267C58546CEEBED6819A33F1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AF605616EF994E353DC4BCFA /* CompanionLaunchTests.swift in Sources */,
+				BA2AAC2DBE9036DCE44948D8 /* LiveDeviceLayoutTests.swift in Sources */,
+				D18392ED534EC36B00C240F2 /* LiveDeviceTerminalTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7D639911632F0F6B44B68F0F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1D5706A804D75DFBCB0E4D2E /* AppConfiguration.swift in Sources */,
+				62023C04E4A2B662B40F6398 /* NotificationEnvelope.swift in Sources */,
+				C7DF90F7100F4909BACE2CAB /* NotificationService.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		88F6D76139362C4508FE90A3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				64E399E0F3FB05E2B1E0139B /* AdaptiveWorkspaceView.swift in Sources */,
+				E46E2FEB1BC74E27FE30B5CE /* AppConfiguration.swift in Sources */,
+				6B5E55B92FDC88FB3693C7A0 /* AppModels.swift in Sources */,
+				C969AA6967BCD48E5B445384 /* CompanionHostConnection.swift in Sources */,
+				ABEE012D67BB90EA48F1A195 /* CompanionServices.swift in Sources */,
+				0157D830911F9926A63C676B /* ManagementViews.swift in Sources */,
+				27A4019177A7B85550F44A22 /* MyTermCompanionApp.swift in Sources */,
+				A380269948EFFCE07E4D5ADC /* NotificationEnrollment.swift in Sources */,
+				2FB7A0308973F49DC950FED3 /* NotificationEnvelope.swift in Sources */,
+				6C5AF092D0549ADBD160EC65 /* PairingCoordinator.swift in Sources */,
+				EF15BAB06B72B6593A67C359 /* RemoteSettingsEditor.swift in Sources */,
+				F192A2A9C31134D2CFCAE42F /* SceneRootView.swift in Sources */,
+				1E0A6809BCEDF532C1B58F3B /* TerminalViews.swift in Sources */,
+				73724AA07F1C9372E0D766F0 /* WorkspaceViews.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CE9373E4523FA0500D9B8E63 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D45BD972D0DEC52E2E4E5EA9 /* BrowserAuthenticationStateTests.swift in Sources */,
+				C3E364CB2489742AC305E98E /* RemoteSettingsDraftTests.swift in Sources */,
+				941ECD6CF20B3D428F38FDC0 /* SceneStateTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		461FDA0EF81FAC7CC704F461 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 636B2E5E2F15AB2DF7B8BC21 /* MyTermCompanion */;
+			targetProxy = E71993211C3700F372BB8937 /* PBXContainerItemProxy */;
+		};
+		709C32E9767E1BE8F5CBC402 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 636B2E5E2F15AB2DF7B8BC21 /* MyTermCompanion */;
+			targetProxy = 9CCB1605B4BC3800C45022FD /* PBXContainerItemProxy */;
+		};
+		743ABB1C2E3BCB3143EE04D3 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F185EE16894EE02B5476AFF7 /* MyTermNotificationService */;
+			targetProxy = 5FF9FBA07A65B9ED928EAB12 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		0660CF7A204661CDC325919E /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = AABD4DF6F0105A47014429F0 /* Signing.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "$(TEAM_ID)";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		0C037932FB29CC5134DDA031 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APS_ENVIRONMENT = development;
+				CODE_SIGN_ENTITLEMENTS = Support/MyTermNotificationService.entitlements;
+				INFOPLIST_FILE = "Support/MyTermNotificationService-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.gordonbeeming.myterm.companion.notifications;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		17EB5371D6402D5BB623D585 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.gordonbeeming.myterm.companion.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MyTermCompanion.app/MyTermCompanion";
+			};
+			name = Debug;
+		};
+		1E498A3018F67D4331B126DF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.gordonbeeming.myterm.companion.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MyTermCompanion.app/MyTermCompanion";
+			};
+			name = Release;
+		};
+		34E25500EDCCDAA217827A16 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APS_ENVIRONMENT = production;
+				CODE_SIGN_ENTITLEMENTS = Support/MyTermNotificationService.entitlements;
+				INFOPLIST_FILE = "Support/MyTermNotificationService-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.gordonbeeming.myterm.companion.notifications;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		5A402EAF75AAF736CEDDFFB9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = AABD4DF6F0105A47014429F0 /* Signing.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "$(TEAM_ID)";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		71A8741BB68F4E4C4D1E2602 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.gordonbeeming.myterm.companion.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = MyTermCompanion;
+			};
+			name = Debug;
+		};
+		BBE431349A395B0A5EDFD8A4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APP_ATTEST_ENVIRONMENT = production;
+				APS_ENVIRONMENT = production;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Support/MyTermCompanion.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = "Support/MyTermCompanion-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.gordonbeeming.myterm.companion;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		F6C22E0FB1B35806CF53190F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.gordonbeeming.myterm.companion.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = MyTermCompanion;
+			};
+			name = Release;
+		};
+		FB7F874EDDF93D40C5D4D06E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APP_ATTEST_ENVIRONMENT = development;
+				APS_ENVIRONMENT = development;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Support/MyTermCompanion.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = "Support/MyTermCompanion-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.gordonbeeming.myterm.companion;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0A01DD95995B9646D84B44FA /* Build configuration list for PBXNativeTarget "MyTermNotificationService" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0C037932FB29CC5134DDA031 /* Debug */,
+				34E25500EDCCDAA217827A16 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		2EA6C6BB7C6519E643609D0E /* Build configuration list for PBXProject "MyTermCompanion" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5A402EAF75AAF736CEDDFFB9 /* Debug */,
+				0660CF7A204661CDC325919E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		4ABD435CE8E8F924EE9BA540 /* Build configuration list for PBXNativeTarget "MyTermCompanionUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				71A8741BB68F4E4C4D1E2602 /* Debug */,
+				F6C22E0FB1B35806CF53190F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		ADFEC5DE695740824DC357F0 /* Build configuration list for PBXNativeTarget "MyTermCompanion" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FB7F874EDDF93D40C5D4D06E /* Debug */,
+				BBE431349A395B0A5EDFD8A4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D31FAF1B210180BD97C0DB7B /* Build configuration list for PBXNativeTarget "MyTermCompanionTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				17EB5371D6402D5BB623D585 /* Debug */,
+				1E498A3018F67D4331B126DF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		3AF906229546C658ECF1EA83 /* XCLocalSwiftPackageReference ".." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ..;
+		};
+		4355CA6C0EA21B35DC9D9C43 /* XCLocalSwiftPackageReference "../Packages/MyTermRemote" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../Packages/MyTermRemote;
+		};
+		6E0E23867C14381B80F5D0F9 /* XCLocalSwiftPackageReference "../Vendor/SwiftTerm" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../Vendor/SwiftTerm;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		01505EAD249CF45C6DEC8167 /* SwiftTerm */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SwiftTerm;
+		};
+		9516E10CB2B00AC3CE7185FA /* MyTermRemote */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MyTermRemote;
+		};
+		A12C7E6D850FFBB09585EAF2 /* MyTermRemote */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MyTermRemote;
+		};
+		DB541F4E37BA4B0764BADCD6 /* MyTermCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MyTermCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 37D423CCF78DDACC2A5E47A2 /* Project object */;
+}

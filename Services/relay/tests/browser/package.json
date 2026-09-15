@@ -1,0 +1,11 @@
+{
+  "name": "myterm-relay-browser-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node relay-webauthn.mjs"
+  },
+  "dependencies": {
+    "playwright": "1.58.2"
+  }
+}

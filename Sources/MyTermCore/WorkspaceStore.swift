@@ -258,6 +258,13 @@ public struct WorkspaceStoreSnapshot: Codable, Equatable, Sendable {
 }
 
 public final class WorkspaceStore {
+    public static var defaultHomeDirectory: URL {
+        #if os(macOS)
+        FileManager.default.homeDirectoryForCurrentUser
+        #else
+        URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+        #endif
+    }
     public let persistenceURL: URL
     public private(set) var snapshot: WorkspaceStoreSnapshot
     public private(set) var loadReport: WorkspaceStoreLoadReport
@@ -371,12 +378,18 @@ public final class WorkspaceStore {
     }
 
     @discardableResult
-    public func createWorkspace(title: String, folderID: WorkspaceFolderID? = nil) throws -> WorkspaceID {
+    public func createWorkspace(
+        title: String,
+        folderID: WorkspaceFolderID? = nil,
+        selectsCreatedWorkspace: Bool = true
+    ) throws -> WorkspaceID {
         if let folderID { _ = try folderIndex(folderID, in: snapshot) }
         let workspace = Workspace(title: title, folderID: folderID)
         try mutate {
             $0.workspaces.append(workspace)
-            $0.selectedWorkspaceID = workspace.id
+            if selectsCreatedWorkspace {
+                $0.selectedWorkspaceID = workspace.id
+            }
         }
         return workspace.id
     }
@@ -397,7 +410,7 @@ public final class WorkspaceStore {
     @discardableResult
     public func importWorkspaces(
         fromJSON data: Data,
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+        homeDirectory: URL = WorkspaceStore.defaultHomeDirectory
     ) throws -> WorkspaceImportSummary {
         // LossyArray only counts what it drops when the tracker is in userInfo. Without it, a
         // malformed entry disappears silently and the summary would claim a clean import.
@@ -448,7 +461,7 @@ public final class WorkspaceStore {
     @discardableResult
     public func importWorkspaces(
         _ document: WorkspaceImportDocument,
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        homeDirectory: URL = WorkspaceStore.defaultHomeDirectory,
         droppedElementCount: Int = 0
     ) throws -> WorkspaceImportSummary {
         guard !document.workspaces.isEmpty else {
@@ -676,7 +689,8 @@ public final class WorkspaceStore {
         to workspaceID: WorkspaceID,
         tabGroupID: TabGroupID,
         content: TabContent,
-        at index: Int? = nil
+        at index: Int? = nil,
+        selectsCreatedTab: Bool = true
     ) throws -> TabID {
         let tab = Tab(content: content)
         try mutate { snapshot in
@@ -689,8 +703,10 @@ public final class WorkspaceStore {
             } else {
                 group.tabs.append(tab)
             }
-            group.selectedTabID = tab.id
-            workspace.focusedTabGroupID = group.id
+            if selectsCreatedTab {
+                group.selectedTabID = tab.id
+                workspace.focusedTabGroupID = group.id
+            }
             guard workspace.layout.replaceGroup(id: group.id, with: group) else {
                 throw WorkspaceStoreError.tabGroupNotFound(group.id)
             }
@@ -704,13 +720,15 @@ public final class WorkspaceStore {
         to workspaceID: WorkspaceID,
         tabGroupID: TabGroupID,
         workingDirectory: URL? = nil,
-        at index: Int? = nil
+        at index: Int? = nil,
+        selectsCreatedTab: Bool = true
     ) throws -> TabID {
         try addTab(
             to: workspaceID,
             tabGroupID: tabGroupID,
             content: Tab.terminal(workingDirectory: workingDirectory).content,
-            at: index
+            at: index,
+            selectsCreatedTab: selectsCreatedTab
         )
     }
 
@@ -720,13 +738,15 @@ public final class WorkspaceStore {
         tabGroupID: TabGroupID,
         url: URL,
         profile: BrowserDataProfile? = nil,
-        at index: Int? = nil
+        at index: Int? = nil,
+        selectsCreatedTab: Bool = true
     ) throws -> TabID {
         try addTab(
             to: workspaceID,
             tabGroupID: tabGroupID,
             content: Tab.browser(url: url, profile: profile).content,
-            at: index
+            at: index,
+            selectsCreatedTab: selectsCreatedTab
         )
     }
 
@@ -781,7 +801,8 @@ public final class WorkspaceStore {
         workspaceID: WorkspaceID,
         tabGroupID: TabGroupID,
         edge: PaneEdge,
-        workingDirectory: URL? = nil
+        workingDirectory: URL? = nil,
+        selectsCreatedGroup: Bool = true
     ) throws -> TabGroupSplitResult {
         let tab = Tab.terminal(workingDirectory: workingDirectory)
         let group = TabGroup(tab: tab)
@@ -791,7 +812,9 @@ public final class WorkspaceStore {
             guard workspace.layout.insertGroup(group, beside: tabGroupID, edge: edge) else {
                 throw WorkspaceStoreError.tabGroupNotFound(tabGroupID)
             }
-            workspace.focusedTabGroupID = group.id
+            if selectsCreatedGroup {
+                workspace.focusedTabGroupID = group.id
+            }
             snapshot.workspaces[index] = workspace
         }
         return TabGroupSplitResult(tabGroupID: group.id, tabID: tab.id)
@@ -803,7 +826,8 @@ public final class WorkspaceStore {
         sourceTabGroupID: TabGroupID,
         tabID: TabID,
         to destinationTabGroupID: TabGroupID,
-        at index: Int? = nil
+        at index: Int? = nil,
+        selectsMovedTab: Bool = true
     ) throws -> Bool {
         if sourceTabGroupID == destinationTabGroupID {
             let group = try tabGroup(sourceTabGroupID, in: workspace(workspaceID))
@@ -832,7 +856,9 @@ public final class WorkspaceStore {
             }
             let tab = source.tabs.remove(at: sourceIndex)
             destination.tabs.insert(tab, at: destinationIndex)
-            destination.selectedTabID = tab.id
+            if selectsMovedTab {
+                destination.selectedTabID = tab.id
+            }
 
             if source.tabs.isEmpty {
                 guard let collapsed = workspace.layout.removingGroup(id: source.id) else {
@@ -848,7 +874,11 @@ public final class WorkspaceStore {
             guard workspace.layout.replaceGroup(id: destination.id, with: destination) else {
                 throw WorkspaceStoreError.tabGroupNotFound(destination.id)
             }
-            workspace.focusedTabGroupID = destination.id
+            if selectsMovedTab {
+                workspace.focusedTabGroupID = destination.id
+            } else if workspace.focusedTabGroupID == source.id && source.tabs.isEmpty {
+                workspace.repair()
+            }
             snapshot.workspaces[workspaceIndex] = workspace
             didMove = true
         }
@@ -861,7 +891,8 @@ public final class WorkspaceStore {
         sourceTabGroupID: TabGroupID,
         tabID: TabID,
         beside targetTabGroupID: TabGroupID,
-        edge: PaneEdge
+        edge: PaneEdge,
+        selectsMovedTab: Bool = true
     ) throws -> TabGroupID? {
         var createdGroupID: TabGroupID?
         try mutate { snapshot in
@@ -891,7 +922,11 @@ public final class WorkspaceStore {
             guard workspace.layout.insertGroup(group, beside: targetTabGroupID, edge: edge) else {
                 throw WorkspaceStoreError.tabGroupNotFound(targetTabGroupID)
             }
-            workspace.focusedTabGroupID = group.id
+            if selectsMovedTab {
+                workspace.focusedTabGroupID = group.id
+            } else if workspace.focusedTabGroupID == source.id && source.tabs.isEmpty {
+                workspace.repair()
+            }
             snapshot.workspaces[workspaceIndex] = workspace
             createdGroupID = group.id
         }

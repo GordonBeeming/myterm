@@ -28,6 +28,77 @@ public protocol TerminalProcessSession: AnyObject {
     func setPaneActive(_ isActive: Bool)
 }
 
+public struct TerminalRemoteOutput: Equatable, Sendable {
+    public let generation: UUID
+    public let sequence: UInt64
+    public let bytes: Data
+
+    public init(generation: UUID, sequence: UInt64, bytes: Data) {
+        self.generation = generation
+        self.sequence = sequence
+        self.bytes = bytes
+    }
+}
+
+public struct TerminalRemoteCheckpoint: Equatable, Sendable {
+    public let generation: UUID
+    public let sequence: UInt64
+    public let bytes: Data
+
+    public init(generation: UUID, sequence: UInt64, bytes: Data) {
+        self.generation = generation
+        self.sequence = sequence
+        self.bytes = bytes
+    }
+}
+
+public struct TerminalRemoteGeometry: Equatable, Sendable {
+    public let generation: UUID
+    public let columns: Int
+    public let rows: Int
+
+    public init(generation: UUID, columns: Int, rows: Int) {
+        self.generation = generation
+        self.columns = columns
+        self.rows = rows
+    }
+}
+
+public enum TerminalRemoteSessionError: Error, Equatable, LocalizedError, Sendable {
+    case unavailable
+    case notRunning
+    case staleGeneration
+    case invalidInput
+    case replayGap
+
+    public var errorDescription: String? {
+        switch self {
+        case .unavailable: "This terminal engine does not support remote sessions."
+        case .notRunning: "The terminal process is not running."
+        case .staleGeneration: "The terminal session has restarted. Attach again before sending input."
+        case .invalidInput: "The terminal input or dimensions are invalid."
+        case .replayGap: "The requested terminal output is no longer available. Request a new checkpoint."
+        }
+    }
+}
+
+@MainActor
+public protocol TerminalRemoteSession: TerminalProcessSession {
+    var remoteGeneration: UUID { get }
+    var remoteSequence: UInt64 { get }
+    var remoteGeometry: TerminalRemoteGeometry { get }
+    func setRemoteCaptureEnabled(_ enabled: Bool)
+    func setRemoteOutputHandler(_ handler: (@MainActor (TerminalRemoteOutput) -> Void)?)
+    func setRemoteGeometryHandler(_ handler: (@MainActor (TerminalRemoteGeometry) -> Void)?)
+    func remoteCheckpoint() throws -> TerminalRemoteCheckpoint
+    func remoteReplay(after sequence: UInt64) throws -> [TerminalRemoteOutput]
+    func sendRemoteInput(_ bytes: Data, generation: UUID) throws
+    func resizeRemotely(columns: Int, rows: Int, generation: UUID) throws
+    func pasteRemoteImage(_ payload: RemoteTerminalImagePayload) throws
+    func setRemoteControllerActive(_ active: Bool)
+    func setRemoteTakeControlHandler(_ handler: (@MainActor () -> Void)?)
+}
+
 public extension TerminalProcessSession {
     var activeForegroundProcessName: String? { nil }
 
@@ -112,6 +183,7 @@ public struct TerminalRuntimeConfiguration: Equatable, Sendable {
 public struct TerminalSessionConfiguration: Equatable, Sendable {
     public let shell: URL
     public let workingDirectory: URL
+    public let shellArguments: [String]
     public let initialCommand: String?
     public let environment: [String: String]
     public let runtimeConfiguration: TerminalRuntimeConfiguration
@@ -120,6 +192,7 @@ public struct TerminalSessionConfiguration: Equatable, Sendable {
     public init(
         shell: URL = TerminalSessionConfiguration.loginShellURL(),
         workingDirectory: URL,
+        shellArguments: [String] = ["-l"],
         initialCommand: String? = nil,
         environment: [String: String] = [:],
         runtimeConfiguration: TerminalRuntimeConfiguration = TerminalRuntimeConfiguration(),
@@ -127,6 +200,7 @@ public struct TerminalSessionConfiguration: Equatable, Sendable {
     ) {
         self.shell = shell
         self.workingDirectory = workingDirectory.standardizedFileURL
+        self.shellArguments = shellArguments
         self.initialCommand = initialCommand
         self.environment = environment
         self.runtimeConfiguration = runtimeConfiguration

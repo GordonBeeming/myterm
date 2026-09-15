@@ -1,0 +1,162 @@
+name: MyTermCompanion
+options:
+  bundleIdPrefix: com.gordonbeeming.myterm
+  deploymentTarget:
+    iOS: "27.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+configFiles:
+  Debug: Support/Signing.xcconfig
+  Release: Support/Signing.xcconfig
+packages:
+  MyTerm:
+    path: ..
+  MyTermRemote:
+    path: ../Packages/MyTermRemote
+  SwiftTerm:
+    path: ../Vendor/SwiftTerm
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "27.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    DEVELOPMENT_TEAM: "$(TEAM_ID)"
+    CODE_SIGN_STYLE: Automatic
+targets:
+  MyTermCompanion:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+      - path: Models
+      - path: Services
+      - path: Views
+      - path: Shared
+      - path: Support/Assets.xcassets
+        buildPhase: resources
+    dependencies:
+      - package: MyTerm
+        product: MyTermCore
+      - package: MyTermRemote
+        product: MyTermRemote
+      - package: SwiftTerm
+        product: SwiftTerm
+      - target: MyTermNotificationService
+        embed: true
+    info:
+      path: Support/MyTermCompanion-Info.plist
+      properties:
+        CFBundleDisplayName: MyTerm
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+        NSCameraUsageDescription: Scan a MyTerm pairing code from your Mac.
+        NSLocalNetworkUsageDescription: Connect to a MyTerm relay hosted on your local network.
+        UIBackgroundModes:
+          - remote-notification
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        MyTermKeychainAccessGroup: "$(AppIdentifierPrefix)com.gordonbeeming.myterm.companion.shared"
+        MyTermPushGatewayOrigin: "$(MYTERM_PUSH_GATEWAY_ORIGIN)"
+        CFBundleURLTypes:
+          - CFBundleURLName: MyTerm companion authentication
+            CFBundleURLSchemes:
+              - myterm-companion
+    entitlements:
+      path: Support/MyTermCompanion.entitlements
+      properties:
+        aps-environment: "$(APS_ENVIRONMENT)"
+        com.apple.developer.devicecheck.appattest-environment: "$(APP_ATTEST_ENVIRONMENT)"
+        com.apple.security.application-groups:
+          - group.com.gordonbeeming.myterm.companion
+        keychain-access-groups:
+          - "$(AppIdentifierPrefix)com.gordonbeeming.myterm.companion.shared"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.gordonbeeming.myterm.companion
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+      configs:
+        Debug:
+          APS_ENVIRONMENT: development
+          APP_ATTEST_ENVIRONMENT: development
+        Release:
+          APS_ENVIRONMENT: production
+          APP_ATTEST_ENVIRONMENT: production
+  MyTermNotificationService:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: NotificationService
+      - path: Shared/NotificationEnvelope.swift
+      - path: Shared/AppConfiguration.swift
+    dependencies:
+      - package: MyTermRemote
+        product: MyTermRemote
+    info:
+      path: Support/MyTermNotificationService-Info.plist
+      properties:
+        CFBundleDisplayName: MyTerm Notification Service
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.usernotifications.service
+          NSExtensionPrincipalClass: "$(PRODUCT_MODULE_NAME).NotificationService"
+        MyTermKeychainAccessGroup: "$(AppIdentifierPrefix)com.gordonbeeming.myterm.companion.shared"
+        MyTermPushGatewayOrigin: "$(MYTERM_PUSH_GATEWAY_ORIGIN)"
+    entitlements:
+      path: Support/MyTermNotificationService.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.gordonbeeming.myterm.companion
+        keychain-access-groups:
+          - "$(AppIdentifierPrefix)com.gordonbeeming.myterm.companion.shared"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.gordonbeeming.myterm.companion.notifications
+        SKIP_INSTALL: YES
+      configs:
+        Debug:
+          APS_ENVIRONMENT: development
+        Release:
+          APS_ENVIRONMENT: production
+  MyTermCompanionTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: MyTermCompanion
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.gordonbeeming.myterm.companion.tests
+  MyTermCompanionUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: MyTermCompanion
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.gordonbeeming.myterm.companion.uitests
+        TEST_TARGET_NAME: MyTermCompanion
+schemes:
+  MyTermCompanion:
+    build:
+      targets:
+        MyTermCompanion: all
+        MyTermNotificationService: all
+        MyTermCompanionTests: [test]
+        MyTermCompanionUITests: [test]
+    test:
+      targets:
+        - MyTermCompanionTests
+        - MyTermCompanionUITests
+      gatherCoverageData: true

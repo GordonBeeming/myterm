@@ -31,6 +31,9 @@ struct SettingsView: View {
 
                 browserSettings
                     .tabItem { Label("Browser", systemImage: "globe") }
+
+                CompanionSettingsView(companion: model.companionHost)
+                    .tabItem { Label("Companion", systemImage: "iphone.and.arrow.forward") }
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 12)

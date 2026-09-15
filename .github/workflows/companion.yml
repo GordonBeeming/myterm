@@ -1,0 +1,97 @@
+name: Companion
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: companion-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  remote-core:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: Services/relay/go.mod
+          cache-dependency-path: Services/relay/go.sum
+      - name: Test native remote protocol and cryptography
+        run: swift test --package-path Packages/MyTermRemote --parallel
+
+  relay-browser:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: Services/relay/go.mod
+          cache-dependency-path: Services/relay/go.sum
+      - name: Install locked browser test dependencies
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: npm ci --prefix Services/relay/tests/browser
+      - name: Test relay WebAuthn in headless Chrome
+        env:
+          MYTERM_RELAY_EVIDENCE_DIR: ${{ runner.temp }}/relay-browser-evidence
+        run: npm test --prefix Services/relay/tests/browser
+      - name: Preserve relay browser screenshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: relay-browser-evidence
+          path: ${{ runner.temp }}/relay-browser-evidence
+          if-no-files-found: warn
+
+  services:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [relay, push-gateway]
+    defaults:
+      run:
+        working-directory: Services/${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: Services/${{ matrix.service }}/go.mod
+          cache-dependency-path: Services/${{ matrix.service }}/go.sum
+      - name: Check service behavior and data races
+        run: go test -race ./...
+      - name: Vet service
+        run: go vet ./...
+      - name: Build service
+        run: go build ./cmd/...
+
+  ios:
+    runs-on: xcode-27
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [iPhone, iPad]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Verify actual SDK
+        run: bash script/verify_companion_toolchain.sh 27.0
+      - name: Install the matching Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
+      - name: Test companion on iOS 27
+        env:
+          COMPANION_DEVICE_FAMILY: ${{ matrix.device }}
+        run: bash script/test_companion.sh
+      - name: Preserve simulator test results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: companion-${{ matrix.device }}-results
+          path: dist/companion-${{ matrix.device }}.xcresult
+          if-no-files-found: warn
