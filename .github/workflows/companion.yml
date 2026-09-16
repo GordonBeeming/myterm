@@ -49,6 +49,10 @@ concurrency:
 jobs:
   remote-core:
     runs-on: macos-15
+    # Same pin as build.yml: this job builds Swift on the shared image, whose default Xcode moves
+    # on a schedule. The xcode-27 jobs below name their toolchain through the runner itself.
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
