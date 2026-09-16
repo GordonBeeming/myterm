@@ -329,3 +329,24 @@ func marshalTestJSON(t *testing.T, value any) []byte {
 	}
 	return data
 }
+
+func TestCompanionChannelRedirectsAreExact(t *testing.T) {
+	values := url.Values{
+		"state":                 {base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{1}, 32))},
+		"code_challenge":        {base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{2}, 32))},
+		"code_challenge_method": {"S256"}, "device_name": {"Demo phone"}, "device_kind": {"client"},
+	}
+	for _, redirect := range []string{"myterm-companion://auth/callback", "myterm-companion-dev://auth/callback"} {
+		values.Set("redirect_uri", redirect)
+		got, err := ValidateOAuthContext(values)
+		if err != nil || got.RedirectURI != redirect {
+			t.Fatalf("valid channel callback rejected: %s: %v", redirect, err)
+		}
+	}
+	for _, redirect := range []string{"myterm-companion://other/callback", "myterm-companion://auth/other", "myterm-companion://auth/callback?extra=1", "myterm-companion://auth/callback#fragment", "myterm-companion-dev://other/callback", "myterm-companion-dev://auth/other", "myterm-companion-dev://auth/callback?extra=1", "myterm-companion-dev://auth/callback#fragment"} {
+		values.Set("redirect_uri", redirect)
+		if _, err := ValidateOAuthContext(values); err == nil {
+			t.Fatalf("accepted unregistered callback: %s", redirect)
+		}
+	}
+}

@@ -20,13 +20,13 @@ struct CompanionSettingsView: View {
                               prompt: Text("Paste your relay address or setup link"))
                         .textFieldStyle(.roundedBorder)
                         .accessibilityLabel("Relay address or setup link")
-                        .disabled(companion.isSigningIn)
+                        .disabled(companion.isSigningIn || companion.status == .connecting)
 
                     Text("Use a setup link to create or recover your passkey. Otherwise, enter the relay address to sign in with an existing passkey.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
 
-                    Button(companion.isSigningIn ? "Waiting for sign-in…" : "Continue") {
+                    Button(companion.isSigningIn ? "Waiting for sign-in…" : companion.status == .connecting ? "Connecting…" : "Continue") {
                         let input = connectionInput.trimmingCharacters(in: .whitespacesAndNewlines)
                         if (try? CompanionHostModel.parseBootstrapLink(input)) != nil {
                             companion.signIn(bootstrapURLText: input)
@@ -35,10 +35,12 @@ struct CompanionSettingsView: View {
                             companion.signIn()
                         }
                     }
-                    .disabled(companion.isSigningIn || connectionInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(companion.isSigningIn || companion.status == .connecting || connectionInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                     if companion.isSigningIn {
                         Button("Cancel sign-in", role: .cancel) { companion.cancelSignIn() }
+                    } else if companion.status == .connecting {
+                        Button("Cancel connection", role: .cancel) { companion.disconnect() }
                     } else if companion.hasLinkedRelay && isEditingConnection {
                         Button("Cancel editing") {
                             companion.relayText = previousRelay

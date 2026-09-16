@@ -194,7 +194,7 @@ final class CompanionHostModel {
     private var signInAttemptID: UUID?
 
     func signIn(bootstrapURLText: String? = nil) {
-        guard !isSigningIn else { return }
+        guard !isSigningIn, status != .connecting else { return }
         disconnect()
         isSigningIn = true
         let id = UUID()
