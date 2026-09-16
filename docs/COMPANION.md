@@ -2,14 +2,14 @@
 
 The companion connects to running myterm apps through an HTTPS relay you operate. Each Mac owns its terminal processes and workspace state. Closing myterm, sleeping the Mac, or losing its connection makes that host unavailable. The relay does not run replacement shells.
 
-The initial app targets iOS and iPadOS 27.0. Platform behavior follows [Apple's iOS and iPadOS 27 release notes](https://developer.apple.com/documentation/ios-ipados-release-notes/ios-ipados-27-release-notes). The separate iPhone Duo layout milestone requires the 27.1 SDK and device validation before it can ship.
+The app supports iOS and iPadOS 26 or later. Adaptive panes respond to the available window size. Device-specific iPhone Duo layout work still requires its own SDK and device validation.
 
 ## Build and test
 
-Use Xcode 27 with the iOS 27 SDK and its Metal component. CI uses GitHub's [Xcode 27 preview runner](https://github.blog/changelog/2026-09-10-xcode-27-runner-image-now-runs-on-macos-27/). Check the selected installation with:
+Use Xcode 26.6 or newer with its matching Metal component. CI pins release Xcode 26.6 on GitHub’s [macOS 26 runner](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-Readme.md). Check the selected installation with:
 
 ```sh
-bash script/verify_companion_toolchain.sh 27.0
+bash script/verify_companion_toolchain.sh 26.0
 ```
 
 If Xcode reports a missing Metal component, install it with `xcodebuild -downloadComponent MetalToolchain`. After upgrading Xcode, finish its component setup before running simulator tests. Changing `DEVELOPER_DIR` for one command allows a particular installation to be used without changing the machine's default selection.
@@ -40,7 +40,7 @@ COMPANION_DEVICE_FAMILY=iPad bash script/test_companion.sh
 
 The native interoperability tests also require Go. They compile a temporary relay fixture before starting its readiness check; the service modules declare the minimum Go version.
 
-The simulator script creates a dedicated device, saves an `.xcresult` under `dist`, and deletes that device afterward. `COMPANION_SIMULATOR_UDID` selects an explicitly supplied device instead; the script never deletes a supplied device. Move previous result bundles before rerunning. Set `COMPANION_KEEP_SIMULATOR=1` when an automatically created device needs further inspection.
+The simulator script chooses an installed runtime matching the selected Xcode SDK’s major version, creates a dedicated device, saves an `.xcresult` under `dist`, and deletes that device afterward. `COMPANION_SIMULATOR_UDID` selects an explicitly supplied device instead; the script never deletes a supplied device. Move previous result bundles before rerunning. Set `COMPANION_KEEP_SIMULATOR=1` when an automatically created device needs further inspection.
 
 Existing desktop validation remains `swift test --parallel`, `bash script/channel_isolation_test.sh`, and `make verify`. Use `--bundle` when running the desktop build script without launching the app. Normal launches now focus the existing healthy instance. Quit it explicitly before launching a rebuilt version.
 

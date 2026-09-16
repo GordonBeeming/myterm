@@ -2,7 +2,7 @@ name: MyTermCompanion
 options:
   bundleIdPrefix: com.gordonbeeming.myterm
   deploymentTarget:
-    iOS: "27.0"
+    iOS: "26.0"
   createIntermediateGroups: true
   generateEmptyDirectories: true
 configFiles:
@@ -18,7 +18,7 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    IPHONEOS_DEPLOYMENT_TARGET: "27.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "26.0"
     TARGETED_DEVICE_FAMILY: "1,2"
     DEVELOPMENT_TEAM: "$(TEAM_ID)"
     CODE_SIGN_STYLE: Automatic

@@ -1,9 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-minimum_sdk="${1:-27.0}"
+minimum_sdk="${1:-26.0}"
 if [[ ! "$minimum_sdk" =~ ^[0-9]+\.[0-9]+$ ]]; then
-  echo "usage: $0 [minimum-ios-sdk, e.g. 27.0]" >&2
+  echo "usage: $0 [minimum-ios-sdk, e.g. 26.0]" >&2
   exit 2
 fi
 
