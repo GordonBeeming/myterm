@@ -50,7 +50,7 @@ Relevant pull requests run the remote, relay, service, iPhone, and iPad test job
 
 The deploy job:
 
-1. Verifies the Xcode 27 SDK and matching Metal toolchain.
+1. Selects release Xcode 26.6, verifies the iOS 26 SDK, and installs its matching Metal toolchain.
 2. Imports the distribution certificate into a new runner-only keychain.
 3. Installs the app and notification service profiles after validating their names and bundle IDs.
 4. Generates an isolated Release project and archives both targets with manual signing.
