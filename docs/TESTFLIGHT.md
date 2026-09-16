@@ -48,6 +48,8 @@ The two profile-name variables must exactly match the embedded `Name` values. Th
 
 Relevant pull requests run the remote, relay, service, iPhone, and iPad test jobs without access to the `beta` environment. A relevant push to `main`, or a manual dispatch explicitly run from `main`, uploads only after all of those jobs pass.
 
+The app and notification extension set `ITSAppUsesNonExemptEncryption: false` in `Companion/project.yml`. MyTerm uses Apple’s CryptoKit and system HTTPS; the declaration is included in each build so App Store Connect does not require the same encryption answer after every upload. Revisit this metadata if the app’s encryption implementation changes. See [Apple’s export-compliance metadata guidance](https://developer.apple.com/documentation/bundleresources/information-property-list/itsappusesnonexemptencryption).
+
 The deploy job:
 
 1. Selects release Xcode 26.6, verifies the iOS 26 SDK, and installs its matching Metal toolchain.
