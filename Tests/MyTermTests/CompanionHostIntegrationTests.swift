@@ -649,6 +649,31 @@ final class CompanionHostIntegrationTests: XCTestCase {
             destinationConnectionID: RelayFrame.broadcastDestination, over: first.socket
         )
         _ = try await requireError(first, code: "control_denied")
+        for imageLease in [leaseID, UUID()] {
+            let image = try RemoteTerminalImagePayload(leaseID: imageLease, generation: acquired.generation,
+                                                       contentType: .png, bytes: Data([1]))
+            let chunk = try RemoteImageChunkPayload(transferID: UUID(), leaseID: imageLease,
+                generation: acquired.generation, contentType: .png, chunkIndex: 0,
+                chunkCount: 1, totalBytes: 1, bytes: Data([1]))
+            for (operation, payload) in [
+                (CommandOperation.terminalPasteImage, try JSONEncoder().encode(image)),
+                (CommandOperation.terminalPasteImageChunk, try JSONEncoder().encode(chunk))
+            ] {
+                let request = metadata(target: target, hostID: identity.hostID, runtimeID: first.runtimeID)
+                try await first.channel.send(.command(request, CommandParameters(operation: operation, payload: payload)),
+                    destinationConnectionID: RelayFrame.broadcastDestination, over: first.socket)
+                while true {
+                    let packet = try await requireApplication(first.reader)
+                    let message = try await first.channel.open(packet)
+                    if case .commandResult(let response, let result) = message,
+                       response.requestID == request.requestID {
+                        XCTAssertFalse(result.succeeded)
+                        XCTAssertEqual(result.errorCode, "control_denied")
+                        break
+                    }
+                }
+            }
+        }
         for connection in [first, second] {
             try await connection.channel.send(
                 .workspaceRequest(MessageMetadata(requestID: UUID(), hostID: identity.hostID,

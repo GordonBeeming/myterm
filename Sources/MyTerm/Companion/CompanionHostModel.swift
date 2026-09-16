@@ -1054,18 +1054,22 @@ final class CompanionHostModel {
                 broadcastWorkspaceSnapshot()
             }
         } catch {
-            let code = (error as? CompanionCommandError)?.code ?? "command_failed"
+            let controlFailure = error is ControlPacketError || (error as? RemoteError) == .controlDenied
+            let code = controlFailure ? "control_denied" : (error as? CompanionCommandError)?.code ?? "command_failed"
             send(
                 .commandResult(
                     makeMetadata(requestID: metadata.requestID),
                     CommandResultParameters(
                         succeeded: false,
                         errorCode: code,
-                        errorMessage: error.localizedDescription
+                        errorMessage: controlFailure ? "You no longer control this terminal. Request control before pasting." : error.localizedDescription
                     )
                 ),
                 to: peer
             )
+            if controlFailure, let target = try? terminalTarget(metadata, allowingAttachedPeer: peer) {
+                broadcastControlState(target: target)
+            }
         }
     }
 
