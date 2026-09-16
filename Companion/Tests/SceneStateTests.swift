@@ -71,6 +71,35 @@ final class SceneStateTests: XCTestCase {
         XCTAssertTrue(state.append(output: OutputParameters(generation: generation, sequence: 2, bytes: Data([4]))))
     }
 
+    func testCompactionFailureKeepsDisplayAndControlUntilNewCheckpoint() async throws {
+        let route = testTerminalRoute(connectionID: testConnection())
+        let state = TerminalSurfaceState(route: route)
+        let generation = UUID()
+        let checkpoint = try await CheckpointAssembler().ingest(
+            metadata: MessageMetadata(hostID: route.hostID, runtimeID: UUID(), sessionID: route.sessionID),
+            chunk: CheckpointChunkParameters(transferID: UUID(), generation: generation, sequence: 0,
+                chunkIndex: 0, chunkCount: 1, totalBytes: 1, bytes: Data([1])))
+        state.apply(checkpoint: try XCTUnwrap(checkpoint))
+        let bytes = Data(repeating: 2, count: 1_024 * 1_024)
+        XCTAssertTrue(state.append(output: OutputParameters(generation: generation, sequence: 1, bytes: bytes)))
+        state.ownsControl = true
+        let leaseID = UUID()
+        state.leaseID = leaseID
+        XCTAssertTrue(state.needsOutputCompaction)
+        state.recordCompactionFailure()
+        XCTAssertFalse(state.needsOutputCompaction)
+        XCTAssertFalse(state.isAwaitingCheckpoint)
+        XCTAssertTrue(state.ownsControl)
+        XCTAssertEqual(state.leaseID, leaseID)
+        XCTAssertEqual(state.checkpoint, Data([1]))
+        XCTAssertEqual(state.outputChunks, [bytes])
+        XCTAssertTrue(state.append(output: OutputParameters(generation: generation, sequence: 2, bytes: Data([3]))))
+        XCTAssertFalse(state.needsOutputCompaction)
+        state.apply(checkpoint: try XCTUnwrap(checkpoint))
+        XCTAssertTrue(state.append(output: OutputParameters(generation: generation, sequence: 1, bytes: bytes)))
+        XCTAssertTrue(state.needsOutputCompaction)
+    }
+
     func testCachedTerminalRetainsDisplayButDropsControlUntilFreshCheckpoint() async throws {
         let route = testTerminalRoute(connectionID: testConnection())
         let scene = SceneModel()

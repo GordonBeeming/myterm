@@ -944,6 +944,17 @@ final class TerminalSurfaceState {
 
     init(route: TerminalRoute) { self.route = route }
 
+    private var failedCompactionRevision: Int?
+
+    var needsOutputCompaction: Bool {
+        bufferedOutputBytes >= 1_024 * 1_024 && !isAwaitingCheckpoint
+            && failedCompactionRevision != checkpointRevision
+    }
+
+    func recordCompactionFailure() {
+        failedCompactionRevision = checkpointRevision
+    }
+
     @discardableResult
     func compactRenderedOutput(checkpoint: Data, sequence: UInt64, revision: Int) -> Bool {
         guard !isAwaitingCheckpoint, self.sequence == sequence, checkpointRevision == revision else { return false }

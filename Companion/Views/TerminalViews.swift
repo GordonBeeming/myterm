@@ -1,6 +1,7 @@
 import MyTermCore
 import MyTermRemote
 import PhotosUI
+import OSLog
 import SwiftTerm
 import SwiftUI
 import UIKit
@@ -216,6 +217,7 @@ private struct TerminalControlBar: View {
 }
 
 private struct RemoteTerminalView: UIViewRepresentable {
+    private static let logger = Logger(subsystem: AppConfiguration.bundleIdentifier, category: "TerminalRendering")
     let state: TerminalSurfaceState
     let showTerminalKeys: Bool
     var requestsKeyboardFocus = true
@@ -333,7 +335,7 @@ private struct RemoteTerminalView: UIViewRepresentable {
                 view.feed(byteArray: array[...])
             }
             coordinator.outputIndex = state.outputChunks.count
-            if state.bufferedOutputBytes >= 1_024 * 1_024, !state.isAwaitingCheckpoint,
+            if state.needsOutputCompaction,
                !coordinator.compactionPending {
                 do {
                     let checkpoint = try view.getTerminal().exportCheckpoint()
@@ -348,8 +350,13 @@ private struct RemoteTerminalView: UIViewRepresentable {
                         }
                     }
                 } catch {
-                    let onResync = onResync
-                    Task { @MainActor in onResync(error) }
+                    Self.logger.warning("Local terminal compaction failed; retaining the display and buffered output.")
+                    let revision = state.checkpointRevision
+                    coordinator.compactionPending = true
+                    Task { @MainActor in
+                        defer { coordinator.compactionPending = false }
+                        if state.checkpointRevision == revision { state.recordCompactionFailure() }
+                    }
                 }
             }
         }
