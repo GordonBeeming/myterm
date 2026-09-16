@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0157D830911F9926A63C676B /* ManagementViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01E2B01D02870D4686EFFA95 /* ManagementViews.swift */; };
+		0F45CD9A7BB9451F8F80B2AD /* LiveDeviceTouchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C321D8E24D9D3D373D55F2B7 /* LiveDeviceTouchTests.swift */; };
 		1D5706A804D75DFBCB0E4D2E /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A017877BD2AA19E348F092AB /* AppConfiguration.swift */; };
 		1E0A6809BCEDF532C1B58F3B /* TerminalViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D0EC6293C786897DA204B4C /* TerminalViews.swift */; };
 		27A4019177A7B85550F44A22 /* MyTermCompanionApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15CE946E75B4FCF6C271546A /* MyTermCompanionApp.swift */; };
@@ -24,6 +25,7 @@
 		75D613545B3FC0EC994D616B /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = 01505EAD249CF45C6DEC8167 /* SwiftTerm */; };
 		8FD92ED5F4F7DF7794C3D1A9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97E4B3C98E1DE16DF3D63DEE /* Assets.xcassets */; };
 		941ECD6CF20B3D428F38FDC0 /* SceneStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C16667DB8CC7675CEFC6E88 /* SceneStateTests.swift */; };
+		A2EDC285AF6DEBF292A4253F /* CompanionTouchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C898CD4E394628E363B26B77 /* CompanionTouchTests.swift */; };
 		A380269948EFFCE07E4D5ADC /* NotificationEnrollment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5811AA28711A02FA8FBCF85D /* NotificationEnrollment.swift */; };
 		ABEE012D67BB90EA48F1A195 /* CompanionServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 242FCDCEC5B800E20925A07C /* CompanionServices.swift */; };
 		AF605616EF994E353DC4BCFA /* CompanionLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F652502288C33AA2EDD07BE2 /* CompanionLaunchTests.swift */; };
@@ -38,6 +40,7 @@
 		EEA6608C6ED4757BC7B0120C /* MyTermRemote in Frameworks */ = {isa = PBXBuildFile; productRef = 9516E10CB2B00AC3CE7185FA /* MyTermRemote */; };
 		EF15BAB06B72B6593A67C359 /* RemoteSettingsEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69775211DDE86AF39BD85C5F /* RemoteSettingsEditor.swift */; };
 		F192A2A9C31134D2CFCAE42F /* SceneRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EABF08F1180E6CF131038913 /* SceneRootView.swift */; };
+		FD55D07F1B043F5EDB1FE758 /* TerminalTouchInteractionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D60BAB7309874741C7B16211 /* TerminalTouchInteractionTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -85,7 +88,6 @@
 		15CE946E75B4FCF6C271546A /* MyTermCompanionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyTermCompanionApp.swift; sourceTree = "<group>"; };
 		167672F5922523F7E84346F5 /* MyTermNotificationService.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = MyTermNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		242FCDCEC5B800E20925A07C /* CompanionServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionServices.swift; sourceTree = "<group>"; };
-		3845513B3D02FB7B6F8F371B /* 20260915-quiet-tern */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "20260915-quiet-tern"; path = ..; sourceTree = SOURCE_ROOT; };
 		4C16667DB8CC7675CEFC6E88 /* SceneStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneStateTests.swift; sourceTree = "<group>"; };
 		4E8E6E39688D735FBB9DCCC2 /* SwiftTerm */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SwiftTerm; path = ../Vendor/SwiftTerm; sourceTree = SOURCE_ROOT; };
 		53A2B5E6871C55271FDA9849 /* AppModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModels.swift; sourceTree = "<group>"; };
@@ -93,6 +95,7 @@
 		69775211DDE86AF39BD85C5F /* RemoteSettingsEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSettingsEditor.swift; sourceTree = "<group>"; };
 		6C515C5438F75556A2FB4710 /* MyTermCompanionUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MyTermCompanionUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6D0EC6293C786897DA204B4C /* TerminalViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalViews.swift; sourceTree = "<group>"; };
+		7FECD994E0E3DE2646FE2207 /* myterm */ = {isa = PBXFileReference; lastKnownFileType = folder; name = myterm; path = ..; sourceTree = SOURCE_ROOT; };
 		97E4B3C98E1DE16DF3D63DEE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		9EFF5F814F79AFC4FE808CBD /* MyTermRemote */ = {isa = PBXFileReference; lastKnownFileType = folder; name = MyTermRemote; path = ../Packages/MyTermRemote; sourceTree = SOURCE_ROOT; };
 		A017877BD2AA19E348F092AB /* AppConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfiguration.swift; sourceTree = "<group>"; };
@@ -102,8 +105,11 @@
 		B2EA22602077EEAC436C98E8 /* MyTermCompanionTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MyTermCompanionTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B34593A3693A9FE889079CF3 /* LiveDeviceLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveDeviceLayoutTests.swift; sourceTree = "<group>"; };
 		BFA88151878C429986196266 /* RemoteSettingsDraftTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSettingsDraftTests.swift; sourceTree = "<group>"; };
+		C321D8E24D9D3D373D55F2B7 /* LiveDeviceTouchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveDeviceTouchTests.swift; sourceTree = "<group>"; };
+		C898CD4E394628E363B26B77 /* CompanionTouchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionTouchTests.swift; sourceTree = "<group>"; };
 		D02D7C3B605BC41C6D6B704D /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		D4D3ECF4B3194B81DF0DA4E1 /* NotificationEnvelope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationEnvelope.swift; sourceTree = "<group>"; };
+		D60BAB7309874741C7B16211 /* TerminalTouchInteractionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalTouchInteractionTests.swift; sourceTree = "<group>"; };
 		DAF28873A55DB620FA995481 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		DB31F13A0F11454C01C5C166 /* MyTermCompanion.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = MyTermCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DDE96CF8557994DF7FEAAB5A /* BrowserAuthenticationStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserAuthenticationStateTests.swift; sourceTree = "<group>"; };
@@ -170,7 +176,7 @@
 		74787029B8F005F4BB5B25A8 /* Packages */ = {
 			isa = PBXGroup;
 			children = (
-				3845513B3D02FB7B6F8F371B /* 20260915-quiet-tern */,
+				7FECD994E0E3DE2646FE2207 /* myterm */,
 				9EFF5F814F79AFC4FE808CBD /* MyTermRemote */,
 				4E8E6E39688D735FBB9DCCC2 /* SwiftTerm */,
 			);
@@ -181,8 +187,10 @@
 			isa = PBXGroup;
 			children = (
 				F652502288C33AA2EDD07BE2 /* CompanionLaunchTests.swift */,
+				C898CD4E394628E363B26B77 /* CompanionTouchTests.swift */,
 				B34593A3693A9FE889079CF3 /* LiveDeviceLayoutTests.swift */,
 				ABE4FD21D0CF4787337BDC5D /* LiveDeviceTerminalTests.swift */,
+				C321D8E24D9D3D373D55F2B7 /* LiveDeviceTouchTests.swift */,
 			);
 			path = UITests;
 			sourceTree = "<group>";
@@ -240,6 +248,7 @@
 				DDE96CF8557994DF7FEAAB5A /* BrowserAuthenticationStateTests.swift */,
 				BFA88151878C429986196266 /* RemoteSettingsDraftTests.swift */,
 				4C16667DB8CC7675CEFC6E88 /* SceneStateTests.swift */,
+				D60BAB7309874741C7B16211 /* TerminalTouchInteractionTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -386,13 +395,14 @@
 				6E0E23867C14381B80F5D0F9 /* XCLocalSwiftPackageReference "../Vendor/SwiftTerm" */,
 			);
 			preferredProjectObjectVersion = 77;
+			productRefGroup = 94E7ABF36E6BB51934FE79B4 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				636B2E5E2F15AB2DF7B8BC21 /* MyTermCompanion */,
+				F185EE16894EE02B5476AFF7 /* MyTermNotificationService */,
 				6B528D5093DC8BD4C4920E2D /* MyTermCompanionTests */,
 				99F1F3EEA84E62B048C62609 /* MyTermCompanionUITests */,
-				F185EE16894EE02B5476AFF7 /* MyTermNotificationService */,
 			);
 		};
 /* End PBXProject section */
@@ -415,8 +425,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				AF605616EF994E353DC4BCFA /* CompanionLaunchTests.swift in Sources */,
+				A2EDC285AF6DEBF292A4253F /* CompanionTouchTests.swift in Sources */,
 				BA2AAC2DBE9036DCE44948D8 /* LiveDeviceLayoutTests.swift in Sources */,
 				D18392ED534EC36B00C240F2 /* LiveDeviceTerminalTests.swift in Sources */,
+				0F45CD9A7BB9451F8F80B2AD /* LiveDeviceTouchTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -459,6 +471,7 @@
 				D45BD972D0DEC52E2E4E5EA9 /* BrowserAuthenticationStateTests.swift in Sources */,
 				C3E364CB2489742AC305E98E /* RemoteSettingsDraftTests.swift in Sources */,
 				941ECD6CF20B3D428F38FDC0 /* SceneStateTests.swift in Sources */,
+				FD55D07F1B043F5EDB1FE758 /* TerminalTouchInteractionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
