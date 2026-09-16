@@ -2821,16 +2821,24 @@ final class AppModel {
         return value
     }
 
-    func createCompanionWorkspace(title: String, folderID: WorkspaceFolderID?) throws -> WorkspaceID {
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    func createCompanionWorkspace(title: String?, folderID: WorkspaceFolderID?,
+                                  sourceWorkspaceID: WorkspaceID? = nil) throws -> WorkspaceID {
+        let sourceWorkspace: Workspace?
+        if let sourceWorkspaceID {
+            guard let source = store.workspaces.first(where: { $0.id == sourceWorkspaceID }) else {
+                throw CompanionCommandError.wrongTarget
+            }
+            sourceWorkspace = source
+        } else { sourceWorkspace = nil }
+        let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? nextWorkspaceTitle()
         guard !trimmed.isEmpty, trimmed.utf8.count <= 256 else {
             throw CompanionCommandError.invalidPayload
         }
         return try performCompanionMutation {
-            let activeDirectory = activeTerminalDirectory(in: selectedWorkspace)
+            let activeDirectory = sourceWorkspace.flatMap { activeTerminalDirectory(in: $0) }
             let workspaceID = try store.createWorkspace(
                 title: trimmed,
-                folderID: folderID,
+                folderID: folderID ?? sourceWorkspace?.folderID,
                 selectsCreatedWorkspace: false
             )
             guard let created = store.workspaces.first(where: { $0.id == workspaceID }) else {

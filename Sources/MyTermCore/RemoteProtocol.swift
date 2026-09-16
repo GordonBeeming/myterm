@@ -191,9 +191,9 @@ public struct RemoteIdentifierResult: Codable, Equatable, Sendable {
 }
 
 public struct RemoteWorkspaceCreatePayload: Codable, Equatable, Sendable {
-    public let title: String
+    public let title: String?
     public let folderID: WorkspaceFolderID?
-    public init(title: String, folderID: WorkspaceFolderID? = nil) {
+    public init(title: String? = nil, folderID: WorkspaceFolderID? = nil) {
         self.title = title
         self.folderID = folderID
     }
@@ -233,9 +233,9 @@ public struct RemoteColorPayload: Codable, Equatable, Sendable {
 }
 
 public struct RemoteFolderCreatePayload: Codable, Equatable, Sendable {
-    public let title: String
+    public let title: String?
     public let color: WorkspaceFolderColor
-    public init(title: String, color: WorkspaceFolderColor = .blue) {
+    public init(title: String? = nil, color: WorkspaceFolderColor = .blue) {
         self.title = title
         self.color = color
     }

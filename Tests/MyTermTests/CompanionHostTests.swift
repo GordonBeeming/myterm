@@ -121,6 +121,49 @@ final class CompanionHostTests: XCTestCase {
         )
     }
 
+    func testAutomaticWorkspaceCreationUsesViewedContextAndUnusedNames() throws {
+        let model = try model()
+        let desktopID = model.store.selectedWorkspaceID
+        let folderID = try model.store.createFolder(title: "Viewed folder")
+        let sourceID = try model.store.createWorkspace(title: "Viewed workspace", folderID: folderID,
+                                                      selectsCreatedWorkspace: false)
+        let source = try XCTUnwrap(model.store.workspaces.first { $0.id == sourceID })
+        let group = try XCTUnwrap(source.focusedTabGroup)
+        let tab = try XCTUnwrap(group.selectedTab)
+        let directory = FileManager.default.temporaryDirectory.standardizedFileURL
+        try model.store.updateTerminalWorkingDirectory(workspaceID: sourceID, tabGroupID: group.id,
+                                                       tabID: tab.id, workingDirectory: directory)
+        try model.store.updateGlobalSettings { $0.newSessionWorkingDirectory = .activePane }
+        var titles: Set<String> = []
+        for _ in 0..<2 {
+            let result = try XCTUnwrap(model.performCompanionCommand(
+                metadata: metadata(workspaceID: sourceID),
+                command: CommandParameters(operation: .workspaceCreate,
+                                            payload: try data(RemoteWorkspaceCreatePayload()))
+            ))
+            let id = try JSONDecoder().decode(RemoteIdentifierResult.self, from: result).id
+            let created = try XCTUnwrap(model.store.workspaces.first { $0.id.rawValue == id })
+            XCTAssertEqual(created.folderID, folderID)
+            XCTAssertTrue(created.title.hasPrefix("Workspace "))
+            XCTAssertTrue(titles.insert(created.title).inserted)
+            XCTAssertEqual(created.selectedTab?.terminalSession?.workingDirectory?.standardizedFileURL, directory)
+        }
+        XCTAssertEqual(model.store.selectedWorkspaceID, desktopID)
+        XCTAssertThrowsError(try model.createCompanionWorkspace(title: nil, folderID: nil,
+                                                               sourceWorkspaceID: WorkspaceID()))
+    }
+
+    func testAutomaticFolderNamesAreAssignedOnTheHost() throws {
+        let model = try model()
+        _ = try model.store.createFolder(title: "Folder 1")
+        for expected in ["Folder 2", "Folder 3"] {
+            let result = try XCTUnwrap(model.performCompanionCommand(metadata: metadata(), command:
+                CommandParameters(operation: .folderCreate, payload: try data(RemoteFolderCreatePayload()))))
+            let id = try JSONDecoder().decode(RemoteIdentifierResult.self, from: result).id
+            XCTAssertEqual(model.store.folders.first { $0.id.rawValue == id }?.title, expected)
+        }
+    }
+
     func testRemoteWorkspaceAndTabCreationPreserveDesktopSelection() throws {
         let model = try model()
         let desktopWorkspaceID = model.store.selectedWorkspaceID

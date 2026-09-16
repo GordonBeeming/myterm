@@ -2,6 +2,7 @@ import Foundation
 import MyTermCore
 import MyTermRemote
 import XCTest
+import UIKit
 @testable import MyTermCompanion
 
 private final class TestSecretStore: SecretStore, @unchecked Sendable {
@@ -20,6 +21,119 @@ private actor VisibilityEventRecorder {
 
 @MainActor
 final class SceneStateTests: XCTestCase {
+    func testClipboardImagePasteRequiresControlAndUsesPNG() throws {
+        let view = ClipboardTerminalView(frame: .zero)
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).image { context in
+            UIColor.red.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 2, height: 2))
+        }
+        UIPasteboard.general.image = image
+        defer { UIPasteboard.general.items = [] }
+        var pasted: Data?
+        view.onPasteImage = { pasted = $0 }
+        view.acceptsUserInput = false
+        view.paste(nil)
+        XCTAssertNil(pasted)
+        view.acceptsUserInput = true
+        view.paste(nil)
+        XCTAssertTrue(pasted?.starts(with: [0x89, 0x50, 0x4e, 0x47]) == true)
+        pasted = nil
+        UIPasteboard.general.items = [["public.utf8-plain-text": "text with a preview",
+                                      "public.png": try XCTUnwrap(image.pngData())]]
+        view.paste(nil)
+        XCTAssertNil(pasted)
+
+        view.canMaximise = true
+        let command = view.keyCommands?.first { $0.input == "\r" && $0.modifierFlags == [.command, .shift] }
+        XCTAssertTrue(command?.wantsPriorityOverSystemBehavior == true)
+        XCTAssertTrue(view.canPerformAction(try XCTUnwrap(command?.action), withSender: nil))
+    }
+
+    func testRenderedOutputCompactionRejectsStaleRenderAndPreservesControl() async throws {
+        let route = testTerminalRoute(connectionID: testConnection())
+        let state = TerminalSurfaceState(route: route)
+        let generation = UUID()
+        let checkpoint = try await CheckpointAssembler().ingest(
+            metadata: MessageMetadata(hostID: route.hostID, runtimeID: UUID(), sessionID: route.sessionID),
+            chunk: CheckpointChunkParameters(transferID: UUID(), generation: generation, sequence: 0,
+                chunkIndex: 0, chunkCount: 1, totalBytes: 1, bytes: Data([1])))
+        state.apply(checkpoint: try XCTUnwrap(checkpoint))
+        let revision = state.checkpointRevision
+        XCTAssertTrue(state.append(output: OutputParameters(generation: generation, sequence: 1, bytes: Data([2]))))
+        state.ownsControl = true
+        XCTAssertFalse(state.compactRenderedOutput(checkpoint: Data([3]), sequence: 0, revision: revision))
+        XCTAssertEqual(state.bufferedOutputBytes, 1)
+        XCTAssertTrue(state.compactRenderedOutput(checkpoint: Data([3]), sequence: 1, revision: revision))
+        XCTAssertTrue(state.ownsControl)
+        XCTAssertFalse(state.isAwaitingCheckpoint)
+        XCTAssertEqual(state.bufferedOutputBytes, 0)
+        XCTAssertEqual(state.checkpoint, Data([3]))
+        XCTAssertTrue(state.append(output: OutputParameters(generation: generation, sequence: 2, bytes: Data([4]))))
+    }
+
+    func testCompactionFailureKeepsDisplayAndControlUntilNewCheckpoint() async throws {
+        let route = testTerminalRoute(connectionID: testConnection())
+        let state = TerminalSurfaceState(route: route)
+        let generation = UUID()
+        let checkpoint = try await CheckpointAssembler().ingest(
+            metadata: MessageMetadata(hostID: route.hostID, runtimeID: UUID(), sessionID: route.sessionID),
+            chunk: CheckpointChunkParameters(transferID: UUID(), generation: generation, sequence: 0,
+                chunkIndex: 0, chunkCount: 1, totalBytes: 1, bytes: Data([1])))
+        state.apply(checkpoint: try XCTUnwrap(checkpoint))
+        let bytes = Data(repeating: 2, count: 1_024 * 1_024)
+        XCTAssertTrue(state.append(output: OutputParameters(generation: generation, sequence: 1, bytes: bytes)))
+        state.ownsControl = true
+        let leaseID = UUID()
+        state.leaseID = leaseID
+        XCTAssertTrue(state.needsOutputCompaction)
+        state.recordCompactionFailure()
+        XCTAssertFalse(state.needsOutputCompaction)
+        XCTAssertFalse(state.isAwaitingCheckpoint)
+        XCTAssertTrue(state.ownsControl)
+        XCTAssertEqual(state.leaseID, leaseID)
+        XCTAssertEqual(state.checkpoint, Data([1]))
+        XCTAssertEqual(state.outputChunks, [bytes])
+        XCTAssertTrue(state.append(output: OutputParameters(generation: generation, sequence: 2, bytes: Data([3]))))
+        XCTAssertFalse(state.needsOutputCompaction)
+        state.apply(checkpoint: try XCTUnwrap(checkpoint))
+        XCTAssertTrue(state.append(output: OutputParameters(generation: generation, sequence: 1, bytes: bytes)))
+        XCTAssertTrue(state.needsOutputCompaction)
+    }
+
+    func testCachedTerminalRetainsDisplayButDropsControlUntilFreshCheckpoint() async throws {
+        let route = testTerminalRoute(connectionID: testConnection())
+        let scene = SceneModel()
+        let state = TerminalSurfaceState(route: route)
+        let generation = UUID()
+        let checkpoint = try await CheckpointAssembler().ingest(
+            metadata: MessageMetadata(hostID: route.hostID, runtimeID: UUID(), sessionID: route.sessionID),
+            chunk: CheckpointChunkParameters(transferID: UUID(), generation: generation, sequence: 0,
+                chunkIndex: 0, chunkCount: 1, totalBytes: 1, bytes: Data([1])))
+        state.apply(checkpoint: try XCTUnwrap(checkpoint))
+        XCTAssertTrue(state.append(output: OutputParameters(generation: generation, sequence: 1, bytes: Data([2]))))
+        state.ownsControl = true
+        state.leaseID = UUID()
+        scene.terminalStates[route.id] = state
+        scene.cacheTerminalSurface(route.id)
+        XCTAssertNil(scene.terminalStates[route.id])
+        XCTAssertEqual(state.checkpoint, Data([1]))
+        XCTAssertEqual(state.outputChunks, [Data([2])])
+        XCTAssertTrue(state.isAwaitingCheckpoint)
+        XCTAssertFalse(state.ownsControl)
+        XCTAssertNil(state.leaseID)
+        XCTAssertFalse(state.append(output: OutputParameters(generation: generation, sequence: 2, bytes: Data([3]))))
+    }
+
+    func testRepeatedActiveNotificationDoesNotResetTerminal() async {
+        let scene = SceneModel()
+        scene.connectionPhase = .online
+        let route = testTerminalRoute(connectionID: testConnection())
+        let state = TerminalSurfaceState(route: route)
+        scene.terminalStates[route.id] = state
+        await scene.setSceneActive(true, services: CompanionServices(secrets: TestSecretStore()))
+        XCTAssertTrue(scene.terminalStates[route.id] === state)
+    }
+
     func testSelectingWorkspaceUsesDetailRootWithoutPushingDuplicate() {
         let scene = SceneModel()
         let workspaceID = UUID()

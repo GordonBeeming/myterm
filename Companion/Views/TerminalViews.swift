@@ -1,6 +1,7 @@
 import MyTermCore
 import MyTermRemote
 import PhotosUI
+import OSLog
 import SwiftTerm
 import SwiftUI
 import UIKit
@@ -133,6 +134,7 @@ struct CompanionTerminalPane: View {
     let route: TerminalRoute
     let showTerminalKeys: Bool
     var requestsKeyboardFocus = true
+    var onToggleMaximise: (() -> Void)?
 
     var body: some View {
         if let state = scene.terminalStates[route.id] {
@@ -141,8 +143,13 @@ struct CompanionTerminalPane: View {
                 TerminalControlBar(state: state) { action in
                     Task { await scene.requestControl(action, route: currentRoute) }
                 }
-                RemoteTerminalView(state: state, showTerminalKeys: showTerminalKeys, requestsKeyboardFocus: requestsKeyboardFocus) { data in
+                RemoteTerminalView(state: state, showTerminalKeys: showTerminalKeys, requestsKeyboardFocus: requestsKeyboardFocus, onToggleMaximise: onToggleMaximise) { data in
                     Task { await scene.sendInput(data, route: currentRoute) }
+                } onPasteImage: { data in
+                    Task {
+                        do { try await scene.pasteImage(data, route: currentRoute) }
+                        catch { scene.errorMessage = error.localizedDescription }
+                    }
                 } onResize: { columns, rows in
                     Task { await scene.resize(columns: columns, rows: rows, route: currentRoute) }
                 } onResync: { error in
@@ -210,17 +217,26 @@ private struct TerminalControlBar: View {
 }
 
 private struct RemoteTerminalView: UIViewRepresentable {
+    private static let logger = Logger(subsystem: AppConfiguration.bundleIdentifier, category: "TerminalRendering")
     let state: TerminalSurfaceState
     let showTerminalKeys: Bool
     var requestsKeyboardFocus = true
+    var onToggleMaximise: (() -> Void)?
     let onInput: (Data) -> Void
+    let onPasteImage: (Data) -> Void
     let onResize: (Int, Int) -> Void
     let onResync: (Error) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
     func makeUIView(context: Context) -> TerminalView {
-        let view = TerminalView(frame: .zero)
+        let view = ClipboardTerminalView(frame: .zero)
+        view.onPasteImage = { [weak coordinator = context.coordinator] data in
+            coordinator?.parent.onPasteImage(data)
+        }
+        view.onToggleMaximise = { [weak coordinator = context.coordinator] in
+            coordinator?.parent.onToggleMaximise?()
+        }
         view.terminalDelegate = context.coordinator
         view.sendsTerminalResponses = false
         view.acceptsUserInput = false
@@ -234,6 +250,9 @@ private struct RemoteTerminalView: UIViewRepresentable {
 
     func updateUIView(_ view: TerminalView, context: Context) {
         context.coordinator.parent = self
+        if let clipboardView = view as? ClipboardTerminalView {
+            clipboardView.canMaximise = onToggleMaximise != nil
+        }
         let accessory = showTerminalKeys ? context.coordinator.defaultInputAccessoryView : nil
         if view.inputAccessoryView !== accessory {
             view.inputAccessoryView = accessory
@@ -262,10 +281,10 @@ private struct RemoteTerminalView: UIViewRepresentable {
            let checkpoint = state.checkpoint {
             do {
                 try view.getTerminal().importCheckpoint(checkpoint)
-                try view.invalidateAfterCheckpointImport()
                 context.coordinator.checkpointRevision = state.checkpointRevision
                 context.coordinator.outputIndex = 0
                 feedPendingOutput(into: view, coordinator: context.coordinator)
+                try view.invalidateAfterCheckpointImport()
             } catch {
                 view.acceptsUserInput = false
                 view.automaticallyResizesTerminal = false
@@ -316,6 +335,30 @@ private struct RemoteTerminalView: UIViewRepresentable {
                 view.feed(byteArray: array[...])
             }
             coordinator.outputIndex = state.outputChunks.count
+            if state.needsOutputCompaction,
+               !coordinator.compactionPending {
+                do {
+                    let checkpoint = try view.getTerminal().exportCheckpoint()
+                    let sequence = state.sequence
+                    let revision = state.checkpointRevision
+                    coordinator.compactionPending = true
+                    Task { @MainActor in
+                        defer { coordinator.compactionPending = false }
+                        if state.compactRenderedOutput(checkpoint: checkpoint, sequence: sequence, revision: revision) {
+                            coordinator.checkpointRevision = state.checkpointRevision
+                            coordinator.outputIndex = 0
+                        }
+                    }
+                } catch {
+                    Self.logger.warning("Local terminal compaction failed; retaining the display and buffered output.")
+                    let revision = state.checkpointRevision
+                    coordinator.compactionPending = true
+                    Task { @MainActor in
+                        defer { coordinator.compactionPending = false }
+                        if state.checkpointRevision == revision { state.recordCompactionFailure() }
+                    }
+                }
+            }
         }
     }
 
@@ -325,6 +368,7 @@ private struct RemoteTerminalView: UIViewRepresentable {
         var requestedFocus = false
         var resignRequested = false
         var checkpointRevision = -1
+        var compactionPending = false
         var outputIndex = 0
         var gridRevision = -1
         var lastAppliedAuthoritativeSize: (Int, Int)?
@@ -548,47 +592,56 @@ struct TerminalActionsView: View {
     }
 
     private func pasteImage(_ item: PhotosPickerItem) async {
-        guard let surface, let leaseID = surface.leaseID, let generation = surface.generation,
-              let uploadConnectionID = scene.connectionID else { return }
         isSendingImage = true
         imageProgress = 0
         defer { isSendingImage = false; imageItem = nil; imageTask = nil }
         do {
-            guard let data = try await item.loadTransferable(type: Data.self),
-                  !data.isEmpty, data.count <= RemoteImageChunkPayload.maximumTotalBytes else {
+            guard let data = try await item.loadTransferable(type: Data.self) else {
                 throw RemoteError.messageTooLarge
             }
-            let contentType: RemoteTerminalImageType
-            if data.starts(with: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) {
-                contentType = .png
-            } else if data.starts(with: [0xff, 0xd8, 0xff]) {
-                contentType = .jpeg
-            } else {
-                throw NSError(domain: "MyTermImagePaste", code: 1,
-                              userInfo: [NSLocalizedDescriptionKey: "Choose a PNG or JPEG image."])
-            }
-            let transferID = UUID()
-            let chunkSize = RemoteImageChunkPayload.maximumChunkBytes
-            let chunkCount = Int(ceil(Double(data.count) / Double(chunkSize)))
-            for index in 0..<chunkCount {
-                try Task.checkCancellation()
-                guard scene.connectionID == uploadConnectionID, surface.ownsControl,
-                      surface.leaseID == leaseID, surface.generation == generation else {
-                    throw RemoteError.disconnected
-                }
-                let start = index * chunkSize
-                let end = min(start + chunkSize, data.count)
-                let chunk = try RemoteImageChunkPayload(
-                    transferID: transferID, leaseID: leaseID, generation: generation,
-                    contentType: contentType, chunkIndex: index, chunkCount: chunkCount,
-                    totalBytes: data.count, bytes: data.subdata(in: start..<end)
-                )
-                _ = try await scene.command(.terminalPasteImageChunk, metadata: metadata(),
-                                            payload: try JSONEncoder().encode(chunk))
-                imageProgress = Double(index + 1) / Double(chunkCount)
-            }
+            try await scene.pasteImage(data, route: route) { imageProgress = $0 }
         } catch is CancellationError {
             return
         } catch { scene.errorMessage = error.localizedDescription }
+    }
+}
+
+@MainActor
+final class ClipboardTerminalView: TerminalView {
+    var onPasteImage: ((Data) -> Void)?
+    var onToggleMaximise: (() -> Void)?
+    var canMaximise = false
+
+    override var keyCommands: [UIKeyCommand]? {
+        var commands = super.keyCommands ?? []
+        let paste = UIKeyCommand(input: "v", modifierFlags: .command, action: #selector(paste(_:)))
+        paste.wantsPriorityOverSystemBehavior = true
+        commands.append(paste)
+        if canMaximise {
+            let maximise = UIKeyCommand(input: "\r", modifierFlags: [.command, .shift], action: #selector(toggleMaximise(_:)))
+            maximise.wantsPriorityOverSystemBehavior = true
+            commands.append(maximise)
+        }
+        return commands
+    }
+
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        if action == #selector(toggleMaximise(_:)) { return canMaximise }
+        if action == #selector(paste(_:)) { return acceptsUserInput }
+        return super.canPerformAction(action, withSender: sender)
+    }
+
+    @objc private func toggleMaximise(_ sender: Any?) { onToggleMaximise?() }
+
+    override func paste(_ sender: Any?) {
+        guard acceptsUserInput else { return }
+        if let text = UIPasteboard.general.string, !text.isEmpty {
+            super.paste(sender)
+        } else if UIPasteboard.general.hasImages, let image = UIPasteboard.general.image,
+           let data = image.pngData() {
+            onPasteImage?(data)
+        } else {
+            super.paste(sender)
+        }
     }
 }

@@ -46,6 +46,7 @@ struct SceneRootView: View {
             Text(scene.errorMessage ?? services.errorMessage ?? "Unknown error")
         }
         .onChange(of: scenePhase) { _, phase in
+            guard phase != .inactive else { return }
             Task { await scene.setSceneActive(phase == .active, services: services) }
         }
         .task {
@@ -151,6 +152,7 @@ private struct HostSidebar: View {
 private struct WorkspaceColumn: View {
     let services: CompanionServices
     let scene: SceneModel
+    @State private var isCreating = false
 
     var body: some View {
         @Bindable var scene = scene
@@ -192,11 +194,36 @@ private struct WorkspaceColumn: View {
         .navigationTitle("Workspaces")
         .toolbar {
             if scene.connectionPhase == .online {
-                Button("New workspace", systemImage: "plus") {
-                    scene.sheet = .workspaceActions(UUID())
+                Menu("Add folder or workspace", systemImage: "plus") {
+                    Button("Add workspace", systemImage: "terminal") { Task { await create(workspace: true) } }
+                    Button("Add folder", systemImage: "folder.badge.plus") { Task { await create(workspace: false) } }
                 }
+                .disabled(isCreating)
             }
         }
+    }
+
+    private func create(workspace: Bool) async {
+        guard !isCreating, let hostID = scene.selectedHostID,
+              let connectionID = scene.selectedConnectionID else { return }
+        let sourceWorkspaceID = scene.selectedWorkspaceID
+        isCreating = true
+        defer { isCreating = false }
+        do {
+            let operation: CommandOperation = workspace ? .workspaceCreate : .folderCreate
+            let payload = workspace
+                ? try JSONEncoder().encode(RemoteWorkspaceCreatePayload())
+                : try JSONEncoder().encode(RemoteFolderCreatePayload())
+            let result = try await scene.command(operation, metadata: MessageMetadata(
+                hostID: hostID, workspaceID: workspace ? sourceWorkspaceID : nil
+            ), payload: payload)
+            guard scene.selectedConnectionID == connectionID,
+                  scene.selectedWorkspaceID == sourceWorkspaceID else { return }
+            if workspace, let result {
+                let created = try JSONDecoder().decode(RemoteIdentifierResult.self, from: result)
+                scene.navigateToWorkspace(created.id)
+            }
+        } catch { scene.errorMessage = error.localizedDescription }
     }
 
     private var connectionDescription: String {

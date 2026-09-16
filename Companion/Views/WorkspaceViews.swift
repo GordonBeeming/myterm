@@ -27,7 +27,7 @@ struct WorkspaceDetail: View {
                         Button("New terminal", systemImage: "plus.rectangle.on.rectangle") {
                             Task { await createTab(kind: .terminal) }
                         }
-                        Menu("Workspace actions", systemImage: "ellipsis.circle") {
+                        Menu("Workspace actions", systemImage: "folder.badge.gearshape") {
                             Button("Manage workspace") { scene.sheet = .workspaceActions(workspace.id.rawValue) }
                             Button("New browser tab") { Task { await createTab(kind: .browser) } }
                         }
@@ -173,6 +173,7 @@ private struct TabProjectionRow: View {
 struct BrowserMetadataView: View {
     let scene: SceneModel
     let route: BrowserRoute
+    var embedded = false
     @Environment(\.openURL) private var openURL
     @State private var closeConfirmation: CloseConfirmationPrompt?
     @State private var tabIndex = 0
@@ -190,16 +191,12 @@ struct BrowserMetadataView: View {
                 Text("The Mac has not reported a URL for this tab.")
             }
         }
-        .navigationTitle(route.title)
+        .navigationTitle(embedded ? (scene.projection?.workspaces.first { $0.id.rawValue == route.workspaceID }?.title ?? "Workspace") : route.title)
         .toolbar {
-            Menu("Tab actions", systemImage: "ellipsis.circle") {
-                Stepper("Position \(tabIndex + 1)", value: $tabIndex, in: 0...255)
-                Button("Move to position") { Task { await reorder() } }
-                ForEach(Array(destinationGroups.enumerated()), id: \.element.id) { index, group in
-                    Button("Move to group \(index + 1)") { Task { await move(to: group) } }
-                }
-                Button("Close tab", role: .destructive) { Task { await close() } }
-            }
+            if !embedded { browserActions }
+        }
+        .overlay(alignment: .topTrailing) {
+            if embedded { browserActions.padding(8) }
         }
         .alert("Close active browser tab?", isPresented: Binding(
             get: { closeConfirmation != nil }, set: { if !$0 { closeConfirmation = nil } }
@@ -210,6 +207,17 @@ struct BrowserMetadataView: View {
             Button("Cancel", role: .cancel) {}
         } message: { prompt in
             Text("These processes are still running: \(prompt.processNames.joined(separator: ", ")).")
+        }
+    }
+
+    private var browserActions: some View {
+        Menu("Browser actions", systemImage: "globe") {
+            Stepper("Position \(tabIndex + 1)", value: $tabIndex, in: 0...255)
+            Button("Move to position") { Task { await reorder() } }
+            ForEach(Array(destinationGroups.enumerated()), id: \.element.id) { index, group in
+                Button("Move to group \(index + 1)") { Task { await move(to: group) } }
+            }
+            Button("Close tab", role: .destructive) { Task { await close() } }
         }
     }
 
@@ -265,7 +273,6 @@ struct WorkspaceActionsView: View {
     let workspaceID: UUID
     @Environment(\.dismiss) private var dismiss
     @State private var title = ""
-    @State private var folderTitle = ""
     @State private var isSubmitting = false
     @State private var closeConfirmation: CloseConfirmationPrompt?
     @State private var color = ""
@@ -274,9 +281,9 @@ struct WorkspaceActionsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section(workspace == nil ? "New workspace" : "Workspace") {
+                Section("Workspace") {
                     TextField("Name", text: $title)
-                    Button(workspace == nil ? "Create workspace" : "Rename workspace") {
+                    Button("Rename workspace") {
                         Task { await saveWorkspace() }
                     }
                     .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmitting)
@@ -304,11 +311,6 @@ struct WorkspaceActionsView: View {
                         }
                         Button("Close workspace", role: .destructive) { Task { await closeWorkspace() } }
                     }
-                }
-                Section("New folder") {
-                    TextField("Folder name", text: $folderTitle)
-                    Button("Create folder") { Task { await createFolder() } }
-                        .disabled(folderTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmitting)
                 }
             }
             .navigationTitle("Workspace actions")
@@ -340,19 +342,13 @@ struct WorkspaceActionsView: View {
     }
 
     private func saveWorkspace() async {
-        guard let hostID = scene.selectedHostID else { return }
+        guard let hostID = scene.selectedHostID, let workspace else { return }
         isSubmitting = true
         defer { isSubmitting = false }
         do {
-            if let workspace {
-                _ = try await scene.command(.workspaceRename, metadata: MessageMetadata(
-                    hostID: hostID, workspaceID: workspace.id.rawValue
-                ), payload: try JSONEncoder().encode(RemoteRenamePayload(title: title)))
-            } else {
-                _ = try await scene.command(.workspaceCreate, metadata: MessageMetadata(
-                    hostID: hostID
-                ), payload: try JSONEncoder().encode(RemoteWorkspaceCreatePayload(title: title)))
-            }
+            _ = try await scene.command(.workspaceRename, metadata: MessageMetadata(
+                hostID: hostID, workspaceID: workspace.id.rawValue
+            ), payload: try JSONEncoder().encode(RemoteRenamePayload(title: title)))
             dismiss()
         } catch { scene.errorMessage = error.localizedDescription }
     }
@@ -418,15 +414,7 @@ struct WorkspaceActionsView: View {
         } catch { scene.errorMessage = error.localizedDescription }
     }
 
-    private func createFolder() async {
-        guard let hostID = scene.selectedHostID else { return }
-        do {
-            _ = try await scene.command(.folderCreate, metadata: MessageMetadata(
-                hostID: hostID
-            ), payload: try JSONEncoder().encode(RemoteFolderCreatePayload(title: folderTitle)))
-            folderTitle = ""
-        } catch { scene.errorMessage = error.localizedDescription }
-    }
+
 }
 
 struct FolderActionsView: View {
