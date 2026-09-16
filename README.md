@@ -228,7 +228,7 @@ The native companion connects to your running Macs through an HTTPS relay you ho
 
 Pairing combines relay passkey sign-in with a one-use QR code and approval on the Mac. Terminal traffic is encrypted between the devices. Wider screens mirror the Mac pane layout; narrow screens use a terminal picker. A per-device setting restores the terminal list. One connection controls input and terminal size at a time.
 
-The companion targets iOS and iPadOS 27. Browser tabs currently expose their titles and URLs. See [the companion setup guide](docs/COMPANION.md) for pairing, layouts, and notification configuration, and [the TestFlight deployment guide](docs/TESTFLIGHT.md) for building and uploading through GitHub Actions.
+The companion supports iOS and iPadOS 26 or later. Browser tabs currently expose their titles and URLs. See [the companion setup guide](docs/COMPANION.md) for pairing, layouts, and notification configuration, and [the TestFlight deployment guide](docs/TESTFLIGHT.md) for building and uploading through GitHub Actions.
 
 ## Everyday shortcuts
 
@@ -295,7 +295,7 @@ The app and its disk image therefore each have their own validated distribution 
 ## Current boundaries
 
 - The desktop app runs on macOS; downloadable desktop builds are Apple silicon only.
-- The companion requires iOS or iPadOS 27 and a running Mac host.
+- The companion requires iOS or iPadOS 26 or later and a running Mac host.
 - One main window and one built-in WebKit engine.
 - Terminal and browser panes share the same persistent split layout.
 - Chromium remains an optional future download so the main app stays small.

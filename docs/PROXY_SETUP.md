@@ -397,7 +397,7 @@ bash script/build_and_run.sh --prod --bundle
 
 After a fresh setup, open the bundle for the environment being configured: `dist/myterm-dev.app` or `dist/myterm.app`. After an isolated prod setup, open only `dist/myterm.app` and leave the existing dev app running. Quit an existing instance of the chosen channel before opening a rebuilt bundle; a second normal launch focuses the existing instance.
 
-Open `Companion/MyTermCompanion.xcodeproj` in Xcode, select the `MyTermCompanion` scheme, configure your Apple development team for the app and notification extension, and run on your iPhone or iPad. Both targets need their shared Keychain and App Group configuration. The current app requires iOS/iPadOS 27.
+Open `Companion/MyTermCompanion.xcodeproj` in Xcode, select the `MyTermCompanion` scheme, configure your Apple development team for the app and notification extension, and run on your iPhone or iPad. Both targets need their shared Keychain and App Group configuration. The current app requires iOS/iPadOS 26 or later.
 
 Pair each newly configured Mac. Complete both environments after a fresh setup; in an isolated prod setup, pair only the new prod connection:
 
