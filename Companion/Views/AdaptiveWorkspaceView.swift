@@ -27,8 +27,15 @@ struct AdaptiveWorkspaceView: View {
     @State private var selectedTabs: [TabGroupID: TabID] = [:]
     @State private var compactTabID: TabID?
     @State private var focusedGroupID: TabGroupID?
+    @State private var maximizedGroupID: TabGroupID?
 
     private var usesWideLayout: Bool { horizontalSizeClass == .regular && workspace.layout != nil }
+    private var validMaximizedGroupID: TabGroupID? {
+        guard let id = maximizedGroupID,
+              workspace.groups.contains(where: { $0.id == id }),
+              workspace.layout.map(groupIDs(in:))?.contains(id) == true else { return nil }
+        return id
+    }
     private var focusedGroup: RemoteTabGroupProjection? {
         workspace.groups.first { $0.id == focusedGroupID }
             ?? workspace.groups.first { $0.id == workspace.focusedGroupID }
@@ -45,7 +52,7 @@ struct AdaptiveWorkspaceView: View {
     }
     private var visibleRoutes: [TerminalRoute] {
         if usesWideLayout {
-            let visibleGroups = Set(workspace.layout.map(groupIDs(in:)) ?? [])
+            let visibleGroups = Set(validMaximizedGroupID.map { [$0] } ?? workspace.layout.map(groupIDs(in:)) ?? [])
             return workspace.groups.filter { visibleGroups.contains($0.id) }.compactMap { group in
                 selectedTab(in: group).flatMap { route(for: $0, group: group) }
             }
@@ -58,7 +65,11 @@ struct AdaptiveWorkspaceView: View {
         let visibility = WorkspaceVisibilityRequest(ownerID: visibilityOwnerID, routes: visibleRoutes)
         Group {
             if usesWideLayout, let layout = workspace.layout {
-                layoutView(layout)
+                if let id = validMaximizedGroupID {
+                    groupPane(id)
+                } else {
+                    layoutView(layout)
+                }
             } else if let (group, tab) = compactSelection {
                 paneContent(tab, group: group, focused: true)
             } else {
@@ -91,6 +102,16 @@ struct AdaptiveWorkspaceView: View {
                     .accessibilityIdentifier("workspace-terminal-picker")
                 }
             }
+            if usesWideLayout {
+                ToolbarItem(placement: .primaryAction) {
+                    Button(validMaximizedGroupID == nil ? "Maximise pane" : "Restore panes",
+                           systemImage: validMaximizedGroupID == nil ? "arrow.up.left.and.arrow.down.right" : "arrow.down.right.and.arrow.up.left") {
+                        maximizedGroupID = validMaximizedGroupID == nil ? focusedGroup?.id : nil
+                    }
+                    .keyboardShortcut(.return, modifiers: [.command, .shift])
+                    .accessibilityIdentifier("toggle-maximise-pane")
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button(showTerminalKeys ? "Hide terminal keys" : "Show terminal keys", systemImage: "keyboard") {
                     showTerminalKeys.toggle()
@@ -99,6 +120,9 @@ struct AdaptiveWorkspaceView: View {
             }
         }
         .onAppear { visibilityOwnerID = UUID() }
+        .onChange(of: workspace.groups.map(\.id)) { _, ids in
+            if let maximizedGroupID, !ids.contains(maximizedGroupID) { self.maximizedGroupID = nil }
+        }
         .task(id: visibility) {
             guard let owner = visibility.ownerID, !Task.isCancelled else { return }
             await scene.configureVisibleWorkspaceTerminals(visibility.routes, ownerID: owner)
@@ -130,14 +154,18 @@ struct AdaptiveWorkspaceView: View {
         if let route = route(for: tab, group: group) {
             CompanionTerminalPane(scene: scene, route: route,
                                   showTerminalKeys: showTerminalKeys && focused,
-                                  requestsKeyboardFocus: focused)
+                                  requestsKeyboardFocus: focused,
+                                  onToggleMaximise: usesWideLayout ? {
+                                      focusedGroupID = group.id
+                                      maximizedGroupID = maximizedGroupID == group.id ? nil : group.id
+                                  } : nil)
                 .id(route.id)
         } else if let connectionID = scene.selectedConnectionID {
             BrowserMetadataView(scene: scene, route: BrowserRoute(
                 connectionID: connectionID, workspaceID: workspace.id.rawValue,
                 groupID: group.id.rawValue, tabID: tab.id.rawValue,
                 title: tab.title, url: tab.browserURL
-            ))
+            ), embedded: true)
         }
     }
 
@@ -161,6 +189,12 @@ struct AdaptiveWorkspaceView: View {
                                 .lineLimit(1)
                         }
                         Spacer()
+                        Button(maximizedGroupID == groupID ? "Restore panes" : "Maximise pane",
+                               systemImage: maximizedGroupID == groupID ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") {
+                            focusedGroupID = groupID
+                            maximizedGroupID = maximizedGroupID == groupID ? nil : groupID
+                        }
+                        .labelStyle(.iconOnly)
                         if let route = route(for: tab, group: group) {
                             Button("Terminal actions", systemImage: "ellipsis") {
                                 scene.sheet = .terminalActions(route)

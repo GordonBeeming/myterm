@@ -171,6 +171,31 @@ final class SceneModel {
     private var pendingNotification: NotificationDestination?
     private var activeHost: SavedHostDescriptor?
     private weak var services: CompanionServices?
+    private var recentTerminalStates: [TerminalSurfaceID: TerminalSurfaceState] = [:]
+    private var recentTerminalOrder: [TerminalSurfaceID] = []
+
+    private func restoredTerminalState(for route: TerminalRoute) -> TerminalSurfaceState {
+        recentTerminalOrder.removeAll { $0 == route.id }
+        let state = recentTerminalStates.removeValue(forKey: route.id) ?? TerminalSurfaceState(route: route)
+        state.route = route
+        return state
+    }
+
+    func cacheTerminalSurface(_ id: TerminalSurfaceID) {
+        guard let state = terminalStates.removeValue(forKey: id), state.checkpoint != nil else { return }
+        state.prepareForReattachment()
+        recentTerminalStates[id] = state
+        recentTerminalOrder.removeAll { $0 == id }
+        recentTerminalOrder.append(id)
+        while recentTerminalOrder.count > 8 || recentTerminalStates.values.reduce(0, {
+            $0 + ($1.checkpoint?.count ?? 0) + $1.bufferedOutputBytes
+        }) > 32 * 1_024 * 1_024 {
+            guard let oldest = recentTerminalOrder.first else { break }
+            recentTerminalOrder.removeFirst()
+            recentTerminalStates.removeValue(forKey: oldest)
+        }
+    }
+
     private var isSceneActive = true
     private var reconnectAttempt = 0
     private var reconnectTask: Task<Void, Never>?
@@ -205,6 +230,7 @@ final class SceneModel {
         projection = nil
         connectionID = nil
         disableAllInput()
+        for id in Array(terminalStates.keys) { cacheTerminalSurface(id) }
         terminalStates.removeAll()
         visibleSessionOrder.removeAll()
         workspaceVisibleSessions.removeAll()
@@ -293,6 +319,7 @@ final class SceneModel {
     }
 
     func setSceneActive(_ active: Bool, services: CompanionServices) async {
+        guard isSceneActive != active else { return }
         isSceneActive = active
         if !active {
             await stopConnection()
@@ -350,9 +377,9 @@ final class SceneModel {
                                                 leaseID: terminalStates[hidden]?.ownsControl == true
                                                     ? terminalStates[hidden]?.leaseID : nil)
                 }
-                terminalStates.removeValue(forKey: hidden)
+                cacheTerminalSurface(hidden)
             }
-            let state = terminalStates[route.id] ?? TerminalSurfaceState(route: route)
+            let state = terminalStates[route.id] ?? restoredTerminalState(for: route)
             terminalStates[route.id] = state
             try await connection.attach(route, requestingFreshCheckpoint: requestingFreshCheckpoint)
         } catch { errorMessage = error.localizedDescription }
@@ -437,7 +464,7 @@ final class SceneModel {
     private func attachWorkspaceTerminal(_ route: TerminalRoute) async {
         do {
             guard let connection else { throw RemoteError.disconnected }
-            let state = terminalStates[route.id] ?? TerminalSurfaceState(route: route)
+            let state = terminalStates[route.id] ?? restoredTerminalState(for: route)
             state.route = route
             terminalStates[route.id] = state
             try await connection.attach(route)
@@ -459,7 +486,50 @@ final class SceneModel {
         guard workspaceVisibilityGeneration == revision,
               !workspaceVisibleSessions.contains(id),
               !visibleSessionOrder.contains(id) else { return }
-        terminalStates.removeValue(forKey: id)
+        cacheTerminalSurface(id)
+    }
+
+    func pasteImage(_ data: Data, route: TerminalRoute,
+                    progress: (Double) -> Void = { _ in }) async throws {
+        guard let surface = terminalStates[route.id], surface.ownsControl,
+              let leaseID = surface.leaseID, let generation = surface.generation,
+              let uploadConnectionID = connectionID else { throw RemoteError.disconnected }
+        guard !data.isEmpty, data.count <= RemoteImageChunkPayload.maximumTotalBytes else {
+            throw RemoteError.messageTooLarge
+        }
+        let contentType: RemoteTerminalImageType
+        if data.starts(with: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) {
+            contentType = .png
+        } else if data.starts(with: [0xff, 0xd8, 0xff]) {
+            contentType = .jpeg
+        } else {
+            throw NSError(domain: "MyTermImagePaste", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "Choose a PNG or JPEG image."])
+        }
+        let transferID = UUID()
+        let chunkSize = RemoteImageChunkPayload.maximumChunkBytes
+        let chunkCount = (data.count + chunkSize - 1) / chunkSize
+        for index in 0..<chunkCount {
+            try Task.checkCancellation()
+            guard connectionID == uploadConnectionID, surface.ownsControl,
+                  surface.leaseID == leaseID, surface.generation == generation else {
+                throw RemoteError.disconnected
+            }
+            let start = index * chunkSize
+            let chunk = try RemoteImageChunkPayload(
+                transferID: transferID, leaseID: leaseID, generation: generation,
+                contentType: contentType, chunkIndex: index, chunkCount: chunkCount,
+                totalBytes: data.count,
+                bytes: data.subdata(in: start..<min(start + chunkSize, data.count))
+            )
+            let currentRoute = surface.route
+            _ = try await command(.terminalPasteImageChunk, metadata: MessageMetadata(
+                hostID: currentRoute.hostID, sessionID: currentRoute.sessionID,
+                workspaceID: currentRoute.workspaceID,
+                groupID: currentRoute.groupID, tabID: currentRoute.tabID
+            ), payload: try JSONEncoder().encode(chunk))
+            progress(Double(index + 1) / Double(chunkCount))
+        }
     }
 
     func refreshTerminal(_ route: TerminalRoute) async {
@@ -475,7 +545,7 @@ final class SceneModel {
         if workspaceVisibleSessions.contains(route.id) { return }
         cancelLeaseRenewal(for: route.id)
         guard let connection else {
-            terminalStates.removeValue(forKey: route.id)
+            cacheTerminalSurface(route.id)
             return
         }
         do {
@@ -483,7 +553,7 @@ final class SceneModel {
             let lease = state?.ownsControl == true ? state?.leaseID : nil
             try await connection.detach(state?.route ?? route, leaseID: lease)
         } catch { errorMessage = error.localizedDescription }
-        terminalStates.removeValue(forKey: route.id)
+        cacheTerminalSurface(route.id)
     }
 
     private func withWorkspaceVisibilityLock(
@@ -599,7 +669,7 @@ final class SceneModel {
             await reconcileRoutes(in: projection)
             resolveNotification(in: projection)
         case .checkpoint(let route, let checkpoint):
-            let state = terminalStates[route.id] ?? TerminalSurfaceState(route: route)
+            let state = terminalStates[route.id] ?? restoredTerminalState(for: route)
             terminalStates[route.id] = state
             state.route = route
             state.apply(checkpoint: checkpoint)
@@ -613,7 +683,7 @@ final class SceneModel {
                 }
             }
         case .control(let route, let control):
-            let state = terminalStates[route.id] ?? TerminalSurfaceState(route: route)
+            let state = terminalStates[route.id] ?? restoredTerminalState(for: route)
             terminalStates[route.id] = state
             state.route = route
             if !state.apply(control: control, ownConnectionID: connectionID) {
@@ -873,6 +943,21 @@ final class TerminalSurfaceState {
     var gridRevision = 0
 
     init(route: TerminalRoute) { self.route = route }
+
+    @discardableResult
+    func compactRenderedOutput(checkpoint: Data, sequence: UInt64, revision: Int) -> Bool {
+        guard !isAwaitingCheckpoint, self.sequence == sequence, checkpointRevision == revision else { return false }
+        self.checkpoint = checkpoint
+        outputChunks.removeAll()
+        bufferedOutputBytes = 0
+        checkpointRevision += 1
+        return true
+    }
+
+    func prepareForReattachment() {
+        isAwaitingCheckpoint = true
+        clearControl()
+    }
 
     func apply(checkpoint: AssembledCheckpoint) {
         self.checkpoint = checkpoint.bytes

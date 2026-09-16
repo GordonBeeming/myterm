@@ -82,7 +82,8 @@ extension AppModel {
                     throw CompanionCommandError.wrongTarget
                 }
             }
-            let id = try createCompanionWorkspace(title: payload.title, folderID: payload.folderID)
+            let id = try createCompanionWorkspace(title: payload.title, folderID: payload.folderID,
+                sourceWorkspaceID: metadata.workspaceID.map { WorkspaceID(rawValue: $0) })
             return try encodeCompanionResult(RemoteIdentifierResult(id: id.rawValue))
 
         case .workspaceRename:
@@ -162,7 +163,15 @@ extension AppModel {
 
         case .folderCreate:
             let payload: RemoteFolderCreatePayload = try decodeCompanionPayload(command.payload)
-            let title = payload.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let title: String
+            if let requested = payload.title {
+                title = requested.trimmingCharacters(in: .whitespacesAndNewlines)
+            } else {
+                var number = 1
+                let used = Set(store.folders.map(\.title))
+                while used.contains("Folder \(number)") { number += 1 }
+                title = "Folder \(number)"
+            }
             guard !title.isEmpty, title.utf8.count <= 256 else {
                 throw CompanionCommandError.invalidPayload
             }
