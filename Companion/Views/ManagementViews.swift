@@ -256,6 +256,8 @@ final class ScannerViewController: UIViewController, @preconcurrency AVCaptureMe
     var onError: ((String) -> Void)?
     private let session = AVCaptureSession()
     private var preview: AVCaptureVideoPreviewLayer?
+    private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
+    private var rotationObservation: NSKeyValueObservation?
     private var didEmitCode = false
 
     override func viewDidLoad() {
@@ -307,7 +309,27 @@ final class ScannerViewController: UIViewController, @preconcurrency AVCaptureMe
         preview.videoGravity = .resizeAspectFill
         view.layer.addSublayer(preview)
         self.preview = preview
+        followInterfaceOrientation(camera: camera, preview: preview)
         session.startRunning()
+    }
+
+    /// Keeps the preview upright as the device rotates. The coordinator publishes
+    /// the angle that levels the horizon for the current interface orientation.
+    private func followInterfaceOrientation(camera: AVCaptureDevice, preview: AVCaptureVideoPreviewLayer) {
+        let coordinator = AVCaptureDevice.RotationCoordinator(device: camera, previewLayer: preview)
+        rotationCoordinator = coordinator
+        rotationObservation = coordinator.observe(\.videoRotationAngleForHorizonLevelPreview,
+                                                  options: [.initial, .new]) { [weak self] coordinator, _ in
+            let angle = coordinator.videoRotationAngleForHorizonLevelPreview
+            // The coordinator delivers its observations on the main queue.
+            MainActor.assumeIsolated { self?.applyPreviewRotation(angle) }
+        }
+    }
+
+    private func applyPreviewRotation(_ angle: CGFloat) {
+        guard let connection = preview?.connection,
+              connection.isVideoRotationAngleSupported(angle) else { return }
+        connection.videoRotationAngle = angle
     }
 
     func metadataOutput(_ output: AVCaptureMetadataOutput,

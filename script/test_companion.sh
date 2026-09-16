@@ -4,7 +4,7 @@ set -euo pipefail
 script_directory=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repo_directory=$(cd -- "$script_directory/.." && pwd)
 cd "$repo_directory"
-bash script/verify_companion_toolchain.sh 27.0
+bash script/verify_companion_toolchain.sh 26.0
 
 device_family="${COMPANION_DEVICE_FAMILY:-iPhone}"
 case "$device_family" in
@@ -23,12 +23,14 @@ cleanup() {
 trap cleanup EXIT
 
 if [[ -z "$device_id" ]]; then
+  simulator_sdk=$(xcrun --sdk iphonesimulator --show-sdk-version)
   device_description=$(xcrun simctl list devices available --json | python3 -c '
 import json, sys
 family = sys.argv[1]
+sdk_major = int(sys.argv[2].split(".")[0])
 devices = json.load(sys.stdin)["devices"]
 for runtime in sorted(devices, reverse=True):
-    if ".iOS-27-" not in runtime:
+    if f".iOS-{sdk_major}-" not in runtime:
         continue
     candidates = [item for item in devices[runtime]
                   if item.get("isAvailable") and item["name"].startswith(family)
@@ -37,9 +39,9 @@ for runtime in sorted(devices, reverse=True):
         chosen = sorted(candidates, key=lambda item: item["name"])[0]
         print(runtime + "\t" + chosen["deviceTypeIdentifier"])
         sys.exit(0)
-print(f"No available iOS 27 {family} runtime/device type.", file=sys.stderr)
+print(f"No available iOS {sdk_major} {family} runtime/device type.", file=sys.stderr)
 sys.exit(1)
-' "$device_family")
+' "$device_family" "$simulator_sdk")
   IFS=$'\t' read -r runtime_id device_type <<< "$device_description"
   owned_device=$(xcrun simctl create "myterm-companion-test-${device_family}-$$" "$device_type" "$runtime_id")
   device_id="$owned_device"

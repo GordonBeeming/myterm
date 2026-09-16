@@ -14,7 +14,7 @@ struct TerminalUITestFixture: UIViewRepresentable {
         view.acceptsUserInput = false
         view.automaticallyResizesTerminal = false
         view.backgroundColor = .black
-        view.feed(text: "\u{001B}[1;36mMyTerm Companion\u{001B}[0m\r\n\r\n$ renderer fixture\r\n✓ iOS 27 SwiftTerm output\r\n$ _")
+        view.feed(text: "\u{001B}[1;36mMyTerm Companion\u{001B}[0m\r\n\r\n$ renderer fixture\r\n✓ SwiftTerm output\r\n$ _")
         view.accessibilityIdentifier = "terminal-fixture"
         return view
     }

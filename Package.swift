@@ -6,7 +6,7 @@ let package = Package(
     name: "MyTerm",
     platforms: [
         .macOS(.v14),
-        .iOS("27.0"),
+        .iOS("26.0"),
     ],
     products: [
         .library(name: "MyTermCore", targets: ["MyTermCore"]),
