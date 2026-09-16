@@ -97,6 +97,7 @@ final class SceneStateTests: XCTestCase {
 
     func testRepeatedActiveNotificationDoesNotResetTerminal() async {
         let scene = SceneModel()
+        scene.connectionPhase = .online
         let route = testTerminalRoute(connectionID: testConnection())
         let state = TerminalSurfaceState(route: route)
         scene.terminalStates[route.id] = state

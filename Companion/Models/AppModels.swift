@@ -319,7 +319,7 @@ final class SceneModel {
     }
 
     func setSceneActive(_ active: Bool, services: CompanionServices) async {
-        guard isSceneActive != active else { return }
+        guard isSceneActive != active || (active && connectionPhase == .disconnected) else { return }
         isSceneActive = active
         if !active {
             await stopConnection()

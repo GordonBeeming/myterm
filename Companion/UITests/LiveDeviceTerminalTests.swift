@@ -13,25 +13,24 @@ final class LiveDeviceTerminalTests: XCTestCase {
         let host = app.staticTexts[hostName].firstMatch
         XCTAssertTrue(host.waitForExistence(timeout: 15), "Paired development host must be available")
         host.tap()
-        let create = app.buttons["New workspace"].firstMatch
-        XCTAssertTrue(create.waitForExistence(timeout: 20), "Host must complete its encrypted connection")
-        create.tap()
-        let name = "Companion input test " + String(UUID().uuidString.prefix(6))
-        let nameField = app.textFields["Name"]
-        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
-        nameField.tap()
-        nameField.typeText(name)
-        app.buttons["Create workspace"].tap()
-        let workspace = app.staticTexts[name].firstMatch
-        XCTAssertTrue(workspace.waitForExistence(timeout: 10))
-        workspace.tap()
-        XCTAssertTrue(app.navigationBars[name].waitForExistence(timeout: 5))
+        let addMenu = app.buttons["Add folder or workspace"].firstMatch
+        XCTAssertTrue(addMenu.waitForExistence(timeout: 20), "Host must complete its encrypted connection")
+        addMenu.tap()
+        app.buttons["Add workspace"].tap()
+        let workspaceBar = app.navigationBars.matching(
+            NSPredicate(format: "identifier MATCHES %@", "^Workspace [0-9]+$")
+        ).firstMatch
+        XCTAssertTrue(workspaceBar.waitForExistence(timeout: 10),
+                      "The automatically named workspace must open after creation")
+        let name = workspaceBar.identifier
         XCTAssertFalse(app.navigationBars.buttons[name].exists,
-                       "Workspace selection must not push another copy of its own detail page")
-        XCTAssertTrue(app.buttons["workspace-terminal-picker"].waitForExistence(timeout: 5),
-                      "Compact workspaces must open a terminal with a picker")
+                       "Workspace creation must not push another copy of its own detail page")
         let surface = app.descendants(matching: .any)["remote-terminal"].firstMatch
         XCTAssertTrue(surface.waitForExistence(timeout: 15))
+        let requestControl = app.buttons["Request control"].firstMatch
+        XCTAssertTrue(requestControl.waitForExistence(timeout: 5))
+        requestControl.tap()
+        XCTAssertTrue(app.staticTexts["You have control"].firstMatch.waitForExistence(timeout: 5))
         surface.tap()
         let marker = "MYTERM_INPUT_" + String(UUID().uuidString.prefix(8))
         let encoded = marker.utf8.map { String(format: "\\%03o", $0) }.joined()
