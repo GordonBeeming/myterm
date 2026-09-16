@@ -21,6 +21,7 @@ myterm-companion://auth/callback?code=<one-time-code>&state=<state>
 The exact redirect allowlist is:
 
 - `myterm-companion://auth/callback`
+- `myterm-companion-dev://auth/callback`
 - `myterm://companion-auth/callback`
 - `myterm-dev://companion-auth/callback`
 

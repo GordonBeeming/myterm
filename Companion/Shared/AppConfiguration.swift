@@ -2,7 +2,13 @@ import Foundation
 import MyTermRemote
 
 enum AppConfiguration {
+    #if DEBUG
+    static let bundleIdentifier = "com.gordonbeeming.myterm.companion.dev"
+    static let urlScheme = "myterm-companion-dev"
+    #else
     static let bundleIdentifier = "com.gordonbeeming.myterm.companion"
+    static let urlScheme = "myterm-companion"
+    #endif
     static let sharedKeychainGroup = Bundle.main.object(
         forInfoDictionaryKey: "MyTermKeychainAccessGroup"
     ) as? String

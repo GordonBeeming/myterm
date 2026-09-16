@@ -25,14 +25,14 @@
 			<string>MyTerm companion authentication</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>myterm-companion</string>
+				<string>$(MYTERM_URL_SCHEME)</string>
 			</array>
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>MyTermKeychainAccessGroup</key>
-	<string>$(AppIdentifierPrefix)com.gordonbeeming.myterm.companion.shared</string>
+	<string>$(AppIdentifierPrefix)$(MYTERM_KEYCHAIN_GROUP)</string>
 	<key>MyTermPushGatewayOrigin</key>
 	<string>$(MYTERM_PUSH_GATEWAY_ORIGIN)</string>
 	<key>NSCameraUsageDescription</key>

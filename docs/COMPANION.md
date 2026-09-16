@@ -22,6 +22,14 @@ xcodegen generate --spec Companion/project.yml --project Companion
 
 For a physical device, copy `Companion/Support/Local.xcconfig.example` to `Companion/Support/Local.xcconfig` and set `TEAM_ID` to your Apple development team ID. Both the app and notification extension use this local, Git-ignored configuration. Select your Apple account in Xcode and allow automatic signing to create the required provisioning profiles. The extension needs the shared App Group as well as the app.
 
+### Local dev installs and TestFlight
+
+Use Debug when installing directly from Xcode. Debug installs as **MyTerm Dev** with bundle ID `com.gordonbeeming.myterm.companion.dev`; its notification extension, app group, keychain group, and URL scheme are also separate. Release/TestFlight keeps `com.gordonbeeming.myterm.companion`. Only the Release app needs an App Store Connect record.
+
+Automatic signing must provision the Debug app and extension IDs and the `group.com.gordonbeeming.myterm.companion.dev` App Group for your team. Pair the Debug app separately; it does not read production credentials or saved connections. Use a relay version that supports `myterm-companion-dev://auth/callback` and scan the QR in the app you intend to pair. Older production pairing links remain supported.
+
+If an older Debug build replaced the TestFlight app, reinstall production from TestFlight, then install the updated Debug build from Xcode. The new identities allow both apps to coexist; reinstalling cannot undo any data changes made by the older shared-identity build.
+
 Run the native protocol tests and the phone/tablet suites:
 
 ```sh

@@ -21,7 +21,7 @@
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>MyTermKeychainAccessGroup</key>
-	<string>$(AppIdentifierPrefix)com.gordonbeeming.myterm.companion.shared</string>
+	<string>$(AppIdentifierPrefix)$(MYTERM_KEYCHAIN_GROUP)</string>
 	<key>MyTermPushGatewayOrigin</key>
 	<string>$(MYTERM_PUSH_GATEWAY_ORIGIN)</string>
 	<key>NSExtension</key>

@@ -227,7 +227,7 @@ final class CompanionServices {
         var stage = CompanionClientSignInStage.callbackConfiguration
         var callbackFailure: AuthorizationCallbackValidationFailure?
         do {
-            guard let redirect = URL(string: "myterm-companion://auth/callback") else {
+            guard let redirect = URL(string: "\(AppConfiguration.urlScheme)://auth/callback") else {
                 throw RemoteError.invalidCallback
             }
             let attempt = try SignInAttempt(relay: relay, redirectURI: redirect)
@@ -235,7 +235,7 @@ final class CompanionServices {
             let loginURL = try attempt.loginURL(deviceName: deviceName, deviceKind: "client")
             stage = .browserSession
             let callback = try await browserAuthentication.authenticate(
-                url: loginURL, callbackScheme: "myterm-companion"
+                url: loginURL, callbackScheme: AppConfiguration.urlScheme
             )
             stage = .callbackValidation
             if let failure = attempt.callbackValidationFailure(from: callback) {

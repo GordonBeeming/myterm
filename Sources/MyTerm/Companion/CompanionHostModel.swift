@@ -190,15 +190,35 @@ final class CompanionHostModel {
     }
 
     private(set) var isSigningIn = false
+    private var signInTask: Task<Void, Never>?
+    private var signInAttemptID: UUID?
 
     func signIn(bootstrapURLText: String? = nil) {
-        guard !isSigningIn else { return }
+        guard !isSigningIn, status != .connecting else { return }
         disconnect()
         isSigningIn = true
-        Task {
-            defer { isSigningIn = false }
+        let id = UUID()
+        signInAttemptID = id
+        signInTask = Task {
+            defer {
+                if signInAttemptID == id {
+                    isSigningIn = false
+                    signInTask = nil
+                    signInAttemptID = nil
+                }
+            }
             await runSignIn(bootstrapURLText: bootstrapURLText)
         }
+    }
+
+    func cancelSignIn() {
+        guard isSigningIn else { return }
+        signInAttemptID = nil
+        signInTask?.cancel()
+        signInTask = nil
+        authenticationSession.cancel()
+        isSigningIn = false
+        disconnect()
     }
 
     func connect() {
@@ -308,7 +328,7 @@ final class CompanionHostModel {
               let ticket = activeTicket, ticket.expiresAt > now() else {
             throw RemoteError.expiredPairing
         }
-        let value = try ticket.qrURL().absoluteString
+        let value = try ticket.qrURL(scheme: channel == .production ? "myterm-companion" : "myterm-companion-dev").absoluteString
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         guard pasteboard.setString(value, forType: .string) else {
@@ -451,6 +471,7 @@ final class CompanionHostModel {
         var stage = SignInStage.setupLink
         var callbackFailure: AuthorizationCallbackValidationFailure?
         do {
+            try Task.checkCancellation()
             let enrollment = try bootstrapURLText.flatMap { raw in
                 raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     ? nil : try Self.parseBootstrapLink(raw)
@@ -480,6 +501,7 @@ final class CompanionHostModel {
                 callbackScheme: redirectScheme,
                 attempt: attempt
             )
+            try Task.checkCancellation()
             stage = .callbackValidation
             if let failure = attempt.callbackValidationFailure(from: callback) {
                 let parts = URLComponents(url: callback, resolvingAgainstBaseURL: false)
@@ -500,6 +522,7 @@ final class CompanionHostModel {
                 attempt: attempt,
                 callback: callback
             )
+            try Task.checkCancellation()
             stage = .persistence
             configuration.relayText = endpoint.canonicalOrigin
             relayText = endpoint.canonicalOrigin
@@ -511,9 +534,11 @@ final class CompanionHostModel {
             hasLinkedRelay = true
             configuration.connectionEnabled = true
             reconnectAttempt = 0
+            isSigningIn = false
             stage = .connection
             await connectConfiguredRelay()
         } catch {
+            guard !Task.isCancelled else { return }
             let reason = callbackFailure?.rawValue ?? Self.sanitizedSignInReason(error)
             logger.error("Companion sign-in failed at \(stage.rawValue, privacy: .public): \(reason, privacy: .public)")
             status = .failed(Self.signInFailureDescription(
@@ -1722,7 +1747,7 @@ final class CompanionHostModel {
             throw CancellationError()
         }
         activeTicket = ticket
-        pairingQRCode = try Self.qrImage(for: ticket.qrURL())
+        pairingQRCode = try Self.qrImage(for: ticket.qrURL(scheme: channel == .production ? "myterm-companion" : "myterm-companion-dev"))
         pairingRefreshesAt = issuedAt.addingTimeInterval(
             CompanionPairingRotation.rotationInterval
         )
