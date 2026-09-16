@@ -48,6 +48,12 @@ The two profile-name variables must exactly match the embedded `Name` values. Th
 
 Relevant pull requests run the remote, relay, service, iPhone, and iPad test jobs without access to the `beta` environment. A relevant push to `main`, or a manual dispatch explicitly run from `main`, uploads only after all of those jobs pass.
 
+The app and notification extension set `ITSAppUsesNonExemptEncryption: false` in `Companion/project.yml`. The declaration is included in each build so App Store Connect does not require the same encryption answer after every upload.
+
+This records the OS-provided-encryption classification for both targets. Pairing, terminal messages, and notification content use Apple's CryptoKit `HPKE.Sender` and `HPKE.Recipient` with `P256_SHA256_AES_GCM_256`; signing, hashing, and key derivation also use CryptoKit. HTTPS uses the system networking implementation. These algorithms are supplied by Apple's operating system, with no separately bundled cryptographic implementation. The relevant code is in [PairingCrypto.swift](../Packages/MyTermRemote/Sources/MyTermRemote/PairingCrypto.swift), [AuthenticatedChannel.swift](../Packages/MyTermRemote/Sources/MyTermRemote/AuthenticatedChannel.swift), and [PushNotificationCrypto.swift](../Packages/MyTermRemote/Sources/MyTermRemote/PushNotificationCrypto.swift).
+
+Apple's [encryption documentation table](https://developer.apple.com/help/app-store-connect/reference/app-information/export-compliance-documentation-for-encryption) lists OS-provided encryption as requiring no App Store Connect documentation. Its [metadata guidance](https://developer.apple.com/documentation/bundleresources/information-property-list/itsappusesnonexemptencryption) permits `false` for exempt encryption. Revisit the declaration if either target adopts bundled or proprietary cryptography.
+
 The deploy job:
 
 1. Selects release Xcode 26.6, verifies the iOS 26 SDK, and installs its matching Metal toolchain.
@@ -61,7 +67,7 @@ The deploy job:
 
 Both `altool` commands must succeed. The helper also treats known `altool` failure text as a job failure instead of allowing a misleading green run.
 
-An upload success means Apple accepted the binary for processing. It does not mean the build is immediately installable: wait until processing completes in App Store Connect. Apple documents this separately in [Upload builds](https://developer.apple.com/help/app-store-connect/manage-builds/upload-builds). If the build shows **Missing Compliance**, complete the encryption/export-compliance determination before distributing it. MyTerm uses encryption, so this determination must be made from the shipped cryptography and the applicable rules rather than guessed or bypassed with an Info.plist flag. See Apple's [export compliance overview](https://developer.apple.com/help/app-store-connect/manage-app-information/overview-of-export-compliance).
+An upload success means Apple accepted the binary for processing. It does not mean the build is immediately installable: wait until processing completes in App Store Connect. Apple documents this separately in [Upload builds](https://developer.apple.com/help/app-store-connect/manage-builds/upload-builds). If a build shows **Missing Compliance**, check that its exported app contains the declaration documented above. Builds uploaded before this metadata was included may still require the matching answer in App Store Connect.
 
 With automatic distribution enabled, a processed and compliance-ready build is delivered to the internal group. Without automatic distribution, select the group and add the build manually before it appears in TestFlight.
 
