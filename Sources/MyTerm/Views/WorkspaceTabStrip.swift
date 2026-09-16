@@ -339,67 +339,24 @@ private struct WorkspaceTabItem: View {
         return "\(state), \(agentAttention.attentionDescription)"
     }
 
+    // The body is a name and its accessibility actions. The tab content, the close button, and the
+    // context menu each live in their own property: as one expression the item outruns the type
+    // checker's budget and the build fails rather than slows. What a tab draws, and in what
+    // order, is the same.
     var body: some View {
-        ZStack(alignment: .trailing) {
-            HStack(spacing: 6) {
-                // The cook stands in for the tab's own icon, so it is still there on the
-                // selected tab and never lands under the close button.
-                if let agentAttention {
-                    AgentChefBadge(state: agentAttention)
-                } else {
-                    Image(systemName: iconName)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .accessibilityHidden(true)
-                }
-                Text(title)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .fontWeight(isSelected ? .medium : .regular)
-                Spacer(minLength: 18)
-            }
-            .padding(.horizontal, 8)
-            .frame(width: WorkspaceTabStripMetrics.tabWidth, height: WorkspaceTabStripMetrics.tabHeight, alignment: .leading)
-            .contentShape(Rectangle())
-            .background {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(backgroundStyle)
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .strokeBorder(borderStyle, lineWidth: isSelected ? 1 : 0.5)
-            }
-            .shadow(color: .black.opacity(isDragged ? 0.22 : 0), radius: 4, y: 1)
-            // The same press either selects the tab or drags it, decided on release by how far
-            // the pointer travelled. The close button sits on top of this content, so a click on
-            // it never reaches this gesture and cannot select the tab on its way to closing it.
-            .gesture(
-                DragGesture(minimumDistance: 0, coordinateSpace: .global)
-                    .onChanged { value in dragChanged(value.location) }
-                    .onEnded { value in dragEnded(value.location) }
-            )
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(title)
-            .accessibilityValue(accessibilityValue)
-            .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-            .accessibilityAction(.default, select)
-            .help(title)
+        tabWithMenu
+            .accessibilityAction(named: "Move to previous pane", moveToPreviousPane)
+            .accessibilityAction(named: "Move to next pane", moveToNextPane)
+            .accessibilityAction(named: "Move to new left pane") { moveToNewPane(.left) }
+            .accessibilityAction(named: "Move to new right pane") { moveToNewPane(.right) }
+            .accessibilityAction(named: "Move to new pane above") { moveToNewPane(.top) }
+            .accessibilityAction(named: "Move to new pane below") { moveToNewPane(.bottom) }
+    }
 
-            Button(action: close) {
-                Image(systemName: "xmark")
-                    .font(.caption2.weight(.semibold))
-                    .frame(width: 18, height: 18)
-            }
-            .buttonStyle(.plain)
-            .frame(width: 22, height: 22)
-            .contentShape(Rectangle())
-            .focusable(false)
-            .opacity(isSelected || isHovering ? 1 : 0)
-            .allowsHitTesting(isSelected || isHovering)
-            .accessibilityHidden(!(isSelected || isHovering))
-            .accessibilityLabel("Close \(title) tab")
-            .help("Close Tab")
-            .padding(.trailing, 2)
+    private var tabWithMenu: some View {
+        ZStack(alignment: .trailing) {
+            tabContent
+            closeButton
         }
         .frame(width: WorkspaceTabStripMetrics.tabWidth, height: WorkspaceTabStripMetrics.tabHeight)
         .contentShape(Rectangle())
@@ -408,26 +365,87 @@ private struct WorkspaceTabItem: View {
         }
         .onHover { isHovering = $0 }
         .onDisappear(perform: dragCancelled)
-        .contextMenu {
-            Button("Rename Tab…", action: rename)
-            Divider()
-            Button("Move to Previous Pane", action: moveToPreviousPane)
-            Button("Move to Next Pane", action: moveToNextPane)
-            Menu("Move to New Pane") {
-                Button("Left", action: { moveToNewPane(.left) })
-                Button("Right", action: { moveToNewPane(.right) })
-                Button("Above", action: { moveToNewPane(.top) })
-                Button("Below", action: { moveToNewPane(.bottom) })
+        .contextMenu { tabMenu }
+    }
+
+    private var tabContent: some View {
+        HStack(spacing: 6) {
+            // The cook stands in for the tab's own icon, so it is still there on the
+            // selected tab and never lands under the close button.
+            if let agentAttention {
+                AgentChefBadge(state: agentAttention)
+            } else {
+                Image(systemName: iconName)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
             }
-            Divider()
-            Button("Close Tab", action: close)
+            Text(title)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .fontWeight(isSelected ? .medium : .regular)
+            Spacer(minLength: 18)
         }
-        .accessibilityAction(named: "Move to previous pane", moveToPreviousPane)
-        .accessibilityAction(named: "Move to next pane", moveToNextPane)
-        .accessibilityAction(named: "Move to new left pane") { moveToNewPane(.left) }
-        .accessibilityAction(named: "Move to new right pane") { moveToNewPane(.right) }
-        .accessibilityAction(named: "Move to new pane above") { moveToNewPane(.top) }
-        .accessibilityAction(named: "Move to new pane below") { moveToNewPane(.bottom) }
+        .padding(.horizontal, 8)
+        .frame(width: WorkspaceTabStripMetrics.tabWidth, height: WorkspaceTabStripMetrics.tabHeight, alignment: .leading)
+        .contentShape(Rectangle())
+        .background {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(backgroundStyle)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(borderStyle, lineWidth: isSelected ? 1 : 0.5)
+        }
+        .shadow(color: .black.opacity(isDragged ? 0.22 : 0), radius: 4, y: 1)
+        // The same press either selects the tab or drags it, decided on release by how far
+        // the pointer travelled. The close button sits on top of this content, so a click on
+        // it never reaches this gesture and cannot select the tab on its way to closing it.
+        .gesture(
+            DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                .onChanged { value in dragChanged(value.location) }
+                .onEnded { value in dragEnded(value.location) }
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(accessibilityValue)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction(.default, select)
+        .help(title)
+    }
+
+    private var closeButton: some View {
+        Button(action: close) {
+            Image(systemName: "xmark")
+                .font(.caption2.weight(.semibold))
+                .frame(width: 18, height: 18)
+        }
+        .buttonStyle(.plain)
+        .frame(width: 22, height: 22)
+        .contentShape(Rectangle())
+        .focusable(false)
+        .opacity(isSelected || isHovering ? 1 : 0)
+        .allowsHitTesting(isSelected || isHovering)
+        .accessibilityHidden(!(isSelected || isHovering))
+        .accessibilityLabel("Close \(title) tab")
+        .help("Close Tab")
+        .padding(.trailing, 2)
+    }
+
+    @ViewBuilder
+    private var tabMenu: some View {
+        Button("Rename Tab…", action: rename)
+        Divider()
+        Button("Move to Previous Pane", action: moveToPreviousPane)
+        Button("Move to Next Pane", action: moveToNextPane)
+        Menu("Move to New Pane") {
+            Button("Left", action: { moveToNewPane(.left) })
+            Button("Right", action: { moveToNewPane(.right) })
+            Button("Above", action: { moveToNewPane(.top) })
+            Button("Below", action: { moveToNewPane(.bottom) })
+        }
+        Divider()
+        Button("Close Tab", action: close)
     }
 
     private var backgroundStyle: Color {
