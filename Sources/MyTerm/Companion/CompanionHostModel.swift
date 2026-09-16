@@ -86,6 +86,15 @@ final class CompanionHostModel {
         }
     }
 
+    private struct RetiredControl {
+        let sessionID: TerminalSessionID
+        let connectionID: UUID
+        let leaseID: UUID
+    }
+    private enum ControlPacketError: Error { case retiredLease }
+    private var retiredControls: [RetiredControl] = []
+    private(set) var locallyPausedSessions: Set<TerminalSessionID> = []
+
     private weak var appModel: AppModel?
     private let channel: MyTermChannel
     private let configuration: CompanionConfigurationStore
@@ -354,6 +363,7 @@ final class CompanionHostModel {
     }
 
     func takeControl(sessionID: TerminalSessionID) {
+        locallyPausedSessions.remove(sessionID)
         clearLease(sessionID: sessionID)
         guard let route = routesBySession[sessionID],
               let session = appModel?.companionTerminalSession(sessionID) else { return }
@@ -375,6 +385,8 @@ final class CompanionHostModel {
         message: String
     ) {
         guard endedSessions.insert(sessionID).inserted else { return }
+        locallyPausedSessions.remove(sessionID)
+        retiredControls.removeAll { $0.sessionID == sessionID }
         routesBySession.removeValue(forKey: sessionID)
         clearLease(sessionID: sessionID)
         for peer in peersByConnection.values {
@@ -925,6 +937,7 @@ final class CompanionHostModel {
             hostID: identity.hostID,
             runtimeID: runtimeID
         )
+        do {
         switch message {
         case .workspaceRequest(let metadata, _):
             sendWorkspaceSnapshot(to: peer, requestID: metadata.requestID)
@@ -942,6 +955,13 @@ final class CompanionHostModel {
             try handleResize(metadata: metadata, resize: resize, peer: peer)
         default:
             throw RemoteError.invalidMessage
+        }
+        } catch ControlPacketError.retiredLease {
+            let target = try terminalTarget(messageMetadata, allowingAttachedPeer: peer)
+            send(.error(messageMetadata, ErrorParameters(code: "control_denied",
+                 message: "Control has moved to another device. Request control to send input.",
+                 retryable: false)), to: peer)
+            broadcastControlState(target: target)
         }
     }
 
@@ -1239,7 +1259,11 @@ final class CompanionHostModel {
             switch request.action {
             case .acquire:
                 let lease = try state.acquire(connectionID: peer.connectionID)
+                if leases[target.sessionID]?.lease?.leaseID != lease.leaseID {
+                    retireControl(sessionID: target.sessionID)
+                }
                 leases[target.sessionID] = state
+                locallyPausedSessions.insert(target.sessionID)
                 target.session.setRemoteControllerActive(true)
                 scheduleLeaseExpiry(lease, target: target)
             case .renew:
@@ -1250,15 +1274,19 @@ final class CompanionHostModel {
             case .release:
                 guard let leaseID = request.leaseID else { throw RemoteError.controlDenied }
                 try state.release(leaseID: leaseID, connectionID: peer.connectionID)
+                retireControl(sessionID: target.sessionID)
                 leases[target.sessionID] = state
                 clearLease(sessionID: target.sessionID)
             case .takeover:
+                retireControl(sessionID: target.sessionID)
                 let lease = state.takeover(connectionID: peer.connectionID)
                 leases[target.sessionID] = state
+                locallyPausedSessions.insert(target.sessionID)
                 target.session.setRemoteControllerActive(true)
                 scheduleLeaseExpiry(lease, target: target)
             }
         } catch RemoteError.controlDenied {
+            if state.lease == nil { retireControl(sessionID: target.sessionID) }
             leases[target.sessionID] = state
             if state.lease == nil {
                 clearLease(sessionID: target.sessionID)
@@ -1333,10 +1361,16 @@ final class CompanionHostModel {
             connectionID: connectionID,
             now: now()
         )
+        if !authorized, state.lease == nil { retireControl(sessionID: target.sessionID) }
         leases[target.sessionID] = state
         guard authorized else {
             if state.lease == nil {
                 clearLease(sessionID: target.sessionID)
+            }
+            if retiredControls.contains(where: {
+                $0.sessionID == target.sessionID && $0.connectionID == connectionID && $0.leaseID == leaseID
+            }) {
+                throw ControlPacketError.retiredLease
             }
             throw RemoteError.controlDenied
         }
@@ -1532,10 +1566,19 @@ final class CompanionHostModel {
         updateControllerPresentation()
     }
 
+    private func retireControl(sessionID: TerminalSessionID) {
+        guard let lease = leases[sessionID]?.lease,
+              !retiredControls.contains(where: { $0.leaseID == lease.leaseID }) else { return }
+        retiredControls.append(RetiredControl(sessionID: sessionID,
+                                             connectionID: lease.connectionID, leaseID: lease.leaseID))
+        if retiredControls.count > 128 { retiredControls.removeFirst(retiredControls.count - 128) }
+    }
+
     private func clearLease(sessionID: TerminalSessionID) {
+        retireControl(sessionID: sessionID)
         leases[sessionID] = ControllerLeaseState()
         leaseExpiryTasks.removeValue(forKey: sessionID)?.cancel()
-        appModel?.companionTerminalSession(sessionID)?.setRemoteControllerActive(false)
+        appModel?.companionTerminalSession(sessionID)?.setRemoteControllerActive(locallyPausedSessions.contains(sessionID))
         updateControllerPresentation()
     }
 

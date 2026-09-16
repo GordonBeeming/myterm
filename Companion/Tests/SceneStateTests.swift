@@ -86,10 +86,10 @@ final class SceneStateTests: XCTestCase {
         XCTAssertFalse(state.ownsControl)
     }
 
-    func testFreeTerminalAutomaticallyRequestsControlOnlyOnceAfterCheckpoint() async throws {
+    func testFreeTerminalWaitsForUserControlRequestAfterCheckpoint() async throws {
         let route = testTerminalRoute(connectionID: testConnection())
         let state = TerminalSurfaceState(route: route)
-        XCTAssertFalse(state.beginAutomaticControlRequest())
+        XCTAssertFalse(state.isControlRequestPending)
 
         let generation = UUID()
         let checkpoint = try await CheckpointAssembler().ingest(
@@ -106,12 +106,10 @@ final class SceneStateTests: XCTestCase {
             generation: generation, columns: 80, rows: 24
         ), ownConnectionID: UUID()))
 
-        XCTAssertTrue(state.beginAutomaticControlRequest())
-        XCTAssertTrue(state.isControlRequestPending)
-        XCTAssertFalse(state.beginAutomaticControlRequest())
+        XCTAssertFalse(state.ownsControl)
+        XCTAssertFalse(state.isControlRequestPending, "Opening a terminal must remain view-only")
         state.controlRequestFailed()
-        XCTAssertFalse(state.beginAutomaticControlRequest(),
-                       "A failure or explicit release must not silently reacquire")
+        XCTAssertFalse(state.isControlRequestPending)
         state.beginUserControlRequest()
         XCTAssertTrue(state.isControlRequestPending)
     }
