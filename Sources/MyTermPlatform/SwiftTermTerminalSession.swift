@@ -827,7 +827,7 @@ private final class RemoteControlBannerView: NSVisualEffectView {
         wantsLayer = true
         layer?.cornerRadius = 8
 
-        let label = NSTextField(labelWithString: "This terminal is controlled remotely")
+        let label = NSTextField(labelWithString: "Input is paused on this Mac")
         label.translatesAutoresizingMaskIntoConstraints = false
         label.textColor = .labelColor
         let button = NSButton(title: "Take Control", target: self, action: #selector(takeControlPressed))

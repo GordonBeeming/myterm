@@ -624,16 +624,6 @@ final class SceneModel {
                 return
             }
             updateLeaseRenewal(for: state)
-            if state.beginAutomaticControlRequest() {
-                do {
-                    guard let connection else { throw RemoteError.disconnected }
-                    try await connection.requestControl(.acquire, route: state.route,
-                                                        leaseID: nil)
-                } catch {
-                    state.controlRequestFailed()
-                    errorMessage = error.localizedDescription
-                }
-            }
         case .activity(let sessionID, let state):
             terminalStates.first(where: { $0.key.sessionID == sessionID })?.value.activity = state
         case .error(let metadata, let error):
@@ -875,7 +865,6 @@ final class TerminalSurfaceState {
     var controlExpiresAt: Date?
     var ownsControl = false
     private(set) var isControlRequestPending = false
-    private(set) var didAutomaticallyRequestControl = false
     var activity: String?
     var fontSize: CGFloat = 13
     private(set) var isAwaitingCheckpoint = true
@@ -940,14 +929,6 @@ final class TerminalSurfaceState {
             authoritativeRows = control.rows
             gridRevision += 1
         }
-        return true
-    }
-
-    func beginAutomaticControlRequest() -> Bool {
-        guard !isAwaitingCheckpoint, controllerConnectionID == nil, !ownsControl,
-              !isControlRequestPending, !didAutomaticallyRequestControl else { return false }
-        didAutomaticallyRequestControl = true
-        isControlRequestPending = true
         return true
     }
 

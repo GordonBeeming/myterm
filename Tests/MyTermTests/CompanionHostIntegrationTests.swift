@@ -82,6 +82,7 @@ private final class FixtureNetworkDiagnostics: @unchecked Sendable {
 
     func setStage(_ stage: String) {
         lock.withLock { currentStage = stage }
+        FileHandle.standardError.write(Data("Integration stage: \(stage)\n".utf8))
     }
 
     func record(_ message: String) {
@@ -300,6 +301,7 @@ final class CompanionHostIntegrationTests: XCTestCase {
                 networkDiagnostics: networkDiagnostics
             )
         } catch {
+            print("Companion integration failure stage: \(networkDiagnostics.stage)")
             throw fixtureIntegrationError(
                 stage: networkDiagnostics.stage,
                 underlying: error,
@@ -491,7 +493,7 @@ final class CompanionHostIntegrationTests: XCTestCase {
             over: first.socket
         )
         let acquired = try await requireControlState(first) { $0.leaseID != nil }
-        let leaseID = try XCTUnwrap(acquired.leaseID)
+        var leaseID = try XCTUnwrap(acquired.leaseID)
         XCTAssertEqual(acquired.generation, checkpoint.identity.generation)
 
         let firstMarker = "MYTERM-HOST-INTEGRATION-ONE"
@@ -633,6 +635,60 @@ final class CompanionHostIntegrationTests: XCTestCase {
         XCTAssertEqual(hostGeometry.rows, 31)
         try await requireOutput(first, containing: resizedMarker)
 
+        networkDiagnostics.setStage("Mac takeover rejects late control packets without disconnecting viewers")
+        host.takeControl(sessionID: TerminalSessionID(rawValue: target.sessionID))
+        _ = try await requireControlState(first) { $0.controllerConnectionID == nil }
+        _ = try await requireControlState(second) { $0.controllerConnectionID == nil }
+        XCTAssertFalse(host.locallyPausedSessions.contains(TerminalSessionID(rawValue: target.sessionID)))
+        try await sendInput("printf 'STALE-MUST-NOT-RUN\\n'\n", leaseID: leaseID,
+                            generation: acquired.generation, metadata: targetMetadata, connection: first)
+        _ = try await requireError(first, code: "control_denied")
+        try await first.channel.send(
+            .resize(targetMetadata, ResizeParameters(leaseID: leaseID, generation: acquired.generation,
+                                                     columns: 77, rows: 22)),
+            destinationConnectionID: RelayFrame.broadcastDestination, over: first.socket
+        )
+        _ = try await requireError(first, code: "control_denied")
+        for imageLease in [leaseID, UUID()] {
+            let image = try RemoteTerminalImagePayload(leaseID: imageLease, generation: acquired.generation,
+                                                       contentType: .png, bytes: Data([1]))
+            let chunk = try RemoteImageChunkPayload(transferID: UUID(), leaseID: imageLease,
+                generation: acquired.generation, contentType: .png, chunkIndex: 0,
+                chunkCount: 1, totalBytes: 1, bytes: Data([1]))
+            for (operation, payload) in [
+                (CommandOperation.terminalPasteImage, try JSONEncoder().encode(image)),
+                (CommandOperation.terminalPasteImageChunk, try JSONEncoder().encode(chunk))
+            ] {
+                let request = metadata(target: target, hostID: identity.hostID, runtimeID: first.runtimeID)
+                try await first.channel.send(.command(request, CommandParameters(operation: operation, payload: payload)),
+                    destinationConnectionID: RelayFrame.broadcastDestination, over: first.socket)
+                while true {
+                    let packet = try await requireApplication(first.reader)
+                    let message = try await first.channel.open(packet)
+                    if case .commandResult(let response, let result) = message,
+                       response.requestID == request.requestID {
+                        XCTAssertFalse(result.succeeded)
+                        XCTAssertEqual(result.errorCode, "control_denied")
+                        break
+                    }
+                }
+            }
+        }
+        for connection in [first, second] {
+            try await connection.channel.send(
+                .workspaceRequest(MessageMetadata(requestID: UUID(), hostID: identity.hostID,
+                                                   runtimeID: connection.runtimeID), WorkspaceRequestParameters()),
+                destinationConnectionID: RelayFrame.broadcastDestination, over: connection.socket
+            )
+            _ = try await requireWorkspaceProjection(connection)
+        }
+        // Explicitly regain remote control for the remainder of the test.
+        try await first.channel.send(.controlRequest(targetMetadata, ControlRequestParameters(action: .acquire)),
+                                     destinationConnectionID: RelayFrame.broadcastDestination, over: first.socket)
+        let reacquired = try await requireControlState(first) { $0.leaseID != nil }
+        leaseID = try XCTUnwrap(reacquired.leaseID)
+        XCTAssertTrue(host.locallyPausedSessions.contains(TerminalSessionID(rawValue: target.sessionID)))
+
         networkDiagnostics.setStage("reject forged lease")
         try await second.channel.send(
             .input(
@@ -708,6 +764,45 @@ final class CompanionHostIntegrationTests: XCTestCase {
             ).isRunning
         )
         XCTAssertTrue(host.remoteControllers.isEmpty)
+        XCTAssertTrue(host.locallyPausedSessions.contains(TerminalSessionID(rawValue: target.sessionID)),
+                      "The Mac must not automatically retake control when the companion detaches")
+        host.takeControl(sessionID: TerminalSessionID(rawValue: target.sessionID))
+        XCTAssertFalse(host.locallyPausedSessions.contains(TerminalSessionID(rawValue: target.sessionID)))
+
+        networkDiagnostics.setStage("controller disconnect does not automatically resume Mac input")
+        let reattachMetadata = MessageMetadata(requestID: UUID(), hostID: identity.hostID,
+            runtimeID: first.runtimeID, sessionID: target.sessionID,
+            workspaceID: target.workspaceID, groupID: destinationGroupID, tabID: target.tabID)
+        try await first.channel.send(.attach(reattachMetadata, AttachParameters()),
+                                     destinationConnectionID: RelayFrame.broadcastDestination, over: first.socket)
+        networkDiagnostics.setStage("receive reattached checkpoint")
+        _ = try await requireCheckpoint(first, sessionID: target.sessionID)
+        networkDiagnostics.setStage("request reattached control")
+        try await first.channel.send(.controlRequest(reattachMetadata, ControlRequestParameters(action: .acquire)),
+                                     destinationConnectionID: RelayFrame.broadcastDestination, over: first.socket)
+        _ = try await requireControlState(first) { $0.leaseID != nil && $0.leaseID != leaseID }
+        let observer = try await makeAuthenticatedConnection(
+            endpoint: endpoint, fixture: fixture,
+            session: try fixtureSession(fixture: fixture, endpoint: endpoint, diagnostics: networkDiagnostics),
+            hostIdentity: identity, clientAgreementKey: clientAgreementKey, clientSigningKey: clientSigningKey
+        )
+        defer { Task { await observer.socket.disconnect() } }
+        _ = try await requireWorkspaceProjection(observer)
+        let observerMetadata = MessageMetadata(requestID: UUID(), hostID: identity.hostID,
+            runtimeID: observer.runtimeID, sessionID: target.sessionID,
+            workspaceID: target.workspaceID, groupID: destinationGroupID, tabID: target.tabID)
+        try await observer.channel.send(.attach(observerMetadata, AttachParameters()),
+                                        destinationConnectionID: RelayFrame.broadcastDestination, over: observer.socket)
+        _ = try await requireCheckpoint(observer, sessionID: target.sessionID)
+        _ = try await requireControlState(observer) { $0.leaseID != nil }
+        networkDiagnostics.setStage("close controller socket")
+        await first.socket.disconnect()
+        networkDiagnostics.setStage("wait for controller socket removal")
+        try await waitUntil { host.remoteControllers.isEmpty }
+        _ = try await requireControlState(observer) { $0.controllerConnectionID == nil && $0.leaseID == nil }
+        XCTAssertTrue(host.locallyPausedSessions.contains(TerminalSessionID(rawValue: target.sessionID)))
+        host.takeControl(sessionID: TerminalSessionID(rawValue: target.sessionID))
+        XCTAssertFalse(host.locallyPausedSessions.contains(TerminalSessionID(rawValue: target.sessionID)))
 
         networkDiagnostics.setStage("reconnect after transport loss")
         await host.disconnectTransportForTesting()
