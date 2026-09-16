@@ -254,3 +254,22 @@ import Testing
 private extension Optional where Wrapped == [URLQueryItem] {
     var orEmpty: [URLQueryItem] { self ?? [] }
 }
+
+@Test func developmentCompanionRoutesRemainSeparateFromProduction() async throws {
+    let relay = try RelayEndpoint(#require(URL(string: "https://relay.example.test")))
+    let redirect = try #require(URL(string: "myterm-companion-dev://auth/callback"))
+    let attempt = try SignInAttempt(relay: relay, redirectURI: redirect)
+    let valid = try #require(URL(string: "myterm-companion-dev://auth/callback?state=\(attempt.state)&code=proof"))
+    #expect(attempt.callbackValidationFailure(from: valid) == nil)
+    let wrongChannel = try #require(URL(string: "myterm-companion://auth/callback?state=\(attempt.state)&code=proof"))
+    #expect(attempt.callbackValidationFailure(from: wrongChannel) == .redirectMismatch)
+    let registry = PairingRegistry()
+    let key = P256.KeyAgreement.PrivateKey()
+    let ticket = try await registry.begin(relay: relay, hostID: UUID(), hostName: "Demo",
+                                          hostPublicKey: key.publicKey)
+    let devURL = try ticket.qrURL(scheme: "myterm-companion-dev")
+    #expect(devURL.scheme == "myterm-companion-dev")
+    #expect(try PairingTicket.decode(qrURL: devURL) == ticket)
+    #expect(try ticket.qrURL().scheme == "myterm-companion")
+    #expect(throws: RemoteError.invalidMessage) { try ticket.qrURL(scheme: "untrusted-app") }
+}

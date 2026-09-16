@@ -8,11 +8,11 @@
 	<string>$(APP_ATTEST_ENVIRONMENT)</string>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.com.gordonbeeming.myterm.companion</string>
+		<string>$(MYTERM_APP_GROUP)</string>
 	</array>
 	<key>keychain-access-groups</key>
 	<array>
-		<string>$(AppIdentifierPrefix)com.gordonbeeming.myterm.companion.shared</string>
+		<string>$(AppIdentifierPrefix)$(MYTERM_KEYCHAIN_GROUP)</string>
 	</array>
 </dict>
 </plist>

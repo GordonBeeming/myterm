@@ -22,9 +22,12 @@ public struct PairingTicket: Codable, Equatable, Sendable {
         catch { throw RemoteError.invalidMessage }
     }
 
-    public func qrURL() throws -> URL {
+    public func qrURL(scheme: String = "myterm-companion") throws -> URL {
+        guard ["myterm-companion", "myterm-companion-dev"].contains(scheme) else {
+            throw RemoteError.invalidMessage
+        }
         var components = URLComponents()
-        components.scheme = "myterm-companion"
+        components.scheme = scheme
         components.host = "pair"
         let data = try JSONEncoder().encode(self)
         guard data.count <= 4096 else { throw RemoteError.messageTooLarge }
@@ -36,7 +39,7 @@ public struct PairingTicket: Codable, Equatable, Sendable {
     public static func decode(qrURL: URL, now: Date = .now) throws -> Self {
         guard qrURL.absoluteString.utf8.count <= 8192,
               let components = URLComponents(url: qrURL, resolvingAgainstBaseURL: false),
-              components.scheme == "myterm-companion", components.host == "pair",
+              ["myterm-companion", "myterm-companion-dev"].contains(components.scheme ?? ""), components.host == "pair",
               components.path.isEmpty, components.user == nil, components.password == nil,
               components.port == nil, components.fragment == nil,
               let items = components.queryItems, items.count == 1,

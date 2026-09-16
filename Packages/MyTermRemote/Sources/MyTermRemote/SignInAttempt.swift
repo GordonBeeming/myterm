@@ -22,7 +22,7 @@ public struct SignInAttempt: Sendable {
     public let relay: RelayEndpoint
 
     public init(relay: RelayEndpoint, redirectURI: URL) throws {
-        guard ["myterm-companion://auth/callback", "myterm://companion-auth/callback",
+        guard ["myterm-companion://auth/callback", "myterm-companion-dev://auth/callback", "myterm://companion-auth/callback",
                "myterm-dev://companion-auth/callback"].contains(redirectURI.absoluteString) else {
             throw RemoteError.invalidCallback
         }

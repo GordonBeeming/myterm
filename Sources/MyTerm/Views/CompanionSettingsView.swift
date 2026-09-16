@@ -26,7 +26,7 @@ struct CompanionSettingsView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
 
-                    Button(companion.isSigningIn ? "Continuing…" : "Continue") {
+                    Button(companion.isSigningIn ? "Waiting for sign-in…" : "Continue") {
                         let input = connectionInput.trimmingCharacters(in: .whitespacesAndNewlines)
                         if (try? CompanionHostModel.parseBootstrapLink(input)) != nil {
                             companion.signIn(bootstrapURLText: input)
@@ -37,13 +37,14 @@ struct CompanionSettingsView: View {
                     }
                     .disabled(companion.isSigningIn || connectionInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
-                    if companion.hasLinkedRelay && isEditingConnection {
-                        Button("Cancel") {
+                    if companion.isSigningIn {
+                        Button("Cancel sign-in", role: .cancel) { companion.cancelSignIn() }
+                    } else if companion.hasLinkedRelay && isEditingConnection {
+                        Button("Cancel editing") {
                             companion.relayText = previousRelay
                             connectionInput = ""
                             isEditingConnection = false
                         }
-                        .disabled(companion.isSigningIn)
                     }
 
                     if !companion.isSigningIn, case .failed = companion.status { statusLabel }

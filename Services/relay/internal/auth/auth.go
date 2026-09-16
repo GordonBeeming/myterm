@@ -21,6 +21,7 @@ import (
 )
 
 var AllowedRedirects = map[string]struct{}{
+	"myterm-companion-dev://auth/callback": {},
 	"myterm-companion://auth/callback":     {},
 	"myterm://companion-auth/callback":     {},
 	"myterm-dev://companion-auth/callback": {},

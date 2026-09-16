@@ -24,6 +24,17 @@ settings:
     CODE_SIGN_STYLE: Automatic
     MARKETING_VERSION: "0.28"
     CURRENT_PROJECT_VERSION: "1"
+  configs:
+    Debug:
+      MYTERM_COMPANION_BUNDLE_ID: com.gordonbeeming.myterm.companion.dev
+      MYTERM_KEYCHAIN_GROUP: com.gordonbeeming.myterm.companion.dev.shared
+      MYTERM_APP_GROUP: group.com.gordonbeeming.myterm.companion.dev
+      MYTERM_URL_SCHEME: myterm-companion-dev
+    Release:
+      MYTERM_COMPANION_BUNDLE_ID: com.gordonbeeming.myterm.companion
+      MYTERM_KEYCHAIN_GROUP: com.gordonbeeming.myterm.companion.shared
+      MYTERM_APP_GROUP: group.com.gordonbeeming.myterm.companion
+      MYTERM_URL_SCHEME: myterm-companion
 targets:
   MyTermCompanion:
     type: application
@@ -69,24 +80,24 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        MyTermKeychainAccessGroup: "$(AppIdentifierPrefix)com.gordonbeeming.myterm.companion.shared"
+        MyTermKeychainAccessGroup: "$(AppIdentifierPrefix)$(MYTERM_KEYCHAIN_GROUP)"
         MyTermPushGatewayOrigin: "$(MYTERM_PUSH_GATEWAY_ORIGIN)"
         CFBundleURLTypes:
           - CFBundleURLName: MyTerm companion authentication
             CFBundleURLSchemes:
-              - myterm-companion
+              - "$(MYTERM_URL_SCHEME)"
     entitlements:
       path: Support/MyTermCompanion.entitlements
       properties:
         aps-environment: "$(APS_ENVIRONMENT)"
         com.apple.developer.devicecheck.appattest-environment: "$(APP_ATTEST_ENVIRONMENT)"
         com.apple.security.application-groups:
-          - group.com.gordonbeeming.myterm.companion
+          - "$(MYTERM_APP_GROUP)"
         keychain-access-groups:
-          - "$(AppIdentifierPrefix)com.gordonbeeming.myterm.companion.shared"
+          - "$(AppIdentifierPrefix)$(MYTERM_KEYCHAIN_GROUP)"
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.gordonbeeming.myterm.companion
+        PRODUCT_BUNDLE_IDENTIFIER: "$(MYTERM_COMPANION_BUNDLE_ID)"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       configs:
         Debug:
@@ -117,18 +128,18 @@ targets:
         NSExtension:
           NSExtensionPointIdentifier: com.apple.usernotifications.service
           NSExtensionPrincipalClass: "$(PRODUCT_MODULE_NAME).NotificationService"
-        MyTermKeychainAccessGroup: "$(AppIdentifierPrefix)com.gordonbeeming.myterm.companion.shared"
+        MyTermKeychainAccessGroup: "$(AppIdentifierPrefix)$(MYTERM_KEYCHAIN_GROUP)"
         MyTermPushGatewayOrigin: "$(MYTERM_PUSH_GATEWAY_ORIGIN)"
     entitlements:
       path: Support/MyTermNotificationService.entitlements
       properties:
         com.apple.security.application-groups:
-          - group.com.gordonbeeming.myterm.companion
+          - "$(MYTERM_APP_GROUP)"
         keychain-access-groups:
-          - "$(AppIdentifierPrefix)com.gordonbeeming.myterm.companion.shared"
+          - "$(AppIdentifierPrefix)$(MYTERM_KEYCHAIN_GROUP)"
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.gordonbeeming.myterm.companion.notifications
+        PRODUCT_BUNDLE_IDENTIFIER: "$(MYTERM_COMPANION_BUNDLE_ID).notifications"
         SKIP_INSTALL: YES
       configs:
         Debug:

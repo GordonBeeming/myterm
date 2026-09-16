@@ -22,7 +22,7 @@ struct MyTermCompanionApp: App {
                     Task { await services.handleAPNSToken(token) }
                 }
                 .onOpenURL { url in
-                    guard url.scheme == "myterm-companion", url.host == "pair" else { return }
+                    guard url.scheme == AppConfiguration.urlScheme, url.host == "pair" else { return }
                     Task {
                         do { _ = try await services.pair(url: url) }
                         catch { services.errorMessage = error.localizedDescription }

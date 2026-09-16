@@ -15,6 +15,7 @@
 		2FB7A0308973F49DC950FED3 /* NotificationEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D3ECF4B3194B81DF0DA4E1 /* NotificationEnvelope.swift */; };
 		3610251539859561DE72ED80 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = D02D7C3B605BC41C6D6B704D /* PrivacyInfo.xcprivacy */; };
 		3BD17EF126C1CC0BD162D44F /* MyTermNotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 167672F5922523F7E84346F5 /* MyTermNotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		4DDFE91F1D2F93245412A086 /* AppConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CF59BEE2EFA0B18D0715D36 /* AppConfigurationTests.swift */; };
 		62023C04E4A2B662B40F6398 /* NotificationEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D3ECF4B3194B81DF0DA4E1 /* NotificationEnvelope.swift */; };
 		64E399E0F3FB05E2B1E0139B /* AdaptiveWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E81C624FBFF3B575146385EC /* AdaptiveWorkspaceView.swift */; };
 		6B5E55B92FDC88FB3693C7A0 /* AppModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53A2B5E6871C55271FDA9849 /* AppModels.swift */; };
@@ -79,6 +80,7 @@
 
 /* Begin PBXFileReference section */
 		01E2B01D02870D4686EFFA95 /* ManagementViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagementViews.swift; sourceTree = "<group>"; };
+		0CF59BEE2EFA0B18D0715D36 /* AppConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfigurationTests.swift; sourceTree = "<group>"; };
 		15A442D19CA92622A5D83225 /* PairingCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingCoordinator.swift; sourceTree = "<group>"; };
 		15CE946E75B4FCF6C271546A /* MyTermCompanionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyTermCompanionApp.swift; sourceTree = "<group>"; };
 		167672F5922523F7E84346F5 /* MyTermNotificationService.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = MyTermNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -234,6 +236,7 @@
 		EBDF73C8C08714D6CD7C9816 /* Tests */ = {
 			isa = PBXGroup;
 			children = (
+				0CF59BEE2EFA0B18D0715D36 /* AppConfigurationTests.swift */,
 				DDE96CF8557994DF7FEAAB5A /* BrowserAuthenticationStateTests.swift */,
 				BFA88151878C429986196266 /* RemoteSettingsDraftTests.swift */,
 				4C16667DB8CC7675CEFC6E88 /* SceneStateTests.swift */,
@@ -452,6 +455,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4DDFE91F1D2F93245412A086 /* AppConfigurationTests.swift in Sources */,
 				D45BD972D0DEC52E2E4E5EA9 /* BrowserAuthenticationStateTests.swift in Sources */,
 				C3E364CB2489742AC305E98E /* RemoteSettingsDraftTests.swift in Sources */,
 				941ECD6CF20B3D428F38FDC0 /* SceneStateTests.swift in Sources */,
@@ -532,6 +536,10 @@
 				MARKETING_VERSION = 0.28;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
+				MYTERM_APP_GROUP = group.com.gordonbeeming.myterm.companion;
+				MYTERM_COMPANION_BUNDLE_ID = com.gordonbeeming.myterm.companion;
+				MYTERM_KEYCHAIN_GROUP = com.gordonbeeming.myterm.companion.shared;
+				MYTERM_URL_SCHEME = "myterm-companion";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -552,7 +560,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.gordonbeeming.myterm.companion.notifications;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MYTERM_COMPANION_BUNDLE_ID).notifications";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -604,7 +612,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.gordonbeeming.myterm.companion.notifications;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MYTERM_COMPANION_BUNDLE_ID).notifications";
 				PROVISIONING_PROFILE_SPECIFIER = "$(MYTERM_NOTIFICATION_PROVISIONING_PROFILE)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -671,6 +679,10 @@
 				MARKETING_VERSION = 0.28;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
+				MYTERM_APP_GROUP = group.com.gordonbeeming.myterm.companion.dev;
+				MYTERM_COMPANION_BUNDLE_ID = com.gordonbeeming.myterm.companion.dev;
+				MYTERM_KEYCHAIN_GROUP = com.gordonbeeming.myterm.companion.dev.shared;
+				MYTERM_URL_SCHEME = "myterm-companion-dev";
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -712,7 +724,7 @@
 					"@executable_path/Frameworks",
 				);
 				MYTERM_DISPLAY_NAME = MyTerm;
-				PRODUCT_BUNDLE_IDENTIFIER = com.gordonbeeming.myterm.companion;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MYTERM_COMPANION_BUNDLE_ID)";
 				PROVISIONING_PROFILE_SPECIFIER = "$(MYTERM_APP_PROVISIONING_PROFILE)";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -750,7 +762,7 @@
 					"@executable_path/Frameworks",
 				);
 				MYTERM_DISPLAY_NAME = "MyTerm Dev";
-				PRODUCT_BUNDLE_IDENTIFIER = com.gordonbeeming.myterm.companion;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MYTERM_COMPANION_BUNDLE_ID)";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
