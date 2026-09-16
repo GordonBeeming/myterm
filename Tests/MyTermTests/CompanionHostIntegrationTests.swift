@@ -756,10 +756,25 @@ final class CompanionHostIntegrationTests: XCTestCase {
         try await first.channel.send(.controlRequest(reattachMetadata, ControlRequestParameters(action: .acquire)),
                                      destinationConnectionID: RelayFrame.broadcastDestination, over: first.socket)
         _ = try await requireControlState(first) { $0.leaseID != nil && $0.leaseID != leaseID }
+        let observer = try await makeAuthenticatedConnection(
+            endpoint: endpoint, fixture: fixture,
+            session: try fixtureSession(fixture: fixture, endpoint: endpoint, diagnostics: networkDiagnostics),
+            hostIdentity: identity, clientAgreementKey: clientAgreementKey, clientSigningKey: clientSigningKey
+        )
+        defer { Task { await observer.socket.disconnect() } }
+        _ = try await requireWorkspaceProjection(observer)
+        let observerMetadata = MessageMetadata(requestID: UUID(), hostID: identity.hostID,
+            runtimeID: observer.runtimeID, sessionID: target.sessionID,
+            workspaceID: target.workspaceID, groupID: destinationGroupID, tabID: target.tabID)
+        try await observer.channel.send(.attach(observerMetadata, AttachParameters()),
+                                        destinationConnectionID: RelayFrame.broadcastDestination, over: observer.socket)
+        _ = try await requireCheckpoint(observer, sessionID: target.sessionID)
+        _ = try await requireControlState(observer) { $0.leaseID != nil }
         networkDiagnostics.setStage("close controller socket")
         await first.socket.disconnect()
         networkDiagnostics.setStage("wait for controller socket removal")
         try await waitUntil { host.remoteControllers.isEmpty }
+        _ = try await requireControlState(observer) { $0.controllerConnectionID == nil && $0.leaseID == nil }
         XCTAssertTrue(host.locallyPausedSessions.contains(TerminalSessionID(rawValue: target.sessionID)))
         host.takeControl(sessionID: TerminalSessionID(rawValue: target.sessionID))
         XCTAssertFalse(host.locallyPausedSessions.contains(TerminalSessionID(rawValue: target.sessionID)))

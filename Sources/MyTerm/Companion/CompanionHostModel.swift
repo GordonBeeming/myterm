@@ -959,7 +959,7 @@ final class CompanionHostModel {
         } catch ControlPacketError.retiredLease {
             let target = try terminalTarget(messageMetadata, allowingAttachedPeer: peer)
             send(.error(messageMetadata, ErrorParameters(code: "control_denied",
-                 message: "Control has moved to another device. Request control to send input.",
+                 message: "You no longer control this terminal. Request control to type or resize.",
                  retryable: false)), to: peer)
             broadcastControlState(target: target)
         }
@@ -1657,6 +1657,12 @@ final class CompanionHostModel {
         }
         for sessionID in controlledSessions {
             clearLease(sessionID: sessionID)
+            if let route = routesBySession[sessionID],
+               let session = appModel?.companionTerminalSession(sessionID) {
+                broadcastControlState(target: (
+                    route.workspaceID, route.groupID, route.tabID, sessionID, session
+                ))
+            }
         }
         for sessionID in affectedSessions { updateRemoteCapture(sessionID: sessionID) }
     }
