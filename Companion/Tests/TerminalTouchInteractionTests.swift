@@ -82,11 +82,40 @@ final class TerminalTouchInteractionTests: XCTestCase {
         XCTAssertFalse(view.mousePanShouldBegin(), "A view-only pane scrolls locally")
         view.acceptsUserInput = true
 
+        XCTAssertTrue(view.mousePanShouldBegin(modifierFlags: []))
+        XCTAssertFalse(view.mousePanShouldBegin(modifierFlags: .shift),
+                       "Shift yields the pan to local scrolling, as panMouseHandler would drop it")
+        view.feed(text: "\(esc)[>1s")
+        XCTAssertTrue(view.mousePanShouldBegin(modifierFlags: .shift),
+                      "XTSHIFTESCAPE lets the application keep Shift-modified pans")
+        view.feed(text: "\(esc)[>0s")
+        XCTAssertFalse(view.mousePanShouldBegin(modifierFlags: .shift))
+
         view.selectAll(nil)
         XCTAssertFalse(view.mousePanShouldBegin(), "An active selection keeps its drag handles")
 
         view.feed(text: "\(esc)[?1000l")
         XCTAssertNil(view.panMouseGesture, "Leaving mouse tracking removes the wheel pan gesture")
+    }
+
+    func testEditMenuOffersCopyWithoutFocus() {
+        let (view, _) = makeMirroredView()
+        view.feed(text: "word: SELECTME_fixture")
+        XCTAssertFalse(view.isFirstResponder, "The view is not in a window, so it cannot hold focus")
+
+        let titles = { (menu: UIMenu) in menu.children.map(\.title) }
+        XCTAssertEqual(titles(view.editMenu()), ["Select", "Select All", "Paste"],
+                       "Without a selection there is nothing to copy")
+
+        view.selection.selectWordOrExpression(at: Position(col: 8, row: 0), in: view.terminal.displayBuffer)
+        XCTAssertEqual(titles(view.editMenu()), ["Select All", "Copy", "Paste"],
+                       "A selection offers Copy even though the view is not first responder")
+    }
+
+    func testHideKeyboardActionReachesTheTerminal() {
+        let (view, _) = makeMirroredView()
+        XCTAssertTrue(view.canPerformAction(#selector(UIResponder.resignFirstResponder), withSender: nil),
+                      "sendAction(to: nil) asks the first responder before it delivers the selector")
     }
 
     func testPanDeltaAccumulatesIntoWholeLines() {

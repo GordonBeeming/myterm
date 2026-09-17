@@ -86,7 +86,6 @@ final class CompanionTouchTests: XCTestCase {
     @MainActor
     func testDoubleTapSelectsWordAndCopies() throws {
         try launchFixture()
-        UIPasteboard.general.string = ""
         cell(col: 10, row: 1).doubleTap()
         let copy = app.menuItems["Copy"].firstMatch
         XCTAssertTrue(copy.waitForExistence(timeout: 5), "Double-tap must show the edit menu with Copy")
@@ -95,10 +94,11 @@ final class CompanionTouchTests: XCTestCase {
         screenshot.lifetime = .keepAlways
         add(screenshot)
         copy.tap()
+        let copied = app.staticTexts["fixture-copied"]
         let pasted = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            UIPasteboard.general.string?.contains("SELECTME_fixture") == true
+            copied.label.contains("SELECTME_fixture")
         }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [pasted], timeout: 5), .completed,
-                       "Copy must place the selected word on the pasteboard, got \(UIPasteboard.general.string ?? "nil")")
+                       "Copy must place the selected word on the pasteboard, got \(copied.label)")
     }
 }

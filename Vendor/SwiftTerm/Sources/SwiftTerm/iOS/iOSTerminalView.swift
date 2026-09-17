@@ -593,6 +593,11 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
             return true
         case #selector(resetCmd(_:)):
             return true
+        case #selector(resignFirstResponder):
+            // A host "hide keyboard" control dismisses the keyboard with
+            // sendAction(to: nil), which asks the first responder through
+            // this method before delivering the selector.
+            return true
         default:
             //print ("canPerformAction invoked for \(action)")
             return false
@@ -608,28 +613,69 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         lastLongSelect = pos
         lastLongSelectRegion = forRegion
 
-        // The standard edit actions (Select, Select All, Copy, Paste) come from
-        // canPerformAction(_:withSender:) on this responder.
         if #available(iOS 16.0, visionOS 1.0, *) {
+            // The menu supplies its own actions (see editMenu()),
+            // so the view need not be first responder. Taking focus here would
+            // show the keyboard, and the layout change that follows resizes the
+            // terminal and discards the selection the menu is for.
             let configuration = UIEditMenuConfiguration(
                 identifier: nil, sourcePoint: CGPoint (x: forRegion.midX, y: forRegion.minY))
             editMenuInteraction.presentEditMenu(with: configuration)
         } else {
+            // UIMenuController resolves its items from the first responder.
+            if !isFirstResponder {
+                _ = becomeFirstResponder()
+            }
             UIMenuController.shared.showMenu(from: self, rect: forRegion)
         }
     }
 
     private var editMenuInteractionStorage: UIInteraction?
+    private var editMenuDelegateStorage: NSObject?
 
     @available(iOS 16.0, visionOS 1.0, *)
     private var editMenuInteraction: UIEditMenuInteraction {
         if let interaction = editMenuInteractionStorage as? UIEditMenuInteraction {
             return interaction
         }
-        let interaction = UIEditMenuInteraction(delegate: nil)
+        let delegate = EditMenuDelegate()
+        delegate.view = self
+        let interaction = UIEditMenuInteraction(delegate: delegate)
         addInteraction(interaction)
+        editMenuDelegateStorage = delegate
         editMenuInteractionStorage = interaction
         return interaction
+    }
+
+    // A separate delegate object, for the same reason as MousePanGestureDelegate.
+    @available(iOS 16.0, visionOS 1.0, *)
+    private final class EditMenuDelegate: NSObject, UIEditMenuInteractionDelegate {
+        weak var view: TerminalView?
+        func editMenuInteraction (_ interaction: UIEditMenuInteraction,
+                                  menuFor configuration: UIEditMenuConfiguration,
+                                  suggestedActions: [UIMenuElement]) -> UIMenu? {
+            view?.editMenu()
+        }
+    }
+
+    /// The edit menu offered for a selection or a tap. The actions are built from
+    /// `canPerformAction` directly instead of the interaction's suggested actions,
+    /// which UIKit only collects from the first responder.
+    @available(iOS 16.0, visionOS 1.0, *)
+    func editMenu () -> UIMenu {
+        var actions: [UIAction] = []
+        for (title, action) in editMenuActions where canPerformAction(action, withSender: nil) {
+            actions.append(UIAction(title: title) { [weak self] _ in _ = self?.perform(action, with: nil) })
+        }
+        return UIMenu(children: actions)
+    }
+
+    /// Menu order matches the standard iOS text edit menu.
+    var editMenuActions: [(title: String, action: Selector)] {
+        [("Select", #selector(select(_:))),
+         ("Select All", #selector(selectAll(_:))),
+         ("Copy", #selector(copy(_:))),
+         ("Paste", #selector(paste(_:)))]
     }
 
     func hideContextMenu () {
@@ -791,7 +837,11 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
     /// In that case the gesture should fall through to local selection handling instead
     /// of being forwarded to the application as a mouse event.
     private func shiftBypassesMouseReporting(for gestureRecognizer: UIGestureRecognizer) -> Bool {
-        gestureRecognizer.modifierFlags.contains(.shift) && !terminal.mouseShiftCapture
+        shiftBypassesMouseReporting(modifierFlags: gestureRecognizer.modifierFlags)
+    }
+
+    func shiftBypassesMouseReporting(modifierFlags: UIKeyModifierFlags) -> Bool {
+        modifierFlags.contains(.shift) && !terminal.mouseShiftCapture
     }
 
     @objc func singleTap (_ gestureRecognizer: UITapGestureRecognizer)
@@ -1094,7 +1144,15 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
     /// Otherwise the pan stays local: the scroll view pans the scrollback, or the
     /// selection pan gesture adjusts an active selection.
     func mousePanShouldBegin () -> Bool {
+        mousePanShouldBegin(modifierFlags: [])
+    }
+
+    /// The decision must agree with `panMouseHandler`: a pan the handler would
+    /// drop (Shift held without XTSHIFTESCAPE) is declined here instead, so the
+    /// scroll view or the selection pan can take the gesture.
+    func mousePanShouldBegin (modifierFlags: UIKeyModifierFlags) -> Bool {
         allowMouseReporting && acceptsUserInput && terminal.mouseMode != .off && !selection.active
+            && !shiftBypassesMouseReporting(modifierFlags: modifierFlags)
     }
 
     // A separate delegate object: UIScrollView is the delegate of its own pan
@@ -1102,7 +1160,7 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
     private final class MousePanGestureDelegate: NSObject, UIGestureRecognizerDelegate {
         weak var view: TerminalView?
         func gestureRecognizerShouldBegin (_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-            view?.mousePanShouldBegin() ?? false
+            view?.mousePanShouldBegin(modifierFlags: gestureRecognizer.modifierFlags) ?? false
         }
     }
     

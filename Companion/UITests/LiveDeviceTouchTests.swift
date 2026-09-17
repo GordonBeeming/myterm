@@ -9,29 +9,33 @@ final class LiveDeviceTouchTests: XCTestCase {
 
     @MainActor
     func testLiveTouchInteractions() throws {
-        try XCTSkipUnless(ProcessInfo.processInfo.environment["MYTERM_LIVE_DEVICE_TEST"] == "1",
-                          "Requires an explicitly selected paired development Mac and physical device.")
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["MYTERM_LIVE_DEVICE_TEST"] == "1",
+              let hostName = environment["MYTERM_LIVE_HOST_NAME"], !hostName.isEmpty else {
+            throw XCTSkip("Requires MYTERM_LIVE_DEVICE_TEST=1 and MYTERM_LIVE_HOST_NAME naming the paired development Mac.")
+        }
         app = XCUIApplication()
         app.launchArguments = ["-workspacePresentation", "adaptive"]
         app.launch()
-        let hostName = ProcessInfo.processInfo.environment["MYTERM_LIVE_HOST_NAME"] ?? "blastoise"
         let host = app.staticTexts[hostName].firstMatch
         XCTAssertTrue(host.waitForExistence(timeout: 15), "Paired development host must be available")
         host.tap()
-        let create = app.buttons["New workspace"].firstMatch
-        XCTAssertTrue(create.waitForExistence(timeout: 20), "Host must complete its encrypted connection")
-        create.tap()
-        let name = "Companion touch test " + String(UUID().uuidString.prefix(6))
-        let nameField = app.textFields["Name"]
-        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
-        nameField.tap()
-        nameField.typeText(name)
-        app.buttons["Create workspace"].tap()
-        let workspace = app.staticTexts[name].firstMatch
-        XCTAssertTrue(workspace.waitForExistence(timeout: 10))
-        workspace.tap()
+        let addMenu = app.buttons["Add folder or workspace"].firstMatch
+        XCTAssertTrue(addMenu.waitForExistence(timeout: 20), "Host must complete its encrypted connection")
+        addMenu.tap()
+        app.buttons["Add workspace"].tap()
+        let workspaceBar = app.navigationBars.matching(
+            NSPredicate(format: "identifier MATCHES %@", "^Workspace [0-9]+$")
+        ).firstMatch
+        XCTAssertTrue(workspaceBar.waitForExistence(timeout: 10),
+                      "The automatically named workspace must open after creation")
         let surface = app.descendants(matching: .any)["remote-terminal"].firstMatch
         XCTAssertTrue(surface.waitForExistence(timeout: 15))
+        // Typed input only reaches the shell once this device holds control.
+        let requestControl = app.buttons["Request control"].firstMatch
+        XCTAssertTrue(requestControl.waitForExistence(timeout: 5))
+        requestControl.tap()
+        XCTAssertTrue(app.staticTexts["You have control"].firstMatch.waitForExistence(timeout: 5))
         surface.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10), "Taking control shows the keyboard")
         let ready = "MYTERM_READY_" + String(UUID().uuidString.prefix(6))

@@ -41,6 +41,15 @@ struct TerminalTouchUITestFixture: View {
                     .font(.caption2)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityIdentifier("fixture-link")
+                // The test runner is another process, and iOS refuses it the
+                // pasteboard, so the app reports its own copies here.
+                Text(model.copiedText ?? "none")
+                    .font(.caption2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("fixture-copied")
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIPasteboard.changedNotification)) { _ in
+                model.copiedText = UIPasteboard.general.string
             }
             .navigationTitle("Touch fixture")
             .navigationBarTitleDisplayMode(.inline)
@@ -55,6 +64,7 @@ struct TerminalTouchUITestFixture: View {
 final class TouchFixtureModel {
     var inputLog = ""
     var openedLink: String?
+    var copiedText: String?
 }
 
 private struct TouchFixtureTerminal: UIViewRepresentable {
