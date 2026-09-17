@@ -1743,6 +1743,9 @@ extension TerminalView {
         if terminal.synchronizedOutputActive {
             return
         }
+#if os(iOS) || os(visionOS)
+        if usesIndependentViewport { updateScroller() }
+#endif
         updateCursorPosition()
         guard let (rowStart, rowEnd) = terminal.getUpdateRange () else {
             if notifyUpdateChanges {
@@ -2060,8 +2063,13 @@ extension TerminalView {
     private func updateUserScrollingState(for row: Int, in displayBuffer: Buffer) {
         let maxScrollback = max(0, displayBuffer.lines.count - displayBuffer.rows)
         let isUserScrolling = row < maxScrollback
+#if os(iOS) || os(visionOS)
+        setManualScrolling(isUserScrolling)
+        setIndependentViewportRow(row)
+#else
         userScrolling = isUserScrolling
         terminal.userScrolling = isUserScrolling
+#endif
     }
     
     public func scrollTo (row: Int, notifyAccessibility: Bool = true)
@@ -2153,6 +2161,9 @@ extension TerminalView {
     }
 
     private func shouldDisplayImmediatelyAfterUserInput() -> Bool {
+#if os(iOS) || os(visionOS)
+        if coalescesInteractiveOutput { return false }
+#endif
         guard !terminal.synchronizedOutputActive else { return false }
         let last = loadLastUserInputUptimeNs()
         guard last > 0 else { return false }
@@ -2390,6 +2401,9 @@ extension TerminalView {
         for buffer in [terminal.normalBuffer, terminal.altBuffer] {
             buffer.recalculateLinesWithImagesCount()
         }
+#if os(iOS) || os(visionOS)
+        mouseModeChanged(source: terminal)
+#endif
         updateScroller()
         terminal.refresh(startRow: 0, endRow: terminal.rows - 1)
         updateDisplay()
