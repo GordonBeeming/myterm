@@ -112,7 +112,8 @@ struct AdaptiveWorkspaceView: View {
                     .accessibilityIdentifier("toggle-maximise-pane")
                 }
             }
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarItemGroup(placement: .primaryAction) {
+                HideKeyboardButton()
                 Button(showTerminalKeys ? "Hide terminal keys" : "Show terminal keys", systemImage: "keyboard") {
                     showTerminalKeys.toggle()
                 }

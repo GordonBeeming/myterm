@@ -5743,30 +5743,44 @@ open class Terminal {
      */
     public func sendEvent (buttonFlags: Int, x: Int, y: Int, pixelX: Int, pixelY: Int)
     {
-        //print ("got \(mouseProtocol)")
+        sendResponse(encodeMouseEvent(buttonFlags: buttonFlags, x: x, y: y, pixelX: pixelX, pixelY: pixelY))
+    }
+
+    /**
+     * Encodes a mouse event in the protocol the application selected, without sending it.
+     * Views that must route mouse events through their user-input path (rather than the
+     * terminal-response path) send the returned bytes themselves.
+     * - Parameter buttonFlags: Button flags encoded in Cb mode.
+     * - Parameter x: X coordinate for the event
+     * - Parameter y: Y coordinate for the event
+     * - Returns: the complete escape sequence for the event
+     */
+    public func encodeMouseEvent (buttonFlags: Int, x: Int, y: Int, pixelX: Int, pixelY: Int) -> [UInt8]
+    {
+        var buffer: [UInt8] = cc.CSI
         switch mouseProtocol {
         case .x10:
-            sendResponse(cc.CSI, "M", [UInt8(min(buttonFlags+32, 255)), UInt8(min(32 + x+1, 255)), UInt8(min(32+y+1, 255))])
+            buffer.append(UInt8 (ascii: "M"))
+            buffer.append(contentsOf: [UInt8(min(buttonFlags+32, 255)), UInt8(min(32 + x+1, 255)), UInt8(min(32+y+1, 255))])
         case .sgr:
             let isRelease = (buttonFlags & 3) == 3 && (buttonFlags & 32) == 0
             let bflags : Int = isRelease ? (buttonFlags & ~3) : buttonFlags
             let m = isRelease ? "m" : "M"
-            sendResponse(cc.CSI, "<\(bflags);\(x+1);\(y+1)\(m)")
+            buffer.append(contentsOf: [UInt8] ("<\(bflags);\(x+1);\(y+1)\(m)".utf8))
         case .sgrPixel:
             let isRelease = (buttonFlags & 3) == 3 && (buttonFlags & 32) == 0
             let bflags : Int = isRelease ? (buttonFlags & ~3) : buttonFlags
             let m = isRelease ? "m" : "M"
-            sendResponse(cc.CSI, "<\(bflags);\(pixelX);\(pixelY)\(m)")
-            
+            buffer.append(contentsOf: [UInt8] ("<\(bflags);\(pixelX);\(pixelY)\(m)".utf8))
         case .urxvt:
-            sendResponse(cc.CSI, "\(buttonFlags+32);\(x+1);\(y+1)M");
+            buffer.append(contentsOf: [UInt8] ("\(buttonFlags+32);\(x+1);\(y+1)M".utf8))
         case .utf8:
-            var buffer: [UInt8] = [UInt8 (ascii: "M")]
+            buffer.append(UInt8 (ascii: "M"))
             encodeMouseUtf(data: &buffer, ch: buttonFlags+32)
             encodeMouseUtf (data: &buffer, ch: x+33)
             encodeMouseUtf (data: &buffer, ch: y+33)
-            sendResponse(cc.CSI, buffer)
         }
+        return buffer
     }
     
     /**
@@ -5986,7 +6000,15 @@ open class Terminal {
         getText(start: start, end: end, buffer: displayBuffer)
     }
 
-    func linkMatch(at location: LinkLookupLocation, mode: LinkLookupMode) -> LinkMatch?
+    /// Finds the link under `location`.
+    /// - Parameter allowHeuristicRowJoin: when `true` (the default), an implicit
+    ///   URL that ends near the right edge may join the next unwrapped row, which
+    ///   recovers URLs a full-screen editor soft-wrapped without a wrap flag.
+    ///   Pointer hover confirms the extent before activation, so the desktop keeps
+    ///   this on. Touch has no hover, and on a narrow screen many one-line URLs end
+    ///   near the edge, so the tap path passes `false` to stay on the tapped row.
+    func linkMatch(at location: LinkLookupLocation, mode: LinkLookupMode,
+                   allowHeuristicRowJoin: Bool = true) -> LinkMatch?
     {
         let buffer = displayBuffer
         guard let position = resolveLinkLocation(location, in: buffer) else {
@@ -6001,7 +6023,8 @@ open class Terminal {
         case .explicitOnly:
             return nil
         case .explicitAndImplicit:
-            return implicitLinkMatch(at: position, in: buffer)
+            return implicitLinkMatch(at: position, in: buffer,
+                                     allowHeuristicRowJoin: allowHeuristicRowJoin)
         }
     }
 
@@ -6076,9 +6099,11 @@ open class Terminal {
         )
     }
 
-    private func implicitLinkMatch(at position: Position, in buffer: Buffer) -> LinkMatch?
+    private func implicitLinkMatch(at position: Position, in buffer: Buffer,
+                                   allowHeuristicRowJoin: Bool = true) -> LinkMatch?
     {
-        guard let lineMap = buildGhosttyImplicitLineMap(at: position, in: buffer) else {
+        guard let lineMap = buildGhosttyImplicitLineMap(
+            at: position, in: buffer, allowHeuristicRowJoin: allowHeuristicRowJoin) else {
             return nil
         }
         guard let regex = Self.ghosttyImplicitLinkRegex else {
@@ -6262,7 +6287,8 @@ open class Terminal {
         charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~:/?#[]@!$&*+,;=%()"
     )
 
-    private func buildGhosttyImplicitLineMap(at position: Position, in buffer: Buffer) -> GhosttyImplicitLineMap?
+    private func buildGhosttyImplicitLineMap(at position: Position, in buffer: Buffer,
+                                            allowHeuristicRowJoin: Bool = true) -> GhosttyImplicitLineMap?
     {
         guard position.row >= 0 && position.row < buffer.lines.count else {
             return nil
@@ -6288,7 +6314,7 @@ open class Terminal {
         while endRow + 1 < buffer.lines.count && buffer.lines[endRow + 1].isWrapped {
             endRow += 1
         }
-        if startRow == targetRow && endRow == targetRow,
+        if allowHeuristicRowJoin, startRow == targetRow && endRow == targetRow,
            let (heuristicStart, heuristicEnd) = heuristicImplicitGroup(around: targetRow, in: buffer)
         {
             startRow = heuristicStart

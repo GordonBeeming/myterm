@@ -12,6 +12,8 @@ struct MyTermCompanionApp: App {
             Group {
                 if UITestConfiguration.showsTerminalFixture {
                     TerminalUITestFixture()
+                } else if UITestConfiguration.showsTouchFixture {
+                    TerminalTouchUITestFixture()
                 } else {
                     SceneRootView(services: services)
                 }

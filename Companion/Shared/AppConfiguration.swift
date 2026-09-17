@@ -36,6 +36,14 @@ enum UITestConfiguration {
         false
         #endif
     }
+
+    static var showsTouchFixture: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-MyTermUITestTouchFixture")
+        #else
+        false
+        #endif
+    }
 }
 
 extension Notification.Name {
