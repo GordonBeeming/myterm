@@ -109,8 +109,8 @@ final class AgentHooksControllerTests: XCTestCase {
     }
 
     func testAHookInstalledByAnEarlierVersionIsReinstalledOnRefresh() throws {
-        // The child-session guard was added after the first hooks shipped. A settings file
-        // carrying the earlier text must pick it up without the user reinstalling by hand.
+        // An installed environment guard suppresses even the owning Claude's hook processes.
+        // Refresh must replace it without disturbing somebody else's settings.
         let url = try makeSettingsURL()
         let controller = AgentHooksController(settingsURL: url)
         controller.install()
@@ -120,14 +120,17 @@ final class AgentHooksControllerTests: XCTestCase {
             var entries = try XCTUnwrap(hooks[event.name] as? [[String: Any]])
             var inner = try XCTUnwrap(entries[0]["hooks"] as? [[String: Any]])
             let command = try XCTUnwrap(inner[0]["command"] as? String)
-            inner[0]["command"] = command.replacingOccurrences(of: #" && [ -z "${CLAUDE_CODE_CHILD_SESSION:-}" ]"#, with: "")
+            inner[0]["command"] = command.replacingOccurrences(
+                of: #"[ -n "${MYTERM_PANE_ID:-}" ] &&"#,
+                with: #"[ -n "${MYTERM_PANE_ID:-}" ] && [ -z "${CLAUDE_CODE_CHILD_SESSION:-}" ] &&"#
+            )
             entries[0]["hooks"] = inner
             hooks[event.name] = entries
         }
         settings["hooks"] = hooks
         settings["model"] = "opus"
         try write(settings, to: url)
-        XCTAssertFalse(try readSettings(at: url).description.contains("CLAUDE_CODE_CHILD_SESSION"), "precondition")
+        XCTAssertTrue(try readSettings(at: url).description.contains("CLAUDE_CODE_CHILD_SESSION"), "precondition")
 
         let reopened = AgentHooksController(settingsURL: url)
 
@@ -138,7 +141,10 @@ final class AgentHooksControllerTests: XCTestCase {
         for event in controller.target.events {
             let commands = commands(in: rereadHooks[event.name])
             XCTAssertEqual(commands.count, 1, event.name)
-            XCTAssertTrue(commands[0].contains(#"[ -z "${CLAUDE_CODE_CHILD_SESSION:-}" ]"#), event.name)
+            XCTAssertFalse(commands[0].contains("CLAUDE_CODE_CHILD_SESSION"), event.name)
+            XCTAssertEqual(commands[0], AgentHooksController.command(
+                agent: controller.target.agent, activity: event.activity, ignoring: event.ignoredMessage
+            ))
         }
     }
 
