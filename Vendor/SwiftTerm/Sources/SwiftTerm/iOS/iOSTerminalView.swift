@@ -1701,7 +1701,7 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         setContentOffsetFromTerminal(CGPoint(x: 0, y: bottomOffset))
     }
 
-    private func syncYDispFromContentOffset() {
+    private func syncYDispFromContentOffset(userInitiated: Bool = false) {
         guard terminal != nil, !updatingContentOffsetFromTerminal, cellDimension.height > 0 else {
             return
         }
@@ -1725,8 +1725,9 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
             return
         }
 
-        // Freeze auto-follow only while the finger is physically down
-        // (isTracking). Excluding the momentum coast is essential: after the
+        // Touch scrolling freezes auto-follow while the finger is physically down
+        // (isTracking). Accessibility paging opts in explicitly. Excluding the
+        // momentum coast is essential: after the
         // finger lifts, deceleration keeps firing sync while streaming output
         // extends the content and the bottom recedes ahead of the coasting
         // offset — treating that "not at the bottom yet" reading as a manual
@@ -1735,7 +1736,7 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         // true through the entire coast, so it fails to exclude momentum. It also
         // covers layout/system-driven offset changes (startup sizing, rotation,
         // keyboard insets, buffer shrink), which are never a manual scroll.
-        guard isTracking else {
+        guard isTracking || userInitiated else {
             return
         }
 
@@ -1846,7 +1847,7 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
 
     open override func accessibilityScroll(_ direction: UIAccessibilityScrollDirection) -> Bool {
         let pageHeight = max(bounds.height, cellDimension.height)
-        let maxOffsetY = max(0, contentSize.height - bounds.height)
+        let maxOffsetY = usesIndependentViewport ? independentFollowOffsetY() : maxContentOffsetY()
         let targetOffsetY: CGFloat
 
         switch direction {
@@ -1863,6 +1864,10 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         }
 
         setContentOffset(CGPoint(x: contentOffset.x, y: targetOffsetY), animated: false)
+        // VoiceOver page changes are deliberate reading actions without a finger
+        // tracking gesture. Layout-driven offset changes must still remain automatic.
+        syncYDispFromContentOffset(userInitiated: true)
+        if usesIndependentViewport { onViewportChanged?() }
         setNeedsDisplay(bounds)
         // Based on WWDC 2019 presentation: argument is nil
         UIAccessibility.post(notification: .pageScrolled, argument: nil)

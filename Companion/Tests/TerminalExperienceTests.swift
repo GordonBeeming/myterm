@@ -91,6 +91,44 @@ final class TerminalExperienceTests: XCTestCase {
         XCTAssertTrue(spectator.panGestureRecognizer.isEnabled)
     }
 
+    func testAccessibilityPagingPausesFollowingAndResumesAtLiveOutput() {
+        let view = makeView()
+        view.contentInset.bottom = 20
+        fill(view)
+        view.followOutput()
+        var captured: TerminalViewportState?
+        view.onViewportChanged = { [weak view] in captured = view?.captureViewport() }
+        XCTAssertTrue(view.accessibilityScroll(.up))
+        XCTAssertFalse(view.followsOutput)
+        XCTAssertEqual(captured?.followsOutput, false)
+        let offset = view.contentOffset.y
+        fill(view, lines: 20)
+        XCTAssertEqual(view.contentOffset.y, offset, accuracy: 1)
+        for _ in 0..<50 where !view.followsOutput {
+            XCTAssertTrue(view.accessibilityScroll(.down))
+        }
+        XCTAssertTrue(view.followsOutput)
+        assertAtBottom(view)
+        fill(view, lines: 5)
+        assertAtBottom(view)
+    }
+
+    func testAccessibilityPagingStopsAtSparsePromptInsteadOfBlankHostRows() {
+        let view = makeView()
+        fill(view)
+        view.feed(text: "\u{1b}[2J\u{1b}[H$ ")
+        view.followOutput()
+        let liveOffset = view.contentOffset.y
+        XCTAssertLessThan(liveOffset, view.contentSize.height - view.bounds.height)
+        XCTAssertTrue(view.accessibilityScroll(.up))
+        XCTAssertFalse(view.followsOutput)
+        for _ in 0..<50 where !view.followsOutput {
+            XCTAssertTrue(view.accessibilityScroll(.down))
+        }
+        XCTAssertTrue(view.followsOutput)
+        XCTAssertEqual(view.contentOffset.y, liveOffset, accuracy: 1)
+    }
+
     func testHistoryPositionSurvivesOutputAndCheckpointRestoreUntilJumpToLive() throws {
         let view = makeView()
         fill(view)
