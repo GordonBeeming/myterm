@@ -234,7 +234,7 @@ private struct TerminalControlBar: View {
     }
 }
 
-private struct RemoteTerminalView: UIViewRepresentable {
+struct RemoteTerminalView: UIViewRepresentable {
     private static let logger = Logger(subsystem: AppConfiguration.bundleIdentifier, category: "TerminalRendering")
     let state: TerminalSurfaceState
     let showTerminalKeys: Bool
@@ -277,7 +277,7 @@ private struct RemoteTerminalView: UIViewRepresentable {
     }
 
     static func dismantleUIView(_ view: TerminalView, coordinator: Coordinator) {
-        coordinator.parent.state.viewport = view.captureViewport()
+        coordinator.finishViewportCapture(from: view)
         view.onFollowOutputChanged = nil
         view.onViewportChanged = nil
         view.terminalDelegate = nil
@@ -419,17 +419,30 @@ private struct RemoteTerminalView: UIViewRepresentable {
         var failedCheckpointRevision = -1
         var followOutputRevision: Int?
         var viewportUpdatePending = false
+        var isDismantled = false
 
         init(parent: RemoteTerminalView) { self.parent = parent }
 
+        @MainActor func finishViewportCapture(from view: TerminalView) {
+            isDismantled = true
+            // Do not replace cached history with an empty view that never restored it.
+            guard checkpointRevision >= 0 else { return }
+            let state = parent.state
+            if let revision = followOutputRevision, revision != state.followOutputRevision { view.followOutput() }
+            let viewport = view.captureViewport()
+            state.viewport = viewport
+            state.isFollowingOutput = viewport.followsOutput
+        }
+
         @MainActor func synchronizeViewport(from view: TerminalView) {
+            guard !isDismantled else { return }
             parent.state.viewport = view.captureViewport()
             guard !viewportUpdatePending else { return }
             viewportUpdatePending = true
             Task { @MainActor [weak self, weak view] in
                 guard let self else { return }
                 defer { self.viewportUpdatePending = false }
-                guard let view else { return }
+                guard let view, !self.isDismantled else { return }
                 let state = self.parent.state
                 state.viewport = view.captureViewport()
                 if state.isFollowingOutput != view.followsOutput { state.isFollowingOutput = view.followsOutput }

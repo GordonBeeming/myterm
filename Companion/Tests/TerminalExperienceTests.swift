@@ -156,6 +156,49 @@ final class TerminalExperienceTests: XCTestCase {
         XCTAssertFalse(viewer.followsOutput)
     }
 
+    private func viewportCoordinator(_ state: TerminalSurfaceState) -> RemoteTerminalView.Coordinator {
+        let parent = RemoteTerminalView(state: state, showTerminalKeys: false,
+            onInput: { _ in }, onPasteImage: { _ in }, onResize: { _, _ in }, onResync: { _ in })
+        let coordinator = parent.makeCoordinator()
+        coordinator.checkpointRevision = 0
+        coordinator.followOutputRevision = state.followOutputRevision
+        return coordinator
+    }
+
+    private func viewportState() -> TerminalSurfaceState {
+        TerminalSurfaceState(route: TerminalRoute(
+            connectionID: SavedConnectionID(relayOrigin: "https://relay.example.com", accountID: UUID(), hostID: UUID()),
+            workspaceID: UUID(), groupID: UUID(), tabID: UUID(), sessionID: UUID(), title: "Terminal"))
+    }
+
+    func testImmediateDismantleSavesFrozenIntentAndCancelsDeferredUpdates() async {
+        let state = viewportState()
+        let coordinator = viewportCoordinator(state)
+        let view = makeView()
+        fill(view)
+        view.scroll(toPosition: 0.3)
+        coordinator.synchronizeViewport(from: view)
+        XCTAssertTrue(state.isFollowingOutput, "The deferred publication has not run yet")
+        RemoteTerminalView.dismantleUIView(view, coordinator: coordinator)
+        XCTAssertFalse(state.isFollowingOutput)
+        XCTAssertEqual(state.viewport?.followsOutput, false)
+        state.resumeFollowingOutput()
+        await Task.yield()
+        XCTAssertTrue(state.isFollowingOutput, "An obsolete view must not overwrite the new viewer's intent")
+    }
+
+    func testDismantleHonoursJumpToLiveBeforeNextRepresentableUpdate() {
+        let state = viewportState()
+        let coordinator = viewportCoordinator(state)
+        let view = makeView()
+        fill(view)
+        view.scroll(toPosition: 0.3)
+        state.resumeFollowingOutput()
+        RemoteTerminalView.dismantleUIView(view, coordinator: coordinator)
+        XCTAssertTrue(state.isFollowingOutput)
+        XCTAssertEqual(state.viewport?.followsOutput, true)
+    }
+
     func testRemoteEchoBurstIsRenderedTogetherWhileTyping() async throws {
         let view = makeView()
         let observer = DisplayObserver()
