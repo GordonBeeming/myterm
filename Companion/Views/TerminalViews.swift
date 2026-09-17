@@ -142,8 +142,12 @@ struct CompanionTerminalPane: View {
             VStack(spacing: 0) {
                 TerminalControlBar(state: state) { action in
                     Task { await scene.requestControl(action, route: currentRoute) }
+                } compose: {
+                    scene.sheet = .terminalComposer(currentRoute)
                 }
-                RemoteTerminalView(state: state, showTerminalKeys: showTerminalKeys, requestsKeyboardFocus: requestsKeyboardFocus, onToggleMaximise: onToggleMaximise) { data in
+                RemoteTerminalView(state: state, showTerminalKeys: showTerminalKeys,
+                                   requestsKeyboardFocus: requestsKeyboardFocus && scene.sheet == nil,
+                                   onToggleMaximise: onToggleMaximise) { data in
                     Task { await scene.sendInput(data, route: currentRoute) }
                 } onPasteImage: { data in
                     Task {
@@ -158,6 +162,16 @@ struct CompanionTerminalPane: View {
                     Task { await scene.refreshTerminal(currentRoute) }
                 }
                 .id(currentRoute.id)
+                .overlay(alignment: .bottomTrailing) {
+                    if !state.isFollowingOutput {
+                        Button("Jump to live", systemImage: "arrow.down.to.line") {
+                            state.resumeFollowingOutput()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("terminal-jump-to-live")
+                        .padding(12)
+                    }
+                }
                 if showTerminalKeys {
                     TerminalAccessoryBar { bytes in
                         Task { await scene.sendInput(bytes, route: currentRoute) }
@@ -175,6 +189,7 @@ struct CompanionTerminalPane: View {
 private struct TerminalControlBar: View {
     let state: TerminalSurfaceState
     let request: (ControlAction) -> Void
+    let compose: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
@@ -183,6 +198,9 @@ private struct TerminalControlBar: View {
                 .font(.footnote)
                 .lineLimit(1)
             Spacer()
+            Button("Compose", systemImage: "square.and.pencil", action: compose)
+                .labelStyle(.iconOnly)
+                .accessibilityIdentifier("compose-terminal-text")
             if state.isAwaitingCheckpoint {
                 ProgressView().controlSize(.small)
             } else if state.isControlRequestPending {
@@ -241,11 +259,29 @@ private struct RemoteTerminalView: UIViewRepresentable {
         view.sendsTerminalResponses = false
         view.acceptsUserInput = false
         view.automaticallyResizesTerminal = false
+        view.usesIndependentViewport = true
+        view.coalescesInteractiveOutput = true
+        view.onFollowOutputChanged = { [weak coordinator = context.coordinator, weak view] _ in
+            guard let view else { return }
+            coordinator?.synchronizeViewport(from: view)
+        }
+        view.onViewportChanged = { [weak coordinator = context.coordinator, weak view] in
+            guard let view else { return }
+            coordinator?.synchronizeViewport(from: view)
+        }
         view.linkReporting = .none
         view.accessibilityIdentifier = "remote-terminal"
         context.coordinator.defaultInputAccessoryView = view.inputAccessoryView
         if !showTerminalKeys { view.inputAccessoryView = nil }
         return view
+    }
+
+    static func dismantleUIView(_ view: TerminalView, coordinator: Coordinator) {
+        coordinator.parent.state.viewport = view.captureViewport()
+        view.onFollowOutputChanged = nil
+        view.onViewportChanged = nil
+        view.terminalDelegate = nil
+        view.updateUiClosed()
     }
 
     func updateUIView(_ view: TerminalView, context: Context) {
@@ -280,7 +316,10 @@ private struct RemoteTerminalView: UIViewRepresentable {
         if context.coordinator.checkpointRevision != state.checkpointRevision,
            let checkpoint = state.checkpoint {
             do {
+                let viewport = context.coordinator.checkpointRevision < 0
+                    ? state.viewport ?? view.captureViewport() : view.captureViewport()
                 try view.getTerminal().importCheckpoint(checkpoint)
+                view.restoreViewport(viewport)
                 context.coordinator.checkpointRevision = state.checkpointRevision
                 context.coordinator.outputIndex = 0
                 feedPendingOutput(into: view, coordinator: context.coordinator)
@@ -298,6 +337,11 @@ private struct RemoteTerminalView: UIViewRepresentable {
         } else {
             feedPendingOutput(into: view, coordinator: context.coordinator)
         }
+        if context.coordinator.followOutputRevision.map({ $0 != state.followOutputRevision }) ?? state.isFollowingOutput {
+            view.followOutput()
+        }
+        context.coordinator.followOutputRevision = state.followOutputRevision
+        context.coordinator.synchronizeViewport(from: view)
         view.acceptsUserInput = acceptsControl
         if gainedControl { view.resizeToFit() }
         if requestsKeyboardFocus && (gainedControl || gainedFocus) {
@@ -373,8 +417,26 @@ private struct RemoteTerminalView: UIViewRepresentable {
         var gridRevision = -1
         var lastAppliedAuthoritativeSize: (Int, Int)?
         var failedCheckpointRevision = -1
+        var followOutputRevision: Int?
+        var viewportUpdatePending = false
 
         init(parent: RemoteTerminalView) { self.parent = parent }
+
+        @MainActor func synchronizeViewport(from view: TerminalView) {
+            parent.state.viewport = view.captureViewport()
+            guard !viewportUpdatePending else { return }
+            viewportUpdatePending = true
+            Task { @MainActor [weak self, weak view] in
+                guard let self else { return }
+                defer { self.viewportUpdatePending = false }
+                guard let view else { return }
+                let state = self.parent.state
+                state.viewport = view.captureViewport()
+                if state.isFollowingOutput != view.followsOutput { state.isFollowingOutput = view.followsOutput }
+                let bracketed = view.getTerminal().bracketedPasteMode
+                if state.bracketedPasteMode != bracketed { state.bracketedPasteMode = bracketed }
+            }
+        }
 
         nonisolated func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
             guard newCols > 0, newRows > 0 else { return }
@@ -392,7 +454,12 @@ private struct RemoteTerminalView: UIViewRepresentable {
             let value = Data(data)
             Task { @MainActor [weak self] in self?.parent.onInput(value) }
         }
-        nonisolated func scrolled(source: TerminalView, position: Double) {}
+        nonisolated func scrolled(source: TerminalView, position: Double) {
+            Task { @MainActor [weak self, weak source] in
+                guard let source else { return }
+                self?.synchronizeViewport(from: source)
+            }
+        }
         nonisolated func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {}
         nonisolated func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
     }

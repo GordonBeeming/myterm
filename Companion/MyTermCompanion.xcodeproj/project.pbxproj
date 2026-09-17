@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0157D830911F9926A63C676B /* ManagementViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01E2B01D02870D4686EFFA95 /* ManagementViews.swift */; };
+		1956A5E0ED8672DAD1EB8F47 /* TerminalComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31B0811434D4E738285EBA29 /* TerminalComposerView.swift */; };
 		1D5706A804D75DFBCB0E4D2E /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A017877BD2AA19E348F092AB /* AppConfiguration.swift */; };
 		1E0A6809BCEDF532C1B58F3B /* TerminalViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D0EC6293C786897DA204B4C /* TerminalViews.swift */; };
 		27A4019177A7B85550F44A22 /* MyTermCompanionApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15CE946E75B4FCF6C271546A /* MyTermCompanionApp.swift */; };
@@ -15,7 +16,9 @@
 		2FB7A0308973F49DC950FED3 /* NotificationEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D3ECF4B3194B81DF0DA4E1 /* NotificationEnvelope.swift */; };
 		3610251539859561DE72ED80 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = D02D7C3B605BC41C6D6B704D /* PrivacyInfo.xcprivacy */; };
 		3BD17EF126C1CC0BD162D44F /* MyTermNotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 167672F5922523F7E84346F5 /* MyTermNotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		4535B244FCE8884F027AC5E9 /* TerminalComposerDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49195F1FC20A11FB4375866B /* TerminalComposerDraft.swift */; };
 		4DDFE91F1D2F93245412A086 /* AppConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CF59BEE2EFA0B18D0715D36 /* AppConfigurationTests.swift */; };
+		539F4D9A61C7A9B49E66E966 /* TerminalExperienceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FA4675623DF3E1DFDD6B478 /* TerminalExperienceTests.swift */; };
 		62023C04E4A2B662B40F6398 /* NotificationEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D3ECF4B3194B81DF0DA4E1 /* NotificationEnvelope.swift */; };
 		64E399E0F3FB05E2B1E0139B /* AdaptiveWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E81C624FBFF3B575146385EC /* AdaptiveWorkspaceView.swift */; };
 		6B5E55B92FDC88FB3693C7A0 /* AppModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53A2B5E6871C55271FDA9849 /* AppModels.swift */; };
@@ -85,11 +88,14 @@
 		15CE946E75B4FCF6C271546A /* MyTermCompanionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyTermCompanionApp.swift; sourceTree = "<group>"; };
 		167672F5922523F7E84346F5 /* MyTermNotificationService.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = MyTermNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		242FCDCEC5B800E20925A07C /* CompanionServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionServices.swift; sourceTree = "<group>"; };
-		3845513B3D02FB7B6F8F371B /* 20260915-quiet-tern */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "20260915-quiet-tern"; path = ..; sourceTree = SOURCE_ROOT; };
+		31B0811434D4E738285EBA29 /* TerminalComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalComposerView.swift; sourceTree = "<group>"; };
+		49195F1FC20A11FB4375866B /* TerminalComposerDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalComposerDraft.swift; sourceTree = "<group>"; };
 		4C16667DB8CC7675CEFC6E88 /* SceneStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneStateTests.swift; sourceTree = "<group>"; };
 		4E8E6E39688D735FBB9DCCC2 /* SwiftTerm */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SwiftTerm; path = ../Vendor/SwiftTerm; sourceTree = SOURCE_ROOT; };
+		4FA4675623DF3E1DFDD6B478 /* TerminalExperienceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalExperienceTests.swift; sourceTree = "<group>"; };
 		53A2B5E6871C55271FDA9849 /* AppModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModels.swift; sourceTree = "<group>"; };
 		5811AA28711A02FA8FBCF85D /* NotificationEnrollment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationEnrollment.swift; sourceTree = "<group>"; };
+		3845513B3D02FB7B6F8F371B /* 20260915-quiet-tern */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "20260915-quiet-tern"; path = ..; sourceTree = SOURCE_ROOT; };
 		69775211DDE86AF39BD85C5F /* RemoteSettingsEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSettingsEditor.swift; sourceTree = "<group>"; };
 		6C515C5438F75556A2FB4710 /* MyTermCompanionUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MyTermCompanionUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6D0EC6293C786897DA204B4C /* TerminalViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalViews.swift; sourceTree = "<group>"; };
@@ -153,6 +159,7 @@
 				01E2B01D02870D4686EFFA95 /* ManagementViews.swift */,
 				69775211DDE86AF39BD85C5F /* RemoteSettingsEditor.swift */,
 				EABF08F1180E6CF131038913 /* SceneRootView.swift */,
+				31B0811434D4E738285EBA29 /* TerminalComposerView.swift */,
 				6D0EC6293C786897DA204B4C /* TerminalViews.swift */,
 				AC518A242E689D2C1E5C96EC /* WorkspaceViews.swift */,
 			);
@@ -163,6 +170,7 @@
 			isa = PBXGroup;
 			children = (
 				53A2B5E6871C55271FDA9849 /* AppModels.swift */,
+				49195F1FC20A11FB4375866B /* TerminalComposerDraft.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -240,6 +248,7 @@
 				DDE96CF8557994DF7FEAAB5A /* BrowserAuthenticationStateTests.swift */,
 				BFA88151878C429986196266 /* RemoteSettingsDraftTests.swift */,
 				4C16667DB8CC7675CEFC6E88 /* SceneStateTests.swift */,
+				4FA4675623DF3E1DFDD6B478 /* TerminalExperienceTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -446,6 +455,8 @@
 				6C5AF092D0549ADBD160EC65 /* PairingCoordinator.swift in Sources */,
 				EF15BAB06B72B6593A67C359 /* RemoteSettingsEditor.swift in Sources */,
 				F192A2A9C31134D2CFCAE42F /* SceneRootView.swift in Sources */,
+				4535B244FCE8884F027AC5E9 /* TerminalComposerDraft.swift in Sources */,
+				1956A5E0ED8672DAD1EB8F47 /* TerminalComposerView.swift in Sources */,
 				1E0A6809BCEDF532C1B58F3B /* TerminalViews.swift in Sources */,
 				73724AA07F1C9372E0D766F0 /* WorkspaceViews.swift in Sources */,
 			);
@@ -459,6 +470,7 @@
 				D45BD972D0DEC52E2E4E5EA9 /* BrowserAuthenticationStateTests.swift in Sources */,
 				C3E364CB2489742AC305E98E /* RemoteSettingsDraftTests.swift in Sources */,
 				941ECD6CF20B3D428F38FDC0 /* SceneStateTests.swift in Sources */,
+				539F4D9A61C7A9B49E66E966 /* TerminalExperienceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -533,7 +545,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.28;
+				MARKETING_VERSION = 0.33;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				MYTERM_APP_GROUP = group.com.gordonbeeming.myterm.companion;
@@ -676,7 +688,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.28;
+				MARKETING_VERSION = 0.33;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				MYTERM_APP_GROUP = group.com.gordonbeeming.myterm.companion.dev;
