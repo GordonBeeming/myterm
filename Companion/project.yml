@@ -52,6 +52,8 @@ targets:
     dependencies:
       - package: MyTerm
         product: MyTermCore
+      - package: MyTerm
+        product: MyTermUI
       - package: MyTermRemote
         product: MyTermRemote
       - package: SwiftTerm

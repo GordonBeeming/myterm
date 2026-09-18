@@ -5,15 +5,20 @@ import SwiftUI
 /// The figure is laid out in a 24-point square and each shape maps that square onto the frame it is
 /// given, so the same drawing serves the tab strip and the sidebar without a second asset.
 /// Everything is one colour: the state is carried by that colour, and by whether the spoon moves.
-struct AgentChefIcon: View {
+public struct AgentChefIcon: View {
     let color: Color
     let isStirring: Bool
+
+    public init(color: Color, isStirring: Bool) {
+        self.color = color
+        self.isStirring = isStirring
+    }
 
     /// How far the spoon swings either side of its resting lean, and how long each pose is held.
     private static let stirSwing: Double = 14
     private static let frameDuration: Double = 0.45
 
-    var body: some View {
+    public var body: some View {
         Group {
             if isStirring {
                 TimelineView(.periodic(from: .now, by: Self.frameDuration)) { context in
@@ -31,7 +36,7 @@ struct AgentChefIcon: View {
     /// At the size this is drawn, a smooth rotation of a few points reads as a blur, and at a
     /// glance as nothing at all. A hard cut between two positions reads as movement. Every cook on
     /// screen takes its pose from the clock, so they all stir together.
-    static func spoonAngle(at date: Date) -> Double {
+    public static func spoonAngle(at date: Date) -> Double {
         let frame = Int(date.timeIntervalSinceReferenceDate / frameDuration)
         return frame.isMultiple(of: 2) ? -stirSwing : stirSwing
     }
