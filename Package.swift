@@ -11,6 +11,7 @@ let package = Package(
     products: [
         .library(name: "MyTermCore", targets: ["MyTermCore"]),
         .library(name: "MyTermPlatform", targets: ["MyTermPlatform"]),
+        .library(name: "MyTermUI", targets: ["MyTermUI"]),
         .executable(name: "MyTerm", targets: ["MyTerm"]),
     ],
     dependencies: [
@@ -19,6 +20,7 @@ let package = Package(
     ],
     targets: [
         .target(name: "MyTermCore"),
+        .target(name: "MyTermUI", dependencies: ["MyTermCore"]),
         .target(
             name: "MyTermPlatform",
             dependencies: [
@@ -30,7 +32,7 @@ let package = Package(
         .executableTarget(
             name: "MyTerm",
             dependencies: [
-                "MyTermCore", "MyTermPlatform",
+                "MyTermCore", "MyTermPlatform", "MyTermUI",
                 .product(name: "MyTermRemote", package: "MyTermRemote"),
             ]
         ),
