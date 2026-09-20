@@ -1,5 +1,6 @@
 import MyTermCore
 import MyTermRemote
+import MyTermUI
 import SwiftUI
 
 struct WorkspaceDetail: View {
@@ -159,10 +160,10 @@ private struct TabProjectionRow: View {
                 }
             }
             Spacer()
-            if let activity = tab.agentActivity {
-                Image(systemName: activity == .awaitingInput ? "person.crop.circle.badge.questionmark" : "circle.fill")
-                    .foregroundStyle(activity == .awaitingInput ? .orange : .secondary)
-                    .accessibilityLabel(activity.attentionDescription)
+            if let activity = tab.agentActivity, activity.showsCook {
+                // The same cook as the Mac tab, so a state looks the same on both screens.
+                AgentChefBadge(state: activity, side: 20)
+                    .accessibilityRepresentation { Text(activity.attentionDescription) }
             }
             if tab.isRunning == false { Text("Ended").font(.caption).foregroundStyle(.secondary) }
         }
