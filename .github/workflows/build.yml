@@ -8,9 +8,15 @@ on:
   release:
     types: [published]
 
+# Every job selects the same Xcode explicitly. The image default moves on GitHub's schedule,
+# so without a pin the compiler that builds and signs a release could change without a commit.
+# Keep this in step with the companion jobs in companion.yml.
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+
 jobs:
   build-and-test:
-    runs-on: macos-15
+    runs-on: macos-26
     name: Build & Test
 
     steps:
@@ -24,7 +30,9 @@ jobs:
           cache-dependency-path: Services/relay/go.sum
 
       - name: Print Swift version
-        run: swift --version
+        run: |
+          xcodebuild -version
+          swift --version
 
       - name: Build all targets
         run: swift build --build-tests
@@ -36,7 +44,7 @@ jobs:
         run: bash script/zsh_shim_test.sh
 
   verify-bundle:
-    runs-on: macos-15
+    runs-on: macos-26
     name: Verify App Bundle
 
     steps:
@@ -70,7 +78,7 @@ jobs:
   release:
     needs: [build-and-test, verify-bundle]
     if: github.event_name == 'release'
-    runs-on: macos-15
+    runs-on: macos-26
     name: Sign, Notarize & Release
     environment: prod
     permissions:
