@@ -61,13 +61,16 @@ final class AgentNotificationsScrollLayoutTests: XCTestCase {
         XCTAssertGreaterThan(height, 40 * 3 + 1 * 2)
     }
 
-    func testNoMeasuredRowsYieldsZeroHeight() {
+    func testNoMeasuredRowsLeavesRoomForTheFirstRowToBeMeasured() {
+        // Before any row has reported a height the frame must not collapse to zero: a
+        // zero-height scroll view never lays out its lazy rows, so nothing would ever be measured.
         let height = AgentNotificationsScrollLayout.scrollHeight(
             rowHeights: [],
             dividerHeight: 1,
             totalRowCount: 4
         )
 
-        XCTAssertEqual(height, 0)
+        XCTAssertEqual(height, AgentNotificationsScrollLayout.unmeasuredHeight)
+        XCTAssertGreaterThan(height, 0)
     }
 }
