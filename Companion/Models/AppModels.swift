@@ -2,6 +2,7 @@ import Foundation
 import MyTermCore
 import MyTermRemote
 import Observation
+import SwiftTerm
 
 enum ConnectionPhase: Equatable, Sendable {
     case disconnected
@@ -83,6 +84,7 @@ enum CompanionSheet: Identifiable {
     case workspaceActions(UUID)
     case folderActions(UUID)
     case terminalActions(TerminalRoute)
+    case terminalComposer(TerminalRoute)
 
     var id: String {
         switch self {
@@ -92,6 +94,7 @@ enum CompanionSheet: Identifiable {
         case .workspaceActions(let id): "workspace-\(id)"
         case .folderActions(let id): "folder-\(id)"
         case .terminalActions(let route): "terminal-\(route.id)"
+        case .terminalComposer(let route): "composer-\(route.id)"
         }
     }
 }
@@ -159,6 +162,14 @@ final class SceneModel {
     var projection: RemoteWorkspaceProjection?
     var errorMessage: String?
     var terminalStates: [TerminalSurfaceID: TerminalSurfaceState] = [:]
+    @ObservationIgnored private var terminalDrafts: [TerminalSurfaceID: TerminalComposerDraft] = [:]
+
+    func composerDraft(for route: TerminalRoute) -> TerminalComposerDraft {
+        if let draft = terminalDrafts[route.id] { return draft }
+        let draft = TerminalComposerDraft()
+        terminalDrafts[route.id] = draft
+        return draft
+    }
 
     private var connection: CompanionHostConnection?
     private var eventTask: Task<Void, Never>?
@@ -617,6 +628,18 @@ final class SceneModel {
         catch { errorMessage = error.localizedDescription }
     }
 
+    func insertComposedText(_ text: String, appendReturn: Bool, route: TerminalRoute) async throws {
+        guard let state = terminalStates[route.id], state.ownsControl,
+              !state.isAwaitingCheckpoint, let lease = state.leaseID,
+              let generation = state.generation else { throw TerminalComposerError.requiresControl }
+        guard route.connectionID == selectedConnectionID, let connection else { throw RemoteError.disconnected }
+        let bytes = try TerminalComposerDraft.pasteBytes(text,
+            bracketed: state.bracketedPasteMode, appendReturn: appendReturn)
+        // One input message keeps paste delimiters, text and optional Return together.
+        try await connection.sendInput(bytes, route: state.route, leaseID: lease, generation: generation)
+        state.resumeFollowingOutput()
+    }
+
     func resize(columns: Int, rows: Int, route: TerminalRoute) async {
         guard let state = terminalStates[route.id], state.ownsControl,
               !state.isAwaitingCheckpoint, let lease = state.leaseID,
@@ -922,6 +945,15 @@ final class SceneModel {
 @Observable
 final class TerminalSurfaceState {
     var route: TerminalRoute
+    var isFollowingOutput = true
+    var followOutputRevision = 0
+    var bracketedPasteMode = false
+    @ObservationIgnored var viewport: TerminalViewportState?
+
+    func resumeFollowingOutput() {
+        isFollowingOutput = true
+        followOutputRevision += 1
+    }
     var checkpoint: Data?
     var checkpointRevision = 0
     static let maximumBufferedOutputBytes = 4 * 1_024 * 1_024

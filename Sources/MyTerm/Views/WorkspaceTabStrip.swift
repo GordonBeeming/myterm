@@ -1,5 +1,6 @@
 import AppKit
 import MyTermCore
+import MyTermUI
 import SwiftUI
 
 enum MiddleClickTabInteraction {

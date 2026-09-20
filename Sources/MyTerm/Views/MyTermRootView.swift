@@ -1,5 +1,6 @@
 import AppKit
 import MyTermCore
+import MyTermUI
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -126,6 +127,11 @@ enum AgentNotificationsScrollLayout {
     /// so a longer backlog reads as "scroll for more" rather than a hard, unexplained cutoff.
     private static let nextRowPeekFraction: CGFloat = 0.4
 
+    /// The cap used until the first row reports its height. It must be tall enough to lay out
+    /// at least one row: a zero-height scroll view never lays out its lazy rows, so nothing
+    /// would ever be measured and the list would stay empty.
+    static let unmeasuredHeight: CGFloat = 320
+
     /// - Parameters:
     ///   - rowHeights: Measured heights of the rows, in display order. Rows not yet measured are
     ///     simply absent; only a leading run of measured heights is used.
@@ -137,7 +143,7 @@ enum AgentNotificationsScrollLayout {
         totalRowCount: Int
     ) -> CGFloat {
         let visibleRows = rowHeights.prefix(maxVisibleRows)
-        guard !visibleRows.isEmpty else { return 0 }
+        guard !visibleRows.isEmpty else { return unmeasuredHeight }
 
         let rowsHeight = visibleRows.reduce(0, +)
         let dividersHeight = dividerHeight * CGFloat(visibleRows.count - 1)

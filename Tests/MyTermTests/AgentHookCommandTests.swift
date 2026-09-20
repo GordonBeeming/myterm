@@ -22,14 +22,30 @@ final class AgentHookCommandTests: XCTestCase {
         // The name has a digit in it, which is what the hook looks for to tell a terminal from
         // the "??" a process with no terminal reports.
         output = directory.appending(path: "tty1", directoryHint: .notDirectory)
-        let relative = "../" + output.path.drop(while: { $0 == "/" })
-        let ps = directory.appending(path: "bin/ps")
-        try "#!/bin/sh\necho '\(relative)'\n".write(to: ps, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: ps.path)
+        try configureProcessAncestors([])
     }
 
     override func tearDown() async throws {
         try? FileManager.default.removeItem(at: directory)
+    }
+
+    private func configureProcessAncestors(_ ancestors: [(tty: String, command: String)]) throws {
+        let relative = "../" + output.path.drop(while: { $0 == "/" })
+        var cases = ancestors.enumerated().map { index, ancestor in
+            let parent = index + 1 < ancestors.count ? 4201 + index : 1
+            return "\(4200 + index)) echo '\(parent) \(ancestor.tty) \(ancestor.command)' ;;"
+        }
+        cases.append("*) echo '\(ancestors.isEmpty ? 1 : 4200) ttys999 /usr/local/bin/claude' ;;")
+        let script = """
+        #!/bin/sh
+        if [ "$2" = 'tty=' ]; then echo '\(relative)'; exit 0; fi
+        case "$8" in
+        \(cases.joined(separator: "\n"))
+        esac
+        """
+        let ps = directory.appending(path: "bin/ps")
+        try script.write(to: ps, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: ps.path)
     }
 
     private func run(
@@ -92,17 +108,52 @@ final class AgentHookCommandTests: XCTestCase {
         }
     }
 
-    func testAChildSessionInThePaneDoesNotReport() throws {
-        // A child session (`CLAUDE_CODE_CHILD_SESSION`) inherits the pane but writes no transcript
-        // and is not the pane's conversation. Its start must not replace the pane's session, and
-        // its end must not discard it.
+    func testTheChildFlagOnATopLevelHookDoesNotSuppressAnyActivity() throws {
+        try configureProcessAncestors([("ttys999", "/bin/zsh"), ("??", "/Applications/MyTerm.app/Contents/MacOS/myterm")])
+        for activity in [AgentActivity.ready, .working, .finished, .awaitingInput, .exited] {
+            let written = try run(
+                activity,
+                stdin: #"{"session_id":"main-session"}"#,
+                environment: ["MYTERM_PANE_ID": "pane", "CLAUDE_CODE_CHILD_SESSION": "1"]
+            )
+            XCTAssertEqual(report(in: written)?.activity, activity)
+            XCTAssertEqual(report(in: written)?.sessionID, "main-session")
+        }
+    }
+
+    func testANestedAgentInThePaneDoesNotReportEvenThroughAShellWrapper() throws {
+        for parent in ["/usr/local/bin/claude", "/usr/local/bin/codex"] {
+            try configureProcessAncestors([("ttys999", "/bin/zsh"), ("ttys999", parent)])
+            let written = try run(.ready, stdin: #"{"session_id":"child-session"}"#)
+            XCTAssertEqual(written, "")
+            XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+        }
+    }
+
+    func testAnAgentOnAnotherTTYDoesNotSuppressThisPane() throws {
+        try configureProcessAncestors([("ttys123", "/usr/local/bin/claude")])
+        let written = try run(.working, stdin: #"{"session_id":"main-session"}"#)
+        XCTAssertEqual(report(in: written)?.activity, .working)
+    }
+
+    func testAnInProcessSubagentDoesNotReport() throws {
         let written = try run(
-            .ready,
-            stdin: #"{"session_id":"child-session-id"}"#,
+            .awaitingInput,
+            stdin: #"{"session_id":"main-session","agent_id":"subagent-123"}"#,
             environment: ["MYTERM_PANE_ID": "pane", "CLAUDE_CODE_CHILD_SESSION": "1"]
         )
         XCTAssertEqual(written, "")
         XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+    }
+
+    func testMentioningAnAgentIdentifierInThePromptDoesNotSuppressTheHook() throws {
+        let written = try run(.working, stdin: #"{"session_id":"main-session","prompt":"Explain \"agent_id\":\"subagent-123\""}"#)
+        XCTAssertEqual(report(in: written)?.activity, .working)
+    }
+
+    func testBackgroundTaskMetadataDoesNotMakeTheMainSessionASubagent() throws {
+        let written = try run(.finished, stdin: #"{"session_id":"main-session","background_tasks":[{"agent_id":"subagent-123"}]}"#)
+        XCTAssertEqual(report(in: written)?.activity, .finished)
     }
 
     // MARK: - Telling a question from a prompt left sitting

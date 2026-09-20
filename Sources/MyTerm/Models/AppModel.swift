@@ -1061,11 +1061,14 @@ final class AppModel {
         // asynchronously. Treat a started open as success and log a launch failure.
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = activate
+        // AppKit calls the completion handler on a LaunchServices queue, not the main thread.
+        // A closure written in this main-actor method inherits main-actor isolation, and the
+        // runtime traps when the handler runs off the main actor. `@Sendable` keeps it nonisolated.
         NSWorkspace.shared.open(
             [url],
             withApplicationAt: applicationURL,
             configuration: configuration
-        ) { _, error in
+        ) { @Sendable _, error in
             guard let error else { return }
             Logger(subsystem: "com.gordonbeeming.myterm", category: "web-links").error(
                 "Could not open a web link in \(applicationURL.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)"

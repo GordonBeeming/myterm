@@ -25,6 +25,14 @@ import MetalKit
 @available(iOS 14.0, *)
 internal var log: Logger = Logger(subsystem: "org.tirania.SwiftTerm", category: "msg")
 
+/// A viewer's position in the buffer, independent of the terminal's grid size.
+public struct TerminalViewportState {
+    public let followsOutput: Bool
+    let absoluteRow: Int
+    let rowFraction: CGFloat
+    let alternateBuffer: Bool
+}
+
 public extension Notification.Name {
     /// Posted when TerminalView's controlModifier is reset to false
     static let terminalViewControlModifierReset = Notification.Name("SwiftTerm.TerminalView.controlModifierReset")
@@ -146,17 +154,63 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
      * If a client application has not indicated any use for mouse events, then this setting
      * does not do anything, and selection and panning are still processed.
      */
-    public var allowMouseReporting: Bool = true
+    public var allowMouseReporting: Bool = true {
+        didSet {
+            if didFinishSetup && oldValue != allowMouseReporting { mouseModeChanged(source: terminal) }
+        }
+    }
 
     /// Controls forwarding of automatic emulator replies (device status, cursor reports,
     /// and similar responses). User keyboard and mouse input still uses `send(data:)`.
     public var sendsTerminalResponses: Bool = true
 
     /// Controls user-originated keyboard and mouse writes through `send(data:)`.
-    public var acceptsUserInput: Bool = true
+    public var acceptsUserInput: Bool = true {
+        didSet {
+            if didFinishSetup && oldValue != acceptsUserInput { mouseModeChanged(source: terminal) }
+        }
+    }
 
     /// Controls terminal-grid changes caused by native view geometry changes.
     public var automaticallyResizesTerminal: Bool = true
+
+    /// Remote viewers can be shorter than the authoritative terminal grid. Their
+    /// viewport follows the physical bottom without changing that grid's dimensions.
+    public var usesIndependentViewport: Bool = false
+    /// Coalesce remote echo chunks using the normal frame timer, including while typing.
+    public var coalescesInteractiveOutput: Bool = false
+    public var onFollowOutputChanged: ((Bool) -> Void)?
+    public var onViewportChanged: (() -> Void)?
+    public var followsOutput: Bool { !userScrolling }
+    private var independentViewportRow: Int?
+
+    public func captureViewport() -> TerminalViewportState {
+        let height = max(cellDimension.height, 1)
+        let row = max(0, contentOffset.y) / height
+        return TerminalViewportState(followsOutput: followsOutput,
+            absoluteRow: independentViewportRow ?? terminal.displayBuffer.linesTop + Int(floor(row)),
+            rowFraction: userScrolling ? manualScrollOffsetWithinRow / height : 0,
+            alternateBuffer: terminal.isDisplayBufferAlternate)
+    }
+
+    /// Restore local reading intent after importing somebody else's terminal checkpoint.
+    public func restoreViewport(_ viewport: TerminalViewportState) {
+        if viewport.followsOutput || viewport.alternateBuffer != terminal.isDisplayBufferAlternate {
+            followOutput()
+        } else {
+            independentViewportRow = viewport.absoluteRow
+            manualScrollOffsetWithinRow = viewport.rowFraction * cellDimension.height
+            setManualScrolling(true)
+            updateScroller()
+            queuePendingDisplay()
+        }
+    }
+
+    public func followOutput() {
+        resetManualScrollTracking()
+        updateScroller()
+        queuePendingDisplay()
+    }
 
     /// Controls how link tracking resolves hovered links:
     /// `.explicit` = OSC 8 only, `.implicit` = explicit + implicit fallback, `.none` = off.
@@ -1644,7 +1698,19 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
             return
         }
         let rowOffset = CGFloat (displayBuffer.yDisp) * cellDimension.height
-        let desiredY = userScrolling ? rowOffset + manualScrollOffsetWithinRow : rowOffset
+        let desiredY: CGFloat
+        if usesIndependentViewport {
+            if userScrolling, let absoluteRow = independentViewportRow {
+                // Checkpoints carry the same trim counter as live output. If this
+                // row has been evicted, the earliest remaining history is all we can show.
+                let row = max(0, absoluteRow - displayBuffer.linesTop)
+                desiredY = CGFloat(row) * cellDimension.height + manualScrollOffsetWithinRow
+            } else {
+                desiredY = independentFollowOffsetY()
+            }
+        } else {
+            desiredY = userScrolling ? rowOffset + manualScrollOffsetWithinRow : rowOffset
+        }
         // Clamp to the scroll view's real maximum so following the bottom rests
         // flush against the last line instead of over-scrolling past it.
         let offsetY = min(desiredY, maxContentOffsetY())
@@ -1697,6 +1763,26 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         max(0, contentSize.height - bounds.height + adjustedContentInset.bottom)
     }
 
+    // A large remote grid can have empty rows below a short prompt. Following those
+    // rows would hide the prompt on a phone, so include the cursor and any content
+    // below it (for example a full-screen application's status bar).
+    private func independentFollowOffsetY() -> CGFloat {
+        let buffer = terminal.displayBuffer
+        guard buffer.lines.count > 0 else { return 0 }
+        var lastRow = min(buffer.lines.count - 1, buffer.yBase + buffer.y)
+        if lastRow + 1 < buffer.lines.count {
+            for row in stride(from: buffer.lines.count - 1, through: lastRow + 1, by: -1) {
+                let line = buffer.lines[row]
+                if line.hasAnyContent() || line.images?.isEmpty == false {
+                    lastRow = row
+                    break
+                }
+            }
+        }
+        let contentBottom = CGFloat(lastRow + 1) * cellDimension.height
+        return min(maxContentOffsetY(), max(0, contentBottom - bounds.height + adjustedContentInset.bottom))
+    }
+
     private func setContentOffsetFromTerminal(_ newContentOffset: CGPoint) {
         if abs(contentOffset.x - newContentOffset.x) <= contentOffsetTolerance &&
             abs(contentOffset.y - newContentOffset.y) <= contentOffsetTolerance {
@@ -1708,16 +1794,25 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         updatingContentOffsetFromTerminal = false
     }
 
-    private func setManualScrolling(_ enabled: Bool) {
+    func setManualScrolling(_ enabled: Bool) {
+        let changed = userScrolling != enabled
         userScrolling = enabled
         terminal.userScrolling = enabled
         if !enabled {
             manualScrollOffsetWithinRow = 0
+            independentViewportRow = nil
         }
+        if changed { onFollowOutputChanged?(!enabled) }
     }
 
     func resetManualScrollOffsetWithinRow() {
         manualScrollOffsetWithinRow = 0
+    }
+
+    func setIndependentViewportRow(_ row: Int) {
+        if usesIndependentViewport && userScrolling {
+            independentViewportRow = terminal.displayBuffer.linesTop + row
+        }
     }
 
     private func resetManualScrollTracking() {
@@ -1729,7 +1824,7 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         setContentOffsetFromTerminal(CGPoint(x: 0, y: bottomOffset))
     }
 
-    private func syncYDispFromContentOffset() {
+    private func syncYDispFromContentOffset(userInitiated: Bool = false) {
         guard terminal != nil, !updatingContentOffsetFromTerminal, cellDimension.height > 0 else {
             return
         }
@@ -1744,7 +1839,8 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         // fractional cell heights and contentInset rounding left the user a hair
         // short of the exact maximum, so the freeze never disengaged.
         let atBottomThreshold = max(contentOffsetTolerance, cellDimension.height / 2)
-        if offsetY >= maxContentOffset - atBottomThreshold {
+        let followOffset = usesIndependentViewport ? independentFollowOffsetY() : maxContentOffset
+        if offsetY >= followOffset - atBottomThreshold {
             if displayBuffer.yDisp != maxRow {
                 terminal.setViewYDisp(maxRow)
             }
@@ -1752,8 +1848,9 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
             return
         }
 
-        // Freeze auto-follow only while the finger is physically down
-        // (isTracking). Excluding the momentum coast is essential: after the
+        // Touch scrolling freezes auto-follow while the finger is physically down
+        // (isTracking). Accessibility paging opts in explicitly. Excluding the
+        // momentum coast is essential: after the
         // finger lifts, deceleration keeps firing sync while streaming output
         // extends the content and the bottom recedes ahead of the coasting
         // offset — treating that "not at the bottom yet" reading as a manual
@@ -1762,12 +1859,14 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         // true through the entire coast, so it fails to exclude momentum. It also
         // covers layout/system-driven offset changes (startup sizing, rotation,
         // keyboard insets, buffer shrink), which are never a manual scroll.
-        guard isTracking else {
+        guard isTracking || userInitiated else {
             return
         }
 
         let row = max(0, min(maxRow, Int(floor((offsetY + contentOffsetTolerance) / cellDimension.height))))
-        manualScrollOffsetWithinRow = offsetY - CGFloat(row) * cellDimension.height
+        let visibleRow = usesIndependentViewport ? Int(floor(offsetY / cellDimension.height)) : row
+        independentViewportRow = displayBuffer.linesTop + visibleRow
+        manualScrollOffsetWithinRow = offsetY - CGFloat(visibleRow) * cellDimension.height
         if displayBuffer.yDisp != row {
             terminal.setViewYDisp(row)
         }
@@ -1830,6 +1929,7 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
 
         if sizeChanged {
             processSizeChange(newSize: currentBounds.size)
+            if usesIndependentViewport { updateScroller() }
             updateCursorPosition()
         }
 
@@ -1851,9 +1951,15 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         lastLayoutBounds = currentBounds
     }
 
+    open override func adjustedContentInsetDidChange() {
+        super.adjustedContentInsetDidChange()
+        if didFinishSetup && usesIndependentViewport { updateScroller() }
+    }
+
     open override var contentOffset: CGPoint {
         didSet {
             syncYDispFromContentOffset()
+            if usesIndependentViewport { onViewportChanged?() }
 #if canImport(MetalKit)
             if useMetalRenderer, metalView != nil {
                 requestMetalDisplay()
@@ -1864,7 +1970,7 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
 
     open override func accessibilityScroll(_ direction: UIAccessibilityScrollDirection) -> Bool {
         let pageHeight = max(bounds.height, cellDimension.height)
-        let maxOffsetY = max(0, contentSize.height - bounds.height)
+        let maxOffsetY = usesIndependentViewport ? independentFollowOffsetY() : maxContentOffsetY()
         let targetOffsetY: CGFloat
 
         switch direction {
@@ -1881,6 +1987,10 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         }
 
         setContentOffset(CGPoint(x: contentOffset.x, y: targetOffsetY), animated: false)
+        // VoiceOver page changes are deliberate reading actions without a finger
+        // tracking gesture. Layout-driven offset changes must still remain automatic.
+        syncYDispFromContentOffset(userInitiated: true)
+        if usesIndependentViewport { onViewportChanged?() }
         setNeedsDisplay(bounds)
         // Based on WWDC 2019 presentation: argument is nil
         UIAccessibility.post(notification: .pageScrolled, argument: nil)
@@ -3090,7 +3200,7 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
     }
     
     open func mouseModeChanged(source: Terminal) {
-        if source.mouseMode != .off {
+        if acceptsUserInput && allowMouseReporting && source.mouseMode != .off {
             enableMousePanGesture()
         } else {
             disableMousePanGesture()

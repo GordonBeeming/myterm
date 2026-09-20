@@ -66,6 +66,10 @@ Save several Macs, including Macs using different relays. The connection picker 
 
 Opening a terminal starts in view-only mode. Use **Request control** or **Take control** explicitly to control its input and dimensions. Other connections keep viewing it. Take Control explicitly transfers that lease. After the Mac yields control, its input stays paused even if the companion releases control or disconnects; click **Take Control** on the Mac to resume local input. Known late input/resize packets from a former controller are rejected without disconnecting the viewer. Detaching a mobile view leaves the process running on the Mac. Disconnecting disables input; uncertain keystrokes are never queued for replay.
 
+The terminal follows live output even in view-only mode. Scrolling up pauses following so you can read earlier output. **Jump to live** resumes it. Each device keeps its own reading position through screen updates, keyboard changes, and reconnects, without resizing the Mac's terminal while viewing.
+
+Use **Compose** beside the control button to write a longer prompt or command in a native text editor. **Insert into terminal** pastes the text; **Insert + Enter** also sends Return. Sending requires control, but drafting does not. Drafts stay in the current app window until cleared, including after insertion or dismissal. They are not saved across app restarts. Terminals that support bracketed paste receive the text as a paste; the composer warns when multiple lines may run commands in a terminal without that support.
+
 Browser tabs expose their titles and URLs in this version. Opening the same URL elsewhere does not transfer the Mac browser's cookies or page state.
 
 ## Notifications

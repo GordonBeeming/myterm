@@ -199,10 +199,9 @@ final class AgentHooksController {
     /// from a prompt left sitting. The installed entry carries a five second timeout, so an agent
     /// that pipes nothing cannot leave the read waiting.
     ///
-    /// A child session (`CLAUDE_CODE_CHILD_SESSION`: an agent another agent started in the same
-    /// pane) inherits the pane's identifier but writes no transcript of its own, and it is not the
-    /// conversation the pane is in. It stays silent, so its start cannot replace the pane's
-    /// conversation and its end cannot discard it.
+    /// Claude sets `CLAUDE_CODE_CHILD_SESSION` on hook processes as well as nested agents, so it
+    /// cannot identify the conversation owning the pane. An agent ancestor on the same TTY can:
+    /// nested agents stay silent without suppressing the owning agent's own hooks.
     static func command(
         agent: String,
         activity: AgentActivity,
@@ -212,12 +211,38 @@ final class AgentHooksController {
         let payload = "agent=\(agent);event=\(activity.rawValue);session=%s"
         let filter = ignoredMessage.map { "case \"$__in\" in *'\($0)'*) exit 0;; esac; " } ?? ""
         return """
-        [ -n "${MYTERM_PANE_ID:-}" ] && [ -z "${CLAUDE_CODE_CHILD_SESSION:-}" ] && { __in=$(cat 2>/dev/null | tr -d '\\n'); \(filter)__id=$(printf '%s' "$__in" | sed -n '\(idPattern)'); \
+        [ -n "${MYTERM_PANE_ID:-}" ] && { __in=$(cat 2>/dev/null | tr -d '\\n'); \(filter)
+        \(nestedAgentGuard)
+        __id=$(printf '%s' "$__in" | sed -n '\(idPattern)'); \
         __tty=$(ps -o tty= -p "$PPID" 2>/dev/null | tr -d '[:space:]'); \
         case "$__tty" in *[0-9]*) __tty="/dev/${__tty#/dev/}";; *) __tty="/dev/tty";; esac; \
         printf '\\033]\(AgentActivityMarker.oscCode);\(payload)\\033\\\\' "$__id" > "$__tty"; } >/dev/null 2>&1 || true \(marker)
         """
     }
+
+    // A different TTY is a different conversation: MyTerm itself can have been launched from
+    // another agent's terminal. Only a top-level JSON agent_id identifies an in-process subagent;
+    // a completed turn can also contain agent_id fields inside its background-task metadata.
+    private static let nestedAgentGuard = #"""
+    if __subagent=$(printf '%s' "$__in" | /usr/bin/plutil -extract agent_id raw -expect string -o - - 2>/dev/null); then
+      [ -z "$__subagent" ] || exit 0
+    fi
+    __pid=$PPID; __depth=0; __owner_tty=''
+    while [ "$__depth" -lt 16 ]; do
+      __info=$(ps -o ppid= -o tty= -o comm= -p "$__pid" 2>/dev/null)
+      read -r __parent __process_tty __command <<EOF
+    $__info
+    EOF
+      [ -n "$__process_tty" ] || break
+      [ -n "$__owner_tty" ] || __owner_tty=$__process_tty
+      [ "$__process_tty" = "$__owner_tty" ] || break
+      if [ "$__depth" -gt 0 ]; then
+        case "${__command##*/}" in claude|codex) exit 0;; esac
+      fi
+      case "$__parent" in ''|*[!0-9]*|0|1) break;; esac
+      __pid=$__parent; __depth=$((__depth + 1))
+    done
+    """#
 
     /// Events carrying a hook of MyTerm's, whichever version of MyTerm wrote it.
     func installedEvents(in settings: [String: Any]) -> [String] {
