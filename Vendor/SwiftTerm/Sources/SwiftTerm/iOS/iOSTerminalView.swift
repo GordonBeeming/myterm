@@ -647,6 +647,11 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
             return true
         case #selector(resetCmd(_:)):
             return true
+        case #selector(resignFirstResponder):
+            // A host "hide keyboard" control dismisses the keyboard with
+            // sendAction(to: nil), which asks the first responder through
+            // this method before delivering the selector.
+            return true
         default:
             //print ("canPerformAction invoked for \(action)")
             return false
@@ -659,21 +664,80 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
     ///  - pos: the location where this was triggered in the buffer, it used at a later point
     ///  to auto-select a word
     func showContextMenu (forRegion: CGRect, pos: Position) {
-        var items: [UIMenuItem] = []
-        
         lastLongSelect = pos
         lastLongSelectRegion = forRegion
 
-        //GAR: Declutter context menu
-        //items.append (UIMenuItem(title: "Reset", action: #selector(resetCmd)))
-        
-        // Configure the shared menu controller
-        let menuController = UIMenuController.shared
-        menuController.menuItems = items
-        
-        // Set the location of the menu in the view.
-        //let menuLocation = CGRect (origin: at, size: CGSize (width: cellDimension.width, height: cellDimension.height))
-        menuController.showMenu(from: self, rect: forRegion)
+        if #available(iOS 16.0, visionOS 1.0, *) {
+            // The menu supplies its own actions (see editMenu()),
+            // so the view need not be first responder. Taking focus here would
+            // show the keyboard, and the layout change that follows resizes the
+            // terminal and discards the selection the menu is for.
+            let configuration = UIEditMenuConfiguration(
+                identifier: nil, sourcePoint: CGPoint (x: forRegion.midX, y: forRegion.minY))
+            editMenuInteraction.presentEditMenu(with: configuration)
+        } else {
+            // UIMenuController resolves its items from the first responder.
+            if !isFirstResponder {
+                _ = becomeFirstResponder()
+            }
+            UIMenuController.shared.showMenu(from: self, rect: forRegion)
+        }
+    }
+
+    private var editMenuInteractionStorage: UIInteraction?
+    private var editMenuDelegateStorage: NSObject?
+
+    @available(iOS 16.0, visionOS 1.0, *)
+    private var editMenuInteraction: UIEditMenuInteraction {
+        if let interaction = editMenuInteractionStorage as? UIEditMenuInteraction {
+            return interaction
+        }
+        let delegate = EditMenuDelegate()
+        delegate.view = self
+        let interaction = UIEditMenuInteraction(delegate: delegate)
+        addInteraction(interaction)
+        editMenuDelegateStorage = delegate
+        editMenuInteractionStorage = interaction
+        return interaction
+    }
+
+    // A separate delegate object, for the same reason as MousePanGestureDelegate.
+    @available(iOS 16.0, visionOS 1.0, *)
+    private final class EditMenuDelegate: NSObject, UIEditMenuInteractionDelegate {
+        weak var view: TerminalView?
+        func editMenuInteraction (_ interaction: UIEditMenuInteraction,
+                                  menuFor configuration: UIEditMenuConfiguration,
+                                  suggestedActions: [UIMenuElement]) -> UIMenu? {
+            view?.editMenu()
+        }
+    }
+
+    /// The edit menu offered for a selection or a tap. The actions are built from
+    /// `canPerformAction` directly instead of the interaction's suggested actions,
+    /// which UIKit only collects from the first responder.
+    @available(iOS 16.0, visionOS 1.0, *)
+    func editMenu () -> UIMenu {
+        var actions: [UIAction] = []
+        for (title, action) in editMenuActions where canPerformAction(action, withSender: nil) {
+            actions.append(UIAction(title: title) { [weak self] _ in _ = self?.perform(action, with: nil) })
+        }
+        return UIMenu(children: actions)
+    }
+
+    /// Menu order matches the standard iOS text edit menu.
+    var editMenuActions: [(title: String, action: Selector)] {
+        [("Select", #selector(select(_:))),
+         ("Select All", #selector(selectAll(_:))),
+         ("Copy", #selector(copy(_:))),
+         ("Paste", #selector(paste(_:)))]
+    }
+
+    func hideContextMenu () {
+        if #available(iOS 16.0, visionOS 1.0, *) {
+            (editMenuInteractionStorage as? UIEditMenuInteraction)?.dismissMenu()
+        } else {
+            UIMenuController.shared.hideMenu()
+        }
     }
     
     // This is a position relative to the buffer
@@ -777,7 +841,33 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
     {
         let hit = calculateTapHit(gesture: gestureRecognizer)
         if let grid = hit.grid.toScreenCoordinate(from: terminal.displayBuffer) {
-            terminal.sendEvent(buttonFlags: encodeFlags (release: release), x: grid.col, y: grid.row, pixelX: hit.pixels.col, pixelY: hit.pixels.row)
+            sendMouseEvent(buttonFlags: encodeFlags (release: release), x: grid.col, y: grid.row, pixelX: hit.pixels.col, pixelY: hit.pixels.row)
+        }
+    }
+
+    /// Mouse events are user input, so they use `send(data:)`: they obey
+    /// `acceptsUserInput`, and a mirrored view with `sendsTerminalResponses`
+    /// off still delivers them, while it keeps suppressing emulator replies.
+    func sendMouseEvent (buttonFlags: Int, x: Int, y: Int, pixelX: Int, pixelY: Int)
+    {
+        let bytes = terminal.encodeMouseEvent(buttonFlags: buttonFlags, x: x, y: y, pixelX: pixelX, pixelY: pixelY)
+        send(data: bytes[...])
+    }
+
+    /// Reports wheel movement to the application at `point` (view coordinates).
+    /// Positive `lines` scrolls toward older content, negative toward newer, the
+    /// same sign convention as a macOS scroll delta. Does nothing while the
+    /// application is not tracking the mouse.
+    public func sendScrollWheel (lines: Int, at point: CGPoint)
+    {
+        guard lines != 0, terminal.mouseMode != .off else { return }
+        let hit = calculateTapHit(point: point)
+        let displayBuffer = terminal.displayBuffer
+        let screenRow = max (0, min (displayBuffer.rows - 1, hit.grid.row - displayBuffer.yDisp))
+        let button = lines > 0 ? 4 : 5
+        let flags = terminal.encodeButton(button: button, release: false, shift: false, meta: false, control: false)
+        for _ in 0..<abs(lines) {
+            sendMouseEvent(buttonFlags: flags, x: hit.grid.col, y: screenRow, pixelX: hit.pixels.col, pixelY: hit.pixels.row)
         }
     }
     
@@ -801,24 +891,27 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
     /// In that case the gesture should fall through to local selection handling instead
     /// of being forwarded to the application as a mouse event.
     private func shiftBypassesMouseReporting(for gestureRecognizer: UIGestureRecognizer) -> Bool {
-        gestureRecognizer.modifierFlags.contains(.shift) && !terminal.mouseShiftCapture
+        shiftBypassesMouseReporting(modifierFlags: gestureRecognizer.modifierFlags)
+    }
+
+    func shiftBypassesMouseReporting(modifierFlags: UIKeyModifierFlags) -> Bool {
+        modifierFlags.contains(.shift) && !terminal.mouseShiftCapture
     }
 
     @objc func singleTap (_ gestureRecognizer: UITapGestureRecognizer)
     {
+        guard gestureRecognizer.view != nil else { return }
+        if gestureRecognizer.state != .ended {
+            return
+        }
+        // Touch has no hover, so a link never carries the highlight that
+        // linkForClick requires. A plain tap on a link opens it.
+        let tapHit = calculateTapHit(gesture: gestureRecognizer).grid
+        if let result = linkForTap(at: tapHit) {
+            terminalDelegate?.requestOpenLink(source: self, link: result.link, params: result.params)
+            return
+        }
         if isFirstResponder {
-            guard gestureRecognizer.view != nil else { return }
-
-            if gestureRecognizer.state != .ended {
-                return
-            }
-
-            let tapHit = calculateTapHit(gesture: gestureRecognizer).grid
-            if let result = linkForClick(at: tapHit, hasCommandModifier: commandActive) {
-                terminalDelegate?.requestOpenLink(source: self, link: result.link, params: result.params)
-                return
-            }
-
             if allowMouseReporting && !shiftBypassesMouseReporting(for: gestureRecognizer) && terminal.mouseMode.sendButtonPress() {
                 sharedMouseEvent(gestureRecognizer: gestureRecognizer, release: false)
 
@@ -830,16 +923,11 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
                     selection.selectNone()
                     disableSelectionPanGesture()
                 }
-                if UIMenuController.shared.isMenuVisible {
-                    UIMenuController.shared.hideMenu()
-                } else {
-                    let location = gestureRecognizer.location(in: gestureRecognizer.view)
-                    let tapLoc = calculateTapHit(gesture: gestureRecognizer).grid
-                    let displayBuffer = terminal.displayBuffer
-                    let cursorRow = displayBuffer.y + displayBuffer.yDisp
-                    if abs (tapLoc.col-displayBuffer.x) < 4 && abs (tapLoc.row - cursorRow) < 2 {
-                        showContextMenu (forRegion: makeContextMenuRegionForTap (point: location), pos: tapLoc)
-                    }
+                let location = gestureRecognizer.location(in: gestureRecognizer.view)
+                let displayBuffer = terminal.displayBuffer
+                let cursorRow = displayBuffer.y + displayBuffer.yDisp
+                if abs (tapHit.col-displayBuffer.x) < 4 && abs (tapHit.row - cursorRow) < 2 {
+                    showContextMenu (forRegion: makeContextMenuRegionForTap (point: location), pos: tapHit)
                 }
             }
             queuePendingDisplay()
@@ -847,7 +935,25 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
             let _ = becomeFirstResponder ()
         }
     }
+
+    /// Resolves the link under a touch. Unlike `linkForClick`, no hover highlight is
+    /// required, because touch never hovers. Returns nil when link reporting is off.
+    func linkForTap (at position: Position) -> (link: String, params: [String:String])? {
+        guard linkReporting != .none else { return nil }
+        let mode: Terminal.LinkLookupMode = linkReporting == .explicit ? .explicitOnly : .explicitAndImplicit
+        guard let match = terminal.linkMatch(at: .buffer(position), mode: mode,
+                                             allowHeuristicRowJoin: false) else { return nil }
+        if match.isExplicit,
+           let payload = payloadString(at: position),
+           let (url, params) = urlAndParamsFrom(payload: payload) {
+            return (url, params)
+        }
+        return (match.text, [:])
+    }
     
+    // Double and triple taps select locally even while the application reports the
+    // mouse: on touch they are the only quick selection gestures, and the application
+    // still receives single taps as clicks.
     @objc func doubleTap (_ gestureRecognizer: UITapGestureRecognizer)
     {
         guard gestureRecognizer.view != nil else { return }
@@ -856,21 +962,12 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
             return
         }
 
-        if allowMouseReporting && !shiftBypassesMouseReporting(for: gestureRecognizer) && terminal.mouseMode.sendButtonPress() {
-            sharedMouseEvent(gestureRecognizer: gestureRecognizer, release: false)
-            
-            if terminal.mouseMode.sendButtonRelease() {
-                sharedMouseEvent(gestureRecognizer: gestureRecognizer, release: true)
-            }
-            return
-        } else {
-            let hit = calculateTapHit(gesture: gestureRecognizer).grid
-            selection.selectWordOrExpression(at: hit, in: terminal.displayBuffer)
-            selection.selectionMode = .character
-            enableSelectionPanGesture()
-            showContextMenu (forRegion: makeContextMenuRegionForSelection(), pos: hit)
-            queuePendingDisplay()
-        }
+        let hit = calculateTapHit(gesture: gestureRecognizer).grid
+        selection.selectWordOrExpression(at: hit, in: terminal.displayBuffer)
+        selection.selectionMode = .character
+        enableSelectionPanGesture()
+        showContextMenu (forRegion: makeContextMenuRegionForSelection(), pos: hit)
+        queuePendingDisplay()
     }
 
     @objc func tripleTap (_ gestureRecognizer: UITapGestureRecognizer)
@@ -881,20 +978,11 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
             return
         }
 
-        if allowMouseReporting && !shiftBypassesMouseReporting(for: gestureRecognizer) && terminal.mouseMode.sendButtonPress() {
-            sharedMouseEvent(gestureRecognizer: gestureRecognizer, release: false)
-
-            if terminal.mouseMode.sendButtonRelease() {
-                sharedMouseEvent(gestureRecognizer: gestureRecognizer, release: true)
-            }
-            return
-        } else {
-            let hit = calculateTapHit(gesture: gestureRecognizer).grid
-            selection.select(row: hit.row)
-            enableSelectionPanGesture()
-            showContextMenu (forRegion: makeContextMenuRegionForSelection(), pos: hit)
-            queuePendingDisplay()
-        }
+        let hit = calculateTapHit(gesture: gestureRecognizer).grid
+        selection.select(row: hit.row)
+        enableSelectionPanGesture()
+        showContextMenu (forRegion: makeContextMenuRegionForSelection(), pos: hit)
+        queuePendingDisplay()
     }
     
     var directionView: UIView?
@@ -975,29 +1063,37 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         imgView.tintColor = .white
     }
     
+    /// Vertical pan distance not yet converted into whole wheel lines.
+    var wheelPanRemainder: CGFloat = 0
+
+    /// Converts a vertical pan distance into whole wheel lines, keeping the
+    /// remainder for the next movement so slow pans still add up to a line.
+    func wheelLines (forPanDelta delta: CGFloat) -> Int {
+        guard cellDimension.height > 0 else { return 0 }
+        wheelPanRemainder += delta
+        let lines = Int(wheelPanRemainder / cellDimension.height)
+        wheelPanRemainder -= CGFloat(lines) * cellDimension.height
+        return lines
+    }
+
+    // A touch pan is a scroll, not a drag. While the application tracks the
+    // mouse it is reported as wheel lines, like a trackpad on macOS, so pagers
+    // and TUI transcripts scroll their own content.
     @objc func panMouseHandler (_ gestureRecognizer: UIPanGestureRecognizer){
         guard gestureRecognizer.view != nil else { return }
-        if allowMouseReporting && !shiftBypassesMouseReporting(for: gestureRecognizer) && terminal.mouseMode != .off {
-            switch gestureRecognizer.state {
-            case .began:
-                // send the initial tap
-                if terminal.mouseMode.sendButtonPress() {
-                    sharedMouseEvent(gestureRecognizer: gestureRecognizer, release: false)
-                }
-            case .ended, .cancelled:
-                if terminal.mouseMode.sendButtonRelease() {
-                    sharedMouseEvent(gestureRecognizer: gestureRecognizer, release: true)
-                }
-            case .changed:
-                if terminal.mouseMode.sendButtonTracking() {
-                    let hit = calculateTapHit(gesture: gestureRecognizer)
-                    if let grid = hit.grid.toScreenCoordinate(from: terminal.displayBuffer) {
-                        terminal.sendMotion(buttonFlags: encodeFlags(release: false), x: grid.col, y: grid.row, pixelX: hit.pixels.col, pixelY: hit.pixels.row)
-                    }
-                }
-            default:
-                break
+        guard allowMouseReporting && !shiftBypassesMouseReporting(for: gestureRecognizer) && terminal.mouseMode != .off else { return }
+        switch gestureRecognizer.state {
+        case .began:
+            wheelPanRemainder = 0
+        case .changed:
+            let delta = gestureRecognizer.translation(in: self).y
+            gestureRecognizer.setTranslation(.zero, in: self)
+            let lines = wheelLines(forPanDelta: delta)
+            if lines != 0 {
+                sendScrollWheel(lines: lines, at: gestureRecognizer.location(in: self))
             }
+        default:
+            break
         }
     }
    
@@ -1086,13 +1182,40 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
     }
     
     var panMouseGesture: UIPanGestureRecognizer?
+    private let mousePanGestureDelegate = MousePanGestureDelegate()
     func enableMousePanGesture () {
         guard panMouseGesture == nil else {
             return
         }
         let gesture = UIPanGestureRecognizer (target: self, action: #selector(panMouseHandler))
+        mousePanGestureDelegate.view = self
+        gesture.delegate = mousePanGestureDelegate
         addGestureRecognizer(gesture)
         panMouseGesture = gesture
+    }
+
+    /// Whether a pan should be reported to the application as wheel movement.
+    /// Otherwise the pan stays local: the scroll view pans the scrollback, or the
+    /// selection pan gesture adjusts an active selection.
+    func mousePanShouldBegin () -> Bool {
+        mousePanShouldBegin(modifierFlags: [])
+    }
+
+    /// The decision must agree with `panMouseHandler`: a pan the handler would
+    /// drop (Shift held without XTSHIFTESCAPE) is declined here instead, so the
+    /// scroll view or the selection pan can take the gesture.
+    func mousePanShouldBegin (modifierFlags: UIKeyModifierFlags) -> Bool {
+        allowMouseReporting && acceptsUserInput && terminal.mouseMode != .off && !selection.active
+            && !shiftBypassesMouseReporting(modifierFlags: modifierFlags)
+    }
+
+    // A separate delegate object: UIScrollView is the delegate of its own pan
+    // gesture, so the view must not implement UIGestureRecognizerDelegate itself.
+    private final class MousePanGestureDelegate: NSObject, UIGestureRecognizerDelegate {
+        weak var view: TerminalView?
+        func gestureRecognizerShouldBegin (_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            view?.mousePanShouldBegin(modifierFlags: gestureRecognizer.modifierFlags) ?? false
+        }
     }
     
     func disableMousePanGesture () {
@@ -3058,7 +3181,7 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
 #endif
             
             if !self.selection.active {
-                UIMenuController.shared.hideMenu()
+                self.hideContextMenu()
                 self.selection.selectNone()
                 self.disableSelectionPanGesture()
             }

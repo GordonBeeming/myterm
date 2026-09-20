@@ -22,6 +22,110 @@ struct TerminalUITestFixture: UIViewRepresentable {
     func updateUIView(_ uiView: TerminalView, context: Context) {}
 }
 
+/// Touch fixture for UI tests: a terminal configured like the mirrored one, whose
+/// input loops back as visible text and whose link opens are recorded. Gestures
+/// can then be verified on a simulator without a paired Mac.
+struct TerminalTouchUITestFixture: View {
+    @State private var model = TouchFixtureModel()
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                TouchFixtureTerminal(model: model)
+                Text(model.inputLog)
+                    .font(.caption2)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("fixture-input")
+                Text(model.openedLink ?? "none")
+                    .font(.caption2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("fixture-link")
+                // The test runner is another process, and iOS refuses it the
+                // pasteboard, so the app reports its own copies here.
+                Text(model.copiedText ?? "none")
+                    .font(.caption2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("fixture-copied")
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIPasteboard.changedNotification)) { _ in
+                model.copiedText = UIPasteboard.general.string
+            }
+            .navigationTitle("Touch fixture")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItemGroup(placement: .primaryAction) { HideKeyboardButton() }
+            }
+        }
+    }
+}
+
+@Observable @MainActor
+final class TouchFixtureModel {
+    var inputLog = ""
+    var openedLink: String?
+    var copiedText: String?
+}
+
+private struct TouchFixtureTerminal: UIViewRepresentable {
+    let model: TouchFixtureModel
+
+    func makeCoordinator() -> Coordinator { Coordinator(model: model) }
+
+    func makeUIView(context: Context) -> TerminalView {
+        let view = TerminalView(frame: .zero)
+        view.terminalDelegate = context.coordinator
+        view.sendsTerminalResponses = false
+        view.acceptsUserInput = true
+        view.automaticallyResizesTerminal = true
+        view.font = .monospacedSystemFont(ofSize: 15, weight: .regular)
+        view.backgroundColor = .black
+        view.accessibilityIdentifier = "touch-fixture"
+        return view
+    }
+
+    func updateUIView(_ uiView: TerminalView, context: Context) {}
+
+    final class Coordinator: NSObject, TerminalViewDelegate, @unchecked Sendable {
+        let model: TouchFixtureModel
+        private var didFeed = false
+        init(model: TouchFixtureModel) { self.model = model }
+
+        // Content goes in once the view has its real grid, so nothing wraps.
+        // A steady cursor keeps the app idle for XCUITest, which otherwise
+        // waits out the repeating blink animation at every step.
+        nonisolated func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
+            MainActor.assumeIsolated {
+                guard !didFeed, newCols >= 40 else { return }
+                didFeed = true
+                source.feed(text: "\u{001B}[2 qdocs: https://example.com/myterm-docs\r\nword: SELECTME_fixture\r\n"
+                            + "\u{001B}[?1000h\u{001B}[?1006h")
+            }
+        }
+        nonisolated func setTerminalTitle(source: TerminalView, title: String) {}
+        nonisolated func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
+        nonisolated func scrolled(source: TerminalView, position: Double) {}
+        nonisolated func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
+
+        // SwiftTerm calls these from UIKit event handling, on the main thread.
+        nonisolated func send(source: TerminalView, data: ArraySlice<UInt8>) {
+            let visible = data.map { byte -> String in
+                if byte == 0x1b { return "^[" }
+                if byte < 0x20 { return "^" + String(UnicodeScalar(byte + 0x40)) }
+                return String(UnicodeScalar(byte))
+            }.joined()
+            MainActor.assumeIsolated {
+                model.inputLog += visible
+                source.feed(text: visible)
+            }
+        }
+
+        nonisolated func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
+            MainActor.assumeIsolated { model.openedLink = link }
+        }
+    }
+}
+
 struct TerminalScreen: View {
     @AppStorage("showTerminalKeys") private var showTerminalKeys = false
     let scene: SceneModel
@@ -46,6 +150,7 @@ struct TerminalScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
+                HideKeyboardButton()
                 Button(showTerminalKeys ? "Hide terminal keys" : "Show terminal keys", systemImage: "keyboard") {
                     showTerminalKeys.toggle()
                 }
@@ -126,6 +231,18 @@ struct TerminalScreen: View {
     private func selectPrimary(_ value: TerminalRoute) {
         let current = scene.terminalStates[route.id]?.route ?? route
         Task { await scene.selectPrimaryTerminal(value, replacing: current) }
+    }
+}
+
+/// Resigns the on-screen keyboard so the terminal can use the whole screen.
+/// Tapping the terminal brings the keyboard back.
+struct HideKeyboardButton: View {
+    var body: some View {
+        Button("Hide keyboard", systemImage: "keyboard.chevron.compact.down") {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                            to: nil, from: nil, for: nil)
+        }
+        .accessibilityIdentifier("hide-keyboard")
     }
 }
 
@@ -269,7 +386,6 @@ struct RemoteTerminalView: UIViewRepresentable {
             guard let view else { return }
             coordinator?.synchronizeViewport(from: view)
         }
-        view.linkReporting = .none
         view.accessibilityIdentifier = "remote-terminal"
         context.coordinator.defaultInputAccessoryView = view.inputAccessoryView
         if !showTerminalKeys { view.inputAccessoryView = nil }
@@ -302,6 +418,9 @@ struct RemoteTerminalView: UIViewRepresentable {
         }
         let acceptsControl = state.ownsControl && !state.isAwaitingCheckpoint
         view.automaticallyResizesTerminal = acceptsControl
+        // A view-only pane cannot reach the application, so its pans scroll the
+        // local scrollback instead of being reported as wheel movement.
+        view.allowMouseReporting = acceptsControl
         if context.coordinator.gridRevision != state.gridRevision {
             context.coordinator.gridRevision = state.gridRevision
             context.coordinator.lastAppliedAuthoritativeSize = (
@@ -473,8 +592,21 @@ struct RemoteTerminalView: UIViewRepresentable {
                 self?.synchronizeViewport(from: source)
             }
         }
-        nonisolated func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {}
+        nonisolated func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
+            guard let url = TerminalLinks.openableURL(link) else { return }
+            Task { @MainActor in UIApplication.shared.open(url) }
+        }
         nonisolated func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
+    }
+}
+
+enum TerminalLinks {
+    /// Only web and mail links open from terminal text. Anything else stays in
+    /// the terminal, so a printed custom scheme cannot launch another app.
+    static func openableURL(_ link: String) -> URL? {
+        guard let url = URL(string: link), let scheme = url.scheme?.lowercased(),
+              ["http", "https", "mailto"].contains(scheme) else { return nil }
+        return url
     }
 }
 
