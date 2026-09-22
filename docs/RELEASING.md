@@ -45,3 +45,7 @@ The main MyTerm repository must remain public so Homebrew can fetch the GitHub r
 ## Passkey entitlement
 
 `Packaging/MyTerm.entitlements` deliberately does not contain Apple's managed browser passkey entitlement yet. Add `com.apple.developer.web-browser.public-key-credential` only after Apple approves the capability for the signing team and the distribution provisioning path includes it.
+
+## Privacy entitlements
+
+Programs running in a pane are checked against MyTerm as the responsible app, so `Packaging/MyTerm.entitlements` carries the hardened-runtime resource entitlements (microphone, camera, contacts, calendars, photos, location, Apple Events). Each one needs its usage string in `Packaging/Info.plist`, and `SystemPermission` in `Sources/MyTermCore/SystemPermission.swift` lists both. `SystemPermissionTests` fails if either file is missing one.

@@ -32,6 +32,9 @@ struct SettingsView: View {
                 browserSettings
                     .tabItem { Label("Browser", systemImage: "globe") }
 
+                PermissionsSettingsView()
+                    .tabItem { Label("Permissions", systemImage: "lock.shield") }
+
                 CompanionSettingsView(companion: model.companionHost)
                     .tabItem { Label("Companion", systemImage: "iphone.and.arrow.forward") }
             }
