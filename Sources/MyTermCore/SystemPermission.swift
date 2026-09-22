@@ -29,6 +29,9 @@ public enum SystemPermission: String, CaseIterable, Identifiable, Sendable {
 
     public var id: String { rawValue }
 
+    /// The Bonjour type the local network probe browses. It has to appear in `NSBonjourServices`.
+    public static let localNetworkProbeServiceType = "_ssh._tcp"
+
     public enum Group: String, CaseIterable, Identifiable, Sendable {
         case devices
         case personalData

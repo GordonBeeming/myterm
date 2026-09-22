@@ -55,8 +55,10 @@ final class SystemPermissionTests: XCTestCase {
         XCTAssertEqual(downloads.requestButtonTitle(for: .granted), "Check Again")
     }
 
-    func testLocalNetworkDeclaresTheBonjourTypeItsProbeBrowses() {
+    func testLocalNetworkDeclaresTheBonjourTypeItsProbeBrowses() throws {
         XCTAssertTrue(SystemPermission.localNetwork.requiredInfoPlistKeys.contains("NSBonjourServices"))
+        let services = try XCTUnwrap(try plist(at: "Packaging/Info.plist")["NSBonjourServices"] as? [String])
+        XCTAssertTrue(services.contains(SystemPermission.localNetworkProbeServiceType))
     }
 
     func testSettingsOnlyAndInformationalPermissionsNeverOfferARequest() {

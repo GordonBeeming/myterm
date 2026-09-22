@@ -453,7 +453,10 @@ private final class LocalNetworkProbe: @unchecked Sendable {
 
     private func start(_ continuation: CheckedContinuation<SystemPermissionStatus, Never>) {
         self.continuation = continuation
-        let browser = NWBrowser(for: .bonjour(type: "_ssh._tcp", domain: nil), using: .tcp)
+        let browser = NWBrowser(
+            for: .bonjour(type: SystemPermission.localNetworkProbeServiceType, domain: nil),
+            using: .tcp
+        )
         self.browser = browser
         browser.stateUpdateHandler = { [self] state in
             switch state {
