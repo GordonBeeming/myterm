@@ -23,6 +23,9 @@ public final class SystemPermissionController {
     /// the resource again, so they're kept for the life of the process to stop a refresh from
     /// resetting a row to "Not checked".
     private var probeResults: [SystemPermission: SystemPermissionStatus] = [:]
+    /// Bumped whenever a request stores a status, so a refresh that read the old value before
+    /// suspending can tell its answer is stale and drop it.
+    private var generations: [SystemPermission: Int] = [:]
     private let provider: any SystemPermissionProviding
 
     public init(provider: any SystemPermissionProviding) {
@@ -42,7 +45,9 @@ public final class SystemPermissionController {
 
     public func refresh() async {
         for permission in SystemPermission.allCases where permission.grantStyle != .informational {
+            let generation = generations[permission, default: 0]
             let current = await provider.currentStatus(of: permission)
+            guard generations[permission, default: 0] == generation else { continue }
             if current == .unknown, let probed = probeResults[permission] {
                 statuses[permission] = probed
             } else {
@@ -59,7 +64,10 @@ public final class SystemPermissionController {
         pending.insert(permission)
         defer { pending.remove(permission) }
 
+        generations[permission, default: 0] += 1
         let result = await provider.request(permission)
+        // A refresh that started while the request was out read the status before the answer.
+        generations[permission, default: 0] += 1
         if permission.grantStyle == .probe {
             probeResults[permission] = result
         }

@@ -333,11 +333,10 @@ public final class LiveSystemPermissionProvider: SystemPermissionProviding {
 @MainActor
 private final class LocationAuthorizationRequest: NSObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
-    private var continuation: CheckedContinuation<Void, Never>?
+    private let wait = PromptWait()
 
     func run() async {
-        await withCheckedContinuation { continuation in
-            self.continuation = continuation
+        await wait.run {
             manager.delegate = self
             manager.requestWhenInUseAuthorization()
         }
@@ -348,8 +347,7 @@ private final class LocationAuthorizationRequest: NSObject, CLLocationManagerDel
         MainActor.assumeIsolated {
             // The delegate also fires with the current value as soon as it's attached.
             guard status != .notDetermined else { return }
-            continuation?.resume()
-            continuation = nil
+            wait.finish()
         }
     }
 }
@@ -359,21 +357,53 @@ private final class LocationAuthorizationRequest: NSObject, CLLocationManagerDel
 @MainActor
 private final class BluetoothAuthorizationRequest: NSObject, CBCentralManagerDelegate {
     private var manager: CBCentralManager?
-    private var continuation: CheckedContinuation<Void, Never>?
+    private let wait = PromptWait()
 
     func run() async {
-        await withCheckedContinuation { continuation in
-            self.continuation = continuation
+        await wait.run {
             manager = CBCentralManager(delegate: self, queue: .main)
         }
+        manager = nil
     }
 
     nonisolated func centralManagerDidUpdateState(_ central: CBCentralManager) {
         MainActor.assumeIsolated {
-            continuation?.resume()
-            continuation = nil
-            manager = nil
+            wait.finish()
         }
+    }
+}
+
+/// Waits for a delegate callback that only arrives once the user answers a prompt. The wait is
+/// bounded because a prompt left open would otherwise keep the row's spinner going for good; the
+/// caller re-reads the status either way, so giving up early only shows "Not requested" again.
+@MainActor
+private final class PromptWait {
+    private static let timeout: Duration = .seconds(120)
+
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var timeoutTask: Task<Void, Never>?
+
+    func run(_ start: () -> Void) async {
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+            timeoutTask = Task { [weak self] in
+                do {
+                    try await Task.sleep(for: Self.timeout)
+                } catch {
+                    // Cancelled because the answer arrived first.
+                    return
+                }
+                self?.finish()
+            }
+            start()
+        }
+    }
+
+    func finish() {
+        timeoutTask?.cancel()
+        timeoutTask = nil
+        continuation?.resume()
+        continuation = nil
     }
 }
 

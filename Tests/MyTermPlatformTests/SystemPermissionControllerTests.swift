@@ -56,6 +56,23 @@ final class SystemPermissionControllerTests: XCTestCase {
         XCTAssertEqual(controller.status(of: .downloadsFolder), .denied)
     }
 
+    func testRefreshThatReadBeforeARequestDoesNotOverwriteItsAnswer() async {
+        let provider = FakePermissionProvider()
+        provider.requestResults[.microphone] = .granted
+        let controller = SystemPermissionController(provider: provider)
+        await controller.refresh()
+
+        provider.holdStatusRead(of: .microphone)
+        let staleRefresh = Task { await controller.refresh() }
+        while !provider.isHoldingStatusRead { await Task.yield() }
+
+        await controller.request(.microphone)
+        provider.releaseStatusRead(returning: .notDetermined)
+        await staleRefresh.value
+
+        XCTAssertEqual(controller.status(of: .microphone), .granted)
+    }
+
     func testRequestIsIgnoredOnceMacOSHasAnswered() async {
         let provider = FakePermissionProvider()
         provider.currentStatuses[.camera] = .denied
@@ -95,8 +112,27 @@ private final class FakePermissionProvider: SystemPermissionProviding {
     private(set) var checked: [SystemPermission] = []
     private(set) var requested: [SystemPermission] = []
 
+    private var heldPermission: SystemPermission?
+    private var heldRead: CheckedContinuation<SystemPermissionStatus, Never>?
+
+    var isHoldingStatusRead: Bool { heldRead != nil }
+
+    /// The next status read for `permission` suspends until `releaseStatusRead` is called.
+    func holdStatusRead(of permission: SystemPermission) {
+        heldPermission = permission
+    }
+
+    func releaseStatusRead(returning status: SystemPermissionStatus) {
+        heldRead?.resume(returning: status)
+        heldRead = nil
+    }
+
     func currentStatus(of permission: SystemPermission) async -> SystemPermissionStatus {
         checked.append(permission)
+        if permission == heldPermission {
+            heldPermission = nil
+            return await withCheckedContinuation { heldRead = $0 }
+        }
         return currentStatuses[permission] ?? .notDetermined
     }
 
