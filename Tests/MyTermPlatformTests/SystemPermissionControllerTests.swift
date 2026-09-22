@@ -53,6 +53,26 @@ final class SystemPermissionControllerTests: XCTestCase {
     }
 }
 
+final class LocalNetworkProbeEventTests: XCTestCase {
+    func testReadyAfterPolicyDeniedMeansTheUserAllowedIt() {
+        XCTAssertEqual(LocalNetworkProbeEvent.outcome(of: .ready, sawPolicyDenied: true), .granted)
+        XCTAssertEqual(LocalNetworkProbeEvent.outcome(of: .resultsChanged, sawPolicyDenied: true), .granted)
+    }
+
+    func testPolicyDeniedAloneKeepsWaitingForTheUser() {
+        XCTAssertNil(LocalNetworkProbeEvent.outcome(of: .policyDenied, sawPolicyDenied: true))
+    }
+
+    func testProbeThatEndsAfterPolicyDeniedReportsDenied() {
+        XCTAssertEqual(LocalNetworkProbeEvent.outcome(of: .timedOut, sawPolicyDenied: true), .denied)
+        XCTAssertEqual(LocalNetworkProbeEvent.outcome(of: .failed, sawPolicyDenied: true), .denied)
+    }
+
+    func testProbeThatEndsWithoutAnAnswerIsUnknown() {
+        XCTAssertEqual(LocalNetworkProbeEvent.outcome(of: .timedOut, sawPolicyDenied: false), .unknown)
+    }
+}
+
 @MainActor
 private final class FakePermissionProvider: SystemPermissionProviding {
     var currentStatuses: [SystemPermission: SystemPermissionStatus] = [:]

@@ -377,8 +377,34 @@ private final class BluetoothAuthorizationRequest: NSObject, CBCentralManagerDel
     }
 }
 
+/// What the local network probe has seen so far, reduced to the one decision that matters: has
+/// macOS answered yet, and how.
+enum LocalNetworkProbeEvent: Equatable, Sendable {
+    case ready
+    case policyDenied
+    case resultsChanged
+    case failed
+    case timedOut
+
+    /// The probe's answer, or nil to keep waiting.
+    ///
+    /// While the prompt is open macOS reports policy-denied, and it keeps doing so after a denial.
+    /// Reaching `ready` or seeing results at any point, before or after that, means access is
+    /// allowed. Only a probe that ends without either can be read as denied.
+    static func outcome(of event: LocalNetworkProbeEvent, sawPolicyDenied: Bool) -> SystemPermissionStatus? {
+        switch event {
+        case .ready, .resultsChanged:
+            .granted
+        case .policyDenied:
+            nil
+        case .failed, .timedOut:
+            sawPolicyDenied ? .denied : .unknown
+        }
+    }
+}
+
 /// Browsing for a Bonjour service is the lightest thing that makes macOS ask for local network
-/// access. macOS reports a denial as the browser waiting with a policy-denied DNS error.
+/// access.
 private final class LocalNetworkProbe: @unchecked Sendable {
     private static let policyDenied: Int32 = -65570
     private static let timeoutSeconds = 30
@@ -402,27 +428,30 @@ private final class LocalNetworkProbe: @unchecked Sendable {
         browser.stateUpdateHandler = { [self] state in
             switch state {
             case .ready:
-                // While the prompt is showing, macOS reports policy-denied first; ready after
-                // that means the user allowed it.
-                if !sawPolicyDenied { finish(.granted) }
+                handle(.ready)
             case .waiting(let error):
                 if case .dns(let code) = error, code == Self.policyDenied {
-                    sawPolicyDenied = true
+                    handle(.policyDenied)
                 }
             case .failed:
-                finish(sawPolicyDenied ? .denied : .unknown)
+                handle(.failed)
             case .setup, .cancelled:
                 break
             @unknown default:
                 break
             }
         }
-        browser.browseResultsChangedHandler = { [self] _, _ in finish(.granted) }
+        browser.browseResultsChangedHandler = { [self] _, _ in handle(.resultsChanged) }
         browser.start(queue: queue)
         queue.asyncAfter(deadline: .now() + .seconds(Self.timeoutSeconds)) { [self] in
-            // No answer either way, most likely because the prompt is still open.
-            finish(sawPolicyDenied ? .denied : .unknown)
+            handle(.timedOut)
         }
+    }
+
+    private func handle(_ event: LocalNetworkProbeEvent) {
+        if event == .policyDenied { sawPolicyDenied = true }
+        guard let status = LocalNetworkProbeEvent.outcome(of: event, sawPolicyDenied: sawPolicyDenied) else { return }
+        finish(status)
     }
 
     private func finish(_ status: SystemPermissionStatus) {
