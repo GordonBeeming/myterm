@@ -88,6 +88,44 @@
     </array>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Programs you run in MyTerm can use the microphone, for example voice input or audio recording.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>Programs you run in MyTerm can use the camera, for example to capture a photo or video.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Programs you run in MyTerm can use speech recognition, for example to turn dictation into text.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>Programs you run in MyTerm can read and change your calendars, for example to list or add events.</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>Programs you run in MyTerm can read and change your calendars, for example to list or add events.</string>
+    <key>NSRemindersFullAccessUsageDescription</key>
+    <string>Programs you run in MyTerm can read and change your reminders, for example to list or add to-dos.</string>
+    <key>NSRemindersUsageDescription</key>
+    <string>Programs you run in MyTerm can read and change your reminders, for example to list or add to-dos.</string>
+    <key>NSContactsUsageDescription</key>
+    <string>Programs you run in MyTerm can read your contacts, for example to look up an email address.</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Programs you run in MyTerm can read your photo library, for example to export or process images.</string>
+    <key>NSLocationUsageDescription</key>
+    <string>Programs you run in MyTerm can use your location, for example for weather or time zone tools.</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Programs you run in MyTerm can use your location, for example for weather or time zone tools.</string>
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>Programs you run in MyTerm can use Bluetooth, for example to list or connect devices.</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Programs you run in MyTerm can reach devices on your local network, for example other machines, dev servers, or printers.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Programs you run in MyTerm can control other apps, for example scripts that use osascript.</string>
+    <key>NSDesktopFolderUsageDescription</key>
+    <string>Programs you run in MyTerm can read and write files in your Desktop folder.</string>
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>Programs you run in MyTerm can read and write files in your Documents folder.</string>
+    <key>NSDownloadsFolderUsageDescription</key>
+    <string>Programs you run in MyTerm can read and write files in your Downloads folder.</string>
+    <key>NSRemovableVolumesUsageDescription</key>
+    <string>Programs you run in MyTerm can read and write files on removable drives.</string>
+    <key>NSNetworkVolumesUsageDescription</key>
+    <string>Programs you run in MyTerm can read and write files on network volumes.</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSPrincipalClass</key>
