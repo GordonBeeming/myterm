@@ -204,7 +204,10 @@ public enum SystemPermission: String, CaseIterable, Identifiable, Sendable {
         case .downloadsFolder: ["NSDownloadsFolderUsageDescription"]
         case .removableVolumes: ["NSRemovableVolumesUsageDescription"]
         case .networkVolumes: ["NSNetworkVolumesUsageDescription"]
-        case .localNetwork: ["NSLocalNetworkUsageDescription"]
+        // The Bonjour type the probe browses has to be declared, or macOS refuses the browse
+        // instead of prompting. It limits only MyTerm's own browsing; programs in a pane are
+        // separate processes and don't read MyTerm's Info.plist.
+        case .localNetwork: ["NSLocalNetworkUsageDescription", "NSBonjourServices"]
         case .automation: ["NSAppleEventsUsageDescription"]
         case .fullDiskAccess, .accessibility, .screenRecording, .inputMonitoring: []
         }
@@ -237,11 +240,12 @@ public enum SystemPermission: String, CaseIterable, Identifiable, Sendable {
             }
         case .probe:
             // A probe only prompts the first time, but running it again still reports the current
-            // decision, so it stays available after a denial.
+            // decision. That's the only way to notice a grant revoked in System Settings, so it
+            // stays available once macOS has answered either way.
             switch status {
             case .unknown, .notDetermined: "Grant"
-            case .denied, .notGranted: "Check Again"
-            case .granted, .restricted, .informational: nil
+            case .granted, .denied, .notGranted: "Check Again"
+            case .restricted, .informational: nil
             }
         case .systemSettingsOnly, .informational:
             nil

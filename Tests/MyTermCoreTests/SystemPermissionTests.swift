@@ -26,8 +26,12 @@ final class SystemPermissionTests: XCTestCase {
 
         for permission in SystemPermission.allCases {
             for key in permission.requiredInfoPlistKeys {
-                let value = infoPlist[key] as? String
-                XCTAssertFalse(value?.isEmpty ?? true, "Info.plist is missing \(key) for \(permission)")
+                let isDeclared = switch infoPlist[key] {
+                case let text as String: !text.isEmpty
+                case let list as [String]: !list.isEmpty
+                default: false
+                }
+                XCTAssertTrue(isDeclared, "Info.plist is missing \(key) for \(permission)")
             }
             for key in permission.requiredEntitlements {
                 XCTAssertEqual(entitlements[key] as? Bool, true, "Entitlements are missing \(key) for \(permission)")
@@ -43,11 +47,16 @@ final class SystemPermissionTests: XCTestCase {
         XCTAssertNil(microphone.requestButtonTitle(for: .denied))
     }
 
-    func testProbePermissionsCanBeCheckedAgainAfterADenial() {
+    func testProbePermissionsCanBeCheckedAgainOnceAnswered() {
         let downloads = SystemPermission.downloadsFolder
         XCTAssertEqual(downloads.requestButtonTitle(for: .unknown), "Grant")
         XCTAssertEqual(downloads.requestButtonTitle(for: .denied), "Check Again")
-        XCTAssertNil(downloads.requestButtonTitle(for: .granted))
+        // A grant revoked in System Settings is only visible by probing again.
+        XCTAssertEqual(downloads.requestButtonTitle(for: .granted), "Check Again")
+    }
+
+    func testLocalNetworkDeclaresTheBonjourTypeItsProbeBrowses() {
+        XCTAssertTrue(SystemPermission.localNetwork.requiredInfoPlistKeys.contains("NSBonjourServices"))
     }
 
     func testSettingsOnlyAndInformationalPermissionsNeverOfferARequest() {

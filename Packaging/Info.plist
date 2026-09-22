@@ -114,6 +114,10 @@
     <string>Programs you run in MyTerm can use Bluetooth, for example to list or connect devices.</string>
     <key>NSLocalNetworkUsageDescription</key>
     <string>Programs you run in MyTerm can reach devices on your local network, for example other machines, dev servers, or printers.</string>
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_ssh._tcp</string>
+    </array>
     <key>NSAppleEventsUsageDescription</key>
     <string>Programs you run in MyTerm can control other apps, for example scripts that use osascript.</string>
     <key>NSDesktopFolderUsageDescription</key>

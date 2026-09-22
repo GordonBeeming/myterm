@@ -41,6 +41,21 @@ final class SystemPermissionControllerTests: XCTestCase {
         XCTAssertEqual(controller.status(of: .downloadsFolder), .denied)
     }
 
+    func testGrantedProbeCanBeRecheckedAfterRevocation() async {
+        let provider = FakePermissionProvider()
+        provider.currentStatuses[.downloadsFolder] = .unknown
+        provider.requestResults[.downloadsFolder] = .granted
+        let controller = SystemPermissionController(provider: provider)
+        await controller.request(.downloadsFolder)
+
+        provider.requestResults[.downloadsFolder] = .denied
+        await controller.refresh()
+        await controller.request(.downloadsFolder)
+
+        XCTAssertEqual(provider.requested, [.downloadsFolder, .downloadsFolder])
+        XCTAssertEqual(controller.status(of: .downloadsFolder), .denied)
+    }
+
     func testRequestIsIgnoredOnceMacOSHasAnswered() async {
         let provider = FakePermissionProvider()
         provider.currentStatuses[.camera] = .denied
