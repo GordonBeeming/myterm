@@ -6,10 +6,10 @@ The app supports iOS and iPadOS 26 or later. Adaptive panes respond to the avail
 
 ## Build and test
 
-Use Xcode 26.6 or newer with its matching Metal component. CI pins release Xcode 26.6 on GitHub’s [macOS 26 runner](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-Readme.md). Check the selected installation with:
+Use Xcode 27.0 or newer with its matching Metal component. CI pins Xcode 27.0 on GitHub’s [xcode-27 runner](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md), which is still a public preview. Check the selected installation with:
 
 ```sh
-bash script/verify_companion_toolchain.sh 26.0
+bash script/verify_companion_toolchain.sh 27.0
 ```
 
 If Xcode reports a missing Metal component, install it with `xcodebuild -downloadComponent MetalToolchain`. After upgrading Xcode, finish its component setup before running simulator tests. Changing `DEVELOPER_DIR` for one command allows a particular installation to be used without changing the machine's default selection.
