@@ -44,6 +44,22 @@ enum UITestConfiguration {
         false
         #endif
     }
+
+    static var showsWorkspaceFixture: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-MyTermUITestWorkspaceFixture")
+        #else
+        false
+        #endif
+    }
+
+    static var forgetsPaneSelection: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-MyTermUITestForgetPaneSelection")
+        #else
+        false
+        #endif
+    }
 }
 
 extension Notification.Name {
