@@ -23,9 +23,10 @@ struct AdaptiveWorkspaceView: View {
     let workspace: RemoteWorkspaceItem
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @AppStorage("showTerminalKeys") private var showTerminalKeys = false
+    private let paneSelections = PaneSelectionStore()
     @State private var visibilityOwnerID: UUID?
     @State private var selectedTabs: [TabGroupID: TabID] = [:]
-    @State private var compactTabID: TabID?
+    @State private var compactSelection: PaneSelection?
     @State private var focusedGroupID: TabGroupID?
     @State private var maximizedGroupID: TabGroupID?
 
@@ -41,14 +42,8 @@ struct AdaptiveWorkspaceView: View {
             ?? workspace.groups.first { $0.id == workspace.focusedGroupID }
             ?? workspace.groups.first
     }
-    private var compactSelection: (RemoteTabGroupProjection, RemoteTabProjection)? {
-        if let compactTabID {
-            for group in workspace.groups {
-                if let tab = group.tabs.first(where: { $0.id == compactTabID }) { return (group, tab) }
-            }
-        }
-        guard let group = focusedGroup, let tab = selectedTab(in: group) else { return nil }
-        return (group, tab)
+    private var resolvedCompactSelection: (RemoteTabGroupProjection, RemoteTabProjection)? {
+        paneSelections.resolve(in: workspace, preferring: compactSelection)
     }
     private var visibleRoutes: [TerminalRoute] {
         if usesWideLayout {
@@ -57,7 +52,8 @@ struct AdaptiveWorkspaceView: View {
                 selectedTab(in: group).flatMap { route(for: $0, group: group) }
             }
         }
-        guard let (group, tab) = compactSelection, let route = route(for: tab, group: group) else { return [] }
+        guard let (group, tab) = resolvedCompactSelection,
+              let route = route(for: tab, group: group) else { return [] }
         return [route]
     }
 
@@ -70,8 +66,14 @@ struct AdaptiveWorkspaceView: View {
                 } else {
                     layoutView(layout)
                 }
-            } else if let (group, tab) = compactSelection {
+            } else if let (group, tab) = resolvedCompactSelection {
+                // An inset rather than a stack, so the strip stays pinned under the navigation
+                // bar and the terminal keeps every point below it.
                 paneContent(tab, group: group, focused: true)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .safeAreaInset(edge: .top, spacing: 0) {
+                        paneSwitcher(selectedGroup: group, selectedTab: tab)
+                    }
             } else {
                 ContentUnavailableView("No terminals", systemImage: "terminal",
                                        description: Text("Create a terminal in this workspace."))
@@ -86,16 +88,16 @@ struct AdaptiveWorkspaceView: View {
                         ForEach(Array(workspace.groups.enumerated()), id: \.element.id) { index, group in
                             Section("Pane \(index + 1)") {
                                 ForEach(group.tabs, id: \.id) { tab in
-                                    Button(tab.title) { compactTabID = tab.id }
+                                    Button(tab.title) { select(group: group, tab: tab) }
                                 }
                             }
                         }
-                        if let (group, tab) = compactSelection {
+                        if let (group, tab) = resolvedCompactSelection {
                             Divider()
                             terminalCommands(tab, group: group)
                         }
                     } label: {
-                        Label(compactSelection?.1.title ?? "Terminals", systemImage: "chevron.down")
+                        Label(resolvedCompactSelection?.1.title ?? "Terminals", systemImage: "chevron.down")
                             .labelStyle(.titleAndIcon)
                             .lineLimit(1)
                     }
@@ -120,9 +122,26 @@ struct AdaptiveWorkspaceView: View {
                 .accessibilityIdentifier("toggle-terminal-keys")
             }
         }
-        .onAppear { visibilityOwnerID = UUID() }
+        .onAppear {
+            visibilityOwnerID = UUID()
+            guard compactSelection == nil,
+                  let remembered = paneSelections.selection(for: workspace.id) else { return }
+            if workspace.groups.contains(where: { $0.id == remembered.groupID }) {
+                compactSelection = remembered
+            } else {
+                // The pane went while this device was looking elsewhere, so onChange never saw it
+                // go. Drop the memory instead of leaving it to take one of the store's slots.
+                paneSelections.clear(for: workspace.id)
+            }
+        }
         .onChange(of: workspace.groups.map(\.id)) { _, ids in
             if let maximizedGroupID, !ids.contains(maximizedGroupID) { self.maximizedGroupID = nil }
+            if let groupID = compactSelection?.groupID, !ids.contains(groupID) {
+                // The Mac closed the pane this device was pinned to. Forget the choice so the next
+                // visit starts at the first pane instead of wherever the desktop is focused now.
+                compactSelection = nil
+                paneSelections.clear(for: workspace.id)
+            }
         }
         .task(id: visibility) {
             guard let owner = visibility.ownerID, !Task.isCancelled else { return }
@@ -133,6 +152,97 @@ struct AdaptiveWorkspaceView: View {
             guard let owner = visibility.ownerID else { return }
             Task { await scene.clearVisibleWorkspaceTerminals(ownerID: owner) }
         }
+    }
+
+    private func select(group: RemoteTabGroupProjection, tab: RemoteTabProjection?) {
+        let selection = PaneSelection(groupID: group.id, tabID: tab?.id)
+        compactSelection = selection
+        paneSelections.select(selection, for: workspace.id)
+    }
+
+    /// The compact switcher: a row of panes, and a row of the selected pane's terminals when it
+    /// holds more than one. Everything switches on a plain tap; nothing hides behind a long press.
+    @ViewBuilder
+    private func paneSwitcher(selectedGroup: RemoteTabGroupProjection,
+                              selectedTab: RemoteTabProjection) -> some View {
+        VStack(spacing: 0) {
+            if workspace.groups.count > 1 {
+                switcherStrip(identifier: "workspace-pane-switcher",
+                              selectedID: selectedGroup.id.rawValue) {
+                    ForEach(Array(workspace.groups.enumerated()), id: \.element.id) { index, group in
+                        let isSelected = group.id == selectedGroup.id
+                        paneChip(title: "Pane \(index + 1)",
+                                 detail: (isSelected ? selectedTab : self.selectedTab(in: group))?.title,
+                                 isSelected: isSelected,
+                                 identifier: "workspace-pane-chip-\(index)") {
+                            select(group: group, tab: nil)
+                        }
+                        .id(group.id.rawValue)
+                    }
+                }
+            }
+            if selectedGroup.tabs.count > 1 {
+                switcherStrip(identifier: "workspace-terminal-switcher",
+                              selectedID: selectedTab.id.rawValue) {
+                    ForEach(Array(selectedGroup.tabs.enumerated()), id: \.element.id) { index, tab in
+                        paneChip(title: tab.title, detail: nil,
+                                 isSelected: tab.id == selectedTab.id,
+                                 identifier: "workspace-terminal-chip-\(index)") {
+                            select(group: selectedGroup, tab: tab)
+                        }
+                        .id(tab.id.rawValue)
+                    }
+                }
+            }
+        }
+    }
+
+    private func switcherStrip<Content: View>(identifier: String, selectedID: UUID,
+                                              @ViewBuilder content: @escaping () -> Content) -> some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) { content() }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+            }
+            .scrollIndicators(.hidden)
+            // Without this the top strip inherits the navigation bar's edge effect, whose overlay
+            // covers the chips and swallows their taps.
+            .scrollEdgeEffectHidden(true, for: .top)
+            .onAppear { proxy.scrollTo(selectedID, anchor: .center) }
+            .onChange(of: selectedID) { _, id in
+                withAnimation { proxy.scrollTo(id, anchor: .center) }
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .background(.bar)
+        .accessibilityIdentifier(identifier)
+    }
+
+    private func paneChip(title: String, detail: String?, isSelected: Bool, identifier: String,
+                          onSelect: @escaping () -> Void) -> some View {
+        Button(action: onSelect) {
+            HStack(spacing: 4) {
+                Text(title)
+                    .fontWeight(isSelected ? .semibold : .regular)
+                    .foregroundStyle(Color.primary)
+                if let detail, !detail.isEmpty {
+                    Text(detail)
+                        .foregroundStyle(Color.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .font(.caption)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(isSelected ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.12),
+                        in: Capsule())
+            .overlay(Capsule().strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(identifier)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private func selectedTab(in group: RemoteTabGroupProjection) -> RemoteTabProjection? {

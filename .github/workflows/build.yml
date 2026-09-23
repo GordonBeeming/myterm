@@ -10,13 +10,14 @@ on:
 
 # Every job selects the same Xcode explicitly. The image default moves on GitHub's schedule,
 # so without a pin the compiler that builds and signs a release could change without a commit.
-# Keep this in step with the companion jobs in companion.yml.
+# Keep this in step with the companion jobs in companion.yml. The xcode-27 image is still a
+# public preview, so a runner shortage or an image change shows up here first.
 env:
-  DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+  DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
 
 jobs:
   build-and-test:
-    runs-on: macos-26
+    runs-on: xcode-27
     name: Build & Test
 
     steps:
@@ -34,6 +35,10 @@ jobs:
           xcodebuild -version
           swift --version
 
+      # The xcode-27 image ships without the Metal toolchain, and SwiftTerm's shaders need it.
+      - name: Install the matching Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
+
       - name: Build all targets
         run: swift build --build-tests
 
@@ -44,7 +49,7 @@ jobs:
         run: bash script/zsh_shim_test.sh
 
   verify-bundle:
-    runs-on: macos-26
+    runs-on: xcode-27
     name: Verify App Bundle
 
     steps:
@@ -56,6 +61,10 @@ jobs:
       # builds and checks the real bundle so the failure lands on the pull request instead.
       # BUILD must match ^[1-9][0-9]*$, so it cannot be 0. The values are throwaway: this job
       # proves the bundle assembles and verifies, and the real ones come from the release tag.
+      # The xcode-27 image ships without the Metal toolchain, and SwiftTerm's shaders need it.
+      - name: Install the matching Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
+
       - name: Build and verify the app bundle
         run: make verify VERSION=0.0.0 BUILD=1
 
@@ -78,7 +87,7 @@ jobs:
   release:
     needs: [build-and-test, verify-bundle]
     if: github.event_name == 'release'
-    runs-on: macos-26
+    runs-on: xcode-27
     name: Sign, Notarize & Release
     environment: prod
     permissions:
@@ -87,6 +96,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      # The xcode-27 image ships without the Metal toolchain, and SwiftTerm's shaders need it.
+      - name: Install the matching Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
 
       - name: Set release version
         run: |

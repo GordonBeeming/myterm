@@ -4,7 +4,7 @@ set -euo pipefail
 script_directory=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repo_directory=$(cd -- "$script_directory/.." && pwd)
 cd "$repo_directory"
-bash script/verify_companion_toolchain.sh 26.0
+bash script/verify_companion_toolchain.sh 27.0
 
 device_family="${COMPANION_DEVICE_FAMILY:-iPhone}"
 case "$device_family" in

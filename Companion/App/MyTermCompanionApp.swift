@@ -14,6 +14,8 @@ struct MyTermCompanionApp: App {
                     TerminalUITestFixture()
                 } else if UITestConfiguration.showsTouchFixture {
                     TerminalTouchUITestFixture()
+                } else if UITestConfiguration.showsWorkspaceFixture {
+                    WorkspaceUITestFixture()
                 } else {
                     SceneRootView(services: services)
                 }
@@ -38,6 +40,12 @@ final class CompanionAppDelegate: NSObject, UIApplicationDelegate, @preconcurren
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        #if DEBUG
+        // Cleared before any view reads it, so a fixture run starts without remembered panes.
+        if UITestConfiguration.forgetsPaneSelection {
+            PaneSelectionStore().clear(for: WorkspaceUITestFixture.workspace.id)
+        }
+        #endif
         return true
     }
 
