@@ -35,6 +35,10 @@ jobs:
           xcodebuild -version
           swift --version
 
+      # The xcode-27 image ships without the Metal toolchain, and SwiftTerm's shaders need it.
+      - name: Install the matching Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
+
       - name: Build all targets
         run: swift build --build-tests
 
@@ -57,6 +61,10 @@ jobs:
       # builds and checks the real bundle so the failure lands on the pull request instead.
       # BUILD must match ^[1-9][0-9]*$, so it cannot be 0. The values are throwaway: this job
       # proves the bundle assembles and verifies, and the real ones come from the release tag.
+      # The xcode-27 image ships without the Metal toolchain, and SwiftTerm's shaders need it.
+      - name: Install the matching Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
+
       - name: Build and verify the app bundle
         run: make verify VERSION=0.0.0 BUILD=1
 
@@ -88,6 +96,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      # The xcode-27 image ships without the Metal toolchain, and SwiftTerm's shaders need it.
+      - name: Install the matching Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
 
       - name: Set release version
         run: |
