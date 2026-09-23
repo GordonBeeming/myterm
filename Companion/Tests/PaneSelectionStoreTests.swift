@@ -107,6 +107,25 @@ final class PaneSelectionStoreTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(store.resolve(in: workspace)).0.id, workspace.groups[0].id)
     }
 
+    func testSelectingTheSamePaneAgainKeepsTheWorkspaceRecent() {
+        let store = PaneSelectionStore(defaults: defaults)
+        let oldest = testWorkspace()
+        let revisited = testWorkspace()
+        for workspace in [oldest, revisited] {
+            store.select(PaneSelection(groupID: workspace.groups[1].id, tabID: nil), for: workspace.id)
+        }
+
+        // Picking the pane it is already on is still a visit, so it must not fall out first.
+        store.select(PaneSelection(groupID: revisited.groups[1].id, tabID: nil), for: revisited.id)
+        for _ in 0..<49 {
+            let filler = testWorkspace()
+            store.select(PaneSelection(groupID: filler.groups[1].id, tabID: nil), for: filler.id)
+        }
+
+        XCTAssertNil(store.selection(for: oldest.id), "The workspace nobody went back to is evicted")
+        XCTAssertEqual(store.selection(for: revisited.id)?.groupID, revisited.groups[1].id)
+    }
+
     func testEvictsTheLeastRecentlySelectedWorkspacesPastTheCap() {
         let store = PaneSelectionStore(defaults: defaults)
         let workspaces = (0..<60).map { _ in testWorkspace() }

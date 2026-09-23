@@ -39,7 +39,8 @@ struct PaneSelectionStore {
     func select(_ selection: PaneSelection, for workspaceID: WorkspaceID) {
         var stored = entries()
         let key = workspaceID.description
-        guard stored[key]?.selection != selection else { return }
+        // Rewritten even when the choice is unchanged: picking a workspace again is what makes it
+        // recent, and the cap evicts in that order.
         let next = (stored.values.map(\.sequence).max() ?? 0) + 1
         stored[key] = Entry(selection: selection, sequence: next)
         if stored.count > Self.capacity {

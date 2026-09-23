@@ -28,7 +28,7 @@ final class LiveDeviceLayoutTests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [allPanes], timeout: 20), .completed)
         XCTAssertFalse(app.buttons["workspace-terminal-picker"].exists,
                        "Wide layout must show panes rather than the compact terminal picker")
-        XCTAssertFalse(app.otherElements["workspace-pane-switcher"].exists,
+        XCTAssertFalse(app.scrollViews["workspace-pane-switcher"].exists,
                        "Wide layout shows every pane, so it needs no pane switcher")
         let keysToggle = app.buttons["toggle-terminal-keys"]
         XCTAssertTrue(keysToggle.exists)

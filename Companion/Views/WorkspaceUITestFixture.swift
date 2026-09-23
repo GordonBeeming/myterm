@@ -1,4 +1,3 @@
-#if DEBUG
 import MyTermCore
 import SwiftUI
 
@@ -43,4 +42,3 @@ struct WorkspaceUITestFixture: View {
         }
     }
 }
-#endif

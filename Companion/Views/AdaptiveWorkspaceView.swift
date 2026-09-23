@@ -124,7 +124,15 @@ struct AdaptiveWorkspaceView: View {
         }
         .onAppear {
             visibilityOwnerID = UUID()
-            if compactSelection == nil { compactSelection = paneSelections.selection(for: workspace.id) }
+            guard compactSelection == nil,
+                  let remembered = paneSelections.selection(for: workspace.id) else { return }
+            if workspace.groups.contains(where: { $0.id == remembered.groupID }) {
+                compactSelection = remembered
+            } else {
+                // The pane went while this device was looking elsewhere, so onChange never saw it
+                // go. Drop the memory instead of leaving it to take one of the store's slots.
+                paneSelections.clear(for: workspace.id)
+            }
         }
         .onChange(of: workspace.groups.map(\.id)) { _, ids in
             if let maximizedGroupID, !ids.contains(maximizedGroupID) { self.maximizedGroupID = nil }

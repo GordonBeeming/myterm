@@ -116,7 +116,7 @@
 		AABD4DF6F0105A47014429F0 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 		ABE4FD21D0CF4787337BDC5D /* LiveDeviceTerminalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveDeviceTerminalTests.swift; sourceTree = "<group>"; };
 		AC518A242E689D2C1E5C96EC /* WorkspaceViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceViews.swift; sourceTree = "<group>"; };
-		AF1D3D8301FD85A3F2B3A95C /* 20260921-hardy-echidna */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "20260921-hardy-echidna"; path = ..; sourceTree = SOURCE_ROOT; };
+		AF1D3D8301FD85A3F2B3A95C /* companion-chef */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "companion-chef"; path = ..; sourceTree = SOURCE_ROOT; };
 		B2EA22602077EEAC436C98E8 /* MyTermCompanionTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MyTermCompanionTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B34593A3693A9FE889079CF3 /* LiveDeviceLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveDeviceLayoutTests.swift; sourceTree = "<group>"; };
 		BFA88151878C429986196266 /* RemoteSettingsDraftTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSettingsDraftTests.swift; sourceTree = "<group>"; };
@@ -196,7 +196,7 @@
 		74787029B8F005F4BB5B25A8 /* Packages */ = {
 			isa = PBXGroup;
 			children = (
-				AF1D3D8301FD85A3F2B3A95C /* 20260921-hardy-echidna */,
+				AF1D3D8301FD85A3F2B3A95C /* companion-chef */,
 				9EFF5F814F79AFC4FE808CBD /* MyTermRemote */,
 				4E8E6E39688D735FBB9DCCC2 /* SwiftTerm */,
 			);

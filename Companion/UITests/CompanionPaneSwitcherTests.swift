@@ -24,6 +24,8 @@ final class CompanionPaneSwitcherTests: XCTestCase {
         var app = launch(forgettingPanes: true)
         XCTAssertTrue(pane(app, 0).waitForExistence(timeout: 10),
                       "The compact workspace shows a pane switcher")
+        XCTAssertTrue(app.scrollViews["workspace-pane-switcher"].exists,
+                      "The strip carries the identifier the wide-layout test asserts is absent")
         XCTAssertTrue(pane(app, 0).isSelected,
                       "A workspace this device has not opened starts at the first pane, "
                       + "even though the fixture reports the Mac focused on the third")
