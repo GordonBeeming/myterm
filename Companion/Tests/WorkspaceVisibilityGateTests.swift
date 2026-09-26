@@ -37,19 +37,20 @@ final class WorkspaceVisibilityGateTests: XCTestCase {
 
         // The gate has to be usable afterwards. It used to strand the permit on the cancelled
         // waiter, which left every later attach waiting forever on a terminal that never appeared.
-        let after = Task { await gate.acquire() }
-        let reacquired = try await withThrowingTaskGroup(of: Bool.self) { group in
-            group.addTask { await after.value }
-            group.addTask {
-                try await Task.sleep(for: .seconds(2))
-                return false
-            }
-            let result = try await group.next() ?? false
-            group.cancelAll()
-            return result
+        // Polled rather than awaited: if the gate strands its permit this has to fail, and
+        // awaiting a task that never returns would hang the suite instead.
+        let reacquiredFlag = AcquisitionFlag()
+        let after = Task {
+            if await gate.acquire() { await reacquiredFlag.record() }
+        }
+        defer { after.cancel() }
+        var reacquired = false
+        for _ in 0..<40 where !reacquired {
+            try await Task.sleep(for: .milliseconds(50))
+            reacquired = await reacquiredFlag.value
         }
         XCTAssertTrue(reacquired, "The gate is still usable after a waiter is cancelled")
-        await gate.release()
+        if reacquired { await gate.release() }
     }
 
     func testTheGateSerialisesConcurrentCallers() async throws {
@@ -71,6 +72,11 @@ final class WorkspaceVisibilityGateTests: XCTestCase {
         let peak = await counter.peak
         XCTAssertEqual(peak, 1, "Only one caller may be inside the gate at a time, saw \(peak)")
     }
+}
+
+private actor AcquisitionFlag {
+    private(set) var value = false
+    func record() { value = true }
 }
 
 private actor ConcurrencyCounter {

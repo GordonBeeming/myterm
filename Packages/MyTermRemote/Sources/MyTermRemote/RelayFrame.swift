@@ -50,6 +50,9 @@ public struct RelayReady: Codable, Equatable, Sendable {
     public let role: RelayRole
     public let maxFrameBytes: Int
     public let heartbeatSeconds: Int
+    /// Whether this relay accepts an in-band token refresh. A relay from before that existed
+    /// omits the field and closes any connection that sends one, so it must never be assumed.
+    public let supportsAuthRefresh: Bool
 
     enum CodingKeys: String, CodingKey {
         case protocolVersion = "protocol"
@@ -58,6 +61,29 @@ public struct RelayReady: Codable, Equatable, Sendable {
         case role
         case maxFrameBytes = "max_frame_bytes"
         case heartbeatSeconds = "heartbeat_seconds"
+        case supportsAuthRefresh = "auth_refresh"
+    }
+
+    public init(protocolVersion: Int, connectionID: UUID, hostID: UUID, role: RelayRole,
+                maxFrameBytes: Int, heartbeatSeconds: Int, supportsAuthRefresh: Bool = false) {
+        self.protocolVersion = protocolVersion
+        self.connectionID = connectionID
+        self.hostID = hostID
+        self.role = role
+        self.maxFrameBytes = maxFrameBytes
+        self.heartbeatSeconds = heartbeatSeconds
+        self.supportsAuthRefresh = supportsAuthRefresh
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        protocolVersion = try container.decode(Int.self, forKey: .protocolVersion)
+        connectionID = try container.decode(UUID.self, forKey: .connectionID)
+        hostID = try container.decode(UUID.self, forKey: .hostID)
+        role = try container.decode(RelayRole.self, forKey: .role)
+        maxFrameBytes = try container.decode(Int.self, forKey: .maxFrameBytes)
+        heartbeatSeconds = try container.decode(Int.self, forKey: .heartbeatSeconds)
+        supportsAuthRefresh = try container.decodeIfPresent(Bool.self, forKey: .supportsAuthRefresh) ?? false
     }
 
     public func validate(expectedHostID: UUID, expectedRole: RelayRole) throws {

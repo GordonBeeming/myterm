@@ -1750,6 +1750,8 @@ final class CompanionHostModel {
     }
 
     private func transportEnded(error: Error?, generation: UUID) {
+        reauthenticationTask?.cancel()
+        reauthenticationTask = nil
         guard connectionFence.accepts(generation) else { return }
         cancelPairing()
         transportTask = nil

@@ -434,6 +434,8 @@ actor CompanionHostConnection {
     }
 
     private func finish(error: Error?) {
+        reauthenticationTask?.cancel()
+        reauthenticationTask = nil
         transportTask?.cancel()
         transportTask = nil
         handshakeTimeout?.cancel()

@@ -104,7 +104,7 @@ The response is:
 
 Connect to `GET /v1/transport/ws?host_id=<stable-host-uuid>&role=host|client` over `wss`. Supply `Authorization: Bearer <access-token>` during the HTTP upgrade. Tokens in the URL or subprotocol are rejected. A host role requires the access token for the device that owns the host registration. Client roles require a client device in the same account.
 
-The server sends UTF-8 JSON control messages. Clients do not send text messages.
+The server sends UTF-8 JSON control messages. A peer sends one only to refresh its authentication, described below; everything else it sends is binary.
 
 ```json
 {
@@ -114,9 +114,41 @@ The server sends UTF-8 JSON control messages. Clients do not send text messages.
   "host_id": "ed97b573-629c-43d7-ae74-dc64e356a31c",
   "role": "client",
   "max_frame_bytes": 1048576,
-  "heartbeat_seconds": 20
+  "heartbeat_seconds": 20,
+  "expires_at": 1790000000,
+  "auth_refresh": true
 }
 ```
+
+`expires_at` is the Unix time at which the relay will close this connection, which is the expiry of
+the access token it was opened with. `auth_refresh` says the relay accepts a refresh; a relay from
+before that existed omits it and closes any connection that sends one, so a peer must treat a
+missing field as false and stay silent.
+
+To keep a connection past that time, a peer sends a text message with a current access token before
+it expires:
+
+```json
+{
+  "type": "auth",
+  "access_token": "<access-token>"
+}
+```
+
+The relay revalidates the token, requires it to belong to the same device, moves the connection's
+expiry to the new token's expiry, and replies:
+
+```json
+{
+  "type": "auth_ok",
+  "expires_at": 1790000900
+}
+```
+
+A token that is rejected closes the connection. A token the relay cannot check right now, because
+its storage is unavailable, produces `{"type":"error","code":"auth_unavailable"}` and leaves the
+connection on its existing expiry to try again. A device that can no longer obtain a valid token
+still stops at its last validated expiry, so this does not extend how long a revoked device lasts.
 
 ```json
 {

@@ -100,6 +100,7 @@ type controlMessage struct {
 	HeartbeatSeconds int64  `json:"heartbeat_seconds,omitempty"`
 	Code             string `json:"code,omitempty"`
 	ExpiresAt        int64  `json:"expires_at,omitempty"`
+	AuthRefresh      bool   `json:"auth_refresh,omitempty"`
 }
 
 type inboundControl struct {
@@ -221,7 +222,7 @@ func (h *Hub) ServeWebSocket(w http.ResponseWriter, r *http.Request, device stor
 	if !conn.sendControl(controlMessage{
 		Type: "ready", Protocol: 1, ConnectionID: conn.id.String(), HostID: host.ID, Role: role,
 		MaxFrameBytes: h.config.WebSocketFrameLimit, HeartbeatSeconds: int64(h.config.HeartbeatInterval.Seconds()),
-		ExpiresAt: device.AccessExpiresAt,
+		ExpiresAt: device.AccessExpiresAt, AuthRefresh: h.authenticate != nil,
 	}) {
 		return errors.New("initial control queue unavailable")
 	}
@@ -355,14 +356,24 @@ func (h *Hub) handleControl(ctx context.Context, source *connection, data []byte
 		slog.Info("rejecting relay re-authentication",
 			"host_id", source.hostID, "role", source.role,
 			"connection_id", source.id.String(), "reason", err.Error())
-		return fmt.Errorf("re-authenticate: %w", err)
+		if errors.Is(err, store.ErrUnauthorized) || errors.Is(err, store.ErrNotFound) {
+			return fmt.Errorf("re-authenticate: %w", err)
+		}
+		// A database blip is not the peer's fault. The connection keeps the expiry it already has
+		// and the peer is free to try again before that runs out.
+		if !source.sendControlWithin(ctx, controlMessage{Type: "error", Code: "auth_unavailable"},
+			h.config.SlowReceiverGrace) {
+			return errors.New("auth error queue unavailable")
+		}
+		return nil
 	}
 	// A token for a different device must never extend this one's connection.
 	if device.ID != source.deviceID {
 		return errors.New("re-authentication is for another device")
 	}
 	source.extendUntil(time.Unix(device.AccessExpiresAt, 0))
-	if !source.sendControl(controlMessage{Type: "auth_ok", ExpiresAt: device.AccessExpiresAt}) {
+	if !source.sendControlWithin(ctx, controlMessage{Type: "auth_ok", ExpiresAt: device.AccessExpiresAt},
+		h.config.SlowReceiverGrace) {
 		return errors.New("auth acknowledgement queue unavailable")
 	}
 	return nil
@@ -396,17 +407,30 @@ func (h *Hub) route(source *connection, frame []byte) error {
 	}
 	delivered := append([]byte(nil), frame...)
 	copy(delivered[1:17], source.id[:])
+	var pending sync.WaitGroup
 	for _, recipient := range recipients {
-		if !recipient.sendWithin(recipient.ctx, outboundMessage{typeCode: websocket.MessageBinary, data: delivered},
-			h.config.SlowReceiverGrace) {
+		if recipient.send(outboundMessage{typeCode: websocket.MessageBinary, data: delivered}) {
+			continue
+		}
+		pending.Add(1)
+		go func(recipient *connection) {
+			defer pending.Done()
+			if recipient.sendWithin(recipient.ctx,
+				outboundMessage{typeCode: websocket.MessageBinary, data: delivered},
+				h.config.SlowReceiverGrace) {
+				return
+			}
 			slog.Warn("closing slow relay receiver",
 				"host_id", recipient.hostID, "role", recipient.role,
 				"connection_id", recipient.id.String(), "device_id", recipient.deviceID,
 				"queue_depth", h.config.WebSocketQueueDepth, "grace", h.config.SlowReceiverGrace)
 			recipient.cancel()
 			_ = recipient.socket.Close(websocket.StatusTryAgainLater, "receiver too slow")
-		}
+		}(recipient)
 	}
+	// The sender still waits before its next read, which is the backpressure that stops a burst
+	// overrunning anyone, but the slowest recipient now sets that delay rather than their sum.
+	pending.Wait()
 	return nil
 }
 
@@ -482,4 +506,14 @@ func closeReason(err error) string {
 		return "write timed out"
 	}
 	return err.Error()
+}
+
+// sendControlWithin queues a control message under the same grace as application traffic, so a
+// queue that is briefly full cannot cost a peer its connection at the moment it renews.
+func (c *connection) sendControlWithin(ctx context.Context, message controlMessage, wait time.Duration) bool {
+	data, err := json.Marshal(message)
+	if err != nil {
+		return false
+	}
+	return c.sendWithin(ctx, outboundMessage{typeCode: websocket.MessageText, data: data}, wait)
 }

@@ -57,9 +57,17 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	queueDepth, err := envInt("MYTERM_RELAY_WS_QUEUE_DEPTH", 128, 1, 4096)
+	queueDepth, err := envInt("MYTERM_RELAY_WS_QUEUE_DEPTH", 128, 1, 1024)
 	if err != nil {
 		return Config{}, err
+	}
+	// Each slot can hold a whole frame, so cap the queue by the bytes it could hold rather than
+	// by slot count alone: the maximum depth against the maximum frame size is gigabytes.
+	if budget := maximumQueueBytes / frameLimit; int64(queueDepth) > budget {
+		if budget < 1 {
+			budget = 1
+		}
+		queueDepth = int(budget)
 	}
 	slowReceiverGrace, err := envDuration("MYTERM_RELAY_WS_SLOW_RECEIVER_GRACE", 2*time.Second,
 		50*time.Millisecond, 30*time.Second)
@@ -154,3 +162,5 @@ func envDuration(name string, fallback, min, max time.Duration) (time.Duration, 
 	}
 	return value, nil
 }
+
+const maximumQueueBytes int64 = 64 * 1024 * 1024

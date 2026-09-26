@@ -20,6 +20,7 @@ public actor RelayWebSocketClient {
     private var continuation: AsyncThrowingStream<RelayTransportEvent, Error>.Continuation?
     private var negotiatedMaximum = RelayFrame.maximumBytes
     private var receivedReady = false
+    private var supportsAuthRefresh = false
     private var pendingWrites = 0
     private var outboundTail: Task<Void, Error>?
 
@@ -110,6 +111,9 @@ public actor RelayWebSocketClient {
     /// busy the connection is.
     public func reauthenticate(accessToken: String) async throws {
         guard let socket, receivedReady else { throw RemoteError.disconnected }
+        // An older relay accepts binary messages only and closes the connection on anything else,
+        // so this stays silent unless the relay said it understands a refresh.
+        guard supportsAuthRefresh else { return }
         guard !accessToken.isEmpty, !accessToken.contains(where: { $0.isNewline }) else {
             throw RemoteError.authenticationRequired
         }
@@ -171,6 +175,7 @@ public actor RelayWebSocketClient {
                 guard !receivedReady else { throw RemoteError.invalidMessage }
                 try ready.validate(expectedHostID: hostID, expectedRole: role)
                 receivedReady = true
+                supportsAuthRefresh = ready.supportsAuthRefresh
                 negotiatedMaximum = ready.maxFrameBytes
                 event = .ready(ready)
             case .peer(let peer):
@@ -202,6 +207,7 @@ public actor RelayWebSocketClient {
         outboundTail?.cancel()
         outboundTail = nil
         receivedReady = false
+        supportsAuthRefresh = false
         if let failure { continuation?.finish(throwing: failure) }
         else { continuation?.finish() }
         continuation = nil
