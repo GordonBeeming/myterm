@@ -18,6 +18,7 @@
 		2FCFE53F942720E2EAC27C17 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = 01505EAD249CF45C6DEC8167 /* SwiftTerm */; };
 		3610251539859561DE72ED80 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = D02D7C3B605BC41C6D6B704D /* PrivacyInfo.xcprivacy */; };
 		3BD17EF126C1CC0BD162D44F /* MyTermNotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 167672F5922523F7E84346F5 /* MyTermNotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		3F261753A48CA260470CAEDB /* WorkspaceVisibilityGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC712012DD4935B1A1E9C804 /* WorkspaceVisibilityGateTests.swift */; };
 		3FF2B070EC5BD131809326C0 /* WorkspaceUITestFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B0D1091518E911593A9F7C5 /* WorkspaceUITestFixture.swift */; };
 		4052949354AD1631457521E5 /* PaneSelectionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 618D836601520F5E0BF78A0B /* PaneSelectionStore.swift */; };
 		4535B244FCE8884F027AC5E9 /* TerminalComposerDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49195F1FC20A11FB4375866B /* TerminalComposerDraft.swift */; };
@@ -116,9 +117,10 @@
 		AABD4DF6F0105A47014429F0 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 		ABE4FD21D0CF4787337BDC5D /* LiveDeviceTerminalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveDeviceTerminalTests.swift; sourceTree = "<group>"; };
 		AC518A242E689D2C1E5C96EC /* WorkspaceViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceViews.swift; sourceTree = "<group>"; };
-		AF1D3D8301FD85A3F2B3A95C /* companion-chef */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "companion-chef"; path = ..; sourceTree = SOURCE_ROOT; };
+		AF1D3D8301FD85A3F2B3A95C /* 20260921-hardy-echidna */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "20260921-hardy-echidna"; path = ..; sourceTree = SOURCE_ROOT; };
 		B2EA22602077EEAC436C98E8 /* MyTermCompanionTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MyTermCompanionTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B34593A3693A9FE889079CF3 /* LiveDeviceLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveDeviceLayoutTests.swift; sourceTree = "<group>"; };
+		BC712012DD4935B1A1E9C804 /* WorkspaceVisibilityGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceVisibilityGateTests.swift; sourceTree = "<group>"; };
 		BFA88151878C429986196266 /* RemoteSettingsDraftTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSettingsDraftTests.swift; sourceTree = "<group>"; };
 		C321D8E24D9D3D373D55F2B7 /* LiveDeviceTouchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveDeviceTouchTests.swift; sourceTree = "<group>"; };
 		C898CD4E394628E363B26B77 /* CompanionTouchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionTouchTests.swift; sourceTree = "<group>"; };
@@ -196,7 +198,7 @@
 		74787029B8F005F4BB5B25A8 /* Packages */ = {
 			isa = PBXGroup;
 			children = (
-				AF1D3D8301FD85A3F2B3A95C /* companion-chef */,
+				AF1D3D8301FD85A3F2B3A95C /* 20260921-hardy-echidna */,
 				9EFF5F814F79AFC4FE808CBD /* MyTermRemote */,
 				4E8E6E39688D735FBB9DCCC2 /* SwiftTerm */,
 			);
@@ -272,6 +274,7 @@
 				4C16667DB8CC7675CEFC6E88 /* SceneStateTests.swift */,
 				4FA4675623DF3E1DFDD6B478 /* TerminalExperienceTests.swift */,
 				D60BAB7309874741C7B16211 /* TerminalTouchInteractionTests.swift */,
+				BC712012DD4935B1A1E9C804 /* WorkspaceVisibilityGateTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -502,6 +505,7 @@
 				941ECD6CF20B3D428F38FDC0 /* SceneStateTests.swift in Sources */,
 				539F4D9A61C7A9B49E66E966 /* TerminalExperienceTests.swift in Sources */,
 				FD55D07F1B043F5EDB1FE758 /* TerminalTouchInteractionTests.swift in Sources */,
+				3F261753A48CA260470CAEDB /* WorkspaceVisibilityGateTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

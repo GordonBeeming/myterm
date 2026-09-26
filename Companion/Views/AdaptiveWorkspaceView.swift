@@ -15,6 +15,10 @@ enum WorkspacePresentationStyle: String, CaseIterable {
 
 private struct WorkspaceVisibilityRequest: Hashable {
     let ownerID: UUID?
+    /// The live relay connection. Without it a reconnect leaves this request unchanged, so the
+    /// terminals are never re-attached and the pane keeps its "Attaching terminal" placeholder
+    /// until the view is rebuilt by leaving the workspace and coming back.
+    let connectionID: UUID?
     let routes: [TerminalRoute]
 }
 
@@ -58,7 +62,9 @@ struct AdaptiveWorkspaceView: View {
     }
 
     var body: some View {
-        let visibility = WorkspaceVisibilityRequest(ownerID: visibilityOwnerID, routes: visibleRoutes)
+        let visibility = WorkspaceVisibilityRequest(ownerID: visibilityOwnerID,
+                                                    connectionID: scene.connectionID,
+                                                    routes: visibleRoutes)
         Group {
             if usesWideLayout, let layout = workspace.layout {
                 if let id = validMaximizedGroupID {
@@ -144,7 +150,10 @@ struct AdaptiveWorkspaceView: View {
             }
         }
         .task(id: visibility) {
-            guard let owner = visibility.ownerID, !Task.isCancelled else { return }
+            // Attaching without a connection only raises an error the user cannot act on. The
+            // request carries the connection, so this runs again by itself once one is back.
+            guard let owner = visibility.ownerID, visibility.connectionID != nil,
+                  !Task.isCancelled else { return }
             await scene.configureVisibleWorkspaceTerminals(visibility.routes, ownerID: owner)
         }
         .onDisappear {

@@ -129,22 +129,43 @@ final class NotificationRouteBroker {
 
 actor WorkspaceVisibilityGate {
     private var isHeld = false
-    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private var waiters: [UUID: CheckedContinuation<Bool, Never>] = [:]
+    private var waitOrder: [UUID] = []
 
-    func acquire() async {
+    /// Returns true when the caller now holds the permit and owes a `release()`. A caller cancelled
+    /// while queued gets false instead, so it never releases a permit another task is holding.
+    func acquire() async -> Bool {
         if !isHeld {
             isHeld = true
-            return
+            return true
         }
-        await withCheckedContinuation { waiters.append($0) }
+        let ticket = UUID()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                waiters[ticket] = continuation
+                waitOrder.append(ticket)
+            }
+        } onCancel: {
+            Task { await self.abandon(ticket) }
+        }
     }
 
+    /// Hands the permit straight to the next waiter, or frees it when nobody is queued.
     func release() {
-        guard !waiters.isEmpty else {
-            isHeld = false
-            return
+        while let next = waitOrder.first {
+            waitOrder.removeFirst()
+            if let continuation = waiters.removeValue(forKey: next) {
+                continuation.resume(returning: true)
+                return
+            }
         }
-        waiters.removeFirst().resume()
+        isHeld = false
+    }
+
+    private func abandon(_ ticket: UUID) {
+        guard let continuation = waiters.removeValue(forKey: ticket) else { return }
+        waitOrder.removeAll { $0 == ticket }
+        continuation.resume(returning: false)
     }
 }
 
@@ -473,11 +494,14 @@ final class SceneModel {
     }
 
     private func attachWorkspaceTerminal(_ route: TerminalRoute) async {
+        // The surface is registered before anything can fail. A throw used to leave no state at
+        // all, and the pane then sat on its "Attaching terminal" placeholder with nothing left to
+        // retry, because the view only re-runs this when its visibility request changes.
+        let state = terminalStates[route.id] ?? restoredTerminalState(for: route)
+        state.route = route
+        terminalStates[route.id] = state
         do {
             guard let connection else { throw RemoteError.disconnected }
-            let state = terminalStates[route.id] ?? restoredTerminalState(for: route)
-            state.route = route
-            terminalStates[route.id] = state
             try await connection.attach(route)
         } catch { errorMessage = error.localizedDescription }
     }
@@ -570,12 +594,9 @@ final class SceneModel {
     private func withWorkspaceVisibilityLock(
         _ operation: () async -> Void
     ) async {
-        await workspaceVisibilityGate.acquire()
-        guard !Task.isCancelled else {
-            await workspaceVisibilityGate.release()
-            return
-        }
-        await operation()
+        guard await workspaceVisibilityGate.acquire() else { return }
+        // `operation` never throws, so control always reaches the release below.
+        if !Task.isCancelled { await operation() }
         await workspaceVisibilityGate.release()
     }
 
