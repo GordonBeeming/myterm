@@ -4,6 +4,8 @@ import Foundation
 public enum RelayTransportEvent: Equatable, Sendable {
     case ready(RelayReady)
     case peer(RelayPeer)
+    /// The relay accepted a refreshed token and moved this connection's expiry to `expiresAt`.
+    case authenticated(RelayAuthenticated)
     /// For received frames, the relay has replaced the destination bytes with this trusted source ID.
     case application(sourceConnectionID: UUID, payload: Data)
 }
@@ -103,6 +105,24 @@ public actor RelayWebSocketClient {
         }
     }
 
+    /// Presents a refreshed access token so the relay moves this connection's expiry forward.
+    /// Without it the relay closes the socket when the token it was opened with runs out, however
+    /// busy the connection is.
+    public func reauthenticate(accessToken: String) async throws {
+        guard let socket, receivedReady else { throw RemoteError.disconnected }
+        guard !accessToken.isEmpty, !accessToken.contains(where: { $0.isNewline }) else {
+            throw RemoteError.authenticationRequired
+        }
+        let message = ["type": "auth", "access_token": accessToken]
+        let data = try JSONEncoder().encode(message)
+        guard let text = String(data: data, encoding: .utf8) else { throw RemoteError.invalidMessage }
+        do { try await socket.send(.string(text)) }
+        catch {
+            disconnect(failure: RelayHTTPClient.classify(error))
+            throw RelayHTTPClient.classify(error)
+        }
+    }
+
     public func ping() async throws {
         guard let socket, receivedReady else { throw RemoteError.disconnected }
         do {
@@ -156,6 +176,9 @@ public actor RelayWebSocketClient {
             case .peer(let peer):
                 guard receivedReady, peer.role != role else { throw RemoteError.invalidMessage }
                 event = .peer(peer)
+            case .authenticated(let authenticated):
+                guard receivedReady else { throw RemoteError.invalidMessage }
+                event = .authenticated(authenticated)
             }
         case .data(let data):
             guard receivedReady, data.count <= negotiatedMaximum else { throw RemoteError.invalidMessage }

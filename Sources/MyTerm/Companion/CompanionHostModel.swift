@@ -114,6 +114,7 @@ final class CompanionHostModel {
     private let makeTransport: @Sendable (RelayEndpoint, UUID, RelayRole) -> RelayWebSocketClient
     private var identity: CompanionHostIdentity?
     private var tokenManager: RelayTokenManager?
+    private var reauthenticationTask: Task<Void, Never>?
     private var httpClient: RelayHTTPClient?
     private var transport: RelayWebSocketClient?
     private var transportTask: Task<Void, Never>?
@@ -251,6 +252,8 @@ final class CompanionHostModel {
         reconnectTask = nil
         transportTask?.cancel()
         transportTask = nil
+        reauthenticationTask?.cancel()
+        reauthenticationTask = nil
         if let transport { Task { await transport.disconnect() } }
         transport = nil
         clearConnectedPeers()
@@ -632,6 +635,12 @@ final class CompanionHostModel {
                     self?.transportEnded(error: error, generation: generation)
                 }
             }
+            reauthenticationTask?.cancel()
+            reauthenticationTask = Task { [weak self] in
+                await self?.keepAuthenticationCurrent(transport: transport,
+                                                      manager: manager,
+                                                      generation: generation)
+            }
         } catch {
             guard connectionFence.accepts(generation) else { return }
             transportTask = nil
@@ -655,6 +664,8 @@ final class CompanionHostModel {
             if !peer.transportOnline {
                 removeConnection(peer.connectionID)
             }
+        case .authenticated:
+            break
         case .application(let connectionID, let payload):
             do {
                 let queue: CompanionConnectionWorkQueue
@@ -1747,6 +1758,24 @@ final class CompanionHostModel {
         if let error { status = .failed(error.localizedDescription) }
         else { status = .disconnected }
         scheduleReconnect()
+    }
+
+    /// Re-presents a current access token so the relay keeps this host connection alive. The relay
+    /// expires a connection with the token it was opened on, so an idle Mac was dropped and had to
+    /// reconnect on the token's schedule.
+    private func keepAuthenticationCurrent(transport: RelayWebSocketClient,
+                                           manager: RelayTokenManager,
+                                           generation: UUID) async {
+        while !Task.isCancelled {
+            let expiry = await manager.accessExpiry()
+            let lead = RelayTokenManager.refreshMargin + 60
+            let sleepFor = max(30, expiry.timeIntervalSinceNow - lead)
+            do { try await Task.sleep(for: .seconds(sleepFor)) }
+            catch { return }
+            guard !Task.isCancelled, connectionFence.accepts(generation) else { return }
+            do { try await transport.reauthenticate(accessToken: try await manager.accessToken()) }
+            catch { return }
+        }
     }
 
     private func scheduleReconnect() {

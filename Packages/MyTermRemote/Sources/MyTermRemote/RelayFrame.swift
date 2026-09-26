@@ -80,9 +80,18 @@ public struct RelayPeer: Codable, Equatable, Sendable {
     }
 }
 
+public struct RelayAuthenticated: Codable, Equatable, Sendable {
+    public let expiresAt: Int64
+
+    enum CodingKeys: String, CodingKey {
+        case expiresAt = "expires_at"
+    }
+}
+
 public enum RelayControlEvent: Equatable, Sendable {
     case ready(RelayReady)
     case peer(RelayPeer)
+    case authenticated(RelayAuthenticated)
 
     public static func decode(_ data: Data) throws -> Self {
         guard data.count <= 16 * 1024 else { throw RemoteError.messageTooLarge }
@@ -92,6 +101,7 @@ public enum RelayControlEvent: Equatable, Sendable {
             switch discriminator.type {
             case "ready": return .ready(try decoder.decode(RelayReady.self, from: data))
             case "peer": return .peer(try decoder.decode(RelayPeer.self, from: data))
+            case "auth_ok": return .authenticated(try decoder.decode(RelayAuthenticated.self, from: data))
             default: throw RemoteError.invalidMessage
             }
         } catch let error as RemoteError { throw error }

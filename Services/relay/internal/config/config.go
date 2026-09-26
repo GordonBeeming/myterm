@@ -26,6 +26,7 @@ type Config struct {
 	WebSocketFrameLimit int64
 	WebSocketQueueDepth int
 	HeartbeatInterval   time.Duration
+	SlowReceiverGrace   time.Duration
 	HeartbeatTimeout    time.Duration
 	TrustedProxyCIDRs   []netip.Prefix
 }
@@ -56,7 +57,12 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	queueDepth, err := envInt("MYTERM_RELAY_WS_QUEUE_DEPTH", 32, 1, 256)
+	queueDepth, err := envInt("MYTERM_RELAY_WS_QUEUE_DEPTH", 128, 1, 4096)
+	if err != nil {
+		return Config{}, err
+	}
+	slowReceiverGrace, err := envDuration("MYTERM_RELAY_WS_SLOW_RECEIVER_GRACE", 2*time.Second,
+		50*time.Millisecond, 30*time.Second)
 	if err != nil {
 		return Config{}, err
 	}
@@ -79,6 +85,7 @@ func Load() (Config, error) {
 		WebSocketFrameLimit: frameLimit,
 		WebSocketQueueDepth: queueDepth,
 		HeartbeatInterval:   20 * time.Second,
+		SlowReceiverGrace:   slowReceiverGrace,
 		HeartbeatTimeout:    10 * time.Second,
 		TrustedProxyCIDRs:   trustedProxies,
 	}, nil
@@ -132,6 +139,18 @@ func envInt64(name string, fallback, min, max int64) (int64, error) {
 	value, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil || value < min || value > max {
 		return 0, fmt.Errorf("%s must be an integer from %d through %d", name, min, max)
+	}
+	return value, nil
+}
+
+func envDuration(name string, fallback, min, max time.Duration) (time.Duration, error) {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return fallback, nil
+	}
+	value, err := time.ParseDuration(raw)
+	if err != nil || value < min || value > max {
+		return 0, fmt.Errorf("%s must be a duration from %s through %s", name, min, max)
 	}
 	return value, nil
 }

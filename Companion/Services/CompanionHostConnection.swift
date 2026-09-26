@@ -50,6 +50,7 @@ actor CompanionHostConnection {
     private let checkpointAssembler = CheckpointAssembler()
     private var transport: RelayWebSocketClient?
     private var transportTask: Task<Void, Never>?
+    private var reauthenticationTask: Task<Void, Never>?
     private var handshakeTimeout: Task<Void, Never>?
     private var continuation: AsyncThrowingStream<CompanionConnectionEvent, Error>.Continuation?
     private var hostConnectionID: UUID?
@@ -101,12 +102,39 @@ actor CompanionHostConnection {
             catch { return }
             await self?.expireHandshake()
         }
+        reauthenticationTask = Task { [weak self] in
+            await self?.keepAuthenticationCurrent()
+        }
         return stream
+    }
+
+    /// Keeps presenting a current access token so the relay keeps extending this connection.
+    /// The relay expires a connection with the token it was opened on, so without this a live
+    /// session is dropped on the token's schedule no matter how much traffic is flowing.
+    private func keepAuthenticationCurrent() async {
+        while !Task.isCancelled {
+            let expiry = await tokenManager.accessExpiry()
+            // Wake with enough margin that the refresh and the round trip both fit.
+            let lead = RelayTokenManager.refreshMargin + 60
+            let sleepFor = max(30, expiry.timeIntervalSinceNow - lead)
+            do { try await Task.sleep(for: .seconds(sleepFor)) }
+            catch { return }
+            guard !Task.isCancelled, let transport else { return }
+            do {
+                try await transport.reauthenticate(accessToken: try await tokenManager.accessToken())
+            } catch {
+                // A failure here is not fatal on its own: the connection keeps running until its
+                // current expiry, and the ordinary reconnect path handles it from there.
+                return
+            }
+        }
     }
 
     func disconnect() async {
         transportTask?.cancel()
         transportTask = nil
+        reauthenticationTask?.cancel()
+        reauthenticationTask = nil
         handshakeTimeout?.cancel()
         handshakeTimeout = nil
         if let transport { await transport.disconnect() }
@@ -200,6 +228,9 @@ actor CompanionHostConnection {
             } else if hostConnectionID == peer.connectionID {
                 throw RemoteError.disconnected
             }
+        case .authenticated:
+            // The relay moved this connection's expiry forward; nothing else to do.
+            break
         case .application(let source, let payload):
             guard source == hostConnectionID else { throw RemoteError.wrongPeer }
             let packet = try RelayApplicationPacket.decode(payload)

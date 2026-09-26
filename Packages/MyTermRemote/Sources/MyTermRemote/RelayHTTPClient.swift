@@ -316,10 +316,17 @@ public actor RelayTokenManager {
         self.record = record
     }
 
+    /// Renewed well before expiry rather than at the last minute: a token with seconds left is
+    /// enough to open a connection the relay then closes almost immediately.
+    public static let refreshMargin: TimeInterval = 5 * 60
+
     public func accessToken(now: Date = .now) async throws -> String {
-        if record.expiresAt.timeIntervalSince(now) > 60 { return record.accessToken }
+        if record.expiresAt.timeIntervalSince(now) > Self.refreshMargin { return record.accessToken }
         return try await refresh(now: now).accessToken
     }
+
+    /// When the current token runs out, for callers that re-present it on a live connection.
+    public func accessExpiry() -> Date { record.expiresAt }
 
     @discardableResult
     public func refresh(now: Date = .now) async throws -> TokenRecord {

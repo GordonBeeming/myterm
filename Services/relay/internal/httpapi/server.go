@@ -100,6 +100,9 @@ func New(cfg config.Config, storage *store.Store, hub *transport.Hub) (*Server, 
 		return nil, err
 	}
 	now := time.Now
+	// Lets a live transport connection extend itself with a refreshed token instead of being
+	// dropped when the token it was opened with expires.
+	hub.SetAuthenticator(storage.AuthenticateAccess)
 	return &Server{
 		config: cfg, store: storage, auth: authManager, hub: hub, now: now,
 		authLimiter: newIPLimiter(rate.Every(6*time.Second), 10, now),
