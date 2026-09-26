@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -18,10 +19,23 @@ import (
 
 const ProtocolVersion byte = 1
 
+const maximumControlBytes = 8 * 1024
+
+// Authenticator resolves an access token to its device, exactly as the HTTP layer does when a
+// connection is first accepted.
+type Authenticator func(ctx context.Context, accessToken string, now time.Time) (store.Device, error)
+
 type Hub struct {
-	mu     sync.RWMutex
-	hosts  map[string]*hostGroup
-	config config.Config
+	mu           sync.RWMutex
+	hosts        map[string]*hostGroup
+	config       config.Config
+	authenticate Authenticator
+}
+
+// SetAuthenticator supplies the token check used to extend a live connection. Without it the hub
+// still serves traffic; connections simply expire with their original token.
+func (h *Hub) SetAuthenticator(authenticate Authenticator) {
+	h.authenticate = authenticate
 }
 
 type hostGroup struct {
@@ -36,8 +50,38 @@ type connection struct {
 	deviceID string
 	socket   *websocket.Conn
 	outbound chan outboundMessage
+	ctx      context.Context
 	cancel   context.CancelFunc
 	once     sync.Once
+
+	// expiry closes the connection when the newest validated access token runs out. It is reset
+	// by an in-band auth message, so a live connection survives a token refresh while a device
+	// that can no longer produce a valid token still drops at its last validated expiry.
+	expiryMu sync.Mutex
+	expiry   *time.Timer
+}
+
+func (c *connection) extendUntil(deadline time.Time) {
+	c.expiryMu.Lock()
+	defer c.expiryMu.Unlock()
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		c.cancel()
+		return
+	}
+	if c.expiry == nil {
+		c.expiry = time.AfterFunc(remaining, c.cancel)
+		return
+	}
+	c.expiry.Reset(remaining)
+}
+
+func (c *connection) stopExpiry() {
+	c.expiryMu.Lock()
+	defer c.expiryMu.Unlock()
+	if c.expiry != nil {
+		c.expiry.Stop()
+	}
 }
 
 type outboundMessage struct {
@@ -55,6 +99,13 @@ type controlMessage struct {
 	MaxFrameBytes    int64  `json:"max_frame_bytes,omitempty"`
 	HeartbeatSeconds int64  `json:"heartbeat_seconds,omitempty"`
 	Code             string `json:"code,omitempty"`
+	ExpiresAt        int64  `json:"expires_at,omitempty"`
+	AuthRefresh      bool   `json:"auth_refresh,omitempty"`
+}
+
+type inboundControl struct {
+	Type        string `json:"type"`
+	AccessToken string `json:"access_token,omitempty"`
 }
 
 var (
@@ -149,11 +200,17 @@ func (h *Hub) ServeWebSocket(w http.ResponseWriter, r *http.Request, device stor
 		return fmt.Errorf("accept websocket: %w", err)
 	}
 	socket.SetReadLimit(h.config.WebSocketFrameLimit)
-	ctx, cancel := context.WithDeadline(r.Context(), time.Unix(device.AccessExpiresAt, 0))
+	// The access token's expiry bounds the connection, but as a timer that an in-band auth message
+	// can push forward. It used to be a fixed context deadline, which killed every live connection
+	// on the token's schedule no matter how busy it was.
+	ctx, cancel := context.WithCancel(r.Context())
 	conn := &connection{
 		id: uuid.New(), hostID: host.ID, role: role, deviceID: device.ID,
-		socket: socket, outbound: make(chan outboundMessage, h.config.WebSocketQueueDepth), cancel: cancel,
+		socket: socket, outbound: make(chan outboundMessage, h.config.WebSocketQueueDepth),
+		ctx: ctx, cancel: cancel,
 	}
+	conn.extendUntil(time.Unix(device.AccessExpiresAt, 0))
+	defer conn.stopExpiry()
 	peers, err := h.register(conn)
 	if err != nil {
 		cancel()
@@ -165,6 +222,7 @@ func (h *Hub) ServeWebSocket(w http.ResponseWriter, r *http.Request, device stor
 	if !conn.sendControl(controlMessage{
 		Type: "ready", Protocol: 1, ConnectionID: conn.id.String(), HostID: host.ID, Role: role,
 		MaxFrameBytes: h.config.WebSocketFrameLimit, HeartbeatSeconds: int64(h.config.HeartbeatInterval.Seconds()),
+		ExpiresAt: device.AccessExpiresAt, AuthRefresh: h.authenticate != nil,
 	}) {
 		return errors.New("initial control queue unavailable")
 	}
@@ -180,6 +238,9 @@ func (h *Hub) ServeWebSocket(w http.ResponseWriter, r *http.Request, device stor
 	go func() { errCh <- h.readLoop(ctx, conn) }()
 	err = <-errCh
 	cancel()
+	slog.Info("relay connection ended",
+		"host_id", host.ID, "role", role, "connection_id", conn.id.String(),
+		"device_id", device.ID, "reason", closeReason(err))
 	_ = socket.Close(websocket.StatusNormalClosure, "connection closed")
 	return err
 }
@@ -254,8 +315,14 @@ func (h *Hub) readLoop(ctx context.Context, source *connection) error {
 		if err != nil {
 			return err
 		}
+		if messageType == websocket.MessageText {
+			if err := h.handleControl(ctx, source, data); err != nil {
+				return err
+			}
+			continue
+		}
 		if messageType != websocket.MessageBinary {
-			return errors.New("clients may send binary messages only")
+			return errors.New("clients may send binary or control messages only")
 		}
 		if int64(len(data)) > h.config.WebSocketFrameLimit || len(data) < 17 || data[0] != ProtocolVersion {
 			return errors.New("invalid binary frame")
@@ -266,6 +333,50 @@ func (h *Hub) readLoop(ctx context.Context, source *connection) error {
 			}
 		}
 	}
+}
+
+// handleControl accepts the small set of text messages a peer may send. Today that is only a
+// re-authentication carrying a fresh access token, which moves the connection's expiry forward.
+func (h *Hub) handleControl(ctx context.Context, source *connection, data []byte) error {
+	if int64(len(data)) > maximumControlBytes {
+		return errors.New("control message too large")
+	}
+	var message inboundControl
+	if err := json.Unmarshal(data, &message); err != nil {
+		return fmt.Errorf("decode control message: %w", err)
+	}
+	if message.Type != "auth" {
+		return fmt.Errorf("unsupported control message %q", message.Type)
+	}
+	if h.authenticate == nil {
+		return errors.New("re-authentication is unavailable")
+	}
+	device, err := h.authenticate(ctx, message.AccessToken, time.Now())
+	if err != nil {
+		slog.Info("rejecting relay re-authentication",
+			"host_id", source.hostID, "role", source.role,
+			"connection_id", source.id.String(), "reason", err.Error())
+		if errors.Is(err, store.ErrUnauthorized) || errors.Is(err, store.ErrNotFound) {
+			return fmt.Errorf("re-authenticate: %w", err)
+		}
+		// A database blip is not the peer's fault. The connection keeps the expiry it already has
+		// and the peer is free to try again before that runs out.
+		if !source.sendControlWithin(ctx, controlMessage{Type: "error", Code: "auth_unavailable"},
+			h.config.SlowReceiverGrace) {
+			return errors.New("auth error queue unavailable")
+		}
+		return nil
+	}
+	// A token for a different device must never extend this one's connection.
+	if device.ID != source.deviceID {
+		return errors.New("re-authentication is for another device")
+	}
+	source.extendUntil(time.Unix(device.AccessExpiresAt, 0))
+	if !source.sendControlWithin(ctx, controlMessage{Type: "auth_ok", ExpiresAt: device.AccessExpiresAt},
+		h.config.SlowReceiverGrace) {
+		return errors.New("auth acknowledgement queue unavailable")
+	}
+	return nil
 }
 
 func (h *Hub) route(source *connection, frame []byte) error {
@@ -296,12 +407,30 @@ func (h *Hub) route(source *connection, frame []byte) error {
 	}
 	delivered := append([]byte(nil), frame...)
 	copy(delivered[1:17], source.id[:])
+	var pending sync.WaitGroup
 	for _, recipient := range recipients {
-		if !recipient.send(outboundMessage{typeCode: websocket.MessageBinary, data: delivered}) {
+		if recipient.send(outboundMessage{typeCode: websocket.MessageBinary, data: delivered}) {
+			continue
+		}
+		pending.Add(1)
+		go func(recipient *connection) {
+			defer pending.Done()
+			if recipient.sendWithin(recipient.ctx,
+				outboundMessage{typeCode: websocket.MessageBinary, data: delivered},
+				h.config.SlowReceiverGrace) {
+				return
+			}
+			slog.Warn("closing slow relay receiver",
+				"host_id", recipient.hostID, "role", recipient.role,
+				"connection_id", recipient.id.String(), "device_id", recipient.deviceID,
+				"queue_depth", h.config.WebSocketQueueDepth, "grace", h.config.SlowReceiverGrace)
 			recipient.cancel()
 			_ = recipient.socket.Close(websocket.StatusTryAgainLater, "receiver too slow")
-		}
+		}(recipient)
 	}
+	// The sender still waits before its next read, which is the backpressure that stops a burst
+	// overrunning anyone, but the slowest recipient now sets that delay rather than their sum.
+	pending.Wait()
 	return nil
 }
 
@@ -345,4 +474,46 @@ func (c *connection) send(message outboundMessage) bool {
 	default:
 		return false
 	}
+}
+
+// sendWithin waits a bounded time for room in the queue before giving up. A burst of terminal
+// output used to overflow the queue instantly and cost the reader its connection; waiting here
+// pushes back on the sender instead, which is what a relay should do with a slow consumer.
+func (c *connection) sendWithin(ctx context.Context, message outboundMessage, wait time.Duration) bool {
+	if c.send(message) {
+		return true
+	}
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case c.outbound <- message:
+		return true
+	case <-timer.C:
+		return false
+	case <-ctx.Done():
+		return false
+	}
+}
+
+func closeReason(err error) string {
+	if err == nil {
+		return "closed"
+	}
+	if errors.Is(err, context.Canceled) {
+		return "access token expired or connection cancelled"
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "write timed out"
+	}
+	return err.Error()
+}
+
+// sendControlWithin queues a control message under the same grace as application traffic, so a
+// queue that is briefly full cannot cost a peer its connection at the moment it renews.
+func (c *connection) sendControlWithin(ctx context.Context, message controlMessage, wait time.Duration) bool {
+	data, err := json.Marshal(message)
+	if err != nil {
+		return false
+	}
+	return c.sendWithin(ctx, outboundMessage{typeCode: websocket.MessageText, data: data}, wait)
 }

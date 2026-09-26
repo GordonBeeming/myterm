@@ -4,6 +4,8 @@ import Foundation
 public enum RelayTransportEvent: Equatable, Sendable {
     case ready(RelayReady)
     case peer(RelayPeer)
+    /// The relay accepted a refreshed token and moved this connection's expiry to `expiresAt`.
+    case authenticated(RelayAuthenticated)
     /// For received frames, the relay has replaced the destination bytes with this trusted source ID.
     case application(sourceConnectionID: UUID, payload: Data)
 }
@@ -18,6 +20,7 @@ public actor RelayWebSocketClient {
     private var continuation: AsyncThrowingStream<RelayTransportEvent, Error>.Continuation?
     private var negotiatedMaximum = RelayFrame.maximumBytes
     private var receivedReady = false
+    private var supportsAuthRefresh = false
     private var pendingWrites = 0
     private var outboundTail: Task<Void, Error>?
 
@@ -103,6 +106,27 @@ public actor RelayWebSocketClient {
         }
     }
 
+    /// Presents a refreshed access token so the relay moves this connection's expiry forward.
+    /// Without it the relay closes the socket when the token it was opened with runs out, however
+    /// busy the connection is.
+    public func reauthenticate(accessToken: String) async throws {
+        guard let socket, receivedReady else { throw RemoteError.disconnected }
+        // An older relay accepts binary messages only and closes the connection on anything else,
+        // so this stays silent unless the relay said it understands a refresh.
+        guard supportsAuthRefresh else { return }
+        guard !accessToken.isEmpty, !accessToken.contains(where: { $0.isNewline }) else {
+            throw RemoteError.authenticationRequired
+        }
+        let message = ["type": "auth", "access_token": accessToken]
+        let data = try JSONEncoder().encode(message)
+        guard let text = String(data: data, encoding: .utf8) else { throw RemoteError.invalidMessage }
+        do { try await socket.send(.string(text)) }
+        catch {
+            disconnect(failure: RelayHTTPClient.classify(error))
+            throw RelayHTTPClient.classify(error)
+        }
+    }
+
     public func ping() async throws {
         guard let socket, receivedReady else { throw RemoteError.disconnected }
         do {
@@ -151,11 +175,15 @@ public actor RelayWebSocketClient {
                 guard !receivedReady else { throw RemoteError.invalidMessage }
                 try ready.validate(expectedHostID: hostID, expectedRole: role)
                 receivedReady = true
+                supportsAuthRefresh = ready.supportsAuthRefresh
                 negotiatedMaximum = ready.maxFrameBytes
                 event = .ready(ready)
             case .peer(let peer):
                 guard receivedReady, peer.role != role else { throw RemoteError.invalidMessage }
                 event = .peer(peer)
+            case .authenticated(let authenticated):
+                guard receivedReady else { throw RemoteError.invalidMessage }
+                event = .authenticated(authenticated)
             }
         case .data(let data):
             guard receivedReady, data.count <= negotiatedMaximum else { throw RemoteError.invalidMessage }
@@ -179,6 +207,7 @@ public actor RelayWebSocketClient {
         outboundTail?.cancel()
         outboundTail = nil
         receivedReady = false
+        supportsAuthRefresh = false
         if let failure { continuation?.finish(throwing: failure) }
         else { continuation?.finish() }
         continuation = nil
