@@ -32,7 +32,11 @@ final class CompanionDiagnosticsStoreTests: XCTestCase {
 
         let written = try String(contentsOf: file, encoding: .utf8)
         XCTAssertEqual(written, "[connection] dropped reason=timeout")
-        XCTAssertTrue(file.path.contains("Gordon"), "The folder is labelled so a person can find it")
+        // The peer's name sits beside its uploads rather than naming the folder, so the folder
+        // stays keyed to the device while a person can still tell whose it is.
+        let label = try String(contentsOf: file.deletingLastPathComponent()
+            .appending(path: "device-name.txt", directoryHint: .notDirectory), encoding: .utf8)
+        XCTAssertEqual(label, "Gordon's iPad")
     }
 
     func testRejectsAnUploadThatArrivesTooSoon() async throws {
@@ -63,7 +67,7 @@ final class CompanionDiagnosticsStoreTests: XCTestCase {
         }
 
         let folder = directory.appending(
-            path: CompanionDiagnosticsStore.folderName(deviceID: device, label: "Gordon's iPad"),
+            path: CompanionDiagnosticsStore.folderName(deviceID: device),
             directoryHint: .isDirectory
         )
         let files = try FileManager.default.contentsOfDirectory(atPath: folder.path)
@@ -71,14 +75,47 @@ final class CompanionDiagnosticsStoreTests: XCTestCase {
                                  "A phone cannot fill the Mac's disk by uploading repeatedly")
     }
 
-    func testTheDeviceLabelCannotEscapeItsFolder() {
+    func testTheFolderComesFromTheDeviceAndNotThePeersLabel() async throws {
+        let store = CompanionDiagnosticsStore(directory: directory)
         let device = UUID()
-        let name = CompanionDiagnosticsStore.folderName(deviceID: device, label: "../../etc/passwd")
+        var moment = Date()
 
-        XCTAssertFalse(name.contains("/"), "A peer's label is text, never a path")
-        XCTAssertFalse(name.contains(".."))
-        XCTAssertTrue(name.contains(String(device.uuidString.prefix(8)).lowercased()),
-                      "The paired device is what makes the folder unique")
+        // A peer that renames itself, including to something path-shaped, must not get a second
+        // folder: that would hand it a fresh retention budget on every upload.
+        for label in ["Gordon's iPad", "../../etc/passwd", "something else"] {
+            _ = try await store.accept(payload("entry", name: label, at: moment),
+                                       deviceID: device, now: moment)
+            moment = moment.addingTimeInterval(CompanionDiagnosticsStore.minimumInterval + 1)
+        }
+
+        let folders = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+        XCTAssertEqual(folders, [device.uuidString.lowercased()],
+                       "One folder per paired device, named by the device itself")
+    }
+
+    func testAZlibBombIsRefusedRatherThanExpanded() throws {
+        let huge = Data(repeating: 0x41, count: RemoteDiagnosticsPayload.maximumExpandedBytes + 1_024)
+        let compressed = try (huge as NSData).compressed(using: .zlib) as Data
+        XCTAssertLessThanOrEqual(compressed.count, RemoteDiagnosticsPayload.maximumCompressedBytes,
+                                 "The fixture has to pass the compressed limit for this to mean anything")
+
+        XCTAssertThrowsError(try CompanionDiagnosticsStore.decompress(compressed)) { error in
+            XCTAssertEqual(error as? CompanionDiagnosticsError, .tooLarge)
+        }
+    }
+
+    func testDecodingAppliesTheSameLimitsAsConstruction() throws {
+        // Codable used to synthesise init(from:), which skipped the validating initialiser, so
+        // peer-supplied JSON reached the Mac unchecked.
+        let oversized = Data(repeating: 0, count: RemoteDiagnosticsPayload.maximumCompressedBytes + 1)
+        let object: [String: Any] = [
+            "deviceName": "iPad",
+            "capturedAt": 0,
+            "compressed": oversized.base64EncodedString(),
+        ]
+        let payload = try JSONSerialization.data(withJSONObject: object)
+
+        XCTAssertThrowsError(try JSONDecoder().decode(RemoteDiagnosticsPayload.self, from: payload))
     }
 
     func testAnEmptyOrOversizedPayloadIsRefused() throws {

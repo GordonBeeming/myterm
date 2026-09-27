@@ -1087,10 +1087,12 @@ final class CompanionHostModel {
                 ),
                 to: peer
             )
+            // An upload changes no workspace, so telling every peer one changed is pure cost.
             if command.operation != .notificationRegister,
                command.operation != .notificationRevoke,
                command.operation != .terminalPasteImage,
-               command.operation != .terminalPasteImageChunk {
+               command.operation != .terminalPasteImageChunk,
+               command.operation != .diagnosticsUpload {
                 broadcastWorkspaceSnapshot()
             }
         } catch {

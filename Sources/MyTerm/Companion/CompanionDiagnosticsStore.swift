@@ -1,3 +1,4 @@
+import Compression
 import Foundation
 import MyTermCore
 import OSLog
@@ -40,13 +41,20 @@ actor CompanionDiagnosticsStore {
             throw CompanionDiagnosticsError.tooFrequent
         }
         let text = try Self.decompress(payload.compressed)
-        let folder = directory.appending(path: Self.folderName(deviceID: deviceID,
-                                                               label: payload.deviceName),
+        let folder = directory.appending(path: Self.folderName(deviceID: deviceID),
                                          directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        // The peer's own name is written beside its uploads rather than used as the folder, so a
+        // device that renames itself keeps one history instead of starting a new one.
+        try? Data(payload.deviceName.utf8).write(
+            to: folder.appending(path: "device-name.txt", directoryHint: .notDirectory)
+        )
 
+        // Two uploads can share a second, and the same snapshot can be sent twice; a suffix keeps
+        // the later one from overwriting a report that was already accepted.
         let stamp = Self.fileStamp(payload.capturedAt)
-        let file = folder.appending(path: "\(stamp).log", directoryHint: .notDirectory)
+        let unique = String(UUID().uuidString.prefix(8)).lowercased()
+        let file = folder.appending(path: "\(stamp)-\(unique).log", directoryHint: .notDirectory)
         try text.write(to: file, atomically: true, encoding: .utf8)
         lastAccepted[deviceID] = now
         prune(folder)
@@ -79,14 +87,10 @@ actor CompanionDiagnosticsStore {
         }
     }
 
-    /// A folder name derived from the paired device, with the peer's own label reduced to safe
-    /// characters. The device identifier is what makes it unique; the label is only for reading.
-    static func folderName(deviceID: UUID, label: String) -> String {
-        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_ "))
-        let cleaned = label.unicodeScalars.filter { allowed.contains($0) }
-            .map(String.init).joined().trimmingCharacters(in: .whitespaces)
-        let shortID = String(deviceID.uuidString.prefix(8)).lowercased()
-        return cleaned.isEmpty ? shortID : "\(cleaned) (\(shortID))"
+    /// One folder per paired device, named by the whole identifier so two devices can never
+    /// share one and a device that renames itself keeps the history it already had.
+    static func folderName(deviceID: UUID) -> String {
+        deviceID.uuidString.lowercased()
     }
 
     static func fileStamp(_ date: Date) -> String {
@@ -97,9 +101,47 @@ actor CompanionDiagnosticsStore {
         return formatter.string(from: date)
     }
 
-    static func decompress(_ data: Data) throws -> String {
-        let expanded = try (data as NSData).decompressed(using: .zlib) as Data
-        guard let text = String(data: expanded, encoding: .utf8) else {
+    /// Inflates with a hard ceiling on the output.
+    ///
+    /// A stream well inside the compressed limit can expand to hundreds of megabytes, so this
+    /// decompresses in chunks and gives up the moment the total passes the cap, rather than
+    /// materialising whatever the peer sent and checking afterwards.
+    static func decompress(_ data: Data,
+                           limit: Int = RemoteDiagnosticsPayload.maximumExpandedBytes) throws -> String {
+        var stream = compression_stream(dst_ptr: UnsafeMutablePointer<UInt8>(bitPattern: 1)!,
+                                        dst_size: 0,
+                                        src_ptr: UnsafePointer<UInt8>(bitPattern: 1)!,
+                                        src_size: 0, state: nil)
+        guard compression_stream_init(&stream, COMPRESSION_STREAM_DECODE,
+                                      COMPRESSION_ZLIB) == COMPRESSION_STATUS_OK else {
+            throw CompanionDiagnosticsError.unreadable
+        }
+        defer { compression_stream_destroy(&stream) }
+
+        let bufferSize = 64 * 1_024
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+        defer { buffer.deallocate() }
+        var expanded = Data()
+
+        let status: compression_status = try data.withUnsafeBytes { raw in
+            guard let base = raw.bindMemory(to: UInt8.self).baseAddress else {
+                throw CompanionDiagnosticsError.unreadable
+            }
+            stream.src_ptr = base
+            stream.src_size = raw.count
+            while true {
+                stream.dst_ptr = buffer
+                stream.dst_size = bufferSize
+                let step = compression_stream_process(&stream, Int32(COMPRESSION_STREAM_FINALIZE.rawValue))
+                guard step != COMPRESSION_STATUS_ERROR else {
+                    throw CompanionDiagnosticsError.unreadable
+                }
+                expanded.append(buffer, count: bufferSize - stream.dst_size)
+                guard expanded.count <= limit else { throw CompanionDiagnosticsError.tooLarge }
+                if step == COMPRESSION_STATUS_END { return step }
+            }
+        }
+        guard status == COMPRESSION_STATUS_END, let text = String(data: expanded, encoding: .utf8) else {
             throw CompanionDiagnosticsError.unreadable
         }
         return text
@@ -109,4 +151,5 @@ actor CompanionDiagnosticsStore {
 enum CompanionDiagnosticsError: Error, Equatable {
     case tooFrequent
     case unreadable
+    case tooLarge
 }

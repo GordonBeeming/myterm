@@ -424,6 +424,10 @@ public struct RemoteDiagnosticsPayload: Codable, Equatable, Sendable {
     /// zlib-compressed UTF-8 log text.
     public let compressed: Data
 
+    /// The largest log this may expand to. A small stream can inflate to hundreds of megabytes,
+    /// so the decompressed size is bounded too, not only the bytes on the wire.
+    public static let maximumExpandedBytes = 4 * 1_024 * 1_024
+
     public init(deviceName: String, capturedAt: Date, compressed: Data) throws {
         guard !compressed.isEmpty, compressed.count <= Self.maximumCompressedBytes else {
             throw RemoteProtocolError.invalidDiagnostics
@@ -431,6 +435,21 @@ public struct RemoteDiagnosticsPayload: Codable, Equatable, Sendable {
         self.deviceName = String(deviceName.prefix(Self.maximumDeviceNameCharacters))
         self.capturedAt = capturedAt
         self.compressed = compressed
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case deviceName, capturedAt, compressed
+    }
+
+    /// Decoding goes through the same checks. The synthesised version assigned the properties
+    /// directly, so peer-supplied JSON reached the host without being validated at all.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(
+            deviceName: try container.decode(String.self, forKey: .deviceName),
+            capturedAt: try container.decode(Date.self, forKey: .capturedAt),
+            compressed: try container.decode(Data.self, forKey: .compressed)
+        )
     }
 }
 
