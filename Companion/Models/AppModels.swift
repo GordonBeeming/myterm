@@ -259,6 +259,8 @@ final class SceneModel {
         let previousConnection = connection
         connection = nil
         connectionPhase = .connecting
+        Task { await DiagnosticsLog.shared.record(category: "connection", "connecting",
+                                                  detail: "host=\(DiagnosticsLog.short(host.hostID))") }
         projection = nil
         connectionID = nil
         disableAllInput()
@@ -494,6 +496,8 @@ final class SceneModel {
     }
 
     private func attachWorkspaceTerminal(_ route: TerminalRoute) async {
+        await DiagnosticsLog.shared.record(category: "terminal", "attaching",
+                                           detail: "session=\(DiagnosticsLog.short(route.sessionID))")
         // The surface is registered before anything can fail. A throw used to leave no state at
         // all, and the pane then sat on its "Attaching terminal" placeholder with nothing left to
         // retry, because the view only re-runs this when its visibility request changes.
@@ -674,7 +678,12 @@ final class SceneModel {
 
     func requestControl(_ action: ControlAction, route: TerminalRoute) async {
         let state = terminalStates[route.id]
-        if action != .renew { state?.beginUserControlRequest() }
+        if action != .renew {
+            state?.beginUserControlRequest()
+            await DiagnosticsLog.shared.record(
+                category: "control", "requested \(action)",
+                detail: "session=\(DiagnosticsLog.short(route.sessionID))")
+        }
         do {
             guard route.connectionID == selectedConnectionID, let connection else { throw RemoteError.disconnected }
             try await connection.requestControl(action, route: route,
@@ -707,7 +716,10 @@ final class SceneModel {
         case .phase(let phase):
             connectionPhase = phase
             if phase == .online { reconnectAttempt = 0 }
-        case .connectionID(let id): connectionID = id
+        case .connectionID(let id):
+            connectionID = id
+            Task { await DiagnosticsLog.shared.record(category: "connection", "connected",
+                                                      detail: "connection=\(DiagnosticsLog.short(id))") }
         case .workspaces(let projection):
             self.projection = projection
             await reconcileRoutes(in: projection)
@@ -716,12 +728,27 @@ final class SceneModel {
             let state = terminalStates[route.id] ?? restoredTerminalState(for: route)
             terminalStates[route.id] = state
             state.route = route
+            let heldBeforeCheckpoint = state.ownsControl
             state.apply(checkpoint: checkpoint)
+            // Renewal stopped while the buffer was stale. A lease this device still holds has to
+            // start renewing again here, or it lapses on the Mac and control is lost after all.
+            updateLeaseRenewal(for: state)
+            if heldBeforeCheckpoint != state.ownsControl {
+                await DiagnosticsLog.shared.record(
+                    category: "control",
+                    state.ownsControl ? "control restored with checkpoint" : "lease expired during resync",
+                    detail: "session=\(DiagnosticsLog.short(route.sessionID))")
+            }
         case .output(let route, let output):
             guard let state = terminalStates[route.id] else { return }
             state.route = route
             if !state.append(output: output) {
+                let buffered = state.bufferedOutputBytes
                 if state.invalidateForCheckpoint() {
+                    await DiagnosticsLog.shared.record(
+                        category: "terminal", "output gap, resyncing",
+                        detail: "session=\(DiagnosticsLog.short(route.sessionID))"
+                            + " buffered=\(buffered)")
                     cancelLeaseRenewal(for: route.id)
                     await refreshTerminal(route)
                 }
@@ -730,7 +757,11 @@ final class SceneModel {
             let state = terminalStates[route.id] ?? restoredTerminalState(for: route)
             terminalStates[route.id] = state
             state.route = route
+            let heldBefore = state.ownsControl
             if !state.apply(control: control, ownConnectionID: connectionID) {
+                await DiagnosticsLog.shared.record(
+                    category: "control", "generation mismatch, resyncing",
+                    detail: "session=\(DiagnosticsLog.short(route.sessionID))")
                 if state.invalidateForCheckpoint() {
                     cancelLeaseRenewal(for: route.id)
                     await refreshTerminal(route)
@@ -738,6 +769,12 @@ final class SceneModel {
                 return
             }
             updateLeaseRenewal(for: state)
+            if heldBefore != state.ownsControl {
+                await DiagnosticsLog.shared.record(
+                    category: "control", state.ownsControl ? "control granted" : "control lost",
+                    detail: "session=\(DiagnosticsLog.short(route.sessionID))"
+                        + " controller=\(DiagnosticsLog.short(control.controllerConnectionID))")
+            }
         case .activity(let sessionID, let state):
             terminalStates.first(where: { $0.key.sessionID == sessionID })?.value.activity = state
         case .error(let metadata, let error):
@@ -763,10 +800,15 @@ final class SceneModel {
         guard leaseRenewals[surfaceID] == nil else { return }
         let renewalID = UUID()
         let fence = connectionGeneration
+        // A lease carried through a resync can have less than the renewal interval left on it,
+        // so the first renewal waits only as long as that lease actually has.
+        let firstDelay = min(10, max(0, state.controlExpiresAt?.timeIntervalSinceNow ?? 10) / 2)
         let task = Task { [weak self] in
+            var delay = firstDelay
             while !Task.isCancelled {
-                do { try await Task.sleep(for: .seconds(10)) }
+                do { try await Task.sleep(for: .seconds(delay)) }
                 catch { break }
+                delay = 10
                 guard let self,
                       await self.renewControlIfCurrent(surfaceID: surfaceID,
                                                        connectionFence: fence) else { break }
@@ -818,6 +860,9 @@ final class SceneModel {
         connectionID = nil
         disableAllInput()
         connectionPhase = .failed(error.localizedDescription)
+        // The message is the relay's or the system's own wording, not user content.
+        Task { await DiagnosticsLog.shared.record(category: "connection", "dropped",
+                                                  detail: error.localizedDescription) }
         if let remote = error as? RemoteError,
            remote == .authenticationRequired || remote == .authenticationRevoked {
             return
@@ -825,6 +870,9 @@ final class SceneModel {
         guard isSceneActive, let activeHost, let services, reconnectAttempt < 6 else { return }
         reconnectAttempt += 1
         let delay = min(30.0, pow(2.0, Double(reconnectAttempt - 1)))
+        let attempt = reconnectAttempt
+        Task { await DiagnosticsLog.shared.record(category: "connection", "reconnecting",
+                                                  detail: "attempt=\(attempt) in=\(Int(delay))s") }
         let expectedConnection = activeHost.connectionID
         reconnectTask = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(delay)) }
@@ -985,6 +1033,9 @@ final class TerminalSurfaceState {
     var sequence: UInt64 = 0
     var leaseID: UUID?
     var controllerConnectionID: UUID?
+    /// Whether the Mac's last word was that this device holds the lease. Kept across a buffer
+    /// resync so control comes back with the checkpoint instead of being lost.
+    private(set) var holdsLease = false
     var controlExpiresAt: Date?
     var ownsControl = false
     private(set) var isControlRequestPending = false
@@ -1031,6 +1082,14 @@ final class TerminalSurfaceState {
         outputChunks.removeAll()
         bufferedOutputBytes = 0
         checkpointRevision += 1
+        // The buffer is current again, so a lease this device still holds becomes usable without
+        // the user having to ask for control a second time. A lease whose deadline passed while the
+        // checkpoint was in flight is gone: the Mac has taken it back and would reject the input.
+        if holdsLease, controlExpiresAt.map({ $0 > .now }) == true {
+            ownsControl = true
+        } else if holdsLease {
+            clearControl()
+        }
     }
 
     @discardableResult
@@ -1057,7 +1116,11 @@ final class TerminalSurfaceState {
         outputChunks.removeAll()
         bufferedOutputBytes = 0
         outputRevision += 1
-        clearControl()
+        // Input is suspended while the buffer is stale, but the lease is not given up. Dropping it
+        // here meant one missed output chunk took control away for good, and a full-screen program
+        // redrawing after a resize produces exactly such a gap, so control could not be held at all.
+        ownsControl = false
+        isControlRequestPending = false
         return true
     }
 
@@ -1070,8 +1133,8 @@ final class TerminalSurfaceState {
         controllerConnectionID = control.controllerConnectionID
         leaseID = control.leaseID
         controlExpiresAt = control.expiresAt
-        ownsControl = !isAwaitingCheckpoint
-            && control.controllerConnectionID == ownConnectionID && control.leaseID != nil
+        holdsLease = control.controllerConnectionID == ownConnectionID && control.leaseID != nil
+        ownsControl = !isAwaitingCheckpoint && holdsLease
         isControlRequestPending = false
         if authoritativeColumns != control.columns || authoritativeRows != control.rows {
             authoritativeColumns = control.columns
@@ -1100,6 +1163,7 @@ final class TerminalSurfaceState {
         leaseID = nil
         controllerConnectionID = nil
         controlExpiresAt = nil
+        holdsLease = false
         ownsControl = false
         isControlRequestPending = false
     }
