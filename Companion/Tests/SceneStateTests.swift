@@ -327,9 +327,22 @@ final class SceneStateTests: XCTestCase {
         XCTAssertFalse(state.append(output: OutputParameters(generation: generation,
                                                              sequence: 5, bytes: bytes)))
         XCTAssertTrue(state.invalidateForCheckpoint())
-        XCTAssertFalse(state.ownsControl)
-        XCTAssertNil(state.leaseID)
+        XCTAssertFalse(state.ownsControl, "Input stays suspended while the buffer is stale")
+        XCTAssertNotNil(state.leaseID,
+                        "The lease is kept: a missed output chunk is a resync, not the Mac taking control")
         XCTAssertFalse(state.invalidateForCheckpoint())
+
+        // A full-screen program redrawing after a resize produces exactly such a gap, so control
+        // has to come back with the fresh checkpoint rather than needing to be asked for again.
+        let resumed = try await CheckpointAssembler().ingest(
+            metadata: MessageMetadata(hostID: route.hostID, runtimeID: UUID(),
+                                      sessionID: route.sessionID),
+            chunk: CheckpointChunkParameters(transferID: UUID(), generation: UUID(),
+                                             sequence: 9, chunkIndex: 0, chunkCount: 1,
+                                             totalBytes: 1, bytes: bytes)
+        )
+        state.apply(checkpoint: try XCTUnwrap(resumed))
+        XCTAssertTrue(state.ownsControl, "Control returns with the checkpoint it was waiting on")
     }
 
     func testBufferedOutputHasHardMemoryBound() async throws {

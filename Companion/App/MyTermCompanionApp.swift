@@ -20,7 +20,13 @@ struct MyTermCompanionApp: App {
                     SceneRootView(services: services)
                 }
             }
-                .task { await services.load() }
+                .task {
+                    // Recording follows the stored preference from launch, so a reconnect that
+                    // happens before Settings is ever opened is still captured.
+                    await DiagnosticsLog.shared
+                        .setEnabled(UserDefaults.standard.bool(forKey: "collectDiagnostics"))
+                    await services.load()
+                }
                 .onReceive(NotificationCenter.default.publisher(for: .myTermAPNSToken)) { note in
                     guard let token = note.object as? Data else { return }
                     Task { await services.handleAPNSToken(token) }
