@@ -186,7 +186,8 @@ public actor RelayWebSocketClient {
                 event = .authenticated(authenticated)
             }
         case .data(let data):
-            guard receivedReady, data.count <= negotiatedMaximum else { throw RemoteError.invalidMessage }
+            guard receivedReady else { throw RemoteError.invalidMessage }
+            guard data.count <= negotiatedMaximum else { throw RemoteError.messageTooLarge }
             let frame = try RelayFrame.decode(data)
             guard frame.connectionID != RelayFrame.broadcastDestination else {
                 throw RemoteError.invalidMessage
@@ -196,13 +197,27 @@ public actor RelayWebSocketClient {
             throw RemoteError.invalidMessage
         }
         guard let continuation else { throw RemoteError.disconnected }
-        if case .dropped = continuation.yield(event) { throw RemoteError.messageTooLarge }
+        if case .dropped = continuation.yield(event) { throw RemoteError.disconnected }
+    }
+
+    /// The close code the relay records. Reporting the real reason is what makes a disconnect
+    /// diagnosable from the server, rather than every cause arriving as a protocol error.
+    static func closeCode(for failure: Error?) -> URLSessionWebSocketTask.CloseCode {
+        guard let failure else { return .normalClosure }
+        guard let remote = failure as? RemoteError else { return .goingAway }
+        switch remote {
+        case .invalidMessage: return .protocolError
+        case .messageTooLarge: return .messageTooBig
+        case .authenticationRequired, .authenticationRevoked: return .policyViolation
+        case .disconnected: return .goingAway
+        default: return .goingAway
+        }
     }
 
     private func disconnect(failure: Error?) {
         reader?.cancel()
         reader = nil
-        socket?.cancel(with: failure == nil ? .normalClosure : .protocolError, reason: nil)
+        socket?.cancel(with: Self.closeCode(for: failure), reason: nil)
         socket = nil
         outboundTail?.cancel()
         outboundTail = nil

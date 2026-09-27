@@ -115,6 +115,10 @@ final class CompanionHostModel {
     private var identity: CompanionHostIdentity?
     private var tokenManager: RelayTokenManager?
     private var reauthenticationTask: Task<Void, Never>?
+    /// The Mac's half of the connection had no record of why it dropped, so a report could
+    /// only ever describe one end of the problem.
+    private static let connectionLogger = Logger(subsystem: "com.gordonbeeming.myterm",
+                                                 category: "companion-transport")
     private var httpClient: RelayHTTPClient?
     private var transport: RelayWebSocketClient?
     private var transportTask: Task<Void, Never>?
@@ -1750,6 +1754,8 @@ final class CompanionHostModel {
     }
 
     private func transportEnded(error: Error?, generation: UUID) {
+        Self.connectionLogger.error(
+            "host transport ended: \(error?.localizedDescription ?? "closed", privacy: .public)")
         reauthenticationTask?.cancel()
         reauthenticationTask = nil
         guard connectionFence.accepts(generation) else { return }
