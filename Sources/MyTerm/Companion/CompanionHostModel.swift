@@ -119,6 +119,11 @@ final class CompanionHostModel {
     /// only ever describe one end of the problem.
     private static let connectionLogger = Logger(subsystem: "com.gordonbeeming.myterm",
                                                  category: "companion-transport")
+    /// Where diagnostics a companion uploads are filed. Absent until the app model supplies the
+    /// support directory, which is also what keeps this out of the way in tests.
+    private var diagnosticsStore: CompanionDiagnosticsStore?
+    /// Where uploads are filed, so Settings can offer to open it.
+    private(set) var diagnosticsDirectory: URL?
     private var httpClient: RelayHTTPClient?
     private var transport: RelayWebSocketClient?
     private var transportTask: Task<Void, Never>?
@@ -200,6 +205,14 @@ final class CompanionHostModel {
         identityStore = CompanionHostIdentityStore(secrets: secrets)
         tokenStore = TokenStore(secrets: secrets)
         notificationGrantStore = CompanionNotificationGrantStore(secrets: secrets)
+        // Uploads land beside the channel's own state. Absent when the support directory cannot be
+        // resolved, in which case an upload is refused rather than written somewhere arbitrary.
+        let diagnosticsFolder = (try? AppModel.applicationSupportDirectory()).map { support in
+            CompanionDiagnosticsStore.directory(applicationSupportDirectory: support,
+                                                channelName: channel.displayName)
+        }
+        diagnosticsDirectory = diagnosticsFolder
+        diagnosticsStore = diagnosticsFolder.map(CompanionDiagnosticsStore.init(directory:))
         pushJournalStore = CompanionPushJournalStore(secrets: secrets)
     }
 
@@ -1049,6 +1062,18 @@ final class CompanionHostModel {
                 _ = try JSONDecoder().decode(RemoteEmptyPayload.self, from: command.payload)
                 try await notificationGrantStore.remove(deviceID: peer.peer.deviceID)
                 notificationGrants.removeValue(forKey: peer.peer.deviceID)
+                result = nil
+            case .diagnosticsUpload:
+                guard let diagnosticsStore else { throw RemoteError.offline }
+                guard command.payload.count <= 192 * 1_024 else {
+                    throw RemoteError.messageTooLarge
+                }
+                let upload = try JSONDecoder().decode(RemoteDiagnosticsPayload.self,
+                                                      from: command.payload)
+                // An upload the store turns down, for arriving too soon or being unreadable, is
+                // the peer's problem to retry, not a reason to drop the connection.
+                do { try await diagnosticsStore.accept(upload, deviceID: peer.peer.deviceID) }
+                catch { throw RemoteError.invalidMessage }
                 result = nil
             default:
                 guard let appModel else { throw RemoteError.offline }

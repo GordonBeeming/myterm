@@ -4,7 +4,9 @@ import SwiftUI
 ///
 /// Collection is off until asked for, and nothing leaves the device until the user shares it.
 struct DiagnosticsView: View {
+    let scene: SceneModel
     @AppStorage("collectDiagnostics") private var collectDiagnostics = false
+    @AppStorage("sendDiagnosticsToMac") private var sendDiagnosticsToMac = false
     @State private var entries: [DiagnosticsEntry] = []
     @State private var exportURL: URL?
 
@@ -13,9 +15,23 @@ struct DiagnosticsView: View {
             Section {
                 Toggle("Collect diagnostics", isOn: $collectDiagnostics)
                     .accessibilityIdentifier("collect-diagnostics")
+                Toggle("Send to Mac", isOn: $sendDiagnosticsToMac)
+                    .accessibilityIdentifier("send-diagnostics-to-mac")
+                    .disabled(!collectDiagnostics)
+                if collectDiagnostics && sendDiagnosticsToMac {
+                    Button("Send now") {
+                        Task {
+                            await scene.uploadDiagnostics()
+                            await reload()
+                        }
+                    }
+                    .accessibilityIdentifier("send-diagnostics-now")
+                }
             } footer: {
                 Text("Records connections, reconnects, terminal attachments and control changes on "
-                     + "this device. It never records what a terminal shows or anything you type.")
+                     + "this device. It never records what a terminal shows or anything you type. "
+                     + "Sending to the Mac files them beside its own data, where they are easier to "
+                     + "read than on this device.")
             }
 
             if !entries.isEmpty {

@@ -406,3 +406,34 @@ public struct RemoteSettingsUpdatePayload: Codable, Equatable, Sendable {
         self.init(scope: scope, patch: overrides, reset: reset)
     }
 }
+
+/// A companion's diagnostics log, on its way to the Mac it is paired with.
+///
+/// The text is compressed because a log is highly repetitive, and bounded because a phone must not
+/// be able to fill the Mac's disk. The companion sends the newest entries that fit rather than
+/// splitting a log across messages: the log is already capped, so one message is enough.
+public struct RemoteDiagnosticsPayload: Codable, Equatable, Sendable {
+    /// Base64 in JSON expands this by about a third, and the encoded command has its own
+    /// 192 KiB bound, so the compressed text has to stay well inside it.
+    public static let maximumCompressedBytes = 128 * 1_024
+    public static let maximumDeviceNameCharacters = 64
+
+    /// A label for the folder the Mac files this under. Treated as untrusted text, never as a path.
+    public let deviceName: String
+    public let capturedAt: Date
+    /// zlib-compressed UTF-8 log text.
+    public let compressed: Data
+
+    public init(deviceName: String, capturedAt: Date, compressed: Data) throws {
+        guard !compressed.isEmpty, compressed.count <= Self.maximumCompressedBytes else {
+            throw RemoteProtocolError.invalidDiagnostics
+        }
+        self.deviceName = String(deviceName.prefix(Self.maximumDeviceNameCharacters))
+        self.capturedAt = capturedAt
+        self.compressed = compressed
+    }
+}
+
+public enum RemoteProtocolError: Error, Equatable, Sendable {
+    case invalidDiagnostics
+}

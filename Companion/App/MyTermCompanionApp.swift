@@ -27,6 +27,7 @@ struct MyTermCompanionApp: App {
                         .setEnabled(UserDefaults.standard.bool(forKey: "collectDiagnostics"))
                     await services.load()
                 }
+
                 .onReceive(NotificationCenter.default.publisher(for: .myTermAPNSToken)) { note in
                     guard let token = note.object as? Data else { return }
                     Task { await services.handleAPNSToken(token) }

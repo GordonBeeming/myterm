@@ -193,7 +193,7 @@ struct CompanionSettingsView: View {
                 Text("Each app window connects independently. Returning to the foreground reloads the latest terminal screen before input is enabled.")
             }
             Section("Diagnostics") {
-                NavigationLink("Connection diagnostics") { DiagnosticsView() }
+                NavigationLink("Connection diagnostics") { DiagnosticsView(scene: scene) }
                     .accessibilityIdentifier("open-diagnostics")
             }
             Section("Current workspace") {
