@@ -3,6 +3,7 @@ import MyTermCore
 import MyTermRemote
 import Observation
 import SwiftTerm
+import UIKit
 
 enum ConnectionPhase: Equatable, Sendable {
     case disconnected
@@ -674,6 +675,28 @@ final class SceneModel {
             try await connection.resize(columns: columns, rows: rows, route: route,
                                         leaseID: lease, generation: generation)
         } catch { errorMessage = error.localizedDescription }
+    }
+
+    /// Sends the collected diagnostics to the paired Mac, where they are easier to get at than
+    /// on the phone. Silent by design: this runs on a timer and a failure is not worth an alert.
+    func uploadDiagnostics() async {
+        guard let hostID = selectedHostID, connection != nil,
+              let compressed = await DiagnosticsLog.shared.compressedForUpload() else { return }
+        do {
+            let payload = try RemoteDiagnosticsPayload(
+                deviceName: UIDevice.current.name,
+                capturedAt: .now,
+                compressed: compressed
+            )
+            _ = try await command(.diagnosticsUpload,
+                                  metadata: MessageMetadata(hostID: hostID),
+                                  payload: try JSONEncoder().encode(payload))
+            await DiagnosticsLog.shared.record(category: "diagnostics", "sent to Mac",
+                                               detail: "bytes=\(compressed.count)")
+        } catch {
+            await DiagnosticsLog.shared.record(category: "diagnostics", "send to Mac failed",
+                                               detail: error.localizedDescription)
+        }
     }
 
     func requestControl(_ action: ControlAction, route: TerminalRoute) async {

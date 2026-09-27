@@ -47,6 +47,16 @@ struct SceneRootView: View {
         } message: {
             Text(scene.errorMessage ?? services.errorMessage ?? "Unknown error")
         }
+        .task {
+            // Ships on a slow timer rather than per event: the point is that a log is already
+            // waiting on the Mac when something gets reported, not that it streams live.
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(300))
+                guard UserDefaults.standard.bool(forKey: "collectDiagnostics"),
+                      UserDefaults.standard.bool(forKey: "sendDiagnosticsToMac") else { continue }
+                await scene.uploadDiagnostics()
+            }
+        }
         .onChange(of: scenePhase) { _, phase in
             guard phase != .inactive else { return }
             Task { await scene.setSceneActive(phase == .active, services: services) }

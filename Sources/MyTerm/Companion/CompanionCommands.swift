@@ -308,8 +308,9 @@ extension AppModel {
             markAsRead(tabID: target.tabID)
             return nil
 
+        // Handled by CompanionHostModel, which is where the paired peer's identity is known.
         case .folderPin, .tabPin, .tabColor, .notificationRegister, .notificationRevoke,
-             .terminalPasteImage, .terminalPasteImageChunk:
+             .terminalPasteImage, .terminalPasteImageChunk, .diagnosticsUpload:
             throw CompanionCommandError.unsupportedOperation
         }
     }

@@ -1,4 +1,5 @@
 import Foundation
+import MyTermCore
 import OSLog
 
 /// One recorded moment in the connection's life.
@@ -162,6 +163,21 @@ actor DiagnosticsLog {
 }
 
 extension DiagnosticsLog {
+    /// The newest entries, compressed, small enough for one upload. Returns nil when there is
+    /// nothing to send or the text will not fit however much is dropped.
+    func compressedForUpload(limit: Int = RemoteDiagnosticsPayload.maximumCompressedBytes) async -> Data? {
+        var lines = await recent().map(\.line)
+        while !lines.isEmpty {
+            let text = lines.joined(separator: "\n")
+            guard let raw = text.data(using: .utf8),
+                  let deflated = try? (raw as NSData).compressed(using: .zlib) as Data else { return nil }
+            if deflated.count <= limit { return deflated }
+            // Drop the oldest tenth and try again, so a long session still sends its recent history.
+            lines.removeFirst(max(1, lines.count / 10))
+        }
+        return nil
+    }
+
     /// A short, non-identifying prefix. Enough to tell two connections apart in a log without
     /// writing down which device or session it was.
     static func short(_ id: UUID?) -> String {

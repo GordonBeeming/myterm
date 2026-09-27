@@ -136,6 +136,22 @@ struct CompanionSettingsView: View {
                     }
                 }
 
+                if let diagnostics = companion.diagnosticsDirectory {
+                    Section("Diagnostics") {
+                        HStack {
+                            Text("Diagnostics a paired device has sent are filed here.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Show in Finder") {
+                                try? FileManager.default.createDirectory(
+                                    at: diagnostics, withIntermediateDirectories: true
+                                )
+                                NSWorkspace.shared.activateFileViewerSelecting([diagnostics])
+                            }
+                        }
+                    }
+                }
                 if !companion.remoteControllers.isEmpty {
                     Section("Remote control") {
                         ForEach(companion.remoteControllers) { controller in

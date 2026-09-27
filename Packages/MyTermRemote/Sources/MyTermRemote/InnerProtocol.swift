@@ -109,6 +109,7 @@ public enum CommandOperation: String, Codable, CaseIterable, Sendable {
     case terminalPasteImageChunk = "terminal_paste_image_chunk"
     case notificationRegister = "notification_register"
     case notificationRevoke = "notification_revoke"
+    case diagnosticsUpload = "diagnostics_upload"
 }
 
 public struct CommandParameters: Codable, Equatable, Sendable {
@@ -564,6 +565,10 @@ extension InnerMessage: Codable {
                       metadata.tabID != nil, value.payload.count <= 96 * 1_024 else {
                     throw RemoteError.invalidMessage
                 }
+            case .diagnosticsUpload:
+                // Compressed log text carried as JSON, so the encoded form is larger than the
+                // payload's own limit; it still has to sit inside the command bound above.
+                guard value.payload.count <= 192 * 1_024 else { throw RemoteError.invalidMessage }
             }
         case .commandResult:
             guard metadata.requestID != nil else { throw RemoteError.invalidMessage }
