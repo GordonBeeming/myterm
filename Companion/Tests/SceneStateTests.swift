@@ -321,7 +321,8 @@ final class SceneStateTests: XCTestCase {
         state.apply(checkpoint: try XCTUnwrap(checkpoint))
         let ownConnection = UUID()
         state.apply(control: ControlStateParameters(controllerConnectionID: ownConnection,
-                                                    leaseID: UUID(), expiresAt: .now,
+                                                    leaseID: UUID(),
+                                                    expiresAt: .now.addingTimeInterval(60),
                                                     generation: generation, columns: 80, rows: 24),
                     ownConnectionID: ownConnection)
         XCTAssertFalse(state.append(output: OutputParameters(generation: generation,
@@ -337,7 +338,7 @@ final class SceneStateTests: XCTestCase {
         let resumed = try await CheckpointAssembler().ingest(
             metadata: MessageMetadata(hostID: route.hostID, runtimeID: UUID(),
                                       sessionID: route.sessionID),
-            chunk: CheckpointChunkParameters(transferID: UUID(), generation: UUID(),
+            chunk: CheckpointChunkParameters(transferID: UUID(), generation: generation,
                                              sequence: 9, chunkIndex: 0, chunkCount: 1,
                                              totalBytes: 1, bytes: bytes)
         )

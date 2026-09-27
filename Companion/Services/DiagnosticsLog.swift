@@ -35,6 +35,7 @@ actor DiagnosticsLog {
     /// Kept small enough to share by email and to hold a session's worth of connection events.
     static let maximumEntries = 2_000
     static let maximumFileBytes = 512 * 1_024
+    static let maximumDetailCharacters = 200
 
     /// Built per call rather than shared: `ISO8601DateFormatter` is not `Sendable`, and a log
     /// line is written far too rarely for the allocation to matter.
@@ -44,6 +45,8 @@ actor DiagnosticsLog {
         return formatter.string(from: date)
     }
 
+    /// Errors about the log itself only. Entries are never written here: the unified log is
+    /// collectable off-device, and this data is meant to leave only when the user shares it.
     private static let logger = Logger(subsystem: AppConfiguration.bundleIdentifier,
                                        category: "Diagnostics")
 
@@ -55,6 +58,17 @@ actor DiagnosticsLog {
     init(fileURL: URL? = DiagnosticsLog.defaultFileURL, enabled: Bool = false) {
         self.fileURL = fileURL
         self.isEnabled = enabled
+        // Read back what an earlier run left behind, so a log survives the app being killed, which
+        // is when it is most wanted. The file holds rendered lines rather than the original fields,
+        // so they are carried as the message: the point is being able to read and share them.
+        if let fileURL, let contents = try? String(contentsOf: fileURL, encoding: .utf8) {
+            for line in contents.split(separator: "\n").suffix(Self.maximumEntries) {
+                entries.append(DiagnosticsEntry(sequence: nextSequence, at: .now,
+                                                category: "earlier run", message: String(line),
+                                                detail: nil))
+                nextSequence &+= 1
+            }
+        }
     }
 
     static var defaultFileURL: URL? {
@@ -77,14 +91,14 @@ actor DiagnosticsLog {
     /// Records one event. `detail` must already be safe to write down.
     func record(category: String, _ message: String, detail: String? = nil) {
         guard isEnabled else { return }
-        let entry = DiagnosticsEntry(sequence: nextSequence, at: .now,
-                                     category: category, message: message, detail: detail)
+        let entry = DiagnosticsEntry(sequence: nextSequence, at: .now, category: category,
+                                     message: message,
+                                     detail: detail.map { String($0.prefix(Self.maximumDetailCharacters)) })
         nextSequence &+= 1
         entries.append(entry)
         if entries.count > Self.maximumEntries {
             entries.removeFirst(entries.count - Self.maximumEntries)
         }
-        Self.logger.debug("\(entry.line, privacy: .public)")
         append(entry)
     }
 
@@ -110,12 +124,17 @@ actor DiagnosticsLog {
         do {
             if FileManager.default.fileExists(atPath: fileURL.path) {
                 let handle = try FileHandle(forWritingTo: fileURL)
-                defer { try? handle.close() }
-                try handle.seekToEnd()
-                try handle.write(contentsOf: data)
-                if try handle.offset() > Self.maximumFileBytes { try trim(fileURL) }
+                var size: UInt64 = 0
+                do {
+                    defer { try? handle.close() }
+                    try handle.seekToEnd()
+                    try handle.write(contentsOf: data)
+                    size = try handle.offset()
+                }
+                if size > Self.maximumFileBytes { try trim(fileURL) }
             } else {
                 try data.write(to: fileURL, options: .atomic)
+                if data.count > Self.maximumFileBytes { try trim(fileURL) }
             }
         } catch {
             // Losing a line of diagnostics is not worth surfacing over whatever is being diagnosed.
@@ -127,9 +146,18 @@ actor DiagnosticsLog {
     /// part nearest whatever just went wrong.
     private func trim(_ fileURL: URL) throws {
         let contents = try String(contentsOf: fileURL, encoding: .utf8)
-        let lines = contents.split(separator: "\n", omittingEmptySubsequences: false)
-        let kept = lines.suffix(max(1, lines.count / 2)).joined(separator: "\n")
-        try (kept + "\n").write(to: fileURL, atomically: true, encoding: .utf8)
+        var kept: [Substring] = []
+        var bytes = 0
+        let budget = Self.maximumFileBytes / 2
+        // Newest first until the budget is spent, so what is kept is nearest whatever went wrong.
+        for line in contents.split(separator: "\n", omittingEmptySubsequences: false).reversed() {
+            let cost = line.utf8.count + 1
+            if bytes + cost > budget, !kept.isEmpty { break }
+            kept.append(line)
+            bytes += cost
+        }
+        let text = kept.reversed().joined(separator: "\n")
+        try (text + "\n").write(to: fileURL, atomically: true, encoding: .utf8)
     }
 }
 

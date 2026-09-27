@@ -50,6 +50,10 @@ struct DiagnosticsView: View {
                 Button("Clear", systemImage: "trash") {
                     Task {
                         await DiagnosticsLog.shared.clear()
+                        // The export sits in a shared temporary directory, so clearing has to take
+                        // it too rather than leave the entries readable after they are gone.
+                        if let exportURL { try? FileManager.default.removeItem(at: exportURL) }
+                        exportURL = nil
                         await reload()
                     }
                 }

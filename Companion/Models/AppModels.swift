@@ -728,19 +728,27 @@ final class SceneModel {
             let state = terminalStates[route.id] ?? restoredTerminalState(for: route)
             terminalStates[route.id] = state
             state.route = route
+            let heldBeforeCheckpoint = state.ownsControl
             state.apply(checkpoint: checkpoint)
             // Renewal stopped while the buffer was stale. A lease this device still holds has to
             // start renewing again here, or it lapses on the Mac and control is lost after all.
             updateLeaseRenewal(for: state)
+            if heldBeforeCheckpoint != state.ownsControl {
+                await DiagnosticsLog.shared.record(
+                    category: "control",
+                    state.ownsControl ? "control restored with checkpoint" : "lease expired during resync",
+                    detail: "session=\(DiagnosticsLog.short(route.sessionID))")
+            }
         case .output(let route, let output):
             guard let state = terminalStates[route.id] else { return }
             state.route = route
             if !state.append(output: output) {
+                let buffered = state.bufferedOutputBytes
                 if state.invalidateForCheckpoint() {
                     await DiagnosticsLog.shared.record(
                         category: "terminal", "output gap, resyncing",
                         detail: "session=\(DiagnosticsLog.short(route.sessionID))"
-                            + " buffered=\(state.bufferedOutputBytes)")
+                            + " buffered=\(buffered)")
                     cancelLeaseRenewal(for: route.id)
                     await refreshTerminal(route)
                 }
@@ -792,10 +800,15 @@ final class SceneModel {
         guard leaseRenewals[surfaceID] == nil else { return }
         let renewalID = UUID()
         let fence = connectionGeneration
+        // A lease carried through a resync can have less than the renewal interval left on it,
+        // so the first renewal waits only as long as that lease actually has.
+        let firstDelay = min(10, max(0, state.controlExpiresAt?.timeIntervalSinceNow ?? 10) / 2)
         let task = Task { [weak self] in
+            var delay = firstDelay
             while !Task.isCancelled {
-                do { try await Task.sleep(for: .seconds(10)) }
+                do { try await Task.sleep(for: .seconds(delay)) }
                 catch { break }
+                delay = 10
                 guard let self,
                       await self.renewControlIfCurrent(surfaceID: surfaceID,
                                                        connectionFence: fence) else { break }
@@ -1070,8 +1083,13 @@ final class TerminalSurfaceState {
         bufferedOutputBytes = 0
         checkpointRevision += 1
         // The buffer is current again, so a lease this device still holds becomes usable without
-        // the user having to ask for control a second time.
-        ownsControl = holdsLease
+        // the user having to ask for control a second time. A lease whose deadline passed while the
+        // checkpoint was in flight is gone: the Mac has taken it back and would reject the input.
+        if holdsLease, controlExpiresAt.map({ $0 > .now }) == true {
+            ownsControl = true
+        } else if holdsLease {
+            clearControl()
+        }
     }
 
     @discardableResult
