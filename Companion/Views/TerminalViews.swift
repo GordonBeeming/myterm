@@ -587,6 +587,11 @@ struct RemoteTerminalView: UIViewRepresentable {
                     try? await Task.sleep(for: .milliseconds(400))
                     guard let self, !Task.isCancelled, !self.isDismantled,
                           self.parent.state.ownsControl,
+                          // A presented sheet takes the keyboard, which changes this view's size
+                          // for as long as it stays open. That is the app's layout, not the
+                          // terminal's, so it must not move the Mac's pty. The size is reported
+                          // again when the sheet closes and the view settles back.
+                          self.parent.requestsKeyboardFocus,
                           self.lastAppliedAuthoritativeSize?.0 != newCols
                             || self.lastAppliedAuthoritativeSize?.1 != newRows else { return }
                     self.parent.onResize(newCols, newRows)

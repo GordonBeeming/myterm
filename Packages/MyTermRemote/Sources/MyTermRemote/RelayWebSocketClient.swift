@@ -186,7 +186,8 @@ public actor RelayWebSocketClient {
                 event = .authenticated(authenticated)
             }
         case .data(let data):
-            guard receivedReady, data.count <= negotiatedMaximum else { throw RemoteError.invalidMessage }
+            guard receivedReady else { throw RemoteError.invalidMessage }
+            guard data.count <= negotiatedMaximum else { throw RemoteError.messageTooLarge }
             let frame = try RelayFrame.decode(data)
             guard frame.connectionID != RelayFrame.broadcastDestination else {
                 throw RemoteError.invalidMessage
@@ -196,7 +197,7 @@ public actor RelayWebSocketClient {
             throw RemoteError.invalidMessage
         }
         guard let continuation else { throw RemoteError.disconnected }
-        if case .dropped = continuation.yield(event) { throw RemoteError.messageTooLarge }
+        if case .dropped = continuation.yield(event) { throw RemoteError.disconnected }
     }
 
     /// The close code the relay records. Reporting the real reason is what makes a disconnect
