@@ -199,10 +199,24 @@ public actor RelayWebSocketClient {
         if case .dropped = continuation.yield(event) { throw RemoteError.messageTooLarge }
     }
 
+    /// The close code the relay records. Reporting the real reason is what makes a disconnect
+    /// diagnosable from the server, rather than every cause arriving as a protocol error.
+    static func closeCode(for failure: Error?) -> URLSessionWebSocketTask.CloseCode {
+        guard let failure else { return .normalClosure }
+        guard let remote = failure as? RemoteError else { return .goingAway }
+        switch remote {
+        case .invalidMessage: return .protocolError
+        case .messageTooLarge: return .messageTooBig
+        case .authenticationRequired, .authenticationRevoked: return .policyViolation
+        case .disconnected: return .goingAway
+        default: return .goingAway
+        }
+    }
+
     private func disconnect(failure: Error?) {
         reader?.cancel()
         reader = nil
-        socket?.cancel(with: failure == nil ? .normalClosure : .protocolError, reason: nil)
+        socket?.cancel(with: Self.closeCode(for: failure), reason: nil)
         socket = nil
         outboundTail?.cancel()
         outboundTail = nil

@@ -162,3 +162,14 @@ import Testing
         try EncryptedEnvelope.decode(data: Data(repeating: 0, count: RelayFrame.maximumBytes + 1))
     }
 }
+
+@Test func closeCodesReportTheRealFailureRatherThanProtocolError() {
+    #expect(RelayWebSocketClient.closeCode(for: nil) == .normalClosure)
+    #expect(RelayWebSocketClient.closeCode(for: RemoteError.invalidMessage) == .protocolError)
+    #expect(RelayWebSocketClient.closeCode(for: RemoteError.messageTooLarge) == .messageTooBig)
+    #expect(RelayWebSocketClient.closeCode(for: RemoteError.disconnected) == .goingAway)
+    #expect(RelayWebSocketClient.closeCode(for: RemoteError.authenticationRevoked) == .policyViolation)
+    // A transport error is not the peer breaking protocol, and calling it one sent every cause to
+    // the relay's log as "protocol error", which is how this went undiagnosed.
+    #expect(RelayWebSocketClient.closeCode(for: URLError(.networkConnectionLost)) == .goingAway)
+}

@@ -394,6 +394,8 @@ struct RemoteTerminalView: UIViewRepresentable {
 
     static func dismantleUIView(_ view: TerminalView, coordinator: Coordinator) {
         coordinator.finishViewportCapture(from: view)
+        coordinator.pendingResize?.cancel()
+        coordinator.pendingResize = nil
         view.onFollowOutputChanged = nil
         view.onViewportChanged = nil
         view.terminalDelegate = nil
@@ -535,6 +537,8 @@ struct RemoteTerminalView: UIViewRepresentable {
         var outputIndex = 0
         var gridRevision = -1
         var lastAppliedAuthoritativeSize: (Int, Int)?
+        /// Coalesces viewport changes so only a size the view settles on reaches the Mac.
+        var pendingResize: Task<Void, Never>?
         var failedCheckpointRevision = -1
         var followOutputRevision: Int?
         var viewportUpdatePending = false
@@ -573,10 +577,20 @@ struct RemoteTerminalView: UIViewRepresentable {
         nonisolated func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
             guard newCols > 0, newRows > 0 else { return }
             Task { @MainActor [weak self] in
-                guard let self, self.parent.state.ownsControl,
-                      (self.lastAppliedAuthoritativeSize?.0 != newCols
-                        || self.lastAppliedAuthoritativeSize?.1 != newRows) else { return }
-                self.parent.onResize(newCols, newRows)
+                guard let self else { return }
+                // A sheet takes the keyboard away and hands it back, and each step reports a new
+                // size. Only the size the view comes to rest on is worth resizing the Mac's pty
+                // for: every resize makes a full-screen program repaint, and that burst is what
+                // overruns the buffer and suspends input.
+                self.pendingResize?.cancel()
+                self.pendingResize = Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .milliseconds(400))
+                    guard let self, !Task.isCancelled, !self.isDismantled,
+                          self.parent.state.ownsControl,
+                          self.lastAppliedAuthoritativeSize?.0 != newCols
+                            || self.lastAppliedAuthoritativeSize?.1 != newRows else { return }
+                    self.parent.onResize(newCols, newRows)
+                }
             }
         }
 
