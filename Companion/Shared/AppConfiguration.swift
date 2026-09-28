@@ -60,6 +60,15 @@ enum UITestConfiguration {
         false
         #endif
     }
+
+    /// Seeds two paired Macs so the machine list can be driven without a relay.
+    static var showsMachineFixture: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-MyTermUITestMachineFixture")
+        #else
+        false
+        #endif
+    }
 }
 
 extension Notification.Name {

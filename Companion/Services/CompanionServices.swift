@@ -162,11 +162,15 @@ final class CompanionServices {
 
     private(set) var savedHosts: [SavedHostDescriptor] = []
     private(set) var hostStatuses: [SavedConnectionID: ConnectionPhase] = [:]
+    private(set) var machinePreferences: [String: MachinePreference] = [:]
     private(set) var isLoading = true
     var errorMessage: String?
     var notificationEnrollment = NotificationEnrollmentModel()
 
-    init(secrets: (any SecretStore)? = nil) {
+    private let machinePreferencesStore: MachinePreferencesStore
+
+    init(secrets: (any SecretStore)? = nil,
+         machinePreferences store: MachinePreferencesStore = MachinePreferencesStore()) {
         let secrets = secrets ?? (UITestConfiguration.isIsolated
             ? EphemeralSecretStore()
             : KeychainSecretStore(service: "\(AppConfiguration.bundleIdentifier).identity"))
@@ -177,6 +181,41 @@ final class CompanionServices {
         localIDStore = LocalDeviceIDStore(secrets: secrets)
         agreementStore = DeviceIdentityStore(secrets: secrets)
         signingStore = SigningIdentityStore(secrets: secrets)
+        machinePreferencesStore = store
+        machinePreferences = store.all()
+    }
+
+    // MARK: - Machine preferences
+
+    func preference(for connectionID: SavedConnectionID) -> MachinePreference {
+        machinePreferences[connectionID.storageKey] ?? MachinePreference()
+    }
+
+    /// The name to show for a Mac: the alias the user typed, or the name the Mac gave at pairing.
+    func displayName(for host: SavedHostDescriptor) -> String {
+        preference(for: host.connectionID).alias ?? host.name
+    }
+
+    func isStarred(_ connectionID: SavedConnectionID) -> Bool {
+        preference(for: connectionID).isStarred
+    }
+
+    /// Returns false, having changed nothing, when the alias is longer than the store accepts.
+    @discardableResult
+    func setAlias(_ alias: String?, for connectionID: SavedConnectionID) -> Bool {
+        guard machinePreferencesStore.setAlias(alias, for: connectionID) else { return false }
+        machinePreferences = machinePreferencesStore.all()
+        return true
+    }
+
+    func setStarred(_ isStarred: Bool, for connectionID: SavedConnectionID) {
+        machinePreferencesStore.setStarred(isStarred, for: connectionID)
+        machinePreferences = machinePreferencesStore.all()
+    }
+
+    func setLastWorkspaceID(_ workspaceID: UUID?, for connectionID: SavedConnectionID) {
+        machinePreferencesStore.setLastWorkspaceID(workspaceID, for: connectionID)
+        machinePreferences = machinePreferencesStore.all()
     }
 
     func load() async {
@@ -196,7 +235,10 @@ final class CompanionServices {
 
     private func performLoad() async {
         if UITestConfiguration.isIsolated {
-            savedHosts = []
+            savedHosts = UITestConfiguration.showsMachineFixture ? MachineUITestFixture.hosts : []
+            // Every fixture Mac reads as offline; the list, the star and the alias are what these
+            // tests drive, and none of them needs a relay.
+            hostStatuses = Dictionary(uniqueKeysWithValues: savedHosts.map { ($0.connectionID, .disconnected) })
             isLoading = false
             return
         }
@@ -380,6 +422,10 @@ final class CompanionServices {
             try await hostCatalog.remove(host)
             savedHosts = try await hostCatalog.load()
             hostStatuses.removeValue(forKey: SavedConnectionID(host))
+            // Only here. Pruning against a freshly loaded host list would erase the user's aliases
+            // any time the keychain read failed once.
+            machinePreferencesStore.forget(SavedConnectionID(host))
+            machinePreferences = machinePreferencesStore.all()
         } catch { errorMessage = error.localizedDescription }
     }
 

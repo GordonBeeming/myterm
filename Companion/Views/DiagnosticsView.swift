@@ -9,6 +9,8 @@ struct DiagnosticsView: View {
     @AppStorage("sendDiagnosticsToMac") private var sendDiagnosticsToMac = false
     @State private var entries: [DiagnosticsEntry] = []
     @State private var exportURL: URL?
+    @State private var isSending = false
+    @State private var uploadOutcome: DiagnosticsUploadOutcome?
 
     var body: some View {
         List {
@@ -19,13 +21,31 @@ struct DiagnosticsView: View {
                     .accessibilityIdentifier("send-diagnostics-to-mac")
                     .disabled(!collectDiagnostics)
                 if collectDiagnostics && sendDiagnosticsToMac {
-                    Button("Send now") {
+                    Button {
                         Task {
-                            await scene.uploadDiagnostics()
+                            isSending = true
+                            uploadOutcome = await scene.uploadDiagnostics()
+                            isSending = false
                             await reload()
                         }
+                    } label: {
+                        HStack {
+                            Text("Send now")
+                            if isSending {
+                                Spacer()
+                                ProgressView().controlSize(.small)
+                            }
+                        }
                     }
+                    .disabled(isSending)
                     .accessibilityIdentifier("send-diagnostics-now")
+                    if let uploadOutcome {
+                        Text(uploadOutcome.message)
+                            .font(.footnote)
+                            .foregroundStyle(uploadOutcome.isFailure ? AnyShapeStyle(.red)
+                                                                     : AnyShapeStyle(.secondary))
+                            .accessibilityIdentifier("send-diagnostics-status")
+                    }
                 }
             } footer: {
                 Text("Records connections, reconnects, terminal attachments and control changes on "
