@@ -394,7 +394,10 @@ private struct WorkspaceColumn: View {
             }
         }
         .onChange(of: scene.selectedWorkspaceID) { _, workspaceID in
-            guard let connectionID = scene.selectedConnectionID else { return }
+            // Only a real choice is remembered. Switching Macs sets the new connection before
+            // `connect` clears the workspace, so persisting the nil would wipe the destination
+            // Mac's memory moments before it is read back.
+            guard let connectionID = scene.selectedConnectionID, let workspaceID else { return }
             services.setLastWorkspaceID(workspaceID, for: connectionID)
         }
         .task(id: WorkspaceChoice(connectionID: scene.selectedConnectionID,
@@ -414,13 +417,15 @@ private struct WorkspaceColumn: View {
     /// something in it as soon as the Mac is connected. Opening a workspace is view-only, so this
     /// takes nothing from whoever is at the Mac.
     private func selectAWorkspace() {
-        guard scene.selectedWorkspaceID == nil,
-              let connectionID = scene.selectedConnectionID,
+        guard let connectionID = scene.selectedConnectionID,
               let workspaces = scene.projection?.workspaces else { return }
-        scene.selectedWorkspaceID = WorkspaceAutoSelection.choice(
+        let chosen = WorkspaceAutoSelection.choice(
             workspaces: workspaces,
+            current: scene.selectedWorkspaceID,
             remembered: services.preference(for: connectionID).lastWorkspaceID
         )
+        guard chosen != scene.selectedWorkspaceID else { return }
+        scene.selectedWorkspaceID = chosen
     }
 
     private var workspaceColumnTitle: String {

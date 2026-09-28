@@ -123,7 +123,7 @@ struct HostActionsView: View {
                             .accessibilityIdentifier("machine-alias")
                             .onSubmit { commitAlias() }
                         if aliasRejected {
-                            Text("That name is too long. Keep it under \(MachinePreferencesStore.aliasByteLimit) characters.")
+                            Text("That name is too long. Keep it to \(MachinePreferencesStore.aliasByteLimit) bytes or fewer — emoji and accented letters each take several.")
                                 .font(.footnote)
                                 .foregroundStyle(.red)
                         }
@@ -166,8 +166,9 @@ struct HostActionsView: View {
             .navigationTitle("Manage Mac")
             .toolbar {
                 Button("Done") {
-                    commitAlias()
-                    dismiss()
+                    // Dismissing over a rejected name would hide both the error and what was
+                    // typed, and bring the old name back with no explanation.
+                    if commitAlias() { dismiss() }
                 }
             }
             .task { alias = services.preference(for: connectionID).alias ?? "" }
@@ -175,9 +176,12 @@ struct HostActionsView: View {
     }
 
     /// Writes the typed alias, keeping it on screen when the store rejects it so the user can
-    /// shorten what they wrote rather than watch it disappear.
-    private func commitAlias() {
-        aliasRejected = !services.setAlias(alias, for: connectionID)
+    /// shorten what they wrote rather than watch it disappear. Returns whether it was stored.
+    @discardableResult
+    private func commitAlias() -> Bool {
+        let stored = services.setAlias(alias, for: connectionID)
+        aliasRejected = !stored
+        return stored
     }
 
     private var host: SavedHostDescriptor? {

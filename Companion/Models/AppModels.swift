@@ -122,11 +122,15 @@ enum MachineAutoSelection: Equatable {
 
 /// The workspace to open a Mac on, so its terminal column is never empty while it is connected.
 enum WorkspaceAutoSelection {
-    /// The one this device was last left on, or the first, matching how `PaneSelectionStore`
-    /// resolves a pane. A remembered workspace the Mac has since deleted falls back rather than
-    /// leaving nothing selected.
-    static func choice(workspaces: [RemoteWorkspaceItem], remembered: UUID?) -> UUID? {
+    /// Keeps the current choice while it still exists, otherwise the one this device was last left
+    /// on, otherwise the first — the same order `PaneSelectionStore` resolves a pane in.
+    ///
+    /// `current` matters as much as `remembered`: a workspace closed on the Mac leaves a selection
+    /// pointing at nothing, and holding on to it strands the detail column on "Choose a workspace"
+    /// with no way to choose.
+    static func choice(workspaces: [RemoteWorkspaceItem], current: UUID?, remembered: UUID?) -> UUID? {
         guard !workspaces.isEmpty else { return nil }
+        if let current, workspaces.contains(where: { $0.id.rawValue == current }) { return current }
         let match = workspaces.first { $0.id.rawValue == remembered }
         return (match ?? workspaces[0]).id.rawValue
     }
