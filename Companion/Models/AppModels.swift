@@ -23,6 +23,15 @@ enum ConnectionPhase: Equatable, Sendable {
         case .failed: "Connection failed"
         }
     }
+
+    /// True while a probe is still in flight, so a caller can wait for an answer rather than read
+    /// a not-yet-online host as unreachable.
+    var isSettling: Bool {
+        switch self {
+        case .connecting, .transportOnline, .authenticating: true
+        case .disconnected, .online, .failed: false
+        }
+    }
 }
 
 struct SavedConnectionID: Hashable, Sendable {
@@ -40,10 +49,91 @@ struct SavedConnectionID: Hashable, Sendable {
         self.init(relayOrigin: host.relay.canonicalOrigin,
                   accountID: host.accountID, hostID: host.hostID)
     }
+
+    /// A stable string for this connection, for use as a dictionary key in stored preferences.
+    /// `relayOrigin` is already canonical, so the same pairing produces the same key every launch.
+    var storageKey: String {
+        "\(relayOrigin)|\(accountID.uuidString.lowercased())|\(hostID.uuidString.lowercased())"
+    }
 }
 
 extension SavedHostDescriptor {
     var connectionID: SavedConnectionID { SavedConnectionID(self) }
+}
+
+/// What came of sending diagnostics to the Mac.
+///
+/// The upload used to return nothing and write its outcome into the log it had just sent, which
+/// left the button looking inert whether it worked, was refused, or was never attempted.
+enum DiagnosticsUploadOutcome: Equatable {
+    case sent(bytes: Int)
+    case notConnected
+    case nothingRecorded
+    case failed(String)
+
+    var message: String {
+        switch self {
+        case .sent(let bytes):
+            "Sent \(bytes.formatted(.byteCount(style: .file))) to the Mac."
+        case .notConnected:
+            "Not connected to a Mac. Open one first, then send."
+        case .nothingRecorded:
+            "Nothing recorded yet, so there is nothing to send."
+        case .failed(let reason):
+            // An older Mac rejects the upload outright, which is worth seeing verbatim rather
+            // than flattened into "failed".
+            "Could not send: \(reason)"
+        }
+    }
+
+    var isFailure: Bool {
+        switch self {
+        case .sent: false
+        case .notConnected, .nothingRecorded, .failed: true
+        }
+    }
+}
+
+/// Whether the app can open straight onto a Mac instead of asking which one.
+enum MachineAutoSelection: Equatable {
+    /// At least one reachability probe has not answered yet. Ask again when it does.
+    case waiting
+    /// Every probe has answered and the machine list is what should be shown.
+    case showTheList
+    case select(SavedConnectionID)
+
+    /// Starring is the opt-in to skipping the list: one Mac reachable is not enough on its own,
+    /// because the list is also where renaming, starring and pairing live.
+    static func choice(hosts: [SavedHostDescriptor],
+                       statuses: [SavedConnectionID: ConnectionPhase],
+                       isStarred: (SavedConnectionID) -> Bool) -> MachineAutoSelection {
+        // Mid-refresh one host can be online while the rest are still connecting, which reads as
+        // "the only one reachable" and is not the same thing.
+        for host in hosts {
+            guard let phase = statuses[host.connectionID] else { return .waiting }
+            if phase.isSettling { return .waiting }
+        }
+        let reachable = hosts.filter { statuses[$0.connectionID] == .online }
+        guard reachable.count == 1, let host = reachable.first,
+              isStarred(host.connectionID) else { return .showTheList }
+        return .select(host.connectionID)
+    }
+}
+
+/// The workspace to open a Mac on, so its terminal column is never empty while it is connected.
+enum WorkspaceAutoSelection {
+    /// Keeps the current choice while it still exists, otherwise the one this device was last left
+    /// on, otherwise the first — the same order `PaneSelectionStore` resolves a pane in.
+    ///
+    /// `current` matters as much as `remembered`: a workspace closed on the Mac leaves a selection
+    /// pointing at nothing, and holding on to it strands the detail column on "Choose a workspace"
+    /// with no way to choose.
+    static func choice(workspaces: [RemoteWorkspaceItem], current: UUID?, remembered: UUID?) -> UUID? {
+        guard !workspaces.isEmpty else { return nil }
+        if let current, workspaces.contains(where: { $0.id.rawValue == current }) { return current }
+        let match = workspaces.first { $0.id.rawValue == remembered }
+        return (match ?? workspaces[0]).id.rawValue
+    }
 }
 
 struct TerminalSurfaceID: Hashable, Sendable {
@@ -679,9 +769,12 @@ final class SceneModel {
 
     /// Sends the collected diagnostics to the paired Mac, where they are easier to get at than
     /// on the phone. Silent by design: this runs on a timer and a failure is not worth an alert.
-    func uploadDiagnostics() async {
-        guard let hostID = selectedHostID, connection != nil,
-              let compressed = await DiagnosticsLog.shared.compressedForUpload() else { return }
+    @discardableResult
+    func uploadDiagnostics() async -> DiagnosticsUploadOutcome {
+        guard let hostID = selectedHostID, connection != nil else { return .notConnected }
+        guard let compressed = await DiagnosticsLog.shared.compressedForUpload() else {
+            return .nothingRecorded
+        }
         do {
             let payload = try RemoteDiagnosticsPayload(
                 deviceName: UIDevice.current.name,
@@ -693,9 +786,11 @@ final class SceneModel {
                                   payload: try JSONEncoder().encode(payload))
             await DiagnosticsLog.shared.record(category: "diagnostics", "sent to Mac",
                                                detail: "bytes=\(compressed.count)")
+            return .sent(bytes: compressed.count)
         } catch {
             await DiagnosticsLog.shared.record(category: "diagnostics", "send to Mac failed",
                                                detail: error.localizedDescription)
+            return .failed(error.localizedDescription)
         }
     }
 
