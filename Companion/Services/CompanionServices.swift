@@ -182,6 +182,12 @@ final class CompanionServices {
         agreementStore = DeviceIdentityStore(secrets: secrets)
         signingStore = SigningIdentityStore(secrets: secrets)
         machinePreferencesStore = store
+        // Before the snapshot, not from the app delegate: this initialiser runs as a property
+        // initialiser, long before `didFinishLaunchingWithOptions`, so clearing there would leave
+        // the observed copy holding a previous test run's aliases and stars.
+        if UITestConfiguration.showsMachineFixture {
+            for host in MachineUITestFixture.hosts { store.forget(host.connectionID) }
+        }
         machinePreferences = store.all()
     }
 

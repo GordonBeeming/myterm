@@ -24,6 +24,9 @@ struct DiagnosticsView: View {
                     Button {
                         Task {
                             isSending = true
+                            // Cleared first, or the last run's "Sent" sits under the spinner and
+                            // reads as the outcome of the send still in flight.
+                            uploadOutcome = nil
                             uploadOutcome = await scene.uploadDiagnostics()
                             isSending = false
                             await reload()

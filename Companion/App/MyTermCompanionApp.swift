@@ -52,12 +52,6 @@ final class CompanionAppDelegate: NSObject, UIApplicationDelegate, @preconcurren
         if UITestConfiguration.forgetsPaneSelection {
             PaneSelectionStore().clear(for: WorkspaceUITestFixture.workspace.id)
         }
-        // Aliases and stars survive a reinstall, so a fixture run has to start from nothing or it
-        // reads back whatever the previous run tapped.
-        if UITestConfiguration.showsMachineFixture {
-            let store = MachinePreferencesStore()
-            for host in MachineUITestFixture.hosts { store.forget(host.connectionID) }
-        }
         #endif
         return true
     }
