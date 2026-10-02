@@ -345,6 +345,7 @@ private struct WorkspaceColumn: View {
     let services: CompanionServices
     let scene: SceneModel
     @State private var isCreating = false
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
         @Bindable var scene = scene
@@ -401,28 +402,35 @@ private struct WorkspaceColumn: View {
             services.setLastWorkspaceID(workspaceID, for: connectionID)
         }
         .task(id: WorkspaceChoice(connectionID: scene.selectedConnectionID,
-                                  workspaceIDs: scene.projection?.workspaces.map(\.id.rawValue) ?? [])) {
+                                  workspaceIDs: scene.projection?.workspaces.map(\.id.rawValue) ?? [],
+                                  sizeClass: horizontalSizeClass)) {
             selectAWorkspace()
         }
     }
 
-    /// The workspaces on offer for one Mac. Re-running the choice on any change to either means a
-    /// workspace deleted on the Mac is replaced rather than leaving the detail column empty.
+    /// The workspaces on offer for one Mac, and whether the layout has room to show one beside
+    /// them. Re-running the choice on any change means a workspace deleted on the Mac is replaced
+    /// rather than left selected, and an iPad widened out of Split View fills its detail column.
     private struct WorkspaceChoice: Equatable {
         let connectionID: SavedConnectionID?
         let workspaceIDs: [UUID]
+        let sizeClass: UserInterfaceSizeClass?
     }
 
-    /// Lands on the workspace this Mac was last left on, or its first, so the terminal column has
-    /// something in it as soon as the Mac is connected. Opening a workspace is view-only, so this
-    /// takes nothing from whoever is at the Mac.
+    /// Fills an empty detail column where the layout keeps the Macs and workspaces beside it, and
+    /// repairs a selection the Mac has closed anywhere.
+    ///
+    /// A narrow layout stops at the workspace list: there, selecting a workspace is a push into
+    /// its terminal with the lists left behind, so opening on one gives no sign of which Mac or
+    /// workspace you are in. Choosing is left to the person.
     private func selectAWorkspace() {
         guard let connectionID = scene.selectedConnectionID,
               let workspaces = scene.projection?.workspaces else { return }
         let chosen = WorkspaceAutoSelection.choice(
             workspaces: workspaces,
             current: scene.selectedWorkspaceID,
-            remembered: services.preference(for: connectionID).lastWorkspaceID
+            remembered: services.preference(for: connectionID).lastWorkspaceID,
+            opensWithoutAsking: horizontalSizeClass == .regular
         )
         guard chosen != scene.selectedWorkspaceID else { return }
         scene.selectedWorkspaceID = chosen
