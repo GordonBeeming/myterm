@@ -159,11 +159,12 @@ final class MachineNavigationTests: XCTestCase {
 
     // MARK: - Workspace
 
-    func testOpensTheRememberedWorkspace() {
+    func testOpensTheRememberedWorkspaceWhereTheListsStayOnScreen() {
         let workspaces = [workspace("myterm"), workspace("xylem"), workspace("sink")]
 
         let chosen = WorkspaceAutoSelection.choice(workspaces: workspaces, current: nil,
-                                                   remembered: workspaces[2].id.rawValue)
+                                                   remembered: workspaces[2].id.rawValue,
+                                                   opensWithoutAsking: true)
 
         XCTAssertEqual(chosen, workspaces[2].id.rawValue)
     }
@@ -172,15 +173,26 @@ final class MachineNavigationTests: XCTestCase {
         let workspaces = [workspace("myterm"), workspace("xylem")]
 
         XCTAssertEqual(WorkspaceAutoSelection.choice(workspaces: workspaces, current: nil,
-                                                     remembered: nil),
+                                                     remembered: nil, opensWithoutAsking: true),
                        workspaces[0].id.rawValue)
+    }
+
+    func testStopsAtTheWorkspaceListOnANarrowLayout() {
+        let workspaces = [workspace("myterm"), workspace("xylem")]
+
+        let chosen = WorkspaceAutoSelection.choice(workspaces: workspaces, current: nil,
+                                                   remembered: workspaces[1].id.rawValue,
+                                                   opensWithoutAsking: false)
+
+        XCTAssertNil(chosen,
+                     "Opening a workspace there is a push into its terminal, which leaves no sign of which Mac you are on")
     }
 
     func testFallsBackWhenTheRememberedWorkspaceIsGoneFromTheMac() {
         let workspaces = [workspace("myterm"), workspace("xylem")]
 
         let chosen = WorkspaceAutoSelection.choice(workspaces: workspaces, current: nil,
-                                                   remembered: UUID())
+                                                   remembered: UUID(), opensWithoutAsking: true)
 
         XCTAssertEqual(chosen, workspaces[0].id.rawValue,
                        "A workspace deleted on the Mac must not leave the detail column empty")
@@ -189,27 +201,33 @@ final class MachineNavigationTests: XCTestCase {
     func testLeavesAWorkspaceTheUserIsAlreadyOnAlone() {
         let workspaces = [workspace("myterm"), workspace("xylem")]
 
-        let chosen = WorkspaceAutoSelection.choice(workspaces: workspaces,
-                                                   current: workspaces[1].id.rawValue,
-                                                   remembered: workspaces[0].id.rawValue)
+        for opensWithoutAsking in [true, false] {
+            let chosen = WorkspaceAutoSelection.choice(workspaces: workspaces,
+                                                       current: workspaces[1].id.rawValue,
+                                                       remembered: workspaces[0].id.rawValue,
+                                                       opensWithoutAsking: opensWithoutAsking)
 
-        XCTAssertEqual(chosen, workspaces[1].id.rawValue,
-                       "What the user is looking at outranks what was remembered")
+            XCTAssertEqual(chosen, workspaces[1].id.rawValue,
+                           "What the user is looking at outranks what was remembered")
+        }
     }
 
-    func testReplacesASelectionTheMacHasClosed() {
+    func testReplacesASelectionTheMacHasClosedOnEveryLayout() {
         let workspaces = [workspace("myterm"), workspace("xylem")]
 
-        let chosen = WorkspaceAutoSelection.choice(workspaces: workspaces, current: UUID(),
-                                                   remembered: workspaces[1].id.rawValue)
+        for opensWithoutAsking in [true, false] {
+            let chosen = WorkspaceAutoSelection.choice(workspaces: workspaces, current: UUID(),
+                                                       remembered: workspaces[1].id.rawValue,
+                                                       opensWithoutAsking: opensWithoutAsking)
 
-        XCTAssertEqual(chosen, workspaces[1].id.rawValue,
-                       "A selection pointing at a closed workspace strands the detail column")
+            XCTAssertEqual(chosen, workspaces[1].id.rawValue,
+                           "Being held in a workspace the Mac has closed is worse than being moved")
+        }
     }
 
     func testChoosesNothingWhenTheMacHasNoWorkspaces() {
         XCTAssertNil(WorkspaceAutoSelection.choice(workspaces: [], current: UUID(),
-                                                   remembered: UUID()))
+                                                   remembered: UUID(), opensWithoutAsking: true))
     }
 
     // MARK: - Fixtures
