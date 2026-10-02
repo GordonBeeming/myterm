@@ -114,7 +114,7 @@ struct AdaptiveWorkspaceView: View {
                 ToolbarItem(placement: .primaryAction) {
                     Button(validMaximizedGroupID == nil ? "Maximise pane" : "Restore panes",
                            systemImage: validMaximizedGroupID == nil ? "arrow.up.left.and.arrow.down.right" : "arrow.down.right.and.arrow.up.left") {
-                        maximizedGroupID = validMaximizedGroupID == nil ? focusedGroup?.id : nil
+                        setMaximised(validMaximizedGroupID == nil ? focusedGroup?.id : nil)
                     }
                     .keyboardShortcut(.return, modifiers: [.command, .shift])
                     .accessibilityIdentifier("toggle-maximise-pane")
@@ -130,6 +130,12 @@ struct AdaptiveWorkspaceView: View {
         }
         .onAppear {
             visibilityOwnerID = UUID()
+            // Restored even when the pane it names is gone: `validMaximizedGroupID` renders that
+            // as unmaximised, and the Mac re-opening the pane should bring the layout back rather
+            // than having quietly dropped it.
+            if maximizedGroupID == nil {
+                maximizedGroupID = paneSelections.maximizedGroupID(for: workspace.id)
+            }
             guard compactSelection == nil,
                   let remembered = paneSelections.selection(for: workspace.id) else { return }
             if workspace.groups.contains(where: { $0.id == remembered.groupID }) {
@@ -137,16 +143,17 @@ struct AdaptiveWorkspaceView: View {
             } else {
                 // The pane went while this device was looking elsewhere, so onChange never saw it
                 // go. Drop the memory instead of leaving it to take one of the store's slots.
-                paneSelections.clear(for: workspace.id)
+                paneSelections.clearSelection(for: workspace.id)
             }
         }
         .onChange(of: workspace.groups.map(\.id)) { _, ids in
-            if let maximizedGroupID, !ids.contains(maximizedGroupID) { self.maximizedGroupID = nil }
+            if let maximizedGroupID, !ids.contains(maximizedGroupID) { setMaximised(nil) }
             if let groupID = compactSelection?.groupID, !ids.contains(groupID) {
                 // The Mac closed the pane this device was pinned to. Forget the choice so the next
                 // visit starts at the first pane instead of wherever the desktop is focused now.
+                // Only the choice: a maximised pane is a separate answer about this workspace.
                 compactSelection = nil
-                paneSelections.clear(for: workspace.id)
+                paneSelections.clearSelection(for: workspace.id)
             }
         }
         .task(id: visibility) {
@@ -161,6 +168,14 @@ struct AdaptiveWorkspaceView: View {
             guard let owner = visibility.ownerID else { return }
             Task { await scene.clearVisibleWorkspaceTerminals(ownerID: owner) }
         }
+    }
+
+    /// Maximising is a view choice this device makes about this workspace, so it is stored the way
+    /// the compact pane choice is — otherwise every return to the workspace rebuilds this view and
+    /// drops back to the Mac's pane arrangement.
+    private func setMaximised(_ groupID: TabGroupID?) {
+        maximizedGroupID = groupID
+        paneSelections.setMaximizedGroupID(groupID, for: workspace.id)
     }
 
     private func select(group: RemoteTabGroupProjection, tab: RemoteTabProjection?) {
@@ -277,7 +292,7 @@ struct AdaptiveWorkspaceView: View {
                                   requestsKeyboardFocus: focused,
                                   onToggleMaximise: usesWideLayout ? {
                                       focusedGroupID = group.id
-                                      maximizedGroupID = maximizedGroupID == group.id ? nil : group.id
+                                      setMaximised(maximizedGroupID == group.id ? nil : group.id)
                                   } : nil)
                 .id(route.id)
         } else if let connectionID = scene.selectedConnectionID {
@@ -312,7 +327,7 @@ struct AdaptiveWorkspaceView: View {
                         Button(maximizedGroupID == groupID ? "Restore panes" : "Maximise pane",
                                systemImage: maximizedGroupID == groupID ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") {
                             focusedGroupID = groupID
-                            maximizedGroupID = maximizedGroupID == groupID ? nil : groupID
+                            setMaximised(maximizedGroupID == groupID ? nil : groupID)
                         }
                         .labelStyle(.iconOnly)
                         if let route = route(for: tab, group: group) {

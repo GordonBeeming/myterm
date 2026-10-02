@@ -8,7 +8,11 @@ struct PaneSelection: Codable, Equatable, Sendable {
     var tabID: TabID?
 }
 
-/// Remembers which pane each workspace was left on, per device.
+/// How this device last viewed each workspace: which pane the compact layout was left on, and
+/// which pane the wide layout was left maximised to.
+///
+/// Both answer "what was I looking at here", and both are this device's business rather than the
+/// Mac's, so they share one record per workspace and one eviction order.
 ///
 /// The compact layout shows one pane at a time, so it needs its own answer to "which pane".
 /// The Mac's focused pane is deliberately not that answer: following it made every visit land
@@ -26,29 +30,43 @@ struct PaneSelectionStore {
         self.defaults = defaults
     }
 
-    /// A stored selection paired with the counter that orders evictions once the store is full.
+    /// What was remembered for one workspace, paired with the counter that orders evictions once
+    /// the store is full.
+    ///
+    /// Both remembered values are optional because they are set independently: a wide layout
+    /// maximises a pane without ever choosing a compact one, and a compact layout the other way
+    /// round. An entry holding neither is removed rather than left taking one of the slots.
     private struct Entry: Codable, Equatable {
-        var selection: PaneSelection
+        var selection: PaneSelection?
         var sequence: Int
+        var maximizedGroupID: TabGroupID?
+
+        var isEmpty: Bool { selection == nil && maximizedGroupID == nil }
     }
 
     func selection(for workspaceID: WorkspaceID) -> PaneSelection? {
         entries()[workspaceID.description]?.selection
     }
 
+    /// The pane the wide layout was left maximised to, if any.
+    func maximizedGroupID(for workspaceID: WorkspaceID) -> TabGroupID? {
+        entries()[workspaceID.description]?.maximizedGroupID
+    }
+
     func select(_ selection: PaneSelection, for workspaceID: WorkspaceID) {
-        var stored = entries()
-        let key = workspaceID.description
         // Rewritten even when the choice is unchanged: picking a workspace again is what makes it
         // recent, and the cap evicts in that order.
-        let next = (stored.values.map(\.sequence).max() ?? 0) + 1
-        stored[key] = Entry(selection: selection, sequence: next)
-        if stored.count > Self.capacity {
-            let evicted = stored.sorted { $0.value.sequence < $1.value.sequence }
-                .prefix(stored.count - Self.capacity)
-            for entry in evicted { stored.removeValue(forKey: entry.key) }
-        }
-        write(stored)
+        update(workspaceID, bumpingRecency: true) { $0.selection = selection }
+    }
+
+    /// Stores the maximised pane, or clears it when `groupID` is nil.
+    func setMaximizedGroupID(_ groupID: TabGroupID?, for workspaceID: WorkspaceID) {
+        update(workspaceID, bumpingRecency: groupID != nil) { $0.maximizedGroupID = groupID }
+    }
+
+    /// Forgets the pane this workspace was left on, keeping anything else remembered about it.
+    func clearSelection(for workspaceID: WorkspaceID) {
+        update(workspaceID, bumpingRecency: false) { $0.selection = nil }
     }
 
     func clear(for workspaceID: WorkspaceID) {
@@ -68,6 +86,30 @@ struct PaneSelectionStore {
             ?? group.tabs.first
         guard let tab else { return nil }
         return (group, tab)
+    }
+
+    private func update(_ workspaceID: WorkspaceID, bumpingRecency: Bool,
+                        _ change: (inout Entry) -> Void) {
+        var stored = entries()
+        let key = workspaceID.description
+        let existing = stored[key]
+        var entry = existing ?? Entry(selection: nil, sequence: 0, maximizedGroupID: nil)
+        change(&entry)
+        if bumpingRecency {
+            entry.sequence = (stored.values.map(\.sequence).max() ?? 0) + 1
+        }
+        if entry.isEmpty {
+            guard stored.removeValue(forKey: key) != nil else { return }
+        } else {
+            guard entry != existing else { return }
+            stored[key] = entry
+        }
+        if stored.count > Self.capacity {
+            let evicted = stored.sorted { $0.value.sequence < $1.value.sequence }
+                .prefix(stored.count - Self.capacity)
+            for entry in evicted { stored.removeValue(forKey: entry.key) }
+        }
+        write(stored)
     }
 
     private func entries() -> [String: Entry] {
@@ -90,4 +132,3 @@ struct PaneSelectionStore {
         }
     }
 }
-

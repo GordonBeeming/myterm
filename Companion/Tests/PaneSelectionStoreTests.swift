@@ -139,6 +139,107 @@ final class PaneSelectionStoreTests: XCTestCase {
                        "The 50 most recent choices are kept")
         XCTAssertEqual(store.selection(for: workspaces[59].id)?.groupID, workspaces[59].groups[1].id)
     }
+
+    // MARK: - Maximised pane
+
+    func testRememberedMaximisedPaneSurvivesAFreshStore() throws {
+        let workspace = testWorkspace()
+        let pane = workspace.groups[1]
+
+        PaneSelectionStore(defaults: defaults).setMaximizedGroupID(pane.id, for: workspace.id)
+
+        XCTAssertEqual(PaneSelectionStore(defaults: defaults).maximizedGroupID(for: workspace.id),
+                       pane.id, "Returning to the workspace must not drop back to the Mac's layout")
+    }
+
+    func testMaximisingNeedsNoPaneSelectionToExistFirst() throws {
+        let workspace = testWorkspace()
+        let store = PaneSelectionStore(defaults: defaults)
+
+        // The wide layout maximises without ever choosing a compact pane.
+        store.setMaximizedGroupID(workspace.groups[0].id, for: workspace.id)
+
+        XCTAssertEqual(store.maximizedGroupID(for: workspace.id), workspace.groups[0].id)
+        XCTAssertNil(store.selection(for: workspace.id))
+    }
+
+    func testRestoringPanesForgetsOnlyTheMaximisedPane() throws {
+        let workspace = testWorkspace()
+        let store = PaneSelectionStore(defaults: defaults)
+        let pane = workspace.groups[2]
+        store.select(PaneSelection(groupID: pane.id, tabID: pane.tabs[0].id), for: workspace.id)
+        store.setMaximizedGroupID(pane.id, for: workspace.id)
+
+        store.setMaximizedGroupID(nil, for: workspace.id)
+
+        XCTAssertNil(store.maximizedGroupID(for: workspace.id))
+        XCTAssertEqual(store.selection(for: workspace.id)?.groupID, pane.id,
+                       "Restoring the panes says nothing about which pane the phone was on")
+    }
+
+    func testForgettingThePaneKeepsTheMaximisedPane() throws {
+        let workspace = testWorkspace()
+        let store = PaneSelectionStore(defaults: defaults)
+        let pane = workspace.groups[1]
+        store.select(PaneSelection(groupID: pane.id, tabID: pane.tabs[0].id), for: workspace.id)
+        store.setMaximizedGroupID(pane.id, for: workspace.id)
+
+        store.clearSelection(for: workspace.id)
+
+        XCTAssertNil(store.selection(for: workspace.id))
+        XCTAssertEqual(store.maximizedGroupID(for: workspace.id), pane.id,
+                       "A pane the Mac closed says nothing about the wide layout's choice")
+    }
+
+    func testAnEntryHoldingNothingIsDropped() throws {
+        let workspace = testWorkspace()
+        let store = PaneSelectionStore(defaults: defaults)
+        store.setMaximizedGroupID(workspace.groups[0].id, for: workspace.id)
+
+        store.setMaximizedGroupID(nil, for: workspace.id)
+
+        let raw = try XCTUnwrap(defaults.data(forKey: "companionPaneSelections"))
+        let stored = try JSONSerialization.jsonObject(with: raw) as? [String: Any]
+        XCTAssertEqual(stored?.count, 0, "An empty record must not hold one of the 50 slots")
+    }
+
+    func testMaximisingDoesNotEvictAWorkspaceStillBeingUsed() {
+        let store = PaneSelectionStore(defaults: defaults)
+        let maximised = testWorkspace()
+        store.setMaximizedGroupID(maximised.groups[0].id, for: maximised.id)
+        for _ in 0..<49 {
+            let filler = testWorkspace()
+            store.select(PaneSelection(groupID: filler.groups[1].id, tabID: nil), for: filler.id)
+        }
+
+        XCTAssertEqual(store.maximizedGroupID(for: maximised.id), maximised.groups[0].id,
+                       "Maximising counts as a visit, so it holds its place like a selection does")
+    }
+
+    func testReadsRecordsWrittenBeforeMaximisingWasStored() throws {
+        let workspace = testWorkspace()
+        let pane = workspace.groups[1]
+        PaneSelectionStore(defaults: defaults)
+            .select(PaneSelection(groupID: pane.id, tabID: pane.tabs[0].id), for: workspace.id)
+
+        // Strip the field back out rather than hand-rolling the old shape, so this is the record
+        // an existing device really has: a selection and a sequence, nothing else.
+        let key = "companionPaneSelections"
+        var records = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: try XCTUnwrap(defaults.data(forKey: key)))
+                as? [String: [String: Any]]
+        )
+        var record = try XCTUnwrap(records[workspace.id.description])
+        record.removeValue(forKey: "maximizedGroupID")
+        XCTAssertNotNil(record["selection"])
+        records[workspace.id.description] = record
+        defaults.set(try JSONSerialization.data(withJSONObject: records), forKey: key)
+
+        let store = PaneSelectionStore(defaults: defaults)
+        XCTAssertEqual(store.selection(for: workspace.id)?.groupID, pane.id,
+                       "An upgrade must not lose the pane the device was already on")
+        XCTAssertNil(store.maximizedGroupID(for: workspace.id))
+    }
 }
 
 private func testTerminal(_ title: String) -> RemoteTabProjection {
