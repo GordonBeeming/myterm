@@ -133,8 +133,13 @@ struct AdaptiveWorkspaceView: View {
             // Restored even when the pane it names is gone: `validMaximizedGroupID` renders that
             // as unmaximised, and the Mac re-opening the pane should bring the layout back rather
             // than having quietly dropped it.
-            if maximizedGroupID == nil {
-                maximizedGroupID = paneSelections.maximizedGroupID(for: workspace.id)
+            if maximizedGroupID == nil,
+               let remembered = paneSelections.maximizedGroupID(for: workspace.id) {
+                maximizedGroupID = remembered
+                // Focus follows it. A maximised pane is the only one on screen, and leaving focus
+                // on whichever pane the Mac happens to be on renders it as a bystander: no
+                // keyboard, and the terminal keys hidden until it is tapped.
+                if focusedGroupID == nil { focusedGroupID = remembered }
             }
             guard compactSelection == nil,
                   let remembered = paneSelections.selection(for: workspace.id) else { return }
@@ -147,7 +152,10 @@ struct AdaptiveWorkspaceView: View {
             }
         }
         .onChange(of: workspace.groups.map(\.id)) { _, ids in
-            if let maximizedGroupID, !ids.contains(maximizedGroupID) { setMaximised(nil) }
+            // A maximised pane that goes is deliberately not forgotten: `validMaximizedGroupID`
+            // renders the workspace unmaximised while it is absent, and the Mac re-opening that
+            // pane restores the arrangement. Clearing it here would have made the restore above
+            // depend on whether this device happened to be watching when the pane went.
             if let groupID = compactSelection?.groupID, !ids.contains(groupID) {
                 // The Mac closed the pane this device was pinned to. Forget the choice so the next
                 // visit starts at the first pane instead of wherever the desktop is focused now.
