@@ -474,6 +474,16 @@ final class SceneModel {
         if let previousConnection { await previousConnection.disconnect() }
     }
 
+    func openBrowserProxy(_ route: BrowserRoute, owner: UUID) async throws -> RemoteBrowserProxyEndpoint {
+        guard route.connectionID == selectedConnectionID, connectionPhase == .online,
+              let connection else { throw RemoteError.disconnected }
+        return try await connection.openBrowserProxy(route, owner: owner)
+    }
+
+    func closeBrowserProxy(_ route: BrowserRoute, owner: UUID) async {
+        await connection?.closeBrowserProxy(route, owner: owner)
+    }
+
     func attach(_ route: TerminalRoute, requestingFreshCheckpoint: Bool = false,
                 usesLegacyVisibility: Bool = true) async {
         await withWorkspaceVisibilityLock {

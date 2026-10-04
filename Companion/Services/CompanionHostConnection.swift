@@ -58,9 +58,14 @@ actor CompanionHostConnection {
     private var clientHello: HelloParameters?
     private var helloChannel: SecureRelayChannel?
     private var applicationChannel: SecureRelayChannel?
+    private var hostCapabilities: Set<String> = []
     private var projection: RemoteWorkspaceProjection?
     private var attachedRoutes = AttachedRouteRegistry()
+    private var browserProxyEpoch = UUID()
+    private var browserProxyOwners: [UUID: UUID] = [:]
+    private var browserProxies: [UUID: (owner: UUID, proxy: RemoteBrowserProxy)] = [:]
     private var commandContinuations: [UUID: CheckedContinuation<Data?, Error>] = [:]
+    private var retiredCommands: [UUID] = []
     private var commandTimeouts: [UUID: Task<Void, Never>] = [:]
 
     init(host: SavedHostDescriptor, tokenManager: RelayTokenManager, identity: CompanionIdentity) {
@@ -187,8 +192,63 @@ actor CompanionHostConnection {
         )))
     }
 
+    func openBrowserProxy(_ route: BrowserRoute, owner: UUID) async throws -> RemoteBrowserProxyEndpoint {
+        try requireBrowserCapability(RemoteBrowserProxy.capability)
+        guard projection?.workspaces.contains(where: { workspace in
+            workspace.id.rawValue == route.workspaceID && workspace.groups.contains(where: { group in
+                group.id.rawValue == route.groupID && group.tabs.contains(where: {
+                    $0.id.rawValue == route.tabID && $0.kind == .browser
+                })
+            })
+        }) == true else { throw RemoteError.invalidMessage }
+        let epoch = browserProxyEpoch
+        browserProxyOwners[route.tabID] = owner
+        if let previous = browserProxies.removeValue(forKey: route.tabID) { await previous.proxy.stop() }
+        guard browserProxyEpoch == epoch, browserProxyOwners[route.tabID] == owner,
+              applicationChannel != nil else { throw CancellationError() }
+        let proxy = RemoteBrowserProxy { [weak self] parameters in
+            guard let self else { throw RemoteError.disconnected }
+            try await self.sendBrowserTunnel(parameters, route: route)
+        }
+        browserProxies[route.tabID] = (owner, proxy)
+        do {
+            let endpoint = try await proxy.start(protocolKind: .socks5)
+            guard browserProxyEpoch == epoch, browserProxyOwners[route.tabID] == owner,
+                  applicationChannel != nil else {
+                await proxy.stop()
+                throw CancellationError()
+            }
+            return endpoint
+        }
+        catch {
+            if browserProxies[route.tabID]?.owner == owner { browserProxies.removeValue(forKey: route.tabID) }
+            if browserProxyOwners[route.tabID] == owner { browserProxyOwners.removeValue(forKey: route.tabID) }
+            await proxy.stop()
+            throw error
+        }
+    }
+
+    func closeBrowserProxy(_ route: BrowserRoute, owner: UUID) async {
+        guard browserProxyOwners[route.tabID] == owner else { return }
+        browserProxyOwners.removeValue(forKey: route.tabID)
+        if let proxy = browserProxies.removeValue(forKey: route.tabID) { await proxy.proxy.stop() }
+    }
+
+    private func requireBrowserCapability(_ capability: String) throws {
+        guard hostCapabilities.contains(capability) else {
+            throw RemoteCommandFailure(code: "host_update_required",
+                message: "Update MyTerm on the connected Mac to use this browser mode.", result: nil)
+        }
+    }
+
+    private func sendBrowserTunnel(_ parameters: BrowserTunnelParameters, route: BrowserRoute) async throws {
+        try await send(.browserTunnel(MessageMetadata(hostID: host.hostID, runtimeID: runtimeID,
+            workspaceID: route.workspaceID, groupID: route.groupID, tabID: route.tabID), parameters))
+    }
+
     func command(_ operation: CommandOperation, metadata source: MessageMetadata,
                  payload: Data) async throws -> Data? {
+        if operation == .browserInteract { try requireBrowserCapability(RemoteBrowserRequest.capability) }
         guard commandContinuations.count < 64 else { throw RemoteError.messageTooLarge }
         let requestID = UUID()
         let requestMetadata = MessageMetadata(
@@ -252,7 +312,8 @@ actor CompanionHostConnection {
             deviceID: identity.localDeviceID,
             agreementKey: identity.agreementKey.publicKey,
             notificationSigningKey: identity.notificationSigningKey.publicKey,
-            capabilities: ["workspace-v1", "terminal-checkpoint-v1", "control-lease-v1"]
+            capabilities: ["workspace-v1", "terminal-checkpoint-v1", "control-lease-v1",
+                           RemoteBrowserProxy.capability, RemoteBrowserRequest.capability]
         )
         let hostKey = try P256.KeyAgreement.PublicKey(x963Representation: host.pinnedPublicKey)
         let outbound = ChannelBinding(
@@ -293,6 +354,7 @@ actor CompanionHostConnection {
             destinationConnectionID: connectionID, over: transport
         )
         self.runtimeID = runtimeID
+        hostCapabilities = Set(response.capabilities)
         applicationChannel = SecureRelayChannel(
             identity: identity.agreementKey, pinnedPeer: hostAgreement,
             outboundBinding: ChannelBinding(
@@ -319,14 +381,18 @@ actor CompanionHostConnection {
         guard message.metadata.hostID == host.hostID,
               message.metadata.runtimeID == runtimeID else { throw RemoteError.wrongPeer }
         switch message {
+        case .browserTunnel(let metadata, let parameters):
+            guard let tabID = metadata.tabID, let proxy = browserProxies[tabID] else { return }
+            try await proxy.proxy.receive(parameters)
         case .workspaces(_, let parameters):
             let value = try JSONDecoder().decode(RemoteWorkspaceProjection.self, from: parameters.model)
             projection = value
             reconcileAttachedRoutes(using: value)
             try emit(.workspaces(value))
         case .commandResult(let metadata, let result):
-            guard let requestID = metadata.requestID,
-                  let continuation = commandContinuations.removeValue(forKey: requestID) else {
+            guard let requestID = metadata.requestID else { throw RemoteError.invalidMessage }
+            guard let continuation = commandContinuations.removeValue(forKey: requestID) else {
+                if retiredCommands.contains(requestID) { return }
                 throw RemoteError.invalidMessage
             }
             commandTimeouts.removeValue(forKey: requestID)?.cancel()
@@ -423,7 +489,10 @@ actor CompanionHostConnection {
 
     private func cancelCommand(_ requestID: UUID, error: Error) {
         commandTimeouts.removeValue(forKey: requestID)?.cancel()
-        commandContinuations.removeValue(forKey: requestID)?.resume(throwing: error)
+        guard let continuation = commandContinuations.removeValue(forKey: requestID) else { return }
+        retiredCommands.append(requestID)
+        if retiredCommands.count > 128 { retiredCommands.removeFirst() }
+        continuation.resume(throwing: error)
     }
 
     private func expireHandshake() async {
@@ -434,6 +503,11 @@ actor CompanionHostConnection {
     }
 
     private func finish(error: Error?) {
+        browserProxyEpoch = UUID()
+        browserProxyOwners.removeAll()
+        let proxies = Array(browserProxies.values)
+        browserProxies.removeAll()
+        Task { for proxy in proxies { await proxy.proxy.stop() } }
         reauthenticationTask?.cancel()
         reauthenticationTask = nil
         transportTask?.cancel()
@@ -442,6 +516,7 @@ actor CompanionHostConnection {
         handshakeTimeout = nil
         for (_, pending) in commandContinuations { pending.resume(throwing: RemoteError.disconnected) }
         commandContinuations.removeAll()
+        retiredCommands.removeAll()
         for timeout in commandTimeouts.values { timeout.cancel() }
         commandTimeouts.removeAll()
         if let error { continuation?.finish(throwing: error) }
@@ -451,5 +526,6 @@ actor CompanionHostConnection {
         applicationChannel = nil
         hostConnectionID = nil
         runtimeID = nil
+        hostCapabilities.removeAll()
     }
 }

@@ -37,6 +37,11 @@
 	<string>$(AppIdentifierPrefix)$(MYTERM_KEYCHAIN_GROUP)</string>
 	<key>MyTermPushGatewayOrigin</key>
 	<string>$(MYTERM_PUSH_GATEWAY_ORIGIN)</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
+	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Scan a MyTerm pairing code from your Mac.</string>
 	<key>NSLocalNetworkUsageDescription</key>

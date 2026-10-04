@@ -6,6 +6,7 @@ final class CompanionConnectionWorkQueue {
         let maximumItems: Int
         let maximumBytes: Int
 
+        static let browser = Limits(maximumItems: 8, maximumBytes: 128 * 1_024)
         static let incoming = Limits(maximumItems: 64, maximumBytes: 8 * 1_024 * 1_024)
         static let outbound = Limits(maximumItems: 4_096, maximumBytes: 32 * 1_024 * 1_024)
     }

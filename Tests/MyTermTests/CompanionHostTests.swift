@@ -153,6 +153,73 @@ final class CompanionHostTests: XCTestCase {
                                                                sourceWorkspaceID: WorkspaceID()))
     }
 
+    func testExplicitFolderWorkspaceCreationInheritsDestinationSettings() throws {
+        let model = try model()
+        let desktopID = model.store.selectedWorkspaceID
+        let sourceFolder = try model.store.createFolder(title: "Source")
+        let destinationFolder = try model.store.createFolder(title: "Destination")
+        let sourceID = try model.store.createWorkspace(title: "Viewed workspace", folderID: sourceFolder,
+                                                      selectsCreatedWorkspace: false)
+        try model.store.updateFolderSettings(sourceFolder) { $0.fontSize = 14 }
+        try model.store.updateFolderSettings(destinationFolder) { $0.fontSize = 21 }
+        let result = try XCTUnwrap(model.performCompanionCommand(
+            metadata: metadata(workspaceID: sourceID),
+            command: CommandParameters(operation: .workspaceCreate,
+                payload: try data(RemoteWorkspaceCreatePayload(folderID: destinationFolder)))
+        ))
+        let id = WorkspaceID(rawValue: try JSONDecoder().decode(RemoteIdentifierResult.self, from: result).id)
+        let created = try XCTUnwrap(model.store.workspaces.first { $0.id == id })
+        XCTAssertEqual(created.folderID, destinationFolder)
+        XCTAssertEqual(try model.store.resolvedSettings(for: id).fontSize, 21)
+        XCTAssertEqual(model.store.selectedWorkspaceID, desktopID)
+        try model.store.updateFolderSettings(destinationFolder) { $0.fontSize = 24 }
+        XCTAssertEqual(try model.store.resolvedSettings(for: id).fontSize, 24,
+                       "Folder preferences must remain inherited after creation")
+        let projected = try XCTUnwrap(model.companionWorkspaceProjection().workspaces.first { $0.id == id })
+        XCTAssertEqual(projected.preferences?.fontSize, 24)
+        XCTAssertThrowsError(try model.performCompanionCommand(
+            metadata: metadata(workspaceID: sourceID),
+            command: CommandParameters(operation: .workspaceCreate,
+                payload: try data(RemoteWorkspaceCreatePayload(folderID: WorkspaceFolderID())))
+        )) { error in
+            XCTAssertEqual(error as? CompanionCommandError, .wrongTarget)
+        }
+    }
+
+    func testExplicitFolderWorkingDirectoryPolicyOverridesViewedPaneDirectory() throws {
+        let model = try model()
+        let sourceFolder = try model.store.createFolder(title: "Source")
+        let destinationFolder = try model.store.createFolder(title: "Destination")
+        let sourceID = try model.store.createWorkspace(title: "Viewed workspace", folderID: sourceFolder,
+                                                      selectsCreatedWorkspace: false)
+        let source = try XCTUnwrap(model.store.workspaces.first { $0.id == sourceID })
+        let group = try XCTUnwrap(source.focusedTabGroup)
+        let tab = try XCTUnwrap(group.selectedTab)
+        let directory = FileManager.default.temporaryDirectory.standardizedFileURL
+        try model.store.updateTerminalWorkingDirectory(workspaceID: sourceID, tabGroupID: group.id,
+                                                       tabID: tab.id, workingDirectory: directory)
+        try model.store.updateFolderSettings(sourceFolder) { $0.newSessionWorkingDirectory = .activePane }
+        try model.store.updateFolderSettings(destinationFolder) {
+            $0.newSessionWorkingDirectory = .custom(FileManager.default.homeDirectoryForCurrentUser)
+        }
+
+        func create(in folderID: WorkspaceFolderID?) throws -> URL? {
+            let result = try XCTUnwrap(model.performCompanionCommand(
+                metadata: metadata(workspaceID: sourceID),
+                command: CommandParameters(operation: .workspaceCreate,
+                    payload: try data(RemoteWorkspaceCreatePayload(folderID: folderID)))
+            ))
+            let id = try JSONDecoder().decode(RemoteIdentifierResult.self, from: result).id
+            let created = try XCTUnwrap(model.store.workspaces.first { $0.id.rawValue == id })
+            return created.selectedTab?.terminalSession?.workingDirectory?.standardizedFileURL
+        }
+
+        XCTAssertEqual(try create(in: destinationFolder),
+                       FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL)
+        XCTAssertEqual(try create(in: sourceFolder), directory)
+        XCTAssertEqual(try create(in: nil), directory)
+    }
+
     func testAutomaticFolderNamesAreAssignedOnTheHost() throws {
         let model = try model()
         _ = try model.store.createFolder(title: "Folder 1")
@@ -692,6 +759,37 @@ final class CompanionHostTests: XCTestCase {
         XCTAssertThrowsError(try queue.enqueue(cost: 8 * 1_024 * 1_024 + 1) {}) { error in
             XCTAssertEqual((error as? CompanionConnectionWorkQueue.Overflow)?.reason, .messageSize)
         }
+    }
+
+    func testBrowserQueueKeepsTerminalResponsiveAndBoundsPendingActions() async throws {
+        let browser = CompanionConnectionWorkQueue(limits: .browser)
+        let application = CompanionConnectionWorkQueue()
+        let started = expectation(description: "browser snapshot suspended")
+        let terminalRan = expectation(description: "terminal input progressed on the same peer")
+        let browserFinished = expectation(description: "browser actions remained ordered")
+        var releaseSnapshot: CheckedContinuation<Void, Never>?
+        var order: [Int] = []
+        try browser.enqueue(cost: 1) {
+            order.append(0)
+            started.fulfill()
+            await withCheckedContinuation { releaseSnapshot = $0 }
+        }
+        await fulfillment(of: [started], timeout: 1)
+        for index in 1...8 {
+            try browser.enqueue(cost: 16 * 1024) {
+                order.append(index)
+                if index == 8 { browserFinished.fulfill() }
+            }
+        }
+        XCTAssertThrowsError(try browser.enqueue(cost: 1) {}) { error in
+            XCTAssertEqual((error as? CompanionConnectionWorkQueue.Overflow)?.reason, .itemCount)
+        }
+        try application.enqueue(cost: 1) { terminalRan.fulfill() }
+        await fulfillment(of: [terminalRan], timeout: 1)
+        XCTAssertEqual(order, [0], "A pending frame must not hold up terminal input")
+        releaseSnapshot?.resume()
+        await fulfillment(of: [browserFinished], timeout: 1)
+        XCTAssertEqual(order, Array(0...8))
     }
 
     func testSlowPeerQueueDoesNotBlockAnotherPeerAndKeepsItsOwnOrder() async throws {

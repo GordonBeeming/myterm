@@ -175,23 +175,12 @@ struct BrowserMetadataView: View {
     let scene: SceneModel
     let route: BrowserRoute
     var embedded = false
-    @Environment(\.openURL) private var openURL
     @State private var closeConfirmation: CloseConfirmationPrompt?
     @State private var tabIndex = 0
 
     var body: some View {
-        ContentUnavailableView {
-            Label(route.title, systemImage: "globe")
-        } description: {
-            Text("Browser sessions stay on the Mac. You can copy or open the current URL in a separate browser.")
-        } actions: {
-            if let url = route.url {
-                Button("Open in browser") { openURL(url) }
-                ShareLink(item: url, subject: Text(route.title)) { Label("Share URL", systemImage: "square.and.arrow.up") }
-            } else {
-                Text("The Mac has not reported a URL for this tab.")
-            }
-        }
+        RemoteBrowserView(scene: scene, route: route)
+            .id(route)
         .navigationTitle(embedded ? (scene.projection?.workspaces.first { $0.id.rawValue == route.workspaceID }?.title ?? "Workspace") : route.title)
         .toolbar {
             if !embedded { browserActions }

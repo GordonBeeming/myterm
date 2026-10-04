@@ -75,6 +75,8 @@ extension AppModel {
         command: CommandParameters
     ) throws -> Data? {
         switch command.operation {
+        case .browserInteract:
+            throw CompanionCommandError.unsupportedOperation
         case .workspaceCreate:
             let payload: RemoteWorkspaceCreatePayload = try decodeCompanionPayload(command.payload)
             if let folderID = payload.folderID {
