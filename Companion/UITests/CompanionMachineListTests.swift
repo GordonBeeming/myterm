@@ -22,16 +22,17 @@ final class CompanionMachineListTests: XCTestCase {
                        "Nothing is starred yet, so the list stays one plain section")
 
         let star = app.buttons[pikachuStar]
-        XCTAssertTrue(star.waitForExistence(timeout: 3))
+        XCTAssertTrue(star.waitForExistence(timeout: 5))
         XCTAssertTrue(star.isHittable, "The star must not be covered by list or navigation chrome")
         star.tap()
 
-        XCTAssertTrue(app.staticTexts["Starred"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["All machines"].exists)
+        XCTAssertTrue(app.staticTexts["Starred"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["All machines"].waitForExistence(timeout: 5))
         attachScreenshot(app, name: "machine-list-starred")
 
+        expectCount(1, of: pikachuStar, in: app)
         app.buttons[pikachuStar].tap()
-        XCTAssertFalse(app.staticTexts["Starred"].waitForExistence(timeout: 2),
+        XCTAssertFalse(app.staticTexts["Starred"].waitForExistence(timeout: 3),
                        "Unstarring the last starred Mac collapses the sections again")
     }
 
@@ -63,9 +64,23 @@ final class CompanionMachineListTests: XCTestCase {
                       "One machine on two relays is two rows with two independent stars")
         prod.tap()
 
-        XCTAssertTrue(app.staticTexts["Starred"].waitForExistence(timeout: 3))
-        XCTAssertEqual(app.buttons.matching(identifier: blastoiseProdStar).count, 1)
-        XCTAssertTrue(app.buttons[blastoiseDevStar].exists)
+        XCTAssertTrue(app.staticTexts["Starred"].waitForExistence(timeout: 5))
+        // Waited for rather than counted on the spot. Starring moves the row between sections, and
+        // mid-animation the query can see the old row and the new one, or neither.
+        expectCount(1, of: blastoiseProdStar, in: app)
+        XCTAssertTrue(app.buttons[blastoiseDevStar].waitForExistence(timeout: 5),
+                      "The other relay's pairing keeps its own unstarred row")
+    }
+
+    /// Waits for a query to settle on a count, because a list re-sectioning can briefly report a
+    /// row twice or not at all.
+    @MainActor
+    private func expectCount(_ count: Int, of identifier: String, in app: XCUIApplication) {
+        let settled = expectation(for: NSPredicate(format: "count == %d", count),
+                                   evaluatedWith: app.buttons.matching(identifier: identifier),
+                                   handler: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [settled], timeout: 5), .completed,
+                       "\(identifier) did not settle at \(count)")
     }
 
     @MainActor
