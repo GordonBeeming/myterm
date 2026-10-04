@@ -289,7 +289,7 @@ final class SceneModel {
     }
 
     private var connection: CompanionHostConnection?
-    private var eventTask: Task<Void, Never>?
+    @ObservationIgnored private var eventTask: Task<Void, Never>?
     private var connectionGeneration = UUID()
     private var visibleSessionOrder: [TerminalSurfaceID] = []
     private var workspaceVisibleSessions: Set<TerminalSurfaceID> = []
@@ -326,14 +326,16 @@ final class SceneModel {
 
     private var isSceneActive = true
     private var reconnectAttempt = 0
-    private var reconnectTask: Task<Void, Never>?
-    private struct LeaseRenewal {
+    @ObservationIgnored private var reconnectTask: Task<Void, Never>?
+    private struct LeaseRenewal: Sendable {
         let id: UUID
         let task: Task<Void, Never>
     }
-    private var leaseRenewals: [TerminalSurfaceID: LeaseRenewal] = [:]
+    @ObservationIgnored private var leaseRenewals: [TerminalSurfaceID: LeaseRenewal] = [:]
 
-    isolated deinit {
+    // Cancellation uses Sendable task handles and needs no executor hop. Keeping teardown
+    // nonisolated avoids the older iOS runtime's task-local cleanup crash outside a Swift task.
+    nonisolated deinit {
         eventTask?.cancel()
         reconnectTask?.cancel()
         for renewal in leaseRenewals.values { renewal.task.cancel() }
