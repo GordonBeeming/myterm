@@ -203,6 +203,12 @@ private struct NativeBrowserSurface: UIViewRepresentable {
 struct RemoteBrowserView: View {
     let scene: SceneModel
     let route: BrowserRoute
+    /// Sits beside the mode picker rather than over it. Floated on top, the tab's actions menu
+    /// landed on the picker's trailing segment and covered its label.
+    ///
+    /// Erased rather than generic so the pure helpers on this type stay callable without naming
+    /// an accessory that has nothing to do with them.
+    var accessory: () -> AnyView = { AnyView(EmptyView()) }
     @State private var native = NativeRemoteBrowser()
     @State private var mode = "native"
     @State private var rendered: RemoteBrowserFrame?
@@ -225,16 +231,17 @@ struct RemoteBrowserView: View {
     var body: some View {
         @Bindable var native = native
         VStack(spacing: 0) {
-            Picker("Browser mode", selection: Binding(get: { mode }, set: { value in
-                UserDefaults.standard.set(value, forKey: preferenceKey)
-                mode = value
-            })) {
-                Text("Native proxy").tag("native")
-                Text("Mac rendered").tag("rendered")
-            }.pickerStyle(.segmented).padding(8)
+            HStack(spacing: 8) {
+                Picker("Browser mode", selection: Binding(get: { mode }, set: { value in
+                    UserDefaults.standard.set(value, forKey: preferenceKey)
+                    mode = value
+                })) {
+                    Text("Native proxy").tag("native")
+                    Text("Mac rendered").tag("rendered")
+                }.pickerStyle(.segmented)
+                accessory()
+            }.padding(8)
             if mode == "native" {
-                Text("Web traffic uses the Mac proxy. Localhost uses Mac rendered mode; WebRTC may connect from this device.")
-                    .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 8)
                 HStack {
                     Button("Back", systemImage: "chevron.left") { native.webView?.goBack() }.disabled(!native.back)
                     Button("Forward", systemImage: "chevron.right") { native.webView?.goForward() }.disabled(!native.forward)
