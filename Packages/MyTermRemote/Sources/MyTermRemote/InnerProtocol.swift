@@ -155,10 +155,27 @@ public struct CommandResultParameters: Codable, Equatable, Sendable {
 public struct AttachParameters: Codable, Equatable, Sendable {
     public let afterSequence: UInt64?
     public let requireCheckpoint: Bool
+    /// Which run of the terminal `afterSequence` was counted in.
+    ///
+    /// Required for a resume to be safe. A terminal that restarts takes a new generation and sets
+    /// its sequence back to zero, so a sequence remembered from the previous run can land inside
+    /// the new run's range and replay output that belongs to a different process as though it
+    /// continued the old one. Absent here — an older companion, which never resumed anyway — the
+    /// host must refuse to replay and send a checkpoint instead.
+    public let generation: UUID?
 
-    public init(afterSequence: UInt64? = nil, requireCheckpoint: Bool = true) {
+    /// The capability a host will advertise once it can honour a resume, which is not yet. A host
+    /// stops capturing a terminal the moment its last peer detaches, so output produced while a
+    /// device is away is lost and a replay from the sequence it left on returns nothing: an empty
+    /// success, and a stale screen with no sign anything is missing. A resume cannot be offered
+    /// until capture is held across the window, so nothing asks for one and no host claims this.
+    public static let resumeCapability = "terminal-resume-v1"
+
+    public init(afterSequence: UInt64? = nil, requireCheckpoint: Bool = true,
+                generation: UUID? = nil) {
         self.afterSequence = afterSequence
         self.requireCheckpoint = requireCheckpoint
+        self.generation = generation
     }
 }
 
@@ -317,6 +334,7 @@ extension AttachParameters {
     enum CodingKeys: String, CodingKey {
         case afterSequence = "after_sequence"
         case requireCheckpoint = "require_checkpoint"
+        case generation
     }
 }
 

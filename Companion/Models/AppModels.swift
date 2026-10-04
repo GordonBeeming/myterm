@@ -76,7 +76,9 @@ enum DiagnosticsUploadOutcome: Equatable {
         case .sent(let bytes):
             "Sent \(bytes.formatted(.byteCount(style: .file))) to the Mac."
         case .notConnected:
-            "Not connected to a Mac. Open one first, then send."
+            // Named for the device, because the old wording read as a claim about the Mac itself
+            // and Settings is reachable from the Mac list before any Mac has been opened here.
+            "This \(UIDevice.current.localizedModel) has no Mac open. Open one, then send."
         case .nothingRecorded:
             "Nothing recorded yet, so there is nothing to send."
         case .failed(let reason):
@@ -91,6 +93,45 @@ enum DiagnosticsUploadOutcome: Equatable {
         case .sent: false
         case .notConnected, .nothingRecorded, .failed: true
         }
+    }
+}
+
+/// How long to wait before the next reconnect, and when to stop trying.
+///
+/// Kept apart from `SceneModel` so the rules can be read and tested without a relay: the loop this
+/// replaced was invisible in every test and only showed up in a shipped build.
+enum ReconnectBackoff {
+    /// How long a connection has to last before it counts as having worked.
+    ///
+    /// `.online` is emitted the moment the companion's own hello acknowledgement goes out, before
+    /// the Mac has answered anything, so reaching it is not evidence of a usable session. Treating
+    /// it as one let a connection that died on arrival reset the backoff every time, which pinned
+    /// the delay at one second indefinitely.
+    static let stabilityWindow: Duration = .seconds(10)
+
+    /// How long to keep retrying a connection that never stabilises. An app left open overnight
+    /// still recovers, but a host that fails every attempt stops being hammered for ever.
+    static let giveUpAfter: Duration = .seconds(600)
+
+    static let maximumDelay: Duration = .seconds(30)
+
+    /// True when a connection lasted long enough that the next failure should start from scratch.
+    /// A connection that never reached `.online` never counts.
+    static func countsAsStable(onlineFor: Duration?) -> Bool {
+        guard let onlineFor else { return false }
+        return onlineFor >= stabilityWindow
+    }
+
+    static func hasGivenUp(retryingFor: Duration) -> Bool { retryingFor >= giveUpAfter }
+
+    /// Doubles per attempt up to the ceiling. `attempt` is 1 for the first retry.
+    static func delay(forAttempt attempt: Int) -> Duration {
+        guard attempt > 1 else { return .seconds(1) }
+        // The exponent is clamped before the Duration is built, not after. `Duration` holds
+        // attoseconds in 128 bits, so 2^(a few dozen) seconds traps on overflow rather than
+        // producing a large value for `min` to discard.
+        let exponent = min(attempt - 1, 16)
+        return min(maximumDelay, .seconds(pow(2.0, Double(exponent))))
     }
 }
 
@@ -268,6 +309,14 @@ actor WorkspaceVisibilityGate {
 @MainActor
 @Observable
 final class SceneModel {
+    /// Injectable so the reconnect rules can be driven in a test without waiting on real seconds,
+    /// matching the `now` seam `CompanionHostModel` already takes.
+    @ObservationIgnored let now: () -> ContinuousClock.Instant
+
+    init(now: @escaping () -> ContinuousClock.Instant = { ContinuousClock().now }) {
+        self.now = now
+    }
+
     var path: [CompanionRoute] = []
     var sheet: CompanionSheet?
     var selectedConnectionID: SavedConnectionID?
@@ -326,7 +375,14 @@ final class SceneModel {
 
     private var isSceneActive = true
     private var reconnectAttempt = 0
+    /// When the current connection reached `.online`, used to tell a connection that worked from
+    /// one that merely got as far as saying hello.
+    @ObservationIgnored private var onlineSince: ContinuousClock.Instant?
     @ObservationIgnored private var reconnectTask: Task<Void, Never>?
+
+    /// When the run of failed reconnects began, so giving up is decided on elapsed time rather
+    /// than a count that a brief success can reset.
+    @ObservationIgnored private var retryingSince: ContinuousClock.Instant?
     private struct LeaseRenewal: Sendable {
         let id: UUID
         let task: Task<Void, Never>
@@ -343,7 +399,11 @@ final class SceneModel {
 
     func connect(to host: SavedHostDescriptor, services: CompanionServices,
                  resetBackoff: Bool = true) async {
-        if resetBackoff { reconnectAttempt = 0 }
+        if resetBackoff {
+            reconnectAttempt = 0
+            retryingSince = nil
+        }
+        onlineSince = nil
         prepareNavigation(replacing: activeHost?.connectionID, with: host.connectionID)
         activeHost = host
         self.services = services
@@ -472,6 +532,7 @@ final class SceneModel {
         connection = nil
         connectionPhase = .disconnected
         connectionID = nil
+        onlineSince = nil
         disableAllInput()
         if let previousConnection { await previousConnection.disconnect() }
     }
@@ -850,7 +911,9 @@ final class SceneModel {
         switch event {
         case .phase(let phase):
             connectionPhase = phase
-            if phase == .online { reconnectAttempt = 0 }
+            // Only the arrival time is recorded here. Whether this connection counts as a success
+            // is decided when it ends, by how long it lasted.
+            if phase == .online, onlineSince == nil { onlineSince = now() }
         case .connectionID(let id):
             connectionID = id
             Task { await DiagnosticsLog.shared.record(category: "connection", "connected",
@@ -1002,15 +1065,32 @@ final class SceneModel {
            remote == .authenticationRequired || remote == .authenticationRevoked {
             return
         }
-        guard isSceneActive, let activeHost, let services, reconnectAttempt < 6 else { return }
+        // How long this connection lasted decides whether it counted. Reaching `.online` does not,
+        // because that happens before the Mac has answered.
+        let onlineFor = onlineSince.map { now() - $0 }
+        onlineSince = nil
+        if ReconnectBackoff.countsAsStable(onlineFor: onlineFor) {
+            reconnectAttempt = 0
+            retryingSince = nil
+        }
+        guard isSceneActive, let activeHost, let services else { return }
+        let retryingFor = retryingSince.map { now() - $0 } ?? .zero
+        guard !ReconnectBackoff.hasGivenUp(retryingFor: retryingFor) else {
+            Task { await DiagnosticsLog.shared.record(
+                category: "connection", "gave up reconnecting",
+                detail: "after=\(retryingFor) attempts=\(reconnectAttempt)") }
+            return
+        }
+        if retryingSince == nil { retryingSince = now() }
         reconnectAttempt += 1
-        let delay = min(30.0, pow(2.0, Double(reconnectAttempt - 1)))
+        let delay = ReconnectBackoff.delay(forAttempt: reconnectAttempt)
         let attempt = reconnectAttempt
-        Task { await DiagnosticsLog.shared.record(category: "connection", "reconnecting",
-                                                  detail: "attempt=\(attempt) in=\(Int(delay))s") }
+        Task { await DiagnosticsLog.shared.record(
+            category: "connection", "reconnecting",
+            detail: "attempt=\(attempt) in=\(delay) lasted=\(onlineFor.map(String.init(describing:)) ?? "never online")") }
         let expectedConnection = activeHost.connectionID
         reconnectTask = Task { [weak self] in
-            do { try await Task.sleep(for: .seconds(delay)) }
+            do { try await Task.sleep(for: delay) }
             catch { return }
             guard let self, self.isSceneActive,
                   self.selectedConnectionID == expectedConnection else { return }

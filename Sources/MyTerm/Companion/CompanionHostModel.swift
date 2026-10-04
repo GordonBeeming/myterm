@@ -129,6 +129,10 @@ final class CompanionHostModel {
     private(set) var diagnosticsDirectory: URL?
     private var httpClient: RelayHTTPClient?
     private var transport: RelayWebSocketClient?
+    /// Long enough to collapse an agent's burst of activity reports, short enough that a change
+    /// still reads as immediate on the phone.
+    static let snapshotCoalescingWindow: Duration = .milliseconds(150)
+    @ObservationIgnored private var snapshotBroadcastTask: Task<Void, Never>?
     private var transportTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
     private var reconnectAttempt = 0
@@ -217,7 +221,20 @@ final class CompanionHostModel {
         diagnosticsDirectory = diagnosticsFolder
         diagnosticsStore = diagnosticsFolder.map(CompanionDiagnosticsStore.init(directory:))
         pushJournalStore = CompanionPushJournalStore(secrets: secrets)
+        // Filed beside what the phones send, so one folder holds both ends of a connection.
+        let ownLog = diagnosticsFolder?.appending(path: "mac-connection.log", directoryHint: .notDirectory)
+        Task {
+            await CompanionConnectionLog.shared.configure(fileURL: ownLog)
+            // Read when it is applied rather than captured now: the Settings toggle can turn
+            // collection off while this is still waiting, and a stale capture would turn it back on.
+            await CompanionConnectionLog.shared.setEnabled(
+                UserDefaults.standard.bool(forKey: Self.collectConnectionLogKey))
+        }
     }
+
+    /// Off by default, like the companion's own collection: this records connection lifecycle, and
+    /// nobody should be paying for it until something needs explaining.
+    static let collectConnectionLogKey = "collectCompanionConnectionLog"
 
     private(set) var isSigningIn = false
     private var signInTask: Task<Void, Never>?
@@ -398,7 +415,25 @@ final class CompanionHostModel {
     func workspaceDidChange() {
         if let appModel { for peer in peersByConnection.values { peer.browserSessions.prune(model: appModel) } }
         workspaceRevision &+= 1
-        broadcastWorkspaceSnapshot()
+        scheduleWorkspaceSnapshotBroadcast()
+    }
+
+    /// Collapses a burst of changes into one broadcast.
+    ///
+    /// A snapshot is the whole workspace state, so only the last one in a burst has any value —
+    /// and an agent running in a pane reports activity continuously, each report ending here. Sent
+    /// immediately, those rebuilt, re-encoded and re-sealed the full projection per peer on the
+    /// main actor often enough to stop the websocket read loop draining, which cost the Mac its
+    /// connection: the relay pings every 20s, allows 10s for the write, then closes.
+    private func scheduleWorkspaceSnapshotBroadcast() {
+        guard snapshotBroadcastTask == nil else { return }
+        snapshotBroadcastTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.snapshotCoalescingWindow)
+            guard let self else { return }
+            self.snapshotBroadcastTask = nil
+            guard !Task.isCancelled else { return }
+            self.broadcastWorkspaceSnapshot()
+        }
     }
 
     func sessionEnded(
@@ -681,6 +716,7 @@ final class CompanionHostModel {
         case .ready:
             reconnectAttempt = 0
             status = .connected
+            Task { await CompanionConnectionLog.shared.record(category: "connection", "connected") }
         case .peer(let peer):
             if !peer.transportOnline {
                 removeConnection(peer.connectionID)
@@ -1412,7 +1448,14 @@ final class CompanionHostModel {
     ) async throws {
         let target = try terminalTarget(metadata)
         target.session.setRemoteCaptureEnabled(true)
-        if !parameters.requireCheckpoint, let after = parameters.afterSequence {
+        // A resume is only honoured for the run the sequence was counted in. `remoteReplay` checks
+        // the sequence alone, and a restarted terminal begins again at zero, so an old sequence
+        // can sit inside the new run's range: replaying there would hand the companion another
+        // process's output as a continuation of what it last saw. No generation, or a different
+        // one, means a checkpoint instead.
+        if !parameters.requireCheckpoint, let after = parameters.afterSequence,
+           let generation = parameters.generation,
+           generation == target.session.remoteGeneration {
             peer.attachingSessions[target.sessionID] = []
             let replay = try target.session.remoteReplay(after: after)
             for output in replay {
@@ -1427,6 +1470,11 @@ final class CompanionHostModel {
         let transferID = UUID()
         let chunkSize = 512 * 1_024
         let count = max(1, Int(ceil(Double(checkpoint.bytes.count) / Double(chunkSize))))
+        // The size is the number worth having: a checkpoint large enough to occupy the main actor
+        // is what stops this process answering the relay's heartbeat, and nothing recorded it.
+        Task { await CompanionConnectionLog.shared.record(
+            category: "terminal", "sending checkpoint",
+            detail: "session=\(CompanionConnectionLog.short(target.sessionID)) bytes=\(checkpoint.bytes.count) chunks=\(count)") }
         for index in 0..<count {
             let start = index * chunkSize
             let end = min(start + chunkSize, checkpoint.bytes.count)
@@ -1752,14 +1800,24 @@ final class CompanionHostModel {
     }
 
     private func sendWorkspaceSnapshot(to peer: PeerConnection, requestID: UUID?) {
-        guard let appModel, peer.applicationChannel != nil else { return }
-        let model: Data
+        guard let model = encodedWorkspaceProjection() else { return }
+        sendWorkspaceSnapshot(model, to: peer, requestID: requestID)
+    }
+
+    /// Builds and encodes the projection once. Each peer used to get its own rebuild and its own
+    /// JSON encode of identical bytes, on the main actor, for every change.
+    private func encodedWorkspaceProjection() -> Data? {
+        guard let appModel else { return nil }
         do {
-            model = try JSONEncoder().encode(appModel.companionWorkspaceProjection())
+            return try JSONEncoder().encode(appModel.companionWorkspaceProjection())
         } catch {
             logger.error("Workspace projection encoding failed: \(error.localizedDescription, privacy: .public)")
-            return
+            return nil
         }
+    }
+
+    private func sendWorkspaceSnapshot(_ model: Data, to peer: PeerConnection, requestID: UUID?) {
+        guard peer.applicationChannel != nil else { return }
         send(
             .workspaces(
                 makeMetadata(requestID: requestID),
@@ -1770,7 +1828,9 @@ final class CompanionHostModel {
     }
 
     private func broadcastWorkspaceSnapshot() {
-        for peer in peersByConnection.values { sendWorkspaceSnapshot(to: peer, requestID: nil) }
+        let peers = peersByConnection.values.filter { $0.applicationChannel != nil }
+        guard !peers.isEmpty, let model = encodedWorkspaceProjection() else { return }
+        for peer in peers { sendWorkspaceSnapshot(model, to: peer, requestID: nil) }
     }
 
     private func send(_ message: InnerMessage, to peer: PeerConnection) {
@@ -1994,7 +2054,12 @@ final class CompanionHostModel {
             "host transport ended: \(error?.localizedDescription ?? "closed", privacy: .public)")
         reauthenticationTask?.cancel()
         reauthenticationTask = nil
+        // Below the fence: an old transport finishing after its replacement started would
+        // otherwise log a close that did not end the connection anyone is using.
         guard connectionFence.accepts(generation) else { return }
+        let reason = error?.localizedDescription ?? "closed"
+        Task { await CompanionConnectionLog.shared.record(
+            category: "connection", "transport ended", detail: reason) }
         cancelPairing()
         transportTask = nil
         transport = nil
@@ -2026,6 +2091,9 @@ final class CompanionHostModel {
         guard configuration.connectionEnabled, reconnectTask == nil else { return }
         let delay = reconnectPolicy.delay(attempt: reconnectAttempt, jitter: jitter())
         reconnectAttempt = min(reconnectAttempt + 1, reconnectPolicy.maximumExponent)
+        let attempt = reconnectAttempt
+        Task { await CompanionConnectionLog.shared.record(
+            category: "connection", "reconnecting", detail: "attempt=\(attempt) in=\(delay)") }
         reconnectTask = Task { [weak self, sleep] in
             do { try await sleep(delay) }
             catch { return }
