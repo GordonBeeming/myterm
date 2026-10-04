@@ -179,14 +179,14 @@ struct BrowserMetadataView: View {
     @State private var tabIndex = 0
 
     var body: some View {
-        RemoteBrowserView(scene: scene, route: route)
+        RemoteBrowserView(scene: scene, route: route) {
+            // Given its own place in the header when there is no toolbar to put it in.
+            embedded ? AnyView(browserActions.labelStyle(.iconOnly)) : AnyView(EmptyView())
+        }
             .id(route)
         .navigationTitle(embedded ? (scene.projection?.workspaces.first { $0.id.rawValue == route.workspaceID }?.title ?? "Workspace") : route.title)
         .toolbar {
             if !embedded { browserActions }
-        }
-        .overlay(alignment: .topTrailing) {
-            if embedded { browserActions.padding(8) }
         }
         .alert("Close active browser tab?", isPresented: Binding(
             get: { closeConfirmation != nil }, set: { if !$0 { closeConfirmation = nil } }
