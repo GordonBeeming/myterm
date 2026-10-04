@@ -984,14 +984,29 @@ final class CompanionHostModel {
         case .command(let metadata, let command):
             if command.operation == .browserInteract {
                 do {
+                    _ = try JSONDecoder().decode(RemoteBrowserRequest.self, from: command.payload)
+                    let deadline = CompanionBrowserActionDeadline()
+                    try deadline.check()
                     try peer.browserQueue.enqueue(cost: command.payload.count) { [weak self, weak peer] in
                         guard let self, let peer, self.peersByConnection[peer.connectionID] === peer else { return }
-                        await self.handleCommand(metadata: metadata, command: command, peer: peer)
+                        do { try deadline.check() }
+                        catch {
+                            self.send(.commandResult(self.makeMetadata(requestID: metadata.requestID),
+                                CommandResultParameters(succeeded: false, errorCode: "browser_expired",
+                                    errorMessage: "The remote browser action expired before it could run.")), to: peer)
+                            return
+                        }
+                        await self.handleCommand(metadata: metadata, command: command, peer: peer, browserDeadline: deadline)
                     }
                 } catch {
+                    let busy = error is CompanionConnectionWorkQueue.Overflow
+                    let expired = (error as? URLError)?.code == .timedOut
                     send(.commandResult(makeMetadata(requestID: metadata.requestID),
-                        CommandResultParameters(succeeded: false, errorCode: "browser_busy",
-                            errorMessage: "The remote browser is busy. Wait for the current actions to finish.")), to: peer)
+                        CommandResultParameters(succeeded: false,
+                            errorCode: busy ? "browser_busy" : expired ? "browser_expired" : "invalid_payload",
+                            errorMessage: busy ? "The remote browser is busy. Wait for the current actions to finish."
+                                : expired ? "The remote browser action expired before it could run."
+                                : "The remote browser request is invalid.")), to: peer)
                 }
             } else { await handleCommand(metadata: metadata, command: command, peer: peer) }
         case .attach(let metadata, let parameters):
@@ -1061,7 +1076,7 @@ final class CompanionHostModel {
                     try await artifact.registerVirtualOrigin(host)
                     return try await artifact.endpoint()
                 }
-                return (host, port)
+                return try await NativeBrowserDestinationPolicy().resolve(host: host, port: port)
             })
             peer.browserSessions.native[route] = .init(tunnel: tunnel, artifact: artifact, sourceURL: url, allowsLocalFileJavaScript: scriptPermission)
         }
@@ -1094,7 +1109,7 @@ final class CompanionHostModel {
     }
 
     private func handleBrowserInteraction(metadata: MessageMetadata, command: CommandParameters,
-                                          peer: PeerConnection) async throws -> Data {
+                                          peer: PeerConnection, deadline: CompanionBrowserActionDeadline?) async throws -> Data {
         let (route, sourceURL) = try browserTarget(metadata, peer: peer)
         let scriptPermission = try appModel?.store.resolvedSettings(for: WorkspaceID(rawValue: route.workspaceID)).allowsLocalFileJavaScript ?? false
         var request = try JSONDecoder().decode(RemoteBrowserRequest.self, from: command.payload)
@@ -1155,7 +1170,10 @@ final class CompanionHostModel {
                                                 height: request.height, url: mapped.absoluteString)
         }
         var frame: RemoteBrowserFrame
-        do { frame = try await entry.controller.interact(request) }
+        do {
+            try deadline?.check()
+            frame = try await entry.controller.interact(request)
+        }
         catch {
             if entry.controller.isClosed,
                peer.browserSessions.rendered[route]?.controller === entry.controller {
@@ -1179,7 +1197,8 @@ final class CompanionHostModel {
     private func handleCommand(
         metadata: MessageMetadata,
         command: CommandParameters,
-        peer: PeerConnection
+        peer: PeerConnection,
+        browserDeadline: CompanionBrowserActionDeadline? = nil
     ) async {
         do {
             if try sendCloseConfirmationIfRequired(
@@ -1233,7 +1252,7 @@ final class CompanionHostModel {
                 try target.session.pasteRemoteImage(payload)
                 result = nil
             case .browserInteract:
-                result = try await handleBrowserInteraction(metadata: metadata, command: command, peer: peer)
+                result = try await handleBrowserInteraction(metadata: metadata, command: command, peer: peer, deadline: browserDeadline)
             case .notificationRegister:
                 guard command.payload.count <= 256 * 1_024 else { throw RemoteError.messageTooLarge }
                 let grant = try JSONDecoder().decode(

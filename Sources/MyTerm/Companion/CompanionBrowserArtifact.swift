@@ -95,15 +95,22 @@ actor CompanionBrowserArtifactServer {
     private var closed = false
     private var clients: [UUID: NWConnection] = [:]
     private var port: UInt16?
-    private var startup: Task<(String, UInt16), Error>?
+    private struct Startup {
+        let id: UUID
+        let task: Task<(String, UInt16), Error>
+    }
+    private var startup: Startup?
+    private let listenerFactory: @Sendable (NWParameters) async throws -> NWListener
     private let token = UUID().uuidString + UUID().uuidString
     private let allowsVirtualOrigin: Bool
     private var registeredOrigins: [String] = []
     private var deadlines: [UUID: Task<Void, Never>] = [:]
 
-    init(artifact: CompanionBrowserArtifact, allowsVirtualOrigin: Bool = true) {
+    init(artifact: CompanionBrowserArtifact, allowsVirtualOrigin: Bool = true,
+         listenerFactory: @escaping @Sendable (NWParameters) async throws -> NWListener = { try NWListener(using: $0) }) {
         self.artifact = artifact
         self.allowsVirtualOrigin = allowsVirtualOrigin
+        self.listenerFactory = listenerFactory
     }
 
     func registerVirtualOrigin(_ host: String) throws {
@@ -135,18 +142,39 @@ actor CompanionBrowserArtifactServer {
     func endpoint() async throws -> (String, UInt16) {
         guard !closed else { throw CancellationError() }
         if let port { return ("127.0.0.1", port) }
-        if let startup { return try await startup.value }
-        let task = Task { try await self.startListener() }
-        startup = task
-        return try await task.value
+        let attempt: Startup
+        if let startup { attempt = startup }
+        else {
+            let id = UUID()
+            let task = Task { try await self.startListener(id: id) }
+            attempt = Startup(id: id, task: task)
+            startup = attempt
+        }
+        do {
+            let endpoint = try await attempt.task.value
+            guard !closed else { throw CancellationError() }
+            return endpoint
+        } catch {
+            if startup?.id == attempt.id {
+                startup = nil
+                listener?.cancel()
+                listener = nil
+                port = nil
+            }
+            throw error
+        }
     }
 
-    private func startListener() async throws -> (String, UInt16) {
+    private func startListener(id: UUID) async throws -> (String, UInt16) {
         guard !closed else { throw CancellationError() }
         try Task.checkCancellation()
         let parameters = NWParameters.tcp
         parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
-        let listener = try NWListener(using: parameters)
+        let listener = try await listenerFactory(parameters)
+        guard !closed, startup?.id == id else {
+            listener.cancel()
+            throw CancellationError()
+        }
         self.listener = listener
         listener.newConnectionHandler = { [weak self] connection in
             Task { await self?.accept(connection) }
@@ -173,14 +201,14 @@ actor CompanionBrowserArtifactServer {
             listener.start(queue: .global(qos: .userInitiated))
         }
         try Task.checkCancellation()
-        guard !closed else { throw CancellationError() }
+        guard !closed, startup?.id == id else { throw CancellationError() }
         self.port = port
         return ("127.0.0.1", port)
     }
 
     func close() {
         closed = true
-        startup?.cancel()
+        startup?.task.cancel()
         startup = nil
         listener?.cancel()
         listener = nil

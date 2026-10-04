@@ -8,6 +8,15 @@ public enum RemoteBrowserKey: String, Codable, Sendable {
 }
 public enum RemoteBrowserValidationError: Error, Sendable { case invalidRequest, invalidFrame }
 
+public enum RemoteBrowserTiming {
+    public static let commandTimeoutSeconds: TimeInterval = 15
+    public static let snapshotTimeoutSeconds: TimeInterval = 10
+    public static let responseOverheadSeconds: TimeInterval = 1
+    public static let executionReservationSeconds = snapshotTimeoutSeconds + responseOverheadSeconds
+    public static let maximumQueueResidenceSeconds =
+        commandTimeoutSeconds - executionReservationSeconds
+}
+
 public struct RemoteBrowserRequest: Codable, Equatable, Sendable {
     public static let capability = "browser-render-v1"
     public let rendererID: UUID?
@@ -22,7 +31,8 @@ public struct RemoteBrowserRequest: Codable, Equatable, Sendable {
     public let text: String?
     public let key: RemoteBrowserKey?
     public init(
-        action: RemoteBrowserAction, rendererID: UUID? = nil, width: Int = 1024, height: Int = 768,
+        action: RemoteBrowserAction, rendererID: UUID? = nil,
+        width: Int = 1024, height: Int = 768,
         url: String? = nil, x: Double? = nil, y: Double? = nil,
         deltaX: Double? = nil, deltaY: Double? = nil,
         text: String? = nil, key: RemoteBrowserKey? = nil

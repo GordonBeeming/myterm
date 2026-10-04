@@ -6,7 +6,9 @@ For a development build, run the Mac host from this checkout and open `Companion
 
 Native proxy renders the page on the companion and carries browser TCP connections to the Mac through the existing authenticated, end-to-end encrypted relay channel. It supports normal touch scrolling and text selection. Each browser uses an authenticated loopback proxy with direct fallback disabled.
 
-WebKit bypasses both HTTP CONNECT and SOCKS proxies for loopback addresses on the tested systems. Native mode therefore blocks localhost and IP-literal navigation and subresources. Tabs with those addresses start in Mac rendered mode. If a native page needs a blocked resource, switch modes using the selector.
+WebKit bypasses both HTTP CONNECT and SOCKS proxies for loopback addresses on the tested systems. Native mode therefore blocks localhost and IP-literal navigation and subresources. Tabs with those addresses start in Mac rendered mode.
+
+The Mac also checks every native connection's DNS answers. It rejects private, loopback, link-local, reserved, and local-interface addresses, including mixed public/private answers, then connects to the vetted numeric address. This prevents a public hostname from rebinding to a private service. Use Mac rendered mode for private-network websites or pages that need blocked resources. Scoped artifact servers retain their separate session capability checks.
 
 WebRTC uses a separate network path. An iPhone simulator test observed device-local STUN packets even with the native proxy configured. Native mode does **not** guarantee that every kind of page traffic originates on the Mac. Use Mac rendered mode when that guarantee matters.
 

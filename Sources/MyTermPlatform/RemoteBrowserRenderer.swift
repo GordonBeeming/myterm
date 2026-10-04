@@ -119,7 +119,7 @@ public final class RemoteBrowserRenderer: NSObject, WKNavigationDelegate, WKUIDe
         return try await withCheckedThrowingContinuation { continuation in
             completion.continuation = continuation
             completion.deadline = Task { [weak self, weak completion] in
-                do { try await Task.sleep(for: .seconds(10)) }
+                do { try await Task.sleep(for: .seconds(RemoteBrowserTiming.snapshotTimeoutSeconds)) }
                 catch { return }
                 self?.close()
                 completion?.finish(.failure(URLError(.timedOut)))

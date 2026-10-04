@@ -3,8 +3,22 @@ import Foundation
 import MyTermCore
 @testable import MyTermPlatform
 import MyTermRemote
+import Network
 import XCTest
 @testable import MyTerm
+
+private actor ArtifactListenerFailureOnce {
+    enum Failure: Error { case startup }
+    private(set) var attempts = 0
+    func make(_ parameters: NWParameters) async throws -> NWListener {
+        attempts += 1
+        if attempts == 1 {
+            try await Task.sleep(for: .milliseconds(40))
+            throw Failure.startup
+        }
+        return try NWListener(using: parameters)
+    }
+}
 
 final class CompanionBrowserArtifactTests: XCTestCase {
     func testArtifactSiblingResourcesAndTraversalAreScoped() throws {
@@ -27,6 +41,43 @@ final class CompanionBrowserArtifactTests: XCTestCase {
         XCTAssertTrue(String(decoding: response, as: UTF8.self).contains("script-src 'none'"))
         let rejected = artifact.response(to: Data("POST /index.html HTTP/1.1\r\n\r\n".utf8))
         XCTAssertTrue(String(decoding: rejected, as: UTF8.self).contains("405 Method Not Allowed"))
+    }
+
+    func testFailedArtifactStartupCanRetryWithSharedWaitersAndServeHTTP() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("index.html")
+        let payload = Data("Recovered artifact".utf8)
+        try payload.write(to: file)
+        let factory = ArtifactListenerFailureOnce()
+        let server = CompanionBrowserArtifactServer(artifact: try CompanionBrowserArtifact(selectedFile: file),
+            allowsVirtualOrigin: false, listenerFactory: { try await factory.make($0) })
+        func startupFails() async -> Bool {
+            do { _ = try await server.endpoint(); return false }
+            catch ArtifactListenerFailureOnce.Failure.startup { return true }
+            catch { return false }
+        }
+        async let first = startupFails()
+        async let second = startupFails()
+        async let third = startupFails()
+        let failures = await [first, second, third]
+        XCTAssertTrue(failures.allSatisfy { $0 })
+        let session = URLSession(configuration: .ephemeral)
+        defer { session.invalidateAndCancel() }
+        do {
+            let url = try await server.authorizedURL(path: "index.html")
+            let (bytes, response) = try await session.data(from: url)
+            XCTAssertEqual(bytes, payload)
+            XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+            let attempts = await factory.attempts
+            XCTAssertEqual(attempts, 2)
+            await server.close()
+            do { _ = try await server.endpoint(); XCTFail("Closed listeners cannot retry") }
+            catch is CancellationError { }
+            let finalAttempts = await factory.attempts
+            XCTAssertEqual(finalAttempts, 2)
+        } catch { await server.close(); throw error }
     }
 
     func testArtifactEndpointRequiresCapabilityAndCannotRestartAfterClose() async throws {

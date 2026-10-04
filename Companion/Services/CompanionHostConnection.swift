@@ -259,8 +259,9 @@ actor CompanionHostConnection {
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 commandContinuations[requestID] = continuation
+                let timeout = operation == .browserInteract ? RemoteBrowserTiming.commandTimeoutSeconds : 15
                 commandTimeouts[requestID] = Task { [weak self] in
-                    do { try await Task.sleep(for: .seconds(15)) }
+                    do { try await Task.sleep(for: .seconds(timeout)) }
                     catch { return }
                     await self?.cancelCommand(requestID, error: RemoteError.timedOut)
                 }

@@ -458,6 +458,10 @@ struct RemoteBrowserView: View {
                 if action == .text, self.text == text { self.text = "" }
                 renderAddress = frame.url
                 renderError = nil
+            } catch RemoteError.timedOut {
+                if generation == token {
+                    renderError = "The response timed out. The Mac may have already applied this action; check the page before retrying."
+                }
             } catch { if generation == token { renderError = error.localizedDescription } }
         }
     }
