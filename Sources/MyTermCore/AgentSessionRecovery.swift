@@ -59,11 +59,6 @@ public enum AgentSessionResume {
     /// Only agents MyTerm knows the resume syntax for are restored. An unknown agent gets a normal
     /// prompt rather than a guessed command.
     ///
-    /// Codex is deliberately absent: it is activity-only. Its hooks drive the cook beside the tab,
-    /// but they report a fresh identifier for each turn rather than the session identifier
-    /// `codex resume` takes, so a pane restored from one would open on an error instead of the
-    /// conversation. A Codex pane always comes back to a prompt.
-    ///
     /// A name is carried back into the conversation when the user gave the tab one, so the tab the
     /// user named and the conversation it holds agree from the first line. It is the user's own
     /// text and reaches the agent as typed: the quoting is what makes it safe on a command line.
@@ -75,6 +70,8 @@ public enum AgentSessionResume {
             } else {
                 "claude --resume \(shellQuoted(handle.sessionID))"
             }
+        case "codex":
+            "codex resume \(shellQuoted(handle.sessionID))"
         default:
             nil
         }

@@ -51,12 +51,13 @@ final class AgentHookCommandTests: XCTestCase {
     private func run(
         _ activity: AgentActivity = .finished,
         ignoring ignoredMessage: String? = nil,
+        agent: String = "claude",
         stdin: String,
         environment: [String: String] = ["MYTERM_PANE_ID": "pane"]
     ) throws -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = ["-c", AgentHooksController.command(agent: "claude", activity: activity, ignoring: ignoredMessage)]
+        process.arguments = ["-c", AgentHooksController.command(agent: agent, activity: activity, ignoring: ignoredMessage)]
         var env = environment
         env["PATH"] = directory.appending(path: "bin").path + ":/usr/bin:/bin"
         process.environment = env
@@ -91,13 +92,27 @@ final class AgentHookCommandTests: XCTestCase {
         XCTAssertEqual(report.sessionID, "9d9a9523-ab12-4c3d-8e4f-000000000001")
     }
 
+    func testCodexTurnAndNestedSessionIdentifiersCannotReplaceTheConversation() throws {
+        let written = try run(agent: "codex", stdin: #"{"session_id":"019a020e-0dbd-7000-8000-000000000001","turn_id":"turn-2","metadata":{"session_id":"nested-session"}}"#)
+        let report = try XCTUnwrap(report(in: written))
+        XCTAssertEqual(report.agent, "codex")
+        XCTAssertEqual(report.sessionID, "019a020e-0dbd-7000-8000-000000000001")
+    }
+
+    func testANestedIdentifierWithoutATopLevelSessionCannotBecomeAResumeHandle() throws {
+        let written = try run(agent: "codex", stdin: #"{"turn_id":"turn-2","metadata":{"session_id":"nested-session"}}"#)
+        let report = try XCTUnwrap(report(in: written))
+        XCTAssertEqual(report.activity, .finished)
+        XCTAssertNil(report.sessionID)
+    }
+
     func testTheHookIsSilentOutsideMyTerm() throws {
         let written = try run(stdin: #"{"session_id":"abc"}"#, environment: [:])
         XCTAssertEqual(written, "")
     }
 
     func testAnIdentifierThatCouldReachAShellNeverLeavesTheHook() throws {
-        for hostile in ["../../etc/passwd", "a;rm -rf ~", "$(whoami)", "a b", String(repeating: "x", count: 1_000), ""] {
+        for hostile in ["../../etc/passwd", "a;rm -rf ~", "$(whoami)", "a b", String(repeating: "x", count: 1_000), "", "abc\ndef", "abc\n"] {
             try? FileManager.default.removeItem(at: output)
             let payload = try String(data: JSONSerialization.data(withJSONObject: ["session_id": hostile]), encoding: .utf8)
             let written = try run(.working, stdin: try XCTUnwrap(payload))

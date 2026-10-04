@@ -7,15 +7,17 @@ struct AgentHookEvent: Sendable {
     /// The agent's own name for the event, which is the key its hooks file is organised by.
     let name: String
     let activity: AgentActivity
+    let timeout: Int
     /// Text in the agent's own hook payload that means this report is not worth passing on.
     ///
     /// The payload arrives on the hook's standard input, and it is the only thing that separates
     /// two different things an agent reports under one event name.
     let ignoredMessage: String?
 
-    init(_ name: String, _ activity: AgentActivity, ignoring ignoredMessage: String? = nil) {
+    init(_ name: String, _ activity: AgentActivity, ignoring ignoredMessage: String? = nil, timeout: Int = 5) {
         self.name = name
         self.activity = activity
+        self.timeout = timeout
         self.ignoredMessage = ignoredMessage
     }
 }
@@ -23,7 +25,7 @@ struct AgentHookEvent: Sendable {
 /// One agent MyTerm installs hooks for, and where that agent keeps them.
 ///
 /// Codex reads the same hook format Claude Code does, from its own file, so one controller serves
-/// both. Only the path, the event names, and the name the agent reports itself under differ.
+/// both while preserving each agent's event names and timeout limits.
 struct AgentHookTarget: Equatable, Sendable {
     /// Lowercased, because it travels in the report and the parser lowercases what it reads.
     let agent: String
@@ -56,8 +58,7 @@ struct AgentHookTarget: Equatable, Sendable {
         ]
     )
 
-    /// Codex calls the same things by mostly the same names and one of its own, and has no
-    /// session end to hook.
+    /// Codex uses PermissionRequest for questions that Claude reports as Notification.
     static let codex = AgentHookTarget(
         agent: "codex",
         displayName: "Codex",
@@ -69,6 +70,7 @@ struct AgentHookTarget: Equatable, Sendable {
             AgentHookEvent("UserPromptSubmit", .working),
             AgentHookEvent("Stop", .finished),
             AgentHookEvent("PermissionRequest", .awaitingInput),
+            AgentHookEvent("SessionEnd", .exited, timeout: 3),
         ]
     )
 
@@ -148,7 +150,7 @@ final class AgentHooksController {
                             activity: event.activity,
                             ignoring: event.ignoredMessage
                         ),
-                        "timeout": 5,
+                        "timeout": event.timeout,
                     ]],
                 ])
                 hooks[event.name] = entries
@@ -196,8 +198,9 @@ final class AgentHooksController {
     /// what lets MyTerm bring the same conversation back after a restart, and the character class
     /// is what keeps a hostile payload from reaching the command line that resumes it. An ignored
     /// message is matched against the same read, because it is the only way to tell a question
-    /// from a prompt left sitting. The installed entry carries a five second timeout, so an agent
-    /// that pipes nothing cannot leave the read waiting.
+    /// from a prompt left sitting. Each installed entry carries a bounded timeout, so an agent
+    /// that pipes nothing cannot leave the read waiting. The extraction sentinel preserves trailing
+    /// newlines in identifiers so validation rejects them rather than truncating them.
     ///
     /// Claude sets `CLAUDE_CODE_CHILD_SESSION` on hook processes as well as nested agents, so it
     /// cannot identify the conversation owning the pane. An agent ancestor on the same TTY can:
@@ -207,13 +210,15 @@ final class AgentHooksController {
         activity: AgentActivity,
         ignoring ignoredMessage: String? = nil
     ) -> String {
-        let idPattern = "s/.*\"session_id\"[[:space:]]*:[[:space:]]*\"\\([A-Za-z0-9._-]\\{1,64\\}\\)\".*/\\1/p"
         let payload = "agent=\(agent);event=\(activity.rawValue);session=%s"
         let filter = ignoredMessage.map { "case \"$__in\" in *'\($0)'*) exit 0;; esac; " } ?? ""
         return """
         [ -n "${MYTERM_PANE_ID:-}" ] && { __in=$(cat 2>/dev/null | tr -d '\\n'); \(filter)
         \(nestedAgentGuard)
-        __id=$(printf '%s' "$__in" | sed -n '\(idPattern)'); \
+        __id=$(printf '%s' "$__in" | /usr/bin/plutil -extract session_id raw -expect string -n -o - - 2>/dev/null; printf '.');
+        __id=${__id%.};
+        case "$__id" in ''|*[!A-Za-z0-9._-]*) __id='';; esac;
+        [ "${#__id}" -le 64 ] || __id='';
         __tty=$(ps -o tty= -p "$PPID" 2>/dev/null | tr -d '[:space:]'); \
         case "$__tty" in *[0-9]*) __tty="/dev/${__tty#/dev/}";; *) __tty="/dev/tty";; esac; \
         printf '\\033]\(AgentActivityMarker.oscCode);\(payload)\\033\\\\' "$__id" > "$__tty"; } >/dev/null 2>&1 || true \(marker)
@@ -270,7 +275,12 @@ final class AgentHooksController {
                 ignoring: event.ignoredMessage
             )
             let entries = (hooks[event.name] as? [[String: Any]]) ?? []
-            let isCurrent = entries.contains { Self.commands(in: $0).contains(expected) }
+            let isCurrent = entries.contains { entry in
+                let handlers = (entry["hooks"] as? [[String: Any]]) ?? []
+                return handlers.contains { handler in
+                    handler["command"] as? String == expected && handler["timeout"] as? Int == event.timeout
+                }
+            }
             return isCurrent ? event.name : nil
         }
     }
@@ -286,7 +296,11 @@ final class AgentHooksController {
             )
             let entries = (hooks[event.name] as? [[String: Any]]) ?? []
             return entries.contains { entry in
-                Self.commands(in: entry).contains { $0.hasSuffix(Self.marker) && $0 != expected }
+                let handlers = (entry["hooks"] as? [[String: Any]]) ?? []
+                return handlers.contains { handler in
+                    guard let command = handler["command"] as? String, command.hasSuffix(Self.marker) else { return false }
+                    return command != expected || handler["timeout"] as? Int != event.timeout
+                }
             }
         }
     }

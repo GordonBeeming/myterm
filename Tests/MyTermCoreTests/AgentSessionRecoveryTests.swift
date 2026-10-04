@@ -29,13 +29,12 @@ final class AgentSessionRecoveryTests: XCTestCase {
         XCTAssertFalse(AgentSessionResume.canResume(other))
     }
 
-    func testCodexIsNotResumed() throws {
-        // Codex hooks report a new identifier per turn, not the one `codex resume` takes, so a pane
-        // restored from one would open on an error instead of the conversation.
-        let codex = try XCTUnwrap(AgentSessionHandle(agent: "codex", sessionID: "01a020e7-0dbd"))
+    func testCodexResumesTheSessionEvenWhenThePaneHasACustomName() throws {
+        let codex = try XCTUnwrap(AgentSessionHandle(agent: "codex", sessionID: "019a020e-0dbd-7000-8000-000000000001"))
 
-        XCTAssertNil(AgentSessionResume.command(for: codex))
-        XCTAssertFalse(AgentSessionResume.canResume(codex))
+        XCTAssertEqual(AgentSessionResume.command(for: codex), "codex resume '019a020e-0dbd-7000-8000-000000000001'")
+        XCTAssertEqual(AgentSessionResume.command(for: codex, name: "Fix the build"), AgentSessionResume.command(for: codex))
+        XCTAssertTrue(AgentSessionResume.canResume(codex))
     }
 
     func testAMarkerCarriesTheConversationToResume() throws {

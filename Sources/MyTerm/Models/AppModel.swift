@@ -2187,9 +2187,8 @@ final class AppModel {
         }
         // A pane that comes back without its resume command comes back to a prompt, and a pane at
         // its prompt has left its conversation. The name goes with it, whether or not there was a
-        // handle to resume: a Codex pane carries a name and nothing to resume. Cleared only once
-        // the pane is running: a pane that failed to start has no prompt either, and keeps its
-        // conversation for the next attempt.
+        // handle to resume. Cleared only once the pane is running: a pane that failed to start has
+        // no prompt either, and keeps its conversation for the next attempt.
         if keepsSavedDirectory, initialCommand == nil, resumeCommand == nil,
            session.agentSession != nil || session.agentTitle != nil {
             do {
