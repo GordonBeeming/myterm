@@ -147,28 +147,14 @@ actor CompanionHostConnection {
         finish(error: nil)
     }
 
-    /// `resumeFrom` is what this device already holds for the route, so a reconnect can ask for
-    /// the output it missed instead of a fresh checkpoint of everything.
     func attach(_ route: TerminalRoute,
-                requestingFreshCheckpoint: Bool = false,
-                resumeFrom: TerminalResumePoint? = nil) async throws {
+                requestingFreshCheckpoint: Bool = false) async throws {
         guard attachedRoutes.register(route,
                                       requestingFreshCheckpoint: requestingFreshCheckpoint) else {
             return
         }
-        // Only against a host that proves it checks the generation. An older one decodes the field
-        // and ignores it, which would let a restarted terminal replay the wrong run's output.
-        let parameters: AttachParameters
-        if let resumeFrom, !requestingFreshCheckpoint,
-           hostCapabilities.contains(AttachParameters.resumeCapability) {
-            parameters = AttachParameters(afterSequence: resumeFrom.sequence,
-                                          requireCheckpoint: false,
-                                          generation: resumeFrom.generation)
-        } else {
-            parameters = AttachParameters()
-        }
         do {
-            try await send(.attach(metadata(route: route, requestID: UUID()), parameters))
+            try await send(.attach(metadata(route: route, requestID: UUID()), AttachParameters()))
         } catch {
             attachedRoutes.remove(sessionID: route.sessionID)
             throw error

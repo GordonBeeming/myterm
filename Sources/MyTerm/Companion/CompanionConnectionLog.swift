@@ -131,10 +131,13 @@ actor CompanionConnectionLog {
               size > Self.maximumFileBytes else { return }
         guard let text = try? String(contentsOf: fileURL, encoding: .utf8) else { return }
         var kept = text.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
-        while kept.count > 1,
-              kept.joined(separator: "\n").utf8.count > Self.maximumFileBytes {
+        // A single line can be longer than the whole budget, because a detail carries an error
+        // description of no fixed length. Keeping the last line unconditionally would leave the
+        // file over its stated cap, so an oversized one goes too and the file empties instead.
+        while !kept.isEmpty, kept.joined(separator: "\n").utf8.count > Self.maximumFileBytes {
             kept.removeFirst()
         }
-        try? Data((kept.joined(separator: "\n") + "\n").utf8).write(to: fileURL, options: .atomic)
+        let body = kept.isEmpty ? "" : kept.joined(separator: "\n") + "\n"
+        try? Data(body.utf8).write(to: fileURL, options: .atomic)
     }
 }

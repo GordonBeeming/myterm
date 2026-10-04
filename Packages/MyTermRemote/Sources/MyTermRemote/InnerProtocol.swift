@@ -164,8 +164,11 @@ public struct AttachParameters: Codable, Equatable, Sendable {
     /// host must refuse to replay and send a checkpoint instead.
     public let generation: UUID?
 
-    /// The host capability that proves a peer checks `generation` before replaying. Without it a
-    /// resume cannot be offered, because an older host decodes the field and ignores it.
+    /// The capability a host will advertise once it can honour a resume, which is not yet. A host
+    /// stops capturing a terminal the moment its last peer detaches, so output produced while a
+    /// device is away is lost and a replay from the sequence it left on returns nothing: an empty
+    /// success, and a stale screen with no sign anything is missing. A resume cannot be offered
+    /// until capture is held across the window, so nothing asks for one and no host claims this.
     public static let resumeCapability = "terminal-resume-v1"
 
     public init(afterSequence: UInt64? = nil, requireCheckpoint: Bool = true,

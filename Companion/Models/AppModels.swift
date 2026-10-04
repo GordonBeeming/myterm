@@ -96,15 +96,6 @@ enum DiagnosticsUploadOutcome: Equatable {
     }
 }
 
-/// What this device already holds for a terminal, so a reconnect can ask only for what it missed.
-///
-/// The generation travels with the sequence because a sequence means nothing without it: a
-/// restarted terminal counts from zero again.
-struct TerminalResumePoint: Equatable, Sendable {
-    let generation: UUID
-    let sequence: UInt64
-}
-
 /// How long to wait before the next reconnect, and when to stop trying.
 ///
 /// Kept apart from `SceneModel` so the rules can be read and tested without a relay: the loop this
@@ -684,7 +675,7 @@ final class SceneModel {
         terminalStates[route.id] = state
         do {
             guard let connection else { throw RemoteError.disconnected }
-            try await connection.attach(route, resumeFrom: state.resumePoint)
+            try await connection.attach(route)
         } catch { errorMessage = error.localizedDescription }
     }
 
@@ -1296,13 +1287,6 @@ final class TerminalSurfaceState {
     func prepareForReattachment() {
         isAwaitingCheckpoint = true
         clearControl()
-    }
-
-    /// What to ask the Mac to resume from, or nil when there is nothing to resume: without a
-    /// checkpoint already applied there is no screen for replayed output to be applied on top of.
-    var resumePoint: TerminalResumePoint? {
-        guard checkpoint != nil, sequence > 0, let generation else { return nil }
-        return TerminalResumePoint(generation: generation, sequence: sequence)
     }
 
     func apply(checkpoint: AssembledCheckpoint) {

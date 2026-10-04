@@ -135,6 +135,22 @@ final class CompanionConnectionLogTests: XCTestCase {
         XCTAssertEqual(entries.count, 2, "The start marker and the entry")
     }
 
+    func testOneEnormousEntryStillLeavesTheFileUnderTheCap() async throws {
+        let log = CompanionConnectionLog()
+        await log.configure(fileURL: logFile)
+        await log.setEnabled(true)
+
+        // A detail carries an error description of no fixed length, so one line can exceed the
+        // whole budget. Keeping the last line unconditionally left the file over its stated cap.
+        await log.record(category: "connection", "transport ended",
+                         detail: String(repeating: "y", count: 600 * 1_024))
+
+        let size = try XCTUnwrap(
+            FileManager.default.attributesOfItem(atPath: logFile.path)[.size] as? Int
+        )
+        XCTAssertLessThanOrEqual(size, 512 * 1_024, "The cap has to hold for a single long entry")
+    }
+
     func testShortenedIdentifiersDoNotCarryAWholeUUID() {
         let id = UUID()
         let short = CompanionConnectionLog.short(id)
