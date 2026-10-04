@@ -7,15 +7,17 @@ struct AgentHookEvent: Sendable {
     /// The agent's own name for the event, which is the key its hooks file is organised by.
     let name: String
     let activity: AgentActivity
+    let timeout: Int
     /// Text in the agent's own hook payload that means this report is not worth passing on.
     ///
     /// The payload arrives on the hook's standard input, and it is the only thing that separates
     /// two different things an agent reports under one event name.
     let ignoredMessage: String?
 
-    init(_ name: String, _ activity: AgentActivity, ignoring ignoredMessage: String? = nil) {
+    init(_ name: String, _ activity: AgentActivity, ignoring ignoredMessage: String? = nil, timeout: Int = 5) {
         self.name = name
         self.activity = activity
+        self.timeout = timeout
         self.ignoredMessage = ignoredMessage
     }
 }
@@ -23,7 +25,7 @@ struct AgentHookEvent: Sendable {
 /// One agent MyTerm installs hooks for, and where that agent keeps them.
 ///
 /// Codex reads the same hook format Claude Code does, from its own file, so one controller serves
-/// both. Only the path, the event names, and the name the agent reports itself under differ.
+/// both while preserving each agent's event names and timeout limits.
 struct AgentHookTarget: Equatable, Sendable {
     /// Lowercased, because it travels in the report and the parser lowercases what it reads.
     let agent: String
@@ -68,7 +70,7 @@ struct AgentHookTarget: Equatable, Sendable {
             AgentHookEvent("UserPromptSubmit", .working),
             AgentHookEvent("Stop", .finished),
             AgentHookEvent("PermissionRequest", .awaitingInput),
-            AgentHookEvent("SessionEnd", .exited),
+            AgentHookEvent("SessionEnd", .exited, timeout: 3),
         ]
     )
 
@@ -148,7 +150,7 @@ final class AgentHooksController {
                             activity: event.activity,
                             ignoring: event.ignoredMessage
                         ),
-                        "timeout": 5,
+                        "timeout": event.timeout,
                     ]],
                 ])
                 hooks[event.name] = entries
@@ -196,7 +198,7 @@ final class AgentHooksController {
     /// what lets MyTerm bring the same conversation back after a restart, and the character class
     /// is what keeps a hostile payload from reaching the command line that resumes it. An ignored
     /// message is matched against the same read, because it is the only way to tell a question
-    /// from a prompt left sitting. The installed entry carries a five second timeout, so an agent
+    /// from a prompt left sitting. Each installed entry carries a bounded timeout, so an agent
     /// that pipes nothing cannot leave the read waiting. The extraction sentinel preserves trailing
     /// newlines in identifiers so validation rejects them rather than truncating them.
     ///
@@ -273,7 +275,12 @@ final class AgentHooksController {
                 ignoring: event.ignoredMessage
             )
             let entries = (hooks[event.name] as? [[String: Any]]) ?? []
-            let isCurrent = entries.contains { Self.commands(in: $0).contains(expected) }
+            let isCurrent = entries.contains { entry in
+                let handlers = (entry["hooks"] as? [[String: Any]]) ?? []
+                return handlers.contains { handler in
+                    handler["command"] as? String == expected && handler["timeout"] as? Int == event.timeout
+                }
+            }
             return isCurrent ? event.name : nil
         }
     }
@@ -289,7 +296,11 @@ final class AgentHooksController {
             )
             let entries = (hooks[event.name] as? [[String: Any]]) ?? []
             return entries.contains { entry in
-                Self.commands(in: entry).contains { $0.hasSuffix(Self.marker) && $0 != expected }
+                let handlers = (entry["hooks"] as? [[String: Any]]) ?? []
+                return handlers.contains { handler in
+                    guard let command = handler["command"] as? String, command.hasSuffix(Self.marker) else { return false }
+                    return command != expected || handler["timeout"] as? Int != event.timeout
+                }
             }
         }
     }

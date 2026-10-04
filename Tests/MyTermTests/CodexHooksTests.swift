@@ -41,6 +41,32 @@ final class CodexHooksTests: XCTestCase {
         XCTAssertTrue(try XCTUnwrap(command(in: upgraded, event: "SessionEnd")).contains("event=exited"))
     }
 
+    func testRefreshingCodexSessionEndCorrectsOnlyTheManagedTimeout() throws {
+        let url = try makeHooksFile("{}")
+        let controller = AgentHooksController(target: .codex.writing(to: url))
+        controller.install()
+        var root = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        var hooks = try XCTUnwrap(root["hooks"] as? [String: Any])
+        let currentCommand = try XCTUnwrap(command(in: hooks, event: "SessionEnd"))
+        hooks["SessionEnd"] = [["hooks": [
+            ["type": "command", "command": currentCommand, "timeout": 5],
+            ["type": "command", "command": "another-tool", "timeout": 1],
+        ]]]
+        root["hooks"] = hooks
+        try JSONSerialization.data(withJSONObject: root).write(to: url)
+
+        controller.refresh()
+
+        XCTAssertTrue(controller.isInstalled)
+        let upgraded = try readHooks(at: url)
+        let entries = try XCTUnwrap(upgraded["SessionEnd"] as? [[String: Any]])
+        let handlers = entries.flatMap { ($0["hooks"] as? [[String: Any]]) ?? [] }
+        XCTAssertEqual(handlers.first { $0["command"] as? String == currentCommand }?["timeout"] as? Int, 3)
+        XCTAssertEqual(handlers.first { $0["command"] as? String == "another-tool" }?["timeout"] as? Int, 1)
+        let stopEntries = try XCTUnwrap(upgraded["Stop"] as? [[String: Any]])
+        XCTAssertEqual((stopEntries.first?["hooks"] as? [[String: Any]])?.first?["timeout"] as? Int, 5)
+    }
+
     func testAnotherToolsHooksInTheSameFileAreLeftAlone() throws {
         // A real hooks.json is shared: other terminals install their own reporters beside MyTerm's.
         let url = try makeHooksFile("""
