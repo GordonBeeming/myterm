@@ -7,6 +7,7 @@ struct CompanionSettingsView: View {
     @State private var isEditingConnection = false
     @State private var previousRelay = ""
     @State private var pairingLinkCopyError: String?
+    @AppStorage(CompanionHostModel.collectConnectionLogKey) private var collectsConnectionLog = false
 
     private var showsLinkForm: Bool {
         !companion.hasLinkedRelay || isEditingConnection
@@ -138,8 +139,17 @@ struct CompanionSettingsView: View {
 
                 if let diagnostics = companion.diagnosticsDirectory {
                     Section("Diagnostics") {
+                        Toggle("Record this Mac's connection", isOn: $collectsConnectionLog)
+                            .onChange(of: collectsConnectionLog) { _, enabled in
+                                Task { await CompanionConnectionLog.shared.setEnabled(enabled) }
+                            }
+                        Text("Logs when this Mac connects, reconnects and loses its relay "
+                             + "connection, and how large a terminal's checkpoint was. It never "
+                             + "records terminal output.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                         HStack {
-                            Text("Diagnostics a paired device has sent are filed here.")
+                            Text("This Mac's log is filed beside what paired devices send.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                             Spacer()

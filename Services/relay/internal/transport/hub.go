@@ -59,6 +59,30 @@ type connection struct {
 	// that can no longer produce a valid token still drops at its last validated expiry.
 	expiryMu sync.Mutex
 	expiry   *time.Timer
+
+	// cause records why this connection was cancelled. Every teardown routes through cancel, so
+	// without it the log reported the same "cancelled" string for a revoked device, an evicted
+	// peer, a slow receiver and an ordinary close alike, and a disconnect could not be diagnosed
+	// from the relay at all.
+	causeMu sync.Mutex
+	cause   string
+}
+
+// cancelBecause cancels the connection and records why, keeping the first reason: the cancel it
+// triggers unwinds through other paths that would otherwise overwrite it with something vaguer.
+func (c *connection) cancelBecause(cause string) {
+	c.causeMu.Lock()
+	if c.cause == "" {
+		c.cause = cause
+	}
+	c.causeMu.Unlock()
+	c.cancel()
+}
+
+func (c *connection) cancellationCause() string {
+	c.causeMu.Lock()
+	defer c.causeMu.Unlock()
+	return c.cause
 }
 
 func (c *connection) extendUntil(deadline time.Time) {
@@ -66,11 +90,13 @@ func (c *connection) extendUntil(deadline time.Time) {
 	defer c.expiryMu.Unlock()
 	remaining := time.Until(deadline)
 	if remaining <= 0 {
-		c.cancel()
+		c.cancelBecause("access token already expired")
 		return
 	}
 	if c.expiry == nil {
-		c.expiry = time.AfterFunc(remaining, c.cancel)
+		c.expiry = time.AfterFunc(remaining, func() {
+			c.cancelBecause("access token expired without an in-band refresh")
+		})
 		return
 	}
 	c.expiry.Reset(remaining)
@@ -141,7 +167,7 @@ func (h *Hub) DisconnectDevice(deviceID string) {
 	}
 	h.mu.RUnlock()
 	for _, conn := range connections {
-		conn.cancel()
+		conn.cancelBecause("device session revoked")
 		_ = conn.socket.Close(websocket.StatusPolicyViolation, "device session revoked")
 	}
 }
@@ -176,7 +202,7 @@ func (h *Hub) DisconnectClient(hostID, connectionID string) error {
 	if target == nil {
 		return nil
 	}
-	target.cancel()
+	target.cancelBecause("host ended this client connection")
 	_ = target.socket.Close(websocket.StatusPolicyViolation, "host ended client connection")
 	return nil
 }
@@ -237,10 +263,12 @@ func (h *Hub) ServeWebSocket(w http.ResponseWriter, r *http.Request, device stor
 	go func() { errCh <- h.writeLoop(ctx, conn) }()
 	go func() { errCh <- h.readLoop(ctx, conn) }()
 	err = <-errCh
+	// Read before cancelling, so the shutdown below cannot be what names the cause.
+	cause := conn.cancellationCause()
 	cancel()
 	slog.Info("relay connection ended",
 		"host_id", host.ID, "role", role, "connection_id", conn.id.String(),
-		"device_id", device.ID, "reason", closeReason(err))
+		"device_id", device.ID, "reason", closeReason(err, cause))
 	_ = socket.Close(websocket.StatusNormalClosure, "connection closed")
 	return err
 }
@@ -277,7 +305,7 @@ func (h *Hub) register(conn *connection) ([]*connection, error) {
 
 func (h *Hub) unregister(conn *connection) {
 	conn.once.Do(func() {
-		conn.cancel()
+		conn.cancelBecause("connection closed")
 		h.mu.Lock()
 		group := h.hosts[conn.hostID]
 		if group == nil {
@@ -424,7 +452,7 @@ func (h *Hub) route(source *connection, frame []byte) error {
 				"host_id", recipient.hostID, "role", recipient.role,
 				"connection_id", recipient.id.String(), "device_id", recipient.deviceID,
 				"queue_depth", h.config.WebSocketQueueDepth, "grace", h.config.SlowReceiverGrace)
-			recipient.cancel()
+			recipient.cancelBecause("receiver too slow to keep up with its peer")
 			_ = recipient.socket.Close(websocket.StatusTryAgainLater, "receiver too slow")
 		}(recipient)
 	}
@@ -495,15 +523,25 @@ func (c *connection) sendWithin(ctx context.Context, message outboundMessage, wa
 	}
 }
 
-func closeReason(err error) string {
+// closeReason explains why a connection ended. A cancellation on its own says almost nothing,
+// because every teardown cancels, so the recorded cause is preferred when there is one.
+func closeReason(err error, cause string) string {
 	if err == nil {
+		if cause != "" {
+			return cause
+		}
 		return "closed"
 	}
 	if errors.Is(err, context.Canceled) {
-		return "access token expired or connection cancelled"
+		if cause != "" {
+			return cause
+		}
+		return "cancelled without a recorded cause"
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		return "write timed out"
+		// The peer stopped draining its socket for longer than the heartbeat allows, which is a
+		// stalled reader on the other end rather than anything the relay chose.
+		return "write timed out: peer stopped reading"
 	}
 	return err.Error()
 }
