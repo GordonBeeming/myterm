@@ -21,6 +21,18 @@ private actor VisibilityEventRecorder {
 
 @MainActor
 final class SceneStateTests: XCTestCase {
+    func testSceneReleasesSynchronouslyInsideTaskLocalScope() {
+        weak var releasedScene: SceneModel?
+        SceneLifetimeContext.$marker.withValue(1) {
+            autoreleasepool {
+                let scene = SceneModel()
+                releasedScene = scene
+                XCTAssertNotNil(releasedScene)
+            }
+        }
+        XCTAssertNil(releasedScene)
+    }
+
     func testClipboardImagePasteRequiresControlAndUsesPNG() throws {
         let view = ClipboardTerminalView(frame: .zero)
         let image = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).image { context in
@@ -740,4 +752,8 @@ private func testConnection(hostID: UUID = UUID()) -> SavedConnectionID {
 private func testTerminalRoute(connectionID: SavedConnectionID) -> TerminalRoute {
     TerminalRoute(connectionID: connectionID, workspaceID: UUID(), groupID: UUID(),
                   tabID: UUID(), sessionID: UUID(), title: "Shell")
+}
+
+private enum SceneLifetimeContext {
+    @TaskLocal static var marker = 0
 }

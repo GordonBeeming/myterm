@@ -70,7 +70,7 @@ The terminal follows live output even in view-only mode. Scrolling up pauses fol
 
 Use **Compose** beside the control button to write a longer prompt or command in a native text editor. **Insert into terminal** pastes the text; **Insert + Enter** also sends Return. Sending requires control, but drafting does not. Drafts stay in the current app window until cleared, including after insertion or dismissal. They are not saved across app restarts. Terminals that support bracketed paste receive the text as a paste; the composer warns when multiple lines may run commands in a terminal without that support.
 
-Browser tabs expose their titles and URLs in this version. Opening the same URL elsewhere does not transfer the Mac browser's cookies or page state.
+Browser tabs offer Native proxy and Mac rendered modes. Localhost tabs start in Mac rendered mode. Native mode accepts public destinations only; use Mac rendered mode for private-network websites. The modes have separate sessions, so switching may require signing into the website again. See [the browser prototype notes](REMOTE_BROWSER_PROTOTYPE.md) for controls, artifact access, and the native mode's WebRTC limitation. The plus button beside a folder creates a workspace that inherits that folder's settings.
 
 ## Notifications
 

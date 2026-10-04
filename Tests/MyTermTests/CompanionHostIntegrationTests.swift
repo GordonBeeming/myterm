@@ -1,4 +1,7 @@
+import AppKit
 import CryptoKit
+import Network
+@preconcurrency import WebKit
 import Foundation
 import MyTermCore
 import MyTermPlatform
@@ -111,6 +114,7 @@ private final class FixtureNetworkDiagnostics: @unchecked Sendable {
 
 @MainActor
 final class CompanionHostIntegrationTests: XCTestCase {
+    private let browserRendererID = UUID()
     private final class MemorySecrets: SecretStore, @unchecked Sendable {
         private let lock = NSLock()
         private var values: [String: Data] = [:]
@@ -245,7 +249,7 @@ final class CompanionHostIntegrationTests: XCTestCase {
         }
     }
 
-    private struct PhoneConnection {
+    private struct PhoneConnection: Sendable {
         let socket: RelayWebSocketClient
         let reader: RelayEventReader
         let channel: SecureRelayChannel
@@ -470,6 +474,17 @@ final class CompanionHostIntegrationTests: XCTestCase {
                 .id.rawValue
         )
         let targetMetadata = metadata(target: target, hostID: identity.hostID, runtimeID: first.runtimeID)
+
+        let browserPhone = try await makeAuthenticatedConnection(
+            endpoint: endpoint, fixture: fixture,
+            session: try fixtureSession(fixture: fixture, endpoint: endpoint, diagnostics: networkDiagnostics),
+            hostIdentity: identity, clientAgreementKey: clientAgreementKey,
+            clientSigningKey: clientSigningKey
+        )
+        _ = try await requireWorkspaceProjection(browserPhone)
+        networkDiagnostics.setStage("exercise both browsers through encrypted relay")
+        try await exerciseRemoteBrowsers(model: model, connection: browserPhone,
+            hostID: identity.hostID, directory: launched.tempDirectory.appendingPathComponent("browser-origin"))
 
         networkDiagnostics.setStage("attach first phone and import checkpoint")
         try await first.channel.send(
@@ -814,6 +829,221 @@ final class CompanionHostIntegrationTests: XCTestCase {
         host.disconnect()
         host.startIfEnabled()
         XCTAssertEqual(host.status, .disconnected)
+    }
+
+    private actor BrowserPacketCounter {
+        private(set) var chunks = 0
+        private(set) var error: String?
+        func record(_ parameters: BrowserTunnelParameters) {
+            if parameters.action == .data { chunks += 1 }
+        }
+        func fail(_ value: String) { error = value }
+    }
+
+    private func exerciseRemoteBrowsers(model: AppModel, connection: PhoneConnection,
+                                        hostID: UUID, directory: URL) async throws {
+        let origin = try await BrowserHTTPFixture.start(in: directory)
+        defer { origin.stop() }
+        let workspaceID = model.store.selectedWorkspaceID
+        let groupID = model.store.selectedWorkspace.focusedTabGroupID
+        let pageURL = origin.origin.appendingPathComponent("index.html")
+        let tabID = try model.store.addBrowserTab(to: workspaceID, tabGroupID: groupID,
+            url: pageURL, selectsCreatedTab: false)
+        let route = MessageMetadata(hostID: hostID, runtimeID: connection.runtimeID,
+            workspaceID: workspaceID.rawValue, groupID: groupID.rawValue, tabID: tabID.rawValue)
+
+        var frame = try await browserCommand(.init(action: .open, width: 800, height: 600),
+                                              route: route, connection: connection)
+        for _ in 0..<40 where frame.title != "RELAY FETCH OK" {
+            try await Task.sleep(for: .milliseconds(150))
+            frame = try await browserCommand(.init(action: .snapshot, width: 800, height: 600),
+                                             route: route, connection: connection)
+        }
+        XCTAssertEqual(frame.title, "RELAY FETCH OK", frame.error ?? "Rendered page did not load")
+        XCTAssertNotNil(NSImage(data: frame.image), "A real rendered JPEG must cross the relay")
+        XCTAssertEqual(frame.width, 800)
+        XCTAssertEqual(frame.height, 600)
+        frame = try await browserCommand(.init(action: .tap, width: 800, height: 600, x: 0.1, y: 0.04),
+                                         route: route, connection: connection)
+        for _ in 0..<40 where frame.title != "Browser next" {
+            try await Task.sleep(for: .milliseconds(150))
+            frame = try await browserCommand(.init(action: .snapshot, width: 800, height: 600),
+                                             route: route, connection: connection)
+        }
+        XCTAssertEqual(frame.title, "Browser next", frame.error ?? "Remote tap did not navigate")
+        frame = try await browserCommand(.init(action: .back, width: 800, height: 600), route: route, connection: connection)
+        for _ in 0..<40 where frame.title != "RELAY FETCH OK" {
+            try await Task.sleep(for: .milliseconds(150))
+            frame = try await browserCommand(.init(action: .snapshot, width: 800, height: 600), route: route, connection: connection)
+        }
+        _ = try await browserCommand(.init(action: .tap, width: 800, height: 600, x: 0.1, y: 0.14), route: route, connection: connection)
+        frame = try await browserCommand(.init(action: .text, width: 800, height: 600, text: "REMOTE TYPED"), route: route, connection: connection)
+        XCTAssertEqual(frame.title, "REMOTE TYPED", "Text input must execute on the Mac page")
+        _ = try await browserCommand(.init(action: .close, rendererID: UUID(), width: 800, height: 600), route: route, connection: connection)
+        frame = try await browserCommand(.init(action: .snapshot, width: 800, height: 600), route: route, connection: connection)
+        XCTAssertEqual(frame.title, "REMOTE TYPED", "A stale renderer owner must not close its replacement")
+        frame = try await browserCommand(.init(action: .navigate, width: 800, height: 600,
+            url: origin.origin.appendingPathComponent("redirect").absoluteString), route: route, connection: connection)
+        for _ in 0..<40 where frame.title != "Browser next" {
+            try await Task.sleep(for: .milliseconds(150))
+            frame = try await browserCommand(.init(action: .snapshot, width: 800, height: 600), route: route, connection: connection)
+        }
+        XCTAssertEqual(frame.title, "Browser next")
+        _ = try await browserCommand(.init(action: .close, width: 800, height: 600), route: route, connection: connection)
+
+        for (path, title) in [("socket-test.html", "RELAY WEBSOCKET OK"), ("post-test.html", "RELAY POST through-relay")] {
+            frame = try await browserCommand(.init(action: .open, width: 800, height: 600,
+                url: origin.origin.appendingPathComponent(path).absoluteString), route: route, connection: connection)
+            for _ in 0..<40 where frame.title != title {
+                try await Task.sleep(for: .milliseconds(150))
+                frame = try await browserCommand(.init(action: .snapshot, width: 800, height: 600), route: route, connection: connection)
+            }
+            XCTAssertEqual(frame.title, title, frame.error ?? "Remote browser network operation did not finish")
+            _ = try await browserCommand(.init(action: .close, width: 800, height: 600), route: route, connection: connection)
+        }
+
+        // A file tab grants only its artifact directory; the companion never reads local disk.
+        let artifactURL = directory.appendingPathComponent("index.html")
+        try model.store.updateWorkspaceSettings(workspaceID) { $0.allowsLocalFileJavaScript = true }
+        try model.store.updateBrowserURL(workspaceID: workspaceID, tabGroupID: groupID, tabID: tabID, url: artifactURL)
+        frame = try await browserCommand(.init(action: .open, width: 800, height: 600), route: route, connection: connection)
+        for _ in 0..<40 where frame.title != "RELAY FETCH OK" {
+            try await Task.sleep(for: .milliseconds(150))
+            frame = try await browserCommand(.init(action: .snapshot, width: 800, height: 600), route: route, connection: connection)
+        }
+        XCTAssertEqual(frame.title, "RELAY FETCH OK", frame.error ?? "Mac artifact did not load")
+        XCTAssertEqual(frame.url, artifactURL.absoluteString)
+        _ = try await browserCommand(.init(action: .close, width: 800, height: 600), route: route, connection: connection)
+        let symlink = directory.appendingPathComponent("link.html")
+        try FileManager.default.createSymbolicLink(at: symlink, withDestinationURL: artifactURL)
+        for unavailableURL in [directory.appendingPathComponent("missing.html"), symlink, directory] {
+            let unavailableTab = try model.store.addBrowserTab(to: workspaceID, tabGroupID: groupID,
+                url: unavailableURL, selectsCreatedTab: false)
+            let unavailableRoute = MessageMetadata(hostID: hostID, runtimeID: connection.runtimeID,
+                workspaceID: workspaceID.rawValue, groupID: groupID.rawValue, tabID: unavailableTab.rawValue)
+            let streamID = UUID()
+            try await connection.channel.send(.browserTunnel(unavailableRoute,
+                .init(streamID: streamID, action: .open,
+                      host: UUID().uuidString.lowercased() + ".myterm-artifact.invalid", port: 80)),
+                destinationConnectionID: RelayFrame.broadcastDestination, over: connection.socket)
+            var closed = false
+            for _ in 0..<100 {
+                let message = try await connection.channel.open(requireApplication(connection.reader))
+                if case .browserTunnel(_, let response) = message, response.streamID == streamID {
+                    closed = response.action == .close
+                    break
+                }
+            }
+            XCTAssertTrue(closed, "An unavailable artifact must reject only its browser stream")
+        }
+        try await connection.channel.send(.workspaceRequest(
+            MessageMetadata(requestID: UUID(), hostID: hostID, runtimeID: connection.runtimeID), .init()),
+            destinationConnectionID: RelayFrame.broadcastDestination, over: connection.socket)
+        _ = try await requireWorkspaceProjection(connection)
+
+        let nativeURL = try XCTUnwrap(URL(string: "http://\(UUID().uuidString.lowercased()).myterm-artifact.invalid/index.html"))
+
+        let counter = BrowserPacketCounter()
+        let proxy = RemoteBrowserProxy { parameters in
+            await counter.record(parameters)
+            try await connection.channel.send(.browserTunnel(route, parameters),
+                destinationConnectionID: RelayFrame.broadcastDestination, over: connection.socket)
+        }
+        let endpoint = try await proxy.start(protocolKind: .socks5)
+        let pump = Task {
+            do {
+                while !Task.isCancelled {
+                    let packet = try await self.requireApplication(connection.reader)
+                    let message = try await connection.channel.open(packet)
+                    if case .browserTunnel(_, let parameters) = message {
+                        try await proxy.receive(parameters)
+                    }
+                }
+            } catch {
+                if !Task.isCancelled { await counter.fail(error.localizedDescription) }
+            }
+        }
+        do {
+            let configuration = WKWebViewConfiguration()
+            let store = WKWebsiteDataStore.nonPersistent()
+            let port = try XCTUnwrap(NWEndpoint.Port(rawValue: endpoint.port))
+            var proxyConfiguration = ProxyConfiguration(socksv5Proxy: .hostPort(host: "127.0.0.1", port: port))
+            proxyConfiguration.matchDomains = ["localhost", "127.0.0.1", "::1", ""]
+            proxyConfiguration.excludedDomains = []
+            proxyConfiguration.allowFailover = false
+            proxyConfiguration.applyCredential(username: endpoint.username, password: endpoint.password)
+            store.proxyConfigurations = [proxyConfiguration]
+            configuration.websiteDataStore = store
+            let browser = WKWebView(frame: NSRect(x: 0, y: 0, width: 800, height: 600), configuration: configuration)
+            browser.load(URLRequest(url: nativeURL))
+            try await waitUntil { browser.title == "RELAY FETCH OK" }
+            let chunks = await counter.chunks
+            XCTAssertGreaterThan(chunks, 0, "WebKit must actually use the relay proxy")
+
+            try await runBrowserScript(browser, "document.getElementById('next').click(); void 0")
+            try await waitUntil { browser.title == "Browser next" }
+            browser.load(URLRequest(url: nativeURL))
+            try await waitUntil { browser.title == "RELAY FETCH OK" }
+            try await runBrowserScript(browser, "fetch('/submit',{method:'POST',body:'through-relay'}).then(r=>document.title=r.status===405?'ARTIFACT READ ONLY':'UNEXPECTED STATUS'); void 0")
+            try await waitUntil { browser.title == "ARTIFACT READ ONLY" }
+            if ProcessInfo.processInfo.environment["MYTERM_BROWSER_TEST_PUBLIC_HTTPS"] == "1" {
+                let secureURL = try XCTUnwrap(URL(string: "https://example.com/"))
+                browser.load(URLRequest(url: secureURL))
+                try await waitUntil { browser.title == "Example Domain" }
+                print("Browser integration verified public HTTPS through the encrypted relay")
+            }
+            browser.stopLoading()
+            await proxy.stop()
+            // A dead local proxy must not silently become a direct localhost connection.
+            browser.load(URLRequest(url: nativeURL.appending(queryItems: [URLQueryItem(name: "uncached", value: UUID().uuidString)])))
+            try await Task.sleep(for: .seconds(1))
+            XCTAssertNotEqual(browser.title, "RELAY FETCH OK")
+            browser.stopLoading()
+            pump.cancel()
+            await connection.socket.disconnect()
+            let pumpError = await counter.error
+            XCTAssertNil(pumpError)
+        } catch {
+            await proxy.stop()
+            pump.cancel()
+            await connection.socket.disconnect()
+            let pumpError = await counter.error
+            XCTFail("Native browser relay pump: \(pumpError ?? "no pump error")")
+            throw error
+        }
+    }
+
+    private func browserCommand(_ request: RemoteBrowserRequest, route: MessageMetadata,
+                                connection: PhoneConnection) async throws -> RemoteBrowserFrame {
+        let metadata = MessageMetadata(requestID: UUID(), hostID: route.hostID, runtimeID: route.runtimeID,
+            workspaceID: route.workspaceID, groupID: route.groupID, tabID: route.tabID)
+        let owned = try RemoteBrowserRequest(action: request.action, rendererID: request.rendererID ?? browserRendererID,
+            width: request.width, height: request.height, url: request.url, x: request.x, y: request.y,
+            deltaX: request.deltaX, deltaY: request.deltaY, text: request.text, key: request.key)
+        try await connection.channel.send(.command(metadata, .init(operation: .browserInteract,
+            payload: JSONEncoder().encode(owned))), destinationConnectionID: RelayFrame.broadcastDestination,
+            over: connection.socket)
+        for _ in 0..<100 {
+            let packet = try await requireApplication(connection.reader)
+            let message = try await connection.channel.open(packet)
+            if case .commandResult(let response, let result) = message, response.requestID == metadata.requestID {
+                guard result.succeeded, let data = result.result else {
+                    throw NSError(domain: "BrowserIntegration", code: 1,
+                        userInfo: [NSLocalizedDescriptionKey: result.errorMessage ?? "Browser command failed"])
+                }
+                return try JSONDecoder().decode(RemoteBrowserFrame.self, from: data)
+            }
+        }
+        throw RemoteError.timedOut
+    }
+
+    private func runBrowserScript(_ browser: WKWebView, _ script: String) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            browser.evaluateJavaScript(script) { _, error in
+                if let error { continuation.resume(throwing: error) }
+                else { continuation.resume() }
+            }
+        }
     }
 
     private func metadata(

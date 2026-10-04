@@ -64,6 +64,7 @@ final class CompanionHostModel {
         let tabID: TabID
     }
 
+    @MainActor
     private final class PeerConnection {
         let connectionID: UUID
         let peer: PairedPeer
@@ -71,10 +72,12 @@ final class CompanionHostModel {
         let clientHello: HelloParameters
         let hostHello: HelloParameters
         var applicationChannel: SecureRelayChannel?
+        let browserSessions = CompanionBrowserSessions()
         var attachedSessions: Set<TerminalSessionID> = []
         var attachingSessions: [TerminalSessionID: [TerminalRemoteOutput]] = [:]
         var attachingOverflow: Set<TerminalSessionID> = []
         let outboundQueue = CompanionConnectionWorkQueue(limits: .outbound)
+        let browserQueue = CompanionConnectionWorkQueue(limits: .browser)
 
         init(connectionID: UUID, peer: PairedPeer, helloChannel: SecureRelayChannel,
              clientHello: HelloParameters, hostHello: HelloParameters) {
@@ -393,6 +396,7 @@ final class CompanionHostModel {
     }
 
     func workspaceDidChange() {
+        if let appModel { for peer in peersByConnection.values { peer.browserSessions.prune(model: appModel) } }
         workspaceRevision &+= 1
         broadcastWorkspaceSnapshot()
     }
@@ -937,7 +941,7 @@ final class CompanionHostModel {
             hostDeviceID: identity.hostID,
             agreementKey: identity.agreementKey.publicKey,
             notificationSigningKey: identity.notificationSigningKey.publicKey,
-            capabilities: ["workspace-v1", "terminal-checkpoint-v1", "control-lease-v1"]
+            capabilities: ["workspace-v1", "terminal-checkpoint-v1", "control-lease-v1", "browser-proxy-v1", RemoteBrowserRequest.capability]
         )
         let peer = PeerConnection(
             connectionID: connectionID,
@@ -967,10 +971,44 @@ final class CompanionHostModel {
         )
         do {
         switch message {
+        case .browserTunnel(let metadata, let parameters):
+            do { try await handleBrowserTunnel(metadata: metadata, parameters: parameters, peer: peer) }
+            catch {
+                // A missing artifact or retired tab affects one browser stream, not terminal control.
+                if parameters.action == .open || parameters.action == .data {
+                    send(.browserTunnel(metadata, .init(streamID: parameters.streamID, action: .close)), to: peer)
+                }
+            }
         case .workspaceRequest(let metadata, _):
             sendWorkspaceSnapshot(to: peer, requestID: metadata.requestID)
         case .command(let metadata, let command):
-            await handleCommand(metadata: metadata, command: command, peer: peer)
+            if command.operation == .browserInteract {
+                do {
+                    _ = try JSONDecoder().decode(RemoteBrowserRequest.self, from: command.payload)
+                    let deadline = CompanionBrowserActionDeadline()
+                    try deadline.check()
+                    try peer.browserQueue.enqueue(cost: command.payload.count) { [weak self, weak peer] in
+                        guard let self, let peer, self.peersByConnection[peer.connectionID] === peer else { return }
+                        do { try deadline.check() }
+                        catch {
+                            self.send(.commandResult(self.makeMetadata(requestID: metadata.requestID),
+                                CommandResultParameters(succeeded: false, errorCode: "browser_expired",
+                                    errorMessage: "The remote browser action expired before it could run.")), to: peer)
+                            return
+                        }
+                        await self.handleCommand(metadata: metadata, command: command, peer: peer, browserDeadline: deadline)
+                    }
+                } catch {
+                    let busy = error is CompanionConnectionWorkQueue.Overflow
+                    let expired = (error as? URLError)?.code == .timedOut
+                    send(.commandResult(makeMetadata(requestID: metadata.requestID),
+                        CommandResultParameters(succeeded: false,
+                            errorCode: busy ? "browser_busy" : expired ? "browser_expired" : "invalid_payload",
+                            errorMessage: busy ? "The remote browser is busy. Wait for the current actions to finish."
+                                : expired ? "The remote browser action expired before it could run."
+                                : "The remote browser request is invalid.")), to: peer)
+                }
+            } else { await handleCommand(metadata: metadata, command: command, peer: peer) }
         case .attach(let metadata, let parameters):
             try await handleAttach(metadata: metadata, parameters: parameters, peer: peer)
         case .detach(let metadata, _):
@@ -993,10 +1031,174 @@ final class CompanionHostModel {
         }
     }
 
+    private func browserTarget(_ metadata: MessageMetadata, peer: PeerConnection) throws -> (CompanionBrowserRoute, URL) {
+        guard peersByConnection[peer.connectionID] === peer, peer.applicationChannel != nil,
+              let appModel else { throw RemoteError.wrongPeer }
+        let route = try CompanionBrowserRoute(metadata)
+        return (route, try appModel.companionBrowserURL(route: route))
+    }
+
+    private func handleBrowserTunnel(metadata: MessageMetadata, parameters: BrowserTunnelParameters,
+                                     peer: PeerConnection) async throws {
+        let (route, url) = try browserTarget(metadata, peer: peer)
+        let scriptPermission = try appModel?.store.resolvedSettings(for: WorkspaceID(rawValue: route.workspaceID)).allowsLocalFileJavaScript ?? false
+        if let existing = peer.browserSessions.native[route], existing.sourceURL != url || existing.allowsLocalFileJavaScript != scriptPermission {
+            peer.browserSessions.closeNative(route: route)
+        }
+        if peer.browserSessions.native[route] == nil {
+            guard parameters.action == .open else {
+                if parameters.action == .data { send(.browserTunnel(metadata, .init(streamID: parameters.streamID, action: .close)), to: peer) }
+                return
+            }
+            let idleCandidates = peersByConnection.values.flatMap { connection in
+                connection.browserSessions.native.map { (connection, $0.key, $0.value.tunnel) }
+            }
+            for (connection, candidateRoute, candidateTunnel) in idleCandidates {
+                if !(await candidateTunnel.hasOpenStreams()),
+                   connection.browserSessions.native[candidateRoute]?.openingStreams.isEmpty == true,
+                   connection.browserSessions.native[candidateRoute]?.tunnel === candidateTunnel {
+                    connection.browserSessions.closeNative(route: candidateRoute)
+                }
+            }
+            guard try browserTarget(metadata, peer: peer).1 == url else { throw CompanionCommandError.wrongTarget }
+            guard peer.browserSessions.native.count < 4,
+                  peersByConnection.values.reduce(0, { $0 + $1.browserSessions.native.count }) < 8 else {
+                send(.browserTunnel(metadata, .init(streamID: parameters.streamID, action: .close)), to: peer)
+                return
+            }
+            let artifact = url.isFileURL ? CompanionBrowserArtifactServer(artifact: try CompanionBrowserArtifact(selectedFile: url, allowsJavaScript: scriptPermission)) : nil
+            let tunnel = RemoteBrowserHostTunnel(send: { [weak self, weak peer] parameters in
+                guard let self, let peer else { throw RemoteError.disconnected }
+                try await self.sendBrowserTunnel(parameters, metadata: metadata, peer: peer)
+            }, resolve: { host, port in
+                if host.lowercased() == CompanionBrowserArtifact.hostname || host.lowercased().hasSuffix("." + CompanionBrowserArtifact.hostname) {
+                    guard port == 80, let artifact else { throw CompanionCommandError.wrongTarget }
+                    try await artifact.registerVirtualOrigin(host)
+                    return try await artifact.endpoint()
+                }
+                return try await NativeBrowserDestinationPolicy().resolve(host: host, port: port)
+            })
+            peer.browserSessions.native[route] = .init(tunnel: tunnel, artifact: artifact, sourceURL: url, allowsLocalFileJavaScript: scriptPermission)
+        }
+        guard let entry = peer.browserSessions.native[route] else { throw RemoteError.invalidMessage }
+        // Socket establishment cannot hold the peer's terminal/control application queue.
+        if parameters.action == .open {
+            peer.browserSessions.native[route]?.openingStreams.insert(parameters.streamID)
+            Task { [weak self, weak peer] in
+                defer {
+                    if let peer, peer.browserSessions.native[route]?.tunnel === entry.tunnel {
+                        peer.browserSessions.native[route]?.openingStreams.remove(parameters.streamID)
+                    }
+                }
+                do { try await entry.tunnel.receive(parameters) }
+                catch {
+                    guard let self, let peer else { return }
+                    self.logger.error("Remote browser tunnel failed: \(error.localizedDescription, privacy: .public)")
+                    if (try? self.browserTarget(metadata, peer: peer)) != nil {
+                        self.send(.browserTunnel(metadata, .init(streamID: parameters.streamID, action: .close)), to: peer)
+                    }
+                }
+            }
+        } else { try await entry.tunnel.receive(parameters) }
+    }
+
+    private func sendBrowserTunnel(_ parameters: BrowserTunnelParameters, metadata: MessageMetadata,
+                                   peer: PeerConnection) throws {
+        guard (try? browserTarget(metadata, peer: peer)) != nil else { return }
+        send(.browserTunnel(metadata, parameters), to: peer)
+    }
+
+    private func handleBrowserInteraction(metadata: MessageMetadata, command: CommandParameters,
+                                          peer: PeerConnection, deadline: CompanionBrowserActionDeadline?) async throws -> Data {
+        let (route, sourceURL) = try browserTarget(metadata, peer: peer)
+        let scriptPermission = try appModel?.store.resolvedSettings(for: WorkspaceID(rawValue: route.workspaceID)).allowsLocalFileJavaScript ?? false
+        var request = try JSONDecoder().decode(RemoteBrowserRequest.self, from: command.payload)
+        if request.action == .close {
+            if peer.browserSessions.rendered[route]?.rendererID == request.rendererID {
+                peer.browserSessions.closeRendered(route: route)
+            }
+            let frame = try RemoteBrowserFrame(image: Data(), width: request.width, height: request.height,
+                url: sourceURL.absoluteString.utf8.count <= 8192 ? sourceURL.absoluteString : "", title: "",
+                canGoBack: false, canGoForward: false, isLoading: false,
+                error: sourceURL.absoluteString.utf8.count <= 8192 ? nil : "This page's address is too long to show or reopen.")
+            return try JSONEncoder().encode(frame)
+        }
+        if request.action == .open, let existing = peer.browserSessions.rendered[route], existing.rendererID != request.rendererID {
+            peer.browserSessions.closeRendered(route: route)
+        }
+        if let existing = peer.browserSessions.rendered[route], existing.sourceURL != sourceURL || existing.allowsLocalFileJavaScript != scriptPermission || existing.controller.isClosed {
+            peer.browserSessions.closeRendered(route: route)
+        }
+        if peer.browserSessions.rendered[route] == nil {
+            guard request.action == .open else { throw RemoteError.invalidMessage }
+            guard peer.browserSessions.rendered.count < 4,
+                  peersByConnection.values.reduce(0, { $0 + $1.browserSessions.rendered.count }) < 8 else { throw RemoteError.messageTooLarge }
+            var initialURL = sourceURL
+            var artifact: CompanionBrowserArtifactServer?
+            if sourceURL.isFileURL {
+                let server = CompanionBrowserArtifactServer(artifact: try CompanionBrowserArtifact(selectedFile: sourceURL, allowsJavaScript: scriptPermission), allowsVirtualOrigin: false)
+                do {
+                    initialURL = try await server.authorizedURL(path: sourceURL.lastPathComponent)
+                    guard try browserTarget(metadata, peer: peer).1 == sourceURL,
+                          try appModel?.store.resolvedSettings(for: WorkspaceID(rawValue: route.workspaceID)).allowsLocalFileJavaScript == scriptPermission else {
+                        throw CompanionCommandError.wrongTarget
+                    }
+                } catch {
+                    await server.close()
+                    throw error
+                }
+                artifact = server
+            }
+            let profile = appModel?.store.workspaces.first(where: { $0.id.rawValue == route.workspaceID })?
+                .orderedGroups.first(where: { $0.id.rawValue == route.groupID })?
+                .tabs.first(where: { $0.id.rawValue == route.tabID })?.browserSession?.profile
+            peer.browserSessions.rendered[route] = .init(rendererID: request.rendererID, controller: RemoteBrowserRenderer(url: initialURL, profile: profile,
+                    artifactRoot: sourceURL.isFileURL ? sourceURL.deletingLastPathComponent() : nil),
+                                                        sourceURL: sourceURL, allowsLocalFileJavaScript: scriptPermission, artifact: artifact)
+        }
+        guard let entry = peer.browserSessions.rendered[route], entry.rendererID == request.rendererID else { throw RemoteError.invalidMessage }
+        if let value = request.url, let url = URL(string: value), url.isFileURL {
+            guard sourceURL.isFileURL, let artifact = entry.artifact else { throw CompanionCommandError.wrongTarget }
+            let root = sourceURL.deletingLastPathComponent().standardizedFileURL.path + "/"
+            let path = url.standardizedFileURL.path
+            guard path.hasPrefix(root) else { throw CompanionCommandError.wrongTarget }
+            let relative = String(path.dropFirst(root.count))
+            let scopedArtifact = try CompanionBrowserArtifact(selectedFile: sourceURL)
+            _ = try await Task.detached { try scopedArtifact.read(path: "/" + relative) }.value
+            let mapped = try await artifact.authorizedURL(path: relative)
+            request = try RemoteBrowserRequest(action: request.action, rendererID: request.rendererID, width: request.width,
+                                                height: request.height, url: mapped.absoluteString)
+        }
+        var frame: RemoteBrowserFrame
+        do {
+            try deadline?.check()
+            frame = try await entry.controller.interact(request)
+        }
+        catch {
+            if entry.controller.isClosed,
+               peer.browserSessions.rendered[route]?.controller === entry.controller {
+                peer.browserSessions.closeRendered(route: route)
+            }
+            throw error
+        }
+        if let artifact = entry.artifact, let url = URL(string: frame.url) {
+            if let relative = await artifact.relativePath(url: url) {
+                let original = sourceURL.deletingLastPathComponent().appendingPathComponent(relative)
+                frame = try RemoteBrowserFrame(image: frame.image, width: frame.width, height: frame.height,
+                    url: original.absoluteString, title: frame.title, canGoBack: frame.canGoBack,
+                    canGoForward: frame.canGoForward, isLoading: frame.isLoading, error: frame.error)
+            }
+        }
+        _ = try browserTarget(metadata, peer: peer)
+        if request.action == .close { peer.browserSessions.closeRendered(route: route) }
+        return try JSONEncoder().encode(frame)
+    }
+
     private func handleCommand(
         metadata: MessageMetadata,
         command: CommandParameters,
-        peer: PeerConnection
+        peer: PeerConnection,
+        browserDeadline: CompanionBrowserActionDeadline? = nil
     ) async {
         do {
             if try sendCloseConfirmationIfRequired(
@@ -1049,6 +1251,8 @@ final class CompanionHostModel {
                 )
                 try target.session.pasteRemoteImage(payload)
                 result = nil
+            case .browserInteract:
+                result = try await handleBrowserInteraction(metadata: metadata, command: command, peer: peer, deadline: browserDeadline)
             case .notificationRegister:
                 guard command.payload.count <= 256 * 1_024 else { throw RemoteError.messageTooLarge }
                 let grant = try JSONDecoder().decode(
@@ -1079,6 +1283,7 @@ final class CompanionHostModel {
                 guard let appModel else { throw RemoteError.offline }
                 result = try appModel.performCompanionCommand(metadata: metadata, command: command)
                 workspaceRevision &+= 1
+                for connection in peersByConnection.values { connection.browserSessions.prune(model: appModel) }
             }
             send(
                 .commandResult(
@@ -1092,7 +1297,8 @@ final class CompanionHostModel {
                command.operation != .notificationRevoke,
                command.operation != .terminalPasteImage,
                command.operation != .terminalPasteImageChunk,
-               command.operation != .diagnosticsUpload {
+               command.operation != .diagnosticsUpload,
+               command.operation != .browserInteract {
                 broadcastWorkspaceSnapshot()
             }
         } catch {
@@ -1568,7 +1774,8 @@ final class CompanionHostModel {
     }
 
     private func send(_ message: InnerMessage, to peer: PeerConnection) {
-        guard let channel = peer.applicationChannel, let transport else { return }
+        guard peersByConnection[peer.connectionID] === peer,
+              let channel = peer.applicationChannel, let transport else { return }
         do {
             let cost = try InnerMessageCodec.encode(message).count
             try peer.outboundQueue.enqueue(cost: cost) { [weak self] in
@@ -1690,6 +1897,8 @@ final class CompanionHostModel {
             Task { [weak self] in await self?.resumePairingModeAfterAttempt() }
         }
         let removedPeer = peersByConnection.removeValue(forKey: connectionID)
+        removedPeer?.browserQueue.cancel()
+        removedPeer?.browserSessions.closeAll()
         var affectedSessions = removedPeer?.attachedSessions ?? []
         if let removedPeer {
             affectedSessions.formUnion(removedPeer.attachingSessions.keys)
@@ -1751,7 +1960,7 @@ final class CompanionHostModel {
         for queue in workQueues.values { queue.cancel() }
         workQueues.removeAll()
         cancelPendingPairingApproval()
-        for peer in peersByConnection.values { peer.outboundQueue.cancel() }
+        for peer in peersByConnection.values { peer.outboundQueue.cancel(); peer.browserQueue.cancel(); peer.browserSessions.closeAll() }
         peersByConnection.removeAll()
         for sessionID in Array(leases.keys) { clearLease(sessionID: sessionID) }
         for sessionID in affectedSessions {

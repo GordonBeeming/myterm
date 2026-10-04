@@ -367,6 +367,11 @@ private struct WorkspaceColumn: View {
                             HStack {
                                 Text(folder.title)
                                 Spacer()
+                                Button("Add workspace in \(folder.title)", systemImage: "plus") {
+                                    Task { await create(workspace: true, folderID: folder.id) }
+                                }
+                                .labelStyle(.iconOnly)
+                                .disabled(isCreating)
                                 Button("Manage \(folder.title)", systemImage: "ellipsis.circle") {
                                     scene.sheet = .folderActions(folder.id.rawValue)
                                 }
@@ -444,7 +449,7 @@ private struct WorkspaceColumn: View {
         return services.displayName(for: host)
     }
 
-    private func create(workspace: Bool) async {
+    private func create(workspace: Bool, folderID: WorkspaceFolderID? = nil) async {
         guard !isCreating, let hostID = scene.selectedHostID,
               let connectionID = scene.selectedConnectionID else { return }
         let sourceWorkspaceID = scene.selectedWorkspaceID
@@ -453,7 +458,7 @@ private struct WorkspaceColumn: View {
         do {
             let operation: CommandOperation = workspace ? .workspaceCreate : .folderCreate
             let payload = workspace
-                ? try JSONEncoder().encode(RemoteWorkspaceCreatePayload())
+                ? try JSONEncoder().encode(RemoteWorkspaceCreatePayload(folderID: folderID))
                 : try JSONEncoder().encode(RemoteFolderCreatePayload())
             let result = try await scene.command(operation, metadata: MessageMetadata(
                 hostID: hostID, workspaceID: workspace ? sourceWorkspaceID : nil

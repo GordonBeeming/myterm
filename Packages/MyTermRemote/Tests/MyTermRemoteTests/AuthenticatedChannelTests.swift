@@ -82,3 +82,30 @@ private func binding() throws -> ChannelBinding {
                                                                 bytes: Data("reply".utf8)))
     #expect(try await client.open(host.seal(reply)) == reply)
 }
+
+@Test func browserCommandsSnapshotsAndTunnelBytesUseAuthenticatedEncryption() async throws {
+    let senderKey = P256.KeyAgreement.PrivateKey(), receiverKey = P256.KeyAgreement.PrivateKey()
+    let context = try binding()
+    let sender = AuthenticatedSender(identity: senderKey, pinnedPeer: receiverKey.publicKey, binding: context)
+    let receiver = AuthenticatedReceiver(identity: receiverKey, pinnedPeer: senderKey.publicKey, binding: context)
+    let metadata = MessageMetadata(requestID: UUID(), hostID: context.hostID, runtimeID: context.runtimeID,
+                                   workspaceID: UUID(), groupID: UUID(), tabID: UUID())
+    let url = "http://localhost:8234/private-artifact"
+    let messages: [InnerMessage] = [
+        .command(metadata, .init(operation: .browserInteract, payload: Data("{\"action\":\"navigate\",\"url\":\"\(url)\"}".utf8))),
+        .commandResult(metadata, .init(succeeded: true, result: Data(repeating: 42, count: 192 * 1024))),
+        .browserTunnel(metadata, .init(streamID: UUID(), action: .open, host: "localhost", port: 8234)),
+        .browserTunnel(metadata, .init(streamID: UUID(), action: .data, bytes: Data(url.utf8)))
+    ]
+    for message in messages {
+        let plaintext = try InnerMessageCodec.encode(message)
+        let encrypted = try await sender.seal(plaintext)
+        #expect(encrypted.ciphertext.range(of: Data(url.utf8)) == nil)
+        let received = try await receiver.open(encrypted)
+        #expect(try InnerMessageCodec.decode(received) == message)
+        await #expect(throws: RemoteError.replayedMessage) { try await receiver.open(encrypted) }
+    }
+    let unscoped = InnerMessage.command(.init(requestID: UUID(), hostID: context.hostID, runtimeID: context.runtimeID),
+                                       .init(operation: .browserInteract, payload: Data("{}".utf8)))
+    #expect(throws: RemoteError.invalidMessage) { try InnerMessageCodec.encode(unscoped) }
+}

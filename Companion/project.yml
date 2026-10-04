@@ -68,6 +68,8 @@ targets:
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoadsInWebContent: true
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
         NSCameraUsageDescription: Scan a MyTerm pairing code from your Mac.

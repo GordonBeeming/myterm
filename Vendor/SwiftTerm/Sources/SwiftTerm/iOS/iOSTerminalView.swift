@@ -30,6 +30,7 @@ public struct TerminalViewportState {
     public let followsOutput: Bool
     let absoluteRow: Int
     let rowFraction: CGFloat
+    let horizontalOffset: CGFloat
     let alternateBuffer: Bool
 }
 
@@ -190,6 +191,7 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         return TerminalViewportState(followsOutput: followsOutput,
             absoluteRow: independentViewportRow ?? terminal.displayBuffer.linesTop + Int(floor(row)),
             rowFraction: userScrolling ? manualScrollOffsetWithinRow / height : 0,
+            horizontalOffset: contentOffset.x,
             alternateBuffer: terminal.isDisplayBufferAlternate)
     }
 
@@ -204,6 +206,8 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
             updateScroller()
             queuePendingDisplay()
         }
+        setContentOffsetFromTerminal(CGPoint(x: clampedHorizontalOffset(viewport.horizontalOffset),
+                                            y: contentOffset.y))
     }
 
     public func followOutput() {
@@ -1714,7 +1718,7 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         // Clamp to the scroll view's real maximum so following the bottom rests
         // flush against the last line instead of over-scrolling past it.
         let offsetY = min(desiredY, maxContentOffsetY())
-        setContentOffsetFromTerminal(CGPoint (x: 0, y: offsetY))
+        setContentOffsetFromTerminal(CGPoint(x: clampedHorizontalOffset(contentOffset.x), y: offsetY))
         //Xscroller.doubleValue = scrollPosition
         //Xscroller.knobProportion = scrollThumbsize
     }
@@ -1761,6 +1765,14 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
     /// disengage the freeze — even by overscrolling.
     private func maxContentOffsetY() -> CGFloat {
         max(0, contentSize.height - bounds.height + adjustedContentInset.bottom)
+    }
+
+    private func clampedHorizontalOffset(_ offset: CGFloat) -> CGFloat {
+        guard usesIndependentViewport else { return 0 }
+        // Following vertical output must not undo a spectator's horizontal reading position.
+        let minimum = -adjustedContentInset.left
+        let maximum = max(minimum, contentSize.width - bounds.width + adjustedContentInset.right)
+        return min(max(offset, minimum), maximum)
     }
 
     // A large remote grid can have empty rows below a short prompt. Following those
@@ -1821,7 +1833,7 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         let displayBuffer = terminal.displayBuffer
         terminal.setViewYDisp(maxDisplayRow(in: displayBuffer))
         let bottomOffset = min(CGFloat(displayBuffer.yDisp) * cellDimension.height, maxContentOffsetY())
-        setContentOffsetFromTerminal(CGPoint(x: 0, y: bottomOffset))
+        setContentOffsetFromTerminal(CGPoint(x: clampedHorizontalOffset(contentOffset.x), y: bottomOffset))
     }
 
     private func syncYDispFromContentOffset(userInitiated: Bool = false) {

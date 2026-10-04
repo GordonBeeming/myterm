@@ -3,6 +3,7 @@ import Foundation
 
 public enum InnerMessageKind: String, Codable, CaseIterable, Sendable {
     case hello
+    case browserTunnel = "browser_tunnel"
     case workspaceRequest = "workspace_request"
     case workspaces
     case command
@@ -109,6 +110,7 @@ public enum CommandOperation: String, Codable, CaseIterable, Sendable {
     case terminalPasteImageChunk = "terminal_paste_image_chunk"
     case notificationRegister = "notification_register"
     case notificationRevoke = "notification_revoke"
+    case browserInteract = "browser_interact"
     case diagnosticsUpload = "diagnostics_upload"
 }
 
@@ -374,6 +376,7 @@ extension ErrorParameters {
 }
 
 public enum InnerMessage: Equatable, Sendable {
+    case browserTunnel(MessageMetadata, BrowserTunnelParameters)
     case hello(MessageMetadata, HelloParameters)
     case workspaceRequest(MessageMetadata, WorkspaceRequestParameters)
     case workspaces(MessageMetadata, WorkspacesParameters)
@@ -392,6 +395,7 @@ public enum InnerMessage: Equatable, Sendable {
 
     public var kind: InnerMessageKind {
         switch self {
+        case .browserTunnel: .browserTunnel
         case .hello: .hello
         case .workspaceRequest: .workspaceRequest
         case .workspaces: .workspaces
@@ -412,7 +416,7 @@ public enum InnerMessage: Equatable, Sendable {
 
     public var metadata: MessageMetadata {
         switch self {
-        case .hello(let value, _), .workspaceRequest(let value, _), .workspaces(let value, _),
+        case .browserTunnel(let value, _), .hello(let value, _), .workspaceRequest(let value, _), .workspaces(let value, _),
              .command(let value, _), .commandResult(let value, _),
              .attach(let value, _), .detach(let value, _), .checkpointChunk(let value, _), .output(let value, _),
              .input(let value, _), .resize(let value, _), .controlRequest(let value, _),
@@ -451,6 +455,7 @@ extension InnerMessage: Codable {
             tabID: try container.decodeIfPresent(UUID.self, forKey: .tabID)
         )
         switch kind {
+        case .browserTunnel: self = .browserTunnel(metadata, try container.decode(BrowserTunnelParameters.self, forKey: .parameters))
         case .hello: self = .hello(metadata, try container.decode(HelloParameters.self, forKey: .parameters))
         case .workspaceRequest: self = .workspaceRequest(metadata, try container.decode(WorkspaceRequestParameters.self, forKey: .parameters))
         case .workspaces: self = .workspaces(metadata, try container.decode(WorkspacesParameters.self, forKey: .parameters))
@@ -485,6 +490,7 @@ extension InnerMessage: Codable {
         try container.encodeIfPresent(value.groupID, forKey: .groupID)
         try container.encodeIfPresent(value.tabID, forKey: .tabID)
         switch self {
+        case .browserTunnel(_, let payload): try container.encode(payload, forKey: .parameters)
         case .hello(_, let payload): try container.encode(payload, forKey: .parameters)
         case .workspaceRequest(_, let payload): try container.encode(payload, forKey: .parameters)
         case .workspaces(_, let payload): try container.encode(payload, forKey: .parameters)
@@ -506,6 +512,9 @@ extension InnerMessage: Codable {
     public func validate() throws {
         let metadata = metadata
         switch self {
+        case .browserTunnel(_, let value):
+            guard metadata.runtimeID != nil, metadata.workspaceID != nil, metadata.groupID != nil, metadata.tabID != nil else { throw RemoteError.invalidMessage }
+            try value.validate()
         case .hello(_, let value):
             guard value.agreementPublicKey.count == 65,
                   value.notificationSigningPublicKey.count == 65,
@@ -565,6 +574,9 @@ extension InnerMessage: Codable {
                       metadata.tabID != nil, value.payload.count <= 96 * 1_024 else {
                     throw RemoteError.invalidMessage
                 }
+            case .browserInteract:
+                guard metadata.runtimeID != nil, metadata.workspaceID != nil, metadata.groupID != nil,
+                      metadata.tabID != nil, value.payload.count <= 16 * 1024 else { throw RemoteError.invalidMessage }
             case .diagnosticsUpload:
                 // Compressed log text carried as JSON, so the encoded form is larger than the
                 // payload's own limit; it still has to sit inside the command bound above.
