@@ -155,10 +155,24 @@ public struct CommandResultParameters: Codable, Equatable, Sendable {
 public struct AttachParameters: Codable, Equatable, Sendable {
     public let afterSequence: UInt64?
     public let requireCheckpoint: Bool
+    /// Which run of the terminal `afterSequence` was counted in.
+    ///
+    /// Required for a resume to be safe. A terminal that restarts takes a new generation and sets
+    /// its sequence back to zero, so a sequence remembered from the previous run can land inside
+    /// the new run's range and replay output that belongs to a different process as though it
+    /// continued the old one. Absent here — an older companion, which never resumed anyway — the
+    /// host must refuse to replay and send a checkpoint instead.
+    public let generation: UUID?
 
-    public init(afterSequence: UInt64? = nil, requireCheckpoint: Bool = true) {
+    /// The host capability that proves a peer checks `generation` before replaying. Without it a
+    /// resume cannot be offered, because an older host decodes the field and ignores it.
+    public static let resumeCapability = "terminal-resume-v1"
+
+    public init(afterSequence: UInt64? = nil, requireCheckpoint: Bool = true,
+                generation: UUID? = nil) {
         self.afterSequence = afterSequence
         self.requireCheckpoint = requireCheckpoint
+        self.generation = generation
     }
 }
 
@@ -317,6 +331,7 @@ extension AttachParameters {
     enum CodingKeys: String, CodingKey {
         case afterSequence = "after_sequence"
         case requireCheckpoint = "require_checkpoint"
+        case generation
     }
 }
 
