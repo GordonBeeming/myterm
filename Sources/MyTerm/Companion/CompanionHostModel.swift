@@ -1103,7 +1103,9 @@ final class CompanionHostModel {
                 peer.browserSessions.closeRendered(route: route)
             }
             let frame = try RemoteBrowserFrame(image: Data(), width: request.width, height: request.height,
-                url: sourceURL.absoluteString, title: "", canGoBack: false, canGoForward: false, isLoading: false)
+                url: sourceURL.absoluteString.utf8.count <= 8192 ? sourceURL.absoluteString : "", title: "",
+                canGoBack: false, canGoForward: false, isLoading: false,
+                error: sourceURL.absoluteString.utf8.count <= 8192 ? nil : "This page's address is too long to show or reopen.")
             return try JSONEncoder().encode(frame)
         }
         if request.action == .open, let existing = peer.browserSessions.rendered[route], existing.rendererID != request.rendererID {

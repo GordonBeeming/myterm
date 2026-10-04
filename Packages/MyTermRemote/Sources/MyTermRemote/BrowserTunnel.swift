@@ -56,31 +56,57 @@ extension BrowserTunnelSocket {
     func read() async throws -> Data? { try await read(maximum: 32_768) }
 }
 
+private final class BrowserTCPStartCompletion: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Void, Error>?
+
+    init(_ continuation: CheckedContinuation<Void, Error>) { self.continuation = continuation }
+
+    func finish(error: Error? = nil, beforeResume: () -> Void) {
+        let pending = lock.withLock {
+            let pending = continuation
+            continuation = nil
+            return pending
+        }
+        guard let pending else { return }
+        beforeResume()
+        if let error { pending.resume(throwing: error) } else { pending.resume() }
+    }
+}
+
 private final class BrowserTCP: BrowserTunnelSocket, @unchecked Sendable {
     let connection: NWConnection
     init(_ connection: NWConnection) { self.connection = connection }
     func start() async throws {
-        let timeout = Task { [connection] in
-            do {
-                try await Task.sleep(for: .seconds(10))
-                connection.cancel()
-            } catch { return }
-        }
-        defer { timeout.cancel() }
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation {
                 (continuation: CheckedContinuation<Void, Error>) in
+                let completion = BrowserTCPStartCompletion(continuation)
+                let timeout = Task { [connection] in
+                    do { try await Task.sleep(for: .seconds(10)) } catch { return }
+                    completion.finish(error: CancellationError()) {
+                        connection.stateUpdateHandler = nil
+                        connection.cancel()
+                    }
+                }
                 connection.stateUpdateHandler = { [connection] state in
                     switch state {
                     case .ready:
-                        connection.stateUpdateHandler = nil
-                        continuation.resume()
-                    case .failed(let error):
-                        connection.stateUpdateHandler = nil
-                        continuation.resume(throwing: error)
+                        completion.finish {
+                            timeout.cancel()
+                            connection.stateUpdateHandler = nil
+                        }
+                    case .waiting(let error), .failed(let error):
+                        completion.finish(error: error) {
+                            timeout.cancel()
+                            connection.stateUpdateHandler = nil
+                            connection.cancel()
+                        }
                     case .cancelled:
-                        connection.stateUpdateHandler = nil
-                        continuation.resume(throwing: CancellationError())
+                        completion.finish(error: CancellationError()) {
+                            timeout.cancel()
+                            connection.stateUpdateHandler = nil
+                        }
                     default: break
                     }
                 }

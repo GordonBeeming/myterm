@@ -68,11 +68,11 @@ public final class RemoteBrowserRenderer: NSObject, WKNavigationDelegate, WKUIDe
             guard let key = request.key else { throw URLError(.badURL) }
             try sendKey(key)
         case .close:
+            let metadata = frameMetadata()
             close()
             return try RemoteBrowserFrame(image: Data(), width: request.width, height: request.height,
-                                      url: webView.url?.absoluteString ?? initialURL.absoluteString,
-                                      title: webView.title ?? "", canGoBack: false, canGoForward: false,
-                                      isLoading: false)
+                                      url: metadata.url, title: metadata.title,
+                                      canGoBack: false, canGoForward: false, isLoading: false, error: metadata.error)
         case .snapshot: break
         }
         // Navigation starts asynchronously; give layout a turn while keeping the command bounded.
@@ -91,10 +91,15 @@ public final class RemoteBrowserRenderer: NSObject, WKNavigationDelegate, WKUIDe
         }.value
         try Task.checkCancellation()
         guard !closed else { throw CancellationError() }
+        let metadata = frameMetadata()
         return try RemoteBrowserFrame(image: jpeg, width: request.width, height: request.height,
-                                  url: webView.url?.absoluteString ?? initialURL.absoluteString,
-                                  title: webView.title ?? "", canGoBack: webView.canGoBack,
-                                  canGoForward: webView.canGoForward, isLoading: webView.isLoading, error: failure)
+                                  url: metadata.url, title: metadata.title, canGoBack: webView.canGoBack,
+                                  canGoForward: webView.canGoForward, isLoading: webView.isLoading, error: metadata.error)
+    }
+
+    private func frameMetadata() -> RemoteBrowserFrameMetadata {
+        RemoteBrowserFrameMetadata(url: webView.url?.absoluteString ?? initialURL.absoluteString,
+                                   title: webView.title ?? "", error: failure)
     }
 
     private final class SnapshotCompletion {
@@ -255,10 +260,43 @@ public final class RemoteBrowserRenderer: NSObject, WKNavigationDelegate, WKUIDe
         completionHandler(nil)
     }
 
+    public func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        // WebKit reports main-frame navigation starts here, including history and page links.
+        // Cancelled policy decisions never reach this callback, so their errors remain visible.
+        failure = nil
+    }
+
     public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         if (error as NSError).code != NSURLErrorCancelled { failure = error.localizedDescription }
     }
     public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         if (error as NSError).code != NSURLErrorCancelled { failure = error.localizedDescription }
+    }
+}
+
+struct RemoteBrowserFrameMetadata {
+    let url: String
+    let title: String
+    let error: String?
+
+    init(url: String, title: String, error: String?) {
+        // A shortened address could point somewhere different when used for mode switching.
+        let addressFits = url.utf8.count <= 8192
+        self.url = addressFits ? url : ""
+        self.title = Self.boundedText(title, maximumBytes: 4096)
+        self.error = error.map { Self.boundedText($0, maximumBytes: 2048) }
+            ?? (addressFits ? nil : "This page's address is too long to show or reopen.")
+    }
+
+    private static func boundedText(_ value: String, maximumBytes: Int) -> String {
+        var result = String.UnicodeScalarView()
+        var remaining = maximumBytes
+        for scalar in value.unicodeScalars {
+            let count = scalar.utf8.count
+            guard count <= remaining else { break }
+            result.append(scalar)
+            remaining -= count
+        }
+        return String(result)
     }
 }

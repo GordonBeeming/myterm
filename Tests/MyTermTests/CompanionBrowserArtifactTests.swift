@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 import MyTermCore
-import MyTermPlatform
+@testable import MyTermPlatform
 import MyTermRemote
 import XCTest
 @testable import MyTerm
@@ -107,6 +107,84 @@ final class CompanionBrowserArtifactTests: XCTestCase {
 
 @MainActor
 final class CompanionBrowserRendererTests: XCTestCase {
+    func testFrameMetadataBoundsMultibyteTextWithoutChangingAddresses() throws {
+        let title = String(repeating: "🦄", count: 2000)
+        let message = String(repeating: "錯", count: 2000)
+        let safeURL = "https://example.test/" + String(repeating: "x", count: 8171)
+        let metadata = RemoteBrowserFrameMetadata(url: safeURL, title: title, error: message)
+        XCTAssertEqual(metadata.url, safeURL)
+        XCTAssertEqual(metadata.title, String(repeating: "🦄", count: 1024))
+        XCTAssertEqual(metadata.error, String(repeating: "錯", count: 682))
+        let omitted = RemoteBrowserFrameMetadata(url: safeURL + "xx", title: title, error: nil)
+        XCTAssertEqual(omitted.url, "")
+        XCTAssertNotNil(omitted.error)
+        let frame = try RemoteBrowserFrame(image: Data(), width: 640, height: 480, url: omitted.url,
+            title: omitted.title, canGoBack: false, canGoForward: false, isLoading: false, error: omitted.error)
+        XCTAssertNoThrow(try JSONEncoder().encode(frame))
+    }
+
+    func testOversizedPageMetadataStillRendersAndCloseStaysBounded() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("index.html")
+        try Data("""
+        <html><head><meta charset="utf-8"><title>Metadata fixture</title></head><body style="margin:0;background:white"><a style="display:block;width:300px;height:100px;background:black;color:white" href="file:///outside-selected-root/private.html">Denied file</a><script>document.title='🦄'.repeat(3000);history.replaceState(null,'','?q='+'x'.repeat(9000))</script></body></html>
+        """.utf8).write(to: file)
+        let server = CompanionBrowserArtifactServer(artifact: try CompanionBrowserArtifact(selectedFile: file, allowsJavaScript: true), allowsVirtualOrigin: false)
+        let url = try await server.authorizedURL(path: "index.html")
+        let renderer = RemoteBrowserRenderer(url: url, artifactRoot: root)
+        do {
+            var frame = try await renderer.interact(RemoteBrowserRequest(action: .open, width: 640, height: 480))
+            for _ in 0..<20 where frame.isLoading || !frame.title.hasPrefix("🦄") {
+                frame = try await renderer.interact(RemoteBrowserRequest(action: .snapshot, width: 640, height: 480))
+            }
+            // WebKit can impose a lower title limit before exposing it to the host.
+            XCTAssertTrue(frame.title.hasPrefix("🦄"))
+            XCTAssertLessThanOrEqual(frame.title.utf8.count, 4096)
+            XCTAssertEqual(frame.url, "")
+            XCTAssertEqual(frame.error, "This page's address is too long to show or reopen.")
+            XCTAssertFalse(frame.image.isEmpty)
+            let closed = try await renderer.interact(RemoteBrowserRequest(action: .close, width: 640, height: 480))
+            XCTAssertLessThanOrEqual(closed.title.utf8.count, 4096)
+            XCTAssertEqual(closed.url, "")
+            await server.close()
+        } catch { renderer.close(); await server.close(); throw error }
+    }
+
+    func testHistoryNavigationClearsPreviousMainFrameFailure() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("index.html")
+        try Data("<html><title>Recovered navigation</title><body>Working page</body></html>".utf8).write(to: file)
+        let server = CompanionBrowserArtifactServer(artifact: try CompanionBrowserArtifact(selectedFile: file), allowsVirtualOrigin: false)
+        let url = try await server.authorizedURL(path: "index.html")
+        let renderer = RemoteBrowserRenderer(url: url)
+        do {
+            var frame = try await renderer.interact(RemoteBrowserRequest(action: .open, width: 640, height: 480))
+            for _ in 0..<20 where frame.isLoading || frame.title != "Recovered navigation" {
+                frame = try await renderer.interact(RemoteBrowserRequest(action: .snapshot, width: 640, height: 480))
+            }
+            _ = try await renderer.interact(RemoteBrowserRequest(action: .navigate, width: 640, height: 480,
+                url: url.absoluteString + "?second=1"))
+            var failed = try await renderer.interact(RemoteBrowserRequest(action: .navigate, width: 640, height: 480,
+                url: "http://127.0.0.1:1/unavailable"))
+            for _ in 0..<20 where failed.isLoading || failed.error == nil {
+                failed = try await renderer.interact(RemoteBrowserRequest(action: .snapshot, width: 640, height: 480))
+            }
+            XCTAssertNotNil(failed.error)
+            var recovered = try await renderer.interact(RemoteBrowserRequest(action: .back, width: 640, height: 480))
+            for _ in 0..<20 where recovered.isLoading || recovered.title != "Recovered navigation" {
+                recovered = try await renderer.interact(RemoteBrowserRequest(action: .snapshot, width: 640, height: 480))
+            }
+            XCTAssertEqual(recovered.title, "Recovered navigation")
+            XCTAssertNil(recovered.error)
+            renderer.close()
+            await server.close()
+        } catch { renderer.close(); await server.close(); throw error }
+    }
+
     func testNativeInputReachesCrossOriginIframeWithoutActivatingWindow() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

@@ -389,8 +389,17 @@ private final class BrowserCancelledSocket: BrowserTunnelSocket, Sendable {
 private actor BrowserOpeningBarrier {
     var entered = 0
     var waiters: [CheckedContinuation<Void, Never>] = []
+    var countWaiter: (target: Int, continuation: CheckedContinuation<Void, Never>)?
+    func waitUntilCount(_ target: Int) async {
+        guard entered < target else { return }
+        await withCheckedContinuation { countWaiter = (target, $0) }
+    }
     func wait() async {
         entered += 1
+        if let countWaiter, entered >= countWaiter.target {
+            self.countWaiter = nil
+            countWaiter.continuation.resume()
+        }
         await withCheckedContinuation { waiters.append($0) }
     }
     func count() -> Int { entered }
@@ -419,10 +428,7 @@ private actor BrowserOpeningBarrier {
                     .init(streamID: UUID(), action: .open, host: "localhost", port: 1))
             })
     }
-    for _ in 0..<1000 {
-        if await barrier.count() == 32 { break }
-        await Task.yield()
-    }
+    await barrier.waitUntilCount(32)
     #expect(await barrier.count() == 32)
     try await host.receive(.init(streamID: UUID(), action: .open, host: "localhost", port: 1))
     #expect(await recorder.closes() == 1)
@@ -430,4 +436,49 @@ private actor BrowserOpeningBarrier {
     await host.closeAll()
     await barrier.releaseAll()
     for opening in openings { try await opening.value }
+}
+
+@Test(.timeLimit(.minutes(1))) func refusedBrowserDestinationClosesPromptlyWithoutDisconnecting()
+    async throws
+{
+    // Release a freshly allocated loopback port immediately before attempting a refused connection.
+    let descriptor = Darwin.socket(AF_INET, SOCK_STREAM, 0)
+    #expect(descriptor >= 0)
+    guard descriptor >= 0 else { return }
+    var ownsDescriptor = true
+    defer { if ownsDescriptor { Darwin.close(descriptor) } }
+    var address = sockaddr_in()
+    address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+    address.sin_family = sa_family_t(AF_INET)
+    address.sin_addr.s_addr = inet_addr("127.0.0.1")
+    let bound = withUnsafePointer(to: &address) { pointer in
+        pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+            Darwin.bind(descriptor, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+        }
+    }
+    #expect(bound == 0)
+    guard bound == 0 else { return }
+    var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+    let located = withUnsafeMutablePointer(to: &address) { pointer in
+        pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+            getsockname(descriptor, $0, &length)
+        }
+    }
+    #expect(located == 0)
+    guard located == 0 else { return }
+    Darwin.close(descriptor)
+    ownsDescriptor = false
+    let recorder = BrowserFrameRecorder()
+    let host = RemoteBrowserHostTunnel(send: { await recorder.append($0) })
+    let started = ContinuousClock.now
+    try await host.receive(
+        .init(
+            streamID: UUID(), action: .open, host: "127.0.0.1",
+            port: UInt16(bigEndian: address.sin_port)))
+    #expect(started.duration(to: .now) < .seconds(2))
+    #expect(await recorder.closes() == 1)
+    #expect(await host.hasOpenStreams() == false)
+    // A normal later message remains processable on the same paired connection.
+    try await host.receive(.init(streamID: UUID(), action: .ack))
+    await host.closeAll()
 }

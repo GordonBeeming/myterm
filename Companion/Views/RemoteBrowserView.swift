@@ -10,7 +10,8 @@ import WebKit
 final class NativeRemoteBrowser: NSObject, WKNavigationDelegate, WKUIDelegate {
     var webView: WKWebView?
     var address = ""
-    var error: String?
+    var error: String? { didSet { isNetworkFailure = false } }
+    @ObservationIgnored private var isNetworkFailure = false
     var loading = false
     var back = false
     var forward = false
@@ -157,6 +158,7 @@ final class NativeRemoteBrowser: NSObject, WKNavigationDelegate, WKUIDelegate {
             decisionHandler(.cancel)
             return
         }
+        if action.targetFrame?.isMainFrame == true { error = nil }
         decisionHandler(.allow)
     }
 
@@ -166,12 +168,29 @@ final class NativeRemoteBrowser: NSObject, WKNavigationDelegate, WKUIDelegate {
         return nil
     }
 
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { report(error) }
-    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { report(error) }
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        guard self.webView === webView else { return }
+        error = nil
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        guard self.webView === webView, isNetworkFailure else { return }
+        error = nil
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        guard self.webView === webView else { return }
+        report(error)
+    }
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        guard self.webView === webView else { return }
+        report(error)
+    }
     private func report(_ failure: Error) {
         guard (failure as NSError).code != NSURLErrorCancelled else { return }
         loading = false
         error = failure.localizedDescription
+        isNetworkFailure = true
     }
 }
 
@@ -188,6 +207,7 @@ struct RemoteBrowserView: View {
     @State private var mode = "native"
     @State private var rendered: RemoteBrowserFrame?
     @State private var renderAddress = ""
+    @FocusState private var isEditingAddress: Bool
     @State private var renderError: String?
     @State private var text = ""
     @State private var busy = false
@@ -266,6 +286,7 @@ struct RemoteBrowserView: View {
 
     private func addressField(_ binding: Binding<String>, submit: @escaping () -> Void) -> some View {
         TextField("Address on connected Mac", text: binding)
+            .focused($isEditingAddress)
             .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
             .submitLabel(.go).onSubmit(submit).accessibilityIdentifier("remote-browser-address")
     }
@@ -349,9 +370,10 @@ struct RemoteBrowserView: View {
         generation = token
         let previousRendererOwner = rendererOwner
         rendererOwner = nil
+        let renderedURL = rendered.flatMap { $0.url.isEmpty ? nil : URL(string: $0.url) }
         let previousURL = fallbackURL?.absoluteString ?? (mode == "rendered"
-            ? Self.renderingURL(native.webView?.url ?? rendered.flatMap { URL(string: $0.url) }, source: route.url, artifactHost: native.artifactHost)?.absoluteString
-            : rendered?.url)
+            ? Self.renderingURL(native.webView?.url ?? renderedURL, source: route.url, artifactHost: native.artifactHost)?.absoluteString
+            : renderedURL?.absoluteString)
         fallbackURL = nil
         native.stop()
         busy = false
@@ -392,7 +414,10 @@ struct RemoteBrowserView: View {
                         let address = action == .open && ["http", "https", "file"].contains(recoveryScheme) ? recoveryURL : nil
                         let frame = try await browserCommand(action, url: address, rendererID: token)
                         guard generation == token else { return }
-                        if !busy, actionRevision == revision { rendered = frame }
+                        if !busy, actionRevision == revision {
+                            rendered = frame
+                            if !isEditingAddress { renderAddress = frame.url }
+                        }
                         renderError = nil
                         failures = 0
                     } catch is CancellationError { return }

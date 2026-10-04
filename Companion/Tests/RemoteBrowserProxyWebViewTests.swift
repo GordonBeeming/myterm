@@ -48,6 +48,8 @@ private final class BrowserHTTPFixture: @unchecked Sendable {
     private let body: String
     private let lock = NSLock()
     private var requestCount = 0
+    private var failsRequests = false
+    func setRequestFailure(_ enabled: Bool) { lock.withLock { failsRequests = enabled } }
     var requests: Int { lock.withLock { requestCount } }
     init(body: String = "<html><title>Remote fixture</title><a href='/next'>Next</a><p>Host page</p></html>") throws {
         self.body = body
@@ -58,7 +60,11 @@ private final class BrowserHTTPFixture: @unchecked Sendable {
             connection.start(queue: queue)
             connection.receive(minimumIncompleteLength: 1, maximumLength: 8192) { data, _, _, error in
                 guard error == nil else { connection.cancel(); return }
-                self.lock.withLock { self.requestCount += 1 }
+                let shouldFail = self.lock.withLock {
+                    self.requestCount += 1
+                    return self.failsRequests
+                }
+                if shouldFail { connection.cancel(); return }
                 if let data, let request = String(data: data, encoding: .utf8),
                    request.lowercased().contains("upgrade: websocket"),
                    let keyLine = request.components(separatedBy: "\r\n").first(where: { $0.lowercased().hasPrefix("sec-websocket-key:") }),
@@ -72,7 +78,7 @@ private final class BrowserHTTPFixture: @unchecked Sendable {
                     return
                 }
                 let body = self.body
-                let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n" + body
+                let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nCache-Control: no-store\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n" + body
                 connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in connection.cancel() })
             }
         }
@@ -126,6 +132,45 @@ private final class BrowserUDPProbe: @unchecked Sendable {
 
 @MainActor
 final class RemoteBrowserProxyWebViewTests: XCTestCase {
+    func testNativeNavigationClearsFailedReloadWhenGoingBackAndReloading() async throws {
+        let fixture = try BrowserHTTPFixture()
+        let port = try await fixture.start()
+        defer { fixture.stop() }
+        let bridge = EncryptedBrowserBridge()
+        await bridge.configure(destinationPort: port)
+        let browser = NativeRemoteBrowser()
+        let endpoint = try await bridge.endpoint()
+        try await browser.start(endpoint, url: try XCTUnwrap(URL(string: "http://myterm-test.invalid/first")))
+        let view = try XCTUnwrap(browser.webView)
+        try await waitForBrowser { view.title == "Remote fixture" && !view.isLoading }
+        view.load(URLRequest(url: try XCTUnwrap(URL(string: "http://myterm-test.invalid/second"))))
+        try await waitForBrowser { view.url?.path == "/second" && !view.isLoading && view.canGoBack }
+        fixture.setRequestFailure(true)
+        view.reload()
+        try await waitForBrowser { browser.error != nil }
+        fixture.setRequestFailure(false)
+        view.goBack()
+        try await waitForBrowser { view.url?.path == "/first" && !view.isLoading }
+        XCTAssertNil(browser.error, "Back navigation must clear the failed reload error")
+        view.goForward()
+        try await waitForBrowser { view.url?.path == "/second" && !view.isLoading }
+        fixture.setRequestFailure(true)
+        view.reload()
+        try await waitForBrowser { browser.error != nil }
+        fixture.setRequestFailure(false)
+        view.reload()
+        try await waitForBrowser { browser.error == nil && !view.isLoading }
+        XCTAssertNil(browser.error, "A successful retry must clear the old error")
+        browser.stop()
+        await bridge.stop()
+    }
+
+    private func waitForBrowser(_ condition: () -> Bool) async throws {
+        let deadline = Date().addingTimeInterval(15)
+        while !condition(), Date() < deadline { try await Task.sleep(for: .milliseconds(50)) }
+        XCTAssertTrue(condition(), "Browser navigation did not reach its expected state")
+    }
+
     func testNativeWebSocketFlowsThroughEncryptedRemoteProxy() async throws {
         let fixture = try BrowserHTTPFixture(body: "<html><title>Remote fixture</title><script>let s=new WebSocket('ws://myterm-test.invalid/socket');s.onmessage=e=>document.title=e.data;</script></html>")
         let port = try await fixture.start()
@@ -247,6 +292,9 @@ final class RemoteBrowserProxyWebViewTests: XCTestCase {
         let url = try XCTUnwrap(URL(string: "http://127.0.0.1:\(port)/"))
         try await browser.start(endpoint, url: url)
         XCTAssertEqual(browser.error, "Use Mac rendered mode for localhost or IP addresses.")
+        browser.webView(try XCTUnwrap(browser.webView), didFinish: nil)
+        XCTAssertEqual(browser.error, "Use Mac rendered mode for localhost or IP addresses.",
+                       "A late page completion must not erase a policy rejection")
         XCTAssertNil(browser.webView?.url)
         let destinations = await bridge.destinations()
         XCTAssertTrue(destinations.isEmpty)
