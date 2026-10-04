@@ -135,6 +135,28 @@ final class CompanionConnectionLogTests: XCTestCase {
         XCTAssertEqual(entries.count, 2, "The start marker and the entry")
     }
 
+    func testAnEarlierRunKeepsItsOwnTimestamp() async throws {
+        let first = CompanionConnectionLog()
+        await first.configure(fileURL: logFile)
+        await first.setEnabled(true)
+        await first.record(category: "connection", "transport ended", detail: "write timed out")
+        let original = try XCTUnwrap(
+            try String(contentsOf: logFile, encoding: .utf8)
+                .split(separator: "\n").last.map(String.init)
+        )
+
+        let second = CompanionConnectionLog()
+        await second.configure(fileURL: logFile)
+        await second.setEnabled(true)
+
+        let exported = await second.exportText()
+        XCTAssertTrue(exported.contains(original),
+                      "A line read back must keep the time it happened, not the time the app reopened")
+        // Re-formatting it would put today's timestamp in front of the stored one.
+        XCTAssertFalse(exported.contains("[earlier run] \(original)"),
+                       "The stored line must not be wrapped in a second timestamp")
+    }
+
     func testOneEnormousEntryStillLeavesTheFileUnderTheCap() async throws {
         let log = CompanionConnectionLog()
         await log.configure(fileURL: logFile)

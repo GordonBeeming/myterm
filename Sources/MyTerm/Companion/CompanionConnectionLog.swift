@@ -8,8 +8,13 @@ struct CompanionConnectionEntry: Sendable, Equatable {
     let category: String
     let message: String
     let detail: String?
+    /// Set only for an entry read back from a previous run, where the stored text is already a
+    /// finished line. Re-formatting it would stamp it with the time the app reopened and claim an
+    /// old connection event happened just now.
+    let verbatimLine: String?
 
     var line: String {
+        if let verbatimLine { return verbatimLine }
         let suffix = detail.map { " \($0)" } ?? ""
         return "\(CompanionConnectionEntry.timestamp(recordedAt)) [\(category)] \(message)\(suffix)"
     }
@@ -68,7 +73,8 @@ actor CompanionConnectionLog {
     func record(category: String, _ message: String, detail: String? = nil) {
         guard isEnabled else { return }
         let entry = CompanionConnectionEntry(sequence: nextSequence, recordedAt: .now,
-                                             category: category, message: message, detail: detail)
+                                             category: category, message: message, detail: detail,
+                                             verbatimLine: nil)
         nextSequence += 1
         entries.append(entry)
         if entries.count > Self.capacity { entries.removeFirst(entries.count - Self.capacity) }
@@ -97,7 +103,8 @@ actor CompanionConnectionLog {
         let lines = text.split(separator: "\n", omittingEmptySubsequences: true).suffix(Self.capacity)
         entries = lines.enumerated().map { index, line in
             CompanionConnectionEntry(sequence: index, recordedAt: .now, category: "earlier run",
-                                     message: String(line), detail: nil)
+                                     message: String(line), detail: nil,
+                                     verbatimLine: String(line))
         }
         nextSequence = entries.count
     }

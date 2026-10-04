@@ -3,6 +3,7 @@ package transport
 import (
 	"context"
 	"errors"
+	"net"
 	"testing"
 )
 
@@ -42,6 +43,22 @@ func TestCloseReasonSaysWhenACancellationHasNoCause(t *testing.T) {
 	// in the wrong direction. It must not come back as a default.
 	if got == "access token expired or connection cancelled" {
 		t.Fatal("an uncaused cancellation must not be reported as token expiry")
+	}
+}
+
+func TestCloseReasonKeepsTheCauseWhenOurOwnCloseRacesTheRead(t *testing.T) {
+	// Recording a cause closes the socket, and the read loop can see that close before it sees
+	// the cancellation. The cause has to survive it or revocation and expiry read as a bare
+	// socket error again.
+	if got := closeReason(net.ErrClosed, "device session revoked"); got != "device session revoked" {
+		t.Fatalf("closeReason = %q, want the recorded cause", got)
+	}
+}
+
+func TestCloseReasonReportsAClosedSocketWithNoCauseVerbatim(t *testing.T) {
+	got := closeReason(net.ErrClosed, "")
+	if got != net.ErrClosed.Error() {
+		t.Fatalf("closeReason = %q, want the error itself", got)
 	}
 }
 

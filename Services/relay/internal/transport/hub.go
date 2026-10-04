@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -532,9 +533,15 @@ func closeReason(err error, cause string) string {
 		}
 		return "closed"
 	}
-	if errors.Is(err, context.Canceled) {
+	// Closing the socket is part of recording a cause, and the read loop can observe that close
+	// before it observes the cancellation. Without this the revocation or expiry we just recorded
+	// would be replaced by the error our own teardown produced.
+	if errors.Is(err, context.Canceled) || errors.Is(err, net.ErrClosed) {
 		if cause != "" {
 			return cause
+		}
+		if errors.Is(err, net.ErrClosed) {
+			return err.Error()
 		}
 		return "cancelled without a recorded cause"
 	}

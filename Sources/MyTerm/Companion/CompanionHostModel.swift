@@ -223,10 +223,12 @@ final class CompanionHostModel {
         pushJournalStore = CompanionPushJournalStore(secrets: secrets)
         // Filed beside what the phones send, so one folder holds both ends of a connection.
         let ownLog = diagnosticsFolder?.appending(path: "mac-connection.log", directoryHint: .notDirectory)
-        let collects = UserDefaults.standard.bool(forKey: Self.collectConnectionLogKey)
         Task {
             await CompanionConnectionLog.shared.configure(fileURL: ownLog)
-            await CompanionConnectionLog.shared.setEnabled(collects)
+            // Read when it is applied rather than captured now: the Settings toggle can turn
+            // collection off while this is still waiting, and a stale capture would turn it back on.
+            await CompanionConnectionLog.shared.setEnabled(
+                UserDefaults.standard.bool(forKey: Self.collectConnectionLogKey))
         }
     }
 
@@ -2050,12 +2052,14 @@ final class CompanionHostModel {
     private func transportEnded(error: Error?, generation: UUID) {
         Self.connectionLogger.error(
             "host transport ended: \(error?.localizedDescription ?? "closed", privacy: .public)")
+        reauthenticationTask?.cancel()
+        reauthenticationTask = nil
+        // Below the fence: an old transport finishing after its replacement started would
+        // otherwise log a close that did not end the connection anyone is using.
+        guard connectionFence.accepts(generation) else { return }
         let reason = error?.localizedDescription ?? "closed"
         Task { await CompanionConnectionLog.shared.record(
             category: "connection", "transport ended", detail: reason) }
-        reauthenticationTask?.cancel()
-        reauthenticationTask = nil
-        guard connectionFence.accepts(generation) else { return }
         cancelPairing()
         transportTask = nil
         transport = nil
