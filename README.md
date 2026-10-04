@@ -110,8 +110,9 @@ wrote, it rewrites MyTerm's own commands to the current ones and leaves the rest
 Each hook writes an escape sequence to its own terminal, `ESC ]7337;agent=claude;event=finished;session=<id> ESC \`,
 and does nothing unless `MYTERM_PANE_ID` is set. Only MyTerm's terminals set it, so the hooks stay
 silent in every other terminal, and terminals that do not know the code ignore it. Every hook reads
-the payload the agent pipes to it, for the session identifier, and carries a five second timeout.
-Restart the agent session after installing the hooks.
+the payload the agent pipes to it for the session identifier. Most hooks have a five-second timeout;
+Codex `SessionEnd` uses three seconds. Restart the agent session after installing the hooks. In
+Codex, use `/hooks` to review and trust the updated hooks before they can run.
 
 Any agent can drive the cook by writing that sequence itself, with its own name in `agent=`. The
 name is what the notification says, so a Codex report reads "Codex finished its turn."
