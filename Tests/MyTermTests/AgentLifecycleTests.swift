@@ -383,15 +383,67 @@ final class AgentLifecycleTests: XCTestCase {
 
     // MARK: - Session identity
 
-    func testCodexNeverLeavesAConversationBehindHoweverManyIdentifiersItReports() throws {
+    func testBothAgentsKeepTheConversationAcrossTurnsAndResumeAfterQuit() throws {
+        for (agent, command) in [("claude", "claude --resume 'abc'"), ("codex", "codex resume 'abc'")] {
+            let fixture = try makeFixture(isActive: false)
+            fixture.session.activeForegroundProcessName = agent
+            fixture.emit(.ready, agent: agent, session: "abc")
+            for _ in 0..<2 {
+                fixture.emit(.working, agent: agent, session: "abc")
+                fixture.emit(.finished, agent: agent, session: "abc")
+            }
+            XCTAssertEqual(fixture.savedSession, AgentSessionHandle(agent: agent, sessionID: "abc"))
+            fixture.model.persistTerminalSnapshots()
+            fixture.model.terminateTerminalSessions()
+            fixture.emit(.exited, agent: agent, session: "abc")
+            fixture.model.persistWorkspaceStore()
+
+            let relaunched = try makeFixture(in: fixture.directory, isActive: false)
+            XCTAssertEqual(relaunched.engine.configurations.first?.initialCommand, command)
+            XCTAssertNil(relaunched.model.agentAttention(forTab: fixture.tabID))
+            relaunched.session.emit(.foregroundProcessChanged(nil))
+            XCTAssertEqual(relaunched.savedSession, AgentSessionHandle(agent: agent, sessionID: "abc"))
+        }
+    }
+
+    func testClaudeAndCodexPanesResumeTheirOwnConversationsTogether() throws {
         let fixture = try makeFixture(isActive: false)
+        fixture.session.activeForegroundProcessName = "claude"
+        fixture.emit(.ready, session: "claude-session")
+        fixture.model.createTerminalTab()
+        let codex = try XCTUnwrap(fixture.engine.sessions.last)
+        codex.activeForegroundProcessName = "codex"
+        codex.emit(.agentActivity(AgentActivityReport(agent: "codex", activity: .ready, sessionID: "codex-session")))
+        fixture.model.persistTerminalSnapshots()
+        fixture.model.persistWorkspaceStore()
 
-        fixture.emit(.ready, agent: "codex", session: "turn-1")
-        fixture.emit(.working, agent: "codex", session: "turn-2")
-        fixture.emit(.finished, agent: "codex", session: "turn-3")
+        let relaunched = try makeFixture(in: fixture.directory, isActive: false)
 
-        XCTAssertEqual(fixture.model.agentAttention(forTab: fixture.tabID), .finished, "the indicator still works")
-        XCTAssertNil(fixture.savedSession, "nothing is saved to resume from")
+        XCTAssertEqual(Set(relaunched.engine.configurations.compactMap(\.initialCommand)), [
+            "claude --resume 'claude-session'", "codex resume 'codex-session'",
+        ])
+    }
+
+    func testBothAgentsLeaveNothingToResumeAfterAnExplicitExitOrReturnToShell() throws {
+        for agent in ["claude", "codex"] {
+            for exitsWithHook in [true, false] {
+                let fixture = try makeFixture(isActive: false)
+                fixture.session.activeForegroundProcessName = agent
+                fixture.emit(.ready, agent: agent, session: "abc")
+                if exitsWithHook {
+                    fixture.emit(.exited, agent: agent, session: "abc")
+                } else {
+                    fixture.session.activeForegroundProcessName = nil
+                    fixture.session.emit(.foregroundProcessChanged(nil))
+                }
+                XCTAssertNil(fixture.savedSession)
+                fixture.model.persistTerminalSnapshots()
+                fixture.model.persistWorkspaceStore()
+
+                let relaunched = try makeFixture(in: fixture.directory, isActive: false)
+                XCTAssertNil(relaunched.engine.configurations.first?.initialCommand)
+            }
+        }
     }
 
     func testCodexEndingCannotDiscardAClaudeConversationInTheSamePane() throws {
@@ -456,14 +508,14 @@ final class AgentLifecycleTests: XCTestCase {
     }
 
     func testANamedPaneWithNothingToResumeComesBackToItsPlainLabel() throws {
-        // Codex names its conversation but never saves a handle, so the pane comes back to a
-        // prompt. A prompt with last week's topic over it would say the wrong thing.
+        // With recovery disabled, a prompt must not keep the conversation's title.
         let fixture = try makeFixture(isActive: false)
+        fixture.model.updateGlobalSettings { $0.restoresAgentSessions = false }
         fixture.session.activeForegroundProcessName = "codex"
         fixture.emit(.ready, agent: "codex", session: "abc")
         fixture.title("✳ Fix the build")
         XCTAssertEqual(fixture.displayTitle, "Fix the build")
-        XCTAssertNil(fixture.savedSession)
+        XCTAssertNotNil(fixture.savedSession)
         fixture.model.persistTerminalSnapshots()
         fixture.model.persistWorkspaceStore()
 

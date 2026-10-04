@@ -56,8 +56,7 @@ struct AgentHookTarget: Equatable, Sendable {
         ]
     )
 
-    /// Codex calls the same things by mostly the same names and one of its own, and has no
-    /// session end to hook.
+    /// Codex uses PermissionRequest for questions that Claude reports as Notification.
     static let codex = AgentHookTarget(
         agent: "codex",
         displayName: "Codex",
@@ -69,6 +68,7 @@ struct AgentHookTarget: Equatable, Sendable {
             AgentHookEvent("UserPromptSubmit", .working),
             AgentHookEvent("Stop", .finished),
             AgentHookEvent("PermissionRequest", .awaitingInput),
+            AgentHookEvent("SessionEnd", .exited),
         ]
     )
 
@@ -197,7 +197,8 @@ final class AgentHooksController {
     /// is what keeps a hostile payload from reaching the command line that resumes it. An ignored
     /// message is matched against the same read, because it is the only way to tell a question
     /// from a prompt left sitting. The installed entry carries a five second timeout, so an agent
-    /// that pipes nothing cannot leave the read waiting.
+    /// that pipes nothing cannot leave the read waiting. The extraction sentinel preserves trailing
+    /// newlines in identifiers so validation rejects them rather than truncating them.
     ///
     /// Claude sets `CLAUDE_CODE_CHILD_SESSION` on hook processes as well as nested agents, so it
     /// cannot identify the conversation owning the pane. An agent ancestor on the same TTY can:
@@ -207,13 +208,15 @@ final class AgentHooksController {
         activity: AgentActivity,
         ignoring ignoredMessage: String? = nil
     ) -> String {
-        let idPattern = "s/.*\"session_id\"[[:space:]]*:[[:space:]]*\"\\([A-Za-z0-9._-]\\{1,64\\}\\)\".*/\\1/p"
         let payload = "agent=\(agent);event=\(activity.rawValue);session=%s"
         let filter = ignoredMessage.map { "case \"$__in\" in *'\($0)'*) exit 0;; esac; " } ?? ""
         return """
         [ -n "${MYTERM_PANE_ID:-}" ] && { __in=$(cat 2>/dev/null | tr -d '\\n'); \(filter)
         \(nestedAgentGuard)
-        __id=$(printf '%s' "$__in" | sed -n '\(idPattern)'); \
+        __id=$(printf '%s' "$__in" | /usr/bin/plutil -extract session_id raw -expect string -n -o - - 2>/dev/null; printf '.');
+        __id=${__id%.};
+        case "$__id" in ''|*[!A-Za-z0-9._-]*) __id='';; esac;
+        [ "${#__id}" -le 64 ] || __id='';
         __tty=$(ps -o tty= -p "$PPID" 2>/dev/null | tr -d '[:space:]'); \
         case "$__tty" in *[0-9]*) __tty="/dev/${__tty#/dev/}";; *) __tty="/dev/tty";; esac; \
         printf '\\033]\(AgentActivityMarker.oscCode);\(payload)\\033\\\\' "$__id" > "$__tty"; } >/dev/null 2>&1 || true \(marker)

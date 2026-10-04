@@ -96,7 +96,7 @@ again:
 | Agent | File | Ready | Working | Finished | Question | Stopped |
 | --- | --- | --- | --- | --- | --- | --- |
 | Claude Code | `~/.claude/settings.json` | `SessionStart` | `UserPromptSubmit` | `Stop` | `Notification` | `SessionEnd` |
-| Codex | `~/.codex/hooks.json` | `SessionStart` | `UserPromptSubmit` | `Stop` | `PermissionRequest` | |
+| Codex | `~/.codex/hooks.json` | `SessionStart` | `UserPromptSubmit` | `Stop` | `PermissionRequest` | `SessionEnd` |
 
 Ready and Stopped put no cook on the tab. They are what tell MyTerm which conversation a pane is
 in, for the section below.
@@ -120,17 +120,13 @@ The state is not saved. After a relaunch, no tab carries a cook until its agent 
 
 ### Come back to a live agent
 
-A pane that was in a Claude Code conversation rejoins that same conversation when MyTerm starts
-again. The pane restores its working directory and its recent output as before, then runs
-`claude --resume <id>`, so quitting is no longer the end of the work in progress.
+A pane running Claude Code or Codex rejoins the same conversation when MyTerm starts again.
+The pane restores its working directory and recent output, then runs `claude --resume <id>` or
+`codex resume <id>`.
 
 The conversation identifier comes from the hooks above, so agent recovery needs them installed.
 Nothing else about the agent is read: MyTerm keeps the identifier the agent reports, and only if it
 is short and free of shell characters.
-
-Codex panes are not resumed. Its hooks report a new identifier for every turn rather than the one
-`codex resume` accepts, so a restored pane would open on an error instead of the conversation. Codex
-hooks still drive the tab indicator above.
 
 A pane left at its shell prompt when you quit comes back to a shell prompt. Leaving the agent is how
 you tell MyTerm the work is finished. An agent killed without the chance to say so counts as left

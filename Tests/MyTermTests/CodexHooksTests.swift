@@ -13,13 +13,32 @@ final class CodexHooksTests: XCTestCase {
         XCTAssertTrue(controller.isInstalled)
 
         let hooks = try readHooks(at: url)
-        XCTAssertEqual(Set(hooks.keys), ["SessionStart", "UserPromptSubmit", "Stop", "PermissionRequest"])
+        XCTAssertEqual(Set(hooks.keys), ["SessionStart", "UserPromptSubmit", "Stop", "PermissionRequest", "SessionEnd"])
         XCTAssertNil(hooks["Notification"], "Notification is Claude's name for it, not Codex's")
 
         let stop = try XCTUnwrap(command(in: hooks, event: "Stop"))
         XCTAssertTrue(stop.contains("agent=codex"))
         XCTAssertTrue(stop.contains("event=finished"))
         XCTAssertTrue(stop.hasSuffix(AgentHooksController.marker))
+    }
+
+    func testRefreshingOlderCodexHooksUpgradesIdentityParsingAndAddsSessionEnd() throws {
+        let url = try makeHooksFile("{}")
+        let controller = AgentHooksController(target: .codex.writing(to: url))
+        controller.install()
+        var root = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        var hooks = try XCTUnwrap(root["hooks"] as? [String: Any])
+        hooks.removeValue(forKey: "SessionEnd")
+        hooks["Stop"] = [["hooks": [["type": "command", "command": "old-command " + AgentHooksController.marker]]]]
+        root["hooks"] = hooks
+        try JSONSerialization.data(withJSONObject: root).write(to: url)
+
+        controller.refresh()
+
+        XCTAssertTrue(controller.isInstalled)
+        let upgraded = try readHooks(at: url)
+        XCTAssertTrue(try XCTUnwrap(command(in: upgraded, event: "Stop")).contains("plutil -extract session_id"))
+        XCTAssertTrue(try XCTUnwrap(command(in: upgraded, event: "SessionEnd")).contains("event=exited"))
     }
 
     func testAnotherToolsHooksInTheSameFileAreLeftAlone() throws {
