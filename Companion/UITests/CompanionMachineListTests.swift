@@ -22,16 +22,17 @@ final class CompanionMachineListTests: XCTestCase {
                        "Nothing is starred yet, so the list stays one plain section")
 
         let star = app.buttons[pikachuStar]
-        XCTAssertTrue(star.waitForExistence(timeout: 3))
+        XCTAssertTrue(star.waitForExistence(timeout: 5))
         XCTAssertTrue(star.isHittable, "The star must not be covered by list or navigation chrome")
         star.tap()
 
-        XCTAssertTrue(app.staticTexts["Starred"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["All machines"].exists)
+        XCTAssertTrue(app.staticTexts["Starred"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["All machines"].waitForExistence(timeout: 5))
         attachScreenshot(app, name: "machine-list-starred")
 
+        expectStableCount(1, of: pikachuStar, in: app)
         app.buttons[pikachuStar].tap()
-        XCTAssertFalse(app.staticTexts["Starred"].waitForExistence(timeout: 2),
+        XCTAssertFalse(app.staticTexts["Starred"].waitForExistence(timeout: 3),
                        "Unstarring the last starred Mac collapses the sections again")
     }
 
@@ -63,9 +64,49 @@ final class CompanionMachineListTests: XCTestCase {
                       "One machine on two relays is two rows with two independent stars")
         prod.tap()
 
-        XCTAssertTrue(app.staticTexts["Starred"].waitForExistence(timeout: 3))
-        XCTAssertEqual(app.buttons.matching(identifier: blastoiseProdStar).count, 1)
-        XCTAssertTrue(app.buttons[blastoiseDevStar].exists)
+        XCTAssertTrue(app.staticTexts["Starred"].waitForExistence(timeout: 5))
+        // Waited for rather than counted on the spot. Starring moves the row between sections, and
+        // mid-animation the query can see the old row and the new one, or neither.
+        expectStableCount(1, of: blastoiseProdStar, in: app)
+        assertStarred(true, identifier: blastoiseProdStar, named: "blastoise", in: app)
+        // Existence alone proved nothing: the row keeps its identifier either way, so starring
+        // both pairings would have passed. The label is what shows the other one is untouched.
+        assertStarred(false, identifier: blastoiseDevStar, named: "blastoise", in: app)
+    }
+
+    /// Waits for a query to hold a count, not merely reach it.
+    ///
+    /// A list re-sectioning reports a row twice, then not at all, then once, so the first reading
+    /// of the expected count can be the row that is still on its way out. Tapping then lands
+    /// mid-animation. The count has to stay put before the test goes on.
+    @MainActor
+    private func expectStableCount(_ count: Int, of identifier: String, in app: XCUIApplication,
+                                   holdingFor hold: TimeInterval = 0.5,
+                                   timeout: TimeInterval = 10) {
+        let query = app.buttons.matching(identifier: identifier)
+        let deadline = Date().addingTimeInterval(timeout)
+        var matchingSince: Date?
+        while Date() < deadline {
+            if query.count == count {
+                let since = matchingSince ?? Date()
+                matchingSince = since
+                if Date().timeIntervalSince(since) >= hold { return }
+            } else {
+                matchingSince = nil
+            }
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        XCTFail("\(identifier) never held a count of \(count) for \(hold)s")
+    }
+
+    /// The identifier is the same whether a row is starred or not, so the label is what says which.
+    @MainActor
+    private func assertStarred(_ starred: Bool, identifier: String, named name: String,
+                               in app: XCUIApplication) {
+        let button = app.buttons[identifier]
+        XCTAssertTrue(button.waitForExistence(timeout: 5))
+        XCTAssertEqual(button.label, starred ? "Unstar \(name)" : "Star \(name)",
+                       "\(identifier) should be \(starred ? "starred" : "unstarred")")
     }
 
     @MainActor
