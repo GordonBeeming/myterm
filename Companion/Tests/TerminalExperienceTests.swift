@@ -42,6 +42,58 @@ final class TerminalExperienceTests: XCTestCase {
         XCTAssertFalse(view.acceptsUserInput)
     }
 
+    func testSpectatorHorizontalPanSurvivesScrollSynchronizationAndLiveOutput() async throws {
+        let view = makeView()
+        fill(view)
+        view.followOutput()
+        view.contentOffset.x = 180
+        view.updateScroller()
+        XCTAssertEqual(view.contentOffset.x, 180, accuracy: 1)
+        fill(view, lines: 20)
+        try await Task.sleep(for: .milliseconds(60))
+        XCTAssertEqual(view.contentOffset.x, 180, accuracy: 1)
+        XCTAssertTrue(view.followsOutput)
+        assertAtBottom(view)
+        view.followOutput()
+        XCTAssertEqual(view.contentOffset.x, 180, accuracy: 1)
+    }
+
+    func testSpectatorHorizontalPositionRestoresWithFollowingAndFrozenCheckpoints() throws {
+        for following in [true, false] {
+            let original = makeView()
+            fill(original)
+            if following { original.followOutput() }
+            else { original.scroll(toPosition: 0.3) }
+            original.contentOffset.x = 180
+            let viewport = original.captureViewport()
+            let checkpoint = try original.getTerminal().exportCheckpoint()
+            let restored = makeView()
+            try restored.getTerminal().importCheckpoint(checkpoint)
+            restored.restoreViewport(viewport)
+            try restored.invalidateAfterCheckpointImport()
+            XCTAssertEqual(restored.contentOffset.x, 180, accuracy: 1)
+            XCTAssertEqual(restored.followsOutput, following)
+        }
+    }
+
+    func testSpectatorHorizontalPanClampsWhenHostGridOrViewportChanges() {
+        let view = makeView()
+        fill(view)
+        view.contentOffset.x = 180
+        let cellWidth = view.contentSize.width / CGFloat(view.getTerminal().getDims().cols)
+        let narrowerColumns = Int((view.bounds.width + 90) / cellWidth)
+        view.resize(cols: narrowerColumns, rows: 40)
+        view.updateScroller()
+        let maximum = max(0, view.contentSize.width - view.bounds.width)
+        XCTAssertGreaterThan(maximum, 0)
+        XCTAssertLessThan(maximum, 180)
+        XCTAssertEqual(view.contentOffset.x, maximum, accuracy: 1)
+        view.frame.size.width = 2000
+        view.layoutIfNeeded()
+        XCTAssertEqual(view.contentOffset.x, 0, accuracy: 1)
+        XCTAssertEqual(view.getTerminal().getDims().cols, narrowerColumns)
+    }
+
     func testShortPromptIsVisibleInsteadOfFollowingUnusedHostRows() async throws {
         let view = makeView()
         view.feed(text: "$ ")
