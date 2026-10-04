@@ -1018,7 +1018,14 @@ final class AppModelTests: XCTestCase {
         session.emitContentChanged()
         session.emitContentChanged()
         session.emitContentChanged()
-        try await Task.sleep(nanoseconds: 80_000_000)
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(5))
+        while session.snapshotCallCount == 0, clock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        // Extra debounced snapshots must have time to expose a failure to coalesce.
+        try await Task.sleep(for: .milliseconds(80))
 
         XCTAssertEqual(session.snapshotCallCount, 1)
         let persistedTab = try XCTUnwrap(model.selectedWorkspace.selectedTab)
