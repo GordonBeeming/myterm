@@ -553,6 +553,47 @@ final class SceneStateTests: XCTestCase {
         XCTAssertNil(scene.terminalStates[original.id])
     }
 
+    /// A reconnect to the same Mac keeps the workspaces it last reported. Dropping them emptied
+    /// both columns on an iPad, which left nothing to tap when one session was breaking the
+    /// connection over and over.
+    func testReconnectingToTheSameMacKeepsTheLastKnownWorkspaces() {
+        let scene = SceneModel()
+        let connectionID = testConnection()
+        scene.projection = oneWorkspaceProjection(title: "Keep me")
+
+        scene.prepareNavigation(replacing: connectionID, with: connectionID)
+
+        XCTAssertEqual(scene.projection?.workspaces.first?.title, "Keep me")
+    }
+
+    func testOpeningADifferentMacDropsTheWorkspacesOfTheOneBefore() {
+        let scene = SceneModel()
+        scene.projection = oneWorkspaceProjection(title: "Other Mac")
+
+        scene.prepareNavigation(replacing: testConnection(), with: testConnection())
+
+        XCTAssertNil(scene.projection,
+                     "Another Mac's workspaces are the wrong list, not a stale view of this one")
+    }
+
+    func testLeavingAMacEntirelyDropsTheWorkspaces() {
+        let scene = SceneModel()
+        scene.projection = oneWorkspaceProjection(title: "Going away")
+
+        scene.clearSelectionAndNavigation()
+
+        XCTAssertNil(scene.projection)
+    }
+
+    private func oneWorkspaceProjection(title: String) -> RemoteWorkspaceProjection {
+        RemoteWorkspaceProjection(folders: [], workspaces: [
+            RemoteWorkspaceItem(id: WorkspaceID(rawValue: UUID()), title: title, folderID: nil,
+                                isPinned: false, color: nil, emoji: nil,
+                                groups: [RemoteTabGroupProjection(id: TabGroupID(rawValue: UUID()),
+                                                                  tabs: [])])
+        ])
+    }
+
     func testBrowserRouteReconcilesAfterMovingGroups() async throws {
         let scene = SceneModel()
         let connectionID = testConnection()

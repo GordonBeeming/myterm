@@ -419,7 +419,13 @@ final class SceneModel {
         connectionPhase = .connecting
         Task { await DiagnosticsLog.shared.record(category: "connection", "connecting",
                                                   detail: "host=\(DiagnosticsLog.short(host.hostID))") }
-        projection = nil
+        // The last known workspaces stay on screen while this host is reconnected. Clearing them
+        // tore the whole workspace view out of the hierarchy on every attempt, so a session that
+        // kept dropping left nothing to read and nothing to tap: on a phone the list came back by
+        // going back, but on an iPad both columns emptied and there was no way to move to a
+        // workspace that still worked. A command sent against this list while there is no
+        // connection fails on its own, and `prepareNavigation` has already dropped the list when
+        // the host itself changed.
         connectionID = nil
         disableAllInput()
         for id in Array(terminalStates.keys) { cacheTerminalSurface(id) }
@@ -479,6 +485,9 @@ final class SceneModel {
         path.removeAll()
         selectedWorkspaceID = nil
         secondaryTerminal = nil
+        // Another Mac's workspaces are not a stale view of this one's, they are the wrong list, and
+        // a tap on one would name a workspace the new host has never heard of.
+        projection = nil
     }
 
     func clearSelectionAndNavigation() {
