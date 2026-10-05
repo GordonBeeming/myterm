@@ -326,6 +326,11 @@ final class SceneModel {
     var connectionPhase: ConnectionPhase = .disconnected
     var connectionID: UUID?
     var projection: RemoteWorkspaceProjection?
+    /// Whether `projection` came from the connection that is live now. A list retained across a
+    /// reconnect is good enough to read and to tap, but not good enough to decide that something
+    /// a notification names does not exist: a workspace opened on the Mac since that list was
+    /// sent is simply missing from it.
+    private(set) var hasFreshProjection = false
     var errorMessage: String?
     var terminalStates: [TerminalSurfaceID: TerminalSurfaceState] = [:]
     @ObservationIgnored private var terminalDrafts: [TerminalSurfaceID: TerminalComposerDraft] = [:]
@@ -419,8 +424,15 @@ final class SceneModel {
         connectionPhase = .connecting
         Task { await DiagnosticsLog.shared.record(category: "connection", "connecting",
                                                   detail: "host=\(DiagnosticsLog.short(host.hostID))") }
-        projection = nil
+        // The last known workspaces stay on screen while this host is reconnected. Clearing them
+        // tore the whole workspace view out of the hierarchy on every attempt, so a session that
+        // kept dropping left nothing to read and nothing to tap: on a phone the list came back by
+        // going back, but on an iPad both columns emptied and there was no way to move to a
+        // workspace that still worked. A command sent against this list while there is no
+        // connection fails on its own, and `prepareNavigation` has already dropped the list when
+        // the host itself changed.
         connectionID = nil
+        hasFreshProjection = false
         disableAllInput()
         for id in Array(terminalStates.keys) { cacheTerminalSurface(id) }
         terminalStates.removeAll()
@@ -479,6 +491,9 @@ final class SceneModel {
         path.removeAll()
         selectedWorkspaceID = nil
         secondaryTerminal = nil
+        // Another Mac's workspaces are not a stale view of this one's, they are the wrong list, and
+        // a tap on one would name a workspace the new host has never heard of.
+        projection = nil
     }
 
     func clearSelectionAndNavigation() {
@@ -901,7 +916,11 @@ final class SceneModel {
         pendingNotification = destination
         selectedConnectionID = destination.connectionID
         selectedWorkspaceID = destination.workspaceID
-        if activeHost?.connectionID == destination.connectionID, let projection {
+        // Only against a list this connection sent. Resolving against one retained from before a
+        // reconnect would not find a workspace the Mac has opened since, and not finding it drops
+        // the notification for good; staying pending lets the next list route it.
+        if activeHost?.connectionID == destination.connectionID, hasFreshProjection,
+           let projection {
             resolveNotification(in: projection)
         }
     }
@@ -920,6 +939,7 @@ final class SceneModel {
                                                       detail: "connection=\(DiagnosticsLog.short(id))") }
         case .workspaces(let projection):
             self.projection = projection
+            hasFreshProjection = true
             await reconcileRoutes(in: projection)
             resolveNotification(in: projection)
         case .checkpoint(let route, let checkpoint):

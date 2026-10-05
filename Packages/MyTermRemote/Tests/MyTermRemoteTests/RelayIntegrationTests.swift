@@ -233,5 +233,34 @@ private func fixtureError(_ message: String, logURL: URL) -> NSError {
     }
     #expect(offline.connectionID == clientConnectionID)
     #expect(!offline.transportOnline)
+
+    // The production failure. A pane that is producing output still has frames addressed to the
+    // peer that just left, and the relay answers those with an error control message. The host had
+    // no case for it, so it closed its own connection with a protocol error: a phone disconnecting
+    // took the Mac off the relay with it, and the busier the session the more reliably it happened.
+    try await hostSocket.send(destinationConnectionID: try #require(clientConnectionID),
+                              payload: replyPacket)
+    let secondClient = RelayWebSocketClient(endpoint: endpoint, hostID: hostID,
+                                            role: .client, session: session)
+    var secondEvents = try await secondClient.connect(accessToken: fixture.clientToken)
+        .makeAsyncIterator()
+    guard case .ready = try await secondEvents.next() else { throw RemoteError.invalidResponse }
+    var secondConnectionID: UUID?
+    while secondConnectionID == nil {
+        guard let event = try await hostEvents.next() else { throw RemoteError.disconnected }
+        if case .peer(let peer) = event, peer.transportOnline {
+            secondConnectionID = peer.connectionID
+        }
+    }
+    try await hostSocket.send(destinationConnectionID: try #require(secondConnectionID),
+                              payload: replyPacket)
+    var afterwards: Data?
+    while afterwards == nil {
+        guard let event = try await secondEvents.next() else { throw RemoteError.disconnected }
+        if case .application(_, let payload) = event { afterwards = payload }
+    }
+    #expect(afterwards == replyPacket,
+            "The host keeps its connection, and still serves a new phone, after addressing one")
+    await secondClient.disconnect()
     await hostSocket.disconnect()
 }

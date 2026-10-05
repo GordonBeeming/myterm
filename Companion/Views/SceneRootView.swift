@@ -352,12 +352,25 @@ private struct WorkspaceColumn: View {
         Group {
             if scene.selectedConnectionID == nil {
                 ContentUnavailableView("Choose a Mac", systemImage: "desktopcomputer")
-            } else if scene.connectionPhase != .online {
+            } else if scene.projection == nil {
+                // Only when there is nothing to show. Checking the phase first put this over a
+                // list that had been deliberately kept, so the column still emptied on every
+                // reconnect and there was nothing to move to.
                 ContentUnavailableView(scene.connectionPhase.title,
                                        systemImage: "network.slash",
                                        description: Text(connectionDescription))
             } else if let projection = scene.projection {
                 List(selection: $scene.selectedWorkspaceID) {
+                    if scene.connectionPhase != .online {
+                        // The list is the one this Mac last sent, so say so rather than letting it
+                        // read as live. Tapping a workspace is still the point of keeping it.
+                        Section {
+                            Label(scene.connectionPhase.title, systemImage: "network.slash")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .accessibilityIdentifier("workspace-list-reconnecting")
+                        }
+                    }
                     ForEach(projection.folders, id: \.id) { folder in
                         Section {
                             ForEach(projection.workspaces.filter { $0.folderID == folder.id }, id: \.id) {

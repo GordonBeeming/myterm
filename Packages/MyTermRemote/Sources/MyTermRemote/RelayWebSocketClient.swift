@@ -1,16 +1,23 @@
 import CryptoKit
 import Foundation
+import OSLog
 
 public enum RelayTransportEvent: Equatable, Sendable {
     case ready(RelayReady)
     case peer(RelayPeer)
     /// The relay accepted a refreshed token and moved this connection's expiry to `expiresAt`.
     case authenticated(RelayAuthenticated)
+    /// The relay could not reach its own store to accept a refreshed token. This connection keeps
+    /// the expiry it already has, which the refresh did not move, so the refresh has to be tried
+    /// again before that one runs out.
+    case authenticationUnavailable
     /// For received frames, the relay has replaced the destination bytes with this trusted source ID.
     case application(sourceConnectionID: UUID, payload: Data)
 }
 
 public actor RelayWebSocketClient {
+    private static let logger = Logger(subsystem: "com.gordonbeeming.myterm",
+                                       category: "relay-transport")
     private let endpoint: RelayEndpoint
     private let hostID: UUID
     private let role: RelayRole
@@ -184,6 +191,23 @@ public actor RelayWebSocketClient {
             case .authenticated(let authenticated):
                 guard receivedReady else { throw RemoteError.invalidMessage }
                 event = .authenticated(authenticated)
+            case .failure(let failure) where failure.code == RelayFailure.authenticationUnavailable:
+                // Not fire and forget. The refresh has already moved this side's token on, while
+                // the relay still holds the expiry it opened with, so whoever asked for the
+                // refresh has to hear that it did not land and try again before that one passes.
+                guard receivedReady else { throw RemoteError.invalidMessage }
+                event = .authenticationUnavailable
+            case .failure(let failure):
+                // The relay is reporting one message it could not act on, not a broken connection.
+                // `invalid_destination` is the ordinary outcome of a peer going away while frames
+                // addressed to it were still in flight, which is what a busy pane always has.
+                // Treating it as fatal cost the host its relay connection every time a phone
+                // disconnected from a session that was producing output.
+                Self.logger.notice("relay reported \(failure.code, privacy: .public)")
+                return
+            case .unrecognised(let type):
+                Self.logger.notice("ignoring unknown relay control message \(type, privacy: .public)")
+                return
             }
         case .data(let data):
             guard receivedReady else { throw RemoteError.invalidMessage }

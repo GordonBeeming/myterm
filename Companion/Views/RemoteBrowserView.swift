@@ -273,7 +273,10 @@ struct RemoteBrowserView: View {
             else { mode = UserDefaults.standard.string(forKey: preferenceKey) == "rendered" ? "rendered" : "native" }
             initialized = true
         }
-        .task(id: "\(initialized)|\(mode)|\(retryID)") {
+        // The connection is part of the key for the same reason the terminal screen's is: a
+        // reconnect stops the old local proxy, and now that a retained list keeps this view alive
+        // nothing else would start the new one, leaving the web view bound to a dead proxy.
+        .task(id: "\(initialized)|\(mode)|\(retryID)|\(scene.connectionID?.uuidString ?? "none")") {
             if initialized { await startMode() }
         }
         .onDisappear {

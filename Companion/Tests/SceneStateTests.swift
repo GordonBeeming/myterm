@@ -553,6 +553,59 @@ final class SceneStateTests: XCTestCase {
         XCTAssertNil(scene.terminalStates[original.id])
     }
 
+    /// A reconnect to the same Mac keeps the workspaces it last reported. Dropping them emptied
+    /// both columns on an iPad, which left nothing to tap when one session was breaking the
+    /// connection over and over.
+    func testReconnectingToTheSameMacKeepsTheLastKnownWorkspaces() {
+        let scene = SceneModel()
+        let connectionID = testConnection()
+        scene.projection = oneWorkspaceProjection(title: "Keep me")
+
+        scene.prepareNavigation(replacing: connectionID, with: connectionID)
+
+        XCTAssertEqual(scene.projection?.workspaces.first?.title, "Keep me")
+    }
+
+    func testOpeningADifferentMacDropsTheWorkspacesOfTheOneBefore() {
+        let scene = SceneModel()
+        scene.projection = oneWorkspaceProjection(title: "Other Mac")
+
+        scene.prepareNavigation(replacing: testConnection(), with: testConnection())
+
+        XCTAssertNil(scene.projection,
+                     "Another Mac's workspaces are the wrong list, not a stale view of this one")
+    }
+
+    func testLeavingAMacEntirelyDropsTheWorkspaces() {
+        let scene = SceneModel()
+        scene.projection = oneWorkspaceProjection(title: "Going away")
+
+        scene.clearSelectionAndNavigation()
+
+        XCTAssertNil(scene.projection)
+    }
+
+    /// A list retained across a reconnect is good enough to read and to tap, but not to decide
+    /// that something a notification names is gone, so it is not treated as this connection's own
+    /// until this connection sends one.
+    func testAListSetOutsideAConnectionIsNotTreatedAsFresh() {
+        let scene = SceneModel()
+
+        scene.projection = oneWorkspaceProjection(title: "Stale")
+
+        XCTAssertFalse(scene.hasFreshProjection,
+                       "Only a workspaces response from the live connection makes the list fresh")
+    }
+
+    private func oneWorkspaceProjection(title: String) -> RemoteWorkspaceProjection {
+        RemoteWorkspaceProjection(folders: [], workspaces: [
+            RemoteWorkspaceItem(id: WorkspaceID(rawValue: UUID()), title: title, folderID: nil,
+                                isPinned: false, color: nil, emoji: nil,
+                                groups: [RemoteTabGroupProjection(id: TabGroupID(rawValue: UUID()),
+                                                                  tabs: [])])
+        ])
+    }
+
     func testBrowserRouteReconcilesAfterMovingGroups() async throws {
         let scene = SceneModel()
         let connectionID = testConnection()

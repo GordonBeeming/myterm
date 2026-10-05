@@ -220,6 +220,98 @@ final class TerminalExperienceTests: XCTestCase {
         XCTAssertFalse(view.followsOutput)
     }
 
+    /// Taking focus in a pane brings up the keyboard and the terminal keys, which changes the
+    /// view's height. The Mac answers that with a new grid, and the companion applies it as a
+    /// `resize` rather than a frame change. A frame change is already known to keep a following
+    /// view pinned; this is the path that was never covered.
+    func testAuthoritativeGridResizeKeepsAFollowingViewAtTheBottom() {
+        let view = makeView()
+        fill(view)
+        view.followOutput()
+        assertAtBottom(view)
+        view.resize(cols: 100, rows: 30)
+        view.layoutIfNeeded()
+        XCTAssertTrue(view.followsOutput,
+                      "A grid resize is not the viewer deciding to read history")
+        assertAtBottom(view)
+    }
+
+    /// A tap on the status bar asks UIKit to rewind the active scroll view, and a terminal is one.
+    /// The gesture is refused at the view rather than corrected afterwards, because by the time
+    /// the offset has moved there is nothing left to say whether the viewer meant it.
+    func testTheTerminalRefusesTheStatusBarScrollToTopGesture() {
+        let view = ClipboardTerminalView(frame: CGRect(x: 0, y: 0, width: 320, height: 220))
+        XCTAssertFalse(view.scrollsToTop,
+                       "Live terminal output has no top worth returning to")
+        view.updateUiClosed()
+    }
+
+    /// The gesture only reaches a scroll view that offers itself for it, so refusing it is what
+    /// keeps a following pane at the bottom. This pins the behaviour the refusal protects.
+    func testAScrollToTopOnAFollowingPaneWouldHaveLostTheBottom() {
+        let view = makeView()
+        fill(view)
+        view.followOutput()
+        assertAtBottom(view)
+        view.setContentOffset(.zero, animated: false)
+        view.layoutIfNeeded()
+        XCTAssertEqual(view.contentOffset.y, 0, accuracy: 1,
+                       "This is what the status bar tap did, and why it had to be refused")
+    }
+
+    /// `updateUIView` calls this when a view-only pane gains control, which is also when the
+    /// keyboard arrives and the height changes.
+    func testResizeToFitKeepsAFollowingViewAtTheBottom() {
+        let view = makeView()
+        fill(view)
+        view.followOutput()
+        assertAtBottom(view)
+        view.acceptsUserInput = true
+        view.automaticallyResizesTerminal = true
+        view.resizeToFit()
+        view.layoutIfNeeded()
+        XCTAssertTrue(view.followsOutput)
+        assertAtBottom(view)
+    }
+
+    /// A checkpoint arriving while the pane is at the bottom must come back at the bottom. The
+    /// captured viewport is the one the companion hands to `restoreViewport`, and a viewport
+    /// captured mid-transition is the suspect for a pane that lands on row zero.
+    func testCheckpointImportWhileFollowingComesBackAtTheBottom() throws {
+        let view = makeView()
+        fill(view)
+        view.followOutput()
+        let captured = view.captureViewport()
+        XCTAssertTrue(captured.followsOutput)
+        let host = makeView()
+        fill(host, lines: 100)
+        try view.getTerminal().importCheckpoint(host.getTerminal().exportCheckpoint())
+        view.restoreViewport(captured)
+        try view.invalidateAfterCheckpointImport()
+        XCTAssertTrue(view.followsOutput)
+        assertAtBottom(view)
+    }
+
+    /// The same import, but captured while the view has been squeezed to nothing the way it is
+    /// during a focus change that brings up the keyboard and the terminal keys.
+    func testCheckpointImportCapturedDuringALayoutTransitionStillComesBackAtTheBottom() throws {
+        let view = makeView()
+        fill(view)
+        view.followOutput()
+        view.frame.size.height = 0
+        view.layoutIfNeeded()
+        let captured = view.captureViewport()
+        view.frame.size.height = 220
+        view.layoutIfNeeded()
+        let host = makeView()
+        fill(host, lines: 100)
+        try view.getTerminal().importCheckpoint(host.getTerminal().exportCheckpoint())
+        view.restoreViewport(captured)
+        try view.invalidateAfterCheckpointImport()
+        XCTAssertTrue(view.followsOutput, "A squeezed layout is not the viewer reading history")
+        assertAtBottom(view)
+    }
+
     func testCheckpointTrimKeepsRetainedTextAndClampsEvictedHistory() throws {
         let host = makeView()
         host.getTerminal().changeScrollback(80)

@@ -136,6 +136,12 @@ final class CompanionHostModel {
     private var transportTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
     private var reconnectAttempt = 0
+    /// When the relay says it will expire this connection. It moves only when the relay
+    /// acknowledges a refresh, so it is what the next refresh is scheduled against. The local
+    /// token's expiry is no use for that: refreshing advances it whether or not the relay accepted
+    /// the new token, and scheduling against it after a refusal sleeps straight through the expiry
+    /// the relay is actually holding.
+    private var relayAcknowledgedExpiry: Date?
     private var connectionFence = CompanionConnectionFence()
     private var pairingRegistry: PairingRegistry?
     private var activeTicket: PairingTicket?
@@ -713,16 +719,23 @@ final class CompanionHostModel {
     ) async {
         guard connectionFence.accepts(generation) else { return }
         switch event {
-        case .ready:
+        case .ready(let ready):
             reconnectAttempt = 0
             status = .connected
+            relayAcknowledgedExpiry = ready.expiresAt.map { Date(timeIntervalSince1970: TimeInterval($0)) }
             Task { await CompanionConnectionLog.shared.record(category: "connection", "connected") }
         case .peer(let peer):
             if !peer.transportOnline {
                 removeConnection(peer.connectionID)
             }
-        case .authenticated:
-            break
+        case .authenticated(let authenticated):
+            relayAcknowledgedExpiry = Date(timeIntervalSince1970: TimeInterval(authenticated.expiresAt))
+        case .authenticationUnavailable:
+            // The relay kept the expiry it already had, so `relayAcknowledgedExpiry` is left where
+            // it was and the refresh loop comes back to it well before it passes.
+            Task { await CompanionConnectionLog.shared.record(
+                category: "connection", "token refresh not accepted",
+                detail: "retrying before expiry") }
         case .application(let connectionID, let payload):
             do {
                 let queue: CompanionConnectionWorkQueue
@@ -2063,6 +2076,7 @@ final class CompanionHostModel {
         cancelPairing()
         transportTask = nil
         transport = nil
+        relayAcknowledgedExpiry = nil
         clearConnectedPeers()
         if let error { status = .failed(error.localizedDescription) }
         else { status = .disconnected }
@@ -2076,7 +2090,14 @@ final class CompanionHostModel {
                                            manager: RelayTokenManager,
                                            generation: UUID) async {
         while !Task.isCancelled {
-            let expiry = await manager.accessExpiry()
+            // The relay's own expiry, not the local token's. A refresh the relay did not accept
+            // leaves this where it was, so the wait shortens by itself and the refresh is tried
+            // again before the connection the relay is still counting down runs out. Scheduling
+            // against the local expiry instead slept past it: the token had moved on, the relay
+            // had not, and the socket closed at a time nothing was waiting for.
+            let expiry: Date
+            if let acknowledged = relayAcknowledgedExpiry { expiry = acknowledged }
+            else { expiry = await manager.accessExpiry() }
             let lead = RelayTokenManager.refreshMargin + 60
             let sleepFor = max(30, expiry.timeIntervalSinceNow - lead)
             do { try await Task.sleep(for: .seconds(sleepFor)) }

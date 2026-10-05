@@ -53,6 +53,11 @@ public struct RelayReady: Codable, Equatable, Sendable {
     /// Whether this relay accepts an in-band token refresh. A relay from before that existed
     /// omits the field and closes any connection that sends one, so it must never be assumed.
     public let supportsAuthRefresh: Bool
+    /// When the relay will expire this connection, as it opened it. The relay moves this only when
+    /// it acknowledges a refresh, so it is the only expiry worth scheduling the next refresh
+    /// against: the local token's own expiry runs ahead of it the moment a refresh is not
+    /// accepted. A relay that does not report it leaves this nil.
+    public let expiresAt: Int64?
 
     enum CodingKeys: String, CodingKey {
         case protocolVersion = "protocol"
@@ -62,10 +67,12 @@ public struct RelayReady: Codable, Equatable, Sendable {
         case maxFrameBytes = "max_frame_bytes"
         case heartbeatSeconds = "heartbeat_seconds"
         case supportsAuthRefresh = "auth_refresh"
+        case expiresAt = "expires_at"
     }
 
     public init(protocolVersion: Int, connectionID: UUID, hostID: UUID, role: RelayRole,
-                maxFrameBytes: Int, heartbeatSeconds: Int, supportsAuthRefresh: Bool = false) {
+                maxFrameBytes: Int, heartbeatSeconds: Int, supportsAuthRefresh: Bool = false,
+                expiresAt: Int64? = nil) {
         self.protocolVersion = protocolVersion
         self.connectionID = connectionID
         self.hostID = hostID
@@ -73,6 +80,7 @@ public struct RelayReady: Codable, Equatable, Sendable {
         self.maxFrameBytes = maxFrameBytes
         self.heartbeatSeconds = heartbeatSeconds
         self.supportsAuthRefresh = supportsAuthRefresh
+        self.expiresAt = expiresAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -84,6 +92,7 @@ public struct RelayReady: Codable, Equatable, Sendable {
         maxFrameBytes = try container.decode(Int.self, forKey: .maxFrameBytes)
         heartbeatSeconds = try container.decode(Int.self, forKey: .heartbeatSeconds)
         supportsAuthRefresh = try container.decodeIfPresent(Bool.self, forKey: .supportsAuthRefresh) ?? false
+        expiresAt = try container.decodeIfPresent(Int64.self, forKey: .expiresAt)
     }
 
     public func validate(expectedHostID: UUID, expectedRole: RelayRole) throws {
@@ -114,10 +123,34 @@ public struct RelayAuthenticated: Codable, Equatable, Sendable {
     }
 }
 
+public struct RelayFailure: Codable, Equatable, Sendable {
+    public let code: String
+
+    enum CodingKeys: String, CodingKey {
+        case code
+    }
+
+    public init(code: String) {
+        self.code = code
+    }
+
+    /// The relay could not deliver one frame, almost always because the peer it named has gone.
+    /// Peer departure is announced separately, so there is nothing here to act on.
+    public static let invalidDestination = "invalid_destination"
+    /// The relay could not reach its own store to refresh a token. The connection keeps the expiry
+    /// it already has and the request can be made again.
+    public static let authenticationUnavailable = "auth_unavailable"
+}
+
 public enum RelayControlEvent: Equatable, Sendable {
     case ready(RelayReady)
     case peer(RelayPeer)
     case authenticated(RelayAuthenticated)
+    /// The relay reporting a problem with one message, not with the connection.
+    case failure(RelayFailure)
+    /// A control message this build has no case for. A newer relay must be able to say something
+    /// new without costing an older peer its connection.
+    case unrecognised(type: String)
 
     public static func decode(_ data: Data) throws -> Self {
         guard data.count <= 16 * 1024 else { throw RemoteError.messageTooLarge }
@@ -128,7 +161,8 @@ public enum RelayControlEvent: Equatable, Sendable {
             case "ready": return .ready(try decoder.decode(RelayReady.self, from: data))
             case "peer": return .peer(try decoder.decode(RelayPeer.self, from: data))
             case "auth_ok": return .authenticated(try decoder.decode(RelayAuthenticated.self, from: data))
-            default: throw RemoteError.invalidMessage
+            case "error": return .failure(try decoder.decode(RelayFailure.self, from: data))
+            default: return .unrecognised(type: discriminator.type)
             }
         } catch let error as RemoteError { throw error }
         catch { throw RemoteError.invalidMessage }

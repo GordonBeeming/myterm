@@ -44,9 +44,54 @@ import Testing
         protocolVersion: 1, connectionID: connectionID, hostID: hostID, role: .client,
         maxFrameBytes: 1_048_576, heartbeatSeconds: 20
     )))
+    // A control message this build has no case for is carried rather than refused. Refusing it
+    // closed the connection, so a relay could not add a control message without cutting off every
+    // peer that predated it.
+    #expect(try RelayControlEvent.decode(Data("{\"type\":\"offline\"}".utf8))
+            == .unrecognised(type: "offline"))
+    // A malformed message of a known type is still a fault.
     #expect(throws: RemoteError.invalidMessage) {
-        try RelayControlEvent.decode(Data("{\"type\":\"offline\"}".utf8))
+        try RelayControlEvent.decode(Data("{\"type\":\"peer\"}".utf8))
     }
+}
+
+/// The relay replies with this when a frame names a peer that has gone, which is the ordinary
+/// outcome of a phone disconnecting while a pane was still producing output. It used to decode as
+/// an unknown type, which closed the host's own relay connection with a protocol error.
+@Test func aRelayReportedErrorDecodesRatherThanClosingTheConnection() throws {
+    #expect(try RelayControlEvent.decode(Data("{\"type\":\"error\",\"code\":\"invalid_destination\"}".utf8))
+            == .failure(RelayFailure(code: RelayFailure.invalidDestination)))
+    #expect(try RelayControlEvent.decode(Data("{\"type\":\"error\",\"code\":\"auth_unavailable\"}".utf8))
+            == .failure(RelayFailure(code: RelayFailure.authenticationUnavailable)))
+}
+
+/// The relay reports the expiry it is counting this connection down to, and moves it only when it
+/// acknowledges a refresh. A peer that schedules its next refresh against its own token instead
+/// sleeps past a refusal, because refreshing advances the local expiry whether the relay took the
+/// new token or not.
+@Test func readyCarriesTheExpiryTheRelayIsHolding() throws {
+    let connectionID = UUID()
+    let hostID = UUID()
+    let withExpiry = Data("""
+        {"type":"ready","protocol":1,"connection_id":"\(connectionID)","host_id":"\(hostID)","role":"host","max_frame_bytes":1048576,"heartbeat_seconds":20,"auth_refresh":true,"expires_at":1791200000}
+        """.utf8)
+    guard case .ready(let ready) = try RelayControlEvent.decode(withExpiry) else {
+        Issue.record("expected a ready message")
+        return
+    }
+    #expect(ready.expiresAt == 1_791_200_000)
+    #expect(ready.supportsAuthRefresh)
+
+    // A relay that does not report one leaves it absent rather than reading as the epoch.
+    let withoutExpiry = Data("""
+        {"type":"ready","protocol":1,"connection_id":"\(connectionID)","host_id":"\(hostID)","role":"host","max_frame_bytes":1048576,"heartbeat_seconds":20}
+        """.utf8)
+    guard case .ready(let older) = try RelayControlEvent.decode(withoutExpiry) else {
+        Issue.record("expected a ready message")
+        return
+    }
+    #expect(older.expiresAt == nil)
+    #expect(try older.validate(expectedHostID: hostID, expectedRole: .host) == ())
 }
 
 @Test func typedInnerMessagesUseSnakeCaseAndRoundTrip() throws {
