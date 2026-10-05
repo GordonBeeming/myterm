@@ -19,19 +19,29 @@ struct WorkspaceDetail: View {
                         AdaptiveWorkspaceView(scene: scene, workspace: workspace)
                             .id(workspace.id)
                     } else {
+                        // Only the list needs new-tab buttons in the toolbar. The adaptive view
+                        // carries them in each pane's own menu, where the pane they affect is the
+                        // one on screen rather than whichever happens to be first.
                         terminalList(workspace)
+                            .toolbar {
+                                ToolbarItemGroup(placement: .primaryAction) {
+                                    Button("New terminal", systemImage: "plus.rectangle.on.rectangle") {
+                                        Task { await createTab(kind: .terminal) }
+                                    }
+                                    Button("New browser tab", systemImage: "globe.badge.chevron.backward") {
+                                        Task { await createTab(kind: .browser) }
+                                    }
+                                }
+                            }
                     }
                 }
                 .navigationTitle(workspace.title)
                 .toolbar {
-                    ToolbarItemGroup(placement: .primaryAction) {
-                        Button("New terminal", systemImage: "plus.rectangle.on.rectangle") {
-                            Task { await createTab(kind: .terminal) }
+                    ToolbarItem(placement: .primaryAction) {
+                        Button("Manage workspace", systemImage: "folder.badge.gearshape") {
+                            scene.sheet = .workspaceActions(workspace.id.rawValue)
                         }
-                        Menu("Workspace actions", systemImage: "folder.badge.gearshape") {
-                            Button("Manage workspace") { scene.sheet = .workspaceActions(workspace.id.rawValue) }
-                            Button("New browser tab") { Task { await createTab(kind: .browser) } }
-                        }
+                        .accessibilityIdentifier("manage-workspace")
                     }
                 }
             } else {
@@ -134,8 +144,14 @@ struct WorkspaceDetail: View {
     }
 
     private func createTab(kind: RemoteTabKind) async {
-        guard let workspace, let group = workspace.groups.first,
-              let hostID = scene.selectedHostID else { return }
+        // The list shows every pane's tabs, so the Mac's focused pane is the least surprising
+        // target when the user is not looking at one in particular.
+        guard let workspace, let hostID = scene.selectedHostID,
+              let group = workspace.groups.first(where: { $0.id == workspace.focusedGroupID })
+                  ?? workspace.groups.first else {
+            scene.errorMessage = "This workspace has no pane to add a tab to."
+            return
+        }
         do {
             _ = try await scene.command(.tabCreate, metadata: MessageMetadata(
                 hostID: hostID, workspaceID: workspace.id.rawValue,
