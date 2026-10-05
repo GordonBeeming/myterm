@@ -1157,8 +1157,12 @@ final class AppModel {
         }
     }
 
+    /// Where a browser tab opens when nothing named a page: the local New Tab command, the group
+    /// variant, and a companion asking for a browser tab without one.
+    static let browserStartPage = URL(string: "https://www.google.com")
+
     func createBrowserTab() {
-        guard let defaultURL = URL(string: "https://www.google.com") else {
+        guard let defaultURL = Self.browserStartPage else {
             errorDescription = AppModelError.defaultBrowserURLInvalid.localizedDescription
             return
         }
@@ -1166,7 +1170,7 @@ final class AppModel {
     }
 
     func createBrowserTab(in tabGroupID: TabGroupID) {
-        guard let defaultURL = URL(string: "https://www.google.com") else {
+        guard let defaultURL = Self.browserStartPage else {
             errorDescription = AppModelError.defaultBrowserURLInvalid.localizedDescription
             return
         }
@@ -2893,7 +2897,10 @@ final class AppModel {
                     selectsCreatedTab: false
                 )
             case .browser:
-                guard let url = payload.url,
+                // A companion asking for a browser tab without naming a page is not an error: the
+                // Mac's own new-tab command has no page in mind either and opens the same start
+                // page. Only a URL this app will not render is rejected.
+                guard let url = payload.url ?? Self.browserStartPage,
                       ["http", "https", "file"].contains(url.scheme?.lowercased() ?? "") else {
                     throw CompanionCommandError.invalidPayload
                 }
@@ -3138,6 +3145,7 @@ final class AppModel {
 
 enum AppModelError: LocalizedError {
     case applicationSupportUnavailable
+    case defaultBrowserURLInvalid
     case workspaceUnavailable(WorkspaceID)
     case tabUnavailable(TabID)
     case terminalUnavailable(TerminalSessionID)
@@ -3147,11 +3155,11 @@ enum AppModelError: LocalizedError {
     case noSelectedTab
     case noFocusedTerminal(TabID)
     case noFocusedTerminalTab
-    case defaultBrowserURLInvalid
 
     var errorDescription: String? {
         switch self {
         case .applicationSupportUnavailable: "Application Support is unavailable."
+        case .defaultBrowserURLInvalid: "The default browser URL is invalid."
         case .workspaceUnavailable(let id): "Workspace \(id) is unavailable."
         case .tabUnavailable(let id): "Tab \(id) is unavailable."
         case .terminalUnavailable(let id): "Terminal \(id) is unavailable."
@@ -3161,7 +3169,6 @@ enum AppModelError: LocalizedError {
         case .noSelectedTab: "There is no selected tab."
         case .noFocusedTerminal(let id): "Tab \(id) has no focused pane."
         case .noFocusedTerminalTab: "Select a pane before splitting it."
-        case .defaultBrowserURLInvalid: "The default browser URL is invalid."
         }
     }
 }

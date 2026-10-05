@@ -100,6 +100,8 @@ struct AdaptiveWorkspaceView: View {
                         }
                         if let (group, tab) = resolvedCompactSelection {
                             Divider()
+                            newTabCommands(in: group)
+                            Divider()
                             terminalCommands(tab, group: group)
                         }
                     } label: {
@@ -326,11 +328,14 @@ struct AdaptiveWorkspaceView: View {
                                 }
                             }
                             Divider()
+                            newTabCommands(in: group)
+                            Divider()
                             terminalCommands(tab, group: group)
                         } label: {
                             Label(tab.title, systemImage: tab.kind == .terminal ? "terminal" : "globe")
                                 .lineLimit(1)
                         }
+                        .accessibilityIdentifier("pane-tab-picker")
                         Spacer()
                         Button(maximizedGroupID == groupID ? "Restore panes" : "Maximise pane",
                                systemImage: maximizedGroupID == groupID ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") {
@@ -354,6 +359,42 @@ struct AdaptiveWorkspaceView: View {
             } else {
                 ContentUnavailableView("Pane unavailable", systemImage: "rectangle.slash")
             }
+        }
+    }
+
+    /// New tabs belong next to the pane they land in. A single toolbar button had to guess a pane,
+    /// and guessing the first one meant a tap on a split layout changed a pane the user was not
+    /// looking at.
+    @ViewBuilder
+    private func newTabCommands(in group: RemoteTabGroupProjection) -> some View {
+        Button("New terminal", systemImage: "plus.rectangle.on.rectangle") {
+            Task { await createTab(kind: .terminal, in: group) }
+        }
+        Button("New browser tab", systemImage: "globe.badge.chevron.backward") {
+            Task { await createTab(kind: .browser, in: group) }
+        }
+    }
+
+    /// The Mac does not move its own selection for a companion's command, so the created tab has to
+    /// be selected here or it lands in the pane unseen and the button reads as doing nothing.
+    private func createTab(kind: RemoteTabKind, in group: RemoteTabGroupProjection) async {
+        guard let hostID = scene.selectedHostID else { return }
+        do {
+            let result = try await scene.command(.tabCreate, metadata: MessageMetadata(
+                hostID: hostID, workspaceID: workspace.id.rawValue, groupID: group.id.rawValue
+            ), payload: try JSONEncoder().encode(RemoteTabCreatePayload(kind: kind)))
+            guard let result,
+                  let created = try? JSONDecoder().decode(RemoteIdentifierResult.self, from: result)
+            else { return }
+            let tabID = TabID(rawValue: created.id)
+            focusedGroupID = group.id
+            selectedTabs[group.id] = tabID
+            guard !usesWideLayout else { return }
+            let selection = PaneSelection(groupID: group.id, tabID: tabID)
+            compactSelection = selection
+            paneSelections.select(selection, for: workspace.id)
+        } catch {
+            scene.errorMessage = error.localizedDescription
         }
     }
 
