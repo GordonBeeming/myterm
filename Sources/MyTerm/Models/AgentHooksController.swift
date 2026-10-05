@@ -227,6 +227,9 @@ final class AgentHooksController {
         __launcher='';
         if [ '\(agent)' = 'codex' ]; then
           case "${MYTERM_CODEX_LAUNCHER:-}" in codex|codex-statusline) __launcher=$MYTERM_CODEX_LAUNCHER;; esac;
+          if [ -z "$__launcher" ]; then
+            case "${__owner_command##*/}" in codex|codex-statusline) __launcher=${__owner_command##*/};; esac;
+          fi;
         fi;
         __tty=$(ps -o tty= -p "$PPID" 2>/dev/null | tr -d '[:space:]'); \
         case "$__tty" in *[0-9]*) __tty="/dev/${__tty#/dev/}";; *) __tty="/dev/tty";; esac; \
@@ -241,17 +244,18 @@ final class AgentHooksController {
     if __subagent=$(printf '%s' "$__in" | /usr/bin/plutil -extract agent_id raw -expect string -o - - 2>/dev/null); then
       [ -z "$__subagent" ] || exit 0
     fi
-    __pid=$PPID; __depth=0; __owner_tty=''
+    __pid=$PPID; __depth=0; __owner_tty=''; __owner_command=''
     while [ "$__depth" -lt 16 ]; do
       __info=$(ps -o ppid= -o tty= -o comm= -p "$__pid" 2>/dev/null)
       read -r __parent __process_tty __command <<EOF
     $__info
     EOF
       [ -n "$__process_tty" ] || break
+      [ "$__depth" -ne 0 ] || __owner_command=$__command
       [ -n "$__owner_tty" ] || __owner_tty=$__process_tty
       [ "$__process_tty" = "$__owner_tty" ] || break
       if [ "$__depth" -gt 0 ]; then
-        case "${__command##*/}" in claude|codex) exit 0;; esac
+        case "${__command##*/}" in claude|codex|codex-statusline) exit 0;; esac
       fi
       case "$__parent" in ''|*[!0-9]*|0|1) break;; esac
       __pid=$__parent; __depth=$((__depth + 1))

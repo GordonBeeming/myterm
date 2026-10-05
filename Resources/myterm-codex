@@ -30,7 +30,7 @@ for argument in "$@"; do
     -c|--config|-m|--model|-p|--profile|-C|--cd|-s|--sandbox|-a|--ask-for-approval|--add-dir|--enable|--disable|-i|--image|--remote-auth-token-env) skip_value=true;;
     -*) ;;
     resume|fork) break;;
-    exec|e|review|login|logout|mcp|plugin|plugins|app-server|remote-control|app|completion|sandbox|debug|apply|a|cloud|update|features|doctor|archive|unarchive|delete) interactive=false; break;;
+    agents|exec|e|review|login|logout|mcp|plugin|plugins|app-server|remote-control|app|completion|sandbox|debug|apply|a|cloud|update|features|doctor|archive|unarchive|delete) interactive=false; break;;
     *) break;;
   esac
 done

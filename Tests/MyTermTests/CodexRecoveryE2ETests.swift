@@ -18,7 +18,11 @@ final class CodexRecoveryE2ETests: XCTestCase {
         try await verify(.statusline, binaryVariable: "MYTERM_STATUSLINE_CODEX_BINARY")
     }
 
-    private func verify(_ launcher: CodexLauncher, binaryVariable: String) async throws {
+    func testAbsoluteStatuslineCodexSurvivesTwoRestarts() async throws {
+        try await verify(.statusline, binaryVariable: "MYTERM_STATUSLINE_CODEX_BINARY", absoluteLaunch: true)
+    }
+
+    private func verify(_ launcher: CodexLauncher, binaryVariable: String, absoluteLaunch: Bool = false) async throws {
         guard ProcessInfo.processInfo.environment["MYTERM_CODEX_E2E"] == "1",
               let binary = ProcessInfo.processInfo.environment[binaryVariable] else {
             throw XCTSkip("Set MYTERM_CODEX_E2E=1 and both CLI binary paths to run real-PTY checks")
@@ -90,7 +94,8 @@ final class CodexRecoveryE2ETests: XCTestCase {
         let tabID = try XCTUnwrap(first.selectedTab?.id)
         let terminal = try remote(first)
         try await wait(terminal, until: { terminal.contentSnapshot(maximumCharacters: 4_000).contains("$") })
-        try send("\(launcher.rawValue) -C \(quote(cwd.path))\r", to: terminal)
+        let command = absoluteLaunch ? "\(quote(testLauncher.path)) --no-daemon" : launcher.rawValue
+        try send("\(command) -C \(quote(cwd.path))\r", to: terminal)
         try await wait(terminal, until: { terminal.contentSnapshot(maximumCharacters: 8_000).contains("Codex") })
         try await Task.sleep(for: .seconds(2))
         try send("Reply only OK. Do not use tools.", to: terminal)

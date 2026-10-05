@@ -37,6 +37,10 @@ codex resume --remote unix:// abc
 check codex resume --remote unix:// abc
 codex exec 'echo test'
 check codex exec 'echo test'
+codex agents
+check codex agents
+codex-statusline agents
+check codex-statusline agents
 codex -m review resume abc
 check codex --no-daemon -m review resume abc
 codex -C '/tmp/a project' resume abc
