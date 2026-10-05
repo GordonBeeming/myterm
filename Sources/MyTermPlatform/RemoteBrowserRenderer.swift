@@ -13,6 +13,7 @@ public final class RemoteBrowserRenderer: NSObject, WKNavigationDelegate, WKUIDe
     private var failure: String?
     private var initialURL: URL
     private let artifactRoot: URL?
+    private var snapshotTimeouts = RemoteBrowserSnapshotTimeoutPolicy()
 
     public init(url: URL, profile: BrowserDataProfile? = nil, artifactRoot: URL? = nil) {
         initialURL = url
@@ -102,18 +103,6 @@ public final class RemoteBrowserRenderer: NSObject, WKNavigationDelegate, WKUIDe
                                    title: webView.title ?? "", error: failure)
     }
 
-    private final class SnapshotCompletion {
-        var continuation: CheckedContinuation<NSImage, Error>?
-        var deadline: Task<Void, Never>?
-        func finish(_ result: Result<NSImage, Error>) {
-            guard let continuation else { return }
-            self.continuation = nil
-            deadline?.cancel()
-            deadline = nil
-            continuation.resume(with: result)
-        }
-    }
-
     private func boundedSnapshot(_ configuration: WKSnapshotConfiguration) async throws -> NSImage {
         let completion = SnapshotCompletion()
         return try await withCheckedThrowingContinuation { continuation in
@@ -121,15 +110,34 @@ public final class RemoteBrowserRenderer: NSObject, WKNavigationDelegate, WKUIDe
             completion.deadline = Task { [weak self, weak completion] in
                 do { try await Task.sleep(for: .seconds(RemoteBrowserTiming.snapshotTimeoutSeconds)) }
                 catch { return }
-                self?.close()
-                completion?.finish(.failure(URLError(.timedOut)))
+                // Closing here is what made a slow page look permanently broken: the session was
+                // dropped, so the next request built a new renderer and loaded the page again
+                // from nothing, which took as long as the snapshot that had just missed and timed
+                // out in the same way. The frame fails; the view keeps loading and is still there
+                // for the next one.
+                // Only if this deadline is the one that answered the request. takeSnapshot can
+                // complete as the sleep expires, too late to cancel it, and a frame that did
+                // arrive must not be recorded as a miss: near-deadline successes would otherwise
+                // pile up phantom misses and close a view that was working.
+                guard completion?.finish(.failure(URLError(.timedOut))) == true else { return }
+                self?.recordSnapshotTimeout()
             }
-            webView.takeSnapshot(with: configuration) { image, error in
+            webView.takeSnapshot(with: configuration) { [weak self] image, error in
                 if let error { completion.finish(.failure(error)) }
-                else if let image { completion.finish(.success(image)) }
-                else { completion.finish(.failure(URLError(.cannotDecodeContentData))) }
+                else if let image {
+                    // Only a snapshot that beat its deadline says the view is producing frames. A
+                    // late one has already had its frame failed, and counting it reset the run on
+                    // every miss, so a view that never answered in time was never given up on
+                    // either: every frame failed and nothing rebuilt it.
+                    if completion.finish(.success(image)) { self?.snapshotTimeouts.recordFrame() }
+                } else { completion.finish(.failure(URLError(.cannotDecodeContentData))) }
             }
         }
+    }
+
+    private func recordSnapshotTimeout() {
+        guard snapshotTimeouts.recordTimeout() == .giveUp else { return }
+        close()
     }
 
     nonisolated private static func encodeJPEG(_ image: CGImage) throws -> Data {
@@ -298,5 +306,25 @@ struct RemoteBrowserFrameMetadata {
             remaining -= count
         }
         return String(result)
+    }
+}
+
+/// Answers a snapshot request exactly once, whichever of the snapshot and its deadline arrives
+/// first, and tells the caller whether it was the one that answered.
+final class SnapshotCompletion {
+    var continuation: CheckedContinuation<NSImage, Error>?
+    var deadline: Task<Void, Never>?
+
+    /// Whether this call is the one that answered the request. The snapshot and its deadline race,
+    /// and the loser has to know it lost: a snapshot that arrives after its deadline is discarded,
+    /// so nothing about it says the view is producing frames.
+    @discardableResult
+    func finish(_ result: Result<NSImage, Error>) -> Bool {
+        guard let continuation else { return false }
+        self.continuation = nil
+        deadline?.cancel()
+        deadline = nil
+        continuation.resume(with: result)
+        return true
     }
 }
