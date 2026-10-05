@@ -1942,6 +1942,45 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(browser.profile?.scope, .appWide)
     }
 
+    /// A companion asking for a browser tab gets the workspace's own data profile, in a workspace
+    /// the Mac does not have selected. Controller restoration skips an unselected workspace, so
+    /// leaving the profile to it meant no profile at all: the renderer keeps nothing and a site
+    /// that was signed in asks for a login again.
+    func testCompanionBrowserTabCarriesTheWorkspaceDataProfileWhileUnselected() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: CapturingTerminalEngine(),
+            startsTerminalProcesses: false
+        )
+        let unselectedID = model.store.selectedWorkspaceID
+        model.updateWorkspaceSettings(unselectedID) { $0.browserDataScope = .appWide }
+        let groupID = try XCTUnwrap(
+            model.workspaces.first(where: { $0.id == unselectedID })?.orderedGroups.first?.id
+        )
+        // Move the Mac somewhere else, so the target workspace is the unselected one.
+        model.createWorkspace()
+        XCTAssertNotEqual(model.store.selectedWorkspaceID, unselectedID)
+
+        let tabID = try model.createCompanionTab(
+            workspaceID: unselectedID,
+            groupID: groupID,
+            payload: RemoteTabCreatePayload(kind: .browser)
+        )
+
+        let workspace = try XCTUnwrap(model.workspaces.first(where: { $0.id == unselectedID }))
+        let created = try XCTUnwrap(workspace.allTabs.first(where: { $0.id == tabID }))
+        let browser = try XCTUnwrap(created.browserSession)
+        XCTAssertEqual(browser.profile?.scope, .appWide,
+                       "The tab carries the workspace's configured scope, not no profile at all")
+        XCTAssertNotNil(browser.profile?.persistentStoreID,
+                        "Without a persistent store the tab keeps no cookies")
+        XCTAssertEqual(browser.url, AppModel.browserStartPage,
+                       "A create with no page named opens the same start page the Mac uses")
+    }
+
     func testProjectScopedBrowserPaneUsesItsOriginatingTerminalDirectory() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }

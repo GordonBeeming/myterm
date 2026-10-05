@@ -2904,10 +2904,22 @@ final class AppModel {
                       ["http", "https", "file"].contains(url.scheme?.lowercased() ?? "") else {
                     throw CompanionCommandError.invalidPayload
                 }
+                guard let target = store.workspaces.first(where: { $0.id == workspaceID }) else {
+                    throw AppModelError.workspaceUnavailable(workspaceID)
+                }
+                // Resolved here rather than left to controller restoration, which skips any
+                // workspace the Mac does not have selected. With no profile the renderer falls back
+                // to a store that keeps nothing, so the configured data scope is ignored and the
+                // tab opens without cookies: a site that was signed in asks for a login again.
+                let settings = try store.resolvedSettings(for: workspaceID)
                 tabID = try store.addBrowserTab(
                     to: workspaceID,
                     tabGroupID: groupID,
                     url: url,
+                    profile: browserDataProfileResolver.resolve(
+                        scope: settings.browserDataScope,
+                        workspace: target
+                    ),
                     selectsCreatedTab: false
                 )
             }
