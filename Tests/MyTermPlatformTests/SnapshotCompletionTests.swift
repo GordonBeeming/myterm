@@ -49,6 +49,25 @@ final class SnapshotCompletionTests: XCTestCase {
         XCTAssertFalse(deadlineRan)
     }
 
+    /// The other direction. A deadline that expires too late to be cancelled must not record a
+    /// miss for a frame that did arrive, or near-deadline successes pile up phantom misses and
+    /// close a view that was working.
+    @MainActor
+    func testADeadlineExpiringAfterTheFrameArrivedIsToldItLost() async throws {
+        let completion = SnapshotCompletion()
+        var lateDeadlineWon: Bool?
+
+        _ = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<NSImage, Error>) in
+            completion.continuation = continuation
+            XCTAssertTrue(completion.finish(.success(NSImage())),
+                          "The snapshot is the one that answered this request")
+            lateDeadlineWon = completion.finish(.failure(URLError(.timedOut)))
+        }
+
+        XCTAssertEqual(lateDeadlineWon, false,
+                       "A deadline that lost its race must not count the frame as missed")
+    }
+
     @MainActor
     func testTheRequestIsOnlyEverAnsweredOnce() async throws {
         let completion = SnapshotCompletion()

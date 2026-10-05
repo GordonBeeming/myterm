@@ -115,8 +115,12 @@ public final class RemoteBrowserRenderer: NSObject, WKNavigationDelegate, WKUIDe
                 // from nothing, which took as long as the snapshot that had just missed and timed
                 // out in the same way. The frame fails; the view keeps loading and is still there
                 // for the next one.
+                // Only if this deadline is the one that answered the request. takeSnapshot can
+                // complete as the sleep expires, too late to cancel it, and a frame that did
+                // arrive must not be recorded as a miss: near-deadline successes would otherwise
+                // pile up phantom misses and close a view that was working.
+                guard completion?.finish(.failure(URLError(.timedOut))) == true else { return }
                 self?.recordSnapshotTimeout()
-                completion?.finish(.failure(URLError(.timedOut)))
             }
             webView.takeSnapshot(with: configuration) { [weak self] image, error in
                 if let error { completion.finish(.failure(error)) }
