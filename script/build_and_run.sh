@@ -104,6 +104,10 @@ cp "$ROOT_DIR/Resources/MyTerm.icns" "$APP_RESOURCES/MyTerm.icns"
 cp "$ROOT_DIR/Resources/myterm-browser" "$APP_RESOURCES/myterm-browser"
 cp "$ROOT_DIR/Resources/open" "$APP_RESOURCES/open"
 cp "$ROOT_DIR/Resources/myterm-bash-env" "$APP_RESOURCES/myterm-bash-env"
+for launcher in codex codex-statusline myterm-codex; do
+  cp "$ROOT_DIR/Resources/$launcher" "$APP_RESOURCES/$launcher"
+  chmod +x "$APP_RESOURCES/$launcher"
+done
 cp -R "$ROOT_DIR/Resources/zsh" "$APP_RESOURCES/"
 chmod +x "$APP_BINARY"
 chmod +x "$APP_RESOURCES/myterm-browser"

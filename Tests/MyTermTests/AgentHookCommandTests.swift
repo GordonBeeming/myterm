@@ -106,6 +106,15 @@ final class AgentHookCommandTests: XCTestCase {
         XCTAssertNil(report.sessionID)
     }
 
+    func testTheCodexHookReportsTheClientAndAgentDirectory() throws {
+        let written = try run(agent: "codex", stdin: #"{"session_id":"abc","cwd":"/tmp/a project"}"#,
+            environment: ["MYTERM_PANE_ID": "pane", "MYTERM_CODEX_LAUNCHER": "codex-statusline"])
+        let report = try XCTUnwrap(report(in: written))
+        XCTAssertEqual(report.codexLauncher, .statusline)
+        XCTAssertEqual(report.workingDirectory?.path, "/tmp/a project")
+        XCTAssertEqual(report.sessionID, "abc")
+    }
+
     func testTheHookIsSilentOutsideMyTerm() throws {
         let written = try run(stdin: #"{"session_id":"abc"}"#, environment: [:])
         XCTAssertEqual(written, "")

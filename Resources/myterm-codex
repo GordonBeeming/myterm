@@ -1,0 +1,48 @@
+#!/bin/sh
+# MyTerm Codex launcher
+set -eu
+launcher=$1
+shift
+case "$launcher" in codex|codex-statusline) ;; *) echo 'myterm: unsupported Codex launcher' >&2; exit 2;; esac
+remaining=${PATH:-/usr/bin:/bin}
+original=''
+while :; do
+  directory=${remaining%%:*}
+  [ -n "$directory" ] || directory=.
+  candidate="$directory/$launcher"
+  if [ -f "$candidate" ] && [ -x "$candidate" ]; then
+    marker=$(LC_ALL=C sed -n '2{p;q;}' "$candidate" 2>/dev/null)
+    if [ "$marker" != '# MyTerm Codex shim' ]; then original=$candidate; break; fi
+  fi
+  case "$remaining" in *:*) remaining=${remaining#*:};; *) break;; esac
+done
+if [ -z "$original" ]; then echo "myterm: $launcher was not found outside MyTerm's launchers" >&2; exit 127; fi
+if [ -z "${MYTERM_PANE_ID:-}" ]; then exec "$original" "$@"; fi
+export MYTERM_CODEX_LAUNCHER="$launcher"
+interactive=true
+explicit_transport=false
+skip_value=false
+for argument in "$@"; do
+  if [ "$skip_value" = true ]; then skip_value=false; continue; fi
+  case "$argument" in
+    --) break;;
+    --no-daemon|--remote|--remote=*) explicit_transport=true;;
+    -c|--config|-m|--model|-p|--profile|-C|--cd|-s|--sandbox|-a|--ask-for-approval|--add-dir|--enable|--disable|-i|--image|--remote-auth-token-env) skip_value=true;;
+    -*) ;;
+    resume|fork) break;;
+    exec|e|review|login|logout|mcp|plugin|plugins|app-server|remote-control|app|completion|sandbox|debug|apply|a|cloud|update|features|doctor|archive|unarchive|delete) interactive=false; break;;
+    *) break;;
+  esac
+done
+# Transport flags can follow resume/fork, so inspect the remaining arguments as well.
+for argument in "$@"; do
+  case "$argument" in --) break;; --no-daemon|--remote|--remote=*) explicit_transport=true;; esac
+done
+if [ "$interactive" = true ] && [ "$explicit_transport" = false ]; then
+  if options=$("$original" --help); then
+    if printf '%s\n' "$options" | /usr/bin/grep -q -- '--no-daemon'; then exec "$original" --no-daemon "$@"; fi
+  else
+    echo "myterm: could not inspect $launcher; automatic session recovery may be unavailable" >&2
+  fi
+fi
+exec "$original" "$@"

@@ -4,29 +4,45 @@ import Foundation
 ///
 /// A hook reports the identifier while the agent runs, so the pane can bring the same conversation
 /// back on the next launch instead of returning to a bare prompt.
+public enum CodexLauncher: String, Codable, Hashable, Sendable {
+    case standard = "codex"
+    case statusline = "codex-statusline"
+}
+
 public struct AgentSessionHandle: Codable, Equatable, Hashable, Sendable {
     /// Lowercased agent name, as reported by the hook. "claude" and "codex" are the ones MyTerm resumes.
     public let agent: String
     /// The agent's own conversation identifier.
     public let sessionID: String
+    public let workingDirectory: URL?
+    public let codexLauncher: CodexLauncher?
 
-    public init?(agent: String, sessionID: String?) {
+    public init?(agent: String, sessionID: String?, workingDirectory: URL? = nil, codexLauncher: CodexLauncher? = nil) {
         let name = agent.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !name.isEmpty, let sessionID = Self.validatedSessionID(sessionID) else { return nil }
+        guard workingDirectory == nil || workingDirectory?.isFileURL == true else { return nil }
         self.agent = name
         self.sessionID = sessionID
+        self.workingDirectory = workingDirectory?.standardizedFileURL
+        self.codexLauncher = name == "codex" ? (codexLauncher ?? .standard) : nil
     }
 
     private enum CodingKeys: String, CodingKey {
         case agent
         case sessionID
+        case workingDirectory
+        case codexLauncher
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let agent = try container.decode(String.self, forKey: .agent)
         let sessionID = try container.decode(String.self, forKey: .sessionID)
-        guard let handle = AgentSessionHandle(agent: agent, sessionID: sessionID) else {
+        guard let handle = AgentSessionHandle(
+            agent: agent, sessionID: sessionID,
+            workingDirectory: try container.decodeIfPresent(URL.self, forKey: .workingDirectory),
+            codexLauncher: try container.decodeIfPresent(CodexLauncher.self, forKey: .codexLauncher)
+        ) else {
             throw DecodingError.dataCorruptedError(
                 forKey: .sessionID,
                 in: container,
@@ -71,7 +87,7 @@ public enum AgentSessionResume {
                 "claude --resume \(shellQuoted(handle.sessionID))"
             }
         case "codex":
-            "codex resume \(shellQuoted(handle.sessionID))"
+            "\((handle.codexLauncher ?? .standard).rawValue) resume \(shellQuoted(handle.sessionID))"
         default:
             nil
         }
