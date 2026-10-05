@@ -180,7 +180,11 @@ struct TerminalScreen: View {
                 }
             }
         }
-        .task(id: horizontalSizeClass) {
+        // Keyed on the connection as well as the size class. This screen used to be torn out of
+        // the hierarchy when a reconnect cleared the workspaces, which is what re-ran this on the
+        // way back; now that the list is kept, a screen that stays up has to attach again itself
+        // or it sits on "Attaching terminal" until the user leaves and returns.
+        .task(id: "\(String(describing: horizontalSizeClass))|\(scene.connectionID?.uuidString ?? "none")") {
             if horizontalSizeClass != .regular { await scene.setSecondaryTerminal(nil) }
             await scene.attach(route)
         }

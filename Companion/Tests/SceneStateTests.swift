@@ -585,6 +585,18 @@ final class SceneStateTests: XCTestCase {
         XCTAssertNil(scene.projection)
     }
 
+    /// A list retained across a reconnect is good enough to read and to tap, but not to decide
+    /// that something a notification names is gone, so it is not treated as this connection's own
+    /// until this connection sends one.
+    func testAListSetOutsideAConnectionIsNotTreatedAsFresh() {
+        let scene = SceneModel()
+
+        scene.projection = oneWorkspaceProjection(title: "Stale")
+
+        XCTAssertFalse(scene.hasFreshProjection,
+                       "Only a workspaces response from the live connection makes the list fresh")
+    }
+
     private func oneWorkspaceProjection(title: String) -> RemoteWorkspaceProjection {
         RemoteWorkspaceProjection(folders: [], workspaces: [
             RemoteWorkspaceItem(id: WorkspaceID(rawValue: UUID()), title: title, folderID: nil,
