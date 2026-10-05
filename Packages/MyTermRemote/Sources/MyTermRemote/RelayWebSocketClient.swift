@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import OSLog
 
 public enum RelayTransportEvent: Equatable, Sendable {
     case ready(RelayReady)
@@ -11,6 +12,8 @@ public enum RelayTransportEvent: Equatable, Sendable {
 }
 
 public actor RelayWebSocketClient {
+    private static let logger = Logger(subsystem: "com.gordonbeeming.myterm",
+                                       category: "relay-transport")
     private let endpoint: RelayEndpoint
     private let hostID: UUID
     private let role: RelayRole
@@ -184,6 +187,17 @@ public actor RelayWebSocketClient {
             case .authenticated(let authenticated):
                 guard receivedReady else { throw RemoteError.invalidMessage }
                 event = .authenticated(authenticated)
+            case .failure(let failure):
+                // The relay is reporting one message it could not act on, not a broken connection.
+                // `invalid_destination` is the ordinary outcome of a peer going away while frames
+                // addressed to it were still in flight, which is what a busy pane always has.
+                // Treating it as fatal cost the host its relay connection every time a phone
+                // disconnected from a session that was producing output.
+                Self.logger.notice("relay reported \(failure.code, privacy: .public)")
+                return
+            case .unrecognised(let type):
+                Self.logger.notice("ignoring unknown relay control message \(type, privacy: .public)")
+                return
             }
         case .data(let data):
             guard receivedReady else { throw RemoteError.invalidMessage }

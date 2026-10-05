@@ -114,10 +114,34 @@ public struct RelayAuthenticated: Codable, Equatable, Sendable {
     }
 }
 
+public struct RelayFailure: Codable, Equatable, Sendable {
+    public let code: String
+
+    enum CodingKeys: String, CodingKey {
+        case code
+    }
+
+    public init(code: String) {
+        self.code = code
+    }
+
+    /// The relay could not deliver one frame, almost always because the peer it named has gone.
+    /// Peer departure is announced separately, so there is nothing here to act on.
+    public static let invalidDestination = "invalid_destination"
+    /// The relay could not reach its own store to refresh a token. The connection keeps the expiry
+    /// it already has and the request can be made again.
+    public static let authenticationUnavailable = "auth_unavailable"
+}
+
 public enum RelayControlEvent: Equatable, Sendable {
     case ready(RelayReady)
     case peer(RelayPeer)
     case authenticated(RelayAuthenticated)
+    /// The relay reporting a problem with one message, not with the connection.
+    case failure(RelayFailure)
+    /// A control message this build has no case for. A newer relay must be able to say something
+    /// new without costing an older peer its connection.
+    case unrecognised(type: String)
 
     public static func decode(_ data: Data) throws -> Self {
         guard data.count <= 16 * 1024 else { throw RemoteError.messageTooLarge }
@@ -128,7 +152,8 @@ public enum RelayControlEvent: Equatable, Sendable {
             case "ready": return .ready(try decoder.decode(RelayReady.self, from: data))
             case "peer": return .peer(try decoder.decode(RelayPeer.self, from: data))
             case "auth_ok": return .authenticated(try decoder.decode(RelayAuthenticated.self, from: data))
-            default: throw RemoteError.invalidMessage
+            case "error": return .failure(try decoder.decode(RelayFailure.self, from: data))
+            default: return .unrecognised(type: discriminator.type)
             }
         } catch let error as RemoteError { throw error }
         catch { throw RemoteError.invalidMessage }

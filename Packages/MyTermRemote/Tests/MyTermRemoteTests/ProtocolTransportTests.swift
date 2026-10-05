@@ -44,9 +44,25 @@ import Testing
         protocolVersion: 1, connectionID: connectionID, hostID: hostID, role: .client,
         maxFrameBytes: 1_048_576, heartbeatSeconds: 20
     )))
+    // A control message this build has no case for is carried rather than refused. Refusing it
+    // closed the connection, so a relay could not add a control message without cutting off every
+    // peer that predated it.
+    #expect(try RelayControlEvent.decode(Data("{\"type\":\"offline\"}".utf8))
+            == .unrecognised(type: "offline"))
+    // A malformed message of a known type is still a fault.
     #expect(throws: RemoteError.invalidMessage) {
-        try RelayControlEvent.decode(Data("{\"type\":\"offline\"}".utf8))
+        try RelayControlEvent.decode(Data("{\"type\":\"peer\"}".utf8))
     }
+}
+
+/// The relay replies with this when a frame names a peer that has gone, which is the ordinary
+/// outcome of a phone disconnecting while a pane was still producing output. It used to decode as
+/// an unknown type, which closed the host's own relay connection with a protocol error.
+@Test func aRelayReportedErrorDecodesRatherThanClosingTheConnection() throws {
+    #expect(try RelayControlEvent.decode(Data("{\"type\":\"error\",\"code\":\"invalid_destination\"}".utf8))
+            == .failure(RelayFailure(code: RelayFailure.invalidDestination)))
+    #expect(try RelayControlEvent.decode(Data("{\"type\":\"error\",\"code\":\"auth_unavailable\"}".utf8))
+            == .failure(RelayFailure(code: RelayFailure.authenticationUnavailable)))
 }
 
 @Test func typedInnerMessagesUseSnakeCaseAndRoundTrip() throws {
