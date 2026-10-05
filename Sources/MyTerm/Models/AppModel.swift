@@ -2899,9 +2899,14 @@ final class AppModel {
             case .browser:
                 // A companion asking for a browser tab without naming a page is not an error: the
                 // Mac's own new-tab command has no page in mind either and opens the same start
-                // page. Only a URL this app will not render is rejected.
-                guard let url = payload.url ?? Self.browserStartPage,
-                      ["http", "https", "file"].contains(url.scheme?.lowercased() ?? "") else {
+                // page. Only a URL this app will not render is rejected, and an unusable start
+                // page is this app's problem rather than something wrong with the command, so it
+                // is reported as itself instead of as a bad payload.
+                let url: URL
+                if let requested = payload.url { url = requested }
+                else if let fallback = Self.browserStartPage { url = fallback }
+                else { throw AppModelError.defaultBrowserURLInvalid }
+                guard ["http", "https", "file"].contains(url.scheme?.lowercased() ?? "") else {
                     throw CompanionCommandError.invalidPayload
                 }
                 guard let target = store.workspaces.first(where: { $0.id == workspaceID }) else {

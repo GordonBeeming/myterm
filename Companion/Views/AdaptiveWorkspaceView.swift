@@ -101,8 +101,13 @@ struct AdaptiveWorkspaceView: View {
                         if let (group, tab) = resolvedCompactSelection {
                             Divider()
                             newTabCommands(in: group)
-                            Divider()
-                            terminalCommands(tab, group: group)
+                            // Tied to the commands rather than placed before them: a browser tab
+                            // has no terminal route, so `terminalCommands` renders nothing and an
+                            // unconditional divider would trail the menu with nothing under it.
+                            if route(for: tab, group: group) != nil {
+                                Divider()
+                                terminalCommands(tab, group: group)
+                            }
                         }
                     } label: {
                         Label(resolvedCompactSelection?.1.title ?? "Terminals", systemImage: "chevron.down")
@@ -329,8 +334,12 @@ struct AdaptiveWorkspaceView: View {
                             }
                             Divider()
                             newTabCommands(in: group)
-                            Divider()
-                            terminalCommands(tab, group: group)
+                            // See the compact picker: a pane showing a browser has no terminal
+                            // route, so this divider goes with the commands it separates.
+                            if route(for: tab, group: group) != nil {
+                                Divider()
+                                terminalCommands(tab, group: group)
+                            }
                         } label: {
                             Label(tab.title, systemImage: tab.kind == .terminal ? "terminal" : "globe")
                                 .lineLimit(1)
