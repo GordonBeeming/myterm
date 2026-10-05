@@ -13,6 +13,7 @@ public final class RemoteBrowserRenderer: NSObject, WKNavigationDelegate, WKUIDe
     private var failure: String?
     private var initialURL: URL
     private let artifactRoot: URL?
+    private var snapshotTimeouts = RemoteBrowserSnapshotTimeoutPolicy()
 
     public init(url: URL, profile: BrowserDataProfile? = nil, artifactRoot: URL? = nil) {
         initialURL = url
@@ -121,15 +122,27 @@ public final class RemoteBrowserRenderer: NSObject, WKNavigationDelegate, WKUIDe
             completion.deadline = Task { [weak self, weak completion] in
                 do { try await Task.sleep(for: .seconds(RemoteBrowserTiming.snapshotTimeoutSeconds)) }
                 catch { return }
-                self?.close()
+                // Closing here is what made a slow page look permanently broken: the session was
+                // dropped, so the next request built a new renderer and loaded the page again
+                // from nothing, which took as long as the snapshot that had just missed and timed
+                // out in the same way. The frame fails; the view keeps loading and is still there
+                // for the next one.
+                self?.recordSnapshotTimeout()
                 completion?.finish(.failure(URLError(.timedOut)))
             }
-            webView.takeSnapshot(with: configuration) { image, error in
+            webView.takeSnapshot(with: configuration) { [weak self] image, error in
                 if let error { completion.finish(.failure(error)) }
-                else if let image { completion.finish(.success(image)) }
-                else { completion.finish(.failure(URLError(.cannotDecodeContentData))) }
+                else if let image {
+                    self?.snapshotTimeouts.recordFrame()
+                    completion.finish(.success(image))
+                } else { completion.finish(.failure(URLError(.cannotDecodeContentData))) }
             }
         }
+    }
+
+    private func recordSnapshotTimeout() {
+        guard snapshotTimeouts.recordTimeout() == .giveUp else { return }
+        close()
     }
 
     nonisolated private static func encodeJPEG(_ image: CGImage) throws -> Data {
