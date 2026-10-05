@@ -26,6 +26,20 @@ final class AgentActivityMarkerTests: XCTestCase {
         }
     }
 
+    func testEmptyOptionalHookMetadataPreservesConversationIdentity() throws {
+        for agent in ["claude", "codex"] {
+            let report = try XCTUnwrap(AgentActivityMarker.report(fromPayload:
+                "agent=\(agent);event=ready;session=abc;cwd64=;launcher="))
+            XCTAssertEqual(report.sessionID, "abc")
+            XCTAssertNil(report.workingDirectory)
+            XCTAssertNil(report.codexLauncher)
+        }
+        let report = try XCTUnwrap(AgentActivityMarker.report(fromPayload:
+            "agent=codex;event=working;session=abc;cwd64=;launcher=codex-statusline"))
+        XCTAssertEqual(report.sessionID, "abc")
+        XCTAssertEqual(report.codexLauncher, .statusline)
+    }
+
     func testAcceptsTheEventNamesOtherTerminalsUse() {
         let equivalents: [String: AgentActivity] = [
             "busy": .working,
