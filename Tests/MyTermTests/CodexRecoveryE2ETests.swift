@@ -106,19 +106,23 @@ final class CodexRecoveryE2ETests: XCTestCase {
         XCTAssertEqual(original.codexLauncher, launcher)
         XCTAssertEqual(original.workingDirectory?.resolvingSymlinksInPath(), cwd.resolvingSymlinksInPath())
 
-        for _ in 0..<2 {
+        for restart in 0..<2 {
             model?.persistWorkspaceStore()
             model?.terminateTerminalSessions()
             try await Task.sleep(for: .milliseconds(300))
             model = try boot()
             let rebooted = try XCTUnwrap(model)
             let resumed = try remote(rebooted)
-            // Codex starts the resumed thread's hooks on its first submitted turn.
+            // The first restart gets no prompt: the next restart must still recover.
             try await Task.sleep(for: .seconds(2))
-            try send("Reply only OK. Do not use tools.", to: resumed)
-            try await Task.sleep(for: .milliseconds(400))
-            try send("\r", to: resumed)
-            try await wait(resumed, until: { rebooted.liveAgentTabs[tabID] == "codex" })
+            try await wait(resumed, until: { resumed.activeForegroundProcessName != nil })
+            if restart == 1 {
+                // A submitted turn proves the final resumed runtime has the same ID.
+                try send("Reply only OK. Do not use tools.", to: resumed)
+                try await Task.sleep(for: .milliseconds(400))
+                try send("\r", to: resumed)
+                try await wait(resumed, until: { rebooted.liveAgentTabs[tabID] == "codex" })
+            }
             XCTAssertEqual(rebooted.selectedTab?.terminalSession?.agentSession, original)
             XCTAssertFalse(rebooted.retiredAgentSessions[tabID]?.contains(original.sessionID) == true)
         }
