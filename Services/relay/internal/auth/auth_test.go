@@ -11,6 +11,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"math/big"
 	"net/http/httptest"
 	"net/url"
 	"strings"
@@ -34,8 +35,31 @@ type testAuthenticator struct {
 }
 
 func TestWebAuthnRegistrationAndLoginUseRealVerifier(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		scalar int64
+	}{
+		{name: "random"},
+		{name: "leading-zero-x", scalar: 379},
+		{name: "leading-zero-y", scalar: 43},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			verifyWebAuthnRoundTrip(t, test.scalar)
+		})
+	}
+}
+
+func verifyWebAuthnRoundTrip(t *testing.T, scalar int64) {
+	t.Helper()
 	manager, storage, oauth, bootstrap := newAuthTest(t)
 	authenticator := newTestAuthenticator(t, "relay.example.com", "https://relay.example.com")
+	if scalar != 0 {
+		privateKey, err := ecdsa.ParseRawPrivateKey(elliptic.P256(), big.NewInt(scalar).FillBytes(make([]byte, 32)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		authenticator.privateKey = privateKey
+	}
 
 	options, ceremonyID, err := manager.BeginRegistration(context.Background(), oauth, bootstrap, "owner", "Relay owner")
 	if err != nil {
@@ -278,7 +302,11 @@ func (a *testAuthenticator) registrationResponse(t *testing.T, challenge string,
 	binary.BigEndian.PutUint16(credentialLength, uint16(len(a.credentialID)))
 	authData = append(authData, credentialLength...)
 	authData = append(authData, a.credentialID...)
-	key := map[int]any{1: 2, 3: -7, -1: 1, -2: a.privateKey.PublicKey.X.Bytes(), -3: a.privateKey.PublicKey.Y.Bytes()}
+	coordinateSize := (a.privateKey.Curve.Params().BitSize + 7) / 8
+	key := map[int]any{1: 2, 3: -7, -1: 1,
+		-2: a.privateKey.PublicKey.X.FillBytes(make([]byte, coordinateSize)),
+		-3: a.privateKey.PublicKey.Y.FillBytes(make([]byte, coordinateSize)),
+	}
 	encodedKey, err := cbor.Marshal(key)
 	if err != nil {
 		t.Fatal(err)
