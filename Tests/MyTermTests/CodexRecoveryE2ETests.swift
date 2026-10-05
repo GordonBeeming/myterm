@@ -41,10 +41,13 @@ final class CodexRecoveryE2ETests: XCTestCase {
         let testEnvironment = [
             "CODEX_HOME": home.path,
             "OPENAI_API_KEY": "myterm-invalid-test-key",
-            "PATH": "\(resources.path):\(bin.path):/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+            // npm's CLI needs node beside its launcher; keep that dependency in the
+            // isolated PATH without moving it ahead of MyTerm or the fixture wrapper.
+            "PATH": "\(resources.path):\(bin.path):\(URL(fileURLWithPath: binary).deletingLastPathComponent().path):/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
             "PS1": "$ "
         ]
         let config = """
+        check_for_update_on_startup = false
         [features]
         hooks = true
         [projects.\(tomlString(cwd.resolvingSymlinksInPath().path))]
