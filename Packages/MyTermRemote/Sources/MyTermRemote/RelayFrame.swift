@@ -53,6 +53,11 @@ public struct RelayReady: Codable, Equatable, Sendable {
     /// Whether this relay accepts an in-band token refresh. A relay from before that existed
     /// omits the field and closes any connection that sends one, so it must never be assumed.
     public let supportsAuthRefresh: Bool
+    /// When the relay will expire this connection, as it opened it. The relay moves this only when
+    /// it acknowledges a refresh, so it is the only expiry worth scheduling the next refresh
+    /// against: the local token's own expiry runs ahead of it the moment a refresh is not
+    /// accepted. A relay that does not report it leaves this nil.
+    public let expiresAt: Int64?
 
     enum CodingKeys: String, CodingKey {
         case protocolVersion = "protocol"
@@ -62,10 +67,12 @@ public struct RelayReady: Codable, Equatable, Sendable {
         case maxFrameBytes = "max_frame_bytes"
         case heartbeatSeconds = "heartbeat_seconds"
         case supportsAuthRefresh = "auth_refresh"
+        case expiresAt = "expires_at"
     }
 
     public init(protocolVersion: Int, connectionID: UUID, hostID: UUID, role: RelayRole,
-                maxFrameBytes: Int, heartbeatSeconds: Int, supportsAuthRefresh: Bool = false) {
+                maxFrameBytes: Int, heartbeatSeconds: Int, supportsAuthRefresh: Bool = false,
+                expiresAt: Int64? = nil) {
         self.protocolVersion = protocolVersion
         self.connectionID = connectionID
         self.hostID = hostID
@@ -73,6 +80,7 @@ public struct RelayReady: Codable, Equatable, Sendable {
         self.maxFrameBytes = maxFrameBytes
         self.heartbeatSeconds = heartbeatSeconds
         self.supportsAuthRefresh = supportsAuthRefresh
+        self.expiresAt = expiresAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -84,6 +92,7 @@ public struct RelayReady: Codable, Equatable, Sendable {
         maxFrameBytes = try container.decode(Int.self, forKey: .maxFrameBytes)
         heartbeatSeconds = try container.decode(Int.self, forKey: .heartbeatSeconds)
         supportsAuthRefresh = try container.decodeIfPresent(Bool.self, forKey: .supportsAuthRefresh) ?? false
+        expiresAt = try container.decodeIfPresent(Int64.self, forKey: .expiresAt)
     }
 
     public func validate(expectedHostID: UUID, expectedRole: RelayRole) throws {

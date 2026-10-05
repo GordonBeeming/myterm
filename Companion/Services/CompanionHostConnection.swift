@@ -292,6 +292,11 @@ actor CompanionHostConnection {
         case .authenticated:
             // The relay moved this connection's expiry forward; nothing else to do.
             break
+        case .authenticationUnavailable:
+            // The relay could not reach its own store, so this connection keeps the expiry it
+            // already has. A phone reconnects on its own when that passes, and taking the
+            // connection down now would only do that sooner and for no gain.
+            break
         case .application(let source, let payload):
             guard source == hostConnectionID else { throw RemoteError.wrongPeer }
             let packet = try RelayApplicationPacket.decode(payload)
