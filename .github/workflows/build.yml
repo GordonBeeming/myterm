@@ -46,7 +46,9 @@ jobs:
         run: swift test --parallel
 
       - name: Run zsh shim test
-        run: bash script/zsh_shim_test.sh
+        run: |
+          bash script/zsh_shim_test.sh
+          bash script/codex_shim_test.sh
 
   verify-bundle:
     runs-on: xcode-27
@@ -75,7 +77,7 @@ jobs:
         run: |
           resources="dist/myterm.app/Contents/Resources"
           missing=0
-          for shim in myterm-browser open myterm-bash-env \
+          for shim in myterm-browser open myterm-bash-env codex codex-statusline myterm-codex \
                       zsh/_myterm_common zsh/.zshenv zsh/.zprofile zsh/.zshrc zsh/.zlogin zsh/.zlogout; do
             if [ ! -f "$resources/$shim" ]; then
               echo "missing from the bundle: $shim" >&2

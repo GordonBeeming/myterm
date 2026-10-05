@@ -1,0 +1,5 @@
+#!/bin/sh
+# MyTerm Codex shim
+set -eu
+resource_directory=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+exec "$resource_directory/myterm-codex" codex-statusline "$@"

@@ -188,7 +188,7 @@ struct SettingsView: View {
                 hookButton(for: claudeHooks)
                 hookButton(for: codexHooks)
 
-                Text("Each agent gets its hooks in its own file: five for Claude Code, five for Codex. They report through the pane's terminal and stay silent outside MyTerm, so other terminals are unaffected. Other tools' hooks in the same file are left alone, and removing takes out only what MyTerm wrote. Restart an agent session for the change to take effect.")
+                Text("Each agent gets its hooks in its own file: five for Claude Code, five for Codex. They report through the pane's terminal and stay silent outside MyTerm, so other terminals are unaffected. Other tools' hooks in the same file are left alone, and removing takes out only what MyTerm wrote. MyTerm refreshes installed hooks at startup. Restart an agent session for the change to take effect.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

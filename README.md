@@ -104,8 +104,8 @@ in, for the section below.
 These files are shared with other tools. MyTerm marks its own commands with a trailing
 `# myterm-managed-hook` comment, adds nothing else, and removes only what carries that mark.
 
-What a hook reports can change between MyTerm versions. When Settings finds hooks an older MyTerm
-wrote, it rewrites MyTerm's own commands to the current ones and leaves the rest of the file alone.
+What a hook reports can change between MyTerm versions. At startup, MyTerm refreshes hooks an older
+version wrote. It rewrites MyTerm's own commands to the current ones and leaves the rest of the file alone.
 
 Each hook writes an escape sequence to its own terminal, `ESC ]7337;agent=claude;event=finished;session=<id> ESC \`,
 and does nothing unless `MYTERM_PANE_ID` is set. Only MyTerm's terminals set it, so the hooks stay
@@ -126,8 +126,16 @@ The pane restores its working directory and recent output, then runs `claude --r
 `codex resume <id>`.
 
 The conversation identifier comes from the hooks above, so agent recovery needs them installed.
-Nothing else about the agent is read: MyTerm keeps the identifier the agent reports, and only if it
-is short and free of shell characters.
+MyTerm keeps the identifier, conversation directory, and Codex launcher reported by the hooks.
+The identifier must be short and free of shell characters.
+
+MyTerm launches interactive `codex` and `codex-statusline` commands in Codex's supported
+`--no-daemon` mode. Each pane then owns its runtime and hooks can report through its terminal.
+The shared background server otherwise has no controlling terminal and can retain another pane's
+environment. Recovery keeps the client you used and the conversation's working directory, including
+worktrees launched from a shell in another folder. Other Codex subcommands and explicit remote
+connections keep their original arguments. If you launch Codex using an absolute executable path,
+include `--no-daemon` yourself.
 
 A pane left at its shell prompt when you quit comes back to a shell prompt. Leaving the agent is how
 you tell MyTerm the work is finished. An agent killed without the chance to say so counts as left

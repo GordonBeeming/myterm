@@ -210,7 +210,7 @@ final class AgentHooksController {
         activity: AgentActivity,
         ignoring ignoredMessage: String? = nil
     ) -> String {
-        let payload = "agent=\(agent);event=\(activity.rawValue);session=%s"
+        let payload = "agent=\(agent);event=\(activity.rawValue);session=%s;cwd64=%s;launcher=%s"
         let filter = ignoredMessage.map { "case \"$__in\" in *'\($0)'*) exit 0;; esac; " } ?? ""
         return """
         [ -n "${MYTERM_PANE_ID:-}" ] && { __in=$(cat 2>/dev/null | tr -d '\\n'); \(filter)
@@ -219,9 +219,21 @@ final class AgentHooksController {
         __id=${__id%.};
         case "$__id" in ''|*[!A-Za-z0-9._-]*) __id='';; esac;
         [ "${#__id}" -le 64 ] || __id='';
+        __cwd='';
+        if __raw_cwd=$(printf '%s' "$__in" | /usr/bin/plutil -extract cwd raw -expect string -n -o - - 2>/dev/null && printf '.'); then
+          __raw_cwd=${__raw_cwd%.};
+          __cwd=$(printf '%s' "$__raw_cwd" | /usr/bin/base64 | tr -d '\\n');
+        fi;
+        __launcher='';
+        if [ '\(agent)' = 'codex' ]; then
+          case "${MYTERM_CODEX_LAUNCHER:-}" in codex|codex-statusline) __launcher=$MYTERM_CODEX_LAUNCHER;; esac;
+          if [ -z "$__launcher" ]; then
+            case "${__owner_command##*/}" in codex|codex-statusline) __launcher=${__owner_command##*/};; esac;
+          fi;
+        fi;
         __tty=$(ps -o tty= -p "$PPID" 2>/dev/null | tr -d '[:space:]'); \
         case "$__tty" in *[0-9]*) __tty="/dev/${__tty#/dev/}";; *) __tty="/dev/tty";; esac; \
-        printf '\\033]\(AgentActivityMarker.oscCode);\(payload)\\033\\\\' "$__id" > "$__tty"; } >/dev/null 2>&1 || true \(marker)
+        printf '\\033]\(AgentActivityMarker.oscCode);\(payload)\\033\\\\' "$__id" "$__cwd" "$__launcher" > "$__tty"; } >/dev/null 2>&1 || true \(marker)
         """
     }
 
@@ -232,17 +244,18 @@ final class AgentHooksController {
     if __subagent=$(printf '%s' "$__in" | /usr/bin/plutil -extract agent_id raw -expect string -o - - 2>/dev/null); then
       [ -z "$__subagent" ] || exit 0
     fi
-    __pid=$PPID; __depth=0; __owner_tty=''
+    __pid=$PPID; __depth=0; __owner_tty=''; __owner_command=''
     while [ "$__depth" -lt 16 ]; do
       __info=$(ps -o ppid= -o tty= -o comm= -p "$__pid" 2>/dev/null)
       read -r __parent __process_tty __command <<EOF
     $__info
     EOF
       [ -n "$__process_tty" ] || break
+      [ "$__depth" -ne 0 ] || __owner_command=$__command
       [ -n "$__owner_tty" ] || __owner_tty=$__process_tty
       [ "$__process_tty" = "$__owner_tty" ] || break
       if [ "$__depth" -gt 0 ]; then
-        case "${__command##*/}" in claude|codex) exit 0;; esac
+        case "${__command##*/}" in claude|codex|codex-statusline) exit 0;; esac
       fi
       case "$__parent" in ''|*[!0-9]*|0|1) break;; esac
       __pid=$__parent; __depth=$((__depth + 1))

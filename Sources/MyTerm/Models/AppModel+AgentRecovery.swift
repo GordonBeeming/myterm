@@ -38,7 +38,14 @@ extension AppModel {
             }
             handle = nil
         case .ready, .working, .finished, .awaitingInput:
-            guard let reported = AgentSessionHandle(agent: report.agent, sessionID: report.sessionID),
+            let continued = terminal.agentSession.flatMap {
+                $0.agent == report.agent && $0.sessionID == report.sessionID ? $0 : nil
+            }
+            guard let reported = AgentSessionHandle(
+                agent: report.agent, sessionID: report.sessionID,
+                workingDirectory: report.workingDirectory ?? continued?.workingDirectory,
+                codexLauncher: report.codexLauncher ?? continued?.codexLauncher
+            ),
                   AgentSessionResume.canResume(reported) else { return }
             // Moving to another conversation puts the current one in the left set. A rejoined one
             // comes back out only with its first turn, not with the SessionStart that rejoined it,
@@ -46,7 +53,8 @@ extension AppModel {
             if report.activity != .ready {
                 retiredAgentSessions[tabID]?.remove(reported.sessionID)
             }
-            if let current = terminal.agentSession, current != reported {
+            if let current = terminal.agentSession,
+               current.agent != reported.agent || current.sessionID != reported.sessionID {
                 retiredAgentSessions[tabID, default: []].insert(current.sessionID)
             }
             handle = reported
@@ -97,7 +105,7 @@ extension AppModel {
             // The rejoined conversation's first turn, and only from the agent that holds it: the
             // same id under another agent's name is not that turn.
             guard let reported = AgentSessionHandle(agent: report.agent, sessionID: sessionID) else { return true }
-            return terminal.agentSession != reported
+            return terminal.agentSession?.agent != reported.agent || terminal.agentSession?.sessionID != reported.sessionID
         case .exited:
             return true
         }

@@ -424,6 +424,42 @@ final class AgentLifecycleTests: XCTestCase {
         ])
     }
 
+    func testUpdatingLaunchDetailsDoesNotRetireTheCurrentConversation() throws {
+        let fixture = try makeFixture(isActive: false)
+        fixture.emit(.ready, agent: "codex", session: "abc")
+        fixture.session.emit(.agentActivity(AgentActivityReport(agent: "codex", activity: .working,
+            sessionID: "abc", workingDirectory: fixture.directory, codexLauncher: .statusline)))
+        fixture.emit(.exited, agent: "codex", session: "abc")
+        XCTAssertNil(fixture.savedSession)
+        XCTAssertNil(fixture.model.liveAgentTabs[fixture.tabID])
+    }
+
+    func testBothCodexClientsResumeFromTheConversationDirectoryAfterMultipleLaunches() throws {
+        for launcher in [CodexLauncher.standard, .statusline] {
+            let fixture = try makeFixture(isActive: false)
+            let agentDirectory = fixture.directory.appending(path: "agent worktree", directoryHint: .isDirectory)
+            try FileManager.default.createDirectory(at: agentDirectory, withIntermediateDirectories: true)
+            fixture.session.activeForegroundProcessName = launcher.rawValue
+            fixture.session.emit(.agentActivity(AgentActivityReport(agent: "codex", activity: .working,
+                sessionID: "abc", workingDirectory: agentDirectory, codexLauncher: launcher)))
+            // A marker from an older reporter cannot discard known launch details.
+            fixture.emit(.finished, agent: "codex", session: "abc")
+            XCTAssertEqual(fixture.savedSession?.codexLauncher, launcher)
+            XCTAssertEqual(fixture.savedSession?.workingDirectory, agentDirectory.standardizedFileURL)
+            fixture.model.persistTerminalSnapshots()
+            fixture.model.persistWorkspaceStore()
+
+            let relaunched = try makeFixture(in: fixture.directory, isActive: false)
+            XCTAssertEqual(relaunched.engine.configurations.first?.initialCommand, "\(launcher.rawValue) resume 'abc'")
+            XCTAssertEqual(relaunched.engine.configurations.first?.workingDirectory, agentDirectory.standardizedFileURL)
+            relaunched.session.activeForegroundProcessName = launcher.rawValue
+            relaunched.model.persistTerminalSnapshots()
+            relaunched.model.persistWorkspaceStore()
+            let again = try makeFixture(in: fixture.directory, isActive: false)
+            XCTAssertEqual(again.engine.configurations.first?.initialCommand, "\(launcher.rawValue) resume 'abc'")
+        }
+    }
+
     func testBothAgentsLeaveNothingToResumeAfterAnExplicitExitOrReturnToShell() throws {
         for agent in ["claude", "codex"] {
             for exitsWithHook in [true, false] {

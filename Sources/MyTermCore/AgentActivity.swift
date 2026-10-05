@@ -27,11 +27,15 @@ public struct AgentActivityReport: Equatable, Hashable, Sendable {
     /// This is what an agent takes back on its resume command, so it is the whole basis of
     /// bringing a session back after a restart.
     public let sessionID: String?
+    public let workingDirectory: URL?
+    public let codexLauncher: CodexLauncher?
 
-    public init(agent: String, activity: AgentActivity, sessionID: String? = nil) {
+    public init(agent: String, activity: AgentActivity, sessionID: String? = nil, workingDirectory: URL? = nil, codexLauncher: CodexLauncher? = nil) {
         self.agent = agent
         self.activity = activity
         self.sessionID = AgentSessionHandle.validatedSessionID(sessionID)
+        self.workingDirectory = workingDirectory
+        self.codexLauncher = codexLauncher
     }
 }
 
@@ -44,13 +48,16 @@ public enum AgentActivityMarker {
 
     /// Longer payloads are ignored rather than parsed, so a stream of text cannot become a report.
     /// The payload arrives as terminal bytes, so the cap counts bytes rather than characters.
-    public static let maximumPayloadBytes = 256
+    public static let maximumPayloadBytes = 8192
 
     public static func report(fromPayload payload: String) -> AgentActivityReport? {
         guard payload.utf8.count <= maximumPayloadBytes else { return nil }
         var agent: String?
         var activity: AgentActivity?
         var sessionID: String?
+        var directory: URL?
+        var launcher: CodexLauncher?
+        var validRecoveryMetadata = true
 
         for field in payload.split(separator: ";", omittingEmptySubsequences: true) {
             let pair = field.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
@@ -65,13 +72,22 @@ public enum AgentActivityMarker {
                 activity = self.activity(named: value.lowercased())
             case "session", "session_id", "sessionid":
                 sessionID = value
+            case "cwd64":
+                if let data = Data(base64Encoded: value), let path = String(data: data, encoding: .utf8),
+                   path.hasPrefix("/"), path.utf8.count <= 4096,
+                   path.rangeOfCharacter(from: .controlCharacters) == nil {
+                    directory = URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
+                } else { validRecoveryMetadata = false }
+            case "launcher":
+                launcher = CodexLauncher(rawValue: value)
+                if launcher == nil { validRecoveryMetadata = false }
             default:
                 continue
             }
         }
 
         guard let agent, let activity else { return nil }
-        return AgentActivityReport(agent: agent, activity: activity, sessionID: sessionID)
+        return AgentActivityReport(agent: agent, activity: activity, sessionID: validRecoveryMetadata ? sessionID : nil, workingDirectory: directory, codexLauncher: launcher)
     }
 
     /// Accepts the names other terminals already use for these states, so one hook can serve several apps.

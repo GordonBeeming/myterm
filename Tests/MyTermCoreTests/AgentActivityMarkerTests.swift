@@ -13,6 +13,33 @@ final class AgentActivityMarkerTests: XCTestCase {
         )
     }
 
+    func testConversationDirectoryAndLauncherAreCapturedWithoutUsingTheTitle() throws {
+        let path = "/tmp/a project/with;separators"
+        let encoded = Data(path.utf8).base64EncodedString()
+        let report = try XCTUnwrap(AgentActivityMarker.report(fromPayload:
+            "agent=codex;event=working;session=abc;cwd64=\(encoded);launcher=codex-statusline"))
+        XCTAssertEqual(report.workingDirectory?.path, path)
+        XCTAssertEqual(report.codexLauncher, .statusline)
+        XCTAssertEqual(report.sessionID, "abc")
+        for metadata in ["cwd64=not-base64", "launcher=unknown", "cwd64=\(Data("relative".utf8).base64EncodedString())"] {
+            XCTAssertNil(AgentActivityMarker.report(fromPayload: "agent=codex;event=working;session=abc;\(metadata)")?.sessionID)
+        }
+    }
+
+    func testEmptyOptionalHookMetadataPreservesConversationIdentity() throws {
+        for agent in ["claude", "codex"] {
+            let report = try XCTUnwrap(AgentActivityMarker.report(fromPayload:
+                "agent=\(agent);event=ready;session=abc;cwd64=;launcher="))
+            XCTAssertEqual(report.sessionID, "abc")
+            XCTAssertNil(report.workingDirectory)
+            XCTAssertNil(report.codexLauncher)
+        }
+        let report = try XCTUnwrap(AgentActivityMarker.report(fromPayload:
+            "agent=codex;event=working;session=abc;cwd64=;launcher=codex-statusline"))
+        XCTAssertEqual(report.sessionID, "abc")
+        XCTAssertEqual(report.codexLauncher, .statusline)
+    }
+
     func testAcceptsTheEventNamesOtherTerminalsUse() {
         let equivalents: [String: AgentActivity] = [
             "busy": .working,
@@ -48,9 +75,9 @@ final class AgentActivityMarkerTests: XCTestCase {
             "agent=claude;event=daydreaming",
             "agent=;event=finished",
             "just some terminal output",
-            "agent=claude;event=finished;" + String(repeating: "x", count: 300),
-            // Under the byte cap this is 228 characters but 828 bytes.
-            "agent=claude;event=finished;" + String(repeating: "\u{1F642}", count: 200),
+            "agent=claude;event=finished;" + String(repeating: "x", count: AgentActivityMarker.maximumPayloadBytes + 1),
+            // The byte limit also applies to multibyte text.
+            "agent=claude;event=finished;" + String(repeating: "\u{1F642}", count: AgentActivityMarker.maximumPayloadBytes / 4 + 1),
         ]
         for payload in rejected {
             XCTAssertNil(

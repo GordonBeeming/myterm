@@ -2097,8 +2097,14 @@ final class AppModel {
         }
 
         let settings = try store.resolvedSettings(for: workspaceID)
+        let restoresConversation = initialCommand == nil && settings.restoresAgentSessions
+            && session.agentSession.map(AgentSessionResume.canResume) == true
+        let agentDirectory = restoresConversation ? session.agentSession?.workingDirectory : nil
+        let validAgentDirectory = agentDirectory.flatMap(validDirectory)
         let workingDirectory: URL
-        if let persistedWorkingDirectory = session.workingDirectory,
+        if let validAgentDirectory {
+            workingDirectory = validAgentDirectory
+        } else if let persistedWorkingDirectory = session.workingDirectory,
            let validPersistedDirectory = validDirectory(persistedWorkingDirectory) {
             workingDirectory = validPersistedDirectory
         } else {
@@ -2106,14 +2112,17 @@ final class AppModel {
         }
         // An agent conversation belongs to the directory it ran in, so a pane that had to fall back
         // to another directory has nothing there to rejoin.
-        let keepsSavedDirectory = session.workingDirectory?.standardizedFileURL == workingDirectory
-        if !keepsSavedDirectory {
+        let keepsSavedDirectory = agentDirectory.map { $0.standardizedFileURL == workingDirectory }
+            ?? (session.workingDirectory?.standardizedFileURL == workingDirectory)
+        if session.workingDirectory?.standardizedFileURL != workingDirectory {
             try store.updateTerminalWorkingDirectory(
                 workspaceID: workspaceID,
                 tabGroupID: tabGroupID,
                 tabID: tabID,
                 workingDirectory: workingDirectory
             )
+        }
+        if !keepsSavedDirectory {
             // The conversation and its name go with the directory, whether or not the pane then
             // starts. Left beside the fallback path, a later attempt would see a directory that
             // exists and rejoin a conversation from one that does not.

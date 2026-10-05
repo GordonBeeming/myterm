@@ -37,6 +37,16 @@ final class AgentSessionRecoveryTests: XCTestCase {
         XCTAssertTrue(AgentSessionResume.canResume(codex))
     }
 
+    func testTheCodexClientAndConversationDirectorySurviveSavedState() throws {
+        let handle = try XCTUnwrap(AgentSessionHandle(agent: "codex", sessionID: "abc", workingDirectory: URL(fileURLWithPath: "/tmp/project", isDirectory: true), codexLauncher: .statusline))
+        let restored = try JSONDecoder().decode(AgentSessionHandle.self, from: JSONEncoder().encode(handle))
+        XCTAssertEqual(restored, handle)
+        XCTAssertEqual(AgentSessionResume.command(for: restored), "codex-statusline resume 'abc'")
+        let legacy = try JSONDecoder().decode(AgentSessionHandle.self, from: Data(#"{"agent":"codex","sessionID":"abc"}"#.utf8))
+        XCTAssertEqual(legacy.codexLauncher, .standard)
+        XCTAssertEqual(AgentSessionResume.command(for: legacy), "codex resume 'abc'")
+    }
+
     func testAMarkerCarriesTheConversationToResume() throws {
         let report = try XCTUnwrap(
             AgentActivityMarker.report(fromPayload: "agent=claude;event=finished;session=9d9a9523")

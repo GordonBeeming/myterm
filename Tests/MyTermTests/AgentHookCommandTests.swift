@@ -29,13 +29,13 @@ final class AgentHookCommandTests: XCTestCase {
         try? FileManager.default.removeItem(at: directory)
     }
 
-    private func configureProcessAncestors(_ ancestors: [(tty: String, command: String)]) throws {
+    private func configureProcessAncestors(_ ancestors: [(tty: String, command: String)], ownerCommand: String = "/usr/local/bin/claude") throws {
         let relative = "../" + output.path.drop(while: { $0 == "/" })
         var cases = ancestors.enumerated().map { index, ancestor in
             let parent = index + 1 < ancestors.count ? 4201 + index : 1
             return "\(4200 + index)) echo '\(parent) \(ancestor.tty) \(ancestor.command)' ;;"
         }
-        cases.append("*) echo '\(ancestors.isEmpty ? 1 : 4200) ttys999 /usr/local/bin/claude' ;;")
+        cases.append("*) echo '\(ancestors.isEmpty ? 1 : 4200) ttys999 \(ownerCommand)' ;;")
         let script = """
         #!/bin/sh
         if [ "$2" = 'tty=' ]; then echo '\(relative)'; exit 0; fi
@@ -106,6 +106,23 @@ final class AgentHookCommandTests: XCTestCase {
         XCTAssertNil(report.sessionID)
     }
 
+    func testTheCodexHookReportsTheClientAndAgentDirectory() throws {
+        let written = try run(agent: "codex", stdin: #"{"session_id":"abc","cwd":"/tmp/a project"}"#,
+            environment: ["MYTERM_PANE_ID": "pane", "MYTERM_CODEX_LAUNCHER": "codex-statusline"])
+        let report = try XCTUnwrap(report(in: written))
+        XCTAssertEqual(report.codexLauncher, .statusline)
+        XCTAssertEqual(report.workingDirectory?.path, "/tmp/a project")
+        XCTAssertEqual(report.sessionID, "abc")
+    }
+
+    func testAnAbsoluteClientPathReportsItsLauncherWithoutTheShim() throws {
+        for launcher in [CodexLauncher.standard, .statusline] {
+            try configureProcessAncestors([], ownerCommand: "/a project/bin/\(launcher.rawValue)")
+            let written = try run(agent: "codex", stdin: #"{"session_id":"abc","cwd":"/tmp/a project"}"#)
+            XCTAssertEqual(report(in: written)?.codexLauncher, launcher)
+        }
+    }
+
     func testTheHookIsSilentOutsideMyTerm() throws {
         let written = try run(stdin: #"{"session_id":"abc"}"#, environment: [:])
         XCTAssertEqual(written, "")
@@ -137,7 +154,7 @@ final class AgentHookCommandTests: XCTestCase {
     }
 
     func testANestedAgentInThePaneDoesNotReportEvenThroughAShellWrapper() throws {
-        for parent in ["/usr/local/bin/claude", "/usr/local/bin/codex"] {
+        for parent in ["/usr/local/bin/claude", "/usr/local/bin/codex", "/usr/local/bin/codex-statusline"] {
             try configureProcessAncestors([("ttys999", "/bin/zsh"), ("ttys999", parent)])
             let written = try run(.ready, stdin: #"{"session_id":"child-session"}"#)
             XCTAssertEqual(written, "")
