@@ -843,6 +843,20 @@ final class ClipboardTerminalView: TerminalView {
     var onToggleMaximise: (() -> Void)?
     var canMaximise = false
 
+    /// `TerminalView` is a `UIScrollView`, and UIKit rewinds the active scroll view to the top when
+    /// the status bar is tapped. A tap anywhere near the title then threw the scrollback back to
+    /// its first line, and the next write scrolled it down again. Live output is not a document
+    /// with a top worth returning to, so this view never offers itself for that gesture.
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        scrollsToTop = false
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        scrollsToTop = false
+    }
+
     override var keyCommands: [UIKeyCommand]? {
         var commands = super.keyCommands ?? []
         let paste = UIKeyCommand(input: "v", modifierFlags: .command, action: #selector(paste(_:)))
