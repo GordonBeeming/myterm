@@ -103,18 +103,6 @@ public final class RemoteBrowserRenderer: NSObject, WKNavigationDelegate, WKUIDe
                                    title: webView.title ?? "", error: failure)
     }
 
-    private final class SnapshotCompletion {
-        var continuation: CheckedContinuation<NSImage, Error>?
-        var deadline: Task<Void, Never>?
-        func finish(_ result: Result<NSImage, Error>) {
-            guard let continuation else { return }
-            self.continuation = nil
-            deadline?.cancel()
-            deadline = nil
-            continuation.resume(with: result)
-        }
-    }
-
     private func boundedSnapshot(_ configuration: WKSnapshotConfiguration) async throws -> NSImage {
         let completion = SnapshotCompletion()
         return try await withCheckedThrowingContinuation { continuation in
@@ -133,8 +121,11 @@ public final class RemoteBrowserRenderer: NSObject, WKNavigationDelegate, WKUIDe
             webView.takeSnapshot(with: configuration) { [weak self] image, error in
                 if let error { completion.finish(.failure(error)) }
                 else if let image {
-                    self?.snapshotTimeouts.recordFrame()
-                    completion.finish(.success(image))
+                    // Only a snapshot that beat its deadline says the view is producing frames. A
+                    // late one has already had its frame failed, and counting it reset the run on
+                    // every miss, so a view that never answered in time was never given up on
+                    // either: every frame failed and nothing rebuilt it.
+                    if completion.finish(.success(image)) { self?.snapshotTimeouts.recordFrame() }
                 } else { completion.finish(.failure(URLError(.cannotDecodeContentData))) }
             }
         }
@@ -311,5 +302,25 @@ struct RemoteBrowserFrameMetadata {
             remaining -= count
         }
         return String(result)
+    }
+}
+
+/// Answers a snapshot request exactly once, whichever of the snapshot and its deadline arrives
+/// first, and tells the caller whether it was the one that answered.
+final class SnapshotCompletion {
+    var continuation: CheckedContinuation<NSImage, Error>?
+    var deadline: Task<Void, Never>?
+
+    /// Whether this call is the one that answered the request. The snapshot and its deadline race,
+    /// and the loser has to know it lost: a snapshot that arrives after its deadline is discarded,
+    /// so nothing about it says the view is producing frames.
+    @discardableResult
+    func finish(_ result: Result<NSImage, Error>) -> Bool {
+        guard let continuation else { return false }
+        self.continuation = nil
+        deadline?.cancel()
+        deadline = nil
+        continuation.resume(with: result)
+        return true
     }
 }
