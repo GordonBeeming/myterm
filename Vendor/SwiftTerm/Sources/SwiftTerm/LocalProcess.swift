@@ -105,7 +105,11 @@ public class LocalProcess {
     private let pendingLowWaterBytes = 1 * 1024 * 1024
     private var pendingBytes = 0
     private var readSuspendedForBackpressure = false
-    
+    // Bumped by every startProcess. A drain that began under the previous child
+    // can still be running when the next one starts, and its pause-restore path
+    // would otherwise re-suspend reads that belong to the new process.
+    private var processGeneration: UInt64 = 0
+
     #if false //canImport(Subprocess)
     // Swift Subprocess related properties
     private var subprocessTask: Task<Void, Error>?
@@ -166,6 +170,9 @@ public class LocalProcess {
 
     private func drainReceivedData() {
         let start = DispatchTime.now().uptimeNanoseconds
+        pendingLock.lock()
+        let generation = processGeneration
+        pendingLock.unlock()
         while true {
             var chunk: [UInt8]?
             var resumeRead = false
@@ -199,8 +206,13 @@ public class LocalProcess {
             if resumeRead, !resumePtyRead() {
                 // Put the pause back so the flag keeps matching reality; nothing
                 // is reading the PTY, and a later drain must be free to try again.
+                // Only while this drain still belongs to the running child: once
+                // the next one has started it owns the flag, and re-suspending
+                // here would pause a read that is already armed.
                 pendingLock.lock()
-                readSuspendedForBackpressure = true
+                if processGeneration == generation {
+                    readSuspendedForBackpressure = true
+                }
                 pendingLock.unlock()
             }
             if let chunk {
@@ -401,6 +413,7 @@ public class LocalProcess {
         // childProcessRead already armed; stale queued chunks would also be
         // delivered to the new child's terminal as if it had written them.
         pendingLock.lock()
+        processGeneration &+= 1
         pendingChunks.removeAll(keepingCapacity: true)
         pendingChunkIndex = 0
         pendingBytes = 0
