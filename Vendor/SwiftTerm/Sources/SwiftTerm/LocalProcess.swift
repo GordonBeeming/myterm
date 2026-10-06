@@ -105,7 +105,11 @@ public class LocalProcess {
     private let pendingLowWaterBytes = 1 * 1024 * 1024
     private var pendingBytes = 0
     private var readSuspendedForBackpressure = false
-    
+    // Bumped by every startProcess. A drain that began under the previous child
+    // can still be running when the next one starts, and its pause-restore path
+    // would otherwise re-suspend reads that belong to the new process.
+    private var processGeneration: UInt64 = 0
+
     #if false //canImport(Subprocess)
     // Swift Subprocess related properties
     private var subprocessTask: Task<Void, Error>?
@@ -152,16 +156,23 @@ public class LocalProcess {
         return keepReading
     }
 
-    // Re-arm the PTY read loop after a backpressure pause.
-    private func resumePtyRead() {
-        guard running, let io else { return }
+    // Re-arm the PTY read loop after a backpressure pause. Returns whether a read
+    // was actually armed: once `readSuspendedForBackpressure` is cleared, an armed
+    // read is the only thing that can deliver another byte, so a caller that
+    // clears the flag without arming one strands the session with no way back.
+    private func resumePtyRead() -> Bool {
+        guard running, let io else { return false }
         io.read(offset: 0, length: readSize, queue: readQueue) { [weak self] done, data, errno in
             self?.childProcessRead(done: done, data: data, errno: errno)
         }
+        return true
     }
 
     private func drainReceivedData() {
         let start = DispatchTime.now().uptimeNanoseconds
+        pendingLock.lock()
+        let generation = processGeneration
+        pendingLock.unlock()
         while true {
             var chunk: [UInt8]?
             var resumeRead = false
@@ -192,8 +203,17 @@ public class LocalProcess {
             }
             pendingLock.unlock()
 
-            if resumeRead {
-                resumePtyRead()
+            if resumeRead, !resumePtyRead() {
+                // Put the pause back so the flag keeps matching reality; nothing
+                // is reading the PTY, and a later drain must be free to try again.
+                // Only while this drain still belongs to the running child: once
+                // the next one has started it owns the flag, and re-suspending
+                // here would pause a read that is already armed.
+                pendingLock.lock()
+                if processGeneration == generation {
+                    readSuspendedForBackpressure = true
+                }
+                pendingLock.unlock()
             }
             if let chunk {
                 delegate?.dataReceived(slice: chunk[...])
@@ -385,7 +405,23 @@ public class LocalProcess {
         if running {
             return
         }
-        
+
+        // A reused LocalProcess must not inherit the previous child's delivery
+        // state. A backpressure pause left set by a process that terminated
+        // mid-drain makes the first chunk of the replacement look paused, and
+        // the drain then arms a second read chain beside the one
+        // childProcessRead already armed; stale queued chunks would also be
+        // delivered to the new child's terminal as if it had written them.
+        pendingLock.lock()
+        processGeneration &+= 1
+        pendingChunks.removeAll(keepingCapacity: true)
+        pendingChunkIndex = 0
+        pendingBytes = 0
+        pendingScheduled = false
+        readSuspendedForBackpressure = false
+        pendingLock.unlock()
+
+
         #if false //canImport(Subprocess)
         startProcessWithSubprocess(executable: executable, args: args, environment: environment, execName: execName, currentDirectory: currentDirectory)
         #else
