@@ -1741,8 +1741,10 @@ extension TerminalView {
     {
         defer { pendingDisplay = false }
         if terminal.synchronizedOutputActive {
+            SyncDebug.log("updateDisplay skipped: synchronized output active")
             return
         }
+        SyncDebug.log("updateDisplay running")
 #if os(iOS) || os(visionOS)
         if usesIndependentViewport { updateScroller() }
 #endif
@@ -1916,6 +1918,7 @@ extension TerminalView {
     func queuePendingDisplay ()
     {
         if terminal.synchronizedOutputActive {
+            SyncDebug.log("queuePendingDisplay dropped: synchronized output active")
             return
         }
         // throttle
@@ -1924,10 +1927,12 @@ extension TerminalView {
             // let fps30 = 16670000*2
             let fpsDelay = fps60
             pendingDisplay = true
+            SyncDebug.log("queuePendingDisplay scheduled")
             DispatchQueue.main.asyncAfter(
                 deadline: DispatchTime (uptimeNanoseconds: DispatchTime.now().uptimeNanoseconds + UInt64 (fpsDelay)),
                 execute: updateDisplay)
         } else {
+            SyncDebug.log("queuePendingDisplay coalesced: a redraw is already pending")
         }
     }
 
@@ -2200,8 +2205,12 @@ extension TerminalView {
         // still collapsing a burst of feed chunks into a single main-thread
         // redraw instead of flooding the main queue with one updateDisplay per
         // chunk. updateDisplay() clears pendingDisplay, reopening the gate.
-        guard !pendingDisplay else { return }
+        guard !pendingDisplay else {
+            SyncDebug.log("displayImmediately coalesced: a redraw is already pending")
+            return
+        }
         pendingDisplay = true
+        SyncDebug.log("displayImmediately scheduled")
         DispatchQueue.main.async { [weak self] in
             self?.updateDisplay()
         }

@@ -5,6 +5,13 @@ import Testing
 final class SynchronizedOutputTests {
     private class TestDelegate: TerminalDelegate {
         var scrolledPositions: [Int] = []
+        var synchronizedOutputWindowsClosed = 0
+
+        func synchronizedOutputChanged(source: Terminal, active: Bool) {
+            if !active {
+                synchronizedOutputWindowsClosed += 1
+            }
+        }
 
         func showCursor(source: Terminal) {}
         func hideCursor(source: Terminal) {}
@@ -68,6 +75,55 @@ final class SynchronizedOutputTests {
         terminal.feed(text: "\(esc)[?2026l")
         #expect(!terminal.synchronizedOutputActive)
         #expect(topLineText(from: terminal.displayBuffer).hasPrefix("NEW"))
+    }
+
+    /// Regression: the safety watchdog is armed once per BSU...ESU window. A
+    /// repeated BSU must not push its deadline out, or a program that emits one
+    /// more often than the timeout keeps the window open forever and a single
+    /// lost ESU freezes the view for the rest of the session.
+    @Test func testRepeatedBeginDoesNotPostponeTheWatchdog() {
+        let terminal = Terminal(
+            delegate: TestDelegate(),
+            options: TerminalOptions(cols: 20, rows: 5, scrollback: 0)
+        )
+        let esc = "\u{1b}"
+
+        terminal.feed(text: "\(esc)[?2026h")
+        #expect(terminal.synchronizedOutputActive)
+        let firstDeadline = terminal.synchronizedOutputDeadlineUptimeNanoseconds
+        #expect(firstDeadline != nil)
+
+        for _ in 0..<5 {
+            terminal.feed(text: "\(esc)[?2026h")
+        }
+
+        #expect(terminal.synchronizedOutputDeadlineUptimeNanoseconds == firstDeadline)
+
+        terminal.feed(text: "\(esc)[?2026l")
+        #expect(!terminal.synchronizedOutputActive)
+        #expect(terminal.synchronizedOutputDeadlineUptimeNanoseconds == nil)
+    }
+
+    /// Regression: when the ESU never arrives, the watchdog must still close the
+    /// window even though the program keeps emitting BSUs in the meantime.
+    @Test func testWatchdogEndsTheWindowWhenEsuIsLost() async {
+        let delegate = TestDelegate()
+        let terminal = Terminal(
+            delegate: delegate,
+            options: TerminalOptions(cols: 20, rows: 5, scrollback: 0)
+        )
+        let esc = "\u{1b}"
+
+        // A repaint loop whose ESU is lost, emitting a BSU more often than the
+        // one-second watchdog: the window still has to close, which is what lets
+        // the view paint again.
+        for _ in 0..<5 {
+            terminal.feed(text: "\(esc)[?2026h")
+            #expect(terminal.synchronizedOutputActive)
+            try? await Task.sleep(nanoseconds: 300_000_000)
+        }
+
+        #expect(delegate.synchronizedOutputWindowsClosed >= 1)
     }
 
     /// Regression: setViewYDisp must update both live and frozen buffers

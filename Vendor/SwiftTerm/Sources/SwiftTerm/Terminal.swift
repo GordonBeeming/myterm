@@ -5583,17 +5583,26 @@ open class Terminal {
     {
         let wasActive = synchronizedOutputActive
         synchronizedOutputActive = true
-        scheduleSynchronizedOutputTimeout()
+        // The watchdog is armed once per BSU...ESU window, never re-armed by a
+        // repeated BSU. A program that repaints several times a second (an agent
+        // CLI redrawing its status line) emits a BSU more often than the timeout,
+        // so re-arming here would push the deadline out indefinitely: one lost ESU
+        // would then leave the flag set for the rest of the session and the view,
+        // which pauses rendering while it is set, would never paint again.
         if !wasActive {
+            scheduleSynchronizedOutputTimeout()
             tdel?.synchronizedOutputChanged(source: self, active: true)
         }
+        SyncDebug.log("BSU active=\(synchronizedOutputActive) wasActive=\(wasActive)")
     }
 
     private func endSynchronizedOutput ()
     {
         guard synchronizedOutputActive else {
+            SyncDebug.log("ESU ignored, not active")
             return
         }
+        SyncDebug.log("ESU ending synchronized output")
         synchronizedOutputActive = false
         synchronizedOutputTimeoutItem?.cancel()
         synchronizedOutputTimeoutItem = nil
@@ -5609,6 +5618,7 @@ open class Terminal {
             guard let self, self.synchronizedOutputActive else {
                 return
             }
+            SyncDebug.log("synchronized output watchdog fired; ESU was never received")
             self.endSynchronizedOutput()
         }
         synchronizedOutputTimeoutItem = workItem

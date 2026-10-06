@@ -152,12 +152,16 @@ public class LocalProcess {
         return keepReading
     }
 
-    // Re-arm the PTY read loop after a backpressure pause.
-    private func resumePtyRead() {
-        guard running, let io else { return }
+    // Re-arm the PTY read loop after a backpressure pause. Returns whether a read
+    // was actually armed: once `readSuspendedForBackpressure` is cleared, an armed
+    // read is the only thing that can deliver another byte, so a caller that
+    // clears the flag without arming one strands the session with no way back.
+    private func resumePtyRead() -> Bool {
+        guard running, let io else { return false }
         io.read(offset: 0, length: readSize, queue: readQueue) { [weak self] done, data, errno in
             self?.childProcessRead(done: done, data: data, errno: errno)
         }
+        return true
     }
 
     private func drainReceivedData() {
@@ -192,8 +196,12 @@ public class LocalProcess {
             }
             pendingLock.unlock()
 
-            if resumeRead {
-                resumePtyRead()
+            if resumeRead, !resumePtyRead() {
+                // Put the pause back so the flag keeps matching reality; nothing
+                // is reading the PTY, and a later drain must be free to try again.
+                pendingLock.lock()
+                readSuspendedForBackpressure = true
+                pendingLock.unlock()
             }
             if let chunk {
                 delegate?.dataReceived(slice: chunk[...])
