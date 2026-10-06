@@ -430,7 +430,17 @@ extension TerminalView {
     {
         if !active {
             updateScroller()
-            queuePendingDisplay()
+            // Paint the frame the window was holding, rather than queue it behind
+            // the 16.67 ms throttle. A program that opens the next window inside
+            // that delay would otherwise have the queued redraw find the mode
+            // active again and skip it, so a stream emitting BSUs faster than the
+            // throttle would never get a frame on screen. The watchdog always
+            // fires on the main queue, so its recovery always takes this path.
+            if Thread.isMainThread {
+                updateDisplay()
+            } else {
+                queuePendingDisplay()
+            }
             terminalDelegate?.scrolled(source: self, position: scrollPosition)
         }
     }

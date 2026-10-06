@@ -393,7 +393,22 @@ public class LocalProcess {
         if running {
             return
         }
-        
+
+        // A reused LocalProcess must not inherit the previous child's delivery
+        // state. A backpressure pause left set by a process that terminated
+        // mid-drain makes the first chunk of the replacement look paused, and
+        // the drain then arms a second read chain beside the one
+        // childProcessRead already armed; stale queued chunks would also be
+        // delivered to the new child's terminal as if it had written them.
+        pendingLock.lock()
+        pendingChunks.removeAll(keepingCapacity: true)
+        pendingChunkIndex = 0
+        pendingBytes = 0
+        pendingScheduled = false
+        readSuspendedForBackpressure = false
+        pendingLock.unlock()
+
+
         #if false //canImport(Subprocess)
         startProcessWithSubprocess(executable: executable, args: args, environment: environment, execName: execName, currentDirectory: currentDirectory)
         #else

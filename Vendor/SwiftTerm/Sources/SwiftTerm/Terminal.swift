@@ -5582,15 +5582,24 @@ open class Terminal {
     private func beginSynchronizedOutput ()
     {
         let wasActive = synchronizedOutputActive
+        let existingDeadline = synchronizedOutputDeadlineUptimeNanoseconds
         synchronizedOutputActive = true
-        // The watchdog is armed once per BSU...ESU window, never re-armed by a
-        // repeated BSU. A program that repaints several times a second (an agent
-        // CLI redrawing its status line) emits a BSU more often than the timeout,
-        // so re-arming here would push the deadline out indefinitely: one lost ESU
-        // would then leave the flag set for the rest of the session and the view,
-        // which pauses rendering while it is set, would never paint again.
-        if !wasActive {
+        // The watchdog bounds the window from its first BSU. Re-arming it with a
+        // fresh second on every BSU would let a program that repaints faster than
+        // the timeout (an agent CLI redrawing its status line) push the deadline
+        // out indefinitely, so one lost ESU would leave the flag set for the rest
+        // of the session and the view, which pauses rendering while it is set,
+        // would never paint again. Every BSU still arms a watchdog, just at the
+        // window's original deadline: feed may run on a background thread, so the
+        // main-queue watchdog can expire between this read of the flag and the
+        // write above, and keying the arming off `wasActive` alone would then
+        // leave the mode set with no timer at all.
+        if wasActive, let existingDeadline {
+            scheduleSynchronizedOutputTimeout(atUptimeNanoseconds: existingDeadline)
+        } else {
             scheduleSynchronizedOutputTimeout()
+        }
+        if !wasActive {
             tdel?.synchronizedOutputChanged(source: self, active: true)
         }
         SyncDebug.log("BSU active=\(synchronizedOutputActive) wasActive=\(wasActive)")
@@ -5613,6 +5622,14 @@ open class Terminal {
 
     func scheduleSynchronizedOutputTimeout(afterNanoseconds delay: UInt64? = nil)
     {
+        let delay = delay ?? UInt64(synchronizedOutputTimeoutSeconds * 1_000_000_000)
+        scheduleSynchronizedOutputTimeout(atUptimeNanoseconds: DispatchTime.now().uptimeNanoseconds &+ delay)
+    }
+
+    // A deadline already in the past is honoured as "fire now", which is how a
+    // BSU arriving after its window's watchdog should have expired recovers.
+    private func scheduleSynchronizedOutputTimeout(atUptimeNanoseconds deadline: UInt64)
+    {
         synchronizedOutputTimeoutItem?.cancel()
         let workItem = DispatchWorkItem { [weak self] in
             guard let self, self.synchronizedOutputActive else {
@@ -5622,10 +5639,9 @@ open class Terminal {
             self.endSynchronizedOutput()
         }
         synchronizedOutputTimeoutItem = workItem
-        let delay = delay ?? UInt64(synchronizedOutputTimeoutSeconds * 1_000_000_000)
-        synchronizedOutputDeadlineUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds &+ delay
+        synchronizedOutputDeadlineUptimeNanoseconds = deadline
         DispatchQueue.main.asyncAfter(
-            deadline: DispatchTime(uptimeNanoseconds: synchronizedOutputDeadlineUptimeNanoseconds!),
+            deadline: DispatchTime(uptimeNanoseconds: deadline),
             execute: workItem
         )
     }
