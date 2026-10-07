@@ -5620,6 +5620,15 @@ open class Terminal {
         tdel?.synchronizedOutputChanged(source: self, active: false)
     }
 
+    /// Closes a synchronized-output window that outlived its own watchdog, for
+    /// the view's stall watchdog to call when it finds the flag still set. The
+    /// view pauses rendering while it is set, so leaving it on after both timers
+    /// have passed means a frozen terminal.
+    func endSynchronizedOutputAfterStall()
+    {
+        endSynchronizedOutput()
+    }
+
     func scheduleSynchronizedOutputTimeout(afterNanoseconds delay: UInt64? = nil)
     {
         let delay = delay ?? UInt64(synchronizedOutputTimeoutSeconds * 1_000_000_000)

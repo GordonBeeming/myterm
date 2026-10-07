@@ -265,6 +265,10 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
     var search: SearchService!
     var debug: UIView?
     var pendingDisplay: Bool = false
+    /// Backs the stall watchdog in AppleTerminalView; see armDisplayStallWatchdog.
+    var displayStallWatchdog: DispatchWorkItem?
+    var displayStallArmed: Bool = false
+    let displayStallLock = NSLock()
     /// Output received shortly after local input is likely echo or prompt redraw;
     /// render it without the 16.67ms frame-rate throttle so typing feels responsive.
     var lastUserInputUptimeNs: UInt64 = 0
