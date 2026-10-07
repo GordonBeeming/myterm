@@ -27,9 +27,11 @@ enum SyncDebug {
         return UserDefaults.standard.bool(forKey: "SwiftTermSyncDebug")
     }()
 
-    /// A trace left on by accident must not fill the disk. Past this the log is
-    /// started again from empty, which keeps the most recent run, and a stall is
-    /// always diagnosed from the tail.
+    /// A trace left on by accident must not fill the disk. Past this the log
+    /// stops growing and the app has to be restarted to begin a new one. It
+    /// deliberately stops rather than truncating: truncation is the one
+    /// operation here that can destroy data that is not ours, which matters
+    /// because the path is only as trustworthy as the directory it sits in.
     private static let maximumBytes: UInt64 = 8 * 1024 * 1024
 
     private static let start = DispatchTime.now().uptimeNanoseconds
@@ -52,36 +54,50 @@ enum SyncDebug {
     /// Caller holds `queue`.
     private static func write(_ data: Data) {
         guard let url = logURL else { return }
-        if handle == nil {
-            do {
-                try FileManager.default.createDirectory(
-                    at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-                if !FileManager.default.fileExists(atPath: url.path) {
-                    FileManager.default.createFile(atPath: url.path, contents: nil)
-                }
-                let opened = try FileHandle(forWritingTo: url)
-                try opened.seekToEnd()
-                handle = opened
-                let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
-                written = (attributes[.size] as? NSNumber)?.uint64Value ?? 0
-            } catch {
-                // Tracing must never take the terminal down with it. One failure
-                // to open the log leaves `handle` nil and every later line is
-                // dropped the same way.
-                return
-            }
+        if handle == nil, !openLog(at: url) {
+            return
         }
-        guard let handle else { return }
-        if written > maximumBytes {
-            try? handle.truncate(atOffset: 0)
-            written = 0
-        }
+        guard let handle, written < maximumBytes else { return }
         do {
             try handle.write(contentsOf: data)
             written &+= UInt64(data.count)
+            if written >= maximumBytes {
+                let notice = "[sync] trace capped at \(maximumBytes) bytes; restart to start a new log\n"
+                try handle.write(contentsOf: Data(notice.utf8))
+            }
         } catch {
             try? handle.close()
             self.handle = nil
         }
+    }
+
+    /// Caller holds `queue`. `handle` is only left set once the log is open and
+    /// its length is known, so a failure part-way through cannot leave later
+    /// lines writing to a file this never finished validating.
+    private static func openLog(at url: URL) -> Bool {
+        do {
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        } catch {
+            // Tracing must never take the terminal down with it. A log that
+            // cannot be opened drops every line the same way.
+            return false
+        }
+        // O_NOFOLLOW: a symlink left at the log path is never followed, so a
+        // trace switched on by the user can never write through one.
+        let descriptor = url.withUnsafeFileSystemRepresentation { path -> Int32 in
+            guard let path else { return -1 }
+            return open(path, O_WRONLY | O_APPEND | O_CREAT | O_NOFOLLOW, 0o600)
+        }
+        guard descriptor >= 0 else { return false }
+        let opened = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        do {
+            written = try opened.seekToEnd()
+        } catch {
+            try? opened.close()
+            return false
+        }
+        handle = opened
+        return true
     }
 }

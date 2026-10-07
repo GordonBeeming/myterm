@@ -258,8 +258,19 @@ final class SynchronizedOutputTests {
         // with a lost ESU does.
         view.terminal.scheduleSynchronizedOutputTimeout(afterNanoseconds: 60_000_000_000)
 
-        try? await Task.sleep(nanoseconds: UInt64((TerminalView.displayStallTimeout + 0.6) * 1_000_000_000))
+        // Poll rather than sleep a fixed interval: the watchdog runs on the main
+        // queue, and a loaded queue can deliver it later than any one sleep.
+        var recovered = false
+        let deadline = Date().addingTimeInterval(TerminalView.displayStallTimeout + 5)
+        while Date() < deadline {
+            if !view.terminal.synchronizedOutputActive, view.terminal.getUpdateRange() == nil {
+                recovered = true
+                break
+            }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
 
+        #expect(recovered)
         #expect(!view.terminal.synchronizedOutputActive)
         #expect(view.terminal.getUpdateRange() == nil)
     }
