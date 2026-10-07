@@ -13,6 +13,12 @@ import AppKit
 import Testing
 @testable import SwiftTerm
 
+/// Main-actor isolated because the test drives `keyDown` through
+/// `NSView.interpretKeyEvents`, which enters Text Services Manager. TSM aborts
+/// the process when it is entered from two threads at once, and swift-testing
+/// runs an unisolated test on the cooperative pool while the main thread is
+/// servicing its own run loop.
+@MainActor
 final class KittyOptionComposeTests {
 
     /// Captures bytes the view sends to the PTY.

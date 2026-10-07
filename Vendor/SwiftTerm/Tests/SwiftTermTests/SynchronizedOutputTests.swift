@@ -239,6 +239,42 @@ final class SynchronizedOutputTests {
         #expect(view.terminal.getUpdateRange() == nil)
     }
 
+    /// Regression: a repaint gate that latches recovers on its own.
+    ///
+    /// Both gates the view repaints through (`pendingDisplay`, and the terminal's
+    /// synchronized-output flag) have been found stuck in the field, leaving the
+    /// terminal showing stale content until the user clicked in it. This covers
+    /// the synchronized-output one, which can be held open from a test; a stuck
+    /// `pendingDisplay` cannot be reproduced on a window-less view, because
+    /// nothing is driving the gate there in the first place.
+    @MainActor
+    @Test func testALatchedSynchronizedWindowStillRepaints() async {
+        let view = TerminalView(frame: CGRect(origin: .zero, size: .init(width: 400, height: 100)))
+        let esc = "\u{1b}"
+
+        view.terminal.feed(text: "\(esc)[?2026h")
+        view.terminal.feed(text: "output held by the window\r\n")
+        // Hold the window open past the emulator's watchdog, as a stream of BSUs
+        // with a lost ESU does.
+        view.terminal.scheduleSynchronizedOutputTimeout(afterNanoseconds: 60_000_000_000)
+
+        // Poll rather than sleep a fixed interval: the watchdog runs on the main
+        // queue, and a loaded queue can deliver it later than any one sleep.
+        var recovered = false
+        let deadline = Date().addingTimeInterval(TerminalView.displayStallTimeout + 5)
+        while Date() < deadline {
+            if !view.terminal.synchronizedOutputActive, view.terminal.getUpdateRange() == nil {
+                recovered = true
+                break
+            }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+
+        #expect(recovered)
+        #expect(!view.terminal.synchronizedOutputActive)
+        #expect(view.terminal.getUpdateRange() == nil)
+    }
+
     /// Regression: after the sync-end debounce fires, the view must emit
     /// terminalDelegate?.scrolled so host scroll indicators update.
     @Test func testViewEmitsScrollDelegateAfterSyncEnd() async {

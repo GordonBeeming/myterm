@@ -1754,6 +1754,8 @@ extension TerminalView {
             SyncDebug.log("updateDisplay skipped: synchronized output active")
             return
         }
+        // Past this point the view repaints, so the owed repaint is settled.
+        disarmDisplayStallWatchdog()
         SyncDebug.log("updateDisplay running")
 #if os(iOS) || os(visionOS)
         if usesIndependentViewport { updateScroller() }
@@ -1927,6 +1929,10 @@ extension TerminalView {
     // It is also cheap, so should be called when new data has been posted or received.
     func queuePendingDisplay ()
     {
+        // Whatever happens below, a repaint is now owed, and the watchdog is what
+        // guarantees one arrives even if the gate this request passes through
+        // never reopens.
+        armDisplayStallWatchdog()
         if terminal.synchronizedOutputActive {
             SyncDebug.log("queuePendingDisplay dropped: synchronized output active")
             return
@@ -1944,6 +1950,65 @@ extension TerminalView {
         } else {
             SyncDebug.log("queuePendingDisplay coalesced: a redraw is already pending")
         }
+    }
+
+    /// How long a repaint may stay owed before the view forces one.
+    ///
+    /// Comfortably past the emulator's one-second synchronized-output ceiling, so
+    /// a legitimate BSU...ESU window is never cut short and no frame is ever torn
+    /// by this. It only catches a repaint gate that has latched: the view holds
+    /// two of them (`pendingDisplay`, and the terminal's synchronized-output
+    /// flag), and either one stuck leaves the terminal showing stale content
+    /// until something outside the normal path invalidates it, which in practice
+    /// means until the user clicks in it.
+    static var displayStallTimeout: TimeInterval { 2.0 }
+
+    /// Records that a repaint is owed. Cheap and idempotent: while a watchdog is
+    /// already pending this does nothing, so a burst of output arms one timer,
+    /// not one per chunk.
+    func armDisplayStallWatchdog() {
+        displayStallLock.lock()
+        if displayStallArmed {
+            displayStallLock.unlock()
+            return
+        }
+        displayStallArmed = true
+        let item = DispatchWorkItem { [weak self] in
+            self?.fireDisplayStallWatchdog()
+        }
+        displayStallWatchdog = item
+        displayStallLock.unlock()
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.displayStallTimeout, execute: item)
+    }
+
+    /// A repaint happened, so nothing is owed.
+    func disarmDisplayStallWatchdog() {
+        displayStallLock.lock()
+        let item = displayStallWatchdog
+        displayStallWatchdog = nil
+        displayStallArmed = false
+        displayStallLock.unlock()
+        item?.cancel()
+    }
+
+    private func fireDisplayStallWatchdog() {
+        displayStallLock.lock()
+        displayStallWatchdog = nil
+        displayStallArmed = false
+        displayStallLock.unlock()
+
+        let synchronized = terminal.synchronizedOutputActive
+        guard pendingDisplay || synchronized else {
+            // The repaint landed through some other path; nothing is owed.
+            return
+        }
+        SyncDebug.log("display stall watchdog fired: pendingDisplay=\(pendingDisplay) synchronizedOutputActive=\(synchronized); forcing a full redraw")
+        if synchronized {
+            terminal.endSynchronizedOutputAfterStall()
+        }
+        pendingDisplay = false
+        terminal.updateFullScreen()
+        updateDisplay()
     }
 
 #if canImport(MetalKit)
@@ -2205,6 +2270,7 @@ extension TerminalView {
     }
 
     private func displayImmediately() {
+        armDisplayStallWatchdog()
         guard !Thread.isMainThread else {
             updateDisplay()
             return
