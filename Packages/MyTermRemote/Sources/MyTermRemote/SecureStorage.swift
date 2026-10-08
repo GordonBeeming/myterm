@@ -198,6 +198,13 @@ public struct TokenPartition: Hashable, Sendable {
 
 public actor TokenStore {
     private let secrets: any SecretStore
+    private struct RefreshOperation {
+        let id: UUID
+        let revision: UUID?
+        let task: Task<TokenRecord, Error>
+    }
+    private var revisions: [TokenPartition: UUID] = [:]
+    private var refreshOperations: [TokenPartition: RefreshOperation] = [:]
 
     public init(secrets: any SecretStore) { self.secrets = secrets }
 
@@ -212,14 +219,69 @@ public actor TokenStore {
         catch { throw RemoteError.invalidResponse }
     }
 
+    func loadForAuthentication(partition: TokenPartition) throws -> TokenRecord? {
+        do { return try load(partition: partition) }
+        catch let error as RemoteError where error == .invalidResponse || error == .wrongPeer {
+            throw RemoteError.authenticationRevoked
+        }
+    }
+
     public func save(_ record: TokenRecord) throws {
         let partition = TokenPartition(relay: record.relay, accountID: record.accountID,
                                        deviceID: record.deviceID)
         try secrets.write(try JSONEncoder().encode(record), account: partition.storageAccount)
+        revisions[partition] = UUID()
     }
 
     public func remove(partition: TokenPartition) throws {
         try secrets.delete(account: partition.storageAccount)
+        revisions[partition] = UUID()
+    }
+
+    /// A store outlives its connection managers, so a reconnect shares any ongoing renewal.
+    /// Persistence is conditional on the credential revision that started the request: a late
+    /// success or rejection must never replace a newer login, even if its bytes happen to match.
+    func refresh(expected: TokenRecord, client: RelayHTTPClient, now: Date) async throws -> TokenRecord {
+        let partition = TokenPartition(relay: expected.relay, accountID: expected.accountID, deviceID: expected.deviceID)
+        guard let current = try loadForAuthentication(partition: partition) else { throw RemoteError.authenticationRevoked }
+        if current != expected { return current }
+        let revision = revisions[partition]
+        if let operation = refreshOperations[partition], operation.revision == revision {
+            return try await operation.task.value
+        }
+        let id = UUID()
+        let task = Task<TokenRecord, Error> {
+            defer {
+                if refreshOperations[partition]?.id == id { refreshOperations[partition] = nil }
+            }
+            do {
+                let payload = try await client.refresh(refreshToken: current.refreshToken)
+                guard payload.deviceID == current.deviceID, payload.accountID == current.accountID else {
+                    throw RemoteError.wrongPeer
+                }
+                let refreshed = try payload.record(relay: current.relay, now: now)
+                guard let latest = try loadForAuthentication(partition: partition) else { throw RemoteError.authenticationRevoked }
+                guard revisions[partition] == revision, latest == current else { return latest }
+                try save(refreshed)
+                return refreshed
+            } catch {
+                guard let latest = try loadForAuthentication(partition: partition) else { throw RemoteError.authenticationRevoked }
+                guard revisions[partition] == revision, latest == current else { return latest }
+                if let remote = error as? RemoteError, remote == .authenticationRequired {
+                    try remove(partition: partition)
+                    throw RemoteError.authenticationRevoked
+                }
+                throw error
+            }
+        }
+        refreshOperations[partition] = RefreshOperation(id: id, revision: revision, task: task)
+        return try await task.value
+    }
+
+    func remove(ifMatching record: TokenRecord) throws {
+        let partition = TokenPartition(relay: record.relay, accountID: record.accountID, deviceID: record.deviceID)
+        guard try load(partition: partition) == record else { return }
+        try remove(partition: partition)
     }
 }
 

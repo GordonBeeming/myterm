@@ -307,7 +307,7 @@ public actor RelayTokenManager {
     private let client: RelayHTTPClient
     private let store: TokenStore
     private var record: TokenRecord
-    private var refreshTask: Task<TokenRecord, Error>?
+    private var cacheGeneration: UInt64 = 0
 
     public init(client: RelayHTTPClient, store: TokenStore, record: TokenRecord) throws {
         guard client.endpoint == record.relay else { throw RemoteError.invalidEndpoint }
@@ -321,7 +321,11 @@ public actor RelayTokenManager {
     public static let refreshMargin: TimeInterval = 5 * 60
 
     public func accessToken(now: Date = .now) async throws -> String {
-        if record.expiresAt.timeIntervalSince(now) > Self.refreshMargin { return record.accessToken }
+        let generation = cacheGeneration
+        let partition = TokenPartition(relay: record.relay, accountID: record.accountID, deviceID: record.deviceID)
+        guard let current = try await store.loadForAuthentication(partition: partition) else { throw RemoteError.authenticationRevoked }
+        if cacheGeneration == generation { record = current; cacheGeneration &+= 1 }
+        if current.expiresAt.timeIntervalSince(now) > Self.refreshMargin { return current.accessToken }
         return try await refresh(now: now).accessToken
     }
 
@@ -330,37 +334,17 @@ public actor RelayTokenManager {
 
     @discardableResult
     public func refresh(now: Date = .now) async throws -> TokenRecord {
-        if let refreshTask { return try await refreshTask.value }
-        let old = record
-        let client = client
-        let task = Task<TokenRecord, Error> {
-            let payload = try await client.refresh(refreshToken: old.refreshToken)
-            guard payload.deviceID == old.deviceID, payload.accountID == old.accountID else {
-                throw RemoteError.wrongPeer
-            }
-            return try payload.record(relay: old.relay, now: now)
-        }
-        refreshTask = task
-        defer { refreshTask = nil }
-        do {
-            let refreshed = try await task.value
-            try await store.save(refreshed)
-            record = refreshed
-            return refreshed
-        } catch RemoteError.authenticationRequired {
-            try? await store.remove(partition: TokenPartition(relay: old.relay,
-                                                              accountID: old.accountID,
-                                                              deviceID: old.deviceID))
-            throw RemoteError.authenticationRevoked
-        }
+        let refreshed = try await store.refresh(expected: record, client: client, now: now)
+        record = refreshed
+        cacheGeneration &+= 1
+        return refreshed
     }
 
     public func revoke() async throws {
-        let old = record
+        let partition = TokenPartition(relay: record.relay, accountID: record.accountID, deviceID: record.deviceID)
+        guard let old = try await store.loadForAuthentication(partition: partition) else { throw RemoteError.authenticationRevoked }
         try await client.revoke(token: old.refreshToken)
-        try await store.remove(partition: TokenPartition(relay: old.relay,
-                                                         accountID: old.accountID,
-                                                         deviceID: old.deviceID))
+        try await store.remove(ifMatching: old)
     }
 }
 

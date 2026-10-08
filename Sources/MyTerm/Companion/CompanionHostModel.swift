@@ -12,10 +12,25 @@ import OSLog
 enum CompanionConnectionStatus: Equatable {
     case notConfigured
     case signedOut
+    case signInRequired(CompanionSignInRequirement)
     case disconnected
     case connecting
     case connected
     case failed(String)
+}
+
+enum CompanionSignInRequirement: Equatable {
+    case credentialsUnavailable
+    case authorizationRejected
+
+    var message: String {
+        switch self {
+        case .credentialsUnavailable:
+            "Your saved relay sign-in is unavailable. Sign in again in Companion settings to reconnect."
+        case .authorizationRejected:
+            "Your relay sign-in could not be renewed. Sign in again in Companion settings to reconnect."
+        }
+    }
 }
 
 struct CompanionPairingPrompt: Identifiable, Equatable {
@@ -106,7 +121,7 @@ final class CompanionHostModel {
     private let tokenStore: TokenStore
     private let notificationGrantStore: CompanionNotificationGrantStore
     private let pushJournalStore: CompanionPushJournalStore
-    private let authenticationSession = CompanionAuthenticationSession()
+    private let authenticationSession: CompanionAuthenticationSession
     private let runtimeID = UUID()
     private let reconnectPolicy: CompanionReconnectPolicy
     private let sleep: @Sendable (TimeInterval) async throws -> Void
@@ -186,6 +201,7 @@ final class CompanionHostModel {
             try await Task.sleep(for: .seconds(seconds))
         },
         secrets injectedSecrets: (any SecretStore)? = nil,
+        authenticationSession: CompanionAuthenticationSession? = nil,
         defaults: UserDefaults = .standard,
         makeHTTPClient: @escaping @Sendable (RelayEndpoint) -> RelayHTTPClient = {
             RelayHTTPClient(endpoint: $0)
@@ -203,6 +219,7 @@ final class CompanionHostModel {
         pairingRotation = CompanionPairingRotation(sleep: pairingSleep)
         self.makeHTTPClient = makeHTTPClient
         self.makeTransport = makeTransport
+        self.authenticationSession = authenticationSession ?? CompanionAuthenticationSession()
         configuration = CompanionConfigurationStore(
             channel: channel,
             namespace: storageNamespace,
@@ -210,8 +227,9 @@ final class CompanionHostModel {
         )
         let savedRelay = configuration.relayText
         relayText = savedRelay
-        status = savedRelay.isEmpty ? .notConfigured : .signedOut
-        hasLinkedRelay = (try? configuration.loadAuthReference()) != nil
+        let linkedRelay = (try? configuration.loadAuthReference()) != nil
+        hasLinkedRelay = linkedRelay
+        status = savedRelay.isEmpty ? .notConfigured : linkedRelay ? .disconnected : .signedOut
         let service = "\(channel.bundleIdentifier).companion.\(storageNamespace)"
         let secrets = injectedSecrets ?? KeychainSecretStore(service: service)
         self.secrets = secrets
@@ -245,10 +263,18 @@ final class CompanionHostModel {
     private(set) var isSigningIn = false
     private var signInTask: Task<Void, Never>?
     private var signInAttemptID: UUID?
+    private var signInRecovery: (reason: CompanionSignInRequirement, connectionEnabled: Bool)?
+    private var signInNotice: String?
 
     func signIn(bootstrapURLText: String? = nil) {
         guard !isSigningIn, status != .connecting else { return }
+        if case .signInRequired(let reason) = status {
+            signInRecovery = (reason, configuration.connectionEnabled)
+        } else {
+            signInRecovery = nil
+        }
         disconnect()
+        if let recovery = signInRecovery { configuration.connectionEnabled = recovery.connectionEnabled }
         isSigningIn = true
         let id = UUID()
         signInAttemptID = id
@@ -258,6 +284,7 @@ final class CompanionHostModel {
                     isSigningIn = false
                     signInTask = nil
                     signInAttemptID = nil
+                    signInRecovery = nil
                 }
             }
             await runSignIn(bootstrapURLText: bootstrapURLText)
@@ -266,20 +293,35 @@ final class CompanionHostModel {
 
     func cancelSignIn() {
         guard isSigningIn else { return }
+        let recovery = signInRecovery
         signInAttemptID = nil
         signInTask?.cancel()
         signInTask = nil
         authenticationSession.cancel()
         isSigningIn = false
         disconnect()
+        if let recovery {
+            configuration.connectionEnabled = recovery.connectionEnabled
+            status = .signInRequired(recovery.reason)
+        }
+        signInRecovery = nil
     }
 
     func connect() {
+        if needsSignIn {
+            signIn()
+            return
+        }
         configuration.connectionEnabled = true
         reconnectAttempt = 0
         reconnectTask?.cancel()
         reconnectTask = nil
-        Task { await connectConfiguredRelay() }
+        Task { await connectConfiguredRelay(allowSignIn: true) }
+    }
+
+    var needsSignIn: Bool {
+        if case .signInRequired = status { return true }
+        return status == .signedOut
     }
 
     func startIfEnabled() {
@@ -299,6 +341,7 @@ final class CompanionHostModel {
         reauthenticationTask = nil
         if let transport { Task { await transport.disconnect() } }
         transport = nil
+        relayAcknowledgedExpiry = nil
         clearConnectedPeers()
         status = .disconnected
     }
@@ -609,6 +652,7 @@ final class CompanionHostModel {
                 deviceID: record.deviceID
             ))
             hasLinkedRelay = true
+            clearSignInNotice()
             configuration.connectionEnabled = true
             reconnectAttempt = 0
             isSigningIn = false
@@ -618,13 +662,20 @@ final class CompanionHostModel {
             guard !Task.isCancelled else { return }
             let reason = callbackFailure?.rawValue ?? Self.sanitizedSignInReason(error)
             logger.error("Companion sign-in failed at \(stage.rawValue, privacy: .public): \(reason, privacy: .public)")
-            status = .failed(Self.signInFailureDescription(
+            let message = Self.signInFailureDescription(
                 error: error, stage: stage, callbackFailure: callbackFailure
-            ))
+            )
+            if let recovery = signInRecovery {
+                configuration.connectionEnabled = recovery.connectionEnabled
+                status = .signInRequired(recovery.reason)
+                presentSignInNotice(message)
+            } else {
+                status = .failed(message)
+            }
         }
     }
 
-    private func connectConfiguredRelay() async {
+    private func connectConfiguredRelay(allowSignIn: Bool = false) async {
         guard transportTask == nil, status != .connecting else { return }
         reconnectTask?.cancel()
         reconnectTask = nil
@@ -634,7 +685,7 @@ final class CompanionHostModel {
             let endpoint = try configuredEndpoint()
             guard let reference = try configuration.loadAuthReference(),
                   reference.relay == endpoint else {
-                status = .signedOut
+                requireSignIn(.credentialsUnavailable, generation: generation, allowSignIn: allowSignIn)
                 return
             }
             let partition = TokenPartition(
@@ -642,8 +693,15 @@ final class CompanionHostModel {
                 accountID: reference.accountID,
                 deviceID: reference.deviceID
             )
-            guard let record = try await tokenStore.load(partition: partition) else {
-                status = .signedOut
+            let storedRecord: TokenRecord?
+            do { storedRecord = try await tokenStore.load(partition: partition) }
+            catch let error as RemoteError where error == .invalidResponse || error == .wrongPeer {
+                requireSignIn(.credentialsUnavailable, generation: generation, allowSignIn: allowSignIn)
+                return
+            }
+            guard let record = storedRecord else {
+                try requireConnectionGeneration(generation)
+                requireSignIn(.credentialsUnavailable, generation: generation, allowSignIn: allowSignIn)
                 return
             }
             try requireConnectionGeneration(generation)
@@ -705,6 +763,10 @@ final class CompanionHostModel {
             }
         } catch {
             guard connectionFence.accepts(generation) else { return }
+            if Self.isAuthenticationFailure(error) {
+                requireSignIn(.authorizationRejected, generation: generation, allowSignIn: allowSignIn)
+                return
+            }
             transportTask = nil
             status = .failed(error.localizedDescription)
             scheduleReconnect()
@@ -722,6 +784,7 @@ final class CompanionHostModel {
         case .ready(let ready):
             reconnectAttempt = 0
             status = .connected
+            clearSignInNotice()
             relayAcknowledgedExpiry = ready.expiresAt.map { Date(timeIntervalSince1970: TimeInterval($0)) }
             Task { await CompanionConnectionLog.shared.record(category: "connection", "connected") }
         case .peer(let peer):
@@ -2104,8 +2167,49 @@ final class CompanionHostModel {
             catch { return }
             guard !Task.isCancelled, connectionFence.accepts(generation) else { return }
             do { try await transport.reauthenticate(accessToken: try await manager.accessToken()) }
-            catch { return }
+            catch {
+                guard !Task.isCancelled, connectionFence.accepts(generation) else { return }
+                if Self.isAuthenticationFailure(error) {
+                    requireSignIn(.authorizationRejected, generation: generation)
+                    return
+                }
+                Self.connectionLogger.error("Relay authentication refresh failed; retrying before expiry.")
+                await CompanionConnectionLog.shared.record(
+                    category: "connection", "authentication refresh failed", detail: "retrying before expiry")
+            }
         }
+    }
+
+    private static func isAuthenticationFailure(_ error: Error) -> Bool {
+        guard let error = error as? RemoteError else { return false }
+        switch error {
+        case .authenticationRevoked: return true
+        default: return false
+        }
+    }
+
+    private func requireSignIn(_ reason: CompanionSignInRequirement, generation: UUID, allowSignIn: Bool = false) {
+        guard connectionFence.accepts(generation) else { return }
+        let connectionEnabled = configuration.connectionEnabled
+        disconnect()
+        // Keep the user's connection preference so the next launch can explain the
+        // missing sign-in too. This attempt ends without scheduling another retry.
+        configuration.connectionEnabled = connectionEnabled
+        tokenManager = nil
+        httpClient = nil
+        status = .signInRequired(reason)
+        presentSignInNotice(reason.message)
+        if allowSignIn { signIn() }
+    }
+
+    private func presentSignInNotice(_ message: String) {
+        signInNotice = message
+        appModel?.errorDescription = message
+    }
+
+    private func clearSignInNotice() {
+        if appModel?.errorDescription == signInNotice { appModel?.errorDescription = nil }
+        signInNotice = nil
     }
 
     private func scheduleReconnect() {
