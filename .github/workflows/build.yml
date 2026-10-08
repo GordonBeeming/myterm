@@ -50,6 +50,11 @@ jobs:
           bash script/zsh_shim_test.sh
           bash script/codex_shim_test.sh
 
+      - name: Verify competing callback routing and channel isolation
+        run: |
+          bash script/test_callback_routing.sh
+          bash script/channel_isolation_test.sh
+
   verify-bundle:
     runs-on: xcode-27
     name: Verify App Bundle
