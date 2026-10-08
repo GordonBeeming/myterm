@@ -92,6 +92,7 @@ bash "$ROOT_DIR/script/install_app.sh" "$TASK_TEMP/Current.app" "$TASK_TEMP/Inst
 test ! -e "$TASK_TEMP/Installed.app/Contents/Resources/obsolete-resource"
 codesign --verify --deep --strict "$TASK_TEMP/Installed.app"
 # A signed but malformed replacement must restore the previous bundle after routing fails.
+mkdir -p "$TASK_TEMP/Installed.app/Contents/Resources"
 touch "$TASK_TEMP/Installed.app/Contents/Resources/rollback-marker"
 codesign --force --sign - "$TASK_TEMP/Installed.app"
 cp -R "$TASK_TEMP/Current.app" "$TASK_TEMP/NoCallback.app"
