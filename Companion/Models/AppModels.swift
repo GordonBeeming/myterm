@@ -1053,6 +1053,9 @@ final class SceneModel {
         guard attempts < Self.maximumAttachRetries else {
             cancelRestoreDeadline(for: entry.key)
             entry.value.recordRestoreFailure(reason)
+            // Spent, so the budget is cleared rather than left at the limit: an explicit Retry has
+            // to get its own attempts instead of giving up on the first error it meets.
+            attachRetries.removeValue(forKey: entry.key)
             await DiagnosticsLog.shared.record(
                 category: "terminal", "attach gave up",
                 detail: "session=\(DiagnosticsLog.short(sessionID)) attempts=\(attempts)")
@@ -1062,7 +1065,29 @@ final class SceneModel {
         await DiagnosticsLog.shared.record(
             category: "terminal", "re-attaching after host error",
             detail: "session=\(DiagnosticsLog.short(sessionID)) attempt=\(attempts + 1)")
-        await attach(entry.value.route, requestingFreshCheckpoint: true)
+        // `refreshTerminal`, not `attach`: the default visibility path runs
+        // `exitWorkspaceVisibilityForLegacy`, which detaches every other visible workspace terminal.
+        // Retrying one pane would have taken the siblings down with it, which is the opposite of
+        // keeping a failure to one terminal.
+        await refreshTerminal(entry.value.route)
+    }
+
+    /// Retry for one terminal, from the pane's own button. Reconnects first when the connection is
+    /// down, because an attach cannot do anything without one: it would throw `disconnected` and set
+    /// a global error, leaving the button dead in exactly the case it exists for.
+    func retryTerminal(_ route: TerminalRoute) async {
+        attachRetries.removeValue(forKey: route.id)
+        terminalStates[route.id]?.clearRestoreFailure()
+        if connectionPhase.isDown {
+            guard let services,
+                  let host = services.savedHosts.first(where: { $0.connectionID == route.connectionID })
+            else { return }
+            // Resets the reconnect budget too, so a connection that had run out of retries starts
+            // over rather than refusing on the spot.
+            await connect(to: host, services: services)
+            return
+        }
+        await refreshTerminal(route)
     }
 
     private func armRestoreDeadline(for route: TerminalRoute) {

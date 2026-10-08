@@ -1081,6 +1081,9 @@ final class CompanionHostModel {
         from peer: PeerConnection
     ) async throws {
         let messageMetadata = message.metadata
+        // Captured before the dispatch, so the catch below can tell an attach that failed from an
+        // input or resize that threw the same error type for an unrelated reason.
+        let isAttach = message.kind == .attach
         guard let identity else { throw RemoteError.authenticationRequired }
         try CompanionHostSecurity.validateApplicationMetadata(
             messageMetadata,
@@ -1146,14 +1149,23 @@ final class CompanionHostModel {
                  message: "You no longer control this terminal. Request control to type or resize.",
                  retryable: false)), to: peer)
             broadcastControlState(target: target)
-        } catch let error as TerminalRemoteSessionError {
+        } catch let error as TerminalRemoteSessionError where isAttach {
             // One session's attach going wrong is that session's problem. Letting it out of here
             // reaches the catch that drops the whole transport, so a single busy terminal took the
             // device's connection down with it and the reconnect loop started again on the same
             // session. Tell the peer to re-attach that one session instead.
+            //
+            // Only for an attach. `handleInput` and `handleResize` throw this type too, for a stale
+            // generation, and converting those would tell the companion to re-attach and spend its
+            // retry budget when no attach had failed.
             if let sessionID = messageMetadata.sessionID {
-                peer.attachingSessions.removeValue(forKey: TerminalSessionID(rawValue: sessionID))
-                peer.attachingOverflow.remove(TerminalSessionID(rawValue: sessionID))
+                let session = TerminalSessionID(rawValue: sessionID)
+                peer.attachingSessions.removeValue(forKey: session)
+                peer.attachingOverflow.remove(session)
+                // This peer is now neither attaching nor attached, so capture has to be recomputed.
+                // Leaving it on kept the session filling a replay buffer for a viewer that had gone,
+                // and the key this clears is how disconnect cleanup would have found it later.
+                updateRemoteCapture(sessionID: session)
             }
             logger.error(
                 "Attach failed for one session: \(error.localizedDescription, privacy: .public)")

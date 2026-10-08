@@ -266,7 +266,7 @@ struct CompanionTerminalPane: View {
                 } compose: {
                     scene.sheet = .terminalComposer(currentRoute)
                 } retry: {
-                    Task { await scene.attach(currentRoute, requestingFreshCheckpoint: true) }
+                    Task { await scene.retryTerminal(currentRoute) }
                 }
                 RemoteTerminalView(state: state, showTerminalKeys: showTerminalKeys,
                                    requestsKeyboardFocus: requestsKeyboardFocus && scene.sheet == nil,
