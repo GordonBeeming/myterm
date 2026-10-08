@@ -7,7 +7,7 @@ fi
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 python3 - "$ROOT_DIR" "$@" <<'PY'
 from pathlib import Path
-import ctypes,os,plistlib,subprocess,sys,uuid
+import ctypes,errno,os,plistlib,shutil,subprocess,sys,uuid
 root=Path(sys.argv[1])
 source=Path(sys.argv[2]).expanduser().resolve()
 archive=(Path(sys.argv[3]).expanduser() if len(sys.argv)==4 else
@@ -54,9 +54,25 @@ result=subprocess.run([register,'-u',str(source)],capture_output=True,text=True)
 if result.returncode and '-10814' not in result.stdout+result.stderr:
     raise SystemExit('Could not unregister the test copy; it was left in place.')
 try:
-    os.rename(source,target)
-except OSError:
-    subprocess.run([register,'-f',str(source)],check=True)
+    try:
+        os.rename(source,target)
+    except OSError as error:
+        if error.errno!=errno.EXDEV:
+            raise
+        # Preserve the complete app before changing the source on another volume.
+        subprocess.run(['ditto',str(source),str(target)],check=True)
+        tombstone=source.with_name(source.name+'.'+str(uuid.uuid4())+'.disabled')
+        os.rename(source,tombstone)
+        try: shutil.rmtree(tombstone)
+        except OSError:
+            print('Archive preserved; the disabled source also remains at',tombstone)
+except (OSError,subprocess.CalledProcessError):
+    try:
+        if source.exists() and target.exists():
+            shutil.rmtree(target)
+    except OSError:
+        print('Could not remove the partial archive at',target,file=sys.stderr)
+    subprocess.run([register,'-f',str(source)],check=False)
     raise
 print('Preserved retired app at',target)
 PY

@@ -11,10 +11,14 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TASK_TEMP="$(mktemp -d "$HOME/.myterm-callback-test.XXXXXX")"
 REGISTER_TOOL="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 FIXTURE_PID=""
+MOUNT_PATH=""
 cleanup() {
   if [[ -n "$FIXTURE_PID" ]]; then
     kill "$FIXTURE_PID" >/dev/null 2>&1 || true
     wait "$FIXTURE_PID" 2>/dev/null || true
+  fi
+  if [[ -n "$MOUNT_PATH" ]]; then
+    hdiutil detach "$MOUNT_PATH" >/dev/null 2>&1 || true
   fi
   "$REGISTER_TOOL" -u "$TASK_TEMP/Old.app" >/dev/null 2>&1 || true
   "$REGISTER_TOOL" -u "$TASK_TEMP/Current.app" >/dev/null 2>&1 || true
@@ -109,5 +113,15 @@ if bash "$ROOT_DIR/script/install_app.sh" "$TASK_TEMP/NoCallback.app" "$TASK_TEM
   exit 1
 fi
 test ! -e "$TASK_TEMP/FirstInstall.app"
+# Archive from a different filesystem without touching any real external device.
+hdiutil create -size 16m -fs HFS+ -volname MyTermArchiveFixture "$TASK_TEMP/archive-volume.dmg"
+MOUNT_PATH="$TASK_TEMP/External"
+hdiutil attach "$TASK_TEMP/archive-volume.dmg" -nobrowse -noautoopen -mountpoint "$MOUNT_PATH"
+ditto "$TASK_TEMP/Current.app" "$MOUNT_PATH/External.app"
+bash "$ROOT_DIR/script/archive_test_app.sh" "$MOUNT_PATH/External.app" "$TASK_TEMP/CrossVolumeArchives"
+test ! -e "$MOUNT_PATH/External.app"
+test -n "$(ls "$TASK_TEMP/CrossVolumeArchives")"
+hdiutil detach "$MOUNT_PATH"
+MOUNT_PATH=""
 "$REGISTER_TOOL" -u "$TASK_TEMP/Installed.app"
 echo 'Competing callback handler regression passed'
