@@ -599,7 +599,7 @@ final class CompanionHostModel {
             stage = .relayEndpoint
             let endpoint = try enrollment?.endpoint ?? configuredEndpoint()
             if enrollment != nil { relayText = endpoint.canonicalOrigin }
-            let redirectScheme = channel == .production ? "myterm" : "myterm-dev"
+            let redirectScheme = channel.authenticationCallbackScheme
             stage = .callbackConfiguration
             let redirect = try validatedURL("\(redirectScheme)://companion-auth/callback")
             let attempt = try SignInAttempt(relay: endpoint, redirectURI: redirect)

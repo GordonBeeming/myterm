@@ -208,7 +208,7 @@ final class CompanionSignInRecoveryTests: XCTestCase {
             terminalEngine: nil, startsTerminalProcesses: false)
         let secrets = RecoveryMemorySecrets()
         let browserStarts = BrowserStarts()
-        let authentication = CompanionAuthenticationSession { url, _, _ in
+        let authentication = CompanionAuthenticationSession(prepareCallback: { _ in }) { url, _, _ in
             browserStarts.urls.append(url)
             return TestBrowserSession(canStart: browserCanStart)
         }

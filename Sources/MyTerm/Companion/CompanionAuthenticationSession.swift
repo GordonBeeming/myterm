@@ -3,6 +3,7 @@ import AuthenticationServices
 import Foundation
 import OSLog
 import MyTermRemote
+import MyTermPlatform
 
 @MainActor
 protocol CompanionBrowserSession: AnyObject {
@@ -21,18 +22,31 @@ final class CompanionAuthenticationSession: NSObject, ASWebAuthenticationPresent
     private var pending: (id: UUID, continuation: CheckedContinuation<URL, Error>)?
     private let makeSession: SessionFactory
     private let externalAuthentication: CompanionExternalBrowserAuthentication
+    private let prepareCallback: @MainActor (String) async throws -> Void
+    private var preparationID: UUID?
 
     init(externalAuthentication: CompanionExternalBrowserAuthentication = .shared,
+         prepareCallback: @escaping @MainActor (String) async throws -> Void = { scheme in
+             try await ApplicationCallbackRouting.prepare(applicationURL: Bundle.main.bundleURL, scheme: scheme)
+         },
          makeSession: @escaping SessionFactory = CompanionAuthenticationSession.makeSystemSession) {
         self.makeSession = makeSession
         self.externalAuthentication = externalAuthentication
+        self.prepareCallback = prepareCallback
         super.init()
     }
 
     func authenticate(url: URL, callbackScheme: String,
                       attempt: SignInAttempt) async throws -> URL {
-        guard session == nil else { throw CompanionAuthenticationError.alreadyRunning }
+        guard session == nil, preparationID == nil else { throw CompanionAuthenticationError.alreadyRunning }
         let id = UUID()
+        preparationID = id
+        defer { if preparationID == id { preparationID = nil } }
+        try Task.checkCancellation()
+        try await prepareCallback(callbackScheme)
+        try Task.checkCancellation()
+        guard preparationID == id else { throw CancellationError() }
+        preparationID = nil
         let callback: URL = try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 guard !Task.isCancelled else {
@@ -76,6 +90,7 @@ final class CompanionAuthenticationSession: NSObject, ASWebAuthenticationPresent
     }
 
     func cancel() {
+        preparationID = nil
         if let id = pending?.id { cancel(id: id) }
         externalAuthentication.cancel()
     }

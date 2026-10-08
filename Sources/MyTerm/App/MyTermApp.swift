@@ -1,6 +1,7 @@
 import AppKit
 import MyTermPlatform
 import Observation
+import OSLog
 import SwiftUI
 
 @main
@@ -48,6 +49,7 @@ final class MyTermApplicationDelegate: NSObject, NSApplicationDelegate {
     private var secondaryTask: Task<Void, Never>?
     private var secondaryURLs: [URL] = []
     private var confirmedInstanceReplacement = false
+    private var hasVerifiedCallbackRouting = false
 
     override init() {
         restoreWindowAfterCancelledTermination = Self.restoreMainWindow
@@ -85,6 +87,16 @@ final class MyTermApplicationDelegate: NSObject, NSApplicationDelegate {
         urlDispatcher.connect(handler: model)
         model?.startAgentNotifications()
         model?.startCompanionHostIfEnabled()
+        guard model != nil, !hasVerifiedCallbackRouting else { return }
+        hasVerifiedCallbackRouting = true
+        do {
+            try ApplicationCallbackRouting.verify(
+                applicationURL: Bundle.main.bundleURL,
+                scheme: MyTermChannel.active.authenticationCallbackScheme)
+        } catch {
+            Logger(subsystem: MyTermChannel.active.bundleIdentifier, category: "callback-routing")
+                .error("Could not verify this app's callback registration: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
