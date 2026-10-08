@@ -150,6 +150,83 @@ private func cookie(
     }
 }
 
+@Test func theCursorBoundAdmitsTheLongestKeyACookieCanHave() throws {
+    // A page ending on a maximal cookie emits that cookie's sortKey as the cursor. If the bound were
+    // smaller the client would reject the response and the pull would stop early, losing the rest.
+    let longest = try cookie(
+        name: String(repeating: "n", count: RemoteBrowserCookie.maximumNameBytes),
+        domain: String(repeating: "d", count: RemoteBrowserCookie.maximumDomainBytes),
+        path: String(repeating: "p", count: RemoteBrowserCookie.maximumPathBytes)
+    )
+
+    #expect(longest.sortKey.utf8.count == RemoteBrowserCookieTransfer.maximumCursorBytes)
+    let request = try RemoteBrowserCookiePullRequest(
+        profileStoreID: UUID(), cursor: longest.sortKey)
+    #expect(request.cursor == longest.sortKey)
+    #expect(
+        try JSONDecoder().decode(
+            RemoteBrowserCookiePullResponse.self,
+            from: JSONEncoder().encode(
+                RemoteBrowserCookiePullResponse(cookies: [longest], nextCursor: longest.sortKey))
+        ).nextCursor == longest.sortKey)
+}
+
+@Test func pushCarriesDeletionsAndAcceptsAChunkThatOnlyDeletes() throws {
+    let key = try RemoteBrowserCookieKey(domain: "example.com", path: "/", name: "session")
+
+    let deletionOnly = try RemoteBrowserCookiePushRequest(
+        profileStoreID: UUID(), transferID: UUID(), chunkIndex: 0, chunkCount: 1,
+        cookies: [], removed: [key])
+    #expect(deletionOnly.removed == [key])
+
+    // A chunk that neither sets nor deletes is pure cost.
+    #expect(throws: RemoteBrowserCookieError.self) {
+        try RemoteBrowserCookiePushRequest(
+            profileStoreID: UUID(), transferID: UUID(), chunkIndex: 0, chunkCount: 1,
+            cookies: [], removed: [])
+    }
+
+    // A peer that predates deletions sends no `removed` key at all.
+    let legacy = try JSONDecoder().decode(
+        RemoteBrowserCookiePushRequest.self,
+        from: Data(
+            #"{"profileStoreID":"\#(UUID().uuidString)","transferID":"\#(UUID().uuidString)","chunkIndex":0,"chunkCount":1,"cookies":[\#(String(decoding: try JSONEncoder().encode(try cookie()), as: UTF8.self))]}"#
+                .utf8))
+    #expect(legacy.removed.isEmpty)
+}
+
+@Test func deletionKeyMatchesItsCookieAndRejectsEmptyFields() throws {
+    let source = try cookie(name: "session", domain: "example.com")
+    #expect(RemoteBrowserCookieKey(source).sortKey == source.sortKey)
+
+    #expect(throws: RemoteBrowserCookieError.self) {
+        try RemoteBrowserCookieKey(domain: "", path: "/", name: "a")
+    }
+    #expect(throws: RemoteBrowserCookieError.self) {
+        try RemoteBrowserCookieKey(domain: "example.com", path: "/", name: "")
+    }
+    #expect(throws: RemoteBrowserCookieError.self) {
+        try RemoteBrowserCookieKey(domain: "example.com", path: "", name: "a")
+    }
+}
+
+@Test func deletionKeyPagesStayInsideOneCommandPayload() throws {
+    let keys = try (0..<500).map {
+        try RemoteBrowserCookieKey(domain: "example.com", path: "/", name: "c\($0)")
+    }
+
+    let pages = RemoteBrowserCookieTransfer.keyPages(of: keys)
+
+    #expect(pages.flatMap { $0 }.count == keys.count)
+    for (index, page) in pages.enumerated() {
+        #expect(page.count <= RemoteBrowserCookieTransfer.maximumCookiesPerPage)
+        let request = try RemoteBrowserCookiePushRequest(
+            profileStoreID: UUID(), transferID: UUID(), chunkIndex: index,
+            chunkCount: max(pages.count, index + 1), cookies: [], removed: page)
+        #expect(try JSONEncoder().encode(request).count <= 16 * 1_024)
+    }
+}
+
 @Test func pullResponseClampsWhenBuiltButRejectsAnOverlongPageOffTheWire() throws {
     let cookies = try (0...RemoteBrowserCookieTransfer.maximumCookiesPerPage).map {
         try cookie(name: "c\($0)")

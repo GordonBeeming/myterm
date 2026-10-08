@@ -1162,12 +1162,14 @@ final class CompanionHostModel {
     ) throws -> BrowserDataProfile {
         let (route, _) = try browserTarget(metadata, peer: peer)
         guard let appModel else { throw RemoteError.offline }
-        guard appModel.companionSharesBrowserSignIns(route: route) else {
-            throw CompanionCommandError.browserCookieSharingDisabled
-        }
         let profile = try appModel.companionBrowserProfile(route: route)
         guard profile.persistentStoreID == profileStoreID else {
             throw CompanionCommandError.wrongTarget
+        }
+        // Checked against the profile rather than the route's workspace: the jar is shared, so every
+        // workspace on it has to have agreed.
+        guard appModel.companionSharesBrowserSignIns(profile: profile) else {
+            throw CompanionCommandError.browserCookieSharingDisabled
         }
         return profile
     }
@@ -1190,12 +1192,14 @@ final class CompanionHostModel {
         do { request = try JSONDecoder().decode(RemoteBrowserCookiePushRequest.self, from: command.payload) }
         catch { throw CompanionCommandError.invalidPayload }
         let profile = try browserCookieProfile(metadata, peer: peer, expecting: request.profileStoreID)
-        let accepted = await BrowserCookieStore(persistentStoreID: profile.persistentStoreID)
-            .apply(request.cookies)
+        let store = BrowserCookieStore(persistentStoreID: profile.persistentStoreID)
+        let accepted = await store.apply(request.cookies)
+        let removed = await store.remove(request.removed)
         logger.trace(
-            "Stored \(accepted, privacy: .public) browser cookies from a companion, chunk \(request.chunkIndex + 1, privacy: .public) of \(request.chunkCount, privacy: .public)"
+            "Stored \(accepted, privacy: .public) and deleted \(removed, privacy: .public) browser cookies from a companion, chunk \(request.chunkIndex + 1, privacy: .public) of \(request.chunkCount, privacy: .public)"
         )
-        return try JSONEncoder().encode(RemoteBrowserCookiePushResponse(acceptedCount: accepted))
+        return try JSONEncoder().encode(
+            RemoteBrowserCookiePushResponse(acceptedCount: accepted, removedCount: removed))
     }
 
     private func sendBrowserTunnel(_ parameters: BrowserTunnelParameters, metadata: MessageMetadata,

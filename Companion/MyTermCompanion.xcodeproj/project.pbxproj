@@ -58,6 +58,7 @@
 		D18392ED534EC36B00C240F2 /* LiveDeviceTerminalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABE4FD21D0CF4787337BDC5D /* LiveDeviceTerminalTests.swift */; };
 		D45BD972D0DEC52E2E4E5EA9 /* BrowserAuthenticationStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE96CF8557994DF7FEAAB5A /* BrowserAuthenticationStateTests.swift */; };
 		E7A4C1B60D39F8527C14A2E8 /* BrowserProfileStoresTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2D8E0A94B617C3DA058916F /* BrowserProfileStoresTests.swift */; };
+		A1C7E90B52D86F34BD071A6C /* BrowserCookieReconcilerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3B85F2E71A09C46E82D4B10 /* BrowserCookieReconcilerTests.swift */; };
 		E46E2FEB1BC74E27FE30B5CE /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A017877BD2AA19E348F092AB /* AppConfiguration.swift */; };
 		EEA6608C6ED4757BC7B0120C /* MyTermRemote in Frameworks */ = {isa = PBXBuildFile; productRef = 9516E10CB2B00AC3CE7185FA /* MyTermRemote */; };
 		EF15BAB06B72B6593A67C359 /* RemoteSettingsEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69775211DDE86AF39BD85C5F /* RemoteSettingsEditor.swift */; };
@@ -159,6 +160,7 @@
 		DB31F13A0F11454C01C5C166 /* MyTermCompanion.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = MyTermCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DDE96CF8557994DF7FEAAB5A /* BrowserAuthenticationStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserAuthenticationStateTests.swift; sourceTree = "<group>"; };
 		F2D8E0A94B617C3DA058916F /* BrowserProfileStoresTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserProfileStoresTests.swift; sourceTree = "<group>"; };
+		D3B85F2E71A09C46E82D4B10 /* BrowserCookieReconcilerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserCookieReconcilerTests.swift; sourceTree = "<group>"; };
 		DE42220FFB1AF6F3FFB21CE2 /* CompanionHostConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionHostConnection.swift; sourceTree = "<group>"; };
 		E81C624FBFF3B575146385EC /* AdaptiveWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveWorkspaceView.swift; sourceTree = "<group>"; };
 		EABF08F1180E6CF131038913 /* SceneRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneRootView.swift; sourceTree = "<group>"; };
@@ -307,6 +309,7 @@
 			children = (
 				0CF59BEE2EFA0B18D0715D36 /* AppConfigurationTests.swift */,
 				DDE96CF8557994DF7FEAAB5A /* BrowserAuthenticationStateTests.swift */,
+				D3B85F2E71A09C46E82D4B10 /* BrowserCookieReconcilerTests.swift */,
 				F2D8E0A94B617C3DA058916F /* BrowserProfileStoresTests.swift */,
 				75DA0C73070BF0DBCA490961 /* DiagnosticsLogTests.swift */,
 				7EF3949B8ED38841787EB2DF /* MachineNavigationTests.swift */,
@@ -554,6 +557,7 @@
 				4DDFE91F1D2F93245412A086 /* AppConfigurationTests.swift in Sources */,
 				D45BD972D0DEC52E2E4E5EA9 /* BrowserAuthenticationStateTests.swift in Sources */,
 				E7A4C1B60D39F8527C14A2E8 /* BrowserProfileStoresTests.swift in Sources */,
+				A1C7E90B52D86F34BD071A6C /* BrowserCookieReconcilerTests.swift in Sources */,
 				3A678F85425E96553FEDB51F /* DiagnosticsLogTests.swift in Sources */,
 				7039039218F7DE33B150C711 /* MachineNavigationTests.swift in Sources */,
 				77474B68B20106A5A73226DE /* MachinePreferencesStoreTests.swift in Sources */,

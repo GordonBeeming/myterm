@@ -201,6 +201,47 @@ public struct RemoteBrowserCookiePullResponse: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey { case cookies, nextCursor }
 }
 
+/// Identifies a cookie without carrying its value, which is all a deletion needs. WebKit matches on
+/// exactly these three fields, so they are enough to remove the right cookie and nothing else.
+public struct RemoteBrowserCookieKey: Codable, Equatable, Hashable, Sendable {
+    public let domain: String
+    public let path: String
+    public let name: String
+
+    public init(domain: String, path: String, name: String) throws {
+        self.domain = domain
+        self.path = path
+        self.name = name
+        try validate()
+    }
+
+    public init(_ cookie: RemoteBrowserCookie) {
+        domain = cookie.domain
+        path = cookie.path
+        name = cookie.name
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        domain = try container.decode(String.self, forKey: .domain)
+        path = try container.decode(String.self, forKey: .path)
+        name = try container.decode(String.self, forKey: .name)
+        try validate()
+    }
+
+    public func validate() throws {
+        guard !name.isEmpty, name.utf8.count <= RemoteBrowserCookie.maximumNameBytes,
+              !domain.isEmpty, domain.utf8.count <= RemoteBrowserCookie.maximumDomainBytes,
+              !path.isEmpty, path.utf8.count <= RemoteBrowserCookie.maximumPathBytes
+        else { throw RemoteBrowserCookieError.invalidCookie }
+    }
+
+    /// Same shape as `RemoteBrowserCookie.sortKey`, so a key and a cookie compare directly.
+    public var sortKey: String { "\(domain)\u{1F}\(path)\u{1F}\(name)" }
+
+    private enum CodingKeys: String, CodingKey { case domain, path, name }
+}
+
 public struct RemoteBrowserCookiePushRequest: Codable, Equatable, Sendable {
     public let profileStoreID: UUID
     /// Groups the chunks of one push so the host can bound a single transfer and trace it. Chunks are
@@ -210,19 +251,24 @@ public struct RemoteBrowserCookiePushRequest: Codable, Equatable, Sendable {
     public let chunkIndex: Int
     public let chunkCount: Int
     public let cookies: [RemoteBrowserCookie]
+    /// Cookies gone from the sender's jar since the last sync. Without these a sign-out never reaches
+    /// the other device, because setting cookies alone can only ever add and replace.
+    public let removed: [RemoteBrowserCookieKey]
 
     public init(
         profileStoreID: UUID,
         transferID: UUID,
         chunkIndex: Int,
         chunkCount: Int,
-        cookies: [RemoteBrowserCookie]
+        cookies: [RemoteBrowserCookie],
+        removed: [RemoteBrowserCookieKey] = []
     ) throws {
         self.profileStoreID = profileStoreID
         self.transferID = transferID
         self.chunkIndex = chunkIndex
         self.chunkCount = chunkCount
         self.cookies = cookies
+        self.removed = removed
         try validate()
     }
 
@@ -233,28 +279,41 @@ public struct RemoteBrowserCookiePushRequest: Codable, Equatable, Sendable {
         chunkIndex = try container.decode(Int.self, forKey: .chunkIndex)
         chunkCount = try container.decode(Int.self, forKey: .chunkCount)
         cookies = try container.decode([RemoteBrowserCookie].self, forKey: .cookies)
+        removed = try container.decodeIfPresent([RemoteBrowserCookieKey].self, forKey: .removed) ?? []
         try validate()
     }
 
     public func validate() throws {
         guard (1...RemoteBrowserCookieTransfer.maximumChunkCount).contains(chunkCount),
               (0..<chunkCount).contains(chunkIndex),
-              !cookies.isEmpty,
-              cookies.count <= RemoteBrowserCookieTransfer.maximumCookiesPerPage
+              // A chunk that only deletes is still worth sending; one that does nothing is not.
+              !(cookies.isEmpty && removed.isEmpty),
+              cookies.count <= RemoteBrowserCookieTransfer.maximumCookiesPerPage,
+              removed.count <= RemoteBrowserCookieTransfer.maximumCookiesPerPage
         else { throw RemoteBrowserCookieError.invalidRequest }
     }
 
     private enum CodingKeys: String, CodingKey {
-        case profileStoreID, transferID, chunkIndex, chunkCount, cookies
+        case profileStoreID, transferID, chunkIndex, chunkCount, cookies, removed
     }
 }
 
 public struct RemoteBrowserCookiePushResponse: Codable, Equatable, Sendable {
     public let acceptedCount: Int
+    public let removedCount: Int
 
-    public init(acceptedCount: Int) {
+    public init(acceptedCount: Int, removedCount: Int = 0) {
         self.acceptedCount = acceptedCount
+        self.removedCount = removedCount
     }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        acceptedCount = try container.decode(Int.self, forKey: .acceptedCount)
+        removedCount = try container.decodeIfPresent(Int.self, forKey: .removedCount) ?? 0
+    }
+
+    private enum CodingKeys: String, CodingKey { case acceptedCount, removedCount }
 }
 
 public enum RemoteBrowserCookieTransfer {
@@ -266,7 +325,14 @@ public enum RemoteBrowserCookieTransfer {
     public static let maximumCookieBytesPerPage = maximumPayloadBytes - 512
     public static let maximumCookiesPerPage = 128
     public static let maximumChunkCount = 64
-    public static let maximumCursorBytes = 1_024
+    /// A cursor is a cookie's `sortKey`, so it has to admit the largest key the field limits allow:
+    /// domain, path and name at their maxima plus the two separators. A tighter bound made the client
+    /// reject any page that ended on a long-keyed cookie, truncating the pull.
+    public static let maximumCursorBytes =
+        RemoteBrowserCookie.maximumDomainBytes
+        + RemoteBrowserCookie.maximumPathBytes
+        + RemoteBrowserCookie.maximumNameBytes
+        + 2
     /// Stops a jar that keeps growing under us from pulling forever.
     public static let maximumPullPages = 64
 
@@ -297,6 +363,34 @@ public enum RemoteBrowserCookieTransfer {
                 currentBytes = 0
             }
             current.append(cookie)
+            currentBytes += cost
+        }
+
+        if !current.isEmpty { pages.append(current) }
+        return pages
+    }
+
+    /// Same budget, for the deletion keys. A key has no value attached, so many more fit per page.
+    public static func keyPages(
+        of keys: [RemoteBrowserCookieKey],
+        encoder: JSONEncoder = JSONEncoder()
+    ) -> [[RemoteBrowserCookieKey]] {
+        var pages: [[RemoteBrowserCookieKey]] = []
+        var current: [RemoteBrowserCookieKey] = []
+        var currentBytes = 0
+
+        for key in keys {
+            guard let encoded = try? encoder.encode(key) else { continue }
+            let cost = encoded.count + 1
+            guard cost <= maximumCookieBytesPerPage else { continue }
+            if !current.isEmpty,
+               current.count == maximumCookiesPerPage
+                   || currentBytes + cost > maximumCookieBytesPerPage {
+                pages.append(current)
+                current = []
+                currentBytes = 0
+            }
+            current.append(key)
             currentBytes += cost
         }
 

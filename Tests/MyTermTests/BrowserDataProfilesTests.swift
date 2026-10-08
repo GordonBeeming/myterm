@@ -481,16 +481,17 @@ final class BrowserDataProfilesTests: XCTestCase {
             hostID: UUID(), workspaceID: workspaceID.rawValue,
             groupID: groupID.rawValue, tabID: browserTab.id.rawValue))
 
-        XCTAssertTrue(model.companionSharesBrowserSignIns(route: browserRoute))
+        let profile = try model.companionBrowserProfile(route: browserRoute)
         XCTAssertEqual(
-            try model.companionBrowserProfile(route: browserRoute).persistentStoreID,
+            profile.persistentStoreID,
             try XCTUnwrap(try browser(in: browserTab).profile).persistentStoreID
         )
+        XCTAssertTrue(model.companionSharesBrowserSignIns(profile: profile))
 
         try model.store.updateWorkspaceSettings(workspaceID) {
             $0.sharesBrowserSignInsWithCompanion = false
         }
-        XCTAssertFalse(model.companionSharesBrowserSignIns(route: browserRoute))
+        XCTAssertFalse(model.companionSharesBrowserSignIns(profile: profile))
 
         // A terminal tab has no jar to hand over, and must not resolve to some other tab's.
         let terminalRoute = try CompanionBrowserRoute(MessageMetadata(
@@ -499,6 +500,49 @@ final class BrowserDataProfilesTests: XCTestCase {
         XCTAssertThrowsError(try model.companionBrowserProfile(route: terminalRoute)) { error in
             XCTAssertEqual(error as? CompanionCommandError, .wrongTarget)
         }
+    }
+
+    func testOneWorkspaceOptingOutKeepsAnAppWideProfileOffEveryCompanion() throws {
+        let directory = try makeTemporaryDirectory()
+        let (defaults, suiteName) = makeDefaults()
+        defer {
+            removeTemporaryDirectory(directory)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        // App-wide scope means both workspaces' browser tabs share one jar, so consent cannot be
+        // decided per workspace: exporting it for one would carry the other's sign-ins too.
+        let settings = BrowserSettingsStore(channel: .development, defaults: defaults)
+        settings.browserDataScope = .appWide
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: nil,
+            startsTerminalProcesses: false,
+            browserSettings: settings
+        )
+
+        let sharingWorkspaceID = model.store.selectedWorkspaceID
+        model.createBrowserTab()
+        let profile = try XCTUnwrap(try browser(in: XCTUnwrap(model.selectedTab)).profile)
+
+        let optedOutWorkspaceID = try model.store.createWorkspace(title: "Private", folderID: nil)
+        try model.store.selectWorkspace(optedOutWorkspaceID)
+        model.createBrowserTab()
+        let otherProfile = try XCTUnwrap(try browser(in: XCTUnwrap(model.selectedTab)).profile)
+        XCTAssertEqual(otherProfile.persistentStoreID, profile.persistentStoreID,
+                       "App-wide scope has to put both workspaces on one jar for this test to mean anything")
+
+        XCTAssertTrue(model.companionSharesBrowserSignIns(profile: profile))
+
+        try model.store.updateWorkspaceSettings(optedOutWorkspaceID) {
+            $0.sharesBrowserSignInsWithCompanion = false
+        }
+        XCTAssertFalse(model.companionSharesBrowserSignIns(profile: profile),
+                       "A single workspace opting out keeps the whole shared jar on the Mac")
+        XCTAssertTrue(try model.store.resolvedSettings(for: sharingWorkspaceID)
+            .sharesBrowserSignInsWithCompanion,
+                      "The other workspace still reads as sharing; the profile is what blocks it")
     }
 
     private func workspace(workingDirectory: URL, folderID: WorkspaceFolderID? = nil) -> Workspace {

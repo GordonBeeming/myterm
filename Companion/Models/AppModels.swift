@@ -326,9 +326,9 @@ final class SceneModel {
     var connectionPhase: ConnectionPhase = .disconnected
     var connectionID: UUID?
     var projection: RemoteWorkspaceProjection?
-    /// Shared by every browser view in this scene, because the one-live-view-per-profile rule it
-    /// enforces only means anything if all the views consult the same cache.
-    @ObservationIgnored let browserProfileStores = BrowserProfileStores()
+    /// Process-wide, not per scene: the one-live-view-per-profile rule only means anything if every
+    /// browser view in the app consults the same cache, and the companion supports multiple scenes.
+    @ObservationIgnored var browserProfileStores: BrowserProfileStores { .shared }
     /// Whether `projection` came from the connection that is live now. A list retained across a
     /// reconnect is good enough to read and to tap, but not good enough to decide that something
     /// a notification names does not exist: a workspace opened on the Mac since that list was
@@ -605,13 +605,21 @@ final class SceneModel {
 
     /// Sends the companion's cookies back a chunk at a time, awaiting each one so a slow link cannot
     /// pile up in-flight commands. Returns how many the Mac stored.
+    ///
+    /// Deletions ride the first chunk. They are keys rather than cookies, so they are small, and
+    /// sending them once avoids re-deleting on every chunk.
     @discardableResult
     func pushBrowserCookies(
         _ route: BrowserRoute,
         profileStoreID: UUID,
-        cookies: [RemoteBrowserCookie]
+        cookies: [RemoteBrowserCookie],
+        removed: [RemoteBrowserCookieKey] = []
     ) async -> Int {
-        let pages = RemoteBrowserCookieTransfer.pages(of: cookies)
+        var pages = RemoteBrowserCookieTransfer.pages(of: cookies)
+        let removedPages = RemoteBrowserCookieTransfer.keyPages(of: removed)
+        // Pad with cookie-less chunks so every page of deletions has one to ride in, which also
+        // covers a push that only deletes.
+        while pages.count < removedPages.count { pages.append([]) }
         guard !pages.isEmpty, pages.count <= RemoteBrowserCookieTransfer.maximumChunkCount else { return 0 }
         let transferID = UUID()
         var accepted = 0
@@ -621,7 +629,8 @@ final class SceneModel {
             do {
                 request = try RemoteBrowserCookiePushRequest(
                     profileStoreID: profileStoreID, transferID: transferID,
-                    chunkIndex: index, chunkCount: pages.count, cookies: page
+                    chunkIndex: index, chunkCount: pages.count, cookies: page,
+                    removed: index < removedPages.count ? removedPages[index] : []
                 )
             } catch { return accepted }
 

@@ -240,6 +240,9 @@ struct RemoteBrowserView: View {
     @State private var cookiePushTask: Task<Void, Never>?
     /// What the Mac is already known to hold, so a push carries only what changed here.
     @State private var syncedCookies: Set<RemoteBrowserCookie> = []
+    /// Identifies this web view as the store's holder. The route cannot: the same tab can be open in
+    /// two scenes, and both would claim the same route.
+    @State private var storeOwner = UUID()
 
     private var preferenceKey: String { "browserMode." + route.connectionID.relayOrigin + "." + route.hostID.uuidString }
 
@@ -306,13 +309,14 @@ struct RemoteBrowserView: View {
             proxyOwner = nil
             rendererOwner = nil
             storeIdentifier = nil
+            let storeHolder = storeOwner
             // The web view goes now rather than behind the cookie round trip. Cookies already set
             // live in the data store, which outlives the view, so they are still readable after this.
             native.stop()
             Task { @MainActor in
                 if hadNativeSession { await pushCookies(identifier: identifier) }
                 if let identifier {
-                    scene.browserProfileStores.release(identifier: identifier, from: route)
+                    scene.browserProfileStores.release(identifier: identifier, owner: storeHolder)
                 }
             }
             Task {
@@ -323,14 +327,40 @@ struct RemoteBrowserView: View {
         }
     }
 
-    /// Another browser tab on this profile has taken the shared data store. Only one live web view can
-    /// use it, because the loopback proxy is configured on the store rather than the view.
-    private func handleStoreDisplaced() {
+    /// Another web view wants the shared data store. Flush first so nothing signed in here is lost,
+    /// then stop: only one live view can use the store, because the loopback proxy is configured on
+    /// the store rather than the view.
+    private func standDownFromStore() async {
         cookiePushTask?.cancel()
         cookiePushTask = nil
         native.onNavigationCommitted = nil
+        if native.webView != nil { await pushCookies() }
         native.stop()
         native.error = "Another browser tab for this workspace took over the shared session. Reload to use it here."
+    }
+
+    /// Brings both jars into line at the start of a session, including deletions in either direction.
+    private func reconcileCookies(
+        identifier: UUID,
+        profileStoreID: UUID,
+        store: WKWebsiteDataStore
+    ) async {
+        let jar = CompanionBrowserCookies(dataStore: store)
+        let local = await jar.all()
+        let remote = await scene.pullBrowserCookies(route, profileStoreID: profileStoreID)
+        let stores = scene.browserProfileStores
+        let plan = BrowserCookieReconciler.plan(
+            local: local, remote: remote, baseline: stores.baseline(identifier: identifier))
+
+        await jar.remove(plan.deleteLocally)
+        await jar.apply(plan.applyLocally)
+        syncedCookies = plan.synced
+        stores.setBaseline(plan.baseline, identifier: identifier)
+
+        if !plan.push.isEmpty {
+            await scene.pushBrowserCookies(
+                route, profileStoreID: profileStoreID, cookies: plan.push)
+        }
     }
 
     /// Coalesces the pushes a page can trigger in quick succession into one, so a site that redirects
@@ -344,26 +374,31 @@ struct RemoteBrowserView: View {
         }
     }
 
-    /// Sends only what the Mac has not already seen. Pushing the whole jar each time would hand the
-    /// Mac its own cookies straight back and, under last-writer-wins, keep overwriting anything it
+    /// Sends what changed here and what was deleted here. Pushing the whole jar each time would hand
+    /// the Mac its own cookies straight back and, under last-writer-wins, keep overwriting anything it
     /// changed in between.
     private func pushCookies(identifier explicit: UUID? = nil) async {
         guard let identifier = explicit ?? storeIdentifier,
               let profileStoreID = scene.browserProfileStoreID(route),
               let store = scene.browserProfileStores.store(identifier: identifier) else { return }
-        let cookies = await CompanionBrowserCookies(dataStore: store).all()
-        let changed = cookies.filter { !syncedCookies.contains($0) }
-        guard !changed.isEmpty else { return }
+        let stores = scene.browserProfileStores
+        let current = await CompanionBrowserCookies(dataStore: store).all()
+        let outcome = BrowserCookieReconciler.push(
+            current: current, synced: syncedCookies, baseline: stores.baseline(identifier: identifier))
+        guard !outcome.changed.isEmpty || !outcome.removed.isEmpty else { return }
 
         let accepted = await scene.pushBrowserCookies(
-            route, profileStoreID: profileStoreID, cookies: changed)
-        // Only mark them synced if the Mac took the lot; a partial push has to be retried in full.
-        if accepted == changed.count { syncedCookies.formUnion(changed) }
+            route, profileStoreID: profileStoreID,
+            cookies: outcome.changed, removed: outcome.removed)
+        // Only record the new agreed state if the Mac took the lot; a partial push retries in full.
+        guard accepted == outcome.changed.count else { return }
+        syncedCookies = Set(current)
+        stores.setBaseline(Set(current.map(\.sortKey)), identifier: identifier)
     }
 
     private func releaseStore() {
         guard let identifier = storeIdentifier else { return }
-        scene.browserProfileStores.release(identifier: identifier, from: route)
+        scene.browserProfileStores.release(identifier: identifier, owner: storeOwner)
     }
 
     private func addressField(_ binding: Binding<String>, submit: @escaping () -> Void) -> some View {
@@ -490,24 +525,25 @@ struct RemoteBrowserView: View {
                     hostID: route.hostID, profileStoreID: profileStoreID, workspaceID: route.workspaceID
                 )
                 storeIdentifier = identifier
-                let store = scene.browserProfileStores.acquire(identifier: identifier, for: route) {
-                    Task { @MainActor in handleStoreDisplaced() }
+                let owner = storeOwner
+                // Awaits any previous holder's final push, so its sign-ins are on the Mac before the
+                // snapshot below lands on top of them.
+                let store = await scene.browserProfileStores.acquire(
+                    identifier: identifier, owner: owner, hostID: route.hostID
+                ) { @MainActor in await standDownFromStore() }
+                guard generation == token, !Task.isCancelled else {
+                    scene.browserProfileStores.release(identifier: identifier, owner: owner)
+                    await scene.closeBrowserProxy(route, owner: token)
+                    return
                 }
                 if let profileStoreID {
-                    let cookies = await scene.pullBrowserCookies(route, profileStoreID: profileStoreID)
+                    await reconcileCookies(
+                        identifier: identifier, profileStoreID: profileStoreID, store: store)
                     guard generation == token, !Task.isCancelled else {
+                        scene.browserProfileStores.release(identifier: identifier, owner: owner)
                         await scene.closeBrowserProxy(route, owner: token)
                         return
                     }
-                    if !cookies.isEmpty {
-                        await CompanionBrowserCookies(dataStore: store).apply(cookies)
-                        guard generation == token, !Task.isCancelled else {
-                            await scene.closeBrowserProxy(route, owner: token)
-                            return
-                        }
-                    }
-                    // What just arrived is by definition what the Mac holds.
-                    syncedCookies = Set(cookies)
                 }
                 native.onNavigationCommitted = { schedulePush() }
                 try await native.start(endpoint, url: previousURL.flatMap(URL.init(string:)) ?? route.url,

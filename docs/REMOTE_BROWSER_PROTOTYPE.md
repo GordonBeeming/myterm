@@ -32,9 +32,13 @@ The boundary is the workspace's **Browser data** setting, the same one the Mac's
 
 Mac rendered already runs in the Mac's own profile. Native proxy keeps its own persistent store on the device, inside the app container under iOS data protection. The companion keeps the two in step over the encrypted channel: it asks for the Mac's cookies when it opens a tab, and sends its own back after each page load and when the tab closes. The relay only ever sees ciphertext.
 
-`Share sign-ins with companion`, under Browser sessions in Settings, controls this per workspace, folder, or globally. It is on by default. Turn it off and nothing crosses the link for that workspace. The companion still keeps a persistent jar, so its sign-ins survive a mode switch; they just stay on the phone. Removing a pairing deletes that Mac's jars from the device.
+Signing out travels too. The companion remembers which cookies both sides held at the last sync, so it can tell a cookie that is new on one device from one that was deleted on the other, and deletions are applied rather than quietly restored from the other side's copy.
 
-Signing in to the same site on both devices at once means whichever copy transfers last wins. And only one web view can hold a profile's store at a time, so opening a second native-proxy tab on the same profile takes the session from the first, which then asks you to reload.
+`Share sign-ins with companion`, under Browser sessions in Settings, controls this per workspace, folder, or globally. It is on by default. Turn it off and nothing crosses the link. The companion still keeps a persistent jar, so its sign-ins survive a mode switch; they just stay on the phone. Removing a pairing deletes that Mac's jars from the device.
+
+Because a profile can be shared by several workspaces, under a folder-wide or app-wide browser data scope, the setting is read across all of them. One workspace with sharing off keeps that whole profile on the Mac, since exporting the jar would carry its sign-ins too. Put a workspace on its own profile if you want it to share while another does not.
+
+Signing in to the same site on both devices at once means whichever copy transfers last wins. And only one browser view can hold a profile's store at a time: opening a second native-proxy tab on the same profile takes the session from the first, which flushes its sign-ins to the Mac on the way out and then asks you to reload.
 
 ## Workspaces inside folders
 

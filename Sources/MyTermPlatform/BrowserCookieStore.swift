@@ -48,6 +48,22 @@ public struct BrowserCookieStore {
         return accepted
     }
 
+    /// Deletes the named cookies, returning how many were actually there to delete. Matching happens
+    /// on domain, path and name, the same triple WebKit replaces on.
+    public func remove(_ keys: [RemoteBrowserCookieKey]) async -> Int {
+        guard !keys.isEmpty else { return 0 }
+        let wanted = Set(keys.map(\.sortKey))
+        var removed = 0
+        for cookie in await allCookies() {
+            guard let mapped = try? RemoteBrowserCookie(cookie), wanted.contains(mapped.sortKey) else {
+                continue
+            }
+            await delete(cookie)
+            removed += 1
+        }
+        return removed
+    }
+
     private func allCookies() async -> [HTTPCookie] {
         await withCheckedContinuation { continuation in
             cookieStore.getAllCookies { continuation.resume(returning: $0) }
@@ -57,6 +73,12 @@ public struct BrowserCookieStore {
     private func setCookie(_ cookie: HTTPCookie) async {
         await withCheckedContinuation { continuation in
             cookieStore.setCookie(cookie) { continuation.resume() }
+        }
+    }
+
+    private func delete(_ cookie: HTTPCookie) async {
+        await withCheckedContinuation { continuation in
+            cookieStore.delete(cookie) { continuation.resume() }
         }
     }
 }
