@@ -208,7 +208,8 @@ public final class RelayHTTPClient: @unchecked Sendable {
         switch http.statusCode {
         case 200..<300: break
         case 300..<400: throw RemoteError.unsafeRedirect
-        case 401, 403: throw RemoteError.authenticationRequired
+        case 401: throw RemoteError.authenticationRequired
+        case 403: throw RemoteError.server(status: 403)
         default: throw RemoteError.server(status: http.statusCode)
         }
         guard data.count <= 2 * 1_024 * 1_024 else { throw RemoteError.messageTooLarge }

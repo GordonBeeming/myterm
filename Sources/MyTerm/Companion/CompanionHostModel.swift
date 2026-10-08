@@ -683,7 +683,13 @@ final class CompanionHostModel {
         do {
             status = .connecting
             let endpoint = try configuredEndpoint()
-            guard let reference = try configuration.loadAuthReference(),
+            let savedReference: CompanionAuthReference?
+            do { savedReference = try configuration.loadAuthReference() }
+            catch let error as RemoteError where error == .invalidResponse || error == .wrongPeer {
+                requireSignIn(.credentialsUnavailable, generation: generation, allowSignIn: allowSignIn)
+                return
+            }
+            guard let reference = savedReference,
                   reference.relay == endpoint else {
                 requireSignIn(.credentialsUnavailable, generation: generation, allowSignIn: allowSignIn)
                 return
@@ -2183,7 +2189,7 @@ final class CompanionHostModel {
     private static func isAuthenticationFailure(_ error: Error) -> Bool {
         guard let error = error as? RemoteError else { return false }
         switch error {
-        case .authenticationRevoked: return true
+        case .authenticationRequired, .authenticationRevoked: return true
         default: return false
         }
     }

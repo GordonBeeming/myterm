@@ -71,6 +71,37 @@ final class CompanionSignInRecoveryTests: XCTestCase {
         XCTAssertEqual(fixture.sleeps.count, 0)
     }
 
+    func testCorruptAuthReferenceExplainsSignInAndStopsRetries() async throws {
+        let fixture = try fixture()
+        try await fixture.host.installAuthenticatedSessionForTesting(fixture.record)
+        fixture.defaults.set(Data("invalid reference".utf8),
+            forKey: "\(MyTermChannel.development.bundleIdentifier).companion.recovery.auth-reference")
+
+        fixture.host.startIfEnabled()
+        try await wait { fixture.host.status == .signInRequired(.credentialsUnavailable) }
+
+        XCTAssertEqual(fixture.sleeps.count, 0)
+        XCTAssertEqual(fixture.browserStarts.count, 0)
+        XCTAssertEqual(fixture.app.errorDescription, CompanionSignInRequirement.credentialsUnavailable.message)
+        fixture.host.connect()
+        try await wait { fixture.browserStarts.count == 1 }
+    }
+
+    func testRejectedUnexpiredAccessTokenOffersSignInWithoutRetrying() async throws {
+        let fixture = try fixture()
+        try await fixture.host.installAuthenticatedSessionForTesting(fixture.record)
+
+        fixture.host.startIfEnabled()
+        try await wait { fixture.host.status == .signInRequired(.authorizationRejected) }
+
+        XCTAssertEqual(fixture.sleeps.count, 0)
+        XCTAssertEqual(fixture.browserStarts.count, 0)
+        let saved = try await TokenStore(secrets: fixture.secrets).load(partition: fixture.partition)
+        XCTAssertEqual(saved, fixture.record)
+        fixture.host.connect()
+        try await wait { fixture.browserStarts.count == 1 }
+    }
+
     func testRejectedRefreshExplainsExpiredOrRevokedSignInAndStopsRetries() async throws {
         let fixture = try fixture(expiry: .distantPast)
         try await fixture.host.installAuthenticatedSessionForTesting(fixture.record)
