@@ -326,6 +326,9 @@ final class SceneModel {
     var connectionPhase: ConnectionPhase = .disconnected
     var connectionID: UUID?
     var projection: RemoteWorkspaceProjection?
+    /// Shared by every browser view in this scene, because the one-live-view-per-profile rule it
+    /// enforces only means anything if all the views consult the same cache.
+    @ObservationIgnored let browserProfileStores = BrowserProfileStores()
     /// Whether `projection` came from the connection that is live now. A list retained across a
     /// reconnect is good enough to read and to tap, but not good enough to decide that something
     /// a notification names does not exist: a workspace opened on the Mac since that list was
@@ -560,6 +563,84 @@ final class SceneModel {
 
     func closeBrowserProxy(_ route: BrowserRoute, owner: UUID) async {
         await connection?.closeBrowserProxy(route, owner: owner)
+    }
+
+    /// The Mac's own data-store identifier for this browser tab, read from the latest projection so
+    /// the companion follows the workspace's "Browser data" scope as the Mac changes it. Nil against a
+    /// Mac that predates cookie sharing.
+    func browserProfileStoreID(_ route: BrowserRoute) -> UUID? {
+        projection?.workspaces
+            .first { $0.id.rawValue == route.workspaceID }?
+            .groups.first { $0.id.rawValue == route.groupID }?
+            .tabs.first { $0.id.rawValue == route.tabID }?
+            .browserProfileStoreID
+    }
+
+    /// Pages the Mac's cookies for a profile. A missing capability or a workspace with sharing off
+    /// comes back empty rather than as an error: the companion still has its own jar to browse with.
+    func pullBrowserCookies(_ route: BrowserRoute, profileStoreID: UUID) async -> [RemoteBrowserCookie] {
+        var collected: [RemoteBrowserCookie] = []
+        var cursor: String?
+
+        for _ in 0..<RemoteBrowserCookieTransfer.maximumPullPages {
+            let request: RemoteBrowserCookiePullRequest
+            do { request = try RemoteBrowserCookiePullRequest(profileStoreID: profileStoreID, cursor: cursor) }
+            catch { return collected }
+
+            guard let payload = try? JSONEncoder().encode(request) else { return collected }
+            let result: Data?
+            do { result = try await command(.browserCookiePull, metadata: metadata(route: route), payload: payload) }
+            catch { return collected }
+
+            guard let result,
+                  let response = try? JSONDecoder().decode(RemoteBrowserCookiePullResponse.self, from: result)
+            else { return collected }
+
+            collected.append(contentsOf: response.cookies)
+            guard let next = response.nextCursor else { return collected }
+            cursor = next
+        }
+        return collected
+    }
+
+    /// Sends the companion's cookies back a chunk at a time, awaiting each one so a slow link cannot
+    /// pile up in-flight commands. Returns how many the Mac stored.
+    @discardableResult
+    func pushBrowserCookies(
+        _ route: BrowserRoute,
+        profileStoreID: UUID,
+        cookies: [RemoteBrowserCookie]
+    ) async -> Int {
+        let pages = RemoteBrowserCookieTransfer.pages(of: cookies)
+        guard !pages.isEmpty, pages.count <= RemoteBrowserCookieTransfer.maximumChunkCount else { return 0 }
+        let transferID = UUID()
+        var accepted = 0
+
+        for (index, page) in pages.enumerated() {
+            let request: RemoteBrowserCookiePushRequest
+            do {
+                request = try RemoteBrowserCookiePushRequest(
+                    profileStoreID: profileStoreID, transferID: transferID,
+                    chunkIndex: index, chunkCount: pages.count, cookies: page
+                )
+            } catch { return accepted }
+
+            guard let payload = try? JSONEncoder().encode(request) else { return accepted }
+            let result: Data?
+            do { result = try await command(.browserCookiePush, metadata: metadata(route: route), payload: payload) }
+            catch { return accepted }
+
+            guard let result,
+                  let response = try? JSONDecoder().decode(RemoteBrowserCookiePushResponse.self, from: result)
+            else { return accepted }
+            accepted += response.acceptedCount
+        }
+        return accepted
+    }
+
+    private func metadata(route: BrowserRoute) -> MessageMetadata {
+        MessageMetadata(hostID: route.hostID, workspaceID: route.workspaceID,
+                        groupID: route.groupID, tabID: route.tabID)
     }
 
     func attach(_ route: TerminalRoute, requestingFreshCheckpoint: Bool = false,

@@ -3084,6 +3084,7 @@ final class AppModel {
         case .nativeTextFilePatterns: patch.nativeTextFilePatterns != nil
         case .browserFilePatterns: patch.browserFilePatterns != nil
         case .allowsLocalFileJavaScript: patch.allowsLocalFileJavaScript != nil
+        case .sharesBrowserSignInsWithCompanion: patch.sharesBrowserSignInsWithCompanion != nil
         case .compactSidebar: patch.compactSidebar != nil
         case .fontPostScriptName: patch.fontPostScriptName != nil
         case .fontSize: patch.fontSize != nil
@@ -3110,6 +3111,9 @@ final class AppModel {
         if let value = patch.nativeTextFilePatterns { overrides.nativeTextFilePatterns = value }
         if let value = patch.browserFilePatterns { overrides.browserFilePatterns = value }
         if let value = patch.allowsLocalFileJavaScript { overrides.allowsLocalFileJavaScript = value }
+        if let value = patch.sharesBrowserSignInsWithCompanion {
+            overrides.sharesBrowserSignInsWithCompanion = value
+        }
         if let value = patch.compactSidebar { overrides.compactSidebar = value }
         if let value = patch.fontPostScriptName { overrides.fontPostScriptName = value }
         if let value = patch.fontSize { overrides.fontSize = value }
@@ -3131,6 +3135,7 @@ final class AppModel {
             case .nativeTextFilePatterns: overrides.nativeTextFilePatterns = nil
             case .browserFilePatterns: overrides.browserFilePatterns = nil
             case .allowsLocalFileJavaScript: overrides.allowsLocalFileJavaScript = nil
+            case .sharesBrowserSignInsWithCompanion: overrides.sharesBrowserSignInsWithCompanion = nil
             case .compactSidebar: overrides.compactSidebar = nil
             case .fontPostScriptName: overrides.fontPostScriptName = nil
             case .fontSize: overrides.fontSize = nil

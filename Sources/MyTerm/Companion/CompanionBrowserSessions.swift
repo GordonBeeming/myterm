@@ -22,11 +22,30 @@ struct CompanionBrowserRoute: Hashable {
 @MainActor
 extension AppModel {
     func companionBrowserURL(route: CompanionBrowserRoute) throws -> URL {
+        try companionBrowserSession(route: route).url
+    }
+
+    /// The data profile behind a route's browser tab. Cookie sync is keyed on this rather than on the
+    /// route, so every tab sharing a workspace's profile shares one jar — the same boundary the
+    /// "Browser data" setting draws on the Mac.
+    func companionBrowserProfile(route: CompanionBrowserRoute) throws -> BrowserDataProfile {
+        guard let profile = try companionBrowserSession(route: route).profile else {
+            throw CompanionCommandError.wrongTarget
+        }
+        return profile
+    }
+
+    func companionSharesBrowserSignIns(route: CompanionBrowserRoute) -> Bool {
+        (try? store.resolvedSettings(for: WorkspaceID(rawValue: route.workspaceID)))?
+            .sharesBrowserSignInsWithCompanion ?? false
+    }
+
+    private func companionBrowserSession(route: CompanionBrowserRoute) throws -> BrowserSession {
         guard let workspace = store.workspaces.first(where: { $0.id.rawValue == route.workspaceID }),
               let group = workspace.orderedGroups.first(where: { $0.id.rawValue == route.groupID }),
               let tab = group.tabs.first(where: { $0.id.rawValue == route.tabID }),
               let browser = tab.browserSession else { throw CompanionCommandError.wrongTarget }
-        return browser.url
+        return browser
     }
 }
 

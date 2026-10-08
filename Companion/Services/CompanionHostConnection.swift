@@ -249,6 +249,11 @@ actor CompanionHostConnection {
     func command(_ operation: CommandOperation, metadata source: MessageMetadata,
                  payload: Data) async throws -> Data? {
         if operation == .browserInteract { try requireBrowserCapability(RemoteBrowserRequest.capability) }
+        // An operation an older Mac cannot decode drops the whole connection, so the gate is the only
+        // thing keeping a cookie sync from disconnecting a peer that predates it.
+        if operation == .browserCookiePull || operation == .browserCookiePush {
+            try requireBrowserCapability(RemoteBrowserCookiePullRequest.capability)
+        }
         guard commandContinuations.count < 64 else { throw RemoteError.messageTooLarge }
         let requestID = UUID()
         let requestMetadata = MessageMetadata(
@@ -319,7 +324,8 @@ actor CompanionHostConnection {
             agreementKey: identity.agreementKey.publicKey,
             notificationSigningKey: identity.notificationSigningKey.publicKey,
             capabilities: ["workspace-v1", "terminal-checkpoint-v1", "control-lease-v1",
-                           RemoteBrowserProxy.capability, RemoteBrowserRequest.capability]
+                           RemoteBrowserProxy.capability, RemoteBrowserRequest.capability,
+                           RemoteBrowserCookiePullRequest.capability]
         )
         let hostKey = try P256.KeyAgreement.PublicKey(x963Representation: host.pinnedPublicKey)
         let outbound = ChannelBinding(

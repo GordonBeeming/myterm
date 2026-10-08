@@ -22,7 +22,19 @@ Open the artifact as a browser tab on the Mac, then select that tab in the compa
 
 Artifact servers bind only to loopback and enforce session-specific access. The relay sees encrypted messages, including page URLs, artifact contents, screenshots, and typed input. It does not terminate the end-to-end browser channel. An HTTP origin remains HTTP between the source Mac and that origin; HTTPS continues to use the browser's normal certificate validation.
 
-The two modes have separate browser sessions and cookie stores. Switching modes carries the current address, but can require signing into the website again. A sleeping or disconnected Mac makes both modes unavailable.
+A sleeping or disconnected Mac makes both modes unavailable.
+
+## Sign-ins and cookies
+
+Both modes share one cookie jar per browser profile, so signing in on the Mac signs you in on the companion and the other way round. Switching between Native proxy and Mac rendered keeps the session.
+
+The boundary is the workspace's **Browser data** setting, the same one the Mac's own browser tabs use. Two workspaces on separate profiles keep separate sign-ins on the phone too, and changing the scope on the Mac moves the companion with it.
+
+Mac rendered already runs in the Mac's own profile. Native proxy keeps its own persistent store on the device, inside the app container under iOS data protection. The companion keeps the two in step over the encrypted channel: it asks for the Mac's cookies when it opens a tab, and sends its own back after each page load and when the tab closes. The relay only ever sees ciphertext.
+
+`Share sign-ins with companion`, under Browser sessions in Settings, controls this per workspace, folder, or globally. It is on by default. Turn it off and nothing crosses the link for that workspace. The companion still keeps a persistent jar, so its sign-ins survive a mode switch; they just stay on the phone. Removing a pairing deletes that Mac's jars from the device.
+
+Signing in to the same site on both devices at once means whichever copy transfers last wins. And only one web view can hold a profile's store at a time, so opening a second native-proxy tab on the same profile takes the session from the first, which then asks you to reload.
 
 ## Workspaces inside folders
 

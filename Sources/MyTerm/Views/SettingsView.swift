@@ -517,6 +517,21 @@ struct SettingsView: View {
                 Text("New browser tabs use this profile. Existing tabs keep their current profile.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+
+                ScopedSettingRow(
+                    model: model,
+                    scope: scope,
+                    title: "Share sign-ins with companion",
+                    global: \TerminalPreferences.sharesBrowserSignInsWithCompanion,
+                    override: \TerminalPreferencesOverrides.sharesBrowserSignInsWithCompanion
+                ) { value in
+                    Toggle("Share sign-ins with companion", isOn: value)
+                        .labelsHidden()
+                }
+
+                Text("On by default. A paired iPhone or iPad browsing through this Mac reads and writes the same cookies as this profile, so signing in on either device signs you in on both. Turn it off to keep a workspace's sign-ins on this Mac; the companion still keeps its own separate sign-ins for the profile.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Web links") {

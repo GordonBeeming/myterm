@@ -1,5 +1,6 @@
 import Foundation
 import MyTermCore
+import MyTermRemote
 @testable import MyTerm
 import XCTest
 
@@ -420,6 +421,84 @@ final class BrowserDataProfilesTests: XCTestCase {
             restored.browserController(for: firstLegacyBrowser.id)?.webView.configuration.websiteDataStore.identifier,
             migratedProfile.persistentStoreID
         )
+    }
+
+    func testProjectionCarriesTheBrowserProfileStoreSoACompanionCanMatchTheBoundary() throws {
+        let directory = try makeTemporaryDirectory()
+        let (defaults, suiteName) = makeDefaults()
+        defer {
+            removeTemporaryDirectory(directory)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let settings = BrowserSettingsStore(channel: .development, defaults: defaults)
+        settings.browserDataScope = .appWide
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: nil,
+            startsTerminalProcesses: false,
+            browserSettings: settings
+        )
+        model.createBrowserTab()
+        let tab = try XCTUnwrap(model.selectedTab)
+        let expected = try XCTUnwrap(try browser(in: tab).profile).persistentStoreID
+
+        let tabs = model.companionWorkspaceProjection().workspaces
+            .flatMap(\.groups).flatMap(\.tabs)
+        let projectedBrowser = try XCTUnwrap(tabs.first { $0.id == tab.id })
+        let projectedTerminal = try XCTUnwrap(tabs.first { $0.kind == .terminal })
+
+        XCTAssertEqual(projectedBrowser.kind, .browser)
+        XCTAssertEqual(projectedBrowser.browserProfileStoreID, expected,
+                       "A companion keys its own jar on this, so it has to be the tab's real profile")
+        XCTAssertNil(projectedTerminal.browserProfileStoreID,
+                     "A terminal tab has no browser profile to share")
+    }
+
+    func testCookieSharingGateFollowsTheWorkspaceSettingAndNeedsARealBrowserTab() throws {
+        let directory = try makeTemporaryDirectory()
+        let (defaults, suiteName) = makeDefaults()
+        defer {
+            removeTemporaryDirectory(directory)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: nil,
+            startsTerminalProcesses: false,
+            browserSettings: BrowserSettingsStore(channel: .development, defaults: defaults)
+        )
+        let terminalTabID = model.selectedWorkspace.selectedTabID
+        model.createBrowserTab()
+        let browserTab = try XCTUnwrap(model.selectedTab)
+        let workspaceID = model.store.selectedWorkspaceID
+        let groupID = model.selectedWorkspace.focusedTabGroupID
+
+        let browserRoute = try CompanionBrowserRoute(MessageMetadata(
+            hostID: UUID(), workspaceID: workspaceID.rawValue,
+            groupID: groupID.rawValue, tabID: browserTab.id.rawValue))
+
+        XCTAssertTrue(model.companionSharesBrowserSignIns(route: browserRoute))
+        XCTAssertEqual(
+            try model.companionBrowserProfile(route: browserRoute).persistentStoreID,
+            try XCTUnwrap(try browser(in: browserTab).profile).persistentStoreID
+        )
+
+        try model.store.updateWorkspaceSettings(workspaceID) {
+            $0.sharesBrowserSignInsWithCompanion = false
+        }
+        XCTAssertFalse(model.companionSharesBrowserSignIns(route: browserRoute))
+
+        // A terminal tab has no jar to hand over, and must not resolve to some other tab's.
+        let terminalRoute = try CompanionBrowserRoute(MessageMetadata(
+            hostID: UUID(), workspaceID: workspaceID.rawValue,
+            groupID: groupID.rawValue, tabID: try XCTUnwrap(terminalTabID).rawValue))
+        XCTAssertThrowsError(try model.companionBrowserProfile(route: terminalRoute)) { error in
+            XCTAssertEqual(error as? CompanionCommandError, .wrongTarget)
+        }
     }
 
     private func workspace(workingDirectory: URL, folderID: WorkspaceFolderID? = nil) -> Workspace {
