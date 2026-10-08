@@ -1571,23 +1571,22 @@ final class CompanionHostModel {
             // through and send a snapshot instead of replaying forever.
         }
 
-        for attempt in 0...Self.maximumAttachCheckpointAttempts {
+        for attempt in 0...Self.maximumAttachCheckpointRetakes {
             try await sendCheckpoint(target: target, peer: peer, metadata: metadata)
-            guard attempt < Self.maximumAttachCheckpointAttempts else {
-                // Out of attempts against a session that keeps outrunning its own snapshot. The
-                // checkpoint is self-contained and the companion resets to its sequence, so claiming
-                // the session now costs the delta since the snapshot and nothing more. Refusing
-                // instead is what left a busy terminal unattached until its output stopped.
-                claimAttached(target: target, peer: peer)
+            guard attempt < Self.maximumAttachCheckpointRetakes else {
+                // Out of attempts against a session that keeps outrunning its own snapshot, so stop
+                // chasing it and claim it. Refusing instead is what left a busy terminal unattached
+                // until its output stopped.
+                flushAndClaim(target: target, peer: peer)
                 return
             }
             if try await finishAttaching(target: target, peer: peer) == .attached { return }
         }
     }
 
-    /// How many times a snapshot may be retaken when output keeps outrunning it. Each attempt copies
-    /// the scrollback on the main actor, so this stays small.
-    private static let maximumAttachCheckpointAttempts = 2
+    /// How many times a snapshot may be *retaken* when output keeps outrunning it, on top of the
+    /// first one. Each retake copies the scrollback on the main actor, so this stays small.
+    private static let maximumAttachCheckpointRetakes = 1
 
     /// How many flush rounds an attach gets before it gives up on replaying the delta. Bounded
     /// because a session emitting output as fast as the link carries it refills the buffer on every
@@ -1692,9 +1691,25 @@ final class CompanionHostModel {
         return .needsFreshCheckpoint
     }
 
-    /// Claims the session for this peer. Synchronous, and called with an empty pending buffer, so
-    /// live output cannot overtake the flush that just finished: `sendOutput` only starts addressing
-    /// this peer once `attachedSessions` contains the session.
+    /// Hands over whatever is still buffered and claims the session, in one step with no `await` in
+    /// between. That matters: the queueing is what makes it safe to stop draining.
+    ///
+    /// The buffered delta cannot simply be dropped. The companion only accepts output at
+    /// `sequence + 1`, and a gap makes it invalidate its buffer and ask for another checkpoint — on a
+    /// session busy enough to get here, that resync arrives straight back in this function. So the
+    /// remainder is queued rather than awaited: it is bounded by the 4 MiB attach buffer, it keeps
+    /// the sequence unbroken, and ordering holds because live output uses this same queue.
+    private func flushAndClaim(target: TerminalTarget, peer: PeerConnection) {
+        let pending = peer.attachingSessions[target.sessionID] ?? []
+        for output in pending.sorted(by: { $0.sequence < $1.sequence }) {
+            sendOutput(output, target: target, to: peer)
+        }
+        claimAttached(target: target, peer: peer)
+    }
+
+    /// Claims the session for this peer. Synchronous, and called with the pending buffer already
+    /// handed over, so live output cannot overtake it: `sendOutput` only starts addressing this peer
+    /// once `attachedSessions` contains the session.
     private func claimAttached(target: TerminalTarget, peer: PeerConnection) {
         peer.attachingSessions.removeValue(forKey: target.sessionID)
         peer.attachingOverflow.remove(target.sessionID)
