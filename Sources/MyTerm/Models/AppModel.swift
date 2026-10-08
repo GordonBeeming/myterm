@@ -2520,6 +2520,7 @@ final class AppModel {
 
     private func handle(_ lifecycle: WorkspaceLifecycleChange) {
         if let removedWorkspace = lifecycle.removedWorkspace {
+            maximizedTabGroupsByWorkspace[removedWorkspace.id] = nil
             cleanUpRuntimeObjects(in: removedWorkspace)
         }
         if let replacementWorkspace = lifecycle.replacementWorkspace {
