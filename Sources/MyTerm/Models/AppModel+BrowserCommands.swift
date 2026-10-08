@@ -65,6 +65,19 @@ extension AppModel {
         browserAddressFocusRequest = nil
     }
 
+    var canFindInSelectedTab: Bool {
+        hasSelectedBrowserTab || selectedTab?.terminalSession != nil
+    }
+
+    /// Cmd+F: a browser tab gets its own find bar, a terminal tab gets the engine's scrollback find bar.
+    func findInSelectedTab() {
+        if hasSelectedBrowserTab {
+            requestSelectedBrowserFind()
+        } else if let sessionID = selectedTab?.terminalSession?.id {
+            terminalSessions[sessionID]?.showFind()
+        }
+    }
+
     func requestSelectedBrowserFind() {
         guard let browserID = selectedTab?.browserSession?.id,
               browserControllers[browserID] != nil else { return }
