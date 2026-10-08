@@ -39,22 +39,27 @@ public enum ApplicationCallbackRouting {
     }
 
     private static func unregister(_ applicationURL: URL) async throws {
-        try await Task.detached {
-            let process = Process()
-            let finished = DispatchSemaphore(value: 0)
-            process.executableURL = URL(fileURLWithPath:
-                "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister")
-            process.arguments = ["-u", applicationURL.path]
-            process.standardOutput = FileHandle.nullDevice
-            process.standardError = FileHandle.nullDevice
-            process.terminationHandler = { _ in finished.signal() }
-            try process.run()
-            guard finished.wait(timeout: .now() + 5) == .success else {
-                if process.isRunning { process.terminate() }
-                throw RoutingError.registrationFailed
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    let process = Process()
+                    let finished = DispatchSemaphore(value: 0)
+                    process.executableURL = URL(fileURLWithPath:
+                        "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister")
+                    process.arguments = ["-u", applicationURL.path]
+                    process.standardOutput = FileHandle.nullDevice
+                    process.standardError = FileHandle.nullDevice
+                    process.terminationHandler = { _ in finished.signal() }
+                    try process.run()
+                    guard finished.wait(timeout: .now() + 5) == .success else {
+                        if process.isRunning { process.terminate() }
+                        throw RoutingError.registrationFailed
+                    }
+                    guard process.terminationStatus == 0 else { throw RoutingError.registrationFailed }
+                    continuation.resume()
+                } catch { continuation.resume(throwing: error) }
             }
-            guard process.terminationStatus == 0 else { throw RoutingError.registrationFailed }
-        }.value
+        }
     }
 
     @MainActor
