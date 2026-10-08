@@ -2375,7 +2375,8 @@ final class AppModelTests: XCTestCase {
         model.acknowledgeBrowserAddressFocus(sessionID: firstBrowserID, token: request.token)
         XCTAssertNil(model.browserAddressFocusRequest)
 
-        model.requestSelectedBrowserFind()
+        XCTAssertTrue(model.canFindInSelectedTab)
+        model.findInSelectedTab()
         let findRequest = try XCTUnwrap(model.browserFindRequest)
         XCTAssertEqual(findRequest.sessionID, firstBrowserID)
         model.acknowledgeBrowserFind(sessionID: firstBrowserID, token: findRequest.token)
@@ -3101,12 +3102,33 @@ final class AppModelTests: XCTestCase {
         model.cancelPaneTabDrag()
     }
 
+    func testFindInSelectedTabOpensTheFocusedTerminalFindBar() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let session = try XCTUnwrap(engine.sessions.first)
+        XCTAssertNotNil(model.selectedTab?.terminalSession)
+        XCTAssertFalse(model.hasSelectedBrowserTab)
+
+        XCTAssertTrue(model.canFindInSelectedTab)
+        model.findInSelectedTab()
+
+        XCTAssertEqual(session.showFindCallCount, 1)
+        XCTAssertNil(model.browserFindRequest)
+    }
+
     func testBrowserShortcutDeclarationsAreExactAndDoNotDuplicateContextualZoom() {
         XCTAssertEqual(MyTermCommandShortcuts.reloadBrowser, .init(key: "r", modifiers: [.command]))
         XCTAssertEqual(MyTermCommandShortcuts.focusBrowserAddress, .init(key: "l", modifiers: [.command]))
         XCTAssertEqual(MyTermCommandShortcuts.browserBack, .init(key: "[", modifiers: [.command]))
         XCTAssertEqual(MyTermCommandShortcuts.browserForward, .init(key: "]", modifiers: [.command]))
-        XCTAssertEqual(MyTermCommandShortcuts.findInBrowser, .init(key: "f", modifiers: [.command]))
+        XCTAssertEqual(MyTermCommandShortcuts.find, .init(key: "f", modifiers: [.command]))
         XCTAssertEqual(MyTermCommandShortcuts.resetBrowserZoom, .init(key: "0", modifiers: [.command]))
 
         let browserShortcuts = [
@@ -3114,7 +3136,7 @@ final class AppModelTests: XCTestCase {
             MyTermCommandShortcuts.focusBrowserAddress,
             MyTermCommandShortcuts.browserBack,
             MyTermCommandShortcuts.browserForward,
-            MyTermCommandShortcuts.findInBrowser,
+            MyTermCommandShortcuts.find,
             MyTermCommandShortcuts.resetBrowserZoom,
         ]
         XCTAssertEqual(Set(browserShortcuts.map { "\($0.key)|\($0.modifiers)" }).count, browserShortcuts.count)
@@ -3426,7 +3448,7 @@ final class AppModelTests: XCTestCase {
             MyTermCommandShortcuts.focusBrowserAddress,
             MyTermCommandShortcuts.browserBack,
             MyTermCommandShortcuts.browserForward,
-            MyTermCommandShortcuts.findInBrowser,
+            MyTermCommandShortcuts.find,
             MyTermCommandShortcuts.resetBrowserZoom,
             MyTermCommandShortcuts.moveTabToPreviousPane,
             MyTermCommandShortcuts.moveTabToNextPane,
@@ -3853,6 +3875,7 @@ private final class CapturingTerminalSession: TerminalProcessSession {
     private(set) var snapshotCallCount = 0
     private(set) var terminateCallCount = 0
     private(set) var focusCallCount = 0
+    private(set) var showFindCallCount = 0
     var snapshotText = ""
     private var contentChangeHandler: (@MainActor () -> Void)?
 
@@ -3860,6 +3883,7 @@ private final class CapturingTerminalSession: TerminalProcessSession {
     func start() throws { isRunning = true }
     func resize(columns: Int, rows: Int) {}
     func focus() { focusCallCount += 1 }
+    func showFind() { showFindCallCount += 1 }
     func terminate() {
         terminateCallCount += 1
         isRunning = false

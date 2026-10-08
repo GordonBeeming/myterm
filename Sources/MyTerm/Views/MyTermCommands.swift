@@ -47,6 +47,9 @@ enum MyTermCommandShortcuts {
     static let toggleSidebar = KeyChord(key: "b", modifiers: [.command])
     static let showNotifications = KeyChord(key: "i", modifiers: [.command, .shift])
 
+    // Edit
+    static let find = KeyChord(key: "f", modifiers: [.command])
+
     // Tabs
     static let newTerminalTab = KeyChord(key: "t", modifiers: [.command])
     static let newBrowserTab = KeyChord(key: "l", modifiers: [.command, .shift])
@@ -71,7 +74,6 @@ enum MyTermCommandShortcuts {
     static let browserForward = KeyChord(key: "]", modifiers: [.command])
     static let reloadBrowser = KeyChord(key: "r", modifiers: [.command])
     static let focusBrowserAddress = KeyChord(key: "l", modifiers: [.command])
-    static let findInBrowser = KeyChord(key: "f", modifiers: [.command])
     static let resetBrowserZoom = KeyChord(key: "0", modifiers: [.command])
 
     /// Cmd+1…9 selects a workspace, Ctrl+1…9 selects a tab. Generated rather than written out so the
@@ -86,12 +88,12 @@ enum MyTermCommandShortcuts {
         newWorkspace, newFolder, renameWorkspace,
         decreaseWorkspaceFontSize, increaseWorkspaceFontSize,
         closeWorkspace, previousWorkspace, nextWorkspace, toggleSidebar, showNotifications,
+        find,
         newTerminalTab, newBrowserTab, renameTab, previousTab, nextTab,
         togglePaneFullScreen, splitRight, splitBelow, closeFocusedPaneOrTab,
         focusPaneLeft, focusPaneUp, focusPaneRight, focusPaneDown,
         moveTabToPreviousPane, moveTabToNextPane,
-        browserBack, browserForward, reloadBrowser, focusBrowserAddress,
-        findInBrowser, resetBrowserZoom,
+        browserBack, browserForward, reloadBrowser, focusBrowserAddress, resetBrowserZoom,
     ] + selectWorkspaceByNumber + selectTabByNumber
 }
 
@@ -110,6 +112,13 @@ struct MyTermCommands: Commands {
                 openSettings()
             }
             .shortcut(MyTermCommandShortcuts.globalSettings)
+        }
+
+        CommandGroup(after: .pasteboard) {
+            Divider()
+            Button("Find…") { startup.model?.findInSelectedTab() }
+                .shortcut(MyTermCommandShortcuts.find)
+                .disabled(startup.model?.canFindInSelectedTab != true)
         }
 
         CommandMenu("Workspace") {
@@ -222,9 +231,6 @@ struct MyTermCommands: Commands {
             Divider()
             Button("Focus Address") { startup.model?.requestSelectedBrowserAddressFocus() }
                 .shortcut(MyTermCommandShortcuts.focusBrowserAddress)
-                .disabled(startup.model?.hasSelectedBrowserTab != true)
-            Button("Find") { startup.model?.requestSelectedBrowserFind() }
-                .shortcut(MyTermCommandShortcuts.findInBrowser)
                 .disabled(startup.model?.hasSelectedBrowserTab != true)
             Divider()
             Button("Zoom In") { startup.model?.zoomInSelectedBrowser() }
