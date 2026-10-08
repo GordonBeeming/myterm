@@ -21,6 +21,8 @@ public protocol TerminalProcessSession: AnyObject {
     func start() throws
     func resize(columns: Int, rows: Int)
     func focus()
+    /// Opens the engine's find bar over the scrollback, if it has one.
+    func showFind()
     func terminate()
     func apply(runtimeConfiguration: TerminalRuntimeConfiguration)
     func contentSnapshot(maximumCharacters: Int) -> String
@@ -101,6 +103,8 @@ public protocol TerminalRemoteSession: TerminalProcessSession {
 
 public extension TerminalProcessSession {
     var activeForegroundProcessName: String? { nil }
+
+    func showFind() {}
 
     func apply(runtimeConfiguration: TerminalRuntimeConfiguration) {}
 

@@ -85,11 +85,11 @@ final class KeyChordTableTests: XCTestCase {
         ("focusPaneDown", MyTermCommandShortcuts.focusPaneDown),
         ("moveTabToPreviousPane", MyTermCommandShortcuts.moveTabToPreviousPane),
         ("moveTabToNextPane", MyTermCommandShortcuts.moveTabToNextPane),
+        ("find", MyTermCommandShortcuts.find),
         ("browserBack", MyTermCommandShortcuts.browserBack),
         ("browserForward", MyTermCommandShortcuts.browserForward),
         ("reloadBrowser", MyTermCommandShortcuts.reloadBrowser),
         ("focusBrowserAddress", MyTermCommandShortcuts.focusBrowserAddress),
-        ("findInBrowser", MyTermCommandShortcuts.findInBrowser),
         ("resetBrowserZoom", MyTermCommandShortcuts.resetBrowserZoom),
     ] + MyTermCommandShortcuts.selectWorkspaceByNumber.enumerated().map { ("workspace\($0.offset + 1)", $0.element) }
       + MyTermCommandShortcuts.selectTabByNumber.enumerated().map { ("tab\($0.offset + 1)", $0.element) }

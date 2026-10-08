@@ -197,6 +197,14 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         terminal.focusWhenPossible()
     }
 
+    public func showFind() {
+        // SwiftTerm only exposes its find bar through the AppKit text-finder action, which reads
+        // the action out of the sender's tag, so a detached menu item is the way to drive it.
+        let action = NSMenuItem()
+        action.tag = NSTextFinder.Action.showFindInterface.rawValue
+        terminal.performTextFinderAction(action)
+    }
+
     public func terminate() {
         guard isRunning else { return }
         stopWorkingDirectoryPolling()
