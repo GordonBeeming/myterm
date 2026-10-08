@@ -798,6 +798,65 @@ final class SceneStateTests: XCTestCase {
     }
 }
 
+/// Covers the state behind "Restoring terminal…". The pane showed that message whenever
+/// `isAwaitingCheckpoint` was set, including when the connection was down or the restore had already
+/// failed, so a dead terminal looked like a busy one.
+@MainActor
+final class TerminalRestoreStateTests: XCTestCase {
+    func testAPhaseThatIsDownIsDistinguishableFromOneOnItsWayUp() {
+        XCTAssertTrue(ConnectionPhase.disconnected.isDown)
+        XCTAssertTrue(ConnectionPhase.failed("relay unreachable").isDown)
+        XCTAssertTrue(ConnectionPhase.failed("relay unreachable").hasFailed)
+        XCTAssertFalse(ConnectionPhase.disconnected.hasFailed)
+
+        for phase: ConnectionPhase in [.connecting, .transportOnline, .authenticating, .online] {
+            XCTAssertFalse(phase.isDown, "\(phase) is on its way up, not down")
+            XCTAssertFalse(phase.hasFailed, "\(phase) has not failed")
+        }
+    }
+
+    func testARestoreFailureIsHeldSeparatelyFromStillAwaiting() {
+        let state = TerminalSurfaceState(route: testTerminalRoute(connectionID: testConnection()))
+        XCTAssertTrue(state.isAwaitingCheckpoint)
+        XCTAssertNil(state.restoreFailure)
+
+        state.recordRestoreFailure("This terminal did not finish restoring.")
+
+        XCTAssertEqual(state.restoreFailure, "This terminal did not finish restoring.")
+        XCTAssertTrue(state.isAwaitingCheckpoint,
+                      "Still awaiting, which is why the failure needs somewhere of its own to live")
+
+        state.clearRestoreFailure()
+        XCTAssertNil(state.restoreFailure)
+    }
+
+    func testReattachmentClearsAStaleFailure() {
+        let state = TerminalSurfaceState(route: testTerminalRoute(connectionID: testConnection()))
+        state.recordRestoreFailure("gone wrong")
+
+        state.prepareForReattachment()
+
+        XCTAssertNil(state.restoreFailure, "A cached surface must not come back wearing an old error")
+        XCTAssertTrue(state.isAwaitingCheckpoint)
+    }
+
+    func testApplyingACheckpointClearsTheFailureAndStopsAwaiting() async throws {
+        let route = testTerminalRoute(connectionID: testConnection())
+        let state = TerminalSurfaceState(route: route)
+        state.recordRestoreFailure("gone wrong")
+        let checkpoint = try await CheckpointAssembler().ingest(
+            metadata: MessageMetadata(hostID: route.hostID, runtimeID: UUID(),
+                                      sessionID: route.sessionID),
+            chunk: CheckpointChunkParameters(transferID: UUID(), generation: UUID(), sequence: 3,
+                chunkIndex: 0, chunkCount: 1, totalBytes: 1, bytes: Data([1])))
+
+        state.apply(checkpoint: try XCTUnwrap(checkpoint))
+
+        XCTAssertNil(state.restoreFailure)
+        XCTAssertFalse(state.isAwaitingCheckpoint)
+    }
+}
+
 private func testConnection(hostID: UUID = UUID()) -> SavedConnectionID {
     SavedConnectionID(relayOrigin: "https://relay.example.test", accountID: UUID(), hostID: hostID)
 }

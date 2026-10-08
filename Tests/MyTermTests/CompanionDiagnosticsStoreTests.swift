@@ -1,5 +1,6 @@
 import Foundation
 import MyTermCore
+import MyTermRemote
 import XCTest
 @testable import MyTerm
 
@@ -54,6 +55,18 @@ final class CompanionDiagnosticsStoreTests: XCTestCase {
         // Once the interval has passed it is accepted again.
         _ = try await store.accept(payload("third"), deviceID: device,
                                    now: start.addingTimeInterval(CompanionDiagnosticsStore.minimumInterval + 1))
+    }
+
+    func testArrivingTooSoonIsReportedApartFromAnUnreadableUpload() {
+        // These were both flattened into `RemoteError.invalidMessage`, so tapping Send twice inside
+        // the window told the user their logs were corrupt. The codes and the wording have to differ,
+        // and the rate-limited one has to say what to do about it.
+        let throttled = CompanionCommandError.diagnosticsTooFrequent
+        XCTAssertEqual(throttled.code, "diagnostics_too_frequent")
+        XCTAssertNotEqual(throttled.code, CompanionCommandError.invalidPayload.code)
+        let message = throttled.errorDescription ?? ""
+        XCTAssertTrue(message.lowercased().contains("already sent"), message)
+        XCTAssertNotEqual(message, RemoteError.invalidMessage.localizedDescription)
     }
 
     func testKeepsOnlyTheNewestUploadsPerDevice() async throws {

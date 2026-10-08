@@ -1146,8 +1146,26 @@ final class CompanionHostModel {
                  message: "You no longer control this terminal. Request control to type or resize.",
                  retryable: false)), to: peer)
             broadcastControlState(target: target)
+        } catch let error as TerminalRemoteSessionError {
+            // One session's attach going wrong is that session's problem. Letting it out of here
+            // reaches the catch that drops the whole transport, so a single busy terminal took the
+            // device's connection down with it and the reconnect loop started again on the same
+            // session. Tell the peer to re-attach that one session instead.
+            if let sessionID = messageMetadata.sessionID {
+                peer.attachingSessions.removeValue(forKey: TerminalSessionID(rawValue: sessionID))
+                peer.attachingOverflow.remove(TerminalSessionID(rawValue: sessionID))
+            }
+            logger.error(
+                "Attach failed for one session: \(error.localizedDescription, privacy: .public)")
+            send(.error(messageMetadata, ErrorParameters(code: Self.attachRetryableCode,
+                 message: "This terminal could not be restored. Reopen it to try again.",
+                 retryable: true)), to: peer)
         }
     }
+
+    /// Told to the companion when an attach failed in a way a fresh attach can fix. Distinct from
+    /// `control_denied`, which is about the lease rather than the buffer.
+    static let attachRetryableCode = "attach_retry"
 
     private func browserTarget(_ metadata: MessageMetadata, peer: PeerConnection) throws -> (CompanionBrowserRoute, URL) {
         guard peersByConnection[peer.connectionID] === peer, peer.applicationChannel != nil,
@@ -1393,8 +1411,13 @@ final class CompanionHostModel {
                 let upload = try JSONDecoder().decode(RemoteDiagnosticsPayload.self,
                                                       from: command.payload)
                 // An upload the store turns down, for arriving too soon or being unreadable, is
-                // the peer's problem to retry, not a reason to drop the connection.
+                // the peer's problem to retry, not a reason to drop the connection. The two are
+                // reported apart: flattening them both into `invalidMessage` told the user their
+                // logs were corrupt when all they had done was tap Send twice inside the window.
                 do { try await diagnosticsStore.accept(upload, deviceID: peer.peer.deviceID) }
+                catch CompanionDiagnosticsError.tooFrequent {
+                    throw CompanionCommandError.diagnosticsTooFrequent
+                }
                 catch { throw RemoteError.invalidMessage }
                 result = nil
             default:
@@ -1543,11 +1566,42 @@ final class CompanionHostModel {
             for output in replay {
                 try await sendOutputAwaiting(output, target: target, to: peer)
             }
-            try await finishAttaching(target: target, peer: peer)
-            return
+            if try await finishAttaching(target: target, peer: peer) == .attached { return }
+            // The replay could not catch up with what the session is still producing, so fall
+            // through and send a snapshot instead of replaying forever.
         }
 
+        for attempt in 0...Self.maximumAttachCheckpointAttempts {
+            try await sendCheckpoint(target: target, peer: peer, metadata: metadata)
+            guard attempt < Self.maximumAttachCheckpointAttempts else {
+                // Out of attempts against a session that keeps outrunning its own snapshot. The
+                // checkpoint is self-contained and the companion resets to its sequence, so claiming
+                // the session now costs the delta since the snapshot and nothing more. Refusing
+                // instead is what left a busy terminal unattached until its output stopped.
+                claimAttached(target: target, peer: peer)
+                return
+            }
+            if try await finishAttaching(target: target, peer: peer) == .attached { return }
+        }
+    }
+
+    /// How many times a snapshot may be retaken when output keeps outrunning it. Each attempt copies
+    /// the scrollback on the main actor, so this stays small.
+    private static let maximumAttachCheckpointAttempts = 2
+
+    /// How many flush rounds an attach gets before it gives up on replaying the delta. Bounded
+    /// because a session emitting output as fast as the link carries it refills the buffer on every
+    /// round, and an unbounded loop never reaches `attachedSessions`.
+    private static let maximumAttachDrainRounds = 4
+
+    private func sendCheckpoint(
+        target: TerminalTarget,
+        peer: PeerConnection,
+        metadata: MessageMetadata
+    ) async throws {
         let checkpoint = try target.session.remoteCheckpoint()
+        // No await between the snapshot and the buffer reset, so nothing produced in between is
+        // counted twice or lost.
         peer.attachingSessions[target.sessionID] = []
         let transferID = UUID()
         let chunkSize = 512 * 1_024
@@ -1584,7 +1638,6 @@ final class CompanionHostModel {
                 over: requireTransport()
             )
         }
-        try await finishAttaching(target: target, peer: peer)
     }
 
     private func handleDetach(metadata: MessageMetadata, peer: PeerConnection) throws {
@@ -1604,23 +1657,45 @@ final class CompanionHostModel {
         if releasedLease { broadcastControlState(target: target) }
     }
 
-    private func finishAttaching(target: TerminalTarget, peer: PeerConnection) async throws {
-        guard !peer.attachingOverflow.contains(target.sessionID) else {
-            peer.attachingSessions.removeValue(forKey: target.sessionID)
-            peer.attachingOverflow.remove(target.sessionID)
-            throw TerminalRemoteSessionError.replayGap
-        }
-        while let pending = peer.attachingSessions[target.sessionID], !pending.isEmpty {
-            guard !peer.attachingOverflow.contains(target.sessionID) else {
-                peer.attachingSessions.removeValue(forKey: target.sessionID)
+    enum AttachOutcome: Equatable {
+        case attached
+        /// The delta could not be flushed within the bound, or was dropped on overflow. A fresh
+        /// snapshot supersedes whatever was buffered, so the caller takes one instead of failing.
+        case needsFreshCheckpoint
+    }
+
+    /// Flushes the output buffered while a session was attaching, then claims the session.
+    ///
+    /// Bounded on purpose. The buffer refills while each send is awaited, so a session producing
+    /// output as fast as the link carries it kept this loop running and never reached
+    /// `attachedSessions` — which left the companion with no output and no control, showing
+    /// "Restoring terminal…" until the session happened to go quiet.
+    private func finishAttaching(
+        target: TerminalTarget,
+        peer: PeerConnection
+    ) async throws -> AttachOutcome {
+        for _ in 0..<Self.maximumAttachDrainRounds {
+            if peer.attachingOverflow.contains(target.sessionID) {
+                peer.attachingSessions[target.sessionID] = []
                 peer.attachingOverflow.remove(target.sessionID)
-                throw TerminalRemoteSessionError.replayGap
+                return .needsFreshCheckpoint
+            }
+            guard let pending = peer.attachingSessions[target.sessionID], !pending.isEmpty else {
+                claimAttached(target: target, peer: peer)
+                return .attached
             }
             peer.attachingSessions[target.sessionID] = []
             for output in pending.sorted(by: { $0.sequence < $1.sequence }) {
                 try await sendOutputAwaiting(output, target: target, to: peer)
             }
         }
+        return .needsFreshCheckpoint
+    }
+
+    /// Claims the session for this peer. Synchronous, and called with an empty pending buffer, so
+    /// live output cannot overtake the flush that just finished: `sendOutput` only starts addressing
+    /// this peer once `attachedSessions` contains the session.
+    private func claimAttached(target: TerminalTarget, peer: PeerConnection) {
         peer.attachingSessions.removeValue(forKey: target.sessionID)
         peer.attachingOverflow.remove(target.sessionID)
         peer.attachedSessions.insert(target.sessionID)
