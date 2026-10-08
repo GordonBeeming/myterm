@@ -10,14 +10,24 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Use a disposable home directory so lookup follows the same path as a real app copy.
 TASK_TEMP="$(mktemp -d "$HOME/.myterm-callback-test.XXXXXX")"
 REGISTER_TOOL="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+FIXTURE_PID=""
 cleanup() {
+  if [[ -n "$FIXTURE_PID" ]]; then
+    kill "$FIXTURE_PID" >/dev/null 2>&1 || true
+    wait "$FIXTURE_PID" 2>/dev/null || true
+  fi
   "$REGISTER_TOOL" -u "$TASK_TEMP/Old.app" >/dev/null 2>&1 || true
   "$REGISTER_TOOL" -u "$TASK_TEMP/Current.app" >/dev/null 2>&1 || true
   rm -rf "$TASK_TEMP"
 }
 trap cleanup EXIT
 SCHEME="mytermtest$(uuidgen | cut -c 1-8 | tr '[:upper:]' '[:lower:]')"
-printf 'import AppKit\nprint("Inert callback test fixture")\n' > "$TASK_TEMP/fixture.swift"
+cat > "$TASK_TEMP/fixture.swift" <<'SWIFT'
+import AppKit
+import Foundation
+if CommandLine.arguments.contains("--hold-for-archive-test") { Thread.sleep(forTimeInterval: 60) }
+print("Inert callback test fixture")
+SWIFT
 swiftc -target "$(uname -m)-apple-macos14.0" "$TASK_TEMP/fixture.swift" -o "$TASK_TEMP/fixture"
 python3 - "$TASK_TEMP" "$SCHEME" <<'PY'
 from pathlib import Path
@@ -62,6 +72,18 @@ if bash "$ROOT_DIR/script/archive_test_app.sh" "$TASK_TEMP/MyTerm.app" "$TASK_TE
   exit 1
 fi
 test -d "$TASK_TEMP/MyTerm.app"
+# Launch only the inert console executable through a relative path; no GUI is created.
+cp -R "$TASK_TEMP/Current.app" "$TASK_TEMP/Running.app"
+(cd "$TASK_TEMP"; exec ./Running.app/Contents/MacOS/fixture --hold-for-archive-test) &
+FIXTURE_PID=$!
+if bash "$ROOT_DIR/script/archive_test_app.sh" "$TASK_TEMP/Running.app" "$TASK_TEMP/Archives"; then
+  echo 'Expected a running executable launched by relative path to be protected' >&2
+  exit 1
+fi
+test -d "$TASK_TEMP/Running.app"
+kill "$FIXTURE_PID"
+wait "$FIXTURE_PID" 2>/dev/null || true
+FIXTURE_PID=""
 # Installation replaces an old bundle instead of retaining resources removed by the new version.
 cp -R "$TASK_TEMP/Current.app" "$TASK_TEMP/Installed.app"
 mkdir -p "$TASK_TEMP/Installed.app/Contents/Resources"
@@ -81,5 +103,10 @@ if bash "$ROOT_DIR/script/install_app.sh" "$TASK_TEMP/NoCallback.app" "$TASK_TEM
 fi
 test -f "$TASK_TEMP/Installed.app/Contents/Resources/rollback-marker"
 codesign --verify --deep --strict "$TASK_TEMP/Installed.app"
+if bash "$ROOT_DIR/script/install_app.sh" "$TASK_TEMP/NoCallback.app" "$TASK_TEMP/FirstInstall.app" "$SCHEME"; then
+  echo 'Expected malformed first installation to fail callback verification' >&2
+  exit 1
+fi
+test ! -e "$TASK_TEMP/FirstInstall.app"
 "$REGISTER_TOOL" -u "$TASK_TEMP/Installed.app"
 echo 'Competing callback handler regression passed'

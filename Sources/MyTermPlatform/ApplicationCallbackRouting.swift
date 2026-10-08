@@ -2,6 +2,7 @@
 import AppKit
 import CoreServices
 import Foundation
+import OSLog
 
 /// Pins a custom callback to an exact app copy, rather than just its bundle identifier.
 public enum ApplicationCallbackRouting {
@@ -12,7 +13,48 @@ public enum ApplicationCallbackRouting {
         guard status == noErr else { throw RoutingError.registrationFailed }
         try await NSWorkspace.shared.setDefaultApplication(at: applicationURL, toOpenURLsWithScheme: scheme)
         try Task.checkCancellation()
-        try verify(applicationURL: applicationURL, scheme: scheme)
+        do {
+            try verify(applicationURL: applicationURL, scheme: scheme)
+        } catch RoutingError.wrongApplication {
+            // Launch Services can treat byte-identical copies as the same application and
+            // keep selecting the older path. Remove competing registrations, never their files.
+            guard let identifier = Bundle(url: applicationURL)?.bundleIdentifier else {
+                throw RoutingError.invalidApplication
+            }
+            for copy in NSWorkspace.shared.urlsForApplications(withBundleIdentifier: identifier)
+                where !isSameApplication(copy, applicationURL) && FileManager.default.fileExists(atPath: copy.path) {
+                try Task.checkCancellation()
+                do { try await unregister(copy) }
+                catch {
+                    Logger(subsystem: identifier, category: "callback-routing")
+                        .notice("Could not remove a competing callback registration; checking the final route again.")
+                }
+            }
+            try Task.checkCancellation()
+            guard LSRegisterURL(applicationURL as CFURL, true) == noErr else { throw RoutingError.registrationFailed }
+            try await NSWorkspace.shared.setDefaultApplication(at: applicationURL, toOpenURLsWithScheme: scheme)
+            try Task.checkCancellation()
+            try verify(applicationURL: applicationURL, scheme: scheme)
+        }
+    }
+
+    private static func unregister(_ applicationURL: URL) async throws {
+        try await Task.detached {
+            let process = Process()
+            let finished = DispatchSemaphore(value: 0)
+            process.executableURL = URL(fileURLWithPath:
+                "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister")
+            process.arguments = ["-u", applicationURL.path]
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+            process.terminationHandler = { _ in finished.signal() }
+            try process.run()
+            guard finished.wait(timeout: .now() + 5) == .success else {
+                if process.isRunning { process.terminate() }
+                throw RoutingError.registrationFailed
+            }
+            guard process.terminationStatus == 0 else { throw RoutingError.registrationFailed }
+        }.value
     }
 
     @MainActor

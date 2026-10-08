@@ -14,10 +14,13 @@ TASK_STAGE="$(mktemp -d "$PARENT/.myterm-install.XXXXXX")"
 mv "$TASK_STAGE" "$TASK_STAGE.noindex"
 TASK_STAGE="$TASK_STAGE.noindex"
 OLD_MOVED=0
+NEW_MOVED=0
 COMPLETE=0
 cleanup() {
-  if [[ "$COMPLETE" != 1 && "$OLD_MOVED" == 1 ]]; then
+  if [[ "$COMPLETE" != 1 && "$NEW_MOVED" == 1 ]]; then
     rm -rf "$DESTINATION"
+  fi
+  if [[ "$COMPLETE" != 1 && "$OLD_MOVED" == 1 ]]; then
     if ! mv "$TASK_STAGE/previous.disabled" "$DESTINATION"; then
       echo "Could not restore the previous app; it is preserved at $TASK_STAGE/previous.disabled" >&2
       return 1
@@ -36,6 +39,7 @@ if [[ -e "$DESTINATION" ]]; then
   OLD_MOVED=1
 fi
 mv "$TASK_STAGE/myterm.app" "$DESTINATION"
+NEW_MOVED=1
 codesign --verify --deep --strict "$DESTINATION"
 bash "$ROOT_DIR/script/check_callback_routing.sh" "$DESTINATION" "$SCHEME" --repair
 COMPLETE=1

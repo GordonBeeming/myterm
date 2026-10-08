@@ -284,6 +284,8 @@ production bundles assembled for release verification should stay in `dist`, out
 On launch, MyTerm checks which app will receive its callback. Before Companion sign-in, it
 pins its callback scheme to the running app's exact path and verifies the route before opening
 the browser. `make install` sets and checks the route after copying the app.
+If macOS still selects an identical competing copy, MyTerm removes that copy's
+Launch Services registration and verifies the route again. Its files are preserved.
 After installing a release manually or through Homebrew, verify its callback route with:
 
 ```sh
