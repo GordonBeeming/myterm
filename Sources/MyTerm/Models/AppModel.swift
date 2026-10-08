@@ -126,7 +126,15 @@ final class AppModel {
     var workspaceEmojiBeingEditedID: WorkspaceID?
     var workspaceEmojiDraft = ""
     private(set) var recentWorkspaceEmojis: [String] = []
-    var maximizedTabGroupID: TabGroupID?
+    private var maximizedTabGroupsByWorkspace: [WorkspaceID: TabGroupID] = [:]
+    var maximizedTabGroupID: TabGroupID? {
+        get {
+            guard let groupID = maximizedTabGroupsByWorkspace[store.selectedWorkspaceID],
+                  selectedWorkspace.group(id: groupID) != nil else { return nil }
+            return groupID
+        }
+        set { maximizedTabGroupsByWorkspace[store.selectedWorkspaceID] = newValue }
+    }
     var folderBeingRenamedID: WorkspaceFolderID?
     var folderRenameDraft = ""
     var tabBeingRenamedID: TabID?
@@ -772,6 +780,7 @@ final class AppModel {
 
         perform {
             try store.removeWorkspace(workspaceID)
+            maximizedTabGroupsByWorkspace[workspaceID] = nil
             cleanUpRuntimeObjects(in: workspace)
             restoreRuntimeObjects(in: store.selectedWorkspace)
         }
@@ -779,9 +788,6 @@ final class AppModel {
 
     func selectWorkspace(_ workspaceID: WorkspaceID) {
         cancelPaneTabDrag()
-        if workspaceID != store.selectedWorkspaceID {
-            maximizedTabGroupID = nil
-        }
         perform {
             try store.selectWorkspace(workspaceID)
             if let workspace = store.workspaces.first(where: { $0.id == workspaceID }) {
@@ -1563,10 +1569,13 @@ final class AppModel {
     }
 
     private func restoreSplitLayoutIfFocusing(workspaceID: WorkspaceID, tabGroupID: TabGroupID) {
-        guard store.selectedWorkspaceID == workspaceID,
-              maximizedTabGroupID != nil,
-              maximizedTabGroupID != tabGroupID else { return }
-        exitPaneFullScreen()
+        guard let maximizedGroupID = maximizedTabGroupsByWorkspace[workspaceID],
+              maximizedGroupID != tabGroupID else { return }
+        if store.selectedWorkspaceID == workspaceID {
+            exitPaneFullScreen()
+        } else {
+            maximizedTabGroupsByWorkspace[workspaceID] = nil
+        }
     }
 
     func focusTerminal(direction: PaneFocusDirection) {
@@ -2947,6 +2956,7 @@ final class AppModel {
         }
         try performCompanionMutation {
             try store.removeWorkspace(workspaceID)
+            maximizedTabGroupsByWorkspace[workspaceID] = nil
             cleanUpRuntimeObjects(in: workspace)
             restoreRuntimeObjects(in: store.selectedWorkspace)
         }

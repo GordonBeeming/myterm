@@ -644,7 +644,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.recentWorkspaceEmojis, ["🚨", "🚀"])
     }
 
-    func testFocusedPaneFullScreenTogglesAndResetsWhenChangingWorkspace() throws {
+    func testFocusedPaneFullScreenIsRememberedIndependentlyForEachWorkspace() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
         let model = try makeModel(applicationSupportDirectory: directory)
@@ -666,6 +666,54 @@ final class AppModelTests: XCTestCase {
         XCTAssertNotEqual(model.store.selectedWorkspaceID, firstWorkspaceID)
         XCTAssertNil(model.maximizedTabGroup)
         XCTAssertEqual(model.paneFullScreenCommandTitle, "Make Pane Full Screen")
+        let secondWorkspaceID = model.store.selectedWorkspaceID
+        let secondGroupID = model.selectedWorkspace.focusedTabGroupID
+        model.toggleFocusedPaneFullScreen()
+        model.selectWorkspace(firstWorkspaceID)
+        XCTAssertEqual(model.maximizedTabGroup?.id, firstGroupID)
+        model.selectWorkspace(secondWorkspaceID)
+        XCTAssertEqual(model.maximizedTabGroup?.id, secondGroupID)
+        model.toggleFocusedPaneFullScreen()
+        model.selectWorkspace(firstWorkspaceID)
+        XCTAssertEqual(model.maximizedTabGroup?.id, firstGroupID)
+    }
+
+    func testMaximizedBrowserRemainsMaximizedAfterSwitchingAwayAndBack() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        model.createBrowserTab()
+        model.splitFocusedTerminal(orientation: .horizontal)
+        let browserGroup = try XCTUnwrap(model.selectedWorkspace.orderedGroups.first(where: {
+            $0.tabs.contains(where: { $0.browserSession != nil })
+        }))
+        model.focusTabGroup(workspaceID: workspaceID, tabGroupID: browserGroup.id)
+        model.toggleFocusedPaneFullScreen()
+        model.createWorkspace()
+        XCTAssertNil(model.maximizedTabGroup)
+        model.selectWorkspace(workspaceID)
+        XCTAssertEqual(model.maximizedTabGroup?.id, browserGroup.id)
+        XCTAssertEqual(model.selectedWorkspace.orderedGroups.count, 2)
+    }
+
+    func testBackgroundPaneFocusRevealsTheNewlyFocusedPaneOnWorkspaceReturn() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        let workspaceID = model.store.selectedWorkspaceID
+        let left = model.selectedWorkspace.focusedTabGroupID
+        model.splitFocusedTerminal(orientation: .horizontal)
+        let right = model.selectedWorkspace.focusedTabGroupID
+        model.focusTabGroup(workspaceID: workspaceID, tabGroupID: left)
+        model.toggleFocusedPaneFullScreen()
+        model.createWorkspace()
+        let otherWorkspaceID = model.store.selectedWorkspaceID
+        model.focusTabGroup(workspaceID: workspaceID, tabGroupID: right, focusContent: false)
+        XCTAssertEqual(model.store.selectedWorkspaceID, otherWorkspaceID)
+        model.selectWorkspace(workspaceID)
+        XCTAssertNil(model.maximizedTabGroup)
+        XCTAssertEqual(model.selectedWorkspace.focusedTabGroupID, right)
     }
 
     func testPaneFocusShortcutExitsFullScreenBeforeFocusingAnotherPane() throws {
