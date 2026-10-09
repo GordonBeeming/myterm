@@ -3,6 +3,7 @@ import CoreText
 import Foundation
 import MyTermCore
 import MyTermPlatform
+import MyTermUI
 import SwiftUI
 
 struct SettingsView: View {
@@ -14,34 +15,69 @@ struct SettingsView: View {
     @State private var codexHooks = AgentHooksController(target: .codex)
     @State private var installedBrowsers = ExternalBrowserCatalog.installedBrowsers()
 
+    @State private var section: SettingsSection = .general
+    @State private var scopeWorkspaceID: WorkspaceID?
+    @State private var scopeFolderID: WorkspaceFolderID?
+
     var body: some View {
-        VStack(spacing: 0) {
-            settingsHeader
-                .padding(.horizontal, 20)
-                .padding(.vertical, 14)
-
-            Divider()
-
-            TabView {
-                generalSettings
-                    .tabItem { Label("General", systemImage: "gearshape") }
-
-                terminalSettings
-                    .tabItem { Label("Terminal", systemImage: "terminal") }
-
-                browserSettings
-                    .tabItem { Label("Browser", systemImage: "globe") }
-
-                PermissionsSettingsView()
-                    .tabItem { Label("Permissions", systemImage: "lock.shield") }
-
-                CompanionSettingsView(companion: model.companionHost)
-                    .tabItem { Label("Companion", systemImage: "iphone.and.arrow.forward") }
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Settings")
+                    .font(Theme.Font.ui(13, weight: .semibold))
+                    .foregroundStyle(Theme.textSecondary)
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 12)
+                ForEach(SettingsSection.allCases) { item in
+                    Button { section = item } label: {
+                        Label(item.rawValue, systemImage: item.symbol)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 10)
+                            .frame(height: 32)
+                            .background(section == item ? Theme.selectedFill : .clear,
+                                        in: RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(KeyEquivalent(Character(String(item.index + 1))), modifiers: .command)
+                    .accessibilityLabel("\(item.rawValue) settings")
+                    .accessibilityAddTraits(section == item ? .isSelected : [])
+                }
+                Spacer()
             }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 12)
+            .padding(12)
+            .frame(width: 216)
+            .background(Theme.sidebarGround)
+            .focusable()
+            .onMoveCommand { direction in
+                let offset = direction == .up ? -1 : direction == .down ? 1 : 0
+                let items = SettingsSection.allCases
+                section = items[min(max(section.index + offset, 0), items.count - 1)]
+            }
+            Rectangle().fill(Theme.hairline).frame(width: 1)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    settingsHeader
+                    switch section {
+                    case .general: generalSettings
+                    case .terminal: terminalSettings
+                    case .browser: browserSettings
+                    case .agents: agentSettings
+                    case .companion: CompanionSettingsView(companion: model.companionHost)
+                    case .permissions: PermissionsSettingsView()
+                    }
+                }
+                .padding(28)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .background(Theme.windowGround)
         }
-        .frame(width: 620, height: 590)
+        .font(Theme.Font.ui(13, weight: .medium))
+        .foregroundStyle(Theme.textPrimary)
+        .tint(Theme.accent)
+        .toggleStyle(.switch)
+        .pickerStyle(.menu)
+        .frame(minWidth: 800, idealWidth: 880, maxWidth: .infinity,
+               minHeight: 560, idealHeight: 720, maxHeight: .infinity)
+        .onAppear { repairScope() }
         .onChange(of: model.folders.map(\.id)) { _, _ in repairScope() }
         .onChange(of: model.workspaces.map(\.id)) { _, _ in repairScope() }
     }
@@ -50,55 +86,77 @@ struct SettingsView: View {
         model.settingsScope
     }
 
+    private var scopeWorkspace: Workspace {
+        if case .workspace(let id) = scope,
+           let workspace = model.workspaces.first(where: { $0.id == id }) { return workspace }
+        if let id = scopeWorkspaceID,
+           let workspace = model.workspaces.first(where: { $0.id == id }) { return workspace }
+        return model.selectedWorkspace
+    }
+
+    private var scopeFolder: WorkspaceFolder? {
+        if case .folder(let id) = scope { return model.folders.first(where: { $0.id == id }) }
+        let folderID: WorkspaceFolderID?
+        if case .workspace = scope { folderID = scopeWorkspace.folderID }
+        else { folderID = scopeFolderID ?? scopeWorkspace.folderID }
+        return model.folders.first(where: { $0.id == folderID })
+    }
+
     private var settingsHeader: some View {
-        HStack(spacing: 12) {
-            Image(systemName: settingsHeaderIcon)
-                .font(.title2)
-                .foregroundStyle(.secondary)
-                .frame(width: 28)
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(settingsHeaderTitle)
-                    .font(.headline)
-                Text(settingsHeaderDescription)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            Text(section.rawValue).font(Theme.Font.ui(20, weight: .semibold))
+            Text(section.isScoped ? settingsHeaderDescription : "Applies to the whole app.")
+                .font(Theme.Font.ui(12))
+                .foregroundStyle(Theme.textSecondary)
+            if section.isScoped {
+                HStack(spacing: 4) {
+                    scopeButton(.global) { Text("Global") }
+                    if let folder = scopeFolder {
+                        scopeButton(.folder(folder.id)) {
+                            Image(systemName: "folder.fill").foregroundStyle(folder.color.swiftUIColor)
+                            Text(folder.title)
+                        }
+                    }
+                    scopeButton(.workspace(scopeWorkspace.id)) {
+                        if let emoji = scopeWorkspace.emoji { Text(emoji) }
+                        Text(scopeWorkspace.title)
+                    }
+                }
+                .padding(4)
+                .background(Theme.controlFill, in: RoundedRectangle(cornerRadius: 8))
+                .padding(.top, 8)
+                .accessibilityLabel("Settings scope")
             }
-
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
-    }
-
-    private var settingsHeaderIcon: String {
-        switch scope {
-        case .global: "globe"
-        case .folder: "folder"
-        case .workspace: "rectangle.stack"
         }
     }
 
-    private var settingsHeaderTitle: String {
-        switch scope {
-        case .global:
-            "Global Settings"
-        case .folder(let folderID):
-            "Folder Settings — \(model.folders.first(where: { $0.id == folderID })?.title ?? "Unknown Folder")"
-        case .workspace(let workspaceID):
-            "Workspace Settings — \(model.workspaces.first(where: { $0.id == workspaceID })?.title ?? "Unknown Workspace")"
+    private func scopeButton<Content: View>(_ target: TerminalSettingsScope,
+                                            @ViewBuilder content: () -> Content) -> some View {
+        Button {
+            scopeWorkspaceID = scopeWorkspace.id
+            scopeFolderID = scopeFolder?.id
+            model.prepareSettings(for: target)
+        } label: {
+            HStack(spacing: 7, content: content)
+                .lineLimit(1)
+                .font(Theme.Font.ui(12))
+                .padding(.horizontal, 10)
+                .frame(height: 28)
+                .background(scope == target ? Theme.selectedFill : .clear,
+                            in: RoundedRectangle(cornerRadius: 6))
         }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(scope == target ? .isSelected : [])
     }
 
     private var settingsHeaderDescription: String {
         switch scope {
         case .global:
-            "Defaults used across MyTerm unless a folder or workspace overrides them."
+            "Defaults for every folder and workspace."
         case .folder:
-            "Overrides for workspaces in this folder. Settings without an override inherit from Global Settings."
+            "Overrides for workspaces in \(scopeFolder?.title ?? "this folder")."
         case .workspace:
-            "Overrides for this workspace. Settings without an override inherit from its folder or Global Settings."
+            "Overrides for this workspace only."
         }
     }
 
@@ -116,25 +174,44 @@ struct SettingsView: View {
     }
 
     private var generalSettings: some View {
-        Form {
-            Section("Workspace appearance") {
+        VStack(alignment: .leading, spacing: 24) {
+            SettingsCard("Workspace sidebar") {
                 ScopedSettingRow(
                     model: model,
                     scope: scope,
                     title: "Compact workspace sidebar",
+                    caption: "Uses shorter workspace rows so more projects remain visible.",
                     global: \TerminalPreferences.compactSidebar,
                     override: \TerminalPreferencesOverrides.compactSidebar
                 ) { value in
                     Toggle("Compact workspace sidebar", isOn: value)
                         .labelsHidden()
                 }
-
-                Text("Uses shorter workspace rows so more projects remain visible.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
 
-            Section("Updates") {
+            SettingsCard("Default terminal · whole app", dimmed: scope != .global) {
+                Text("Open scripts, executable files, and SSH links in MyTerm. Launch requests reuse the existing MyTerm window.")
+                    .font(Theme.Font.ui(12))
+                    .foregroundStyle(Theme.textSecondary)
+
+                Button(defaultTerminal.isDefault ? "MyTerm Is the Default" : "Make MyTerm the Default") {
+                    defaultTerminal.makeDefault()
+                }
+                .disabled(defaultTerminal.isDefault || defaultTerminal.state == .registering)
+
+                if case .failed(let message) = defaultTerminal.state {
+                    Label(message, systemImage: "exclamationmark.triangle.fill")
+                        .font(Theme.Font.ui(12))
+                        .foregroundStyle(.red)
+                        .accessibilityLabel("Default terminal error: \(message)")
+                }
+
+                Text("This action applies to the whole app and is not inherited by folders or workspaces.")
+                    .font(Theme.Font.ui(12))
+                    .foregroundStyle(Theme.textSecondary)
+            }
+
+            SettingsCard("Updates · whole app", dimmed: scope != .global) {
                 Toggle("Check for updates automatically", isOn: Binding(
                     get: { model.updates.automaticallyChecks },
                     set: { model.updates.automaticallyChecks = $0 }
@@ -142,7 +219,7 @@ struct SettingsView: View {
 
                 LabeledContent("Installed") {
                     Text(model.updates.currentVersion.isEmpty ? "unknown" : model.updates.currentVersion)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.textSecondary)
                 }
 
                 HStack {
@@ -154,46 +231,30 @@ struct SettingsView: View {
                 }
 
                 Text(updatesFootnote)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Font.ui(12))
+                    .foregroundStyle(Theme.textSecondary)
             }
 
-            Section("Default terminal") {
-                Text("Open scripts, executable files, and SSH links in MyTerm. Launch requests reuse the existing MyTerm window.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
 
-                Button(defaultTerminal.isDefault ? "MyTerm Is the Default" : "Make MyTerm the Default") {
-                    defaultTerminal.makeDefault()
-                }
-                .disabled(defaultTerminal.isDefault || defaultTerminal.state == .registering)
+        }
+    }
 
-                if case .failed(let message) = defaultTerminal.state {
-                    Label(message, systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                        .accessibilityLabel("Default terminal error: \(message)")
-                }
-
-                Text("This action applies to the whole app and is not inherited by folders or workspaces.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("Agent activity") {
+    private var agentSettings: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            SettingsCard("Activity hooks · whole app", dimmed: scope != .global) {
                 Text("Put a cook beside a tab whose agent is running. He stirs while the agent works, turns blue when it finishes, and turns purple when it has a question. He leaves once you have read the tab, and the tab goes back to its own icon.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Font.ui(12))
+                    .foregroundStyle(Theme.textSecondary)
 
                 hookButton(for: claudeHooks)
                 hookButton(for: codexHooks)
 
                 Text("Each agent gets its hooks in its own file: five for Claude Code, five for Codex. They report through the pane's terminal and stay silent outside MyTerm, so other terminals are unaffected. Other tools' hooks in the same file are left alone, and removing takes out only what MyTerm wrote. MyTerm refreshes installed hooks at startup. Restart an agent session for the change to take effect.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Font.ui(12))
+                    .foregroundStyle(Theme.textSecondary)
             }
 
-            Section("Agent notifications") {
+            SettingsCard("When an agent needs you · whole app", dimmed: scope != .global) {
                 Toggle("Notify when an agent needs you", isOn: Binding(
                     get: { model.agentNotifications.isEnabled },
                     set: { isEnabled in
@@ -217,8 +278,8 @@ struct SettingsView: View {
                 .disabled(!model.agentNotifications.isEnabled)
 
                 Text("A banner arrives only while MyTerm is not the app in front, and carries a swatch of the workspace's folder colour. Clicking it opens the tab. This applies to the whole app and is not inherited by folders or workspaces.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Font.ui(12))
+                    .foregroundStyle(Theme.textSecondary)
 
                 Toggle("Show the agent bell in the toolbar", isOn: Binding(
                     get: { model.store.globalSettings.showsAgentNotificationBell },
@@ -226,15 +287,16 @@ struct SettingsView: View {
                 ))
 
                 Text("The list of tabs whose agent needs you is kept either way, so turning the bell back on shows what was missed.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Font.ui(12))
+                    .foregroundStyle(Theme.textSecondary)
             }
 
-            Section("Agent sessions") {
+            SettingsCard("Sessions") {
                 ScopedSettingRow(
                     model: model,
                     scope: scope,
                     title: "Restore agent sessions",
+                    caption: "A pane running Claude Code or Codex rejoins its conversation on the next launch, using the agent's own resume command. A pane left at its shell prompt comes back to a shell prompt. Install the hooks above so MyTerm can save the conversation identifier.",
                     global: \TerminalPreferences.restoresAgentSessions,
                     override: \TerminalPreferencesOverrides.restoresAgentSessions
                 ) { value in
@@ -242,54 +304,82 @@ struct SettingsView: View {
                         .labelsHidden()
                 }
 
-                Text("A pane running Claude Code or Codex rejoins its conversation on the next launch, using the agent's own resume command. A pane left at its shell prompt comes back to a shell prompt. Install the hooks above so MyTerm can save the conversation identifier.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-
                 ScopedSettingRow(
                     model: model,
                     scope: scope,
                     title: "Name tabs after agent sessions",
+                    caption: "A tab takes the name the agent gives its conversation, so /rename in the pane names the tab as well. Until you rename it, the name is the topic Claude Code writes for itself. A tab you named stays as you named it, and that name goes back to Claude Code when the pane rejoins the conversation. Leaving the agent puts the tab back to Terminal. This needs the hooks above.",
                     global: \TerminalPreferences.namesTabsFromAgentSessions,
                     override: \TerminalPreferencesOverrides.namesTabsFromAgentSessions
                 ) { value in
                     Toggle("Name tabs after agent sessions", isOn: value)
                         .labelsHidden()
                 }
+                ScopedSettingRow(
+                    model: model, scope: scope,
+                    title: "Show the agent's icon when it's idle",
+                    global: \TerminalPreferences.showsIdleAgentIcon,
+                    override: \TerminalPreferencesOverrides.showsIdleAgentIcon
+                ) { value in
+                    Toggle("Show the agent's icon when it's idle", isOn: value).labelsHidden()
+                }
+                HStack(spacing: 8) {
+                    AgentIdentityIcon(identity: .claude).frame(width: 16, height: 16)
+                    Text("Claude Code")
+                    AgentIdentityIcon(identity: .codex).frame(width: 16, height: 16)
+                    Text("Codex")
+                }
+                .font(Theme.Font.ui(12))
+                .foregroundStyle(Theme.textSecondary)
+                Text("Sits where the cook goes on the workspace and tab, so it shows only while the cook is away. Other programs show nothing.")
+                    .font(Theme.Font.ui(12))
+                    .foregroundStyle(Theme.textSecondary)
 
-                Text("A tab takes the name the agent gives its conversation, so /rename in the pane names the tab as well. Until you rename it, the name is the topic Claude Code writes for itself. A tab you named stays as you named it, and that name goes back to Claude Code when the pane rejoins the conversation. Leaving the agent puts the tab back to Terminal. This needs the hooks above.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
         }
-        .formStyle(.grouped)
     }
 
     @ViewBuilder
     private func hookButton(for hooks: AgentHooksController) -> some View {
         HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(hooks.target.displayName)
+                Text(hooks.target.fileDescription)
+                    .font(Theme.Font.mono(12))
+                    .foregroundStyle(Theme.textSecondary)
+            }
+            Spacer(minLength: 8)
             switch hooks.state {
             case .installed:
-                Button("Remove from \(hooks.target.displayName)") { hooks.remove() }
-                Label("Installed in \(hooks.target.fileDescription)", systemImage: "checkmark.circle.fill")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                Text("Installed")
+                    .font(Theme.Font.ui(12))
+                    .foregroundStyle(Theme.success)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(Theme.success.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                Button("Remove") { hooks.remove() }
+                    .accessibilityLabel("Remove hooks from \(hooks.target.displayName)")
             case .notInstalled, .failed:
-                Button("Set Up \(hooks.target.displayName) Hooks") { hooks.install() }
+                Text("Not installed")
+                    .font(Theme.Font.ui(12))
+                    .foregroundStyle(Theme.textSecondary)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(Theme.controlFill, in: RoundedRectangle(cornerRadius: 6))
+                Button("Set Up Hooks") { hooks.install() }
+                    .accessibilityLabel("Set up \(hooks.target.displayName) hooks")
             }
         }
 
         if case .failed(let message) = hooks.state {
             Label(message, systemImage: "exclamationmark.triangle.fill")
-                .font(.footnote)
+                .font(Theme.Font.ui(12))
                 .foregroundStyle(.red)
                 .accessibilityLabel("\(hooks.target.displayName) hooks error: \(message)")
         }
     }
 
     private var terminalSettings: some View {
-        Form {
-            Section("Text") {
+        VStack(alignment: .leading, spacing: 24) {
+            SettingsCard("Text and colour") {
                 ScopedSettingRow(
                     model: model,
                     scope: scope,
@@ -333,7 +423,7 @@ struct SettingsView: View {
                         .font(.custom(settings.fontPostScriptName, size: CGFloat(settings.fontSize)))
                         .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
                         .padding(.horizontal, 10)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .background(Theme.paneGround, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                         .accessibilityLabel("Terminal font preview")
 
                     if !TerminalFontCatalog.isAvailable(settings.fontPostScriptName) {
@@ -341,24 +431,22 @@ struct SettingsView: View {
                             "\(settings.fontPostScriptName) is unavailable. Terminals will use the system monospaced font until you choose an installed font.",
                             systemImage: "exclamationmark.triangle.fill"
                         )
-                        .font(.footnote)
+                        .font(Theme.Font.ui(12))
                         .foregroundStyle(.orange)
                     } else if !TerminalFontCatalog.supportsPowerlineSymbols(settings.fontPostScriptName) {
                         Label(
                             "This font does not include common Powerline and Nerd Font symbols. Choose a patched monospaced font if your prompt shows missing-glyph boxes.",
                             systemImage: "character.book.closed.fill"
                         )
-                        .font(.footnote)
+                        .font(Theme.Font.ui(12))
                         .foregroundStyle(.orange)
                     }
                 }
 
                 Text("Only installed fixed-pitch fonts are shown. If a saved font is unavailable, MyTerm uses the system monospaced font.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
+                    .font(Theme.Font.ui(12))
+                    .foregroundStyle(Theme.textSecondary)
 
-            Section("Appearance") {
                 ScopedSettingRow(
                     model: model,
                     scope: scope,
@@ -392,7 +480,7 @@ struct SettingsView: View {
                 }
             }
 
-            Section("New sessions") {
+            SettingsCard("New sessions") {
                 ScopedSettingRow(
                     model: model,
                     scope: scope,
@@ -415,12 +503,12 @@ struct SettingsView: View {
 
                 if let customShellWarning {
                     Label(customShellWarning, systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
+                        .font(Theme.Font.ui(12))
                         .foregroundStyle(.orange)
                 }
             }
 
-            Section("Behavior") {
+            SettingsCard("Behaviour") {
                 ScopedSettingRow(
                     model: model,
                     scope: scope,
@@ -475,6 +563,7 @@ struct SettingsView: View {
                     model: model,
                     scope: scope,
                     title: "Shell line editing",
+                    caption: "Shift-Option word selection uses the configured shell editing mode. Choose Vi to leave those keys to a vi-mode shell.",
                     global: \TerminalPreferences.lineEditingMode,
                     override: \TerminalPreferencesOverrides.lineEditingMode
                 ) { value in
@@ -486,22 +575,18 @@ struct SettingsView: View {
                     .labelsHidden()
                     .frame(width: 150)
                 }
-
-                Text("Shift-Option word selection uses the configured shell editing mode. Choose Vi to leave those keys to a vi-mode shell.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
         }
-        .formStyle(.grouped)
     }
 
     private var browserSettings: some View {
-        Form {
-            Section("Browser sessions") {
+        VStack(alignment: .leading, spacing: 24) {
+            SettingsCard("Sign-ins and cookies") {
                 ScopedSettingRow(
                     model: model,
                     scope: scope,
                     title: "Browser data",
+                    caption: "New browser tabs use this profile. Existing tabs keep their current profile.",
                     global: \TerminalPreferences.browserDataScope,
                     override: \TerminalPreferencesOverrides.browserDataScope
                 ) { value in
@@ -514,31 +599,25 @@ struct SettingsView: View {
                     .frame(width: 220)
                 }
 
-                Text("New browser tabs use this profile. Existing tabs keep their current profile.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-
                 ScopedSettingRow(
                     model: model,
                     scope: scope,
                     title: "Share sign-ins with companion",
+                    caption: "On by default. A paired iPhone or iPad browsing through this Mac reads and writes the same cookies as this profile, so signing in on either device signs you in on both. Turn it off to keep a workspace's sign-ins on this Mac; the companion still keeps its own separate sign-ins for the profile.",
                     global: \TerminalPreferences.sharesBrowserSignInsWithCompanion,
                     override: \TerminalPreferencesOverrides.sharesBrowserSignInsWithCompanion
                 ) { value in
                     Toggle("Share sign-ins with companion", isOn: value)
                         .labelsHidden()
                 }
-
-                Text("On by default. A paired iPhone or iPad browsing through this Mac reads and writes the same cookies as this profile, so signing in on either device signs you in on both. Turn it off to keep a workspace's sign-ins on this Mac; the companion still keeps its own separate sign-ins for the profile.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
 
-            Section("Web links") {
+            SettingsCard("Links from terminals") {
                 ScopedSettingRow(
                     model: model,
                     scope: scope,
                     title: "Open web links in",
+                    caption: "Links opened from a terminal, and web addresses handed to MyTerm, go to this browser. New Browser Tab always opens MyTerm's own browser.",
                     global: \TerminalPreferences.webLinkDestination,
                     override: \TerminalPreferencesOverrides.webLinkDestination
                 ) { value in
@@ -564,13 +643,9 @@ struct SettingsView: View {
                     .labelsHidden()
                     .frame(width: 220)
                 }
-
-                Text("Links opened from a terminal, and web addresses handed to MyTerm, go to this browser. New Browser Tab always opens MyTerm's own browser.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
 
-            Section("File links") {
+            SettingsCard("File links") {
                 ScopedSettingRow(
                     model: model,
                     scope: scope,
@@ -590,16 +665,13 @@ struct SettingsView: View {
                     model: model,
                     scope: scope,
                     title: "Run JavaScript in local pages",
+                    caption: "Off by default. When enabled, HTML files opened in MyTerm can run their scripts. Changing this reloads open local pages in the affected workspaces.",
                     global: \TerminalPreferences.allowsLocalFileJavaScript,
                     override: \TerminalPreferencesOverrides.allowsLocalFileJavaScript
                 ) { value in
                     Toggle("Run JavaScript in local pages", isOn: value)
                         .labelsHidden()
                 }
-
-                Text("Off by default. When enabled, HTML files opened in MyTerm can run their scripts. Changing this reloads open local pages in the affected workspaces.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
 
                 ScopedSettingRow(
                     model: model,
@@ -618,22 +690,19 @@ struct SettingsView: View {
                     model: model,
                     scope: scope,
                     title: "Text file patterns",
+                    caption: "Browser patterns are checked first and open in MyTerm. Text patterns use the command above; unmatched files open in the default macOS application. Enter one pattern per line: use *.json for an extension, or a literal name such as Dockerfile or .gitignore. Put {file} where the quoted path belongs, or MyTerm appends it. Leave the command empty to open matching text files externally.",
                     global: \TerminalPreferences.nativeTextFilePatterns,
                     override: \TerminalPreferencesOverrides.nativeTextFilePatterns
                 ) { value in
                     FilePatternsEditor(patterns: value)
                         .id(scope)
                 }
-
-                Text("Browser patterns are checked first and open in MyTerm. Text patterns use the command above; unmatched files open in the default macOS application. Enter one pattern per line: use *.json for an extension, or a literal name such as Dockerfile or .gitignore. Put {file} where the quoted path belongs, or MyTerm appends it. Leave the command empty to open matching text files externally.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
 
-            Section("Passkeys") {
+            SettingsCard("Passkeys · whole app", dimmed: scope != .global) {
                 Text(passkeyDescription)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Font.ui(12))
+                    .foregroundStyle(Theme.textSecondary)
 
                 if passkeyAccess.state == .notDetermined {
                     Button("Allow Passkey Access") {
@@ -642,11 +711,10 @@ struct SettingsView: View {
                 }
 
                 Text("Passkey access applies to the signed app and is not inherited by folders or workspaces.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Font.ui(12))
+                    .foregroundStyle(Theme.textSecondary)
             }
         }
-        .formStyle(.grouped)
     }
 
     private var passkeyDescription: String {
@@ -733,6 +801,7 @@ private struct ScopedSettingRow<Value, Control: View>: View {
     @Bindable var model: AppModel
     let scope: TerminalSettingsScope
     let title: String
+    let caption: String?
     let globalKeyPath: WritableKeyPath<TerminalPreferences, Value>
     let overrideKeyPath: WritableKeyPath<TerminalPreferencesOverrides, Value?>
     let control: (Binding<Value>) -> Control
@@ -741,6 +810,7 @@ private struct ScopedSettingRow<Value, Control: View>: View {
         model: AppModel,
         scope: TerminalSettingsScope,
         title: String,
+        caption: String? = nil,
         global: WritableKeyPath<TerminalPreferences, Value>,
         override: WritableKeyPath<TerminalPreferencesOverrides, Value?>,
         @ViewBuilder control: @escaping (Binding<Value>) -> Control
@@ -748,34 +818,40 @@ private struct ScopedSettingRow<Value, Control: View>: View {
         self.model = model
         self.scope = scope
         self.title = title
+        self.caption = caption
         globalKeyPath = global
         overrideKeyPath = override
         self.control = control
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            LabeledContent(title) {
-                HStack(spacing: 12) {
-                    control(valueBinding)
-                        .disabled(!isEditable)
-
-                    if scope != .global {
-                        Toggle("Override", isOn: overrideBinding)
-                            .toggleStyle(.switch)
-                            .controlSize(.mini)
-                            .fixedSize()
-                            .accessibilityLabel("Override \(title)")
+        HStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(Theme.Font.ui(13, weight: .medium))
+                if let caption {
+                    Text(caption)
+                        .font(Theme.Font.ui(12))
+                        .foregroundStyle(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if scope != .global {
+                    HStack(spacing: 0) {
+                        Text("\(hasOverride ? "Overrides" : "Inherited from") \(inheritanceSource) · ")
+                        Button(hasOverride ? "Reset" : "Override") {
+                            overrideBinding.wrappedValue = !hasOverride
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Theme.accent)
+                        .accessibilityLabel("\(hasOverride ? "Reset" : "Override") \(title)")
                     }
+                    .font(Theme.Font.ui(12))
+                    .foregroundStyle(hasOverride ? Theme.accent : Theme.textSecondary)
                 }
             }
-
-            if scope != .global, !hasOverride {
-                Text("Inherited from \(inheritanceSource)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel("\(title) is inherited from \(inheritanceSource)")
-            }
+            Spacer(minLength: 8)
+            control(valueBinding)
+                .disabled(!isEditable)
+                .opacity(isEditable ? 1 : 0.45)
         }
     }
 
@@ -834,7 +910,8 @@ private struct ScopedSettingRow<Value, Control: View>: View {
         case .workspace(let workspaceID):
             guard let workspace = model.workspaces.first(where: { $0.id == workspaceID }),
                   let folderID = workspace.folderID,
-                  let folder = model.folders.first(where: { $0.id == folderID }) else {
+                  let folder = model.folders.first(where: { $0.id == folderID }),
+                  folder.settingsOverrides?[keyPath: overrideKeyPath] != nil else {
                 return "Global"
             }
             return folder.title
@@ -1056,5 +1133,71 @@ private extension TerminalLineEditingMode {
         case .emacs: return "Emacs"
         case .vi: return "Vi"
         }
+    }
+}
+
+private enum SettingsSection: String, CaseIterable, Identifiable {
+    case general = "General", terminal = "Terminal", browser = "Browser"
+    case agents = "Agents", companion = "Companion", permissions = "Permissions"
+
+    var id: Self { self }
+    var index: Int { Self.allCases.firstIndex(of: self) ?? 0 }
+    var isScoped: Bool { self != .companion && self != .permissions }
+    var symbol: String {
+        switch self {
+        case .general: "gearshape"
+        case .terminal: "terminal"
+        case .browser: "globe"
+        case .agents: "sparkles"
+        case .companion: "iphone.and.arrow.forward"
+        case .permissions: "lock.shield"
+        }
+    }
+}
+
+// Flatten conditional content so each visible row gets the same inset and separator.
+@MainActor
+@resultBuilder
+struct SettingsRowsBuilder {
+    static func buildExpression<V: View>(_ view: V) -> [AnyView] { [AnyView(view)] }
+    static func buildBlock(_ parts: [AnyView]...) -> [AnyView] { parts.flatMap { $0 } }
+    static func buildOptional(_ part: [AnyView]?) -> [AnyView] { part ?? [] }
+    static func buildEither(first: [AnyView]) -> [AnyView] { first }
+    static func buildEither(second: [AnyView]) -> [AnyView] { second }
+    static func buildArray(_ parts: [[AnyView]]) -> [AnyView] { parts.flatMap { $0 } }
+}
+
+struct SettingsCard: View {
+    let title: String
+    let dimmed: Bool
+    let rows: [AnyView]
+    let insetRows: Bool
+
+    init(_ title: String, dimmed: Bool = false, insetRows: Bool = true, @SettingsRowsBuilder content: () -> [AnyView]) {
+        self.title = title
+        self.dimmed = dimmed
+        self.insetRows = insetRows
+        rows = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(Theme.Font.ui(12, weight: .semibold))
+                .foregroundStyle(Theme.textSecondary)
+                .padding(.horizontal, 4)
+            VStack(spacing: 0) {
+                ForEach(rows.indices, id: \.self) { index in
+                    if index > 0 { Rectangle().fill(Theme.hairline).frame(height: 1) }
+                    rows[index]
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, insetRows ? 14 : 0)
+                        .padding(.horizontal, insetRows ? 16 : 0)
+                }
+            }
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.hairline, lineWidth: 1))
+        }
+        .opacity(dimmed ? 0.5 : 1)
     }
 }
