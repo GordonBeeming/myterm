@@ -598,13 +598,12 @@ struct SettingsView: View {
                     global: \TerminalPreferences.cursorShape,
                     override: \TerminalPreferencesOverrides.cursorShape
                 ) { value in
-                    Picker("Cursor shape", selection: value) {
-                        ForEach(MyTermCore.TerminalCursorShape.allCases, id: \.self) { shape in
-                            Text(shape.settingsLabel).tag(shape)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(width: 150)
+                    let resolved = model.resolvedSettings(for: scope) ?? TerminalPreferences.default
+                    CursorShapePicker(
+                        selection: value,
+                        fontName: resolved.fontPostScriptName,
+                        blinks: resolved.cursorBlink
+                    )
                 }
 
                 ScopedSettingRow(
@@ -1160,7 +1159,7 @@ private enum TerminalFontCatalog {
 
     static func displayName(for postScriptName: String) -> String {
         if postScriptName == TerminalPreferences.defaultFontPostScriptName {
-            return "Default — Menlo"
+            return "Default — GeistMono Nerd Font"
         }
         return NSFont(name: postScriptName, size: 13)?.displayName ?? "\(postScriptName) — unavailable"
     }
@@ -1183,6 +1182,76 @@ private extension TerminalTheme {
         case .basic: return "Basic"
         case .solarizedLight: return "Solarized Light"
         case .solarizedDark: return "Solarized Dark"
+        }
+    }
+}
+
+/// The cursor shapes as small terminal previews, so the choice can be seen without leaving Settings.
+private struct CursorShapePicker: View {
+    @Binding var selection: MyTermCore.TerminalCursorShape
+    let fontName: String
+    let blinks: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(MyTermCore.TerminalCursorShape.allCases, id: \.self) { shape in
+                Button { selection = shape } label: {
+                    VStack(spacing: 6) {
+                        preview(for: shape)
+                        Text(shape.settingsLabel)
+                            .font(Theme.Font.ui(11.5, weight: selection == shape ? .semibold : .regular))
+                            .foregroundStyle(selection == shape ? Theme.textStrong : Theme.textSecondary)
+                    }
+                    .padding(8)
+                    .frame(width: 92)
+                    .background(Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .stroke(selection == shape ? Theme.accent : Theme.hairline, lineWidth: selection == shape ? 1.5 : 1)
+                    }
+                    .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(shape.settingsLabel) cursor")
+                .accessibilityAddTraits(selection == shape ? .isSelected : [])
+            }
+        }
+    }
+
+    private func preview(for shape: MyTermCore.TerminalCursorShape) -> some View {
+        // Blinks on the terminal's own half-second beat, and holds still when blinking is off,
+        // Reduce Motion is on, or the row is inherited and disabled.
+        TimelineView(.periodic(from: .now, by: 0.53)) { context in
+            let animates = blinks && !reduceMotion && isEnabled
+            let visible = !animates || Int(context.date.timeIntervalSinceReferenceDate / 0.53).isMultiple(of: 2)
+            HStack(spacing: 0) {
+                Text("~ % ")
+                    .foregroundStyle(Theme.textSecondary)
+                cursor(shape)
+                    .opacity(visible ? 1 : 0)
+            }
+            .font(.custom(fontName, size: 13))
+            .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
+            .padding(.horizontal, 8)
+            .background(Theme.paneGround, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private func cursor(_ shape: MyTermCore.TerminalCursorShape) -> some View {
+        switch shape {
+        case .block:
+            Rectangle().fill(Theme.textPrimary).frame(width: 8, height: 16)
+        case .beam:
+            Rectangle().fill(Theme.textPrimary).frame(width: 2, height: 16)
+                .frame(width: 8, alignment: .leading)
+        case .underline:
+            Rectangle().fill(Theme.textPrimary).frame(width: 8, height: 2)
+                .frame(height: 16, alignment: .bottom)
         }
     }
 }

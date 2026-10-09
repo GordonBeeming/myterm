@@ -163,7 +163,9 @@ public enum NewSessionWorkingDirectoryPolicy: Codable, Equatable, Hashable, Send
 }
 
 public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
-    public static let defaultFontPostScriptName = "Menlo-Regular"
+    /// GeistMono Nerd Font Mono, bundled with the app: it matches the interface's Geist Mono and
+    /// carries the Nerd Font glyphs that Powerline and icon prompts draw, at one cell wide each.
+    public static let defaultFontPostScriptName = "GeistMonoNFM"
     public static let defaultFontSize = 12.0
     public static let defaultScrollbackLines = 10_000
     public static let defaultTextFileOpenCommand = "ide browse {file}"
