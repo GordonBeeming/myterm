@@ -578,29 +578,45 @@ final class SceneModel {
 
     /// Pages the Mac's cookies for a profile. A missing capability or a workspace with sharing off
     /// comes back empty rather than as an error: the companion still has its own jar to browse with.
-    func pullBrowserCookies(_ route: BrowserRoute, profileStoreID: UUID) async -> [RemoteBrowserCookie] {
-        var collected: [RemoteBrowserCookie] = []
+    /// A pull, and whether it reached the end of the Mac's jar.
+    ///
+    /// Completeness has to be reported, not assumed. A page that fails partway returns what arrived
+    /// so far, and treating that as the whole jar makes every cookie that was not fetched look
+    /// deleted on the Mac — which the reconciler would then delete locally. A truncated pull is
+    /// still worth applying, because applying only ever adds; it just cannot be used to decide what
+    /// is gone.
+    struct BrowserCookiePull {
+        var cookies: [RemoteBrowserCookie] = []
+        var isComplete = false
+    }
+
+    func pullBrowserCookies(_ route: BrowserRoute, profileStoreID: UUID) async -> BrowserCookiePull {
+        var pull = BrowserCookiePull()
         var cursor: String?
 
         for _ in 0..<RemoteBrowserCookieTransfer.maximumPullPages {
             let request: RemoteBrowserCookiePullRequest
             do { request = try RemoteBrowserCookiePullRequest(profileStoreID: profileStoreID, cursor: cursor) }
-            catch { return collected }
+            catch { return pull }
 
-            guard let payload = try? JSONEncoder().encode(request) else { return collected }
+            guard let payload = try? JSONEncoder().encode(request) else { return pull }
             let result: Data?
             do { result = try await command(.browserCookiePull, metadata: metadata(route: route), payload: payload) }
-            catch { return collected }
+            catch { return pull }
 
             guard let result,
                   let response = try? JSONDecoder().decode(RemoteBrowserCookiePullResponse.self, from: result)
-            else { return collected }
+            else { return pull }
 
-            collected.append(contentsOf: response.cookies)
-            guard let next = response.nextCursor else { return collected }
+            pull.cookies.append(contentsOf: response.cookies)
+            guard let next = response.nextCursor else {
+                pull.isComplete = true
+                return pull
+            }
             cursor = next
         }
-        return collected
+        // Ran out of pages with a cursor still outstanding, so the jar is bigger than the ceiling.
+        return pull
     }
 
     /// Sends the companion's cookies back a chunk at a time, awaiting each one so a slow link cannot

@@ -238,6 +238,21 @@ final class BrowserProfileStores {
         }
     }
 
+    /// Deletes jars left behind by Macs that are no longer paired.
+    ///
+    /// `removeStores` keeps an ownership row when a delete fails so it can be retried, but the only
+    /// caller removes the saved host straight afterwards, so that retry would never have come and the
+    /// jar would have sat on the device for good. Sweeping against the current host list is what
+    /// actually collects them, including after a relaunch.
+    func removeStoresForUnknownHosts(keeping hostIDs: Set<UUID>) async {
+        let known = Set(hostIDs.map(\.uuidString))
+        let orphans = Set(ownership.values).subtracting(known)
+        for orphan in orphans {
+            guard let hostID = UUID(uuidString: orphan) else { continue }
+            await removeStores(hostID: hostID)
+        }
+    }
+
     private var ownership: [String: String] {
         defaults.dictionary(forKey: Self.ownershipKey) as? [String: String] ?? [:]
     }

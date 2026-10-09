@@ -26,6 +26,19 @@ final class BrowserCookieReconcilerTests: XCTestCase {
                        "A cookie the Mac never had is a sign-in made here, not a deletion")
     }
 
+    func testAnIncompletePullIsNotTreatedAsTheWholeJar() {
+        // The reconciler decides what to delete from what the Mac did *not* return, so a pull that
+        // stopped partway would make every unfetched cookie look deleted. The caller refuses to
+        // reconcile unless the pull says it reached the end, and this pins the flag's default: a
+        // pull that returns early must never claim completeness.
+        XCTAssertFalse(SceneModel.BrowserCookiePull().isComplete)
+        XCTAssertTrue(SceneModel.BrowserCookiePull().cookies.isEmpty)
+
+        var finished = SceneModel.BrowserCookiePull()
+        finished.isComplete = true
+        XCTAssertTrue(finished.isComplete)
+    }
+
     func testFirstSyncWithNoBaselinePushesLocalCookiesRatherThanDeletingThem() throws {
         let local = try cookie("phone")
         let remote = try cookie("mac")

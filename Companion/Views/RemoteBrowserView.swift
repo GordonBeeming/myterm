@@ -265,7 +265,12 @@ struct RemoteBrowserView: View {
                     Button("Forward", systemImage: "chevron.right") { native.webView?.goForward() }.disabled(!native.forward)
                     addressField($native.address) { native.submit() }
                     Button(native.loading ? "Stop" : "Reload", systemImage: native.loading ? "xmark" : "arrow.clockwise") {
-                        if native.loading { native.webView?.stopLoading() } else { native.webView?.reload() }
+                        if native.loading { native.webView?.stopLoading() }
+                        // With no web view there is nothing to reload: this tab was stood down so
+                        // another could take the profile's session, and getting it back means
+                        // starting the mode over rather than reloading a view that is gone.
+                        else if native.webView == nil { retryID = UUID() }
+                        else { native.webView?.reload() }
                     }
                 }.padding(8)
                 if native.loading { ProgressView().progressViewStyle(.linear) }
@@ -279,7 +284,11 @@ struct RemoteBrowserView: View {
                 }
                 if let webView = native.webView { NativeBrowserSurface(webView: webView) }
                 else if native.error != nil {
-                    ContentUnavailableView("Browser unavailable", systemImage: "network.slash")
+                    ContentUnavailableView {
+                        Label("Browser unavailable", systemImage: "network.slash")
+                    } actions: {
+                        Button("Reload") { retryID = UUID() }
+                    }
                 } else { ProgressView("Connecting browser").frame(maxWidth: .infinity, maxHeight: .infinity) }
             } else {
                 renderedBrowser
@@ -347,10 +356,22 @@ struct RemoteBrowserView: View {
     ) async {
         let jar = CompanionBrowserCookies(dataStore: store)
         let local = await jar.all()
-        let remote = await scene.pullBrowserCookies(route, profileStoreID: profileStoreID)
+        let pull = await scene.pullBrowserCookies(route, profileStoreID: profileStoreID)
         let stores = scene.browserProfileStores
+
+        guard pull.isComplete else {
+            // A truncated pull cannot say what the Mac no longer has, so nothing is deleted and the
+            // baseline is left alone. Applying what did arrive is still safe, since that only adds,
+            // and the next session reconciles properly.
+            await jar.apply(pull.cookies)
+            await DiagnosticsLog.shared.record(
+                category: "browser", "cookie pull incomplete",
+                detail: "applied=\(pull.cookies.count) without reconciling")
+            return
+        }
+
         let plan = BrowserCookieReconciler.plan(
-            local: local, remote: remote, baseline: stores.baseline(identifier: identifier))
+            local: local, remote: pull.cookies, baseline: stores.baseline(identifier: identifier))
 
         await jar.remove(plan.deleteLocally)
         await jar.apply(plan.applyLocally)
