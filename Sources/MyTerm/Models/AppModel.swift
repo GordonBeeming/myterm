@@ -169,7 +169,7 @@ final class AppModel {
         externalWebOpener: @escaping ExternalWebOpener = AppModel.openInBrowserApplication,
         updates: UpdateController? = nil,
         agentNotifications: AgentNotificationSettings? = nil,
-        makeAgentNotificationPoster: @escaping @MainActor () -> any AgentNotificationPosting = { UserNotificationPoster() },
+        makeAgentNotificationPoster: @escaping @MainActor () -> any AgentNotificationPosting = { AgentNotificationPosterFactory.make() },
         isApplicationActive: @escaping @MainActor () -> Bool = { NSApp?.isActive ?? false },
         makeCompanionHost: @escaping CompanionHostFactory = { model, channel, namespace in
             CompanionHostModel(appModel: model, channel: channel, storageNamespace: namespace)

@@ -12,6 +12,28 @@ protocol AgentNotificationPosting: AnyObject {
     func post(_ notification: AgentNotification)
 }
 
+/// Builds the poster a process can actually use. Notification Centre raises an exception, which
+/// cannot be caught in Swift, when the process is not a bundled app: a test runner, or `swift run`.
+/// Those get a poster that posts nothing instead of a crash.
+enum AgentNotificationPosterFactory {
+    @MainActor
+    static func make(bundle: Bundle = .main) -> any AgentNotificationPosting {
+        guard bundle.bundleIdentifier != nil, bundle.bundleURL.pathExtension == "app" else {
+            return SilentAgentNotificationPoster()
+        }
+        return UserNotificationPoster()
+    }
+}
+
+/// Stands in for Notification Centre where it is unavailable. Banners are skipped; the cook, the
+/// bell and the inbox do not depend on them.
+final class SilentAgentNotificationPoster: AgentNotificationPosting {
+    var openTab: ((WorkspaceID, TabID) -> Void)?
+
+    func requestAuthorization() {}
+    func post(_ notification: AgentNotification) {}
+}
+
 /// Posts agent banners through Notification Centre, and brings the tab forward when one is clicked.
 /// The `userInfo` keys carrying the tab a banner belongs to. Read back from a nonisolated
 /// delegate callback, so they sit outside the main-actor type.
