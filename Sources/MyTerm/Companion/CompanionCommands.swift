@@ -8,6 +8,7 @@ enum CompanionCommandError: Error, LocalizedError, Equatable {
     case unsupportedOperation
     case activeProcessRequiresDesktopConfirmation
     case browserCookieSharingDisabled
+    case diagnosticsTooFrequent
 
     var code: String {
         switch self {
@@ -16,6 +17,7 @@ enum CompanionCommandError: Error, LocalizedError, Equatable {
         case .unsupportedOperation: "unsupported_operation"
         case .activeProcessRequiresDesktopConfirmation: "active_process"
         case .browserCookieSharingDisabled: RemoteBrowserCookieTransfer.sharingDisabledCode
+        case .diagnosticsTooFrequent: "diagnostics_too_frequent"
         }
     }
 
@@ -28,6 +30,8 @@ enum CompanionCommandError: Error, LocalizedError, Equatable {
             "An active foreground process requires confirmation on the Mac before it can be closed."
         case .browserCookieSharingDisabled:
             "This workspace does not share browser sign-ins with companion devices."
+        case .diagnosticsTooFrequent:
+            "These logs were already sent in the last 30 seconds. Wait a moment, then send again."
         }
     }
 }

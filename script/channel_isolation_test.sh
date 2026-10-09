@@ -57,4 +57,18 @@ assert_line "workspace_state_path=$production_support/myterm/workspace-state.jso
 assert_line "instance_policy=focus-existing" "$production_plan"
 assert_line "build_configuration=release" "$production_plan"
 
-printf 'channel isolation plan checks passed\n'
+cp "$ROOT_DIR/Packaging/Info.plist" "$TEST_ROOT/development.plist"
+cp "$ROOT_DIR/Packaging/Info.plist" "$TEST_ROOT/production.plist"
+bash "$ROOT_DIR/script/configure_url_handlers.sh" development com.gordonbeeming.myterm.dev "$TEST_ROOT/development.plist"
+bash "$ROOT_DIR/script/configure_url_handlers.sh" production com.gordonbeeming.myterm "$TEST_ROOT/production.plist"
+python3 - "$TEST_ROOT" <<'PY'
+from pathlib import Path
+import plistlib,sys
+root=Path(sys.argv[1])
+def schemes(channel):
+    data=plistlib.loads((root/(channel+'.plist')).read_bytes())
+    return {s for t in data['CFBundleURLTypes'] for s in t['CFBundleURLSchemes']}
+assert schemes('development') == {'myterm-dev'}, schemes('development')
+assert schemes('production') == {'myterm','http','https','ssh'}, schemes('production')
+PY
+printf 'channel isolation plan and URL registration checks passed\n'

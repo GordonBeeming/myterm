@@ -277,6 +277,29 @@ Run the development channel from the repository:
 
 This builds and launches `myterm-dev`. It has its own bundle identifier, browser settings, website-data profiles, and workspace state, so it can live beside production `myterm`.
 
+Development and test builds register only `myterm-dev:`. They do not claim production's
+`myterm:`, HTTP, HTTPS, or SSH handlers. Use the development channel for interactive testing;
+production bundles assembled for release verification should stay in `dist`, outside `/Applications`.
+
+On launch, MyTerm checks which app will receive its callback. Before Companion sign-in, it
+pins its callback scheme to the running app's exact path and verifies the route before opening
+the browser. `make install` sets and checks the route after copying the app.
+If macOS still selects an identical competing copy, MyTerm removes that copy's
+Launch Services registration and verifies the route again. Its files are preserved.
+After installing a release manually or through Homebrew, verify its callback route with:
+
+```sh
+bash script/check_callback_routing.sh /Applications/myterm.app myterm
+```
+
+Add `--repair` to set the handler to that installed copy. Keep named retired production
+test copies out of `/Applications`: quit the copy, then preserve it with
+`bash script/archive_test_app.sh /path/to/myterm-old-test.app`. This moves it to
+`~/Library/Application Support/myterm/AppArchives` with a `.disabled` suffix and removes
+its old Launch Services registration. It refuses to move the standard installed app,
+a running copy, or the current callback handler. `make install` updates the existing
+`/Applications/myterm.app` when present instead of creating another copy under `~/Applications`.
+
 ```bash
 ./run.sh --prod
 ./run.sh --verify

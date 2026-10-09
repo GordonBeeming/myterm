@@ -26,6 +26,13 @@ enum MyTermChannel: String, CaseIterable, Sendable {
         }
     }
 
+    var authenticationCallbackScheme: String {
+        switch self {
+        case .development: "myterm-dev"
+        case .production: "myterm"
+        }
+    }
+
     func persistenceURL(applicationSupportDirectory: URL) -> URL {
         applicationSupportDirectory
             .appending(path: displayName, directoryHint: .isDirectory)

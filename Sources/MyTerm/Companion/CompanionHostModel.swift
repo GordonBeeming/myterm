@@ -12,10 +12,25 @@ import OSLog
 enum CompanionConnectionStatus: Equatable {
     case notConfigured
     case signedOut
+    case signInRequired(CompanionSignInRequirement)
     case disconnected
     case connecting
     case connected
     case failed(String)
+}
+
+enum CompanionSignInRequirement: Equatable {
+    case credentialsUnavailable
+    case authorizationRejected
+
+    var message: String {
+        switch self {
+        case .credentialsUnavailable:
+            "Your saved relay sign-in is unavailable. Sign in again in Companion settings to reconnect."
+        case .authorizationRejected:
+            "Your relay sign-in could not be renewed. Sign in again in Companion settings to reconnect."
+        }
+    }
 }
 
 struct CompanionPairingPrompt: Identifiable, Equatable {
@@ -106,7 +121,7 @@ final class CompanionHostModel {
     private let tokenStore: TokenStore
     private let notificationGrantStore: CompanionNotificationGrantStore
     private let pushJournalStore: CompanionPushJournalStore
-    private let authenticationSession = CompanionAuthenticationSession()
+    private let authenticationSession: CompanionAuthenticationSession
     private let runtimeID = UUID()
     private let reconnectPolicy: CompanionReconnectPolicy
     private let sleep: @Sendable (TimeInterval) async throws -> Void
@@ -186,6 +201,7 @@ final class CompanionHostModel {
             try await Task.sleep(for: .seconds(seconds))
         },
         secrets injectedSecrets: (any SecretStore)? = nil,
+        authenticationSession: CompanionAuthenticationSession? = nil,
         defaults: UserDefaults = .standard,
         makeHTTPClient: @escaping @Sendable (RelayEndpoint) -> RelayHTTPClient = {
             RelayHTTPClient(endpoint: $0)
@@ -203,6 +219,7 @@ final class CompanionHostModel {
         pairingRotation = CompanionPairingRotation(sleep: pairingSleep)
         self.makeHTTPClient = makeHTTPClient
         self.makeTransport = makeTransport
+        self.authenticationSession = authenticationSession ?? CompanionAuthenticationSession()
         configuration = CompanionConfigurationStore(
             channel: channel,
             namespace: storageNamespace,
@@ -210,8 +227,9 @@ final class CompanionHostModel {
         )
         let savedRelay = configuration.relayText
         relayText = savedRelay
-        status = savedRelay.isEmpty ? .notConfigured : .signedOut
-        hasLinkedRelay = (try? configuration.loadAuthReference()) != nil
+        let linkedRelay = (try? configuration.loadAuthReference()) != nil
+        hasLinkedRelay = linkedRelay
+        status = savedRelay.isEmpty ? .notConfigured : linkedRelay ? .disconnected : .signedOut
         let service = "\(channel.bundleIdentifier).companion.\(storageNamespace)"
         let secrets = injectedSecrets ?? KeychainSecretStore(service: service)
         self.secrets = secrets
@@ -245,10 +263,18 @@ final class CompanionHostModel {
     private(set) var isSigningIn = false
     private var signInTask: Task<Void, Never>?
     private var signInAttemptID: UUID?
+    private var signInRecovery: (reason: CompanionSignInRequirement, connectionEnabled: Bool)?
+    private var signInNotice: String?
 
     func signIn(bootstrapURLText: String? = nil) {
         guard !isSigningIn, status != .connecting else { return }
+        if case .signInRequired(let reason) = status {
+            signInRecovery = (reason, configuration.connectionEnabled)
+        } else {
+            signInRecovery = nil
+        }
         disconnect()
+        if let recovery = signInRecovery { configuration.connectionEnabled = recovery.connectionEnabled }
         isSigningIn = true
         let id = UUID()
         signInAttemptID = id
@@ -258,6 +284,7 @@ final class CompanionHostModel {
                     isSigningIn = false
                     signInTask = nil
                     signInAttemptID = nil
+                    signInRecovery = nil
                 }
             }
             await runSignIn(bootstrapURLText: bootstrapURLText)
@@ -266,20 +293,35 @@ final class CompanionHostModel {
 
     func cancelSignIn() {
         guard isSigningIn else { return }
+        let recovery = signInRecovery
         signInAttemptID = nil
         signInTask?.cancel()
         signInTask = nil
         authenticationSession.cancel()
         isSigningIn = false
         disconnect()
+        if let recovery {
+            configuration.connectionEnabled = recovery.connectionEnabled
+            status = .signInRequired(recovery.reason)
+        }
+        signInRecovery = nil
     }
 
     func connect() {
+        if needsSignIn {
+            signIn()
+            return
+        }
         configuration.connectionEnabled = true
         reconnectAttempt = 0
         reconnectTask?.cancel()
         reconnectTask = nil
-        Task { await connectConfiguredRelay() }
+        Task { await connectConfiguredRelay(allowSignIn: true) }
+    }
+
+    var needsSignIn: Bool {
+        if case .signInRequired = status { return true }
+        return status == .signedOut
     }
 
     func startIfEnabled() {
@@ -299,6 +341,7 @@ final class CompanionHostModel {
         reauthenticationTask = nil
         if let transport { Task { await transport.disconnect() } }
         transport = nil
+        relayAcknowledgedExpiry = nil
         clearConnectedPeers()
         status = .disconnected
     }
@@ -556,7 +599,7 @@ final class CompanionHostModel {
             stage = .relayEndpoint
             let endpoint = try enrollment?.endpoint ?? configuredEndpoint()
             if enrollment != nil { relayText = endpoint.canonicalOrigin }
-            let redirectScheme = channel == .production ? "myterm" : "myterm-dev"
+            let redirectScheme = channel.authenticationCallbackScheme
             stage = .callbackConfiguration
             let redirect = try validatedURL("\(redirectScheme)://companion-auth/callback")
             let attempt = try SignInAttempt(relay: endpoint, redirectURI: redirect)
@@ -609,6 +652,7 @@ final class CompanionHostModel {
                 deviceID: record.deviceID
             ))
             hasLinkedRelay = true
+            clearSignInNotice()
             configuration.connectionEnabled = true
             reconnectAttempt = 0
             isSigningIn = false
@@ -618,13 +662,20 @@ final class CompanionHostModel {
             guard !Task.isCancelled else { return }
             let reason = callbackFailure?.rawValue ?? Self.sanitizedSignInReason(error)
             logger.error("Companion sign-in failed at \(stage.rawValue, privacy: .public): \(reason, privacy: .public)")
-            status = .failed(Self.signInFailureDescription(
+            let message = Self.signInFailureDescription(
                 error: error, stage: stage, callbackFailure: callbackFailure
-            ))
+            )
+            if let recovery = signInRecovery {
+                configuration.connectionEnabled = recovery.connectionEnabled
+                status = .signInRequired(recovery.reason)
+                presentSignInNotice(message)
+            } else {
+                status = .failed(message)
+            }
         }
     }
 
-    private func connectConfiguredRelay() async {
+    private func connectConfiguredRelay(allowSignIn: Bool = false) async {
         guard transportTask == nil, status != .connecting else { return }
         reconnectTask?.cancel()
         reconnectTask = nil
@@ -632,9 +683,15 @@ final class CompanionHostModel {
         do {
             status = .connecting
             let endpoint = try configuredEndpoint()
-            guard let reference = try configuration.loadAuthReference(),
+            let savedReference: CompanionAuthReference?
+            do { savedReference = try configuration.loadAuthReference() }
+            catch let error as RemoteError where error == .invalidResponse || error == .wrongPeer {
+                requireSignIn(.credentialsUnavailable, generation: generation, allowSignIn: allowSignIn)
+                return
+            }
+            guard let reference = savedReference,
                   reference.relay == endpoint else {
-                status = .signedOut
+                requireSignIn(.credentialsUnavailable, generation: generation, allowSignIn: allowSignIn)
                 return
             }
             let partition = TokenPartition(
@@ -642,8 +699,15 @@ final class CompanionHostModel {
                 accountID: reference.accountID,
                 deviceID: reference.deviceID
             )
-            guard let record = try await tokenStore.load(partition: partition) else {
-                status = .signedOut
+            let storedRecord: TokenRecord?
+            do { storedRecord = try await tokenStore.load(partition: partition) }
+            catch let error as RemoteError where error == .invalidResponse || error == .wrongPeer {
+                requireSignIn(.credentialsUnavailable, generation: generation, allowSignIn: allowSignIn)
+                return
+            }
+            guard let record = storedRecord else {
+                try requireConnectionGeneration(generation)
+                requireSignIn(.credentialsUnavailable, generation: generation, allowSignIn: allowSignIn)
                 return
             }
             try requireConnectionGeneration(generation)
@@ -705,6 +769,10 @@ final class CompanionHostModel {
             }
         } catch {
             guard connectionFence.accepts(generation) else { return }
+            if Self.isAuthenticationFailure(error) {
+                requireSignIn(.authorizationRejected, generation: generation, allowSignIn: allowSignIn)
+                return
+            }
             transportTask = nil
             status = .failed(error.localizedDescription)
             scheduleReconnect()
@@ -722,6 +790,7 @@ final class CompanionHostModel {
         case .ready(let ready):
             reconnectAttempt = 0
             status = .connected
+            clearSignInNotice()
             relayAcknowledgedExpiry = ready.expiresAt.map { Date(timeIntervalSince1970: TimeInterval($0)) }
             Task { await CompanionConnectionLog.shared.record(category: "connection", "connected") }
         case .peer(let peer):
@@ -1013,6 +1082,9 @@ final class CompanionHostModel {
         from peer: PeerConnection
     ) async throws {
         let messageMetadata = message.metadata
+        // Captured before the dispatch, so the catch below can tell an attach that failed from an
+        // input or resize that threw the same error type for an unrelated reason.
+        let isAttach = message.kind == .attach
         guard let identity else { throw RemoteError.authenticationRequired }
         try CompanionHostSecurity.validateApplicationMetadata(
             messageMetadata,
@@ -1078,8 +1150,35 @@ final class CompanionHostModel {
                  message: "You no longer control this terminal. Request control to type or resize.",
                  retryable: false)), to: peer)
             broadcastControlState(target: target)
+        } catch let error as TerminalRemoteSessionError where isAttach {
+            // One session's attach going wrong is that session's problem. Letting it out of here
+            // reaches the catch that drops the whole transport, so a single busy terminal took the
+            // device's connection down with it and the reconnect loop started again on the same
+            // session. Tell the peer to re-attach that one session instead.
+            //
+            // Only for an attach. `handleInput` and `handleResize` throw this type too, for a stale
+            // generation, and converting those would tell the companion to re-attach and spend its
+            // retry budget when no attach had failed.
+            if let sessionID = messageMetadata.sessionID {
+                let session = TerminalSessionID(rawValue: sessionID)
+                peer.attachingSessions.removeValue(forKey: session)
+                peer.attachingOverflow.remove(session)
+                // This peer is now neither attaching nor attached, so capture has to be recomputed.
+                // Leaving it on kept the session filling a replay buffer for a viewer that had gone,
+                // and the key this clears is how disconnect cleanup would have found it later.
+                updateRemoteCapture(sessionID: session)
+            }
+            logger.error(
+                "Attach failed for one session: \(error.localizedDescription, privacy: .public)")
+            send(.error(messageMetadata, ErrorParameters(code: Self.attachRetryableCode,
+                 message: "This terminal could not be restored. Reopen it to try again.",
+                 retryable: true)), to: peer)
         }
     }
+
+    /// Told to the companion when an attach failed in a way a fresh attach can fix. Distinct from
+    /// `control_denied`, which is about the lease rather than the buffer.
+    static let attachRetryableCode = "attach_retry"
 
     private func browserTarget(_ metadata: MessageMetadata, peer: PeerConnection) throws -> (CompanionBrowserRoute, URL) {
         guard peersByConnection[peer.connectionID] === peer, peer.applicationChannel != nil,
@@ -1379,8 +1478,13 @@ final class CompanionHostModel {
                 let upload = try JSONDecoder().decode(RemoteDiagnosticsPayload.self,
                                                       from: command.payload)
                 // An upload the store turns down, for arriving too soon or being unreadable, is
-                // the peer's problem to retry, not a reason to drop the connection.
+                // the peer's problem to retry, not a reason to drop the connection. The two are
+                // reported apart: flattening them both into `invalidMessage` told the user their
+                // logs were corrupt when all they had done was tap Send twice inside the window.
                 do { try await diagnosticsStore.accept(upload, deviceID: peer.peer.deviceID) }
+                catch CompanionDiagnosticsError.tooFrequent {
+                    throw CompanionCommandError.diagnosticsTooFrequent
+                }
                 catch { throw RemoteError.invalidMessage }
                 result = nil
             default:
@@ -1531,11 +1635,41 @@ final class CompanionHostModel {
             for output in replay {
                 try await sendOutputAwaiting(output, target: target, to: peer)
             }
-            try await finishAttaching(target: target, peer: peer)
-            return
+            if try await finishAttaching(target: target, peer: peer) == .attached { return }
+            // The replay could not catch up with what the session is still producing, so fall
+            // through and send a snapshot instead of replaying forever.
         }
 
+        for attempt in 0...Self.maximumAttachCheckpointRetakes {
+            try await sendCheckpoint(target: target, peer: peer, metadata: metadata)
+            guard attempt < Self.maximumAttachCheckpointRetakes else {
+                // Out of attempts against a session that keeps outrunning its own snapshot, so stop
+                // chasing it and claim it. Refusing instead is what left a busy terminal unattached
+                // until its output stopped.
+                flushAndClaim(target: target, peer: peer)
+                return
+            }
+            if try await finishAttaching(target: target, peer: peer) == .attached { return }
+        }
+    }
+
+    /// How many times a snapshot may be *retaken* when output keeps outrunning it, on top of the
+    /// first one. Each retake copies the scrollback on the main actor, so this stays small.
+    private static let maximumAttachCheckpointRetakes = 1
+
+    /// How many flush rounds an attach gets before it gives up on replaying the delta. Bounded
+    /// because a session emitting output as fast as the link carries it refills the buffer on every
+    /// round, and an unbounded loop never reaches `attachedSessions`.
+    private static let maximumAttachDrainRounds = 4
+
+    private func sendCheckpoint(
+        target: TerminalTarget,
+        peer: PeerConnection,
+        metadata: MessageMetadata
+    ) async throws {
         let checkpoint = try target.session.remoteCheckpoint()
+        // No await between the snapshot and the buffer reset, so nothing produced in between is
+        // counted twice or lost.
         peer.attachingSessions[target.sessionID] = []
         let transferID = UUID()
         let chunkSize = 512 * 1_024
@@ -1572,7 +1706,6 @@ final class CompanionHostModel {
                 over: requireTransport()
             )
         }
-        try await finishAttaching(target: target, peer: peer)
     }
 
     private func handleDetach(metadata: MessageMetadata, peer: PeerConnection) throws {
@@ -1592,23 +1725,61 @@ final class CompanionHostModel {
         if releasedLease { broadcastControlState(target: target) }
     }
 
-    private func finishAttaching(target: TerminalTarget, peer: PeerConnection) async throws {
-        guard !peer.attachingOverflow.contains(target.sessionID) else {
-            peer.attachingSessions.removeValue(forKey: target.sessionID)
-            peer.attachingOverflow.remove(target.sessionID)
-            throw TerminalRemoteSessionError.replayGap
-        }
-        while let pending = peer.attachingSessions[target.sessionID], !pending.isEmpty {
-            guard !peer.attachingOverflow.contains(target.sessionID) else {
-                peer.attachingSessions.removeValue(forKey: target.sessionID)
+    enum AttachOutcome: Equatable {
+        case attached
+        /// The delta could not be flushed within the bound, or was dropped on overflow. A fresh
+        /// snapshot supersedes whatever was buffered, so the caller takes one instead of failing.
+        case needsFreshCheckpoint
+    }
+
+    /// Flushes the output buffered while a session was attaching, then claims the session.
+    ///
+    /// Bounded on purpose. The buffer refills while each send is awaited, so a session producing
+    /// output as fast as the link carries it kept this loop running and never reached
+    /// `attachedSessions` — which left the companion with no output and no control, showing
+    /// "Restoring terminal…" until the session happened to go quiet.
+    private func finishAttaching(
+        target: TerminalTarget,
+        peer: PeerConnection
+    ) async throws -> AttachOutcome {
+        for _ in 0..<Self.maximumAttachDrainRounds {
+            if peer.attachingOverflow.contains(target.sessionID) {
+                peer.attachingSessions[target.sessionID] = []
                 peer.attachingOverflow.remove(target.sessionID)
-                throw TerminalRemoteSessionError.replayGap
+                return .needsFreshCheckpoint
+            }
+            guard let pending = peer.attachingSessions[target.sessionID], !pending.isEmpty else {
+                claimAttached(target: target, peer: peer)
+                return .attached
             }
             peer.attachingSessions[target.sessionID] = []
             for output in pending.sorted(by: { $0.sequence < $1.sequence }) {
                 try await sendOutputAwaiting(output, target: target, to: peer)
             }
         }
+        return .needsFreshCheckpoint
+    }
+
+    /// Hands over whatever is still buffered and claims the session, in one step with no `await` in
+    /// between. That matters: the queueing is what makes it safe to stop draining.
+    ///
+    /// The buffered delta cannot simply be dropped. The companion only accepts output at
+    /// `sequence + 1`, and a gap makes it invalidate its buffer and ask for another checkpoint — on a
+    /// session busy enough to get here, that resync arrives straight back in this function. So the
+    /// remainder is queued rather than awaited: it is bounded by the 4 MiB attach buffer, it keeps
+    /// the sequence unbroken, and ordering holds because live output uses this same queue.
+    private func flushAndClaim(target: TerminalTarget, peer: PeerConnection) {
+        let pending = peer.attachingSessions[target.sessionID] ?? []
+        for output in pending.sorted(by: { $0.sequence < $1.sequence }) {
+            sendOutput(output, target: target, to: peer)
+        }
+        claimAttached(target: target, peer: peer)
+    }
+
+    /// Claims the session for this peer. Synchronous, and called with the pending buffer already
+    /// handed over, so live output cannot overtake it: `sendOutput` only starts addressing this peer
+    /// once `attachedSessions` contains the session.
+    private func claimAttached(target: TerminalTarget, peer: PeerConnection) {
         peer.attachingSessions.removeValue(forKey: target.sessionID)
         peer.attachingOverflow.remove(target.sessionID)
         peer.attachedSessions.insert(target.sessionID)
@@ -2161,8 +2332,49 @@ final class CompanionHostModel {
             catch { return }
             guard !Task.isCancelled, connectionFence.accepts(generation) else { return }
             do { try await transport.reauthenticate(accessToken: try await manager.accessToken()) }
-            catch { return }
+            catch {
+                guard !Task.isCancelled, connectionFence.accepts(generation) else { return }
+                if Self.isAuthenticationFailure(error) {
+                    requireSignIn(.authorizationRejected, generation: generation)
+                    return
+                }
+                Self.connectionLogger.error("Relay authentication refresh failed; retrying before expiry.")
+                await CompanionConnectionLog.shared.record(
+                    category: "connection", "authentication refresh failed", detail: "retrying before expiry")
+            }
         }
+    }
+
+    private static func isAuthenticationFailure(_ error: Error) -> Bool {
+        guard let error = error as? RemoteError else { return false }
+        switch error {
+        case .authenticationRequired, .authenticationRevoked: return true
+        default: return false
+        }
+    }
+
+    private func requireSignIn(_ reason: CompanionSignInRequirement, generation: UUID, allowSignIn: Bool = false) {
+        guard connectionFence.accepts(generation) else { return }
+        let connectionEnabled = configuration.connectionEnabled
+        disconnect()
+        // Keep the user's connection preference so the next launch can explain the
+        // missing sign-in too. This attempt ends without scheduling another retry.
+        configuration.connectionEnabled = connectionEnabled
+        tokenManager = nil
+        httpClient = nil
+        status = .signInRequired(reason)
+        presentSignInNotice(reason.message)
+        if allowSignIn { signIn() }
+    }
+
+    private func presentSignInNotice(_ message: String) {
+        signInNotice = message
+        appModel?.errorDescription = message
+    }
+
+    private func clearSignInNotice() {
+        if appModel?.errorDescription == signInNotice { appModel?.errorDescription = nil }
+        signInNotice = nil
     }
 
     private func scheduleReconnect() {

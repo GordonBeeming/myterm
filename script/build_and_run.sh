@@ -120,19 +120,7 @@ cp "$ROOT_DIR/Packaging/Info.plist" "$INFO_PLIST"
 /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" "$INFO_PLIST"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$INFO_PLIST"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$INFO_PLIST"
-/usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:0:CFBundleURLName $BUNDLE_ID.web" "$INFO_PLIST"
-/usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:1:CFBundleURLName $BUNDLE_ID.terminal" "$INFO_PLIST"
-/usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:2:CFBundleURLName $BUNDLE_ID.workspace" "$INFO_PLIST"
-if [[ "$CHANNEL" == "development" ]]; then
-  /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:3 dict" "$INFO_PLIST"
-  /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:3:CFBundleTypeRole string Viewer" "$INFO_PLIST"
-  /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:3:CFBundleURLName string $BUNDLE_ID.authentication" "$INFO_PLIST"
-  /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:3:CFBundleURLSchemes array" "$INFO_PLIST"
-  /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:3:CFBundleURLSchemes:0 string myterm-dev" "$INFO_PLIST"
-  # A development browser registration makes macOS 27 return the initial HTTPS
-  # auth page as the callback. Keep web handlers on the installed production app.
-  /usr/libexec/PlistBuddy -c "Delete :CFBundleURLTypes:0" "$INFO_PLIST"
-fi
+bash "$ROOT_DIR/script/configure_url_handlers.sh" "$CHANNEL" "$BUNDLE_ID" "$INFO_PLIST"
 /usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion $MIN_SYSTEM_VERSION" "$INFO_PLIST"
 
 SIGNING_IDENTITY="${CODESIGN_IDENTITY:-}"

@@ -57,17 +57,21 @@ struct CompanionSettingsView: View {
                     LabeledContent("Address", value: companion.relayText)
                     statusLabel
                     HStack {
-                        if companion.status == .connected {
+                        if companion.isSigningIn {
+                            Button("Cancel sign-in", role: .cancel) { companion.cancelSignIn() }
+                        } else if companion.status == .connecting {
+                            Button("Cancel connection", role: .cancel) { companion.disconnect() }
+                        } else if companion.status == .connected {
                             Button("Disconnect") { companion.disconnect() }
                         } else {
-                            Button("Reconnect") { companion.connect() }
-                                .disabled(companion.status == .connecting || companion.isSigningIn)
+                            Button(companion.needsSignIn ? "Sign in again" : "Reconnect") { companion.connect() }
                         }
                         Button("Change relay or recover passkey…") {
                             previousRelay = companion.relayText
                             connectionInput = companion.relayText
                             isEditingConnection = true
                         }
+                        .disabled(companion.isSigningIn || companion.status == .connecting)
                     }
                     Text("Keep this Mac awake with MyTerm running so your phone can connect.")
                         .font(.footnote)
@@ -218,6 +222,12 @@ struct CompanionSettingsView: View {
         switch companion.status {
         case .notConfigured: Label("Not configured", systemImage: "circle")
         case .signedOut: Label("Signed out", systemImage: "person.crop.circle.badge.xmark")
+        case .signInRequired(let reason):
+            Label("Sign in required", systemImage: "person.crop.circle.badge.xmark")
+                .foregroundStyle(.orange)
+            Text(reason.message)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         case .disconnected: Label("Disconnected", systemImage: "network.slash")
         case .connecting: Label("Connecting", systemImage: "arrow.triangle.2.circlepath")
         case .connected: Label("Connected", systemImage: "checkmark.circle.fill")
