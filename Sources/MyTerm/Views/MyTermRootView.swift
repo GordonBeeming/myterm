@@ -829,13 +829,11 @@ private struct WorkspaceSidebarRow: View {
                 }
         }
         .onDrop(of: [.mytermSidebarItem], delegate: dropDelegate)
+        // The List draws the selection itself, so only the workspace's own tint is drawn here;
+        // a second selection fill would nest inside the native one.
         .background(
             RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)
-                .fill(isSelected ? Theme.selectedFill : .clear)
-                .overlay {
-                    RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)
-                        .fill(workspaceBackgroundColor)
-                }
+                .fill(workspaceBackgroundColor)
                 .allowsHitTesting(false)
         )
         // The row in the list stands in for the item in the user's hand: it shows where the drop
