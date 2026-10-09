@@ -261,10 +261,12 @@ struct CompanionTerminalPane: View {
         if let state = scene.terminalStates[route.id] {
             let currentRoute = state.route
             VStack(spacing: 0) {
-                TerminalControlBar(state: state) { action in
+                TerminalControlBar(state: state, connectionPhase: scene.connectionPhase) { action in
                     Task { await scene.requestControl(action, route: currentRoute) }
                 } compose: {
                     scene.sheet = .terminalComposer(currentRoute)
+                } retry: {
+                    Task { await scene.retryTerminal(currentRoute) }
                 }
                 RemoteTerminalView(state: state, showTerminalKeys: showTerminalKeys,
                                    requestsKeyboardFocus: requestsKeyboardFocus && scene.sheet == nil,
@@ -309,8 +311,10 @@ struct CompanionTerminalPane: View {
 
 private struct TerminalControlBar: View {
     let state: TerminalSurfaceState
+    let connectionPhase: ConnectionPhase
     let request: (ControlAction) -> Void
     let compose: () -> Void
+    let retry: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
@@ -322,7 +326,13 @@ private struct TerminalControlBar: View {
             Button("Compose", systemImage: "square.and.pencil", action: compose)
                 .labelStyle(.iconOnly)
                 .accessibilityIdentifier("compose-terminal-text")
-            if state.isAwaitingCheckpoint {
+            if isStalled {
+                // A spinner here claimed something was happening when nothing was.
+                Button("Retry", systemImage: "arrow.clockwise", action: retry)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .accessibilityIdentifier("retry-terminal-attach")
+            } else if state.isAwaitingCheckpoint {
                 ProgressView().controlSize(.small)
             } else if state.isControlRequestPending {
                 ProgressView().controlSize(.small)
@@ -346,7 +356,16 @@ private struct TerminalControlBar: View {
         .accessibilityElement(children: .contain)
     }
 
+    /// True when nothing is going to arrive without something being retried, which is when the bar
+    /// offers the retry rather than a spinner.
+    private var isStalled: Bool { connectionPhase.isDown || state.restoreFailure != nil }
+
+    /// The connection is consulted ahead of `isAwaitingCheckpoint`, because that flag stays set when
+    /// a restore never lands. Reporting it as progress is what made a dropped connection look like a
+    /// terminal that was still busy restoring.
     private var status: String {
+        if connectionPhase.isDown { return "Disconnected from the Mac" }
+        if let failure = state.restoreFailure { return failure }
         if state.isAwaitingCheckpoint { return "Restoring terminal…" }
         if state.isControlRequestPending { return "Requesting control…" }
         if state.ownsControl { return "You have control" }

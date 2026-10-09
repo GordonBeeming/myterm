@@ -13,6 +13,14 @@ enum ConnectionPhase: Equatable, Sendable {
     case online
     case failed(String)
 
+    var hasFailed: Bool {
+        if case .failed = self { return true }
+        return false
+    }
+
+    /// Nothing is in flight and nothing will arrive until something reconnects.
+    var isDown: Bool { self == .disconnected || hasFailed }
+
     var title: String {
         switch self {
         case .disconnected: "Offline"
@@ -326,6 +334,8 @@ final class SceneModel {
     var connectionPhase: ConnectionPhase = .disconnected
     var connectionID: UUID?
     var projection: RemoteWorkspaceProjection?
+    @ObservationIgnored private var attachRetries: [TerminalSurfaceID: Int] = [:]
+    @ObservationIgnored private var restoreDeadlines: [TerminalSurfaceID: Task<Void, Never>] = [:]
     /// Whether `projection` came from the connection that is live now. A list retained across a
     /// reconnect is good enough to read and to tap, but not good enough to decide that something
     /// a notification names does not exist: a workspace opened on the Mac since that list was
@@ -526,7 +536,12 @@ final class SceneModel {
     }
 
     func setSceneActive(_ active: Bool, services: CompanionServices) async {
-        guard isSceneActive != active || (active && connectionPhase == .disconnected) else { return }
+        // `.failed` counts as much as `.disconnected`. It did not, so a connection that had run out
+        // of retries sat there for good: coming back to the app changed neither flag, the guard
+        // returned, and nothing called `connect` again. Coming back is also what cancels a pending
+        // backoff sleep, instead of making the user wait out a delay they cannot see.
+        let needsConnection = connectionPhase == .disconnected || connectionPhase.hasFailed
+        guard isSceneActive != active || (active && needsConnection) else { return }
         isSceneActive = active
         if !active {
             await stopConnection()
@@ -599,6 +614,8 @@ final class SceneModel {
             }
             let state = terminalStates[route.id] ?? restoredTerminalState(for: route)
             terminalStates[route.id] = state
+            state.clearRestoreFailure()
+            armRestoreDeadline(for: route)
             try await connection.attach(route, requestingFreshCheckpoint: requestingFreshCheckpoint)
         } catch { errorMessage = error.localizedDescription }
     }
@@ -688,6 +705,11 @@ final class SceneModel {
         let state = terminalStates[route.id] ?? restoredTerminalState(for: route)
         state.route = route
         terminalStates[route.id] = state
+        // Armed here as well as in the legacy path. Adaptive workspace panes only come through this
+        // function, so a deadline set only over there would have left exactly those panes showing
+        // "Restoring terminal…" for ever with no Retry, which is the case this is meant to catch.
+        state.clearRestoreFailure()
+        armRestoreDeadline(for: route)
         do {
             guard let connection else { throw RemoteError.disconnected }
             try await connection.attach(route)
@@ -864,8 +886,16 @@ final class SceneModel {
     /// on the phone. Silent by design: this runs on a timer and a failure is not worth an alert.
     @discardableResult
     func uploadDiagnostics() async -> DiagnosticsUploadOutcome {
-        guard let hostID = selectedHostID, connection != nil else { return .notConnected }
+        guard let hostID = selectedHostID, connection != nil else {
+            // Recorded, because this branch said nothing at all: a Send that failed left no trace in
+            // the very log it was trying to send, which is why repeated failures were invisible.
+            await DiagnosticsLog.shared.record(category: "diagnostics", "send to Mac skipped",
+                                               detail: "no Mac open in this scene")
+            return .notConnected
+        }
         guard let compressed = await DiagnosticsLog.shared.compressedForUpload() else {
+            await DiagnosticsLog.shared.record(category: "diagnostics", "send to Mac skipped",
+                                               detail: "nothing recorded yet")
             return .nothingRecorded
         }
         do {
@@ -948,6 +978,9 @@ final class SceneModel {
             state.route = route
             let heldBeforeCheckpoint = state.ownsControl
             state.apply(checkpoint: checkpoint)
+            // The restore landed, so the retry budget and the deadline start over.
+            attachRetries.removeValue(forKey: route.id)
+            cancelRestoreDeadline(for: route.id)
             // Renewal stopped while the buffer was stale. A lease this device still holds has to
             // start renewing again here, or it lapses on the Mac and control is lost after all.
             updateLeaseRenewal(for: state)
@@ -1000,8 +1033,85 @@ final class SceneModel {
                 terminalStates.first(where: { $0.key.sessionID == sessionID })?
                     .value.controlRequestFailed()
             }
+            if error.code == Self.attachRetryableCode, let sessionID = metadata.sessionID {
+                await retryAttach(sessionID: sessionID, reason: error.message)
+                // Handled for this terminal; a banner across the whole app would be noise.
+                return
+            }
             errorMessage = error.message
         }
+    }
+
+    /// Matches the host's `CompanionHostModel.attachRetryableCode`.
+    private static let attachRetryableCode = "attach_retry"
+    private static let maximumAttachRetries = 2
+    /// How long a terminal may sit waiting for a checkpoint before the UI stops calling it progress.
+    /// Comfortably longer than a large checkpoint over a slow link, short enough to not look hung.
+    private static let restoreDeadline: Duration = .seconds(45)
+
+    /// A session the Mac could not restore gets a bounded retry before the surface is marked failed,
+    /// because the usual cause is transient: the session was producing output faster than the attach
+    /// could flush it.
+    private func retryAttach(sessionID: UUID, reason: String) async {
+        guard let entry = terminalStates.first(where: { $0.key.sessionID == sessionID }) else { return }
+        let attempts = attachRetries[entry.key, default: 0]
+        guard attempts < Self.maximumAttachRetries else {
+            cancelRestoreDeadline(for: entry.key)
+            entry.value.recordRestoreFailure(reason)
+            // Spent, so the budget is cleared rather than left at the limit: an explicit Retry has
+            // to get its own attempts instead of giving up on the first error it meets.
+            attachRetries.removeValue(forKey: entry.key)
+            await DiagnosticsLog.shared.record(
+                category: "terminal", "attach gave up",
+                detail: "session=\(DiagnosticsLog.short(sessionID)) attempts=\(attempts)")
+            return
+        }
+        attachRetries[entry.key] = attempts + 1
+        await DiagnosticsLog.shared.record(
+            category: "terminal", "re-attaching after host error",
+            detail: "session=\(DiagnosticsLog.short(sessionID)) attempt=\(attempts + 1)")
+        // `refreshTerminal`, not `attach`: the default visibility path runs
+        // `exitWorkspaceVisibilityForLegacy`, which detaches every other visible workspace terminal.
+        // Retrying one pane would have taken the siblings down with it, which is the opposite of
+        // keeping a failure to one terminal.
+        await refreshTerminal(entry.value.route)
+    }
+
+    /// Retry for one terminal, from the pane's own button. Reconnects first when the connection is
+    /// down, because an attach cannot do anything without one: it would throw `disconnected` and set
+    /// a global error, leaving the button dead in exactly the case it exists for.
+    func retryTerminal(_ route: TerminalRoute) async {
+        attachRetries.removeValue(forKey: route.id)
+        terminalStates[route.id]?.clearRestoreFailure()
+        if connectionPhase.isDown {
+            guard let services,
+                  let host = services.savedHosts.first(where: { $0.connectionID == route.connectionID })
+            else { return }
+            // Resets the reconnect budget too, so a connection that had run out of retries starts
+            // over rather than refusing on the spot.
+            await connect(to: host, services: services)
+            return
+        }
+        await refreshTerminal(route)
+    }
+
+    private func armRestoreDeadline(for route: TerminalRoute) {
+        restoreDeadlines.removeValue(forKey: route.id)?.cancel()
+        restoreDeadlines[route.id] = Task { [weak self] in
+            do { try await Task.sleep(for: Self.restoreDeadline) }
+            catch { return }
+            guard let self, let state = self.terminalStates[route.id],
+                  state.isAwaitingCheckpoint else { return }
+            self.restoreDeadlines.removeValue(forKey: route.id)
+            state.recordRestoreFailure("This terminal did not finish restoring.")
+            await DiagnosticsLog.shared.record(
+                category: "terminal", "restore timed out",
+                detail: "session=\(DiagnosticsLog.short(route.sessionID))")
+        }
+    }
+
+    private func cancelRestoreDeadline(for id: TerminalSurfaceID) {
+        restoreDeadlines.removeValue(forKey: id)?.cancel()
     }
 
     private func disableAllInput() {
@@ -1096,6 +1206,9 @@ final class SceneModel {
         guard isSceneActive, let activeHost, let services else { return }
         let retryingFor = retryingSince.map { now() - $0 } ?? .zero
         guard !ReconnectBackoff.hasGivenUp(retryingFor: retryingFor) else {
+            // Stays given up until something asks again. `setSceneActive` and an explicit reconnect
+            // both call `connect`, which resets the budget, so this is no longer a dead end: before,
+            // the phase stayed `.failed` and nothing could get back out of it.
             Task { await DiagnosticsLog.shared.record(
                 category: "connection", "gave up reconnecting",
                 detail: "after=\(retryingFor) attempts=\(reconnectAttempt)") }
@@ -1277,6 +1390,10 @@ final class TerminalSurfaceState {
     var activity: String?
     var fontSize: CGFloat = 13
     private(set) var isAwaitingCheckpoint = true
+    /// Why this terminal is not showing anything, when the answer is not "a checkpoint is on its
+    /// way". Set when the Mac reports an attach it cannot complete, or when a restore runs out of
+    /// time. The pane shows this instead of a progress message, because nothing is in flight.
+    private(set) var restoreFailure: String?
     var authoritativeColumns = 80
     var authoritativeRows = 24
     var gridRevision = 0
@@ -1306,10 +1423,20 @@ final class TerminalSurfaceState {
 
     func prepareForReattachment() {
         isAwaitingCheckpoint = true
+        restoreFailure = nil
         clearControl()
     }
 
+    func recordRestoreFailure(_ reason: String) {
+        restoreFailure = reason
+    }
+
+    func clearRestoreFailure() {
+        restoreFailure = nil
+    }
+
     func apply(checkpoint: AssembledCheckpoint) {
+        restoreFailure = nil
         self.checkpoint = checkpoint.bytes
         generation = checkpoint.identity.generation
         sequence = checkpoint.identity.sequence

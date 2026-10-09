@@ -7,6 +7,7 @@ enum CompanionCommandError: Error, LocalizedError, Equatable {
     case wrongTarget
     case unsupportedOperation
     case activeProcessRequiresDesktopConfirmation
+    case diagnosticsTooFrequent
 
     var code: String {
         switch self {
@@ -14,6 +15,7 @@ enum CompanionCommandError: Error, LocalizedError, Equatable {
         case .wrongTarget: "wrong_target"
         case .unsupportedOperation: "unsupported_operation"
         case .activeProcessRequiresDesktopConfirmation: "active_process"
+        case .diagnosticsTooFrequent: "diagnostics_too_frequent"
         }
     }
 
@@ -24,6 +26,8 @@ enum CompanionCommandError: Error, LocalizedError, Equatable {
         case .unsupportedOperation: "This version of MyTerm does not support that remote operation."
         case .activeProcessRequiresDesktopConfirmation:
             "An active foreground process requires confirmation on the Mac before it can be closed."
+        case .diagnosticsTooFrequent:
+            "These logs were already sent in the last 30 seconds. Wait a moment, then send again."
         }
     }
 }
