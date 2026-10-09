@@ -254,6 +254,7 @@ final class BrowserDataProfilesTests: XCTestCase {
             $0.browserDataScope = .workspace
             $0.compactSidebar = true
         }
+        try first.store.flush()
         legacy.browserDataScope = .projectDirectory
         legacy.compactSidebar = false
         let restored = try AppModel(

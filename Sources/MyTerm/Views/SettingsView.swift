@@ -735,7 +735,7 @@ struct SettingsView: View {
                     model: model,
                     scope: scope,
                     title: "Run JavaScript in local pages",
-                    caption: "Off by default. When enabled, HTML files opened in MyTerm can run their scripts. Changing this reloads open local pages in the affected workspaces.",
+                    caption: "On by default. HTML files opened in MyTerm can run their scripts; turn this off to show them as static pages. Changing this reloads open local pages in the affected workspaces.",
                     global: \TerminalPreferences.allowsLocalFileJavaScript,
                     override: \TerminalPreferencesOverrides.allowsLocalFileJavaScript
                 ) { value in

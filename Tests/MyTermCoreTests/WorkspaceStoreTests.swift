@@ -165,15 +165,15 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.resolvedSettings(for: workspaceID).browserFilePatterns, ["*.workspace"])
     }
 
-    func testLocalFileJavaScriptDefaultsOffAndResolvesAtEveryScope() throws {
-        XCTAssertFalse(TerminalPreferences.default.allowsLocalFileJavaScript)
+    func testLocalFileJavaScriptDefaultsOnAndResolvesAtEveryScope() throws {
+        XCTAssertTrue(TerminalPreferences.default.allowsLocalFileJavaScript)
 
-        let enabled = TerminalPreferences(allowsLocalFileJavaScript: true)
+        let disabled = TerminalPreferences(allowsLocalFileJavaScript: false)
         let restored = try JSONDecoder().decode(
             TerminalPreferences.self,
-            from: JSONEncoder().encode(enabled)
+            from: JSONEncoder().encode(disabled)
         )
-        XCTAssertTrue(restored.allowsLocalFileJavaScript)
+        XCTAssertFalse(restored.allowsLocalFileJavaScript)
 
         let url = temporaryURL()
         let store = try WorkspaceStore(persistenceURL: url)
@@ -809,7 +809,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(persistenceURL: url)
 
-        XCTAssertFalse(store.globalSettings.allowsLocalFileJavaScript)
+        XCTAssertTrue(store.globalSettings.allowsLocalFileJavaScript, "a missing key takes the default")
         XCTAssertEqual(store.loadReport.structuralRepairCount, 0)
         XCTAssertTrue(store.loadReport.backupURLs.isEmpty)
         XCTAssertEqual(try Data(contentsOf: recoveryBackupURL), existingBackup)

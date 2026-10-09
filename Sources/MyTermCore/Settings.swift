@@ -217,12 +217,12 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
     public var lineEditingMode: TerminalLineEditingMode
 
     public init(
-        browserDataScope: BrowserDataScope = .workspace,
+        browserDataScope: BrowserDataScope = .appWide,
         webLinkDestination: WebLinkDestination = .myterm,
         textFileOpenCommand: String = TerminalPreferences.defaultTextFileOpenCommand,
         nativeTextFilePatterns: [String] = TerminalPreferences.defaultNativeTextFilePatterns,
         browserFilePatterns: [String] = TerminalPreferences.defaultBrowserFilePatterns,
-        allowsLocalFileJavaScript: Bool = false,
+        allowsLocalFileJavaScript: Bool = true,
         sharesBrowserSignInsWithCompanion: Bool = true,
         compactSidebar: Bool = true,
         fontPostScriptName: String = TerminalPreferences.defaultFontPostScriptName,
@@ -242,7 +242,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         questionIndicatorIcon: QuestionIndicatorIcon = .pulsingBubble,
         questionIndicatorColor: WorkspaceColor = .purple,
         scrollbackLines: Int = TerminalPreferences.defaultScrollbackLines,
-        cursorShape: TerminalCursorShape = .block,
+        cursorShape: TerminalCursorShape = .beam,
         cursorBlink: Bool = true,
         optionAsMeta: Bool = true,
         lineEditingMode: TerminalLineEditingMode = .emacs
@@ -388,14 +388,14 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let legacyContainer = try decoder.container(keyedBy: LegacyCodingKeys.self)
         self.init(
-            browserDataScope: (try? container.decode(BrowserDataScope.self, forKey: .browserDataScope)) ?? .workspace,
+            browserDataScope: (try? container.decode(BrowserDataScope.self, forKey: .browserDataScope)) ?? .appWide,
             webLinkDestination: (try? container.decode(WebLinkDestination.self, forKey: .webLinkDestination)) ?? .myterm,
             textFileOpenCommand: (try? container.decode(String.self, forKey: .textFileOpenCommand))
                 ?? (try? legacyContainer.decode(String.self, forKey: .markdownOpenCommand))
                 ?? Self.defaultTextFileOpenCommand,
             nativeTextFilePatterns: (try? container.decode([String].self, forKey: .nativeTextFilePatterns)) ?? Self.defaultNativeTextFilePatterns,
             browserFilePatterns: (try? container.decode([String].self, forKey: .browserFilePatterns)) ?? Self.defaultBrowserFilePatterns,
-            allowsLocalFileJavaScript: (try? container.decode(Bool.self, forKey: .allowsLocalFileJavaScript)) ?? false,
+            allowsLocalFileJavaScript: (try? container.decode(Bool.self, forKey: .allowsLocalFileJavaScript)) ?? true,
             sharesBrowserSignInsWithCompanion: (try? container.decode(Bool.self, forKey: .sharesBrowserSignInsWithCompanion)) ?? true,
             compactSidebar: (try? container.decode(Bool.self, forKey: .compactSidebar)) ?? true,
             fontPostScriptName: (try? container.decode(String.self, forKey: .fontPostScriptName)) ?? Self.defaultFontPostScriptName,
@@ -415,7 +415,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
             questionIndicatorIcon: (try? container.decode(QuestionIndicatorIcon.self, forKey: .questionIndicatorIcon)) ?? .pulsingBubble,
             questionIndicatorColor: (try? container.decode(WorkspaceColor.self, forKey: .questionIndicatorColor)) ?? .purple,
             scrollbackLines: (try? container.decode(Int.self, forKey: .scrollbackLines)) ?? Self.defaultScrollbackLines,
-            cursorShape: (try? container.decode(TerminalCursorShape.self, forKey: .cursorShape)) ?? .block,
+            cursorShape: (try? container.decode(TerminalCursorShape.self, forKey: .cursorShape)) ?? .beam,
             cursorBlink: (try? container.decode(Bool.self, forKey: .cursorBlink)) ?? true,
             optionAsMeta: (try? container.decode(Bool.self, forKey: .optionAsMeta)) ?? true,
             lineEditingMode: (try? container.decode(TerminalLineEditingMode.self, forKey: .lineEditingMode)) ?? .emacs
