@@ -1956,9 +1956,6 @@ final class AppModel {
                 if let browserDataScope = legacy.browserDataScope {
                     settings.browserDataScope = browserDataScope
                 }
-                if let compactSidebar = legacy.compactSidebar {
-                    settings.compactSidebar = compactSidebar
-                }
             }
         }
         browserSettings.markTerminalPreferencesMigrationComplete()
@@ -3096,7 +3093,7 @@ final class AppModel {
         case .browserFilePatterns: patch.browserFilePatterns != nil
         case .allowsLocalFileJavaScript: patch.allowsLocalFileJavaScript != nil
         case .sharesBrowserSignInsWithCompanion: patch.sharesBrowserSignInsWithCompanion != nil
-        case .compactSidebar: patch.compactSidebar != nil
+        case .compactSidebar: false
         case .fontPostScriptName: patch.fontPostScriptName != nil
         case .fontSize: patch.fontSize != nil
         case .terminalAppearance: patch.terminalAppearance != nil
@@ -3125,7 +3122,6 @@ final class AppModel {
         if let value = patch.sharesBrowserSignInsWithCompanion {
             overrides.sharesBrowserSignInsWithCompanion = value
         }
-        if let value = patch.compactSidebar { overrides.compactSidebar = value }
         if let value = patch.fontPostScriptName { overrides.fontPostScriptName = value }
         if let value = patch.fontSize { overrides.fontSize = value }
         if let value = patch.terminalAppearance { overrides.terminalAppearance = value }
@@ -3147,7 +3143,7 @@ final class AppModel {
             case .browserFilePatterns: overrides.browserFilePatterns = nil
             case .allowsLocalFileJavaScript: overrides.allowsLocalFileJavaScript = nil
             case .sharesBrowserSignInsWithCompanion: overrides.sharesBrowserSignInsWithCompanion = nil
-            case .compactSidebar: overrides.compactSidebar = nil
+            case .compactSidebar: break
             case .fontPostScriptName: overrides.fontPostScriptName = nil
             case .fontSize: overrides.fontSize = nil
             case .terminalAppearance: overrides.terminalAppearance = nil

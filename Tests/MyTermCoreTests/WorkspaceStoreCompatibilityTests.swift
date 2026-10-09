@@ -120,6 +120,29 @@ final class WorkspaceStoreCompatibilityTests: XCTestCase {
     /// one a decoder discarded. The same code runs here against a key from a build newer than this
     /// one, so this is the downgrade seen from the other side: `agentSession` in a file read by a
     /// build that predates it.
+    func testARetiredCompactSidebarSettingLoadsCleanAndIsDropped() throws {
+        // Files written before the sidebar settled on one density still carry the setting, both
+        // globally and as a folder or workspace override. They load as they are, with no notice.
+        var (_, json) = try snapshotWithAnAgentSession()
+        var settings = try XCTUnwrap(json["globalSettings"] as? [String: Any])
+        settings["compactSidebar"] = false
+        json["globalSettings"] = settings
+        var workspaces = try XCTUnwrap(json["workspaces"] as? [[String: Any]])
+        workspaces[0]["settingsOverrides"] = ["compactSidebar": true, "fontSize": 15]
+        json["workspaces"] = workspaces
+        try JSONSerialization.data(withJSONObject: json).write(to: stateURL)
+
+        let store = try WorkspaceStore(persistenceURL: stateURL)
+
+        XCTAssertEqual(store.loadReport.structuralRepairCount, 0)
+        XCTAssertEqual(store.loadReport.backupURLs, [])
+        XCTAssertEqual(store.workspaces.first?.settingsOverrides?.fontSize, 15)
+        try store.updateGlobalSettings { $0.fontSize = 13 }
+        try store.flush()
+        let written = try String(contentsOf: stateURL, encoding: .utf8)
+        XCTAssertFalse(written.contains("compactSidebar"), "the retired key is not written back")
+    }
+
     func testAKeyFromANewerBuildIsNotARepair() throws {
         var (_, json) = try snapshotWithAnAgentSession()
         var workspaces = try XCTUnwrap(json["workspaces"] as? [[String: Any]])

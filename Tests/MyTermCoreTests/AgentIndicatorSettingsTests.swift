@@ -66,7 +66,7 @@ final class AgentIndicatorSettingsTests: XCTestCase {
         let store = try WorkspaceStore(persistenceURL: url)
         let folder = try store.createFolder(title: "Juniper", color: .teal)
         let workspace = try store.createWorkspace(title: "Workbench", folderID: folder)
-        try store.updateFolderSettings(folder) { $0.compactSidebar = false }
+        try store.updateFolderSettings(folder) { $0.cursorBlink = false }
         try store.updateWorkspaceSettings(workspace) { $0.fontSize = 18 }
         try store.updateGlobalSettings {
             $0.workingIndicatorIcon = .orbit

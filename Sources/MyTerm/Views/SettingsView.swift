@@ -179,21 +179,7 @@ struct SettingsView: View {
 
     private var generalSettings: some View {
         VStack(alignment: .leading, spacing: 24) {
-            SettingsCard("Workspace sidebar") {
-                ScopedSettingRow(
-                    model: model,
-                    scope: scope,
-                    title: "Compact workspace sidebar",
-                    caption: "Uses shorter workspace rows so more projects remain visible.",
-                    global: \TerminalPreferences.compactSidebar,
-                    override: \TerminalPreferencesOverrides.compactSidebar
-                ) { value in
-                    Toggle("Compact workspace sidebar", isOn: value)
-                        .labelsHidden()
-                }
-            }
-
-            SettingsCard("Default terminal · whole app", dimmed: scope != .global) {
+            SettingsCard("Default terminal") {
                 Text("Open scripts, executable files, and SSH links in MyTerm. Launch requests reuse the existing MyTerm window.")
                     .font(Theme.Font.ui(12))
                     .foregroundStyle(Theme.textSecondary)
@@ -215,7 +201,7 @@ struct SettingsView: View {
                     .foregroundStyle(Theme.textSecondary)
             }
 
-            SettingsCard("Updates · whole app", dimmed: scope != .global) {
+            SettingsCard("Updates") {
                 Toggle("Check for updates automatically", isOn: Binding(
                     get: { model.updates.automaticallyChecks },
                     set: { model.updates.automaticallyChecks = $0 }
@@ -1281,7 +1267,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
 
     var id: Self { self }
     var index: Int { Self.allCases.firstIndex(of: self) ?? 0 }
-    var isScoped: Bool { self != .companion && self != .permissions }
+    var isScoped: Bool { self != .general && self != .companion && self != .permissions }
     var symbol: String {
         switch self {
         case .general: "gearshape"

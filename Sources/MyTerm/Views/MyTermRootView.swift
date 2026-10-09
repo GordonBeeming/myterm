@@ -542,7 +542,7 @@ private struct WorkspaceSidebar: View {
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
         .background(Theme.sidebarGround)
-        .environment(\.defaultMinListRowHeight, model.selectedWorkspaceSettings.compactSidebar ? 24 : 30)
+        .environment(\.defaultMinListRowHeight, SidebarRowMetrics.rowHeight)
         .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 480)
         .onChange(of: activeDragItem) { _, item in
             // The drag ending anywhere, including a cancel over the terminal, closes the preview.
@@ -615,7 +615,7 @@ private struct WorkspaceSidebar: View {
     }
 
     private var sidebarRowHeight: CGFloat {
-        model.selectedWorkspaceSettings.compactSidebar ? 24 : 30
+        SidebarRowMetrics.rowHeight
     }
 
     @ViewBuilder
@@ -752,6 +752,8 @@ private struct WorkspaceSidebar: View {
 /// rather than as something inside it.
 private enum SidebarRowMetrics {
     /// The folder row's disclosure chevron.
+    /// One density for every sidebar: compact rows, so more workspaces stay in view.
+    static let rowHeight: CGFloat = 24
     static let disclosureWidth: CGFloat = 16
     static let disclosureSpacing: CGFloat = 8
     static let folderIconWidth: CGFloat = 16

@@ -376,6 +376,8 @@ public enum RemoteSettingField: String, Codable, CaseIterable, Equatable, Hashab
     case browserFilePatterns
     case allowsLocalFileJavaScript
     case sharesBrowserSignInsWithCompanion
+    /// Retired: the sidebar has one density now. Kept so a Companion built before that can still
+    /// send a settings update that names it; the Mac ignores it.
     case compactSidebar
     case fontPostScriptName
     case fontSize
