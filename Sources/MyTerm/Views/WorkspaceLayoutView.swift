@@ -1,4 +1,5 @@
 import AppKit
+import MyTermUI
 import MyTermCore
 import SwiftUI
 
@@ -15,6 +16,7 @@ struct WorkspaceTabContentView: View {
                 WorkspaceLayoutView(model: model, workspaceID: workspace.id, layout: workspace.layout)
             }
         }
+            .padding(8)
             .id(workspace.id)
     }
 }
@@ -75,7 +77,7 @@ private struct ResizableWorkspaceSplitView: View {
     let weights: [Double]
     @State private var dragWeights: [Double]?
 
-    private static let dividerThickness: CGFloat = 11
+    private static let dividerThickness: CGFloat = 6
 
     var body: some View {
         GeometryReader { proxy in
@@ -101,7 +103,6 @@ private struct ResizableWorkspaceSplitView: View {
                     width: orientation == .horizontal ? lengths[index] : crossLength,
                     height: orientation == .vertical ? lengths[index] : crossLength
                 )
-                .clipped()
             if index < children.count - 1 { divider(index: index, availableLength: availableLength) }
         }
     }
@@ -161,7 +162,7 @@ private struct WorkspaceSplitDivider: View {
         ZStack {
             Color.clear
             Rectangle()
-                .fill(Color(nsColor: .separatorColor))
+                .fill(Theme.hairline)
                 .frame(width: orientation == .horizontal ? 1 : nil, height: orientation == .vertical ? 1 : nil)
         }
         .onHover { isHovering in

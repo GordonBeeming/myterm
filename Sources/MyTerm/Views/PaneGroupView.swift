@@ -1,3 +1,4 @@
+import MyTermUI
 import MyTermCore
 import SwiftUI
 
@@ -17,7 +18,7 @@ struct PaneGroupView: View {
                     tabGroup: group,
                     paneTabDragRegistrationID: paneTabDragRegistrationID
                 )
-                Divider()
+                Theme.hairline.frame(height: 1)
                 PaneContentView(
                     model: model,
                     workspaceID: workspaceID,
@@ -34,7 +35,8 @@ struct PaneGroupView: View {
                         .position(x: previewFrame.midX, y: previewFrame.midY)
                 }
             }
-            .background(isFocused ? Color.accentColor.opacity(0.045) : Color.clear)
+            .background(Theme.paneGround)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.pane))
             .background(
                 Color.clear
                     .onAppear {
@@ -55,8 +57,13 @@ struct PaneGroupView: View {
                     }
             )
             .overlay {
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .stroke(isFocused ? Color.accentColor.opacity(0.65) : Color.secondary.opacity(0.16), lineWidth: isFocused ? 1.5 : 1)
+                RoundedRectangle(cornerRadius: Theme.Radius.pane, style: .continuous)
+                    .stroke(isFocused ? Theme.accent.opacity(0.4) : Theme.hairline, lineWidth: 1)
+                    .background {
+                        RoundedRectangle(cornerRadius: Theme.Radius.pane)
+                            .stroke(Theme.accent.opacity(isFocused ? 0.08 : 0), lineWidth: 3)
+                            .padding(-1.5)
+                    }
                     .allowsHitTesting(false)
             }
             .accessibilityElement(children: .contain)
@@ -89,12 +96,12 @@ struct PaneGroupView: View {
     }
 
     private var dropPreview: some View {
-        RoundedRectangle(cornerRadius: 5, style: .continuous)
-            .fill(Color.accentColor.opacity(0.18))
+        RoundedRectangle(cornerRadius: Theme.Radius.pane, style: .continuous)
+            .fill(Theme.accent.opacity(0.18))
             .overlay {
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                RoundedRectangle(cornerRadius: Theme.Radius.pane, style: .continuous)
                     .stroke(
-                        Color.accentColor.opacity(0.8),
+                        Theme.accent,
                         style: StrokeStyle(lineWidth: 2, dash: [6, 4])
                     )
             }

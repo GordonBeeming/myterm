@@ -36,10 +36,15 @@ final class LocalEventMonitorLifecycle {
 }
 
 enum WorkspaceTabStripMetrics {
+    // Stress fixtures use a representative slot; live strips resolve their width from the viewport.
     static let tabWidth: CGFloat = 136
-    static let tabHeight: CGFloat = 26
-    static let tabSpacing: CGFloat = 4
     static var slotWidth: CGFloat { tabWidth + tabSpacing }
+
+    static func resolvedTabWidth(availableWidth: CGFloat, count: Int) -> CGFloat {
+        min(220, max(110, (availableWidth - 48) / CGFloat(max(1, count)) - tabSpacing))
+    }
+    static let tabHeight: CGFloat = 28
+    static let tabSpacing: CGFloat = 4
     static let slide = Animation.easeInOut(duration: 0.18)
 }
 
@@ -52,62 +57,70 @@ struct WorkspaceTabStrip: View {
 
     var body: some View {
         let reorderPreview = model.paneTabReorderPreview(in: tabGroup.id)
-        ScrollViewReader { scrollProxy in
-            HStack(spacing: 8) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: WorkspaceTabStripMetrics.tabSpacing) {
-                        ForEach(Array(tabGroup.tabs.enumerated()), id: \.element.id) { entry in
-                            tabItem(entry.element, at: entry.offset, reorderPreview: reorderPreview)
-                                .id(entry.element.id)
+        GeometryReader { geometry in
+            let tabWidth = WorkspaceTabStripMetrics.resolvedTabWidth(availableWidth: geometry.size.width, count: tabGroup.tabs.count)
+            ScrollViewReader { scrollProxy in
+                HStack(spacing: 8) {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        LazyHStack(spacing: WorkspaceTabStripMetrics.tabSpacing) {
+                            ForEach(Array(tabGroup.tabs.enumerated()), id: \.element.id) { entry in
+                                tabItem(entry.element, at: entry.offset, reorderPreview: reorderPreview, tabWidth: tabWidth)
+                                    .id(entry.element.id)
+                            }
                         }
+                        .padding(.horizontal, 2)
                     }
-                    .padding(.horizontal, 2)
-                }
-                .scrollIndicators(.hidden)
-                .frame(maxWidth: .infinity)
-                .frame(height: 26)
-                .onAppear { scrollToSelectedTab(using: scrollProxy) }
-                .onChange(of: tabGroup.selectedTabID) { _, _ in
-                    scrollToSelectedTab(using: scrollProxy)
-                }
+                    .scrollIndicators(.hidden)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 28)
+                    .onAppear { scrollToSelectedTab(using: scrollProxy) }
+                    .onChange(of: tabGroup.selectedTabID) { _, _ in
+                        scrollToSelectedTab(using: scrollProxy)
+                    }
+                    .onChange(of: tabWidth) { _, _ in
+                        scrollToSelectedTab(using: scrollProxy)
+                    }
 
-                Divider().frame(height: 20)
+                    Divider().frame(height: 20)
 
-                Menu {
-                    Button("New Terminal Tab") { model.createTerminalTab(in: tabGroup.id) }
-                    Button("New Browser Tab") { model.createBrowserTab(in: tabGroup.id) }
-                } label: {
-                    Image(systemName: "plus")
+                    Menu {
+                        Button("New Terminal Tab") { model.createTerminalTab(in: tabGroup.id) }
+                        Button("New Browser Tab") { model.createBrowserTab(in: tabGroup.id) }
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .focusable(false)
+                    .accessibilityLabel("Add tab to pane")
+                    .help("Add Tab")
                 }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .focusable(false)
-                .accessibilityLabel("Add tab to pane")
-                .help("Add Tab")
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(
-                PaneTabStripFrameReporter(
-                    model: model,
-                    workspaceID: workspaceID,
-                    tabGroupID: tabGroup.id,
-                    registrationID: paneTabDragRegistrationID
+                .padding(.horizontal, 8)
+                .frame(height: 38)
+                .background(Theme.paneHeader)
+                .background(
+                    PaneTabStripFrameReporter(
+                        model: model,
+                        workspaceID: workspaceID,
+                        tabGroupID: tabGroup.id,
+                        registrationID: paneTabDragRegistrationID
+                    )
                 )
-            )
-            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
-                model.cancelPaneTabDrag()
-            }
-            .onChange(of: reorderPreview != nil, initial: true) { _, isDraggingOwnTab in
-                if isDraggingOwnTab {
-                    startEscapeMonitor()
-                } else {
-                    stopEscapeMonitor()
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+                    model.cancelPaneTabDrag()
                 }
+                .onChange(of: reorderPreview != nil, initial: true) { _, isDraggingOwnTab in
+                    if isDraggingOwnTab {
+                        startEscapeMonitor()
+                    } else {
+                        stopEscapeMonitor()
+                    }
+                }
+                .onDisappear(perform: stopEscapeMonitor)
             }
-            .onDisappear(perform: stopEscapeMonitor)
         }
+        .frame(height: 38)
     }
 
     private func startEscapeMonitor() {
@@ -132,7 +145,7 @@ struct WorkspaceTabStrip: View {
         scrollProxy.scrollTo(tabGroup.selectedTabID, anchor: .center)
     }
 
-    private func tabItem(_ tab: MyTermCore.Tab, at index: Int, reorderPreview: PaneTabReorderPreview?) -> some View {
+    private func tabItem(_ tab: MyTermCore.Tab, at index: Int, reorderPreview: PaneTabReorderPreview?, tabWidth: CGFloat) -> some View {
         let source = PaneTabDragSource(
             workspaceID: workspaceID,
             tabGroupID: tabGroup.id,
@@ -142,7 +155,7 @@ struct WorkspaceTabStrip: View {
         let offset = reorderPreview?.offset(
             forTabAt: index,
             tabID: tab.id,
-            slotWidth: WorkspaceTabStripMetrics.slotWidth
+            slotWidth: tabWidth + WorkspaceTabStripMetrics.tabSpacing
         ) ?? 0
         let slotShift = reorderPreview?.slotShift(forTabAt: index) ?? 0
         return WorkspaceTabItem(
@@ -152,6 +165,9 @@ struct WorkspaceTabStrip: View {
             isDragged: isDragged,
             title: title(for: tab),
             agentAttention: model.agentAttention(forTab: tab.id),
+            agentIdentity: model.agentIdentity(forTab: tab.id),
+            showsIdleIdentity: model.showsIdleAgentIcon(forWorkspace: workspaceID),
+            tabWidth: tabWidth,
             select: { model.selectTab(tab.id, in: tabGroup.id) },
             rename: { model.beginRenamingTab(tab.id, in: tabGroup.id) },
             close: { model.closeTab(tab.id) },
@@ -323,6 +339,9 @@ private struct WorkspaceTabItem: View {
     let isDragged: Bool
     let title: String
     let agentAttention: AgentActivity?
+    let agentIdentity: AgentIdentity?
+    let showsIdleIdentity: Bool
+    let tabWidth: CGFloat
     let select: () -> Void
     let rename: () -> Void
     let close: () -> Void
@@ -336,40 +355,35 @@ private struct WorkspaceTabItem: View {
 
     private var accessibilityValue: String {
         let state = isSelected ? "Selected tab" : "Tab"
-        guard let agentAttention else { return state }
-        return "\(state), \(agentAttention.attentionDescription)"
+        if let agentAttention, agentAttention.showsCook { return "\(state), \(agentAttention.attentionDescription)" }
+        if showsIdleIdentity, let agentIdentity { return "\(state), \(agentIdentity.displayName)" }
+        return state
     }
 
     var body: some View {
         ZStack(alignment: .trailing) {
             HStack(spacing: 6) {
-                // The cook stands in for the tab's own icon, so it is still there on the
-                // selected tab and never lands under the close button.
-                if let agentAttention {
-                    AgentChefBadge(state: agentAttention)
-                } else {
+                AgentSlot(attention: agentAttention, identity: agentIdentity, showsIdleIdentity: showsIdleIdentity) {
                     Image(systemName: iconName)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.textSecondary)
                         .accessibilityHidden(true)
                 }
                 Text(title)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                    .fontWeight(isSelected ? .medium : .regular)
+                    .font(Theme.Font.ui(13, weight: isSelected ? .medium : .regular))
+                    .foregroundStyle(isSelected ? Theme.textStrong : Theme.textSecondary)
                 Spacer(minLength: 18)
             }
             .padding(.horizontal, 8)
-            .frame(width: WorkspaceTabStripMetrics.tabWidth, height: WorkspaceTabStripMetrics.tabHeight, alignment: .leading)
+            .frame(width: tabWidth, height: WorkspaceTabStripMetrics.tabHeight, alignment: .leading)
             .contentShape(Rectangle())
             .background {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)
                     .fill(backgroundStyle)
             }
-            .overlay {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .strokeBorder(borderStyle, lineWidth: isSelected ? 1 : 0.5)
-            }
+
             .shadow(color: .black.opacity(isDragged ? 0.22 : 0), radius: 4, y: 1)
             // The same press either selects the tab or drags it, decided on release by how far
             // the pointer travelled. The close button sits on top of this content, so a click on
@@ -402,7 +416,7 @@ private struct WorkspaceTabItem: View {
             .help("Close Tab")
             .padding(.trailing, 2)
         }
-        .frame(width: WorkspaceTabStripMetrics.tabWidth, height: WorkspaceTabStripMetrics.tabHeight)
+        .frame(width: tabWidth, height: WorkspaceTabStripMetrics.tabHeight)
         .contentShape(Rectangle())
         .overlay {
             MiddleClickTabHandler(close: close).allowsHitTesting(false)
@@ -432,13 +446,9 @@ private struct WorkspaceTabItem: View {
     }
 
     private var backgroundStyle: Color {
-        if isSelected { return Color.accentColor.opacity(0.16) }
-        if isHovering { return Color.primary.opacity(0.06) }
+        if isSelected { return Theme.selectedFill }
+        if isHovering { return Theme.hoverFill }
         return .clear
-    }
-
-    private var borderStyle: Color {
-        isSelected ? Color.accentColor.opacity(0.6) : Color.secondary.opacity(0.2)
     }
 
     private var iconName: String { tab.isBrowser ? "globe" : "terminal" }
