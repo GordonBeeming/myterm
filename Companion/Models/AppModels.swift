@@ -705,6 +705,11 @@ final class SceneModel {
         let state = terminalStates[route.id] ?? restoredTerminalState(for: route)
         state.route = route
         terminalStates[route.id] = state
+        // Armed here as well as in the legacy path. Adaptive workspace panes only come through this
+        // function, so a deadline set only over there would have left exactly those panes showing
+        // "Restoring terminal…" for ever with no Retry, which is the case this is meant to catch.
+        state.clearRestoreFailure()
+        armRestoreDeadline(for: route)
         do {
             guard let connection else { throw RemoteError.disconnected }
             try await connection.attach(route)
