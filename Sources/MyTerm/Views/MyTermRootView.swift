@@ -91,15 +91,25 @@ private struct AgentNotificationsButton: View {
         Button {
             model.isAgentNotificationsPresented.toggle()
         } label: {
-            HStack(spacing: 3) {
-                Image(systemName: items.isEmpty ? "bell" : "bell.badge.fill")
+            HStack(spacing: 6) {
+                Image(systemName: "bell")
                     .symbolRenderingMode(.hierarchical)
                 if !items.isEmpty {
                     Text("\(items.count)")
-                        .font(.caption.monospacedDigit())
+                        .font(Theme.Font.ui(12, weight: .semibold).monospacedDigit())
                 }
             }
+            .foregroundStyle(Theme.textPrimary)
+            .padding(.horizontal, 10)
+            .frame(height: 32)
+            .background(
+                // The same purple as a question cook, since a waiting question is what the count is for.
+                items.isEmpty ? Color.clear : Color.purple.opacity(0.16),
+                in: RoundedRectangle(cornerRadius: Theme.Radius.control)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.control))
         }
+        .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel(count: items.count))
         .help(items.isEmpty ? "Notifications" : "Notifications (\(items.count) waiting)")
         .popover(isPresented: $model.isAgentNotificationsPresented, arrowEdge: .bottom) {
@@ -127,31 +137,28 @@ enum AgentNotificationsScrollLayout {
     /// so a longer backlog reads as "scroll for more" rather than a hard, unexplained cutoff.
     private static let nextRowPeekFraction: CGFloat = 0.4
 
-    /// The cap used until the first row reports its height. It must be tall enough to lay out
-    /// at least one row: a zero-height scroll view never lays out its lazy rows, so nothing
-    /// would ever be measured and the list would stay empty.
-    static let unmeasuredHeight: CGFloat = 320
+    static let estimatedRowHeight: CGFloat = 52
 
-    /// - Parameters:
-    ///   - rowHeights: Measured heights of the rows, in display order. Rows not yet measured are
-    ///     simply absent; only a leading run of measured heights is used.
-    ///   - dividerHeight: Measured height of the divider drawn between rows.
-    ///   - totalRowCount: Total number of rows in the list, including any not yet measured.
+    // Missing measurements retain their positions so a later row cannot stand in for an earlier one.
     static func scrollHeight(
-        rowHeights: [CGFloat],
+        rowHeights: [CGFloat?],
         dividerHeight: CGFloat,
         totalRowCount: Int
     ) -> CGFloat {
-        let visibleRows = rowHeights.prefix(maxVisibleRows)
-        guard !visibleRows.isEmpty else { return unmeasuredHeight }
-
-        let rowsHeight = visibleRows.reduce(0, +)
-        let dividersHeight = dividerHeight * CGFloat(visibleRows.count - 1)
-        let hasMoreRows = totalRowCount > visibleRows.count
-        guard hasMoreRows else { return rowsHeight + dividersHeight }
-
-        let averageRowHeight = rowsHeight / CGFloat(visibleRows.count)
-        return rowsHeight + dividersHeight + dividerHeight + averageRowHeight * nextRowPeekFraction
+        guard totalRowCount > 0 else { return 0 }
+        let visibleCount = min(totalRowCount, maxVisibleRows)
+        let measured = rowHeights.prefix(visibleCount).compactMap { $0 }.filter { $0.isFinite && $0 > 0 }
+        let estimate = measured.isEmpty ? estimatedRowHeight : measured.reduce(0, +) / CGFloat(measured.count)
+        func height(at index: Int) -> CGFloat {
+            guard rowHeights.indices.contains(index), let height = rowHeights[index],
+                  height.isFinite, height > 0 else { return estimate }
+            return height
+        }
+        let rowsHeight = (0..<visibleCount).reduce(CGFloat.zero) { $0 + height(at: $1) }
+        let spacing = max(0, dividerHeight)
+        let visibleHeight = rowsHeight + spacing * CGFloat(visibleCount - 1)
+        guard totalRowCount > maxVisibleRows else { return visibleHeight }
+        return visibleHeight + spacing + height(at: maxVisibleRows) * nextRowPeekFraction
     }
 }
 
@@ -159,7 +166,7 @@ private struct AgentNotificationsList: View {
     @Bindable var model: AppModel
 
     @State private var rowHeights: [AgentNotificationItem.ID: CGFloat] = [:]
-    @State private var dividerHeight: CGFloat = 0
+    private let rowSpacing: CGFloat = 2
 
     var body: some View {
         // Read here rather than taking a copy from the bell, so an agent that reports while the
@@ -168,16 +175,21 @@ private struct AgentNotificationsList: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Notifications")
-                    .font(.headline)
+                    .font(Theme.Font.ui(13, weight: .semibold))
+                    .foregroundStyle(Theme.textPrimary)
                 Spacer()
-                Button("Clear All") { model.clearAgentNotifications() }
+                Text("\(items.count) waiting")
+                    .font(Theme.Font.ui(12))
+                    .foregroundStyle(Theme.textSecondary)
+                Button("Clear all") { model.clearAgentNotifications() }
                     .buttonStyle(.borderless)
+                    .font(Theme.Font.ui(12))
+                    .foregroundStyle(Theme.textPrimary)
                     .disabled(items.isEmpty)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-
-            Divider()
+            .padding(.horizontal, 14)
+            .padding(.top, 12)
+            .padding(.bottom, 10)
 
             if items.isEmpty {
                 Text("Nothing is waiting for you.")
@@ -187,16 +199,12 @@ private struct AgentNotificationsList: View {
                     .padding(.vertical, 14)
             } else {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: rowSpacing) {
                         ForEach(items) { item in
-                            if item.id != items.first?.id {
-                                Divider()
-                                    .padding(.leading, 12)
-                                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
-                                        dividerHeight = $0
-                                    }
-                            }
-                            AgentNotificationRow(item: item) {
+                            AgentNotificationRow(
+                                item: item,
+                                workspace: model.workspaces.first { $0.id == item.workspaceID }
+                            ) {
                                 model.isAgentNotificationsPresented = false
                                 model.openAgentNotification(item)
                             }
@@ -207,61 +215,78 @@ private struct AgentNotificationsList: View {
                     }
                 }
                 .frame(
-                    maxHeight: AgentNotificationsScrollLayout.scrollHeight(
-                        rowHeights: items.prefix(AgentNotificationsScrollLayout.maxVisibleRows)
-                            .compactMap { rowHeights[$0.id] },
-                        dividerHeight: dividerHeight,
+                    height: AgentNotificationsScrollLayout.scrollHeight(
+                        rowHeights: items.prefix(AgentNotificationsScrollLayout.maxVisibleRows + 1)
+                            .map { rowHeights[$0.id] },
+                        dividerHeight: rowSpacing,
                         totalRowCount: items.count
                     )
                 )
             }
+            Text("Opening one goes to its tab and clears it.")
+                .font(Theme.Font.ui(11.5))
+                .foregroundStyle(Theme.textTertiary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .overlay(alignment: .top) { Theme.hairline.frame(height: 1) }
         }
-        .frame(width: 320)
+        .frame(width: 380)
+        .background(Theme.surfaceRaised)
     }
 }
 
 private struct AgentNotificationRow: View {
     let item: AgentNotificationItem
+    let workspace: Workspace?
     let open: () -> Void
 
     @State private var isHovering = false
 
-    private var isQuestion: Bool { item.activity == .awaitingInput }
-
     var body: some View {
         Button(action: open) {
-            HStack(alignment: .top, spacing: 8) {
-                // The glyph differs as well as the color, so the two states never read alike.
-                Image(systemName: isQuestion ? "questionmark.circle.fill" : "checkmark.circle.fill")
-                    .foregroundStyle(isQuestion ? Color.orange : Color.accentColor)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(item.activity.attentionDescription)
-                        // Capped so a long tab title or agent message can't blow a single row out
-                        // to the point it dominates the five-row budget below.
-                        .lineLimit(2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    HStack(spacing: 8) {
-                        Text("\(item.workspaceTitle) · \(item.tabTitle)")
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Spacer(minLength: 0)
+            HStack(alignment: .top, spacing: 10) {
+                AgentChefIcon(color: item.activity == .awaitingInput ? .purple : .blue, isStirring: false)
+                    .frame(width: 18, height: 18)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(item.activity.attentionDescription)
+                            .font(Theme.Font.ui(13, weight: .medium))
+                            .foregroundStyle(Theme.textStrong)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         (Text(item.date, style: .relative) + Text(" ago"))
-                            // The elapsed time is short and grows as it counts, so it keeps its
-                            // width and the tab name gives way instead.
+                            .font(Theme.Font.ui(11.5).monospacedDigit())
+                            .foregroundStyle(Theme.textTertiary)
                             .fixedSize(horizontal: true, vertical: false)
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        if let emoji = workspace?.emoji, !emoji.isEmpty {
+                            Text(emoji)
+                        }
+                        Text(workspace?.title ?? item.workspaceTitle)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Text("›")
+                            .foregroundStyle(Theme.textTertiary)
+                        Text(item.tabTitle)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    .font(Theme.Font.ui(12))
+                    .foregroundStyle(Theme.textSecondary)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .background(
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .fill(isHovering ? Color.primary.opacity(0.06) : .clear)
-                    .padding(.horizontal, 6)
+                RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+                    .fill(isHovering ? Theme.hoverFill : .clear)
             )
+            .padding(.horizontal, 6)
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
@@ -495,7 +520,10 @@ private struct WorkspaceSidebar: View {
                         )
                     }
                 } header: {
-                    Text("Unfiled")
+                    Text("UNFILED")
+                        .font(Theme.Font.ui(11.5, weight: .semibold))
+                        .tracking(0.8)
+                        .foregroundStyle(Theme.textTertiary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(Rectangle())
                         .background(
@@ -512,7 +540,9 @@ private struct WorkspaceSidebar: View {
             }
         }
         .listStyle(.sidebar)
-        .environment(\.defaultMinListRowHeight, model.selectedWorkspaceSettings.compactSidebar ? 22 : 30)
+        .scrollContentBackground(.hidden)
+        .background(Theme.sidebarGround)
+        .environment(\.defaultMinListRowHeight, model.selectedWorkspaceSettings.compactSidebar ? 24 : 30)
         .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 480)
         .onChange(of: activeDragItem) { _, item in
             // The drag ending anywhere, including a cancel over the terminal, closes the preview.
@@ -532,6 +562,8 @@ private struct WorkspaceSidebar: View {
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
+                .frame(width: 30, height: 30)
+                .foregroundStyle(Theme.textSecondary)
                 .accessibilityLabel("Add workspace or folder")
                 .help("Add Workspace or Folder")
 
@@ -541,6 +573,8 @@ private struct WorkspaceSidebar: View {
                     Image(systemName: "minus")
                 }
                 .buttonStyle(.borderless)
+                .frame(width: 30, height: 30)
+                .foregroundStyle(Theme.textSecondary)
                 .accessibilityLabel("Close selected workspace")
                 .help("Close Workspace")
                 Spacer()
@@ -548,18 +582,20 @@ private struct WorkspaceSidebar: View {
                     Button {
                         model.presentAvailableUpdate()
                     } label: {
-                        Label("Update to \(release.version)", systemImage: "arrow.down.circle.fill")
+                        Label("Update to \(release.version.description)", systemImage: "arrow.down.circle.fill")
                             .labelStyle(.iconOnly)
                             .foregroundStyle(.tint)
                     }
                     .buttonStyle(.borderless)
-                    .accessibilityLabel("Update available, version \(release.version)")
-                    .help("Update Available — \(release.version)")
+                    .frame(width: 30, height: 30)
+                    .accessibilityLabel("Update available, version \(release.version.description)")
+                    .help("Update Available — \(release.version.description)")
                 }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
-            .background(.bar)
+            .background(Theme.sidebarGround)
+            .overlay(alignment: .top) { Theme.hairline.frame(height: 1) }
             .overlay {
                 if isUnfiledDropTargeted && acceptsActiveDragItem(in: nil) {
                     Label("Move to Unfiled", systemImage: "tray")
@@ -579,7 +615,7 @@ private struct WorkspaceSidebar: View {
     }
 
     private var sidebarRowHeight: CGFloat {
-        model.selectedWorkspaceSettings.compactSidebar ? 22 : 30
+        model.selectedWorkspaceSettings.compactSidebar ? 24 : 30
     }
 
     @ViewBuilder
@@ -716,12 +752,11 @@ private struct WorkspaceSidebar: View {
 /// rather than as something inside it.
 private enum SidebarRowMetrics {
     /// The folder row's disclosure chevron.
-    static let disclosureWidth: CGFloat = 12
-    static let disclosureSpacing: CGFloat = 4
-    /// The folder icon, and the gap `Label` leaves between that icon and its text.
-    static let folderIconWidth: CGFloat = 24
+    static let disclosureWidth: CGFloat = 16
+    static let disclosureSpacing: CGFloat = 8
+    static let folderIconWidth: CGFloat = 16
 
-    static let filedWorkspaceIndent = disclosureWidth + disclosureSpacing + folderIconWidth
+    static let filedWorkspaceIndent = disclosureWidth + disclosureSpacing + folderIconWidth + disclosureSpacing
 }
 
 private struct WorkspaceSidebarRow: View {
@@ -744,29 +779,44 @@ private struct WorkspaceSidebarRow: View {
         let name = workspace.isPinned
             ? "Pinned workspace \(workspace.displayTitle)"
             : "Workspace \(workspace.displayTitle)"
-        guard let agentAttention else { return name }
-        return "\(name), \(agentAttention.attentionDescription)"
+        if let agentAttention, agentAttention.showsCook {
+            return "\(name), \(agentAttention.attentionDescription)"
+        }
+        if model.showsIdleAgentIcon(forWorkspace: workspace.id),
+           let identity = model.agentIdentity(forWorkspace: workspace.id) {
+            return "\(name), running \(identity.displayName)"
+        }
+        return name
     }
 
     var body: some View {
         HStack(spacing: 6) {
+            if let emoji = workspace.emoji, !emoji.isEmpty {
+                Text(emoji)
+                    .frame(width: 18)
+            }
+            Text(workspace.title)
+                .font(Theme.Font.ui(13, weight: isSelected ? .medium : .regular))
+                .foregroundStyle(isSelected ? Theme.textStrong : Theme.textPrimary.opacity(0.85))
+                .lineLimit(1)
             if workspace.isPinned {
                 Image(systemName: "pin.fill")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textTertiary)
                     .accessibilityHidden(true)
             }
-            Text(workspace.displayTitle)
-                .lineLimit(1)
             Spacer(minLength: 0)
-            if let agentAttention {
-                AgentChefBadge(state: agentAttention)
-                    .padding(.trailing, 2)
-            }
+            AgentSlot(
+                attention: agentAttention,
+                identity: model.agentIdentity(forWorkspace: workspace.id),
+                showsIdleIdentity: model.showsIdleAgentIcon(forWorkspace: workspace.id)
+            )
+            .accessibilityHidden(true)
+            .padding(.trailing, 2)
         }
-        .padding(.vertical, model.selectedWorkspaceSettings.compactSidebar ? 0 : 2)
         .padding(.leading, indentation)
         .frame(maxWidth: .infinity, minHeight: rowHeight, alignment: .leading)
+        .listRowBackground(Color.clear)
         .tag(workspace.id)
         .accessibilityLabel(accessibilityLabel)
         .draggable(SidebarDragItem.workspace(workspace.id)) {
@@ -780,8 +830,12 @@ private struct WorkspaceSidebarRow: View {
         }
         .onDrop(of: [.mytermSidebarItem], delegate: dropDelegate)
         .background(
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(workspaceBackgroundColor)
+            RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)
+                .fill(isSelected ? Theme.selectedFill : .clear)
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)
+                        .fill(workspaceBackgroundColor)
+                }
                 .allowsHitTesting(false)
         )
         // The row in the list stands in for the item in the user's hand: it shows where the drop
@@ -883,9 +937,10 @@ private struct WorkspaceSidebarRow: View {
 
     // A reorder previews as the rows sliding apart, so this row keeps showing its own colour
     // rather than tinting as though the drop landed inside it.
+    private var isSelected: Bool { model.store.selectedWorkspaceID == workspace.id }
+
     private var workspaceBackgroundColor: Color {
         guard let color = workspace.color else { return .clear }
-        let isSelected = model.store.selectedWorkspaceID == workspace.id
         return color.swiftUIColor.opacity(isSelected ? 0.30 : 0.18)
     }
 
@@ -942,20 +997,20 @@ private struct WorkspaceFolderRow: View {
             Button(action: toggleExpansion) {
                 Image(systemName: folder.isExpanded ? "chevron.down" : "chevron.right")
                     .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textTertiary)
                     .frame(width: SidebarRowMetrics.disclosureWidth, height: 16)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(folder.isExpanded ? "Collapse \(folder.title)" : "Expand \(folder.title)")
 
-            Label {
-                Text(folder.title)
-                    .lineLimit(1)
-            } icon: {
-                Image(systemName: "folder.fill")
-                    .foregroundStyle(folder.color.swiftUIColor)
-            }
+            Image(systemName: "folder.fill")
+                .foregroundStyle(folder.color.swiftUIColor)
+                .frame(width: SidebarRowMetrics.folderIconWidth)
+            Text(folder.title)
+                .font(Theme.Font.ui(13, weight: .semibold))
+                .foregroundStyle(Theme.textPrimary)
+                .lineLimit(1)
         }
         .frame(maxWidth: .infinity, minHeight: rowHeight, alignment: .leading)
         .onTapGesture(count: 2) {
