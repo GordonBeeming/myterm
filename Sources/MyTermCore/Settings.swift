@@ -204,6 +204,12 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
     /// list is kept either way; this only decides whether the toolbar shows it. Global: the
     /// toolbar is the app's, not a workspace's, so no override carries it.
     public var showsAgentNotificationBell: Bool
+    public var workingIndicatorIcon: WorkingIndicatorIcon
+    public var workingIndicatorColor: WorkspaceColor
+    public var finishedIndicatorIcon: FinishedIndicatorIcon
+    public var finishedIndicatorColor: WorkspaceColor
+    public var questionIndicatorIcon: QuestionIndicatorIcon
+    public var questionIndicatorColor: WorkspaceColor
     public var scrollbackLines: Int
     public var cursorShape: TerminalCursorShape
     public var cursorBlink: Bool
@@ -229,6 +235,12 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         namesTabsFromAgentSessions: Bool = true,
         showsIdleAgentIcon: Bool = false,
         showsAgentNotificationBell: Bool = true,
+        workingIndicatorIcon: WorkingIndicatorIcon = .stirringCook,
+        workingIndicatorColor: WorkspaceColor = .gray,
+        finishedIndicatorIcon: FinishedIndicatorIcon = .tickDraw,
+        finishedIndicatorColor: WorkspaceColor = .blue,
+        questionIndicatorIcon: QuestionIndicatorIcon = .pulsingBubble,
+        questionIndicatorColor: WorkspaceColor = .purple,
         scrollbackLines: Int = TerminalPreferences.defaultScrollbackLines,
         cursorShape: TerminalCursorShape = .block,
         cursorBlink: Bool = true,
@@ -253,6 +265,12 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         self.namesTabsFromAgentSessions = namesTabsFromAgentSessions
         self.showsIdleAgentIcon = showsIdleAgentIcon
         self.showsAgentNotificationBell = showsAgentNotificationBell
+        self.workingIndicatorIcon = workingIndicatorIcon
+        self.workingIndicatorColor = workingIndicatorColor
+        self.finishedIndicatorIcon = finishedIndicatorIcon
+        self.finishedIndicatorColor = finishedIndicatorColor
+        self.questionIndicatorIcon = questionIndicatorIcon
+        self.questionIndicatorColor = questionIndicatorColor
         self.scrollbackLines = Self.clampedScrollbackLines(scrollbackLines)
         self.cursorShape = cursorShape
         self.cursorBlink = cursorBlink
@@ -282,6 +300,12 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
             namesTabsFromAgentSessions: namesTabsFromAgentSessions,
             showsIdleAgentIcon: showsIdleAgentIcon,
             showsAgentNotificationBell: showsAgentNotificationBell,
+            workingIndicatorIcon: workingIndicatorIcon,
+            workingIndicatorColor: workingIndicatorColor,
+            finishedIndicatorIcon: finishedIndicatorIcon,
+            finishedIndicatorColor: finishedIndicatorColor,
+            questionIndicatorIcon: questionIndicatorIcon,
+            questionIndicatorColor: questionIndicatorColor,
             scrollbackLines: scrollbackLines,
             cursorShape: cursorShape,
             cursorBlink: cursorBlink,
@@ -311,6 +335,12 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         try container.encode(namesTabsFromAgentSessions, forKey: .namesTabsFromAgentSessions)
         try container.encode(showsIdleAgentIcon, forKey: .showsIdleAgentIcon)
         try container.encode(showsAgentNotificationBell, forKey: .showsAgentNotificationBell)
+        try container.encode(workingIndicatorIcon, forKey: .workingIndicatorIcon)
+        try container.encode(workingIndicatorColor, forKey: .workingIndicatorColor)
+        try container.encode(finishedIndicatorIcon, forKey: .finishedIndicatorIcon)
+        try container.encode(finishedIndicatorColor, forKey: .finishedIndicatorColor)
+        try container.encode(questionIndicatorIcon, forKey: .questionIndicatorIcon)
+        try container.encode(questionIndicatorColor, forKey: .questionIndicatorColor)
         try container.encode(scrollbackLines, forKey: .scrollbackLines)
         try container.encode(cursorShape, forKey: .cursorShape)
         try container.encode(cursorBlink, forKey: .cursorBlink)
@@ -337,6 +367,12 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         case namesTabsFromAgentSessions
         case showsIdleAgentIcon
         case showsAgentNotificationBell
+        case workingIndicatorIcon
+        case workingIndicatorColor
+        case finishedIndicatorIcon
+        case finishedIndicatorColor
+        case questionIndicatorIcon
+        case questionIndicatorColor
         case scrollbackLines
         case cursorShape
         case cursorBlink
@@ -372,6 +408,12 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
             namesTabsFromAgentSessions: (try? container.decode(Bool.self, forKey: .namesTabsFromAgentSessions)) ?? true,
             showsIdleAgentIcon: (try? container.decode(Bool.self, forKey: .showsIdleAgentIcon)) ?? false,
             showsAgentNotificationBell: (try? container.decode(Bool.self, forKey: .showsAgentNotificationBell)) ?? true,
+            workingIndicatorIcon: (try? container.decode(WorkingIndicatorIcon.self, forKey: .workingIndicatorIcon)) ?? .stirringCook,
+            workingIndicatorColor: (try? container.decode(WorkspaceColor.self, forKey: .workingIndicatorColor)) ?? .gray,
+            finishedIndicatorIcon: (try? container.decode(FinishedIndicatorIcon.self, forKey: .finishedIndicatorIcon)) ?? .tickDraw,
+            finishedIndicatorColor: (try? container.decode(WorkspaceColor.self, forKey: .finishedIndicatorColor)) ?? .blue,
+            questionIndicatorIcon: (try? container.decode(QuestionIndicatorIcon.self, forKey: .questionIndicatorIcon)) ?? .pulsingBubble,
+            questionIndicatorColor: (try? container.decode(WorkspaceColor.self, forKey: .questionIndicatorColor)) ?? .purple,
             scrollbackLines: (try? container.decode(Int.self, forKey: .scrollbackLines)) ?? Self.defaultScrollbackLines,
             cursorShape: (try? container.decode(TerminalCursorShape.self, forKey: .cursorShape)) ?? .block,
             cursorBlink: (try? container.decode(Bool.self, forKey: .cursorBlink)) ?? true,
@@ -561,6 +603,12 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
             showsIdleAgentIcon: showsIdleAgentIcon ?? base.showsIdleAgentIcon,
             // Global only: the toolbar is the app's, so an override has nothing to say about it.
             showsAgentNotificationBell: base.showsAgentNotificationBell,
+            workingIndicatorIcon: base.workingIndicatorIcon,
+            workingIndicatorColor: base.workingIndicatorColor,
+            finishedIndicatorIcon: base.finishedIndicatorIcon,
+            finishedIndicatorColor: base.finishedIndicatorColor,
+            questionIndicatorIcon: base.questionIndicatorIcon,
+            questionIndicatorColor: base.questionIndicatorColor,
             scrollbackLines: scrollbackLines ?? base.scrollbackLines,
             cursorShape: cursorShape ?? base.cursorShape,
             cursorBlink: cursorBlink ?? base.cursorBlink,

@@ -25,6 +25,8 @@ final class WorkspaceStoreCompatibilityTests: XCTestCase {
     /// The keys this build added after `466ed05` (origin/main), by the object they live in.
     private static let settingsKeysAddedSinceMain = [
         "restoresAgentSessions", "namesTabsFromAgentSessions", "showsIdleAgentIcon", "showsAgentNotificationBell",
+        "workingIndicatorIcon", "workingIndicatorColor",
+        "finishedIndicatorIcon", "finishedIndicatorColor", "questionIndicatorIcon", "questionIndicatorColor",
     ]
     private static let sessionKeysAddedSinceMain = ["agentSession", "agentTitle"]
 

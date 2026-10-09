@@ -120,7 +120,7 @@ MyTerm is flat. Tone and hairline borders separate surfaces, and shadows are kep
 
 One icon position on a tab or a sidebar row, shared by three things in this order:
 
-1. **The cook**, when the agent needs attention: working stirs in grey, finished is blue, a question is purple. Ready and exited show no cook.
+1. **The state indicator**, while the agent is working, has finished, or has a question. Ready and exited show none. Each state has ten icons and the ten named colors to choose from, set once for the whole app under Settings › Agents › Indicators. The defaults are a stirring cook in gray for working, a tick that draws itself in, in blue, for finished, and a pulsing question bubble in purple for a question. Working icons move steadily, every question icon is animated to catch the eye, and finished icons stay still apart from the tick drawing in once. Reduce Motion stops every animation. The notification rows and the bell's tint use the same choices.
 2. **The idle agent icon**, when the scoped setting "Show the agent's icon when it's idle" is on and the agent is Claude Code or Codex. Claude is a six-ray asterisk in #D97757. Codex is a hexagon outline with a center dot in `textPrimary`. Both are generic shapes, not vendor logos, and carry the agent's name as their accessibility label.
 3. **The normal icon**, which is the tab's terminal or globe glyph, or nothing on a sidebar row.
 
@@ -160,7 +160,7 @@ The setting defaults to off and can be overridden per folder and per workspace. 
 - **List:** A 380 pt popover, newest first, showing five rows and a sliver of the sixth so a long backlog reads as "scroll for more" rather than a hard cutoff. Fewer than six entries show every row. The height comes from the row count and a row height that does not depend on which rows a lazy container has measured, so the list can never settle on a partial row.
 - **Header and footer:** The header reads "Notifications", then how many are waiting, then Clear All. A footer line explains how rows clear.
 - **Row:** The first line has a cook glyph and what the agent did, with the time at the end, and the time never truncates. The second line has the workspace emoji, the workspace, and the tab, truncated in the middle. Names are resolved from the live workspace, so renaming a tab renames the row. Rows take `hoverFill`.
-- **States:** A finished turn is a blue cook and a question is a purple one, and each row says which in words, so the two never depend on color alone.
+- **States:** Each row draws the finished or question indicator chosen in Settings and says which in words, so the two never depend on icon or color alone.
 - **Reading:** Clicking a row goes to its tab, which is also what clears it. Clear All reads every tab in the list.
 - **Empty:** Say plainly that nothing is waiting. Do not hide the control.
 

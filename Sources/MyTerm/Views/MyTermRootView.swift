@@ -35,6 +35,7 @@ struct MyTermRootView: View {
     var body: some View {
         if let model = startup.model {
             WorkspaceContentView(model: model)
+                .environment(\.agentIndicatorAppearance, AgentIndicatorAppearance(preferences: model.store.globalSettings))
         } else {
             ContentUnavailableView(
                 "MyTerm could not start",
@@ -85,6 +86,7 @@ private struct DismissibleBanner: View {
 /// count only when there is one. Opening a row goes to that tab, which is also what reads the entry.
 private struct AgentNotificationsButton: View {
     @Bindable var model: AppModel
+    @Environment(\.agentIndicatorAppearance) private var indicatorAppearance
 
     var body: some View {
         let items = model.agentNotificationItems
@@ -103,8 +105,8 @@ private struct AgentNotificationsButton: View {
             .padding(.horizontal, 10)
             .frame(height: 32)
             .background(
-                // The same purple as a question cook, since a waiting question is what the count is for.
-                items.isEmpty ? Color.clear : Color.purple.opacity(0.16),
+                // A waiting question and the bell share the selected question colour.
+                items.isEmpty ? Color.clear : indicatorAppearance.questionColor.indicatorColor.opacity(0.16),
                 in: RoundedRectangle(cornerRadius: Theme.Radius.control)
             )
             .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.control))
@@ -246,9 +248,7 @@ private struct AgentNotificationRow: View {
     var body: some View {
         Button(action: open) {
             HStack(alignment: .top, spacing: 10) {
-                AgentChefIcon(color: item.activity == .awaitingInput ? .purple : .blue, isStirring: false)
-                    .frame(width: 18, height: 18)
-                    .accessibilityHidden(true)
+                AgentChefBadge(state: item.activity, side: 18)
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(item.activity.attentionDescription)

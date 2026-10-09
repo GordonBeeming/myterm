@@ -242,7 +242,7 @@ struct SettingsView: View {
     private var agentSettings: some View {
         VStack(alignment: .leading, spacing: 24) {
             SettingsCard("Activity hooks · whole app", dimmed: scope != .global) {
-                Text("Put a cook beside a tab whose agent is running. He stirs while the agent works, turns blue when it finishes, and turns purple when it has a question. He leaves once you have read the tab, and the tab goes back to its own icon.")
+                Text("Show agent activity beside a running tab. Choose the icons and colours for working, finished, and question states below.")
                     .font(Theme.Font.ui(12))
                     .foregroundStyle(Theme.textSecondary)
 
@@ -289,6 +289,72 @@ struct SettingsView: View {
                 Text("The list of tabs whose agent needs you is kept either way, so turning the bell back on shows what was missed.")
                     .font(Theme.Font.ui(12))
                     .foregroundStyle(Theme.textSecondary)
+            }
+
+            SettingsCard("Indicators · whole app", dimmed: scope != .global) {
+                AgentIndicatorPicker(
+                    title: "Working",
+                    caption: "The agent is busy. Steady motion that never asks for anything.",
+                    icon: Binding(
+                        get: { model.store.globalSettings.workingIndicatorIcon },
+                        set: { value in model.updateGlobalSettings { $0.workingIndicatorIcon = value } }
+                    ),
+                    color: Binding(
+                        get: { model.store.globalSettings.workingIndicatorColor },
+                        set: { value in model.updateGlobalSettings { $0.workingIndicatorColor = value } }
+                    ),
+                    displayName: { $0.displayName },
+                    reset: {
+                        model.updateGlobalSettings {
+                            $0.workingIndicatorIcon = .stirringCook
+                            $0.workingIndicatorColor = .gray
+                        }
+                    }
+                ) { icon, color, side in
+                    AgentStateGlyph(working: icon, color: color, side: side)
+                }
+                AgentIndicatorPicker(
+                    title: "Finished",
+                    caption: "The agent finished its turn. Shown until you open the tab.",
+                    icon: Binding(
+                        get: { model.store.globalSettings.finishedIndicatorIcon },
+                        set: { value in model.updateGlobalSettings { $0.finishedIndicatorIcon = value } }
+                    ),
+                    color: Binding(
+                        get: { model.store.globalSettings.finishedIndicatorColor },
+                        set: { value in model.updateGlobalSettings { $0.finishedIndicatorColor = value } }
+                    ),
+                    displayName: { $0.displayName },
+                    reset: {
+                        model.updateGlobalSettings {
+                            $0.finishedIndicatorIcon = .tickDraw
+                            $0.finishedIndicatorColor = .blue
+                        }
+                    }
+                ) { icon, color, side in
+                    AgentStateGlyph(finished: icon, color: color, side: side)
+                }
+                AgentIndicatorPicker(
+                    title: "Question",
+                    caption: "The agent is waiting on you. Animated so it catches your eye, and stays until you answer.",
+                    icon: Binding(
+                        get: { model.store.globalSettings.questionIndicatorIcon },
+                        set: { value in model.updateGlobalSettings { $0.questionIndicatorIcon = value } }
+                    ),
+                    color: Binding(
+                        get: { model.store.globalSettings.questionIndicatorColor },
+                        set: { value in model.updateGlobalSettings { $0.questionIndicatorColor = value } }
+                    ),
+                    displayName: { $0.displayName },
+                    reset: {
+                        model.updateGlobalSettings {
+                            $0.questionIndicatorIcon = .pulsingBubble
+                            $0.questionIndicatorColor = .purple
+                        }
+                    }
+                ) { icon, color, side in
+                    AgentStateGlyph(question: icon, color: color, side: side)
+                }
             }
 
             SettingsCard("Sessions") {
