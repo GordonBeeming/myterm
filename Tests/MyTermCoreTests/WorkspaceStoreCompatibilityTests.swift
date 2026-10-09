@@ -111,7 +111,6 @@ final class WorkspaceStoreCompatibilityTests: XCTestCase {
         let reloaded = try WorkspaceStore(persistenceURL: stateURL)
         XCTAssertEqual(reloaded.loadReport.structuralRepairCount, 0)
         XCTAssertEqual(try reloaded.resolvedSettings(for: workspace.id).scrollbackLines, 5_000)
-        XCTAssertNil(reloaded.selectedWorkspace.settingsOverrides?.restoresAgentSessions)
     }
 
     // MARK: - A file from this build read by origin/main's decoders

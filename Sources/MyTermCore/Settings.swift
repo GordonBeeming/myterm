@@ -478,9 +478,6 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
     public var terminalTheme: TerminalTheme?
     public var shell: TerminalShell?
     public var newSessionWorkingDirectory: NewSessionWorkingDirectoryPolicy?
-    public var restoresAgentSessions: Bool?
-    public var namesTabsFromAgentSessions: Bool?
-    public var showsIdleAgentIcon: Bool?
     public var scrollbackLines: Int?
     public var cursorShape: TerminalCursorShape?
     public var cursorBlink: Bool?
@@ -503,9 +500,6 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         case terminalTheme
         case shell
         case newSessionWorkingDirectory
-        case restoresAgentSessions
-        case namesTabsFromAgentSessions
-        case showsIdleAgentIcon
         case scrollbackLines
         case cursorShape
         case cursorBlink
@@ -537,9 +531,6 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         terminalTheme = try? container.decodeIfPresent(TerminalTheme.self, forKey: .terminalTheme)
         shell = try? container.decodeIfPresent(TerminalShell.self, forKey: .shell)
         newSessionWorkingDirectory = try? container.decodeIfPresent(NewSessionWorkingDirectoryPolicy.self, forKey: .newSessionWorkingDirectory)
-        restoresAgentSessions = try? container.decodeIfPresent(Bool.self, forKey: .restoresAgentSessions)
-        namesTabsFromAgentSessions = try? container.decodeIfPresent(Bool.self, forKey: .namesTabsFromAgentSessions)
-        showsIdleAgentIcon = try? container.decodeIfPresent(Bool.self, forKey: .showsIdleAgentIcon)
         scrollbackLines = try? container.decodeIfPresent(Int.self, forKey: .scrollbackLines)
         cursorShape = try? container.decodeIfPresent(TerminalCursorShape.self, forKey: .cursorShape)
         cursorBlink = try? container.decodeIfPresent(Bool.self, forKey: .cursorBlink)
@@ -563,9 +554,6 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         try container.encodeIfPresent(terminalTheme, forKey: .terminalTheme)
         try container.encodeIfPresent(shell, forKey: .shell)
         try container.encodeIfPresent(newSessionWorkingDirectory, forKey: .newSessionWorkingDirectory)
-        try container.encodeIfPresent(restoresAgentSessions, forKey: .restoresAgentSessions)
-        try container.encodeIfPresent(namesTabsFromAgentSessions, forKey: .namesTabsFromAgentSessions)
-        try container.encodeIfPresent(showsIdleAgentIcon, forKey: .showsIdleAgentIcon)
         try container.encodeIfPresent(scrollbackLines, forKey: .scrollbackLines)
         try container.encodeIfPresent(cursorShape, forKey: .cursorShape)
         try container.encodeIfPresent(cursorBlink, forKey: .cursorBlink)
@@ -588,9 +576,10 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
             terminalTheme: terminalTheme ?? base.terminalTheme,
             shell: shell ?? base.shell,
             newSessionWorkingDirectory: newSessionWorkingDirectory ?? base.newSessionWorkingDirectory,
-            restoresAgentSessions: restoresAgentSessions ?? base.restoresAgentSessions,
-            namesTabsFromAgentSessions: namesTabsFromAgentSessions ?? base.namesTabsFromAgentSessions,
-            showsIdleAgentIcon: showsIdleAgentIcon ?? base.showsIdleAgentIcon,
+            // Agent settings are global only: how agents behave is the same in every workspace.
+            restoresAgentSessions: base.restoresAgentSessions,
+            namesTabsFromAgentSessions: base.namesTabsFromAgentSessions,
+            showsIdleAgentIcon: base.showsIdleAgentIcon,
             // Global only: the toolbar is the app's, so an override has nothing to say about it.
             showsAgentNotificationBell: base.showsAgentNotificationBell,
             workingIndicatorIcon: base.workingIndicatorIcon,

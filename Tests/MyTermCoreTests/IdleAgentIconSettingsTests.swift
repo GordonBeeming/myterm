@@ -3,31 +3,24 @@ import XCTest
 @testable import MyTermCore
 
 final class IdleAgentIconSettingsTests: XCTestCase {
-    func testMissingKeyDefaultsOffAndOverrideInherits() throws {
+    func testMissingKeyDefaultsOff() throws {
         let preferences = try JSONDecoder().decode(TerminalPreferences.self, from: Data("{}".utf8))
-        let overrides = try JSONDecoder().decode(TerminalPreferencesOverrides.self, from: Data("{}".utf8))
         XCTAssertFalse(preferences.showsIdleAgentIcon)
-        XCTAssertNil(overrides.showsIdleAgentIcon)
-        XCTAssertFalse(overrides.applying(to: preferences).showsIdleAgentIcon)
+        XCTAssertFalse(TerminalPreferencesOverrides().applying(to: preferences).showsIdleAgentIcon)
     }
 
-    func testExplicitValuesRoundTripAndOverrideGlobalInBothDirections() throws {
+    func testExplicitValuesRoundTrip() throws {
         for enabled in [false, true] {
             let preferences = TerminalPreferences(showsIdleAgentIcon: enabled)
             let restored = try JSONDecoder().decode(TerminalPreferences.self, from: JSONEncoder().encode(preferences))
             XCTAssertEqual(restored.showsIdleAgentIcon, enabled)
             XCTAssertEqual(restored.normalized().showsIdleAgentIcon, enabled)
-
-            var overrides = TerminalPreferencesOverrides()
-            overrides.showsIdleAgentIcon = !enabled
-            let restoredOverrides = try JSONDecoder().decode(
-                TerminalPreferencesOverrides.self, from: JSONEncoder().encode(overrides)
-            )
-            XCTAssertEqual(restoredOverrides.applying(to: restored).showsIdleAgentIcon, !enabled)
         }
     }
 
-    func testWorkspaceOverridesFolderAndResetRestoresInheritanceAfterReload() throws {
+    /// Agent settings are global only, so every folder and workspace resolves to the global value,
+    /// including ones whose files still carry an override from before.
+    func testAgentSettingsResolveToTheGlobalValueEverywhere() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer {
@@ -38,18 +31,27 @@ final class IdleAgentIconSettingsTests: XCTestCase {
         let store = try WorkspaceStore(persistenceURL: url)
         let folderID = try store.createFolder(title: "Juniper", color: .teal)
         let workspaceID = try store.createWorkspace(title: "Workbench", folderID: folderID)
-        try store.updateGlobalSettings { $0.showsIdleAgentIcon = false }
-        try store.updateFolderSettings(folderID) { $0.showsIdleAgentIcon = true }
-        XCTAssertTrue(try store.resolvedSettings(for: workspaceID).showsIdleAgentIcon)
-        try store.updateWorkspaceSettings(workspaceID) { $0.showsIdleAgentIcon = false }
+        try store.updateGlobalSettings {
+            $0.showsIdleAgentIcon = true
+            $0.restoresAgentSessions = false
+            $0.namesTabsFromAgentSessions = false
+        }
         try store.flush()
 
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        var folders = try XCTUnwrap(json["folders"] as? [[String: Any]])
+        folders[0]["settingsOverrides"] = [
+            "showsIdleAgentIcon": false, "restoresAgentSessions": true, "namesTabsFromAgentSessions": true
+        ]
+        json["folders"] = folders
+        try JSONSerialization.data(withJSONObject: json).write(to: url)
+
         let restored = try WorkspaceStore(persistenceURL: url)
-        XCTAssertFalse(try restored.resolvedSettings(for: workspaceID).showsIdleAgentIcon)
-        try restored.updateWorkspaceSettings(workspaceID) { $0.showsIdleAgentIcon = nil }
-        XCTAssertTrue(try restored.resolvedSettings(for: workspaceID).showsIdleAgentIcon)
-        try restored.updateFolderSettings(folderID) { $0.showsIdleAgentIcon = nil }
-        XCTAssertFalse(try restored.resolvedSettings(for: workspaceID).showsIdleAgentIcon)
+        let resolved = try restored.resolvedSettings(for: workspaceID)
+        XCTAssertTrue(resolved.showsIdleAgentIcon)
+        XCTAssertFalse(resolved.restoresAgentSessions)
+        XCTAssertFalse(resolved.namesTabsFromAgentSessions)
+        XCTAssertEqual(restored.loadReport.structuralRepairCount, 0)
     }
 
     /// Settings decode lossily like their neighbours: one bad value falls back to its default
@@ -57,6 +59,5 @@ final class IdleAgentIconSettingsTests: XCTestCase {
     func testInvalidValueFallsBackInsteadOfFailingTheDecode() throws {
         let data = Data("{\"showsIdleAgentIcon\":\"yes\"}".utf8)
         XCTAssertFalse(try JSONDecoder().decode(TerminalPreferences.self, from: data).showsIdleAgentIcon)
-        XCTAssertNil(try JSONDecoder().decode(TerminalPreferencesOverrides.self, from: data).showsIdleAgentIcon)
     }
 }

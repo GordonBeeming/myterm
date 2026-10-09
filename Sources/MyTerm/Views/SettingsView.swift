@@ -231,7 +231,7 @@ struct SettingsView: View {
 
     private var agentSettings: some View {
         VStack(alignment: .leading, spacing: 24) {
-            SettingsCard("Activity hooks · whole app", dimmed: scope != .global) {
+            SettingsCard("Activity hooks") {
                 Text("Show agent activity beside a running tab. Choose the icons and colours for working, finished, and question states below.")
                     .font(Theme.Font.ui(12))
                     .foregroundStyle(Theme.textSecondary)
@@ -244,7 +244,7 @@ struct SettingsView: View {
                     .foregroundStyle(Theme.textSecondary)
             }
 
-            SettingsCard("When an agent needs you · whole app", dimmed: scope != .global) {
+            SettingsCard("When an agent needs you") {
                 Toggle("Notify when an agent needs you", isOn: Binding(
                     get: { model.agentNotifications.isEnabled },
                     set: { isEnabled in
@@ -281,7 +281,7 @@ struct SettingsView: View {
                     .foregroundStyle(Theme.textSecondary)
             }
 
-            SettingsCard("Indicators · whole app", dimmed: scope != .global) {
+            SettingsCard("Indicators") {
                 AgentIndicatorPicker(
                     title: "Working",
                     caption: "The agent is busy. Steady motion that never asks for anything.",
@@ -348,37 +348,24 @@ struct SettingsView: View {
             }
 
             SettingsCard("Sessions") {
-                ScopedSettingRow(
+                GlobalSettingRow(
                     model: model,
-                    scope: scope,
                     title: "Restore agent sessions",
                     caption: "A pane running Claude Code or Codex rejoins its conversation on the next launch, using the agent's own resume command. A pane left at its shell prompt comes back to a shell prompt. Install the hooks above so MyTerm can save the conversation identifier.",
-                    global: \TerminalPreferences.restoresAgentSessions,
-                    override: \TerminalPreferencesOverrides.restoresAgentSessions
-                ) { value in
-                    Toggle("Restore agent sessions", isOn: value)
-                        .labelsHidden()
-                }
+                    setting: \.restoresAgentSessions
+                )
 
-                ScopedSettingRow(
+                GlobalSettingRow(
                     model: model,
-                    scope: scope,
                     title: "Name tabs after agent sessions",
                     caption: "A tab takes the name the agent gives its conversation, so /rename in the pane names the tab as well. Until you rename it, the name is the topic Claude Code writes for itself. A tab you named stays as you named it, and that name goes back to Claude Code when the pane rejoins the conversation. Leaving the agent puts the tab back to Terminal. This needs the hooks above.",
-                    global: \TerminalPreferences.namesTabsFromAgentSessions,
-                    override: \TerminalPreferencesOverrides.namesTabsFromAgentSessions
-                ) { value in
-                    Toggle("Name tabs after agent sessions", isOn: value)
-                        .labelsHidden()
-                }
-                ScopedSettingRow(
-                    model: model, scope: scope,
+                    setting: \.namesTabsFromAgentSessions
+                )
+                GlobalSettingRow(
+                    model: model,
                     title: "Show the agent's icon when it's idle",
-                    global: \TerminalPreferences.showsIdleAgentIcon,
-                    override: \TerminalPreferencesOverrides.showsIdleAgentIcon
-                ) { value in
-                    Toggle("Show the agent's icon when it's idle", isOn: value).labelsHidden()
-                }
+                    setting: \.showsIdleAgentIcon
+                )
                 HStack(spacing: 8) {
                     AgentIdentityIcon(identity: .claude).frame(width: 16, height: 16)
                     Text("Claude Code")
@@ -852,6 +839,35 @@ private struct FilePatternsEditor: View {
     }
 }
 
+/// A switch for a setting that only exists globally, laid out like a scoped row without the
+/// inherit and override line.
+private struct GlobalSettingRow: View {
+    @Bindable var model: AppModel
+    let title: String
+    var caption: String?
+    let setting: WritableKeyPath<TerminalPreferences, Bool>
+
+    var body: some View {
+        HStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(Theme.Font.ui(13, weight: .medium))
+                if let caption {
+                    Text(caption)
+                        .font(Theme.Font.ui(12))
+                        .foregroundStyle(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 8)
+            Toggle(title, isOn: Binding(
+                get: { model.store.globalSettings[keyPath: setting] },
+                set: { value in model.updateGlobalSettings { $0[keyPath: setting] = value } }
+            ))
+            .labelsHidden()
+        }
+    }
+}
+
 private struct ScopedSettingRow<Value, Control: View>: View {
     @Bindable var model: AppModel
     let scope: TerminalSettingsScope
@@ -1267,7 +1283,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
 
     var id: Self { self }
     var index: Int { Self.allCases.firstIndex(of: self) ?? 0 }
-    var isScoped: Bool { self != .general && self != .companion && self != .permissions }
+    var isScoped: Bool { self == .terminal || self == .browser }
     var symbol: String {
         switch self {
         case .general: "gearshape"
