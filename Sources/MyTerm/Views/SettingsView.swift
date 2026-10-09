@@ -6,6 +6,11 @@ import MyTermPlatform
 import MyTermUI
 import SwiftUI
 
+/// The settings window, opened by the Global, Folder and Workspace Settings commands.
+enum SettingsWindow {
+    static let id = "settings"
+}
+
 struct SettingsView: View {
     @Bindable var model: AppModel
 

@@ -98,7 +98,7 @@ enum MyTermCommandShortcuts {
 }
 
 struct MyTermCommands: Commands {
-    @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
     let startup: MyTermStartup
 
     var body: some Commands {
@@ -109,7 +109,7 @@ struct MyTermCommands: Commands {
         CommandGroup(replacing: .appSettings) {
             Button("Global Settings…") {
                 startup.model?.prepareSettings(for: .global)
-                openSettings()
+                openWindow(id: SettingsWindow.id)
             }
             .shortcut(MyTermCommandShortcuts.globalSettings)
         }

@@ -767,7 +767,7 @@ private struct WorkspaceSidebarRow: View {
     @Binding var activeDragItem: SidebarDragItem?
     let dropSession: SidebarDropSession
 
-    @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
     @State private var dropFeedback: SidebarDropFeedback = .none
     @State private var renderedRowHeight: CGFloat = 0
 
@@ -846,7 +846,7 @@ private struct WorkspaceSidebarRow: View {
         .contextMenu {
             Button("Workspace Settings…", systemImage: "gearshape") {
                 model.prepareSettings(for: .workspace(workspace.id))
-                openSettings()
+                openWindow(id: SettingsWindow.id)
             }
             Divider()
             Button(workspace.isPinned ? "Unpin Workspace" : "Pin Workspace") {
@@ -986,7 +986,7 @@ private struct WorkspaceFolderRow: View {
     @Binding var activeDragItem: SidebarDragItem?
     let dropSession: SidebarDropSession
 
-    @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
     @State private var dropFeedback: SidebarDropFeedback = .none
     @State private var renderedRowHeight: CGFloat = 0
 
@@ -1037,7 +1037,7 @@ private struct WorkspaceFolderRow: View {
         .contextMenu {
             Button("Folder Settings…", systemImage: "gearshape") {
                 model.prepareSettings(for: .folder(folder.id))
-                openSettings()
+                openWindow(id: SettingsWindow.id)
             }
             Divider()
             Button("New Workspace") { model.createWorkspace(in: folder.id) }
