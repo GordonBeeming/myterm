@@ -136,11 +136,16 @@ public struct RemoteTabProjection: Codable, Equatable, Sendable {
     public let workingDirectory: URL?
     public let isRunning: Bool?
     public let agentActivity: AgentActivity?
+    /// Identifies the website data store backing this browser tab on the host, so a companion can
+    /// key its own store the same way and inherit the workspace's browser-data boundary instead of
+    /// inventing one. Absent from hosts that predate companion cookie sharing.
+    public let browserProfileStoreID: UUID?
 
     public init(id: TabID, title: String, kind: RemoteTabKind,
                 terminalSessionID: TerminalSessionID?, browserURL: URL? = nil,
                 workingDirectory: URL? = nil, isRunning: Bool? = nil,
-                agentActivity: AgentActivity? = nil) {
+                agentActivity: AgentActivity? = nil,
+                browserProfileStoreID: UUID? = nil) {
         self.id = id
         self.title = title
         self.kind = kind
@@ -149,6 +154,7 @@ public struct RemoteTabProjection: Codable, Equatable, Sendable {
         self.workingDirectory = workingDirectory
         self.isRunning = isRunning
         self.agentActivity = agentActivity
+        self.browserProfileStoreID = browserProfileStoreID
     }
 }
 
@@ -369,6 +375,7 @@ public enum RemoteSettingField: String, Codable, CaseIterable, Equatable, Hashab
     case nativeTextFilePatterns
     case browserFilePatterns
     case allowsLocalFileJavaScript
+    case sharesBrowserSignInsWithCompanion
     case compactSidebar
     case fontPostScriptName
     case fontSize

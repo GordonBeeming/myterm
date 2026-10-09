@@ -334,6 +334,9 @@ final class SceneModel {
     var connectionPhase: ConnectionPhase = .disconnected
     var connectionID: UUID?
     var projection: RemoteWorkspaceProjection?
+    /// Process-wide, not per scene: the one-live-view-per-profile rule only means anything if every
+    /// browser view in the app consults the same cache, and the companion supports multiple scenes.
+    @ObservationIgnored var browserProfileStores: BrowserProfileStores { .shared }
     @ObservationIgnored private var attachRetries: [TerminalSurfaceID: Int] = [:]
     @ObservationIgnored private var restoreDeadlines: [TerminalSurfaceID: Task<Void, Never>] = [:]
     /// Whether `projection` came from the connection that is live now. A list retained across a
@@ -575,6 +578,109 @@ final class SceneModel {
 
     func closeBrowserProxy(_ route: BrowserRoute, owner: UUID) async {
         await connection?.closeBrowserProxy(route, owner: owner)
+    }
+
+    /// The Mac's own data-store identifier for this browser tab, read from the latest projection so
+    /// the companion follows the workspace's "Browser data" scope as the Mac changes it. Nil against a
+    /// Mac that predates cookie sharing.
+    func browserProfileStoreID(_ route: BrowserRoute) -> UUID? {
+        projection?.workspaces
+            .first { $0.id.rawValue == route.workspaceID }?
+            .groups.first { $0.id.rawValue == route.groupID }?
+            .tabs.first { $0.id.rawValue == route.tabID }?
+            .browserProfileStoreID
+    }
+
+    /// Pages the Mac's cookies for a profile. A missing capability or a workspace with sharing off
+    /// comes back empty rather than as an error: the companion still has its own jar to browse with.
+    /// A pull, and whether it reached the end of the Mac's jar.
+    ///
+    /// Completeness has to be reported, not assumed. A page that fails partway returns what arrived
+    /// so far, and treating that as the whole jar makes every cookie that was not fetched look
+    /// deleted on the Mac — which the reconciler would then delete locally. A truncated pull is
+    /// still worth applying, because applying only ever adds; it just cannot be used to decide what
+    /// is gone.
+    struct BrowserCookiePull {
+        var cookies: [RemoteBrowserCookie] = []
+        var isComplete = false
+    }
+
+    func pullBrowserCookies(_ route: BrowserRoute, profileStoreID: UUID) async -> BrowserCookiePull {
+        var pull = BrowserCookiePull()
+        var cursor: String?
+
+        for _ in 0..<RemoteBrowserCookieTransfer.maximumPullPages {
+            let request: RemoteBrowserCookiePullRequest
+            do { request = try RemoteBrowserCookiePullRequest(profileStoreID: profileStoreID, cursor: cursor) }
+            catch { return pull }
+
+            guard let payload = try? JSONEncoder().encode(request) else { return pull }
+            let result: Data?
+            do { result = try await command(.browserCookiePull, metadata: metadata(route: route), payload: payload) }
+            catch { return pull }
+
+            guard let result,
+                  let response = try? JSONDecoder().decode(RemoteBrowserCookiePullResponse.self, from: result)
+            else { return pull }
+
+            pull.cookies.append(contentsOf: response.cookies)
+            guard let next = response.nextCursor else {
+                pull.isComplete = true
+                return pull
+            }
+            cursor = next
+        }
+        // Ran out of pages with a cursor still outstanding, so the jar is bigger than the ceiling.
+        return pull
+    }
+
+    /// Sends the companion's cookies back a chunk at a time, awaiting each one so a slow link cannot
+    /// pile up in-flight commands. Returns how many the Mac stored.
+    ///
+    /// Deletions ride the first chunk. They are keys rather than cookies, so they are small, and
+    /// sending them once avoids re-deleting on every chunk.
+    @discardableResult
+    func pushBrowserCookies(
+        _ route: BrowserRoute,
+        profileStoreID: UUID,
+        cookies: [RemoteBrowserCookie],
+        removed: [RemoteBrowserCookieKey] = []
+    ) async -> Int {
+        var pages = RemoteBrowserCookieTransfer.pages(of: cookies)
+        let removedPages = RemoteBrowserCookieTransfer.keyPages(of: removed)
+        // Pad with cookie-less chunks so every page of deletions has one to ride in, which also
+        // covers a push that only deletes.
+        while pages.count < removedPages.count { pages.append([]) }
+        guard !pages.isEmpty, pages.count <= RemoteBrowserCookieTransfer.maximumChunkCount else { return 0 }
+        let transferID = UUID()
+        var accepted = 0
+
+        for (index, page) in pages.enumerated() {
+            let request: RemoteBrowserCookiePushRequest
+            do {
+                request = try RemoteBrowserCookiePushRequest(
+                    profileStoreID: profileStoreID, transferID: transferID,
+                    chunkIndex: index, chunkCount: pages.count, cookies: page,
+                    removed: index < removedPages.count ? removedPages[index] : []
+                )
+            } catch { return accepted }
+
+            guard let payload = try? JSONEncoder().encode(request) else { return accepted }
+            let result: Data?
+            do { result = try await command(.browserCookiePush, metadata: metadata(route: route), payload: payload) }
+            catch { return accepted }
+
+            guard let result,
+                  let response = try? JSONDecoder().decode(RemoteBrowserCookiePushResponse.self, from: result)
+            else { return accepted }
+            accepted += response.acceptedCount
+        }
+        return accepted
+    }
+
+    private func metadata(route: BrowserRoute) -> MessageMetadata {
+        MessageMetadata(hostID: route.hostID, workspaceID: route.workspaceID,
+                        groupID: route.groupID, tabID: route.tabID)
     }
 
     func attach(_ route: TerminalRoute, requestingFreshCheckpoint: Bool = false,

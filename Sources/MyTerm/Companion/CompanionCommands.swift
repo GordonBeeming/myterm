@@ -7,6 +7,7 @@ enum CompanionCommandError: Error, LocalizedError, Equatable {
     case wrongTarget
     case unsupportedOperation
     case activeProcessRequiresDesktopConfirmation
+    case browserCookieSharingDisabled
     case diagnosticsTooFrequent
 
     var code: String {
@@ -15,6 +16,7 @@ enum CompanionCommandError: Error, LocalizedError, Equatable {
         case .wrongTarget: "wrong_target"
         case .unsupportedOperation: "unsupported_operation"
         case .activeProcessRequiresDesktopConfirmation: "active_process"
+        case .browserCookieSharingDisabled: RemoteBrowserCookieTransfer.sharingDisabledCode
         case .diagnosticsTooFrequent: "diagnostics_too_frequent"
         }
     }
@@ -26,6 +28,8 @@ enum CompanionCommandError: Error, LocalizedError, Equatable {
         case .unsupportedOperation: "This version of MyTerm does not support that remote operation."
         case .activeProcessRequiresDesktopConfirmation:
             "An active foreground process requires confirmation on the Mac before it can be closed."
+        case .browserCookieSharingDisabled:
+            "This workspace does not share browser sign-ins with companion devices."
         case .diagnosticsTooFrequent:
             "These logs were already sent in the last 30 seconds. Wait a moment, then send again."
         }
@@ -64,7 +68,8 @@ extension AppModel {
                                     browserURL: tab.browserSession?.url,
                                     workingDirectory: tab.terminalSession?.workingDirectory,
                                     isRunning: tab.terminalSession.flatMap { terminalSessions[$0.id]?.isRunning },
-                                    agentActivity: agentAttention[tab.id]
+                                    agentActivity: agentAttention[tab.id],
+                                    browserProfileStoreID: tab.browserSession?.profile?.persistentStoreID
                                 )
                             }
                         )
@@ -79,7 +84,7 @@ extension AppModel {
         command: CommandParameters
     ) throws -> Data? {
         switch command.operation {
-        case .browserInteract:
+        case .browserInteract, .browserCookiePull, .browserCookiePush:
             throw CompanionCommandError.unsupportedOperation
         case .workspaceCreate:
             let payload: RemoteWorkspaceCreatePayload = try decodeCompanionPayload(command.payload)

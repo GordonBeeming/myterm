@@ -1059,7 +1059,8 @@ final class CompanionHostModel {
             hostDeviceID: identity.hostID,
             agreementKey: identity.agreementKey.publicKey,
             notificationSigningKey: identity.notificationSigningKey.publicKey,
-            capabilities: ["workspace-v1", "terminal-checkpoint-v1", "control-lease-v1", "browser-proxy-v1", RemoteBrowserRequest.capability]
+            capabilities: ["workspace-v1", "terminal-checkpoint-v1", "control-lease-v1", "browser-proxy-v1",
+                           RemoteBrowserRequest.capability, RemoteBrowserCookiePullRequest.capability]
         )
         let peer = PeerConnection(
             connectionID: connectionID,
@@ -1250,6 +1251,56 @@ final class CompanionHostModel {
         } else { try await entry.tunnel.receive(parameters) }
     }
 
+    /// Resolves the profile a cookie command may touch. The companion names the store it expects and
+    /// the host only serves it when that matches the route's own profile, so a peer cannot read or
+    /// seed a jar belonging to a workspace it was not handed.
+    private func browserCookieProfile(
+        _ metadata: MessageMetadata,
+        peer: PeerConnection,
+        expecting profileStoreID: UUID
+    ) throws -> BrowserDataProfile {
+        let (route, _) = try browserTarget(metadata, peer: peer)
+        guard let appModel else { throw RemoteError.offline }
+        let profile = try appModel.companionBrowserProfile(route: route)
+        guard profile.persistentStoreID == profileStoreID else {
+            throw CompanionCommandError.wrongTarget
+        }
+        // Checked against the profile rather than the route's workspace: the jar is shared, so every
+        // workspace on it has to have agreed.
+        guard appModel.companionSharesBrowserSignIns(profile: profile) else {
+            throw CompanionCommandError.browserCookieSharingDisabled
+        }
+        return profile
+    }
+
+    private func handleBrowserCookiePull(metadata: MessageMetadata, command: CommandParameters,
+                                         peer: PeerConnection) async throws -> Data {
+        let request: RemoteBrowserCookiePullRequest
+        do { request = try JSONDecoder().decode(RemoteBrowserCookiePullRequest.self, from: command.payload) }
+        catch { throw CompanionCommandError.invalidPayload }
+        let profile = try browserCookieProfile(metadata, peer: peer, expecting: request.profileStoreID)
+        let response = await BrowserCookieStore(persistentStoreID: profile.persistentStoreID)
+            .page(after: request.cursor)
+        logger.trace("Served \(response.cookies.count, privacy: .public) browser cookies to a companion")
+        return try JSONEncoder().encode(response)
+    }
+
+    private func handleBrowserCookiePush(metadata: MessageMetadata, command: CommandParameters,
+                                         peer: PeerConnection) async throws -> Data {
+        let request: RemoteBrowserCookiePushRequest
+        do { request = try JSONDecoder().decode(RemoteBrowserCookiePushRequest.self, from: command.payload) }
+        catch { throw CompanionCommandError.invalidPayload }
+        let profile = try browserCookieProfile(metadata, peer: peer, expecting: request.profileStoreID)
+        let store = BrowserCookieStore(persistentStoreID: profile.persistentStoreID)
+        let accepted = await store.apply(request.cookies)
+        let removed = await store.remove(request.removed)
+        logger.trace(
+            "Stored \(accepted, privacy: .public) and deleted \(removed, privacy: .public) browser cookies from a companion, chunk \(request.chunkIndex + 1, privacy: .public) of \(request.chunkCount, privacy: .public)"
+        )
+        return try JSONEncoder().encode(
+            RemoteBrowserCookiePushResponse(acceptedCount: accepted, removedCount: removed))
+    }
+
     private func sendBrowserTunnel(_ parameters: BrowserTunnelParameters, metadata: MessageMetadata,
                                    peer: PeerConnection) throws {
         guard (try? browserTarget(metadata, peer: peer)) != nil else { return }
@@ -1401,6 +1452,10 @@ final class CompanionHostModel {
                 result = nil
             case .browserInteract:
                 result = try await handleBrowserInteraction(metadata: metadata, command: command, peer: peer, deadline: browserDeadline)
+            case .browserCookiePull:
+                result = try await handleBrowserCookiePull(metadata: metadata, command: command, peer: peer)
+            case .browserCookiePush:
+                result = try await handleBrowserCookiePush(metadata: metadata, command: command, peer: peer)
             case .notificationRegister:
                 guard command.payload.count <= 256 * 1_024 else { throw RemoteError.messageTooLarge }
                 let grant = try JSONDecoder().decode(
@@ -1451,7 +1506,9 @@ final class CompanionHostModel {
                command.operation != .terminalPasteImage,
                command.operation != .terminalPasteImageChunk,
                command.operation != .diagnosticsUpload,
-               command.operation != .browserInteract {
+               command.operation != .browserInteract,
+               command.operation != .browserCookiePull,
+               command.operation != .browserCookiePush {
                 broadcastWorkspaceSnapshot()
             }
         } catch {

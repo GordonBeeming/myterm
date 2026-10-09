@@ -192,6 +192,42 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertTrue(try store.resolvedSettings(for: workspaceID).allowsLocalFileJavaScript)
     }
 
+    func testCompanionSignInSharingDefaultsOnAndResolvesAtEveryScope() throws {
+        XCTAssertTrue(TerminalPreferences.default.sharesBrowserSignInsWithCompanion)
+
+        let disabled = TerminalPreferences(sharesBrowserSignInsWithCompanion: false)
+        let restored = try JSONDecoder().decode(
+            TerminalPreferences.self,
+            from: JSONEncoder().encode(disabled)
+        )
+        XCTAssertFalse(restored.sharesBrowserSignInsWithCompanion)
+
+        // Settings saved before this existed have to come back on, matching the new default rather
+        // than silently leaving a workspace unsynced.
+        let legacy = try JSONDecoder().decode(
+            TerminalPreferences.self, from: Data(#"{"browserDataScope":"workspace"}"#.utf8))
+        XCTAssertTrue(legacy.sharesBrowserSignInsWithCompanion)
+
+        let url = temporaryURL()
+        let store = try WorkspaceStore(persistenceURL: url)
+        let folderID = try store.createFolder(title: "Work")
+        let workspaceID = store.selectedWorkspaceID
+        try store.moveWorkspace(workspaceID, to: folderID)
+        let inheritedWorkspaceID = try store.createWorkspace(title: "Inherited", folderID: folderID)
+
+        XCTAssertTrue(try store.resolvedSettings(for: inheritedWorkspaceID).sharesBrowserSignInsWithCompanion)
+
+        try store.updateGlobalSettings { $0.sharesBrowserSignInsWithCompanion = false }
+        XCTAssertFalse(try store.resolvedSettings(for: inheritedWorkspaceID).sharesBrowserSignInsWithCompanion)
+
+        try store.updateFolderSettings(folderID) { $0.sharesBrowserSignInsWithCompanion = true }
+        XCTAssertTrue(try store.resolvedSettings(for: inheritedWorkspaceID).sharesBrowserSignInsWithCompanion)
+
+        try store.updateWorkspaceSettings(workspaceID) { $0.sharesBrowserSignInsWithCompanion = false }
+        XCTAssertFalse(try store.resolvedSettings(for: workspaceID).sharesBrowserSignInsWithCompanion)
+        XCTAssertTrue(try store.resolvedSettings(for: inheritedWorkspaceID).sharesBrowserSignInsWithCompanion)
+    }
+
     func testTextFileCommandPersistsUnderTheLegacyKeyForGlobalAndScopedSettings() throws {
         let url = temporaryURL()
         let store = try WorkspaceStore(persistenceURL: url)

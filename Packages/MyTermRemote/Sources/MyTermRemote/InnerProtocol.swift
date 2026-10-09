@@ -111,6 +111,8 @@ public enum CommandOperation: String, Codable, CaseIterable, Sendable {
     case notificationRegister = "notification_register"
     case notificationRevoke = "notification_revoke"
     case browserInteract = "browser_interact"
+    case browserCookiePull = "browser_cookie_pull"
+    case browserCookiePush = "browser_cookie_push"
     case diagnosticsUpload = "diagnostics_upload"
 }
 
@@ -593,6 +595,9 @@ extension InnerMessage: Codable {
                     throw RemoteError.invalidMessage
                 }
             case .browserInteract:
+                guard metadata.runtimeID != nil, metadata.workspaceID != nil, metadata.groupID != nil,
+                      metadata.tabID != nil, value.payload.count <= 16 * 1024 else { throw RemoteError.invalidMessage }
+            case .browserCookiePull, .browserCookiePush:
                 guard metadata.runtimeID != nil, metadata.workspaceID != nil, metadata.groupID != nil,
                       metadata.tabID != nil, value.payload.count <= 16 * 1024 else { throw RemoteError.invalidMessage }
             case .diagnosticsUpload:

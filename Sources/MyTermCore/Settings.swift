@@ -187,6 +187,9 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
     public var nativeTextFilePatterns: [String]
     public var browserFilePatterns: [String]
     public var allowsLocalFileJavaScript: Bool
+    /// Whether a paired companion may read and write this profile's browser cookies. Off means the
+    /// companion still keeps its own persistent jar for the profile; nothing crosses the link.
+    public var sharesBrowserSignInsWithCompanion: Bool
     public var compactSidebar: Bool
     public var fontPostScriptName: String
     public var fontSize: Double
@@ -213,6 +216,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         nativeTextFilePatterns: [String] = TerminalPreferences.defaultNativeTextFilePatterns,
         browserFilePatterns: [String] = TerminalPreferences.defaultBrowserFilePatterns,
         allowsLocalFileJavaScript: Bool = false,
+        sharesBrowserSignInsWithCompanion: Bool = true,
         compactSidebar: Bool = true,
         fontPostScriptName: String = TerminalPreferences.defaultFontPostScriptName,
         fontSize: Double = TerminalPreferences.defaultFontSize,
@@ -235,6 +239,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         self.nativeTextFilePatterns = Self.normalizedNativeTextFilePatterns(nativeTextFilePatterns)
         self.browserFilePatterns = Self.normalizedFilePatterns(browserFilePatterns)
         self.allowsLocalFileJavaScript = allowsLocalFileJavaScript
+        self.sharesBrowserSignInsWithCompanion = sharesBrowserSignInsWithCompanion
         self.compactSidebar = compactSidebar
         self.fontPostScriptName = Self.validatedFontName(fontPostScriptName)
         self.fontSize = Self.clampedFontSize(fontSize)
@@ -262,6 +267,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
             nativeTextFilePatterns: nativeTextFilePatterns,
             browserFilePatterns: browserFilePatterns,
             allowsLocalFileJavaScript: allowsLocalFileJavaScript,
+            sharesBrowserSignInsWithCompanion: sharesBrowserSignInsWithCompanion,
             compactSidebar: compactSidebar,
             fontPostScriptName: fontPostScriptName,
             fontSize: fontSize,
@@ -289,6 +295,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         try container.encode(nativeTextFilePatterns, forKey: .nativeTextFilePatterns)
         try container.encode(browserFilePatterns, forKey: .browserFilePatterns)
         try container.encode(allowsLocalFileJavaScript, forKey: .allowsLocalFileJavaScript)
+        try container.encode(sharesBrowserSignInsWithCompanion, forKey: .sharesBrowserSignInsWithCompanion)
         try container.encode(compactSidebar, forKey: .compactSidebar)
         try container.encode(fontPostScriptName, forKey: .fontPostScriptName)
         try container.encode(fontSize, forKey: .fontSize)
@@ -313,6 +320,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         case nativeTextFilePatterns
         case browserFilePatterns
         case allowsLocalFileJavaScript
+        case sharesBrowserSignInsWithCompanion
         case compactSidebar
         case fontPostScriptName
         case fontSize
@@ -346,6 +354,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
             nativeTextFilePatterns: (try? container.decode([String].self, forKey: .nativeTextFilePatterns)) ?? Self.defaultNativeTextFilePatterns,
             browserFilePatterns: (try? container.decode([String].self, forKey: .browserFilePatterns)) ?? Self.defaultBrowserFilePatterns,
             allowsLocalFileJavaScript: (try? container.decode(Bool.self, forKey: .allowsLocalFileJavaScript)) ?? false,
+            sharesBrowserSignInsWithCompanion: (try? container.decode(Bool.self, forKey: .sharesBrowserSignInsWithCompanion)) ?? true,
             compactSidebar: (try? container.decode(Bool.self, forKey: .compactSidebar)) ?? true,
             fontPostScriptName: (try? container.decode(String.self, forKey: .fontPostScriptName)) ?? Self.defaultFontPostScriptName,
             fontSize: (try? container.decode(Double.self, forKey: .fontSize)) ?? Self.defaultFontSize,
@@ -418,6 +427,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
     public var nativeTextFilePatterns: [String]?
     public var browserFilePatterns: [String]?
     public var allowsLocalFileJavaScript: Bool?
+    public var sharesBrowserSignInsWithCompanion: Bool?
     public var compactSidebar: Bool?
     public var fontPostScriptName: String?
     public var fontSize: Double?
@@ -442,6 +452,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         case nativeTextFilePatterns
         case browserFilePatterns
         case allowsLocalFileJavaScript
+        case sharesBrowserSignInsWithCompanion
         case compactSidebar
         case fontPostScriptName
         case fontSize
@@ -475,6 +486,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         nativeTextFilePatterns = try? container.decodeIfPresent([String].self, forKey: .nativeTextFilePatterns)
         browserFilePatterns = try? container.decodeIfPresent([String].self, forKey: .browserFilePatterns)
         allowsLocalFileJavaScript = try? container.decodeIfPresent(Bool.self, forKey: .allowsLocalFileJavaScript)
+        sharesBrowserSignInsWithCompanion = try? container.decodeIfPresent(Bool.self, forKey: .sharesBrowserSignInsWithCompanion)
         compactSidebar = try? container.decodeIfPresent(Bool.self, forKey: .compactSidebar)
         fontPostScriptName = try? container.decodeIfPresent(String.self, forKey: .fontPostScriptName)
         fontSize = try? container.decodeIfPresent(Double.self, forKey: .fontSize)
@@ -500,6 +512,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         try container.encodeIfPresent(nativeTextFilePatterns, forKey: .nativeTextFilePatterns)
         try container.encodeIfPresent(browserFilePatterns, forKey: .browserFilePatterns)
         try container.encodeIfPresent(allowsLocalFileJavaScript, forKey: .allowsLocalFileJavaScript)
+        try container.encodeIfPresent(sharesBrowserSignInsWithCompanion, forKey: .sharesBrowserSignInsWithCompanion)
         try container.encodeIfPresent(compactSidebar, forKey: .compactSidebar)
         try container.encodeIfPresent(fontPostScriptName, forKey: .fontPostScriptName)
         try container.encodeIfPresent(fontSize, forKey: .fontSize)
@@ -524,6 +537,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
             nativeTextFilePatterns: nativeTextFilePatterns ?? base.nativeTextFilePatterns,
             browserFilePatterns: browserFilePatterns ?? base.browserFilePatterns,
             allowsLocalFileJavaScript: allowsLocalFileJavaScript ?? base.allowsLocalFileJavaScript,
+            sharesBrowserSignInsWithCompanion: sharesBrowserSignInsWithCompanion ?? base.sharesBrowserSignInsWithCompanion,
             compactSidebar: compactSidebar ?? base.compactSidebar,
             fontPostScriptName: fontPostScriptName ?? base.fontPostScriptName,
             fontSize: fontSize ?? base.fontSize,

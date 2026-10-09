@@ -64,6 +64,13 @@ struct SceneRootView: View {
             }
             .task(id: services.isLoading) {
                 if !services.isLoading { consumePendingNotification() }
+                // Once the host list is known, collect browser jars belonging to Macs that are no
+                // longer paired. A delete that failed while removing a pairing has no other chance
+                // to be retried, because the host it was keyed to is gone from that list.
+                if !services.isLoading {
+                    await scene.browserProfileStores.removeStoresForUnknownHosts(
+                        keeping: Set(services.savedHosts.map(\.hostID)))
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: .myTermNotificationRoute)) { _ in
                 if !services.isLoading { consumePendingNotification() }

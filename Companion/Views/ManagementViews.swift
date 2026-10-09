@@ -156,6 +156,7 @@ struct HostActionsView: View {
                         Button("Remove pairing", role: .destructive) {
                             Task {
                                 await scene.disconnect()
+                                await scene.browserProfileStores.removeStores(hostID: host.hostID)
                                 await services.remove(host)
                                 dismiss()
                             }

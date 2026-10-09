@@ -140,7 +140,7 @@ final class RemoteBrowserProxyWebViewTests: XCTestCase {
         await bridge.configure(destinationPort: port)
         let browser = NativeRemoteBrowser()
         let endpoint = try await bridge.endpoint()
-        try await browser.start(endpoint, url: try XCTUnwrap(URL(string: "http://myterm-test.invalid/first")))
+        try await browser.start(endpoint, url: try XCTUnwrap(URL(string: "http://myterm-test.invalid/first")), dataStore: .nonPersistent())
         let view = try XCTUnwrap(browser.webView)
         try await waitForBrowser { view.title == "Remote fixture" && !view.isLoading }
         view.load(URLRequest(url: try XCTUnwrap(URL(string: "http://myterm-test.invalid/second"))))
@@ -179,7 +179,7 @@ final class RemoteBrowserProxyWebViewTests: XCTestCase {
         await bridge.configure(destinationPort: port)
         let browser = NativeRemoteBrowser()
         let endpoint = try await bridge.endpoint()
-        try await browser.start(endpoint, url: try XCTUnwrap(URL(string: "http://myterm-test.invalid/page")))
+        try await browser.start(endpoint, url: try XCTUnwrap(URL(string: "http://myterm-test.invalid/page")), dataStore: .nonPersistent())
         let deadline = Date().addingTimeInterval(15)
         while browser.webView?.title != "Remote websocket", browser.error == nil, Date() < deadline {
             try await Task.sleep(for: .milliseconds(100))
@@ -202,7 +202,7 @@ final class RemoteBrowserProxyWebViewTests: XCTestCase {
         await bridge.configure(destinationPort: port)
         let browser = NativeRemoteBrowser()
         let endpoint = try await bridge.endpoint()
-        try await browser.start(endpoint, url: try XCTUnwrap(URL(string: "http://myterm-test.invalid/page")))
+        try await browser.start(endpoint, url: try XCTUnwrap(URL(string: "http://myterm-test.invalid/page")), dataStore: .nonPersistent())
         let deadline = Date().addingTimeInterval(15)
         while browser.webView?.title != "Remote fixture", browser.error == nil, Date() < deadline {
             try await Task.sleep(for: .milliseconds(100))
@@ -244,7 +244,7 @@ final class RemoteBrowserProxyWebViewTests: XCTestCase {
         await bridge.configure(destinationPort: port)
         let endpoint = try await bridge.endpoint()
         let browser = NativeRemoteBrowser()
-        try await browser.start(endpoint, url: try XCTUnwrap(URL(string: "http://myterm-test.invalid/page")))
+        try await browser.start(endpoint, url: try XCTUnwrap(URL(string: "http://myterm-test.invalid/page")), dataStore: .nonPersistent())
         let deadline = Date().addingTimeInterval(15)
         while browser.webView?.title != "Remote fixture", browser.error == nil, Date() < deadline {
             try await Task.sleep(for: .milliseconds(100))
@@ -269,7 +269,7 @@ final class RemoteBrowserProxyWebViewTests: XCTestCase {
         await bridge.configure(destinationPort: port)
         let browser = NativeRemoteBrowser()
         let endpoint = try await bridge.endpoint()
-        try await browser.start(endpoint, url: try XCTUnwrap(URL(string: "http://myterm-test.invalid/page")))
+        try await browser.start(endpoint, url: try XCTUnwrap(URL(string: "http://myterm-test.invalid/page")), dataStore: .nonPersistent())
         let deadline = Date().addingTimeInterval(15)
         while browser.webView?.title != "Remote fixture", browser.error == nil, Date() < deadline {
             try await Task.sleep(for: .milliseconds(100))
@@ -290,7 +290,7 @@ final class RemoteBrowserProxyWebViewTests: XCTestCase {
         let endpoint = try await bridge.endpoint()
         let browser = NativeRemoteBrowser()
         let url = try XCTUnwrap(URL(string: "http://127.0.0.1:\(port)/"))
-        try await browser.start(endpoint, url: url)
+        try await browser.start(endpoint, url: url, dataStore: .nonPersistent())
         XCTAssertEqual(browser.error, "Use Mac rendered mode for localhost or IP addresses.")
         browser.webView(try XCTUnwrap(browser.webView), didFinish: nil)
         XCTAssertEqual(browser.error, "Use Mac rendered mode for localhost or IP addresses.",
