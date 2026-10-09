@@ -145,6 +145,16 @@ struct WorkspaceTabStrip: View {
         scrollProxy.scrollTo(tabGroup.selectedTabID, anchor: .center)
     }
 
+    /// Focus only needs marking when there is another pane it could be in. A single pane, or one
+    /// pane shown full screen, gets no mark at all.
+    private var marksFocusedPane: Bool {
+        let workspace = model.selectedWorkspace
+        guard workspace.id == workspaceID,
+              workspace.focusedTabGroupID == tabGroup.id,
+              model.maximizedTabGroupID == nil else { return false }
+        return workspace.orderedGroups.count > 1
+    }
+
     private func tabItem(_ tab: MyTermCore.Tab, at index: Int, reorderPreview: PaneTabReorderPreview?, tabWidth: CGFloat) -> some View {
         let source = PaneTabDragSource(
             workspaceID: workspaceID,
@@ -162,6 +172,7 @@ struct WorkspaceTabStrip: View {
             tab: tab,
             source: source,
             isSelected: tab.id == tabGroup.selectedTabID,
+            marksFocus: tab.id == tabGroup.selectedTabID && marksFocusedPane,
             isDragged: isDragged,
             title: title(for: tab),
             agentAttention: model.agentAttention(forTab: tab.id),
@@ -336,6 +347,7 @@ private struct WorkspaceTabItem: View {
     let tab: MyTermCore.Tab
     let source: PaneTabDragSource
     let isSelected: Bool
+    let marksFocus: Bool
     let isDragged: Bool
     let title: String
     let agentAttention: AgentActivity?
@@ -383,7 +395,16 @@ private struct WorkspaceTabItem: View {
                 RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous)
                     .fill(backgroundStyle)
             }
-
+            .overlay(alignment: .bottom) {
+                if marksFocus {
+                    UnevenRoundedRectangle(topLeadingRadius: 1, topTrailingRadius: 1, style: .continuous)
+                        .fill(Theme.accent)
+                        .frame(height: 2)
+                        .padding(.horizontal, 6)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
             .shadow(color: .black.opacity(isDragged ? 0.22 : 0), radius: 4, y: 1)
             // The same press either selects the tab or drags it, decided on release by how far
             // the pointer travelled. The close button sits on top of this content, so a click on

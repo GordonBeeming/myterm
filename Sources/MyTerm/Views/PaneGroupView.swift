@@ -35,8 +35,9 @@ struct PaneGroupView: View {
                         .position(x: previewFrame.midX, y: previewFrame.midY)
                 }
             }
+            // Panes run edge to edge; focus is marked on the selected tab, not with a frame.
             .background(Theme.paneGround)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.pane))
+            .clipped()
             .background(
                 Color.clear
                     .onAppear {
@@ -56,16 +57,6 @@ struct PaneGroupView: View {
                         )
                     }
             )
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.Radius.pane, style: .continuous)
-                    .stroke(isFocused ? Theme.accent.opacity(0.4) : Theme.hairline, lineWidth: 1)
-                    .background {
-                        RoundedRectangle(cornerRadius: Theme.Radius.pane)
-                            .stroke(Theme.accent.opacity(isFocused ? 0.08 : 0), lineWidth: 3)
-                            .padding(-1.5)
-                    }
-                    .allowsHitTesting(false)
-            }
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Pane \(group.selectedTab.customTitle ?? group.selectedTab.automaticDisplayTitle)")
             .accessibilityValue(isFocused ? "Active pane" : "Inactive pane")

@@ -16,7 +16,6 @@ struct WorkspaceTabContentView: View {
                 WorkspaceLayoutView(model: model, workspaceID: workspace.id, layout: workspace.layout)
             }
         }
-            .padding(8)
             .id(workspace.id)
     }
 }

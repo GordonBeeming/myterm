@@ -98,8 +98,9 @@ There is one accent. Folder and workspace colors are separate: they stay the use
 
 MyTerm is flat. Tone and hairline borders separate surfaces, and shadows are kept for popovers.
 
-- **Panes:** a 10 pt rounded container on `paneGround` with a 1 pt hairline. The focused pane gets a focus ring: an accent border at 40% with a soft 3 pt accent halo at 8%. There is no background wash on focus.
-- **Gaps:** panes sit 6 pt apart. Splitters keep their native behavior and take the new visuals.
+- **Panes:** flush with the window and each other on `paneGround`, separated by a 1 pt hairline. No frame, no rounding, no glow.
+- **Focus:** in a split workspace, the selected tab of the focused pane carries a 2 pt accent underline, like an editor's active tab. A single pane, or a pane shown full screen, carries no focus mark, since there is nothing else it could be.
+- **Splitters:** keep their native behavior; the hairline sits inside a 6 pt drag target.
 - **Popovers and menus:** the only place shadows appear, and only the ones macOS draws.
 
 **The Working Surface Rule.** Terminal and browser content should remain visually dominant. Containers exist to frame the content.
@@ -137,9 +138,9 @@ The setting defaults to off and can be overridden per folder and per workspace. 
 
 ### Terminal Pane
 
-- **Surface:** SwiftTerm fills the pane container inside its hairline and radius.
+- **Surface:** SwiftTerm fills the pane edge to edge.
 - **Splits:** Native draggable splitters preserve child proportions. Each pane has one quiet overflow menu for split and close actions.
-- **Focus:** The AppKit first responder decides the active terminal. Only that terminal shows its focus ring and a caret at full opacity, and only it receives pane commands.
+- **Focus:** The AppKit first responder decides the active terminal. Only that terminal shows a caret at full opacity and only it receives pane commands; in a split workspace its selected tab also carries the focus underline.
 
 ### Browser Pane
 
