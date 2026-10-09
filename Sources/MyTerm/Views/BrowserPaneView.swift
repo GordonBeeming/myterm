@@ -102,7 +102,8 @@ private struct ObservedBrowserTabContent: View {
             browserButton("magnifyingglass", label: "Find in page", disabled: false) {
                 if isFindVisible { dismissFind() } else {
                     isFindVisible = true
-                    model.findInSelectedTab()
+                    selectWithoutFocusingContent()
+                    model.requestSelectedBrowserFind()
                 }
             }
             .background(isFindVisible ? Theme.selectedFill : .clear, in: RoundedRectangle(cornerRadius: 8))
@@ -132,11 +133,18 @@ private struct ObservedBrowserTabContent: View {
 
     private var addressCapsule: some View {
         HStack(spacing: 8) {
-            if controller.state.url?.scheme == "https" {
+            switch BrowserAddressSecurity.classify(controller.state.url) {
+            case .secure:
                 Image(systemName: "lock").foregroundStyle(Theme.textSecondary).accessibilityLabel("Secure connection")
-            } else if let url = controller.state.url, ["http", "file"].contains(url.scheme ?? "") || url.host == "localhost" {
+            case .local:
                 Text("local").font(Theme.Font.ui(11)).foregroundStyle(Theme.textSecondary)
                     .padding(.horizontal, 6).frame(height: 18).background(Theme.controlFill, in: RoundedRectangle(cornerRadius: 5))
+            case .insecure:
+                Image(systemName: "lock.open").foregroundStyle(Theme.textSecondary)
+                    .help("Not secure")
+                    .accessibilityLabel("Not secure connection")
+            case .none:
+                EmptyView()
             }
             BrowserAddressTextField(
                 text: Binding(get: { addressState.text }, set: { addressState.updateFromUser($0); suggestionIndex = 0 }),
@@ -314,8 +322,8 @@ private struct ObservedBrowserTabContent: View {
                 text: $findQuery,
                 beginEditing: { selectWithoutFocusingContent(); return true },
                 endEditing: {},
-                submit: { model.findInSelectedBrowser($0) },
-                submitBackwards: { model.findInSelectedBrowser($0, backwards: true) },
+                submit: { findInPane($0) },
+                submitBackwards: { findInPane($0, backwards: true) },
                 focusToken: findFocusToken,
                 didFocus: acknowledgeFind,
                 onEscape: dismissFind,
@@ -323,10 +331,10 @@ private struct ObservedBrowserTabContent: View {
             )
             .frame(width: 180, height: 28)
             browserButton("chevron.up", label: "Previous match", disabled: findQuery.isEmpty) {
-                model.findInSelectedBrowser(findQuery, backwards: true)
+                findInPane(findQuery, backwards: true)
             }
             browserButton("chevron.down", label: "Next match", disabled: findQuery.isEmpty) {
-                model.findInSelectedBrowser(findQuery)
+                findInPane(findQuery)
             }
             Button(action: dismissFind) {
                 Image(systemName: "xmark")
@@ -343,6 +351,11 @@ private struct ObservedBrowserTabContent: View {
         .shadow(color: .black.opacity(0.35), radius: 12, y: 6)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Find in page")
+    }
+
+    private func findInPane(_ query: String, backwards: Bool = false) {
+        selectWithoutFocusingContent()
+        controller.find(query, backwards: backwards)
     }
 
     private func handleBrowserRequests() {
@@ -406,6 +419,31 @@ private struct BrowserQuietButtonStyle: ButtonStyle {
             configuration.label
                 .background(isHovering || configuration.isPressed ? Theme.hoverFill : .clear, in: RoundedRectangle(cornerRadius: 8))
                 .onHover { isHovering = $0 }
+        }
+    }
+}
+
+enum BrowserAddressSecurity: Equatable {
+    case secure
+    case local
+    case insecure
+    case none
+
+    static func classify(_ url: URL?) -> Self {
+        guard let url else { return .none }
+        switch url.scheme?.lowercased() {
+        case "https": return .secure
+        case "file": return .local
+        case "http":
+            let host = (url.host ?? "").lowercased()
+                .trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+            let normalizedHost = host.hasSuffix(".") ? String(host.dropLast()) : host
+            if normalizedHost == "localhost" || normalizedHost.hasSuffix(".localhost")
+                || normalizedHost == "127.0.0.1" || normalizedHost == "::1" {
+                return .local
+            }
+            return .insecure
+        default: return .none
         }
     }
 }
