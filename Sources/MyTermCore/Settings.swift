@@ -199,6 +199,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
     public var newSessionWorkingDirectory: NewSessionWorkingDirectoryPolicy
     public var restoresAgentSessions: Bool
     public var namesTabsFromAgentSessions: Bool
+    public var showsIdleAgentIcon: Bool
     /// Whether the toolbar carries the bell that lists the tabs whose agent needs the user. The
     /// list is kept either way; this only decides whether the toolbar shows it. Global: the
     /// toolbar is the app's, not a workspace's, so no override carries it.
@@ -226,6 +227,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         newSessionWorkingDirectory: NewSessionWorkingDirectoryPolicy = .home,
         restoresAgentSessions: Bool = true,
         namesTabsFromAgentSessions: Bool = true,
+        showsIdleAgentIcon: Bool = false,
         showsAgentNotificationBell: Bool = true,
         scrollbackLines: Int = TerminalPreferences.defaultScrollbackLines,
         cursorShape: TerminalCursorShape = .block,
@@ -249,6 +251,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         self.newSessionWorkingDirectory = newSessionWorkingDirectory
         self.restoresAgentSessions = restoresAgentSessions
         self.namesTabsFromAgentSessions = namesTabsFromAgentSessions
+        self.showsIdleAgentIcon = showsIdleAgentIcon
         self.showsAgentNotificationBell = showsAgentNotificationBell
         self.scrollbackLines = Self.clampedScrollbackLines(scrollbackLines)
         self.cursorShape = cursorShape
@@ -277,6 +280,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
             newSessionWorkingDirectory: newSessionWorkingDirectory,
             restoresAgentSessions: restoresAgentSessions,
             namesTabsFromAgentSessions: namesTabsFromAgentSessions,
+            showsIdleAgentIcon: showsIdleAgentIcon,
             showsAgentNotificationBell: showsAgentNotificationBell,
             scrollbackLines: scrollbackLines,
             cursorShape: cursorShape,
@@ -305,6 +309,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         try container.encode(newSessionWorkingDirectory, forKey: .newSessionWorkingDirectory)
         try container.encode(restoresAgentSessions, forKey: .restoresAgentSessions)
         try container.encode(namesTabsFromAgentSessions, forKey: .namesTabsFromAgentSessions)
+        try container.encode(showsIdleAgentIcon, forKey: .showsIdleAgentIcon)
         try container.encode(showsAgentNotificationBell, forKey: .showsAgentNotificationBell)
         try container.encode(scrollbackLines, forKey: .scrollbackLines)
         try container.encode(cursorShape, forKey: .cursorShape)
@@ -330,6 +335,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         case newSessionWorkingDirectory
         case restoresAgentSessions
         case namesTabsFromAgentSessions
+        case showsIdleAgentIcon
         case showsAgentNotificationBell
         case scrollbackLines
         case cursorShape
@@ -364,6 +370,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
             newSessionWorkingDirectory: (try? container.decode(NewSessionWorkingDirectoryPolicy.self, forKey: .newSessionWorkingDirectory)) ?? .home,
             restoresAgentSessions: (try? container.decode(Bool.self, forKey: .restoresAgentSessions)) ?? true,
             namesTabsFromAgentSessions: (try? container.decode(Bool.self, forKey: .namesTabsFromAgentSessions)) ?? true,
+            showsIdleAgentIcon: (try? container.decode(Bool.self, forKey: .showsIdleAgentIcon)) ?? false,
             showsAgentNotificationBell: (try? container.decode(Bool.self, forKey: .showsAgentNotificationBell)) ?? true,
             scrollbackLines: (try? container.decode(Int.self, forKey: .scrollbackLines)) ?? Self.defaultScrollbackLines,
             cursorShape: (try? container.decode(TerminalCursorShape.self, forKey: .cursorShape)) ?? .block,
@@ -437,6 +444,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
     public var newSessionWorkingDirectory: NewSessionWorkingDirectoryPolicy?
     public var restoresAgentSessions: Bool?
     public var namesTabsFromAgentSessions: Bool?
+    public var showsIdleAgentIcon: Bool?
     public var scrollbackLines: Int?
     public var cursorShape: TerminalCursorShape?
     public var cursorBlink: Bool?
@@ -462,6 +470,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         case newSessionWorkingDirectory
         case restoresAgentSessions
         case namesTabsFromAgentSessions
+        case showsIdleAgentIcon
         case scrollbackLines
         case cursorShape
         case cursorBlink
@@ -496,6 +505,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         newSessionWorkingDirectory = try? container.decodeIfPresent(NewSessionWorkingDirectoryPolicy.self, forKey: .newSessionWorkingDirectory)
         restoresAgentSessions = try? container.decodeIfPresent(Bool.self, forKey: .restoresAgentSessions)
         namesTabsFromAgentSessions = try? container.decodeIfPresent(Bool.self, forKey: .namesTabsFromAgentSessions)
+        showsIdleAgentIcon = try? container.decodeIfPresent(Bool.self, forKey: .showsIdleAgentIcon)
         scrollbackLines = try? container.decodeIfPresent(Int.self, forKey: .scrollbackLines)
         cursorShape = try? container.decodeIfPresent(TerminalCursorShape.self, forKey: .cursorShape)
         cursorBlink = try? container.decodeIfPresent(Bool.self, forKey: .cursorBlink)
@@ -522,6 +532,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         try container.encodeIfPresent(newSessionWorkingDirectory, forKey: .newSessionWorkingDirectory)
         try container.encodeIfPresent(restoresAgentSessions, forKey: .restoresAgentSessions)
         try container.encodeIfPresent(namesTabsFromAgentSessions, forKey: .namesTabsFromAgentSessions)
+        try container.encodeIfPresent(showsIdleAgentIcon, forKey: .showsIdleAgentIcon)
         try container.encodeIfPresent(scrollbackLines, forKey: .scrollbackLines)
         try container.encodeIfPresent(cursorShape, forKey: .cursorShape)
         try container.encodeIfPresent(cursorBlink, forKey: .cursorBlink)
@@ -547,6 +558,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
             newSessionWorkingDirectory: newSessionWorkingDirectory ?? base.newSessionWorkingDirectory,
             restoresAgentSessions: restoresAgentSessions ?? base.restoresAgentSessions,
             namesTabsFromAgentSessions: namesTabsFromAgentSessions ?? base.namesTabsFromAgentSessions,
+            showsIdleAgentIcon: showsIdleAgentIcon ?? base.showsIdleAgentIcon,
             // Global only: the toolbar is the app's, so an override has nothing to say about it.
             showsAgentNotificationBell: base.showsAgentNotificationBell,
             scrollbackLines: scrollbackLines ?? base.scrollbackLines,

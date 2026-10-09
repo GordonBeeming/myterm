@@ -108,6 +108,7 @@ for launcher in codex codex-statusline myterm-codex; do
   cp "$ROOT_DIR/Resources/$launcher" "$APP_RESOURCES/$launcher"
   chmod +x "$APP_RESOURCES/$launcher"
 done
+cp -R "$ROOT_DIR/Resources/Fonts" "$APP_RESOURCES/Fonts"
 cp -R "$ROOT_DIR/Resources/zsh" "$APP_RESOURCES/"
 chmod +x "$APP_BINARY"
 chmod +x "$APP_RESOURCES/myterm-browser"

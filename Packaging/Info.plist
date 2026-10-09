@@ -132,6 +132,8 @@
     <string>Programs you run in MyTerm can read and write files on network volumes.</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>ATSApplicationFontsPath</key>
+    <string>Fonts</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
 </dict>
