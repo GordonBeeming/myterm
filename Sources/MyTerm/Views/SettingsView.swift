@@ -92,7 +92,14 @@ struct SettingsView: View {
         model.settingsScope
     }
 
-    private var scopeWorkspace: Workspace {
+    private var scopeWorkspace: Workspace? {
+        if case .folder(let folderID) = scope {
+            let selectedWorkspace = model.selectedWorkspace
+            if selectedWorkspace.folderID == folderID { return selectedWorkspace }
+            let workspaces = model.workspaces.filter { $0.folderID == folderID }
+            // The sidebar puts pinned workspaces before the remaining stored order.
+            return workspaces.first(where: \.isPinned) ?? workspaces.first
+        }
         if case .workspace(let id) = scope,
            let workspace = model.workspaces.first(where: { $0.id == id }) { return workspace }
         if let id = scopeWorkspaceID,
@@ -103,8 +110,8 @@ struct SettingsView: View {
     private var scopeFolder: WorkspaceFolder? {
         if case .folder(let id) = scope { return model.folders.first(where: { $0.id == id }) }
         let folderID: WorkspaceFolderID?
-        if case .workspace = scope { folderID = scopeWorkspace.folderID }
-        else { folderID = scopeFolderID ?? scopeWorkspace.folderID }
+        if case .workspace = scope { folderID = scopeWorkspace?.folderID }
+        else { folderID = scopeFolderID ?? scopeWorkspace?.folderID }
         return model.folders.first(where: { $0.id == folderID })
     }
 
@@ -123,9 +130,11 @@ struct SettingsView: View {
                             Text(folder.title)
                         }
                     }
-                    scopeButton(.workspace(scopeWorkspace.id)) {
-                        if let emoji = scopeWorkspace.emoji { Text(emoji) }
-                        Text(scopeWorkspace.title)
+                    if let workspace = scopeWorkspace {
+                        scopeButton(.workspace(workspace.id)) {
+                            if let emoji = workspace.emoji { Text(emoji) }
+                            Text(workspace.title)
+                        }
                     }
                 }
                 .padding(4)
@@ -139,7 +148,7 @@ struct SettingsView: View {
     private func scopeButton<Content: View>(_ target: TerminalSettingsScope,
                                             @ViewBuilder content: () -> Content) -> some View {
         Button {
-            scopeWorkspaceID = scopeWorkspace.id
+            scopeWorkspaceID = scopeWorkspace?.id
             scopeFolderID = scopeFolder?.id
             model.prepareSettings(for: target)
         } label: {
