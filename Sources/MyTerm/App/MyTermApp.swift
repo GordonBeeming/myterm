@@ -35,6 +35,9 @@ struct MyTermApp: App {
                 ContentUnavailableView("Settings unavailable", systemImage: "exclamationmark.triangle")
             }
         }
+        // Settings windows are fixed-size by default; this lets the window grow while the view's
+        // minimum frame still sets how small it can go.
+        .windowResizability(.contentMinSize)
         // The main scene owns the Global Settings command and its scope selection.
         .commandsRemoved()
     }

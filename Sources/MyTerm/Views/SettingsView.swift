@@ -33,10 +33,8 @@ struct SettingsView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 10)
                             .frame(height: 32)
-                            .background(section == item ? Theme.selectedFill : .clear,
-                                        in: RoundedRectangle(cornerRadius: 8))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(SettingsSelectableButtonStyle(isSelected: section == item, cornerRadius: 8))
                     .keyboardShortcut(KeyEquivalent(Character(String(item.index + 1))), modifiers: .command)
                     .accessibilityLabel("\(item.rawValue) settings")
                     .accessibilityAddTraits(section == item ? .isSelected : [])
@@ -47,6 +45,9 @@ struct SettingsView: View {
             .frame(width: 216)
             .background(Theme.sidebarGround)
             .focusable()
+            // Focus is only here so the arrow keys move between sections; the selected row already
+            // shows where you are, so the ring the column would draw is noise.
+            .focusEffectDisabled()
             .onMoveCommand { direction in
                 let offset = direction == .up ? -1 : direction == .down ? 1 : 0
                 let items = SettingsSection.allCases
@@ -142,10 +143,8 @@ struct SettingsView: View {
                 .font(Theme.Font.ui(12))
                 .padding(.horizontal, 10)
                 .frame(height: 28)
-                .background(scope == target ? Theme.selectedFill : .clear,
-                            in: RoundedRectangle(cornerRadius: 6))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SettingsSelectableButtonStyle(isSelected: scope == target, cornerRadius: 6))
         .accessibilityAddTraits(scope == target ? .isSelected : [])
     }
 
@@ -1231,6 +1230,36 @@ struct SettingsRowsBuilder {
     static func buildEither(first: [AnyView]) -> [AnyView] { first }
     static func buildEither(second: [AnyView]) -> [AnyView] { second }
     static func buildArray(_ parts: [[AnyView]]) -> [AnyView] { parts.flatMap { $0 } }
+}
+
+/// A plain button that is clickable across its whole shape, not just where text is drawn, and
+/// shows a hover fill so an unselected row still reads as something to click.
+private struct SettingsSelectableButtonStyle: ButtonStyle {
+    let isSelected: Bool
+    let cornerRadius: CGFloat
+
+    func makeBody(configuration: Configuration) -> some View {
+        SelectableLabel(configuration: configuration, isSelected: isSelected, cornerRadius: cornerRadius)
+    }
+
+    private struct SelectableLabel: View {
+        let configuration: Configuration
+        let isSelected: Bool
+        let cornerRadius: CGFloat
+        @State private var isHovering = false
+
+        var body: some View {
+            configuration.label
+                .background(fill, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .onHover { isHovering = $0 }
+        }
+
+        private var fill: Color {
+            if isSelected || configuration.isPressed { return Theme.selectedFill }
+            return isHovering ? Theme.hoverFill : .clear
+        }
+    }
 }
 
 struct SettingsCard: View {
