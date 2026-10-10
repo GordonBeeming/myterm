@@ -3,16 +3,14 @@ import MyTermCore
 extension AppModel {
     func agentIdentity(forTab tabID: TabID) -> AgentIdentity? {
         _ = stateVersion
-        guard let agent = store.workspaces.lazy.flatMap(\.allTabs)
-            .first(where: { $0.id == tabID })?.terminalSession?.agentSession?.agent else { return nil }
-        return AgentIdentity(agentName: agent)
+        return liveAgentTabs[tabID].flatMap(AgentIdentity.init(agentName:))
     }
 
     func agentIdentity(forWorkspace workspaceID: WorkspaceID) -> AgentIdentity? {
         _ = stateVersion
-        guard let agent = store.workspaces.first(where: { $0.id == workspaceID })?
-            .focusedTabGroup?.selectedTab.terminalSession?.agentSession?.agent else { return nil }
-        return AgentIdentity(agentName: agent)
+        guard let tabID = store.workspaces.first(where: { $0.id == workspaceID })?
+            .focusedTabGroup?.selectedTabID else { return nil }
+        return agentIdentity(forTab: tabID)
     }
 
     func showsIdleAgentIcon(forWorkspace workspaceID: WorkspaceID) -> Bool {
