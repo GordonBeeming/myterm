@@ -166,6 +166,16 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
     /// GeistMono Nerd Font Mono, bundled with the app: it matches the interface's Geist Mono and
     /// carries the Nerd Font glyphs that Powerline and icon prompts draw, at one cell wide each.
     public static let defaultFontPostScriptName = "GeistMonoNFM"
+
+    /// The defaults these settings had before new installs got different ones. A saved file that
+    /// is missing one of these keys predates it, and its owner was running with the old value, so
+    /// decoding keeps that value instead of switching an upgrade to the new default.
+    static let legacy = (
+        browserDataScope: BrowserDataScope.workspace,
+        allowsLocalFileJavaScript: false,
+        fontPostScriptName: "Menlo-Regular",
+        cursorShape: TerminalCursorShape.block
+    )
     public static let defaultFontSize = 12.0
     public static let defaultScrollbackLines = 10_000
     public static let defaultTextFileOpenCommand = "ide browse {file}"
@@ -384,16 +394,16 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let legacyContainer = try decoder.container(keyedBy: LegacyCodingKeys.self)
         self.init(
-            browserDataScope: (try? container.decode(BrowserDataScope.self, forKey: .browserDataScope)) ?? .appWide,
+            browserDataScope: (try? container.decode(BrowserDataScope.self, forKey: .browserDataScope)) ?? Self.legacy.browserDataScope,
             webLinkDestination: (try? container.decode(WebLinkDestination.self, forKey: .webLinkDestination)) ?? .myterm,
             textFileOpenCommand: (try? container.decode(String.self, forKey: .textFileOpenCommand))
                 ?? (try? legacyContainer.decode(String.self, forKey: .markdownOpenCommand))
                 ?? Self.defaultTextFileOpenCommand,
             nativeTextFilePatterns: (try? container.decode([String].self, forKey: .nativeTextFilePatterns)) ?? Self.defaultNativeTextFilePatterns,
             browserFilePatterns: (try? container.decode([String].self, forKey: .browserFilePatterns)) ?? Self.defaultBrowserFilePatterns,
-            allowsLocalFileJavaScript: (try? container.decode(Bool.self, forKey: .allowsLocalFileJavaScript)) ?? true,
+            allowsLocalFileJavaScript: (try? container.decode(Bool.self, forKey: .allowsLocalFileJavaScript)) ?? Self.legacy.allowsLocalFileJavaScript,
             sharesBrowserSignInsWithCompanion: (try? container.decode(Bool.self, forKey: .sharesBrowserSignInsWithCompanion)) ?? true,
-            fontPostScriptName: (try? container.decode(String.self, forKey: .fontPostScriptName)) ?? Self.defaultFontPostScriptName,
+            fontPostScriptName: (try? container.decode(String.self, forKey: .fontPostScriptName)) ?? Self.legacy.fontPostScriptName,
             fontSize: (try? container.decode(Double.self, forKey: .fontSize)) ?? Self.defaultFontSize,
             terminalAppearance: (try? container.decode(TerminalAppearance.self, forKey: .terminalAppearance)) ?? .system,
             terminalTheme: (try? container.decode(TerminalTheme.self, forKey: .terminalTheme)) ?? .system,
@@ -410,7 +420,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
             questionIndicatorIcon: (try? container.decode(QuestionIndicatorIcon.self, forKey: .questionIndicatorIcon)) ?? .pulsingBubble,
             questionIndicatorColor: (try? container.decode(WorkspaceColor.self, forKey: .questionIndicatorColor)) ?? .purple,
             scrollbackLines: (try? container.decode(Int.self, forKey: .scrollbackLines)) ?? Self.defaultScrollbackLines,
-            cursorShape: (try? container.decode(TerminalCursorShape.self, forKey: .cursorShape)) ?? .beam,
+            cursorShape: (try? container.decode(TerminalCursorShape.self, forKey: .cursorShape)) ?? Self.legacy.cursorShape,
             cursorBlink: (try? container.decode(Bool.self, forKey: .cursorBlink)) ?? true,
             optionAsMeta: (try? container.decode(Bool.self, forKey: .optionAsMeta)) ?? true,
             lineEditingMode: (try? container.decode(TerminalLineEditingMode.self, forKey: .lineEditingMode)) ?? .emacs

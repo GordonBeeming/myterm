@@ -809,7 +809,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(persistenceURL: url)
 
-        XCTAssertTrue(store.globalSettings.allowsLocalFileJavaScript, "a missing key takes the default")
+        XCTAssertFalse(store.globalSettings.allowsLocalFileJavaScript, "a file that predates the key keeps scripts off")
         XCTAssertEqual(store.loadReport.structuralRepairCount, 0)
         XCTAssertTrue(store.loadReport.backupURLs.isEmpty)
         XCTAssertEqual(try Data(contentsOf: recoveryBackupURL), existingBackup)
