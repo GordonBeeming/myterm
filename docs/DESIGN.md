@@ -44,7 +44,7 @@ The app stays deliberately narrow in scope. It should never resemble an agent da
 - Compact, readable density
 - Large uninterrupted terminal and browser surfaces
 - Clear focus and keyboard paths
-- Native behavior where macOS owns it: text fields, menus, popovers, splitters, and the Settings scene
+- Native behavior where macOS owns it: text fields, menus, popovers, splitters, and the Settings window
 - No ornamental status or motion
 
 ## Colors
@@ -145,7 +145,7 @@ The setting defaults to off and applies to the whole app. An agent appears only 
 ### Browser Pane
 
 - **Toolbar:** Back, Forward, and a Reload button that becomes Stop while a page loads, all 32 pt. Then the address capsule, a find button, and the pane actions menu.
-- **Address capsule:** 34 pt tall with a 10 pt radius. The host is in `textStrong` and the path in `textSecondary`, both in Geist Mono. A lock glyph marks https, and a "local" chip marks anything else.
+- **Address capsule:** 34 pt tall with a 10 pt radius. The host is in `textStrong` and the path in `textSecondary`, both in Geist Mono. A lock glyph marks https. A "local" chip marks file URLs and loopback hosts (`localhost`, `*.localhost`, `127.0.0.1`, `::1`). Remote http shows an open lock labelled "Not secure", and addresses such as `about:blank` show no indicator.
 - **Browser-data chip:** Shown when the data profile is scoped to a folder, workspace, or project directory. It carries the folder glyph in the folder's color and the scope name.
 - **Focus:** A focused address takes an accent border and the same 3 pt halo as a focused pane.
 - **Suggestions:** A popover with "Go to" the typed address, followed by matching open tabs in the workspace, which switch to that tab. Arrow keys move, Return opens, Escape closes. There is nothing else in the list, and no button for opening the default browser.
