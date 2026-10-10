@@ -13,13 +13,14 @@ final class CodexHooksTests: XCTestCase {
         XCTAssertTrue(controller.isInstalled)
 
         let hooks = try readHooks(at: url)
-        XCTAssertEqual(Set(hooks.keys), ["SessionStart", "UserPromptSubmit", "Stop", "PermissionRequest", "SessionEnd"])
+        XCTAssertEqual(Set(hooks.keys), ["SessionStart", "UserPromptSubmit", "Stop", "PermissionRequest", "PostToolUse", "SessionEnd"])
         XCTAssertNil(hooks["Notification"], "Notification is Claude's name for it, not Codex's")
 
         let stop = try XCTUnwrap(command(in: hooks, event: "Stop"))
-        XCTAssertTrue(stop.contains("agent=codex"))
-        XCTAssertTrue(stop.contains("event=finished"))
+        XCTAssertTrue(stop.contains("codex finished"))
+        XCTAssertFalse(stop.contains("plutil"))
         XCTAssertTrue(stop.hasSuffix(AgentHooksController.marker))
+        XCTAssertTrue(try XCTUnwrap(command(in: hooks, event: "PostToolUse")).contains("codex working"))
     }
 
     func testRefreshingOlderCodexHooksUpgradesIdentityParsingAndAddsSessionEnd() throws {
@@ -37,8 +38,8 @@ final class CodexHooksTests: XCTestCase {
 
         XCTAssertTrue(controller.isInstalled)
         let upgraded = try readHooks(at: url)
-        XCTAssertTrue(try XCTUnwrap(command(in: upgraded, event: "Stop")).contains("plutil -extract session_id"))
-        XCTAssertTrue(try XCTUnwrap(command(in: upgraded, event: "SessionEnd")).contains("event=exited"))
+        XCTAssertTrue(try XCTUnwrap(command(in: upgraded, event: "Stop")).contains("myterm-agent-hook"))
+        XCTAssertTrue(try XCTUnwrap(command(in: upgraded, event: "SessionEnd")).contains("codex exited"))
     }
 
     func testRefreshingCodexSessionEndCorrectsOnlyTheManagedTimeout() throws {

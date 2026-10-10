@@ -40,3 +40,7 @@ if [ -n "${MYTERM_RESOURCE_DIR:-}" ]; then
   export PATH
   unset _myterm_kept_path _myterm_entry
 fi
+
+if (( $+functions[_myterm_shell_ready] )); then
+  precmd_functions+=( _myterm_shell_ready )
+fi

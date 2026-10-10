@@ -82,8 +82,8 @@ jobs:
         run: |
           resources="dist/myterm.app/Contents/Resources"
           missing=0
-          for shim in myterm-browser open myterm-bash-env codex codex-statusline myterm-codex \
-                      zsh/_myterm_common zsh/.zshenv zsh/.zprofile zsh/.zshrc zsh/.zlogin zsh/.zlogout; do
+          for shim in myterm-browser open myterm-bash-env myterm-agent-hook codex codex-statusline myterm-codex \
+                      zsh/_myterm_common zsh/_myterm_startup zsh/.zshenv zsh/.zprofile zsh/.zshrc zsh/.zlogin zsh/.zlogout; do
             if [ ! -f "$resources/$shim" ]; then
               echo "missing from the bundle: $shim" >&2
               missing=1

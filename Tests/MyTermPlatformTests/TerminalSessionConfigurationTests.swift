@@ -7,6 +7,67 @@ private final class FocusableTerminalTestView: NSView {
 }
 
 final class TerminalSessionConfigurationTests: XCTestCase {
+    @MainActor
+    func testInitialCommandSurvivesStartupReadingTerminalInput() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "myterm-startup-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let marker = root.appending(path: "command-ran")
+        // Prompt tooling can consume queued terminal input while querying the terminal.
+        try "HISTFILE=/dev/null\nread -t 0.5 startup_input\nPS1='$ '\n".write(
+            to: root.appending(path: ".zshrc"), atomically: true, encoding: .utf8
+        )
+        let resources = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().appending(path: "Resources")
+        let session = try SwiftTermTerminalSession(configuration: TerminalSessionConfiguration(
+            shell: URL(fileURLWithPath: "/bin/zsh"), workingDirectory: root,
+            shellArguments: ["-l", "-i"], initialCommand: "printf ran > '\(marker.path)'",
+            environment: ["ZDOTDIR": resources.appending(path: "zsh").path,
+                          "MYTERM_ORIGINAL_ZDOTDIR": root.path, "MYTERM_RESOURCE_DIR": resources.path]
+        ))
+        defer { session.terminate() }
+        try session.start()
+        for _ in 0..<100 {
+            if FileManager.default.fileExists(atPath: marker.path) { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path),
+                      "The resume command must run after shell startup, rather than becoming startup input")
+    }
+
+    @MainActor
+    func testMissingStartupReadinessWarnsWithoutEndingTheShell() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "myterm-no-readiness-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try "export HISTFILE=/dev/null\nexec /bin/zsh -f\n".write(
+            to: root.appending(path: ".zshrc"), atomically: true, encoding: .utf8
+        )
+        let resources = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().appending(path: "Resources")
+        let marker = root.appending(path: "command-ran")
+        let session = try SwiftTermTerminalSession(configuration: TerminalSessionConfiguration(
+            shell: URL(fileURLWithPath: "/bin/zsh"), workingDirectory: root,
+            shellArguments: ["-i"], initialCommand: "printf ran > '\(marker.path)'",
+            environment: ["ZDOTDIR": resources.appending(path: "zsh").path,
+                          "MYTERM_ORIGINAL_ZDOTDIR": root.path, "MYTERM_RESOURCE_DIR": resources.path]
+        ))
+        defer { session.terminate() }
+        var warned = false
+        var failed = false
+        session.onEvent = { event in
+            if case .initialCommandFailed = event { warned = true }
+            if case .failed = event { failed = true }
+        }
+        try session.start()
+        let deadline = Date().addingTimeInterval(12)
+        while !warned, Date() < deadline { try await Task.sleep(for: .milliseconds(50)) }
+        XCTAssertTrue(warned)
+        XCTAssertFalse(failed)
+        XCTAssertTrue(session.isRunning)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path))
+    }
+
     // Channel values are full-scale so the expected NSColor can be written out directly
     // instead of re-deriving MyTermPlatform's 16-bit-to-unit-interval conversion here.
     private static let themedRuntimeConfiguration = TerminalRuntimeConfiguration(

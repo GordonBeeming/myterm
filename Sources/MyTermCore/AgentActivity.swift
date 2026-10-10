@@ -29,13 +29,18 @@ public struct AgentActivityReport: Equatable, Hashable, Sendable {
     public let sessionID: String?
     public let workingDirectory: URL?
     public let codexLauncher: CodexLauncher?
+    /// Fingerprint of a tool's name and input, shared by its permission and completion reports.
+    public let toolRequestID: String?
 
-    public init(agent: String, activity: AgentActivity, sessionID: String? = nil, workingDirectory: URL? = nil, codexLauncher: CodexLauncher? = nil) {
+    public init(agent: String, activity: AgentActivity, sessionID: String? = nil, workingDirectory: URL? = nil, codexLauncher: CodexLauncher? = nil, toolRequestID: String? = nil) {
         self.agent = agent
         self.activity = activity
         self.sessionID = AgentSessionHandle.validatedSessionID(sessionID)
         self.workingDirectory = workingDirectory
         self.codexLauncher = codexLauncher
+        self.toolRequestID = toolRequestID.flatMap {
+            $0.utf8.count == 64 && $0.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) } ? $0 : nil
+        }
     }
 }
 
@@ -57,6 +62,7 @@ public enum AgentActivityMarker {
         var sessionID: String?
         var directory: URL?
         var launcher: CodexLauncher?
+        var toolRequestID: String?
         var validRecoveryMetadata = true
 
         for field in payload.split(separator: ";", omittingEmptySubsequences: true) {
@@ -81,13 +87,15 @@ public enum AgentActivityMarker {
             case "launcher":
                 launcher = CodexLauncher(rawValue: value)
                 if launcher == nil { validRecoveryMetadata = false }
+            case "tool":
+                toolRequestID = String(value)
             default:
                 continue
             }
         }
 
         guard let agent, let activity else { return nil }
-        return AgentActivityReport(agent: agent, activity: activity, sessionID: validRecoveryMetadata ? sessionID : nil, workingDirectory: directory, codexLauncher: launcher)
+        return AgentActivityReport(agent: agent, activity: activity, sessionID: validRecoveryMetadata ? sessionID : nil, workingDirectory: directory, codexLauncher: launcher, toolRequestID: toolRequestID)
     }
 
     /// Accepts the names other terminals already use for these states, so one hook can serve several apps.

@@ -18,11 +18,16 @@ final class CodexRecoveryE2ETests: XCTestCase {
         try await verify(.statusline, binaryVariable: "MYTERM_STATUSLINE_CODEX_BINARY")
     }
 
+    func testStatuslineCodexResumesAfterZshStartupReadsInput() async throws {
+        try await verify(.statusline, binaryVariable: "MYTERM_STATUSLINE_CODEX_BINARY", startupReadsInput: true)
+    }
+
     func testAbsoluteStatuslineCodexSurvivesTwoRestarts() async throws {
         try await verify(.statusline, binaryVariable: "MYTERM_STATUSLINE_CODEX_BINARY", absoluteLaunch: true)
     }
 
-    private func verify(_ launcher: CodexLauncher, binaryVariable: String, absoluteLaunch: Bool = false) async throws {
+    private func verify(_ launcher: CodexLauncher, binaryVariable: String, absoluteLaunch: Bool = false,
+                        startupReadsInput: Bool = false) async throws {
         guard ProcessInfo.processInfo.environment["MYTERM_CODEX_E2E"] == "1",
               let binary = ProcessInfo.processInfo.environment[binaryVariable] else {
             throw XCTSkip("Set MYTERM_CODEX_E2E=1 and both CLI binary paths to run real-PTY checks")
@@ -42,7 +47,7 @@ final class CodexRecoveryE2ETests: XCTestCase {
             model?.terminateTerminalSessions()
             try? FileManager.default.removeItem(at: root)
         }
-        let testEnvironment = [
+        var testEnvironment = [
             "CODEX_HOME": home.path,
             "OPENAI_API_KEY": "myterm-invalid-test-key",
             // npm's CLI needs node beside its launcher; keep that dependency in the
@@ -50,6 +55,13 @@ final class CodexRecoveryE2ETests: XCTestCase {
             "PATH": "\(resources.path):\(bin.path):\(URL(fileURLWithPath: binary).deletingLastPathComponent().path):/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
             "PS1": "$ "
         ]
+        if startupReadsInput {
+            testEnvironment["ZDOTDIR"] = resources.appending(path: "zsh").path
+            testEnvironment["MYTERM_ORIGINAL_ZDOTDIR"] = root.path
+            try "HISTFILE=/dev/null\nread -t 0.5 startup_input\nPS1='$ '\n".write(
+                to: root.appending(path: ".zshrc"), atomically: true, encoding: .utf8
+            )
+        }
         let config = """
         check_for_update_on_startup = false
         [features]
@@ -79,7 +91,7 @@ final class CodexRecoveryE2ETests: XCTestCase {
         try "#!/bin/sh\nexec /bin/sh -i\n".write(to: shell, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: shell.path)
         let seed = try AppModel(channel: .development, applicationSupportDirectory: support, startsTerminalProcesses: false)
-        seed.updateGlobalSettings { $0.shell = .custom(path: shell.path) }
+        seed.updateGlobalSettings { $0.shell = .custom(path: startupReadsInput ? "/bin/zsh" : shell.path) }
         seed.persistWorkspaceStore()
 
         func boot() throws -> AppModel {
@@ -116,6 +128,7 @@ final class CodexRecoveryE2ETests: XCTestCase {
             // The first restart gets no prompt: the next restart must still recover.
             try await Task.sleep(for: .seconds(2))
             try await wait(resumed, until: { resumed.activeForegroundProcessName != nil })
+            try await wait(resumed, until: { rebooted.agentIdentity(forTab: tabID) == .codex })
             if restart == 1 {
                 // A submitted turn proves the final resumed runtime has the same ID.
                 try send("Reply only OK. Do not use tools.", to: resumed)

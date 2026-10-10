@@ -50,15 +50,17 @@ final class AgentHookCommandTests: XCTestCase {
 
     private func run(
         _ activity: AgentActivity = .finished,
-        ignoring ignoredMessage: String? = nil,
         agent: String = "claude",
         stdin: String,
         environment: [String: String] = ["MYTERM_PANE_ID": "pane"]
     ) throws -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = ["-c", AgentHooksController.command(agent: agent, activity: activity, ignoring: ignoredMessage)]
+        process.arguments = ["-c", AgentHooksController.command(agent: agent, activity: activity)]
         var env = environment
+        let resources = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().appending(path: "Resources")
+        env["MYTERM_RESOURCE_DIR"] = resources.path
         env["PATH"] = directory.appending(path: "bin").path + ":/usr/bin:/bin"
         process.environment = env
         let input = Pipe()
@@ -113,6 +115,18 @@ final class AgentHookCommandTests: XCTestCase {
         XCTAssertEqual(report.codexLauncher, .statusline)
         XCTAssertEqual(report.workingDirectory?.path, "/tmp/a project")
         XCTAssertEqual(report.sessionID, "abc")
+    }
+
+    func testCodexPermissionAndCompletionShareAnInputFingerprint() throws {
+        let permission = try XCTUnwrap(report(in: run(.awaitingInput, agent: "codex", stdin:
+            #"{"session_id":"abc","tool_name":"Bash","tool_input":{"command":"echo OK","description":"approve this command"}}"#)))
+        let completed = try XCTUnwrap(report(in: run(.working, agent: "codex", stdin:
+            #"{"session_id":"abc","tool_name":"Bash","tool_input":{"description":null,"command":"echo OK"}}"#)))
+        let different = try XCTUnwrap(report(in: run(.working, agent: "codex", stdin:
+            #"{"session_id":"abc","tool_name":"Bash","tool_input":{"command":"echo other","description":null}}"#)))
+        XCTAssertNotNil(permission.toolRequestID)
+        XCTAssertEqual(permission.toolRequestID, completed.toolRequestID)
+        XCTAssertNotEqual(permission.toolRequestID, different.toolRequestID)
     }
 
     func testAnAbsoluteClientPathReportsItsLauncherWithoutTheShim() throws {
@@ -195,18 +209,15 @@ final class AgentHookCommandTests: XCTestCase {
     /// the payload on the hook's standard input is the only thing that separates them.
     func testAnIdlePromptIsDroppedAndAQuestionIsReported() throws {
         let notification = try XCTUnwrap(AgentHookTarget.claude.events.first { $0.name == "Notification" })
-        let ignored = try XCTUnwrap(notification.ignoredMessage)
 
         let idle = try run(
             notification.activity,
-            ignoring: ignored,
             stdin: #"{"session_id":"abc","hook_event_name":"Notification","message":"Claude is waiting for your input"}"#
         )
         XCTAssertEqual(idle, "", "A prompt left sitting is nothing for the user to answer")
 
         let question = try run(
             notification.activity,
-            ignoring: ignored,
             stdin: #"{"session_id":"abc","hook_event_name":"Notification","message":"Claude needs your permission to use Bash"}"#
         )
         let report = try XCTUnwrap(report(in: question))

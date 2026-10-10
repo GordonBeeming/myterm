@@ -21,17 +21,17 @@ final class AgentHooksControllerTests: XCTestCase {
         )
         let stop = try XCTUnwrap((hooks["Stop"] as? [[String: Any]])?.first)
         let command = try XCTUnwrap((stop["hooks"] as? [[String: Any]])?.first?["command"] as? String)
-        XCTAssertTrue(command.contains("MYTERM_PANE_ID"), "The hook must stay silent outside MyTerm")
-        XCTAssertTrue(command.contains("7337;agent=claude;event=finished;session=%s"))
-        XCTAssertTrue(command.contains("session_id"), "The hook must report the conversation to resume")
+        XCTAssertTrue(command.contains("MYTERM_RESOURCE_DIR"))
+        XCTAssertTrue(command.contains("myterm-agent-hook\" claude finished"))
+        XCTAssertFalse(command.contains("plutil"), "Payload parsing belongs in the shipped script")
         XCTAssertTrue(command.hasSuffix(AgentHooksController.marker))
 
         // Starting or resuming a session must not report work in progress: the pane is sitting
         // where the user left it.
         let sessionStart = try XCTUnwrap((hooks["SessionStart"] as? [[String: Any]])?.first)
         let startCommand = try XCTUnwrap((sessionStart["hooks"] as? [[String: Any]])?.first?["command"] as? String)
-        XCTAssertTrue(startCommand.contains("event=ready"))
-        XCTAssertFalse(startCommand.contains("event=working"))
+        XCTAssertTrue(startCommand.contains("claude ready"))
+        XCTAssertFalse(startCommand.contains("claude working"))
     }
 
     func testInstallKeepsEverythingElseInTheFile() throws {
@@ -119,11 +119,7 @@ final class AgentHooksControllerTests: XCTestCase {
         for event in controller.target.events {
             var entries = try XCTUnwrap(hooks[event.name] as? [[String: Any]])
             var inner = try XCTUnwrap(entries[0]["hooks"] as? [[String: Any]])
-            let command = try XCTUnwrap(inner[0]["command"] as? String)
-            inner[0]["command"] = command.replacingOccurrences(
-                of: #"[ -n "${MYTERM_PANE_ID:-}" ] &&"#,
-                with: #"[ -n "${MYTERM_PANE_ID:-}" ] && [ -z "${CLAUDE_CODE_CHILD_SESSION:-}" ] &&"#
-            )
+            inner[0]["command"] = "[ -n \"${MYTERM_PANE_ID:-}\" ] && [ -z \"${CLAUDE_CODE_CHILD_SESSION:-}\" ] && echo old " + AgentHooksController.marker
             entries[0]["hooks"] = inner
             hooks[event.name] = entries
         }
@@ -143,7 +139,7 @@ final class AgentHooksControllerTests: XCTestCase {
             XCTAssertEqual(commands.count, 1, event.name)
             XCTAssertFalse(commands[0].contains("CLAUDE_CODE_CHILD_SESSION"), event.name)
             XCTAssertEqual(commands[0], AgentHooksController.command(
-                agent: controller.target.agent, activity: event.activity, ignoring: event.ignoredMessage
+                agent: controller.target.agent, activity: event.activity
             ))
         }
     }

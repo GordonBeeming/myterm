@@ -21,6 +21,46 @@ final class AgentLifecycleTests: XCTestCase {
 
     // MARK: - Hook order
 
+    func testStartupCommandWarningShowsItsMessageWithoutEndingTheTerminal() throws {
+        let fixture = try makeFixture(isActive: false)
+        let message = "Shell startup did not signal readiness."
+        fixture.session.emit(.initialCommandFailed(TerminalSessionFailure(message: message)))
+        XCTAssertEqual(fixture.model.errorDescription, message)
+        XCTAssertTrue(fixture.session.isRunning)
+    }
+
+    func testCompletingAnotherToolDoesNotClearAnOutstandingCodexPermission() throws {
+        let fixture = try makeFixture(isActive: false)
+        func emit(_ activity: String, tool: String) throws {
+            let report = try XCTUnwrap(AgentActivityMarker.report(fromPayload:
+                "agent=codex;event=\(activity);session=abc;tool=\(tool)"))
+            fixture.session.emit(.agentActivity(report))
+        }
+        let pending = String(repeating: "a", count: 64)
+        let other = String(repeating: "b", count: 64)
+        try emit("awaiting_input", tool: pending)
+        try emit("working", tool: other)
+        XCTAssertEqual(fixture.model.agentAttention(forTab: fixture.tabID), .awaitingInput)
+        try emit("awaiting_input", tool: pending)
+        try emit("working", tool: pending)
+        XCTAssertEqual(fixture.model.agentAttention(forTab: fixture.tabID), .awaitingInput)
+        try emit("working", tool: pending)
+        XCTAssertEqual(fixture.model.agentAttention(forTab: fixture.tabID), .working)
+    }
+
+    func testCodexToolCompletionClearsThePermissionQuestionDuringTheTurn() throws {
+        let fixture = try makeFixture(isActive: false)
+        for eventName in ["UserPromptSubmit", "PermissionRequest", "PostToolUse"] {
+            let event = try XCTUnwrap(AgentHookTarget.codex.events.first { $0.name == eventName })
+            fixture.emit(event.activity, agent: "codex", session: "abc")
+            if eventName == "PermissionRequest" {
+                XCTAssertEqual(fixture.model.agentAttention(forTab: fixture.tabID), .awaitingInput)
+            }
+        }
+        XCTAssertEqual(fixture.model.agentAttention(forTab: fixture.tabID), .working)
+        XCTAssertFalse(fixture.model.needsAgentAttention(workspaceID: fixture.workspaceID))
+    }
+
     func testAStopBeforeANotificationLeavesTheQuestionStanding() throws {
         let fixture = try makeFixture(isActive: false)
 
@@ -382,6 +422,57 @@ final class AgentLifecycleTests: XCTestCase {
     }
 
     // MARK: - Session identity
+
+    func testResumedCodexShowsItsIdentityBeforeItsFirstHook() throws {
+        for launcher in [CodexLauncher.standard, .statusline] {
+            let fixture = try makeFixture(isActive: false)
+            fixture.session.activeForegroundProcessName = launcher.rawValue
+            fixture.session.emit(.agentActivity(AgentActivityReport(
+                agent: "codex", activity: .ready, sessionID: "abc", codexLauncher: launcher
+            )))
+            fixture.model.persistTerminalSnapshots()
+            fixture.model.persistWorkspaceStore()
+
+            let relaunched = try makeFixture(in: fixture.directory, isActive: false)
+            XCTAssertNil(relaunched.model.agentIdentity(forTab: fixture.tabID))
+            relaunched.session.activeForegroundProcessName = launcher.rawValue
+            relaunched.session.emit(.foregroundProcessChanged(launcher.rawValue))
+
+            XCTAssertEqual(relaunched.model.agentIdentity(forTab: fixture.tabID), .codex)
+            XCTAssertEqual(relaunched.model.agentIdentity(forWorkspace: fixture.workspaceID), .codex)
+            XCTAssertNil(relaunched.model.agentAttention(forTab: fixture.tabID))
+
+            relaunched.session.activeForegroundProcessName = nil
+            relaunched.session.emit(.foregroundProcessChanged(nil))
+            XCTAssertNil(relaunched.model.agentIdentity(forTab: fixture.tabID))
+            XCTAssertEqual(relaunched.savedSession?.sessionID, "abc", "A failed resume must not retire the conversation before a hook confirms it")
+        }
+    }
+
+    func testForegroundDetectionDoesNotBlockARejoinedSessionsStartHook() throws {
+        let fixture = try makeFixture(isActive: false)
+        fixture.emit(.ready, agent: "codex", session: "abc")
+        fixture.emit(.exited, agent: "codex", session: "abc")
+        fixture.session.activeForegroundProcessName = "codex"
+        fixture.session.emit(.foregroundProcessChanged("codex"))
+
+        fixture.emit(.ready, agent: "codex", session: "abc")
+
+        XCTAssertEqual(fixture.savedSession?.sessionID, "abc")
+        XCTAssertEqual(fixture.model.liveAgentTabs[fixture.tabID], "codex")
+    }
+
+    func testAnUnrelatedForegroundProcessDoesNotBorrowTheSavedAgentsIcon() throws {
+        let fixture = try makeFixture(isActive: false)
+        fixture.session.activeForegroundProcessName = "codex"
+        fixture.emit(.ready, agent: "codex", session: "abc")
+        fixture.model.persistTerminalSnapshots()
+        fixture.model.persistWorkspaceStore()
+        let relaunched = try makeFixture(in: fixture.directory, isActive: false)
+        relaunched.session.activeForegroundProcessName = "vim"
+        relaunched.session.emit(.foregroundProcessChanged("vim"))
+        XCTAssertNil(relaunched.model.agentIdentity(forTab: fixture.tabID))
+    }
 
     func testBothAgentsKeepTheConversationAcrossTurnsAndResumeAfterQuit() throws {
         for (agent, command) in [("claude", "claude --resume 'abc'"), ("codex", "codex resume 'abc'")] {

@@ -47,6 +47,8 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
     private var foregroundProcessTimer: Timer?
     private var lastReportedForegroundProcessName: String?
     private var didTerminate = false
+    private var startupToken: String?
+    private var startupReadinessTimer: Timer?
     private var contentChangeHandler: (@MainActor () -> Void)?
     public private(set) var remoteGeneration = UUID()
     public private(set) var remoteSequence: UInt64 = 0
@@ -105,6 +107,15 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
                 self?.onEvent?(.agentActivity(report))
             }
         }
+        terminal.onShellReady = { [weak self] token in
+            Task { @MainActor [weak self] in
+                guard let self, self.isRunning, self.startupToken == token else { return }
+                self.startupReadinessTimer?.invalidate()
+                self.startupReadinessTimer = nil
+                self.startupToken = nil
+                self.sendInitialCommand()
+            }
+        }
         terminal.autoresizingMask = [.width, .height]
         terminal.apply(runtimeConfiguration: configuration.runtimeConfiguration)
         if let restoredOutput = configuration.restoredOutput {
@@ -130,10 +141,22 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         remoteReplayBuffer.removeAll(keepingCapacity: true)
         remoteReplayHead = 0
         remoteReplayBytes = 0
+        var environment = configuration.environment
+        startupReadinessTimer?.invalidate()
+        startupReadinessTimer = nil
+        startupToken = nil
+        if configuration.initialCommand?.isEmpty == false,
+           configuration.shell.lastPathComponent == "zsh",
+           let zdotdir = environment["ZDOTDIR"],
+           let readiness = try? String(contentsOfFile: "\(zdotdir)/_myterm_startup", encoding: .utf8),
+           readiness.hasPrefix("# MyTerm shell readiness v1\n") {
+            startupToken = UUID().uuidString
+            environment["MYTERM_STARTUP_TOKEN"] = startupToken
+        }
         terminal.startProcess(
             executable: configuration.shell.path,
             args: configuration.shellArguments,
-            environment: Self.processEnvironment(overrides: configuration.environment),
+            environment: Self.processEnvironment(overrides: environment),
             execName: "-\(configuration.shell.lastPathComponent)",
             currentDirectory: configuration.workingDirectory.path
         )
@@ -144,8 +167,21 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
             throw failure
         }
         isRunning = true
-        if let command = configuration.initialCommand, !command.isEmpty {
-            terminal.send(txt: command + "\n")
+        if startupToken == nil {
+            sendInitialCommand()
+        } else {
+            let timer = Timer(timeInterval: 10, repeats: false) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self, self.isRunning, self.startupToken != nil else { return }
+                    self.startupToken = nil
+                    self.startupReadinessTimer = nil
+                    self.onEvent?(.initialCommandFailed(TerminalSessionFailure(
+                        message: "Shell startup did not signal readiness. The saved command was not sent; run it manually once the shell is ready."
+                    )))
+                }
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            startupReadinessTimer = timer
         }
         workingDirectoryPoller = ProcessWorkingDirectoryPoller(
             processID: terminal.process.shellPid,
@@ -160,12 +196,19 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         startForegroundProcessPolling()
     }
 
+    private func sendInitialCommand() {
+        if let command = configuration.initialCommand, !command.isEmpty {
+            terminal.send(txt: command + "\n")
+        }
+    }
+
     /// Asks the kernel who is in front of the shell, on the same cadence as the working directory.
     ///
     /// An agent that is killed never runs its SessionEnd hook, so the pane would keep saying it
     /// holds an agent. The shell coming back to the front is the one signal that survives a kill.
     private func startForegroundProcessPolling() {
-        lastReportedForegroundProcessName = activeForegroundProcessName
+        lastReportedForegroundProcessName = nil
+        pollForegroundProcess()
         let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.pollForegroundProcess() }
         }
@@ -357,6 +400,9 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
     }
 
     private func stopWorkingDirectoryPolling() {
+        startupReadinessTimer?.invalidate()
+        startupReadinessTimer = nil
+        startupToken = nil
         workingDirectoryPoller?.stop()
         workingDirectoryPoller = nil
         foregroundProcessTimer?.invalidate()
@@ -414,6 +460,7 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
     var onOpenWebURL: ((URL) -> Void)?
     var onContentChanged: (() -> Void)?
     var onAgentActivity: ((AgentActivityReport) -> Void)?
+    var onShellReady: ((String) -> Void)?
     var onRawOutput: ((Data) -> Void)?
     var currentWorkingDirectory: URL?
     private let contentChangeCoalescer = TerminalContentChangeCoalescer()
@@ -448,6 +495,10 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
     }
 
     private func installAgentActivityHandler() {
+        getTerminal().registerOscHandler(code: 7338) { [weak self] payload in
+            guard let token = String(bytes: payload, encoding: .utf8) else { return }
+            self?.onShellReady?(token)
+        }
         getTerminal().registerOscHandler(code: AgentActivityMarker.oscCode) { [weak self] payload in
             guard let self,
                   let text = String(bytes: payload, encoding: .utf8),

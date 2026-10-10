@@ -25,6 +25,27 @@ extension AppModel {
         tabGroupID: TabGroupID,
         tabID: TabID
     ) {
+        if report.agent == "codex", let tool = report.toolRequestID {
+            switch report.activity {
+            case .awaitingInput:
+                pendingAgentToolRequests[tabID, default: [:]][tool, default: 0] += 1
+            case .working:
+                if let count = pendingAgentToolRequests[tabID]?[tool] {
+                    pendingAgentToolRequests[tabID]?[tool] = count > 1 ? count - 1 : nil
+                }
+                // Completing a parallel tool doesn't answer another tool's permission request.
+                if pendingAgentToolRequests[tabID]?.isEmpty == false { return }
+            case .ready, .finished, .exited:
+                pendingAgentToolRequests.removeValue(forKey: tabID)
+            }
+        } else {
+            switch report.activity {
+            case .ready, .working, .finished, .exited:
+                pendingAgentToolRequests.removeValue(forKey: tabID)
+            case .awaitingInput:
+                break
+            }
+        }
         let isInFrontOfUser = isTabInFrontOfUser(
             workspaceID: workspaceID,
             tabGroupID: tabGroupID,
@@ -82,6 +103,7 @@ extension AppModel {
     }
 
     func forgetAgentAttention(forTab tabID: TabID) {
+        pendingAgentToolRequests.removeValue(forKey: tabID)
         agentInbox.markRead(tabID: tabID)
         agentAttention.removeValue(forKey: tabID)
     }

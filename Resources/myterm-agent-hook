@@ -1,0 +1,88 @@
+#!/bin/sh
+# Hooks must never write replies to stdout or block an agent because reporting failed.
+report_agent() {
+  [ -n "${MYTERM_PANE_ID:-}" ] || return 0
+  agent=${1:-}
+  activity=${2:-}
+  [ "$activity" != awaitingInput ] || activity=awaiting_input
+  case "$agent" in claude|codex) ;; *) return 0;; esac
+  case "$activity" in ready|working|finished|awaiting_input|exited) ;; *) return 0;; esac
+  input=$(cat | tr -d '\n')
+  # An idle Claude prompt is not a question. Keep filtering in the shipped script
+  # so changes don't alter the hook definitions users have already trusted.
+  if [ "$agent" = claude ] && [ "$activity" = awaiting_input ]; then
+    case "$input" in *'waiting for your input'*) return 0;; esac
+  fi
+  if subagent=$(printf '%s' "$input" | /usr/bin/plutil -extract agent_id raw -expect string -o - - 2>/dev/null); then
+    [ -z "$subagent" ] || return 0
+  fi
+  # Only ancestors on this TTY identify a nested agent. MyTerm itself may have
+  # been launched from another agent's terminal.
+  pid=$PPID
+  depth=0
+  owner_tty=''
+  owner_command=''
+  while [ "$depth" -lt 16 ]; do
+    info=$(ps -o ppid= -o tty= -o comm= -p "$pid" 2>/dev/null)
+    read -r parent process_tty command <<EOF
+$info
+EOF
+    [ -n "$process_tty" ] || break
+    [ "$depth" -ne 0 ] || owner_command=$command
+    [ -n "$owner_tty" ] || owner_tty=$process_tty
+    [ "$process_tty" = "$owner_tty" ] || break
+    if [ "$depth" -gt 0 ]; then
+      case "${command##*/}" in claude|codex|codex-statusline) return 0;; esac
+    fi
+    case "$parent" in ''|*[!0-9]*|0|1) break;; esac
+    pid=$parent
+    depth=$((depth + 1))
+  done
+  # The sentinel preserves trailing newlines so validation rejects them.
+  session=$(printf '%s' "$input" | /usr/bin/plutil -extract session_id raw -expect string -n -o - - 2>/dev/null; printf '.')
+  session=${session%.}
+  case "$session" in ''|*[!A-Za-z0-9._-]*) session='';; esac
+  [ "${#session}" -le 64 ] || session=''
+  cwd=''
+  if raw_cwd=$(printf '%s' "$input" | /usr/bin/plutil -extract cwd raw -expect string -n -o - - 2>/dev/null && printf '.'); then
+    raw_cwd=${raw_cwd%.}
+    cwd=$(printf '%s' "$raw_cwd" | /usr/bin/base64 | tr -d '\n')
+  fi
+  launcher=''
+  tool=''
+  if [ "$agent" = codex ]; then
+    # Canonical JSON also supports null arguments, which property-list XML cannot
+    # represent. Read through stdin rather than exposing tool arguments in argv.
+    if tool_name=$(printf '%s' "$input" | /usr/bin/plutil -extract tool_name raw -expect string -n -o - - 2>/dev/null) &&
+       tool_input=$(printf '%s' "$input" | /usr/bin/plutil -extract tool_input json -o - - 2>/dev/null |
+         /usr/bin/osascript -l JavaScript -e '
+           ObjC.import("Foundation");
+           function sorted(value) {
+             if (Array.isArray(value)) return value.map(sorted);
+             if (value === null || typeof value !== "object") return value;
+             var result = Object.create(null);
+             Object.keys(value).sort().forEach(function (key) { result[key] = sorted(value[key]); });
+             return result;
+           }
+           function run() {
+             var data = $.NSFileHandle.fileHandleWithStandardInput.readDataToEndOfFile;
+             var text = ObjC.unwrap($.NSString.alloc.initWithDataEncoding(data, $.NSUTF8StringEncoding));
+             var input = JSON.parse(text);
+             // Shell approval callbacks can add a description absent from tool completion.
+             if (input && typeof input.command === "string") input = { command: input.command };
+             return JSON.stringify(sorted(input));
+           }'); then
+      tool=$(printf '%s\n%s' "$tool_name" "$tool_input" | /usr/bin/shasum -a 256)
+      tool=${tool%% *}
+    fi
+    case "${MYTERM_CODEX_LAUNCHER:-}" in codex|codex-statusline) launcher=$MYTERM_CODEX_LAUNCHER;; esac
+    if [ -z "$launcher" ]; then
+      case "${owner_command##*/}" in codex|codex-statusline) launcher=${owner_command##*/};; esac
+    fi
+  fi
+  tty=$(ps -o tty= -p "$PPID" 2>/dev/null | tr -d '[:space:]')
+  case "$tty" in *[0-9]*) tty="/dev/${tty#/dev/}";; *) tty=/dev/tty;; esac
+  printf '\033]7337;agent=%s;event=%s;session=%s;cwd64=%s;launcher=%s;tool=%s\033\\' \
+    "$agent" "$activity" "$session" "$cwd" "$launcher" "$tool" > "$tty"
+}
+report_agent "$@" >/dev/null 2>&1 || true

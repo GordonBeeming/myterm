@@ -65,6 +65,8 @@ final class AppModel {
     /// Tabs that have an agent in them, by agent name, as the hooks last reported.
     /// Runtime only: it says what is running now, which is the one thing a saved handle cannot say.
     var liveAgentTabs: [TabID: String] = [:]
+    var foregroundAgentTabs: [TabID: AgentIdentity] = [:]
+    var pendingAgentToolRequests: [TabID: [String: Int]] = [:]
     /// The conversations each tab has left this run, by session id: ended by their own SessionEnd,
     /// replaced by another conversation, or taken away with a killed agent. Hooks report late, and
     /// a report about one of these is about a conversation the pane is no longer in.
@@ -2405,6 +2407,8 @@ final class AppModel {
                 tabID: tabID,
                 message: error.localizedDescription
             )
+        case .initialCommandFailed(let error):
+            present(error)
         case .processTerminated(let exitCode):
             if let exitCode, exitCode != 0 {
                 errorDescription = "Terminal exited with status \(exitCode)."
@@ -2423,6 +2427,9 @@ final class AppModel {
             terminalSessions[sessionID]?.onEvent = nil
             forgetAgent(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID, sessionID: sessionID)
         case .foregroundProcessChanged(let name):
+            foregroundAgentTabs[tabID] = name.flatMap {
+                AgentIdentity(agentName: $0 == CodexLauncher.statusline.rawValue ? "codex" : $0)
+            }
             // The shell back in front of a pane that held an agent means the agent left without
             // its own hook saying so. Everything that hook would have retired is retired here.
             guard name == nil, liveAgentTabs[tabID] != nil else { return }

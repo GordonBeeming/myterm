@@ -3,7 +3,7 @@ import MyTermCore
 extension AppModel {
     func agentIdentity(forTab tabID: TabID) -> AgentIdentity? {
         _ = stateVersion
-        return liveAgentTabs[tabID].flatMap(AgentIdentity.init(agentName:))
+        return liveAgentTabs[tabID].flatMap(AgentIdentity.init(agentName:)) ?? foregroundAgentTabs[tabID]
     }
 
     func agentIdentity(forWorkspace workspaceID: WorkspaceID) -> AgentIdentity? {

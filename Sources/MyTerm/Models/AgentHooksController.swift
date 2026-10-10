@@ -8,17 +8,10 @@ struct AgentHookEvent: Sendable {
     let name: String
     let activity: AgentActivity
     let timeout: Int
-    /// Text in the agent's own hook payload that means this report is not worth passing on.
-    ///
-    /// The payload arrives on the hook's standard input, and it is the only thing that separates
-    /// two different things an agent reports under one event name.
-    let ignoredMessage: String?
-
-    init(_ name: String, _ activity: AgentActivity, ignoring ignoredMessage: String? = nil, timeout: Int = 5) {
+    init(_ name: String, _ activity: AgentActivity, timeout: Int = 5) {
         self.name = name
         self.activity = activity
         self.timeout = timeout
-        self.ignoredMessage = ignoredMessage
     }
 }
 
@@ -53,7 +46,7 @@ struct AgentHookTarget: Equatable, Sendable {
             // Claude Code sends `Notification` for a question it cannot go on without, and again
             // for a prompt left alone for a minute. The second is nothing to answer, and it arrives
             // after every finished turn, so passing it on would leave the cook purple for good.
-            AgentHookEvent("Notification", .awaitingInput, ignoring: "waiting for your input"),
+            AgentHookEvent("Notification", .awaitingInput),
             AgentHookEvent("SessionEnd", .exited),
         ]
     )
@@ -70,6 +63,7 @@ struct AgentHookTarget: Equatable, Sendable {
             AgentHookEvent("UserPromptSubmit", .working),
             AgentHookEvent("Stop", .finished),
             AgentHookEvent("PermissionRequest", .awaitingInput),
+            AgentHookEvent("PostToolUse", .working),
             AgentHookEvent("SessionEnd", .exited, timeout: 3),
         ]
     )
@@ -147,8 +141,7 @@ final class AgentHooksController {
                         "type": "command",
                         "command": Self.command(
                             agent: target.agent,
-                            activity: event.activity,
-                            ignoring: event.ignoredMessage
+                            activity: event.activity
                         ),
                         "timeout": event.timeout,
                     ]],
@@ -191,76 +184,13 @@ final class AgentHooksController {
         }
     }
 
-    /// The shell one hook runs. It reports to the pane's TTY and never writes to stdout, which
-    /// Claude Code reads as the hook's own JSON reply.
-    ///
-    /// The agent pipes its own payload to the hook, and every hook reads it once. `session_id` is
-    /// what lets MyTerm bring the same conversation back after a restart, and the character class
-    /// is what keeps a hostile payload from reaching the command line that resumes it. An ignored
-    /// message is matched against the same read, because it is the only way to tell a question
-    /// from a prompt left sitting. Each installed entry carries a bounded timeout, so an agent
-    /// that pipes nothing cannot leave the read waiting. The extraction sentinel preserves trailing
-    /// newlines in identifiers so validation rejects them rather than truncating them.
-    ///
-    /// Claude sets `CLAUDE_CODE_CHILD_SESSION` on hook processes as well as nested agents, so it
-    /// cannot identify the conversation owning the pane. An agent ancestor on the same TTY can:
-    /// nested agents stay silent without suppressing the owning agent's own hooks.
-    static func command(
-        agent: String,
-        activity: AgentActivity,
-        ignoring ignoredMessage: String? = nil
-    ) -> String {
-        let payload = "agent=\(agent);event=\(activity.rawValue);session=%s;cwd64=%s;launcher=%s"
-        let filter = ignoredMessage.map { "case \"$__in\" in *'\($0)'*) exit 0;; esac; " } ?? ""
-        return """
-        [ -n "${MYTERM_PANE_ID:-}" ] && { __in=$(cat 2>/dev/null | tr -d '\\n'); \(filter)
-        \(nestedAgentGuard)
-        __id=$(printf '%s' "$__in" | /usr/bin/plutil -extract session_id raw -expect string -n -o - - 2>/dev/null; printf '.');
-        __id=${__id%.};
-        case "$__id" in ''|*[!A-Za-z0-9._-]*) __id='';; esac;
-        [ "${#__id}" -le 64 ] || __id='';
-        __cwd='';
-        if __raw_cwd=$(printf '%s' "$__in" | /usr/bin/plutil -extract cwd raw -expect string -n -o - - 2>/dev/null && printf '.'); then
-          __raw_cwd=${__raw_cwd%.};
-          __cwd=$(printf '%s' "$__raw_cwd" | /usr/bin/base64 | tr -d '\\n');
-        fi;
-        __launcher='';
-        if [ '\(agent)' = 'codex' ]; then
-          case "${MYTERM_CODEX_LAUNCHER:-}" in codex|codex-statusline) __launcher=$MYTERM_CODEX_LAUNCHER;; esac;
-          if [ -z "$__launcher" ]; then
-            case "${__owner_command##*/}" in codex|codex-statusline) __launcher=${__owner_command##*/};; esac;
-          fi;
-        fi;
-        __tty=$(ps -o tty= -p "$PPID" 2>/dev/null | tr -d '[:space:]'); \
-        case "$__tty" in *[0-9]*) __tty="/dev/${__tty#/dev/}";; *) __tty="/dev/tty";; esac; \
-        printf '\\033]\(AgentActivityMarker.oscCode);\(payload)\\033\\\\' "$__id" "$__cwd" "$__launcher" > "$__tty"; } >/dev/null 2>&1 || true \(marker)
+    /// Stable calls use the resources of the MyTerm hosting the pane. Updating the
+    /// shipped script doesn't change a hook definition the user has already trusted.
+    static func command(agent: String, activity: AgentActivity) -> String {
+        """
+        [ ! -r "${MYTERM_RESOURCE_DIR:-}/myterm-agent-hook" ] || exec /bin/sh "$MYTERM_RESOURCE_DIR/myterm-agent-hook" \(agent) \(activity.rawValue) \(marker)
         """
     }
-
-    // A different TTY is a different conversation: MyTerm itself can have been launched from
-    // another agent's terminal. Only a top-level JSON agent_id identifies an in-process subagent;
-    // a completed turn can also contain agent_id fields inside its background-task metadata.
-    private static let nestedAgentGuard = #"""
-    if __subagent=$(printf '%s' "$__in" | /usr/bin/plutil -extract agent_id raw -expect string -o - - 2>/dev/null); then
-      [ -z "$__subagent" ] || exit 0
-    fi
-    __pid=$PPID; __depth=0; __owner_tty=''; __owner_command=''
-    while [ "$__depth" -lt 16 ]; do
-      __info=$(ps -o ppid= -o tty= -o comm= -p "$__pid" 2>/dev/null)
-      read -r __parent __process_tty __command <<EOF
-    $__info
-    EOF
-      [ -n "$__process_tty" ] || break
-      [ "$__depth" -ne 0 ] || __owner_command=$__command
-      [ -n "$__owner_tty" ] || __owner_tty=$__process_tty
-      [ "$__process_tty" = "$__owner_tty" ] || break
-      if [ "$__depth" -gt 0 ]; then
-        case "${__command##*/}" in claude|codex|codex-statusline) exit 0;; esac
-      fi
-      case "$__parent" in ''|*[!0-9]*|0|1) break;; esac
-      __pid=$__parent; __depth=$((__depth + 1))
-    done
-    """#
 
     /// Events carrying a hook of MyTerm's, whichever version of MyTerm wrote it.
     func installedEvents(in settings: [String: Any]) -> [String] {
@@ -284,8 +214,7 @@ final class AgentHooksController {
         return target.events.compactMap { event in
             let expected = Self.command(
                 agent: target.agent,
-                activity: event.activity,
-                ignoring: event.ignoredMessage
+                activity: event.activity
             )
             let entries = (hooks[event.name] as? [[String: Any]]) ?? []
             let isCurrent = entries.contains { entry in
@@ -304,8 +233,7 @@ final class AgentHooksController {
         return target.events.contains { event in
             let expected = Self.command(
                 agent: target.agent,
-                activity: event.activity,
-                ignoring: event.ignoredMessage
+                activity: event.activity
             )
             let entries = (hooks[event.name] as? [[String: Any]]) ?? []
             return entries.contains { entry in

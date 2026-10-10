@@ -104,6 +104,7 @@ cp "$ROOT_DIR/Resources/MyTerm.icns" "$APP_RESOURCES/MyTerm.icns"
 cp "$ROOT_DIR/Resources/myterm-browser" "$APP_RESOURCES/myterm-browser"
 cp "$ROOT_DIR/Resources/open" "$APP_RESOURCES/open"
 cp "$ROOT_DIR/Resources/myterm-bash-env" "$APP_RESOURCES/myterm-bash-env"
+cp "$ROOT_DIR/Resources/myterm-agent-hook" "$APP_RESOURCES/myterm-agent-hook"
 for launcher in codex codex-statusline myterm-codex; do
   cp "$ROOT_DIR/Resources/$launcher" "$APP_RESOURCES/$launcher"
   chmod +x "$APP_RESOURCES/$launcher"
