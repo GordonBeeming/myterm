@@ -12,18 +12,15 @@ final class BrowserDataProfilesTests: XCTestCase {
 
         let initial = BrowserSettingsStore(channel: .development, defaults: defaults)
         XCTAssertEqual(initial.browserDataScope, .workspace)
-        XCTAssertTrue(initial.compactSidebar)
         XCTAssertEqual(BrowserDataScope.appWide.browserDataScopeLabel, "Across all workspaces")
         XCTAssertEqual(BrowserDataScope.folder.browserDataScopeLabel, "Per MyTerm folder")
         XCTAssertEqual(BrowserDataScope.workspace.browserDataScopeLabel, "Per workspace")
         XCTAssertEqual(BrowserDataScope.projectDirectory.browserDataScopeLabel, "Per project directory")
 
         initial.browserDataScope = .projectDirectory
-        initial.compactSidebar = false
 
         let restored = BrowserSettingsStore(channel: .development, defaults: defaults)
         XCTAssertEqual(restored.browserDataScope, .projectDirectory)
-        XCTAssertFalse(restored.compactSidebar)
     }
 
     func testRecentWorkspaceEmojisPersistNewestFirstAndKeepTenUniqueValues() {
@@ -238,7 +235,6 @@ final class BrowserDataProfilesTests: XCTestCase {
         }
         let legacy = BrowserSettingsStore(channel: .development, defaults: defaults)
         legacy.browserDataScope = .appWide
-        legacy.compactSidebar = false
 
         let first = try AppModel(
             channel: .development,
@@ -248,14 +244,12 @@ final class BrowserDataProfilesTests: XCTestCase {
             browserSettings: legacy
         )
         XCTAssertEqual(first.store.globalSettings.browserDataScope, .appWide)
-        XCTAssertFalse(first.store.globalSettings.compactSidebar)
 
         first.updateGlobalSettings {
             $0.browserDataScope = .workspace
-            $0.compactSidebar = true
         }
+        try first.store.flush()
         legacy.browserDataScope = .projectDirectory
-        legacy.compactSidebar = false
         let restored = try AppModel(
             channel: .development,
             applicationSupportDirectory: directory,
@@ -265,7 +259,6 @@ final class BrowserDataProfilesTests: XCTestCase {
         )
 
         XCTAssertEqual(restored.store.globalSettings.browserDataScope, .workspace)
-        XCTAssertTrue(restored.store.globalSettings.compactSidebar)
     }
 
     func testExistingBeamCursorSelectionIsPreserved() throws {

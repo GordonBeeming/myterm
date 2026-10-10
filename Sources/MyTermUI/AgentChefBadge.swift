@@ -1,14 +1,14 @@
 import MyTermCore
 import SwiftUI
 
-/// The cook, coloured for what the agent is doing.
+/// What the agent is doing, drawn with the icon and colour chosen for that state in Settings.
 ///
-/// Blue asks to be clicked and purple says a question is waiting. A working agent keeps a neutral
-/// colour and stirs instead: it is not asking for anything yet. A session with nothing left to say
-/// has no cook at all, so there is no state here for it.
+/// Only working, finished and a question reach a tab: `AgentActivity.showsCook` keeps ready and
+/// exited off it, so their plain cook here is a fallback rather than something users see.
 public struct AgentChefBadge: View {
     let state: AgentActivity
     var side: CGFloat = 15
+    @Environment(\.agentIndicatorAppearance) private var appearance
 
     public init(state: AgentActivity, side: CGFloat = 15) {
         self.state = state
@@ -16,24 +16,22 @@ public struct AgentChefBadge: View {
     }
 
     public var body: some View {
-        AgentChefIcon(color: color, isStirring: state == .working)
-            .frame(width: side, height: side)
-            .accessibilityHidden(true)
-            #if os(macOS)
-            .help(state.attentionDescription)
-            #endif
-    }
-
-    private var color: Color {
-        switch state {
-        case .finished:
-            .blue
-        case .awaitingInput:
-            .purple
-        // A cook is never shown for these, so the colour is only a fallback. See
-        // `AgentActivity.showsCook`, which is what keeps them off a tab.
-        case .working, .ready, .exited:
-            .secondary
+        Group {
+            switch state {
+            case .finished:
+                AgentStateGlyph(finished: appearance.finishedIcon, color: appearance.finishedColor.indicatorColor, side: side)
+            case .awaitingInput:
+                AgentStateGlyph(question: appearance.questionIcon, color: appearance.questionColor.indicatorColor, side: side)
+            case .working:
+                AgentStateGlyph(working: appearance.workingIcon, color: appearance.workingColor.indicatorColor, side: side)
+            case .ready, .exited:
+                AgentChefIcon(color: .secondary, isStirring: false)
+                    .frame(width: side, height: side)
+            }
         }
+        .accessibilityHidden(true)
+        #if os(macOS)
+        .help(state.attentionDescription)
+        #endif
     }
 }

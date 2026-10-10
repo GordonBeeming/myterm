@@ -1,4 +1,5 @@
 import MyTermRemote
+import MyTermUI
 import SwiftUI
 
 struct CompanionSettingsView: View {
@@ -7,6 +8,7 @@ struct CompanionSettingsView: View {
     @State private var isEditingConnection = false
     @State private var previousRelay = ""
     @State private var pairingLinkCopyError: String?
+    @State private var diagnosticsError: String?
     @AppStorage(CompanionHostModel.collectConnectionLogKey) private var collectsConnectionLog = false
 
     private var showsLinkForm: Bool {
@@ -14,9 +16,9 @@ struct CompanionSettingsView: View {
     }
 
     var body: some View {
-        Form {
+        VStack(alignment: .leading, spacing: 24) {
             if showsLinkForm {
-                Section("Link this Mac") {
+                SettingsCard("Link this Mac") {
                     TextField("Relay address or setup link", text: $connectionInput,
                               prompt: Text("Paste your relay address or setup link"))
                         .textFieldStyle(.roundedBorder)
@@ -24,8 +26,8 @@ struct CompanionSettingsView: View {
                         .disabled(companion.isSigningIn || companion.status == .connecting)
 
                     Text("Use a setup link to create or recover your passkey. Otherwise, enter the relay address to sign in with an existing passkey.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .font(Theme.Font.ui(12))
+                        .foregroundStyle(Theme.textSecondary)
 
                     Button(companion.isSigningIn ? "Waiting for sign-in…" : companion.status == .connecting ? "Connecting…" : "Continue") {
                         let input = connectionInput.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -53,34 +55,26 @@ struct CompanionSettingsView: View {
                     if !companion.isSigningIn, case .failed = companion.status { statusLabel }
                 }
             } else {
-                Section("Relay") {
-                    LabeledContent("Address", value: companion.relayText)
-                    statusLabel
-                    HStack {
-                        if companion.isSigningIn {
-                            Button("Cancel sign-in", role: .cancel) { companion.cancelSignIn() }
-                        } else if companion.status == .connecting {
-                            Button("Cancel connection", role: .cancel) { companion.disconnect() }
-                        } else if companion.status == .connected {
-                            Button("Disconnect") { companion.disconnect() }
-                        } else {
-                            Button(companion.needsSignIn ? "Sign in again" : "Reconnect") { companion.connect() }
+                SettingsCard("Relay") {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 16) {
+                            relayDetails
+                            Spacer(minLength: 12)
+                            relayActions
                         }
-                        Button("Change relay or recover passkey…") {
-                            previousRelay = companion.relayText
-                            connectionInput = companion.relayText
-                            isEditingConnection = true
+                        VStack(alignment: .leading, spacing: 12) {
+                            relayDetails
+                            relayActions
                         }
-                        .disabled(companion.isSigningIn || companion.status == .connecting)
                     }
                     Text("Keep this Mac awake with MyTerm running so your phone can connect.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .font(Theme.Font.ui(12))
+                        .foregroundStyle(Theme.textSecondary)
                 }
             }
 
             if !showsLinkForm {
-                Section("Pair a phone") {
+                SettingsCard("Pair a phone") {
                     HStack {
                         Button("Start Pair Mode") { companion.beginPairing() }
                             .disabled(
@@ -95,8 +89,8 @@ struct CompanionSettingsView: View {
                         if let refresh = companion.pairingRefreshesAt,
                            let expiry = companion.pairingExpiresAt {
                             Text("Refreshes \(refresh, style: .relative) · Link valid \(expiry, style: .relative)")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                                .font(Theme.Font.ui(12))
+                                .foregroundStyle(Theme.textSecondary)
                         }
                     }
 
@@ -106,7 +100,7 @@ struct CompanionSettingsView: View {
                                 .interpolation(.none)
                                 .resizable()
                                 .scaledToFit()
-                                .frame(width: 220, height: 220)
+                                .frame(width: 132, height: 132)
                                 .accessibilityLabel("Pairing QR code")
                             Button("Copy pairing link", systemImage: "doc.on.doc") {
                                 do { try companion.copyPairingLink() }
@@ -117,14 +111,15 @@ struct CompanionSettingsView: View {
                     }
 
                     Text("The QR code refreshes every 30 seconds. Each one-use link remains valid for 60 seconds, so a scan can finish while the next code is shown. The relay never receives the secret. You must approve the phone on this Mac before it becomes trusted.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .font(Theme.Font.ui(12))
+                        .foregroundStyle(Theme.textSecondary)
                 }
 
-                Section("Paired phones") {
+                SettingsCard("Paired phones", insetRows: false) {
                     if companion.pairedPeers.isEmpty {
                         Text("No phones paired")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.textSecondary)
+                            .padding(16)
                     } else {
                         ForEach(companion.pairedPeers, id: \.deviceID) { peer in
                             HStack {
@@ -132,17 +127,23 @@ struct CompanionSettingsView: View {
                                     Text(peer.name)
                                     Text("Paired \(peer.pairedAt.formatted(date: .abbreviated, time: .shortened))")
                                         .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(Theme.textSecondary)
                                 }
                                 Spacer()
                                 Button("Revoke", role: .destructive) { companion.revoke(peer: peer) }
+                                    .accessibilityLabel("Revoke \(peer.name)")
+                            }
+                            .padding(.vertical, 14)
+                            .padding(.horizontal, 16)
+                            if peer.deviceID != companion.pairedPeers.last?.deviceID {
+                                Rectangle().fill(Theme.hairline).frame(height: 1)
                             }
                         }
                     }
                 }
 
                 if let diagnostics = companion.diagnosticsDirectory {
-                    Section("Diagnostics") {
+                    SettingsCard("Diagnostics") {
                         Toggle("Record this Mac's connection", isOn: $collectsConnectionLog)
                             .onChange(of: collectsConnectionLog) { _, enabled in
                                 Task { await CompanionConnectionLog.shared.setEnabled(enabled) }
@@ -150,24 +151,28 @@ struct CompanionSettingsView: View {
                         Text("Logs when this Mac connects, reconnects and loses its relay "
                              + "connection, and how large a terminal's checkpoint was. It never "
                              + "records terminal output.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .font(Theme.Font.ui(12))
+                            .foregroundStyle(Theme.textSecondary)
                         HStack {
                             Text("This Mac's log is filed beside what paired devices send.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                                .font(Theme.Font.ui(12))
+                                .foregroundStyle(Theme.textSecondary)
                             Spacer()
                             Button("Show in Finder") {
-                                try? FileManager.default.createDirectory(
-                                    at: diagnostics, withIntermediateDirectories: true
-                                )
-                                NSWorkspace.shared.activateFileViewerSelecting([diagnostics])
+                                do {
+                                    try FileManager.default.createDirectory(
+                                        at: diagnostics, withIntermediateDirectories: true
+                                    )
+                                    NSWorkspace.shared.activateFileViewerSelecting([diagnostics])
+                                } catch {
+                                    diagnosticsError = error.localizedDescription
+                                }
                             }
                         }
                     }
                 }
                 if !companion.remoteControllers.isEmpty {
-                    Section("Remote control") {
+                    SettingsCard("Remote control") {
                         ForEach(companion.remoteControllers) { controller in
                             HStack {
                                 Text("\(controller.deviceName) controls a terminal")
@@ -181,7 +186,6 @@ struct CompanionSettingsView: View {
                 }
             }
         }
-        .formStyle(.grouped)
         .onAppear {
             if connectionInput.isEmpty { connectionInput = companion.relayText }
         }
@@ -204,6 +208,14 @@ struct CompanionSettingsView: View {
         } message: { prompt in
             Text("Allow \(prompt.deviceName) to access this Mac through the configured relay?")
         }
+        .alert("Diagnostics could not be opened", isPresented: Binding(
+            get: { diagnosticsError != nil },
+            set: { if !$0 { diagnosticsError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(diagnosticsError ?? "")
+        }
         .alert(
             "Pairing link could not be copied",
             isPresented: Binding(
@@ -217,6 +229,36 @@ struct CompanionSettingsView: View {
         }
     }
 
+    private var relayDetails: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            statusLabel
+            Text(companion.relayText)
+                .font(Theme.Font.mono(12))
+                .foregroundStyle(Theme.textSecondary)
+                .textSelection(.enabled)
+        }
+    }
+
+    private var relayActions: some View {
+        HStack {
+            Button("Change relay or recover passkey…") {
+                previousRelay = companion.relayText
+                connectionInput = companion.relayText
+                isEditingConnection = true
+            }
+            .disabled(companion.isSigningIn || companion.status == .connecting)
+            if companion.isSigningIn {
+                Button("Cancel sign-in", role: .cancel) { companion.cancelSignIn() }
+            } else if companion.status == .connecting {
+                Button("Cancel connection", role: .cancel) { companion.disconnect() }
+            } else if companion.status == .connected {
+                Button("Disconnect") { companion.disconnect() }
+            } else {
+                Button(companion.needsSignIn ? "Sign in again" : "Reconnect") { companion.connect() }
+            }
+        }
+    }
+
     @ViewBuilder
     private var statusLabel: some View {
         switch companion.status {
@@ -226,11 +268,15 @@ struct CompanionSettingsView: View {
             Label("Sign in required", systemImage: "person.crop.circle.badge.xmark")
                 .foregroundStyle(.orange)
             Text(reason.message)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+                .font(Theme.Font.ui(12))
+                .foregroundStyle(Theme.textSecondary)
         case .disconnected: Label("Disconnected", systemImage: "network.slash")
         case .connecting: Label("Connecting", systemImage: "arrow.triangle.2.circlepath")
-        case .connected: Label("Connected", systemImage: "checkmark.circle.fill")
+        case .connected:
+            HStack(spacing: 7) {
+                Circle().fill(Theme.success).frame(width: 8, height: 8).accessibilityHidden(true)
+                Text("Connected")
+            }
         case .failed(let message):
             Label(message, systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.red)

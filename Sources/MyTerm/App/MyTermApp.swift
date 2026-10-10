@@ -28,13 +28,17 @@ struct MyTermApp: App {
             MyTermCommands(startup: startup)
         }
 
-        Settings {
+        // A plain window rather than the Settings scene: SwiftUI keeps a Settings window at a fixed
+        // size, and this one needs to grow.
+        Window("Settings", id: SettingsWindow.id) {
             if let model = startup.model {
                 SettingsView(model: model)
             } else {
                 ContentUnavailableView("Settings unavailable", systemImage: "exclamationmark.triangle")
             }
         }
+        .defaultSize(width: 880, height: 720)
+        .windowResizability(.contentMinSize)
         // The main scene owns the Global Settings command and its scope selection.
         .commandsRemoved()
     }

@@ -165,15 +165,15 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.resolvedSettings(for: workspaceID).browserFilePatterns, ["*.workspace"])
     }
 
-    func testLocalFileJavaScriptDefaultsOffAndResolvesAtEveryScope() throws {
-        XCTAssertFalse(TerminalPreferences.default.allowsLocalFileJavaScript)
+    func testLocalFileJavaScriptDefaultsOnAndResolvesAtEveryScope() throws {
+        XCTAssertTrue(TerminalPreferences.default.allowsLocalFileJavaScript)
 
-        let enabled = TerminalPreferences(allowsLocalFileJavaScript: true)
+        let disabled = TerminalPreferences(allowsLocalFileJavaScript: false)
         let restored = try JSONDecoder().decode(
             TerminalPreferences.self,
-            from: JSONEncoder().encode(enabled)
+            from: JSONEncoder().encode(disabled)
         )
-        XCTAssertTrue(restored.allowsLocalFileJavaScript)
+        XCTAssertFalse(restored.allowsLocalFileJavaScript)
 
         let url = temporaryURL()
         let store = try WorkspaceStore(persistenceURL: url)
@@ -809,7 +809,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(persistenceURL: url)
 
-        XCTAssertFalse(store.globalSettings.allowsLocalFileJavaScript)
+        XCTAssertFalse(store.globalSettings.allowsLocalFileJavaScript, "a file that predates the key keeps scripts off")
         XCTAssertEqual(store.loadReport.structuralRepairCount, 0)
         XCTAssertTrue(store.loadReport.backupURLs.isEmpty)
         XCTAssertEqual(try Data(contentsOf: recoveryBackupURL), existingBackup)
@@ -841,7 +841,6 @@ final class WorkspaceStoreTests: XCTestCase {
             JSONSerialization.jsonObject(with: JSONEncoder().encode(snapshot)) as? [String: Any]
         )
         var settings = try XCTUnwrap(json["globalSettings"] as? [String: Any])
-        XCTAssertNotNil(settings.removeValue(forKey: "compactSidebar"))
         XCTAssertNotNil(settings.removeValue(forKey: "cursorBlink"))
         XCTAssertNotNil(settings.removeValue(forKey: "showsAgentNotificationBell"))
         json["globalSettings"] = settings
@@ -852,7 +851,6 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(store.loadReport.structuralRepairCount, 0)
         XCTAssertEqual(store.loadReport.identifierRepairCount, 0)
         XCTAssertEqual(store.loadReport.backupURLs, [])
-        XCTAssertTrue(store.globalSettings.compactSidebar)
         XCTAssertTrue(store.globalSettings.cursorBlink)
         XCTAssertTrue(store.globalSettings.showsAgentNotificationBell)
     }

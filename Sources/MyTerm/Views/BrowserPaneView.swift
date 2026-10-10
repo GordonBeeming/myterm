@@ -1,4 +1,5 @@
 import AppKit
+import MyTermUI
 import MyTermCore
 import MyTermPlatform
 import SwiftUI
@@ -40,22 +41,13 @@ private struct ObservedBrowserTabContent: View {
     @ObservedObject var controller: BrowserSessionController
     let isFocused: Bool
     @State private var addressState = BrowserAddressFieldState()
+    @State private var suggestionIndex = 0
     @State private var isFindVisible = false
     @State private var findQuery = ""
 
     var body: some View {
         VStack(spacing: 0) {
-            browserToolbar
-            ProgressView(value: controller.state.estimatedProgress)
-                .progressViewStyle(.linear)
-                .tint(.accentColor)
-                .frame(maxWidth: .infinity, minHeight: 2, maxHeight: 2)
-                .opacity(controller.state.isLoading ? 1 : 0)
-                .accessibilityHidden(!controller.state.isLoading)
-                .accessibilityLabel("Page loading progress")
-                .accessibilityValue(
-                    "\(Int((controller.state.estimatedProgress * 100).rounded())) percent"
-                )
+            browserToolbar.zIndex(1)
             if let error = controller.state.errorDescription {
                 Text(error)
                     .font(.callout)
@@ -106,20 +98,15 @@ private struct ObservedBrowserTabContent: View {
                 controller.state.isLoading ? controller.stopLoading() : controller.reload()
             }
 
-            BrowserAddressTextField(
-                text: Binding(get: { addressState.text }, set: { addressState.updateFromUser($0) }),
-                beginEditing: { selectWithoutFocusingContent(); return addressState.beginEditing() },
-                endEditing: { addressState.endEditing(navigationText: controller.state.url?.absoluteString) },
-                submit: loadAddress,
-                submitBackwards: loadAddress,
-                focusToken: addressFocusToken,
-                didFocus: acknowledgeAddressFocus,
-                onEscape: focusBrowserContent
-            )
-            .frame(minHeight: 18)
-            .padding(.horizontal, 6)
-            .frame(maxWidth: .infinity, minHeight: 22)
-            .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 5))
+            addressCapsule
+            browserButton("magnifyingglass", label: "Find in page", disabled: false) {
+                if isFindVisible { dismissFind() } else {
+                    isFindVisible = true
+                    selectWithoutFocusingContent()
+                    model.requestSelectedBrowserFind()
+                }
+            }
+            .background(isFindVisible ? Theme.selectedFill : .clear, in: RoundedRectangle(cornerRadius: 8))
 
             PaneActionsMenu(
                 select: select,
@@ -130,8 +117,154 @@ private struct ObservedBrowserTabContent: View {
                 isActive: isFocused
             )
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
+        .padding(8)
+        .background(Theme.paneHeader)
+    }
+
+    private var workspace: Workspace? { model.workspaces.first { $0.id == workspaceID } }
+
+    private var suggestions: [BrowserAddressSuggestions.Suggestion] {
+        BrowserAddressSuggestions.suggestions(text: addressState.text, openTabs: workspace?.allTabs.compactMap { tab in
+            guard case .browser(let browser) = tab.content else { return nil }
+            let url = model.browserController(for: browser.id)?.state.url ?? browser.url
+            return .init(title: tab.customTitle ?? tab.automaticDisplayTitle, url: url, tabID: tab.id)
+        } ?? [], currentTabID: tab.id)
+    }
+
+    private var addressCapsule: some View {
+        HStack(spacing: 8) {
+            switch BrowserAddressSecurity.classify(controller.state.url) {
+            case .secure:
+                Image(systemName: "lock").foregroundStyle(Theme.textSecondary).accessibilityLabel("Secure connection")
+            case .local:
+                Text("local").font(Theme.Font.ui(11)).foregroundStyle(Theme.textSecondary)
+                    .padding(.horizontal, 6).frame(height: 18).background(Theme.controlFill, in: RoundedRectangle(cornerRadius: 5))
+            case .insecure:
+                Image(systemName: "lock.open").foregroundStyle(Theme.textSecondary)
+                    .help("Not secure")
+                    .accessibilityLabel("Not secure connection")
+            case .none:
+                EmptyView()
+            }
+            BrowserAddressTextField(
+                text: Binding(get: { addressState.text }, set: { addressState.updateFromUser($0); suggestionIndex = 0 }),
+                beginEditing: { selectWithoutFocusingContent(); suggestionIndex = 0; return addressState.beginEditing() },
+                endEditing: { addressState.endEditing(navigationText: controller.state.url?.absoluteString) },
+                submit: performSelectedSuggestion,
+                submitBackwards: performSelectedSuggestion,
+                focusToken: addressFocusToken,
+                didFocus: acknowledgeAddressFocus,
+                onEscape: focusBrowserContent,
+                moveSelection: moveSuggestion,
+                displayURL: controller.state.url
+            )
+            .frame(maxWidth: .infinity)
+            if addressState.isEditing {
+                Text("⏎ to go").font(Theme.Font.mono(11)).foregroundStyle(Theme.textTertiary)
+            } else {
+                browserDataChip
+            }
+        }
+        .font(Theme.Font.ui(13))
+        .padding(.horizontal, 10)
+        .frame(height: 34)
+        .background(Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 10))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10).stroke(addressState.isEditing ? Theme.accent : Theme.hairline, lineWidth: 1)
+                .allowsHitTesting(false)
+        }
+        .background {
+            RoundedRectangle(cornerRadius: 10).stroke(Theme.accent.opacity(addressState.isEditing ? 0.18 : 0), lineWidth: 3)
+                .padding(-1.5)
+        }
+        .overlay(alignment: .bottomLeading) {
+            if controller.state.isLoading {
+                GeometryReader { geometry in
+                    Theme.accent.frame(width: geometry.size.width * min(1, max(0, controller.state.estimatedProgress)), height: 2)
+                }
+                .frame(height: 2).padding(.horizontal, 10)
+                .accessibilityLabel("Page loading progress")
+                .accessibilityValue("\(Int((controller.state.estimatedProgress * 100).rounded())) percent")
+            }
+        }
+        .overlay(alignment: .topLeading) {
+            if addressState.isEditing, !suggestions.isEmpty {
+                suggestionDropdown.offset(y: 40)
+            }
+        }
+    }
+
+    @ViewBuilder private var browserDataChip: some View {
+        if let profile = browser.profile, profile.scope != .appWide {
+            let folder = model.folders.first { $0.id == workspace?.folderID }
+            let name = profile.scope == .folder ? (folder?.title ?? "No folder")
+                : profile.scope == .projectDirectory ? (profile.projectDirectory?.lastPathComponent ?? "Project")
+                : (workspace?.title ?? "Workspace")
+            HStack(spacing: 5) {
+                if profile.scope == .workspace, let emoji = workspace?.emoji { Text(emoji) } else {
+                    Image(systemName: profile.scope == .workspace ? "square.stack" : "folder.fill")
+                        .foregroundStyle(profile.scope == .folder ? (folder?.color.swiftUIColor ?? Theme.textSecondary) : Theme.textSecondary)
+                }
+                Text(name).lineLimit(1)
+            }
+            .font(Theme.Font.ui(11, weight: .medium)).foregroundStyle(Theme.textSecondary)
+            .padding(.horizontal, 7).frame(height: 20)
+            .background(Theme.controlFill, in: RoundedRectangle(cornerRadius: 6))
+            .help("Browser data: \(name)")
+            .accessibilityLabel("Browser data: \(name)")
+        }
+    }
+
+    private var suggestionDropdown: some View {
+        VStack(spacing: 1) {
+            ForEach(Array(suggestions.enumerated()), id: \.offset) { index, suggestion in
+                Button { performSuggestion(suggestion) } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: suggestion.action.isNavigation ? "arrow.right" : "globe")
+                            .frame(width: 22, height: 22)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(suggestion.title).font(Theme.Font.ui(13)).foregroundStyle(Theme.textPrimary)
+                            Text(suggestion.detail).font(Theme.Font.mono(11)).foregroundStyle(Theme.textSecondary)
+                        }.lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+                        Text(suggestion.action.isNavigation ? "Enter" : "Switch to tab")
+                            .font(Theme.Font.ui(11)).foregroundStyle(Theme.textTertiary)
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 7)
+                    .background(index == suggestionIndex ? Theme.accent.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain).focusable(false)
+                .accessibilityValue(index == suggestionIndex ? "Selected suggestion" : "")
+            }
+            Theme.hairline.frame(height: 1).padding(.top, 4)
+            Text("↑↓ choose · ⏎ open · esc back to the page")
+                .font(Theme.Font.ui(11)).foregroundStyle(Theme.textTertiary).padding(8)
+        }
+        .padding(6).background(Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 12))
+        .overlay { RoundedRectangle(cornerRadius: 12).stroke(Theme.hairline, lineWidth: 1) }
+        .shadow(color: .black.opacity(0.4), radius: 18, y: 10)
+        .accessibilityElement(children: .contain).accessibilityLabel("Address suggestions")
+    }
+
+    private func moveSuggestion(_ offset: Int) {
+        guard !suggestions.isEmpty else { return }
+        suggestionIndex = min(suggestions.count - 1, max(0, suggestionIndex + offset))
+    }
+
+    private func performSelectedSuggestion(_ text: String) {
+        // The native editor can submit before SwiftUI has refreshed the suggestion rows.
+        if text != addressState.text { addressState.updateFromUser(text); suggestionIndex = 0 }
+        guard suggestions.indices.contains(suggestionIndex) else { loadAddress(text); return }
+        performSuggestion(suggestions[suggestionIndex])
+    }
+
+    private func performSuggestion(_ suggestion: BrowserAddressSuggestions.Suggestion) {
+        switch suggestion.action {
+        case .navigate(let text): loadAddress(text)
+        case .switchTab(let id):
+            guard let group = workspace?.layout.orderedGroups.first(where: { $0.tabs.contains { $0.id == id } }) else { return }
+            addressState.endEditing(navigationText: controller.state.url?.absoluteString)
+            model.selectTab(id, in: group.id)
+        }
     }
 
     private func browserButton(
@@ -145,11 +278,11 @@ private struct ObservedBrowserTabContent: View {
             action()
         } label: {
             Image(systemName: image)
-                .frame(width: 18, height: 18)
+                .frame(width: 32, height: 32)
+                .foregroundStyle(disabled ? Theme.textDisabled : Theme.textSecondary)
         }
-        .buttonStyle(.borderless)
-        .controlSize(.small)
-        .frame(width: 24, height: 24)
+        .buttonStyle(BrowserQuietButtonStyle())
+        .frame(width: 32, height: 32)
         .contentShape(Rectangle())
         .disabled(disabled)
         .accessibilityLabel(label)
@@ -168,7 +301,10 @@ private struct ObservedBrowserTabContent: View {
 
     private func select() { model.selectTab(tab.id, in: tabGroupID) }
     private func selectWithoutFocusingContent() { model.selectTab(tab.id, in: tabGroupID, focusContent: false) }
-    private func focusBrowserContent() { controller.webView.window?.makeFirstResponder(controller.webView) }
+    private func focusBrowserContent() {
+        addressState.endEditing(navigationText: controller.state.url?.absoluteString)
+        controller.webView.window?.makeFirstResponder(controller.webView)
+    }
     private var paneTitle: String { tab.customTitle ?? tab.automaticDisplayTitle }
     private var addressFocusToken: UInt64? {
         guard model.browserAddressFocusRequest?.sessionID == browser.id else { return nil }
@@ -186,14 +322,20 @@ private struct ObservedBrowserTabContent: View {
                 text: $findQuery,
                 beginEditing: { selectWithoutFocusingContent(); return true },
                 endEditing: {},
-                submit: { model.findInSelectedBrowser($0) },
-                submitBackwards: { model.findInSelectedBrowser($0, backwards: true) },
+                submit: { findInPane($0) },
+                submitBackwards: { findInPane($0, backwards: true) },
                 focusToken: findFocusToken,
                 didFocus: acknowledgeFind,
                 onEscape: dismissFind,
                 presentation: .findInPage
             )
-            .frame(width: 220, height: 22)
+            .frame(width: 180, height: 28)
+            browserButton("chevron.up", label: "Previous match", disabled: findQuery.isEmpty) {
+                findInPane(findQuery, backwards: true)
+            }
+            browserButton("chevron.down", label: "Next match", disabled: findQuery.isEmpty) {
+                findInPane(findQuery)
+            }
             Button(action: dismissFind) {
                 Image(systemName: "xmark")
                     .frame(width: 18, height: 18)
@@ -204,9 +346,16 @@ private struct ObservedBrowserTabContent: View {
                 .accessibilityLabel("Close find")
         }
         .padding(6)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .background(Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 10))
+        .overlay { RoundedRectangle(cornerRadius: 10).stroke(Theme.hairline, lineWidth: 1) }
+        .shadow(color: .black.opacity(0.35), radius: 12, y: 6)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Find in page")
+    }
+
+    private func findInPane(_ query: String, backwards: Bool = false) {
+        selectWithoutFocusingContent()
+        controller.find(query, backwards: backwards)
     }
 
     private func handleBrowserRequests() {
@@ -251,108 +400,50 @@ struct PaneActionsMenu: View {
     }
 }
 
-private struct BrowserAddressTextField: NSViewRepresentable {
-    @Binding var text: String
-    let beginEditing: () -> Bool
-    let endEditing: () -> Void
-    let submit: (String) -> Void
-    let submitBackwards: (String) -> Void
-    let focusToken: UInt64?
-    let didFocus: (UInt64) -> Void
-    let onEscape: () -> Void
-    var presentation = BrowserTextFieldPresentation.browserAddress
+private extension BrowserAddressSuggestions.Action {
+    var isNavigation: Bool {
+        if case .navigate = self { return true }
+        return false
+    }
+}
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator(
-            text: $text,
-            beginEditing: beginEditing,
-            endEditing: endEditing,
-            submit: submit,
-            submitBackwards: submitBackwards,
-            didFocus: didFocus,
-            onEscape: onEscape
-        )
+private struct BrowserQuietButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        QuietButton(configuration: configuration)
     }
 
-    func makeNSView(context: Context) -> NSTextField {
-        let field = NSTextField(string: text)
-        field.delegate = context.coordinator
-        field.isBezeled = false
-        field.drawsBackground = false
-        field.focusRingType = .default
-        field.placeholderString = presentation.placeholder
-        field.lineBreakMode = .byTruncatingTail
-        field.usesSingleLineMode = true
-        field.toolTip = presentation.accessibilityLabel
-        field.setAccessibilityLabel(presentation.accessibilityLabel)
-        field.setAccessibilityHelp(presentation.accessibilityHelp)
-        return field
-    }
-
-    func updateNSView(_ textField: NSTextField, context: Context) {
-        context.coordinator.text = $text
-        context.coordinator.beginEditing = beginEditing
-        context.coordinator.endEditing = endEditing
-        context.coordinator.submit = submit
-        context.coordinator.submitBackwards = submitBackwards
-        context.coordinator.didFocus = didFocus
-        context.coordinator.onEscape = onEscape
-        if textField.currentEditor() == nil, textField.stringValue != text { textField.stringValue = text }
-        context.coordinator.focusIfRequested(textField, token: focusToken)
-    }
-
-    @MainActor
-    final class Coordinator: NSObject, NSTextFieldDelegate {
-        var text: Binding<String>
-        var beginEditing: () -> Bool
-        var endEditing: () -> Void
-        var submit: (String) -> Void
-        var submitBackwards: (String) -> Void
-        var didFocus: (UInt64) -> Void
-        var onEscape: () -> Void
-        private var lastFocusedToken: UInt64?
-
-        init(
-            text: Binding<String>,
-            beginEditing: @escaping () -> Bool,
-            endEditing: @escaping () -> Void,
-            submit: @escaping (String) -> Void,
-            submitBackwards: @escaping (String) -> Void,
-            didFocus: @escaping (UInt64) -> Void,
-            onEscape: @escaping () -> Void
-        ) {
-            self.text = text
-            self.beginEditing = beginEditing
-            self.endEditing = endEditing
-            self.submit = submit
-            self.submitBackwards = submitBackwards
-            self.didFocus = didFocus
-            self.onEscape = onEscape
+    private struct QuietButton: View {
+        let configuration: ButtonStyle.Configuration
+        @State private var isHovering = false
+        var body: some View {
+            configuration.label
+                .background(isHovering || configuration.isPressed ? Theme.hoverFill : .clear, in: RoundedRectangle(cornerRadius: 8))
+                .onHover { isHovering = $0 }
         }
+    }
+}
 
-        func focusIfRequested(_ field: NSTextField, token: UInt64?) {
-            guard let token, token != lastFocusedToken else { return }
-            lastFocusedToken = token
-            DispatchQueue.main.async { [weak self, weak field] in
-                guard let self, let field, let window = field.window else { return }
-                window.makeFirstResponder(field)
-                field.currentEditor()?.selectAll(nil)
-                self.didFocus(token)
+enum BrowserAddressSecurity: Equatable {
+    case secure
+    case local
+    case insecure
+    case none
+
+    static func classify(_ url: URL?) -> Self {
+        guard let url else { return .none }
+        switch url.scheme?.lowercased() {
+        case "https": return .secure
+        case "file": return .local
+        case "http":
+            let host = (url.host ?? "").lowercased()
+                .trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+            let normalizedHost = host.hasSuffix(".") ? String(host.dropLast()) : host
+            if normalizedHost == "localhost" || normalizedHost.hasSuffix(".localhost")
+                || normalizedHost == "127.0.0.1" || normalizedHost == "::1" {
+                return .local
             }
-        }
-
-        func controlTextDidBeginEditing(_ notification: Notification) {
-            guard beginEditing() else { return }
-            (notification.object as? NSTextField)?.currentEditor()?.selectAll(nil)
-        }
-        func controlTextDidEndEditing(_ notification: Notification) { endEditing() }
-        func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-            if commandSelector == #selector(NSResponder.insertNewline(_:)) {
-                if NSEvent.modifierFlags.contains(.shift) { submitBackwards(textView.string) } else { submit(textView.string) }
-                return true
-            }
-            if commandSelector == #selector(NSResponder.cancelOperation(_:)) { onEscape(); return true }
-            return false
+            return .insecure
+        default: return .none
         }
     }
 }

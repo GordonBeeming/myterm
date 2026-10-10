@@ -163,7 +163,19 @@ public enum NewSessionWorkingDirectoryPolicy: Codable, Equatable, Hashable, Send
 }
 
 public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
-    public static let defaultFontPostScriptName = "Menlo-Regular"
+    /// GeistMono Nerd Font Mono, bundled with the app: it matches the interface's Geist Mono and
+    /// carries the Nerd Font glyphs that Powerline and icon prompts draw, at one cell wide each.
+    public static let defaultFontPostScriptName = "GeistMonoNFM"
+
+    /// The defaults these settings had before new installs got different ones. A saved file that
+    /// is missing one of these keys predates it, and its owner was running with the old value, so
+    /// decoding keeps that value instead of switching an upgrade to the new default.
+    static let legacy = (
+        browserDataScope: BrowserDataScope.workspace,
+        allowsLocalFileJavaScript: false,
+        fontPostScriptName: "Menlo-Regular",
+        cursorShape: TerminalCursorShape.block
+    )
     public static let defaultFontSize = 12.0
     public static let defaultScrollbackLines = 10_000
     public static let defaultTextFileOpenCommand = "ide browse {file}"
@@ -190,7 +202,6 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
     /// Whether a paired companion may read and write this profile's browser cookies. Off means the
     /// companion still keeps its own persistent jar for the profile; nothing crosses the link.
     public var sharesBrowserSignInsWithCompanion: Bool
-    public var compactSidebar: Bool
     public var fontPostScriptName: String
     public var fontSize: Double
     public var terminalAppearance: TerminalAppearance
@@ -199,10 +210,17 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
     public var newSessionWorkingDirectory: NewSessionWorkingDirectoryPolicy
     public var restoresAgentSessions: Bool
     public var namesTabsFromAgentSessions: Bool
+    public var showsIdleAgentIcon: Bool
     /// Whether the toolbar carries the bell that lists the tabs whose agent needs the user. The
     /// list is kept either way; this only decides whether the toolbar shows it. Global: the
     /// toolbar is the app's, not a workspace's, so no override carries it.
     public var showsAgentNotificationBell: Bool
+    public var workingIndicatorIcon: WorkingIndicatorIcon
+    public var workingIndicatorColor: WorkspaceColor
+    public var finishedIndicatorIcon: FinishedIndicatorIcon
+    public var finishedIndicatorColor: WorkspaceColor
+    public var questionIndicatorIcon: QuestionIndicatorIcon
+    public var questionIndicatorColor: WorkspaceColor
     public var scrollbackLines: Int
     public var cursorShape: TerminalCursorShape
     public var cursorBlink: Bool
@@ -210,14 +228,13 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
     public var lineEditingMode: TerminalLineEditingMode
 
     public init(
-        browserDataScope: BrowserDataScope = .workspace,
+        browserDataScope: BrowserDataScope = .appWide,
         webLinkDestination: WebLinkDestination = .myterm,
         textFileOpenCommand: String = TerminalPreferences.defaultTextFileOpenCommand,
         nativeTextFilePatterns: [String] = TerminalPreferences.defaultNativeTextFilePatterns,
         browserFilePatterns: [String] = TerminalPreferences.defaultBrowserFilePatterns,
-        allowsLocalFileJavaScript: Bool = false,
+        allowsLocalFileJavaScript: Bool = true,
         sharesBrowserSignInsWithCompanion: Bool = true,
-        compactSidebar: Bool = true,
         fontPostScriptName: String = TerminalPreferences.defaultFontPostScriptName,
         fontSize: Double = TerminalPreferences.defaultFontSize,
         terminalAppearance: TerminalAppearance = .system,
@@ -226,9 +243,16 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         newSessionWorkingDirectory: NewSessionWorkingDirectoryPolicy = .home,
         restoresAgentSessions: Bool = true,
         namesTabsFromAgentSessions: Bool = true,
+        showsIdleAgentIcon: Bool = false,
         showsAgentNotificationBell: Bool = true,
+        workingIndicatorIcon: WorkingIndicatorIcon = .stirringCook,
+        workingIndicatorColor: WorkspaceColor = .gray,
+        finishedIndicatorIcon: FinishedIndicatorIcon = .tickDraw,
+        finishedIndicatorColor: WorkspaceColor = .blue,
+        questionIndicatorIcon: QuestionIndicatorIcon = .pulsingBubble,
+        questionIndicatorColor: WorkspaceColor = .purple,
         scrollbackLines: Int = TerminalPreferences.defaultScrollbackLines,
-        cursorShape: TerminalCursorShape = .block,
+        cursorShape: TerminalCursorShape = .beam,
         cursorBlink: Bool = true,
         optionAsMeta: Bool = true,
         lineEditingMode: TerminalLineEditingMode = .emacs
@@ -240,7 +264,6 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         self.browserFilePatterns = Self.normalizedFilePatterns(browserFilePatterns)
         self.allowsLocalFileJavaScript = allowsLocalFileJavaScript
         self.sharesBrowserSignInsWithCompanion = sharesBrowserSignInsWithCompanion
-        self.compactSidebar = compactSidebar
         self.fontPostScriptName = Self.validatedFontName(fontPostScriptName)
         self.fontSize = Self.clampedFontSize(fontSize)
         self.terminalAppearance = terminalAppearance
@@ -249,7 +272,14 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         self.newSessionWorkingDirectory = newSessionWorkingDirectory
         self.restoresAgentSessions = restoresAgentSessions
         self.namesTabsFromAgentSessions = namesTabsFromAgentSessions
+        self.showsIdleAgentIcon = showsIdleAgentIcon
         self.showsAgentNotificationBell = showsAgentNotificationBell
+        self.workingIndicatorIcon = workingIndicatorIcon
+        self.workingIndicatorColor = workingIndicatorColor
+        self.finishedIndicatorIcon = finishedIndicatorIcon
+        self.finishedIndicatorColor = finishedIndicatorColor
+        self.questionIndicatorIcon = questionIndicatorIcon
+        self.questionIndicatorColor = questionIndicatorColor
         self.scrollbackLines = Self.clampedScrollbackLines(scrollbackLines)
         self.cursorShape = cursorShape
         self.cursorBlink = cursorBlink
@@ -268,7 +298,6 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
             browserFilePatterns: browserFilePatterns,
             allowsLocalFileJavaScript: allowsLocalFileJavaScript,
             sharesBrowserSignInsWithCompanion: sharesBrowserSignInsWithCompanion,
-            compactSidebar: compactSidebar,
             fontPostScriptName: fontPostScriptName,
             fontSize: fontSize,
             terminalAppearance: terminalAppearance,
@@ -277,7 +306,14 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
             newSessionWorkingDirectory: newSessionWorkingDirectory,
             restoresAgentSessions: restoresAgentSessions,
             namesTabsFromAgentSessions: namesTabsFromAgentSessions,
+            showsIdleAgentIcon: showsIdleAgentIcon,
             showsAgentNotificationBell: showsAgentNotificationBell,
+            workingIndicatorIcon: workingIndicatorIcon,
+            workingIndicatorColor: workingIndicatorColor,
+            finishedIndicatorIcon: finishedIndicatorIcon,
+            finishedIndicatorColor: finishedIndicatorColor,
+            questionIndicatorIcon: questionIndicatorIcon,
+            questionIndicatorColor: questionIndicatorColor,
             scrollbackLines: scrollbackLines,
             cursorShape: cursorShape,
             cursorBlink: cursorBlink,
@@ -296,7 +332,6 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         try container.encode(browserFilePatterns, forKey: .browserFilePatterns)
         try container.encode(allowsLocalFileJavaScript, forKey: .allowsLocalFileJavaScript)
         try container.encode(sharesBrowserSignInsWithCompanion, forKey: .sharesBrowserSignInsWithCompanion)
-        try container.encode(compactSidebar, forKey: .compactSidebar)
         try container.encode(fontPostScriptName, forKey: .fontPostScriptName)
         try container.encode(fontSize, forKey: .fontSize)
         try container.encode(terminalAppearance, forKey: .terminalAppearance)
@@ -305,7 +340,14 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         try container.encode(newSessionWorkingDirectory, forKey: .newSessionWorkingDirectory)
         try container.encode(restoresAgentSessions, forKey: .restoresAgentSessions)
         try container.encode(namesTabsFromAgentSessions, forKey: .namesTabsFromAgentSessions)
+        try container.encode(showsIdleAgentIcon, forKey: .showsIdleAgentIcon)
         try container.encode(showsAgentNotificationBell, forKey: .showsAgentNotificationBell)
+        try container.encode(workingIndicatorIcon, forKey: .workingIndicatorIcon)
+        try container.encode(workingIndicatorColor, forKey: .workingIndicatorColor)
+        try container.encode(finishedIndicatorIcon, forKey: .finishedIndicatorIcon)
+        try container.encode(finishedIndicatorColor, forKey: .finishedIndicatorColor)
+        try container.encode(questionIndicatorIcon, forKey: .questionIndicatorIcon)
+        try container.encode(questionIndicatorColor, forKey: .questionIndicatorColor)
         try container.encode(scrollbackLines, forKey: .scrollbackLines)
         try container.encode(cursorShape, forKey: .cursorShape)
         try container.encode(cursorBlink, forKey: .cursorBlink)
@@ -321,7 +363,6 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         case browserFilePatterns
         case allowsLocalFileJavaScript
         case sharesBrowserSignInsWithCompanion
-        case compactSidebar
         case fontPostScriptName
         case fontSize
         case terminalAppearance
@@ -330,7 +371,14 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         case newSessionWorkingDirectory
         case restoresAgentSessions
         case namesTabsFromAgentSessions
+        case showsIdleAgentIcon
         case showsAgentNotificationBell
+        case workingIndicatorIcon
+        case workingIndicatorColor
+        case finishedIndicatorIcon
+        case finishedIndicatorColor
+        case questionIndicatorIcon
+        case questionIndicatorColor
         case scrollbackLines
         case cursorShape
         case cursorBlink
@@ -346,17 +394,16 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let legacyContainer = try decoder.container(keyedBy: LegacyCodingKeys.self)
         self.init(
-            browserDataScope: (try? container.decode(BrowserDataScope.self, forKey: .browserDataScope)) ?? .workspace,
+            browserDataScope: (try? container.decode(BrowserDataScope.self, forKey: .browserDataScope)) ?? Self.legacy.browserDataScope,
             webLinkDestination: (try? container.decode(WebLinkDestination.self, forKey: .webLinkDestination)) ?? .myterm,
             textFileOpenCommand: (try? container.decode(String.self, forKey: .textFileOpenCommand))
                 ?? (try? legacyContainer.decode(String.self, forKey: .markdownOpenCommand))
                 ?? Self.defaultTextFileOpenCommand,
             nativeTextFilePatterns: (try? container.decode([String].self, forKey: .nativeTextFilePatterns)) ?? Self.defaultNativeTextFilePatterns,
             browserFilePatterns: (try? container.decode([String].self, forKey: .browserFilePatterns)) ?? Self.defaultBrowserFilePatterns,
-            allowsLocalFileJavaScript: (try? container.decode(Bool.self, forKey: .allowsLocalFileJavaScript)) ?? false,
+            allowsLocalFileJavaScript: (try? container.decode(Bool.self, forKey: .allowsLocalFileJavaScript)) ?? Self.legacy.allowsLocalFileJavaScript,
             sharesBrowserSignInsWithCompanion: (try? container.decode(Bool.self, forKey: .sharesBrowserSignInsWithCompanion)) ?? true,
-            compactSidebar: (try? container.decode(Bool.self, forKey: .compactSidebar)) ?? true,
-            fontPostScriptName: (try? container.decode(String.self, forKey: .fontPostScriptName)) ?? Self.defaultFontPostScriptName,
+            fontPostScriptName: (try? container.decode(String.self, forKey: .fontPostScriptName)) ?? Self.legacy.fontPostScriptName,
             fontSize: (try? container.decode(Double.self, forKey: .fontSize)) ?? Self.defaultFontSize,
             terminalAppearance: (try? container.decode(TerminalAppearance.self, forKey: .terminalAppearance)) ?? .system,
             terminalTheme: (try? container.decode(TerminalTheme.self, forKey: .terminalTheme)) ?? .system,
@@ -364,9 +411,16 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
             newSessionWorkingDirectory: (try? container.decode(NewSessionWorkingDirectoryPolicy.self, forKey: .newSessionWorkingDirectory)) ?? .home,
             restoresAgentSessions: (try? container.decode(Bool.self, forKey: .restoresAgentSessions)) ?? true,
             namesTabsFromAgentSessions: (try? container.decode(Bool.self, forKey: .namesTabsFromAgentSessions)) ?? true,
+            showsIdleAgentIcon: (try? container.decode(Bool.self, forKey: .showsIdleAgentIcon)) ?? false,
             showsAgentNotificationBell: (try? container.decode(Bool.self, forKey: .showsAgentNotificationBell)) ?? true,
+            workingIndicatorIcon: (try? container.decode(WorkingIndicatorIcon.self, forKey: .workingIndicatorIcon)) ?? .stirringCook,
+            workingIndicatorColor: (try? container.decode(WorkspaceColor.self, forKey: .workingIndicatorColor)) ?? .gray,
+            finishedIndicatorIcon: (try? container.decode(FinishedIndicatorIcon.self, forKey: .finishedIndicatorIcon)) ?? .tickDraw,
+            finishedIndicatorColor: (try? container.decode(WorkspaceColor.self, forKey: .finishedIndicatorColor)) ?? .blue,
+            questionIndicatorIcon: (try? container.decode(QuestionIndicatorIcon.self, forKey: .questionIndicatorIcon)) ?? .pulsingBubble,
+            questionIndicatorColor: (try? container.decode(WorkspaceColor.self, forKey: .questionIndicatorColor)) ?? .purple,
             scrollbackLines: (try? container.decode(Int.self, forKey: .scrollbackLines)) ?? Self.defaultScrollbackLines,
-            cursorShape: (try? container.decode(TerminalCursorShape.self, forKey: .cursorShape)) ?? .block,
+            cursorShape: (try? container.decode(TerminalCursorShape.self, forKey: .cursorShape)) ?? Self.legacy.cursorShape,
             cursorBlink: (try? container.decode(Bool.self, forKey: .cursorBlink)) ?? true,
             optionAsMeta: (try? container.decode(Bool.self, forKey: .optionAsMeta)) ?? true,
             lineEditingMode: (try? container.decode(TerminalLineEditingMode.self, forKey: .lineEditingMode)) ?? .emacs
@@ -428,15 +482,12 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
     public var browserFilePatterns: [String]?
     public var allowsLocalFileJavaScript: Bool?
     public var sharesBrowserSignInsWithCompanion: Bool?
-    public var compactSidebar: Bool?
     public var fontPostScriptName: String?
     public var fontSize: Double?
     public var terminalAppearance: TerminalAppearance?
     public var terminalTheme: TerminalTheme?
     public var shell: TerminalShell?
     public var newSessionWorkingDirectory: NewSessionWorkingDirectoryPolicy?
-    public var restoresAgentSessions: Bool?
-    public var namesTabsFromAgentSessions: Bool?
     public var scrollbackLines: Int?
     public var cursorShape: TerminalCursorShape?
     public var cursorBlink: Bool?
@@ -453,15 +504,12 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         case browserFilePatterns
         case allowsLocalFileJavaScript
         case sharesBrowserSignInsWithCompanion
-        case compactSidebar
         case fontPostScriptName
         case fontSize
         case terminalAppearance
         case terminalTheme
         case shell
         case newSessionWorkingDirectory
-        case restoresAgentSessions
-        case namesTabsFromAgentSessions
         case scrollbackLines
         case cursorShape
         case cursorBlink
@@ -487,15 +535,12 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         browserFilePatterns = try? container.decodeIfPresent([String].self, forKey: .browserFilePatterns)
         allowsLocalFileJavaScript = try? container.decodeIfPresent(Bool.self, forKey: .allowsLocalFileJavaScript)
         sharesBrowserSignInsWithCompanion = try? container.decodeIfPresent(Bool.self, forKey: .sharesBrowserSignInsWithCompanion)
-        compactSidebar = try? container.decodeIfPresent(Bool.self, forKey: .compactSidebar)
         fontPostScriptName = try? container.decodeIfPresent(String.self, forKey: .fontPostScriptName)
         fontSize = try? container.decodeIfPresent(Double.self, forKey: .fontSize)
         terminalAppearance = try? container.decodeIfPresent(TerminalAppearance.self, forKey: .terminalAppearance)
         terminalTheme = try? container.decodeIfPresent(TerminalTheme.self, forKey: .terminalTheme)
         shell = try? container.decodeIfPresent(TerminalShell.self, forKey: .shell)
         newSessionWorkingDirectory = try? container.decodeIfPresent(NewSessionWorkingDirectoryPolicy.self, forKey: .newSessionWorkingDirectory)
-        restoresAgentSessions = try? container.decodeIfPresent(Bool.self, forKey: .restoresAgentSessions)
-        namesTabsFromAgentSessions = try? container.decodeIfPresent(Bool.self, forKey: .namesTabsFromAgentSessions)
         scrollbackLines = try? container.decodeIfPresent(Int.self, forKey: .scrollbackLines)
         cursorShape = try? container.decodeIfPresent(TerminalCursorShape.self, forKey: .cursorShape)
         cursorBlink = try? container.decodeIfPresent(Bool.self, forKey: .cursorBlink)
@@ -513,15 +558,12 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         try container.encodeIfPresent(browserFilePatterns, forKey: .browserFilePatterns)
         try container.encodeIfPresent(allowsLocalFileJavaScript, forKey: .allowsLocalFileJavaScript)
         try container.encodeIfPresent(sharesBrowserSignInsWithCompanion, forKey: .sharesBrowserSignInsWithCompanion)
-        try container.encodeIfPresent(compactSidebar, forKey: .compactSidebar)
         try container.encodeIfPresent(fontPostScriptName, forKey: .fontPostScriptName)
         try container.encodeIfPresent(fontSize, forKey: .fontSize)
         try container.encodeIfPresent(terminalAppearance, forKey: .terminalAppearance)
         try container.encodeIfPresent(terminalTheme, forKey: .terminalTheme)
         try container.encodeIfPresent(shell, forKey: .shell)
         try container.encodeIfPresent(newSessionWorkingDirectory, forKey: .newSessionWorkingDirectory)
-        try container.encodeIfPresent(restoresAgentSessions, forKey: .restoresAgentSessions)
-        try container.encodeIfPresent(namesTabsFromAgentSessions, forKey: .namesTabsFromAgentSessions)
         try container.encodeIfPresent(scrollbackLines, forKey: .scrollbackLines)
         try container.encodeIfPresent(cursorShape, forKey: .cursorShape)
         try container.encodeIfPresent(cursorBlink, forKey: .cursorBlink)
@@ -538,17 +580,24 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
             browserFilePatterns: browserFilePatterns ?? base.browserFilePatterns,
             allowsLocalFileJavaScript: allowsLocalFileJavaScript ?? base.allowsLocalFileJavaScript,
             sharesBrowserSignInsWithCompanion: sharesBrowserSignInsWithCompanion ?? base.sharesBrowserSignInsWithCompanion,
-            compactSidebar: compactSidebar ?? base.compactSidebar,
             fontPostScriptName: fontPostScriptName ?? base.fontPostScriptName,
             fontSize: fontSize ?? base.fontSize,
             terminalAppearance: terminalAppearance ?? base.terminalAppearance,
             terminalTheme: terminalTheme ?? base.terminalTheme,
             shell: shell ?? base.shell,
             newSessionWorkingDirectory: newSessionWorkingDirectory ?? base.newSessionWorkingDirectory,
-            restoresAgentSessions: restoresAgentSessions ?? base.restoresAgentSessions,
-            namesTabsFromAgentSessions: namesTabsFromAgentSessions ?? base.namesTabsFromAgentSessions,
+            // Agent settings are global only: how agents behave is the same in every workspace.
+            restoresAgentSessions: base.restoresAgentSessions,
+            namesTabsFromAgentSessions: base.namesTabsFromAgentSessions,
+            showsIdleAgentIcon: base.showsIdleAgentIcon,
             // Global only: the toolbar is the app's, so an override has nothing to say about it.
             showsAgentNotificationBell: base.showsAgentNotificationBell,
+            workingIndicatorIcon: base.workingIndicatorIcon,
+            workingIndicatorColor: base.workingIndicatorColor,
+            finishedIndicatorIcon: base.finishedIndicatorIcon,
+            finishedIndicatorColor: base.finishedIndicatorColor,
+            questionIndicatorIcon: base.questionIndicatorIcon,
+            questionIndicatorColor: base.questionIndicatorColor,
             scrollbackLines: scrollbackLines ?? base.scrollbackLines,
             cursorShape: cursorShape ?? base.cursorShape,
             cursorBlink: cursorBlink ?? base.cursorBlink,

@@ -1322,17 +1322,18 @@ final class AppModelTests: XCTestCase {
               let controller = model.browserController(for: browser.id) else {
             return XCTFail("Expected a browser tab and controller")
         }
-        XCTAssertFalse(controller.allowsLocalFileJavaScript)
-
-        model.updateGlobalSettings { $0.allowsLocalFileJavaScript = true }
-
         XCTAssertTrue(controller.allowsLocalFileJavaScript)
+
+        model.updateGlobalSettings { $0.allowsLocalFileJavaScript = false }
+
+        XCTAssertFalse(controller.allowsLocalFileJavaScript)
     }
 
     func testScopedLocalFileJavaScriptUpdatesOnlyAffectedBrowserControllers() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
         let model = try makeModel(applicationSupportDirectory: directory)
+        model.updateGlobalSettings { $0.allowsLocalFileJavaScript = false }
         let firstWorkspaceID = model.store.selectedWorkspaceID
         model.createBrowserTab()
         guard case .browser(let firstBrowser) = try XCTUnwrap(model.selectedTab?.content),

@@ -1,28 +1,33 @@
 import AppKit
 import MyTermCore
 import MyTermPlatform
+import MyTermUI
 import SwiftUI
 
 struct PermissionsSettingsView: View {
     @State private var permissions = SystemPermissionController()
 
     var body: some View {
-        Form {
-            Section {
+        VStack(alignment: .leading, spacing: 24) {
+            Group {
                 Text("macOS treats programs you run in MyTerm as MyTerm, so a permission granted here applies to every pane. Nothing is requested until you click Grant or a program asks for it.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Font.ui(12))
+                    .foregroundStyle(Theme.textSecondary)
             }
 
             ForEach(SystemPermission.Group.allCases) { group in
-                Section(group.title) {
+                SettingsCard(group.title, insetRows: false) {
                     ForEach(group.permissions) { permission in
                         PermissionRow(permission: permission, permissions: permissions)
+                            .padding(.vertical, 14)
+                            .padding(.horizontal, 16)
+                        if permission != group.permissions.last {
+                            Rectangle().fill(Theme.hairline).frame(height: 1)
+                        }
                     }
                 }
             }
         }
-        .formStyle(.grouped)
         .task { await permissions.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             // Most grants are finished in System Settings, so re-read them on the way back.
@@ -43,8 +48,8 @@ private struct PermissionRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(permission.title)
                 Text(permission.detail)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Font.ui(12))
+                    .foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -66,7 +71,11 @@ private struct PermissionRow: View {
             Button {
                 permissions.openSystemSettings(for: permission)
             } label: {
-                Image(systemName: "arrow.up.forward.app")
+                if permission.requestButtonTitle(for: status) == nil {
+                    Text("Open System Settings")
+                } else {
+                    Image(systemName: "arrow.up.forward.app")
+                }
             }
             .buttonStyle(.borderless)
             .help("Open \(permission.title) in System Settings")
@@ -75,29 +84,21 @@ private struct PermissionRow: View {
     }
 
     private var statusLabel: some View {
-        Label(status.label, systemImage: statusSymbol)
-            .font(.footnote)
+        Text(status.label)
+            .font(Theme.Font.ui(12))
             .foregroundStyle(statusColor)
-            .labelStyle(.titleAndIcon)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(statusColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
             .fixedSize()
             .accessibilityLabel("\(permission.title): \(status.label)")
     }
 
-    private var statusSymbol: String {
-        switch status {
-        case .granted: "checkmark.circle.fill"
-        case .denied, .restricted: "xmark.circle.fill"
-        case .notGranted: "minus.circle"
-        case .notDetermined, .unknown: "circle.dashed"
-        case .informational: "info.circle"
-        }
-    }
-
     private var statusColor: Color {
         switch status {
-        case .granted: .green
-        case .denied, .restricted: .red
-        case .notGranted, .notDetermined, .unknown, .informational: .secondary
+        case .granted: Theme.success
+        case .denied, .restricted: Theme.danger
+        case .notGranted, .notDetermined, .unknown, .informational: Theme.textSecondary
         }
     }
 }

@@ -314,7 +314,6 @@ final class WorkspaceStoreStressTests: XCTestCase {
         overrides.nativeTextFilePatterns = ["*.md"]
         overrides.browserFilePatterns = ["*.html"]
         overrides.allowsLocalFileJavaScript = true
-        overrides.compactSidebar = false
         overrides.fontPostScriptName = "Menlo-Bold"
         overrides.fontSize = 1_000
         overrides.terminalAppearance = .dark

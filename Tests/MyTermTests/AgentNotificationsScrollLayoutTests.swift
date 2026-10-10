@@ -2,75 +2,73 @@ import XCTest
 @testable import MyTerm
 
 final class AgentNotificationsScrollLayoutTests: XCTestCase {
-    func testFewerThanFiveRowsFitsExactlyToTheirContent() {
-        let height = AgentNotificationsScrollLayout.scrollHeight(
-            rowHeights: [40, 50, 60],
-            dividerHeight: 1,
-            totalRowCount: 3
-        )
-
-        // 3 rows + 2 dividers between them, no peek because there is nothing more to reveal.
-        XCTAssertEqual(height, 40 + 50 + 60 + 1 * 2)
+    func testAllMeasuredRows() {
+        for count in [1, 2, 5, 6, 12] {
+            let heights: [CGFloat?] = (0..<count).map { CGFloat(40 + $0 * 10) }
+            let expected: CGFloat
+            switch count {
+            case 1: expected = 40
+            case 2: expected = 91
+            case 5: expected = 304
+            default: expected = 341
+            }
+            XCTAssertEqual(height(heights, count: count), expected, accuracy: 0.001, "count: \(count)")
+        }
     }
 
-    func testExactlyFiveRowsFitsAllOfThemWithNoPeek() {
-        let rowHeights: [CGFloat] = [40, 40, 40, 40, 40]
-        let height = AgentNotificationsScrollLayout.scrollHeight(
+    func testOnlyFirstMeasuredReservesEveryVisibleRow() {
+        for count in [1, 2, 5, 6, 12] {
+            var heights = Array<CGFloat?>(repeating: nil, count: count)
+            heights[0] = 40
+            let expected: CGFloat
+            switch count {
+            case 1: expected = 40
+            case 2: expected = 81
+            case 5: expected = 204
+            default: expected = 221
+            }
+            XCTAssertEqual(height(heights, count: count), expected, accuracy: 0.001, "count: \(count)")
+        }
+    }
+
+    func testNoMeasurementsUses52PointEstimateForEveryVisibleRow() {
+        for count in [1, 2, 5, 6, 12] {
+            let expected: CGFloat
+            switch count {
+            case 1: expected = 52
+            case 2: expected = 105
+            case 5: expected = 264
+            default: expected = 285.8
+            }
+            XCTAssertEqual(height([], count: count), expected, accuracy: 0.001, "count: \(count)")
+        }
+    }
+
+    func testMissingMeasurementRetainsItsPositionAndUsesMeasuredAverage() {
+        XCTAssertEqual(height([40, nil, 60], count: 3), 152)
+    }
+
+    func testPeekUsesSixthRowHeightAndIgnoresLaterRows() {
+        XCTAssertEqual(height([40, 40, 40, 40, 40, 100, 500], count: 7), 245)
+    }
+
+    func testEmptyListHasNoScrollArea() {
+        XCTAssertEqual(height([], count: 0), 0)
+    }
+
+    func testMissingTrailingMeasurementsUseTheVisibleAverage() {
+        XCTAssertEqual(height([40], count: 12), 221)
+    }
+
+    func testInvalidMeasurementsUseTheEstimate() {
+        XCTAssertEqual(height([0, .infinity, .nan], count: 3), 158)
+    }
+
+    private func height(_ rowHeights: [CGFloat?], count: Int) -> CGFloat {
+        AgentNotificationsScrollLayout.scrollHeight(
             rowHeights: rowHeights,
             dividerHeight: 1,
-            totalRowCount: 5
+            totalRowCount: count
         )
-
-        XCTAssertEqual(height, 40 * 5 + 1 * 4)
-    }
-
-    func testMoreThanFiveRowsCapsAtFiveWithAPeekOfTheSixth() {
-        let rowHeights: [CGFloat] = [40, 40, 40, 40, 40, 40, 40]
-        let height = AgentNotificationsScrollLayout.scrollHeight(
-            rowHeights: rowHeights,
-            dividerHeight: 1,
-            totalRowCount: 7
-        )
-
-        // Extra, unmeasured rows beyond the fifth never grow the frame...
-        let fiveRowsAndFourDividers = AgentNotificationsScrollLayout.scrollHeight(
-            rowHeights: Array(rowHeights.prefix(5)),
-            dividerHeight: 1,
-            totalRowCount: 5
-        )
-        XCTAssertGreaterThan(height, fiveRowsAndFourDividers)
-
-        // ...but the sixth row's divider plus a fraction of a row height peeks through, hinting
-        // there is more without fully revealing it.
-        let fiveRows: CGFloat = 40 * 5
-        let fourDividers: CGFloat = 1 * 4
-        let peek: CGFloat = 40 * 0.4
-        let expected: CGFloat = fiveRows + fourDividers + 1 + peek
-        XCTAssertEqual(height, expected, accuracy: 0.001)
-    }
-
-    func testUnmeasuredRowsBeyondTheVisibleSetAreIgnored() {
-        // Only the first three rows have reported a height so far (the rest are still off-screen
-        // in the lazy stack); the frame should reflect just what is known.
-        let height = AgentNotificationsScrollLayout.scrollHeight(
-            rowHeights: [40, 40, 40],
-            dividerHeight: 1,
-            totalRowCount: 8
-        )
-
-        XCTAssertGreaterThan(height, 40 * 3 + 1 * 2)
-    }
-
-    func testNoMeasuredRowsLeavesRoomForTheFirstRowToBeMeasured() {
-        // Before any row has reported a height the frame must not collapse to zero: a
-        // zero-height scroll view never lays out its lazy rows, so nothing would ever be measured.
-        let height = AgentNotificationsScrollLayout.scrollHeight(
-            rowHeights: [],
-            dividerHeight: 1,
-            totalRowCount: 4
-        )
-
-        XCTAssertEqual(height, AgentNotificationsScrollLayout.unmeasuredHeight)
-        XCTAssertGreaterThan(height, 0)
     }
 }

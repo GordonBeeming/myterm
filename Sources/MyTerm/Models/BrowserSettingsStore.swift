@@ -6,7 +6,6 @@ import Observation
 @Observable
 final class BrowserSettingsStore {
     private static let browserDataScopeKey = "browserDataScope"
-    private static let compactSidebarKey = "compactSidebar"
     private static let recentWorkspaceEmojisKey = "recentWorkspaceEmojis"
     private static let terminalPreferencesMigrationKey = "terminalPreferencesMigration.v1"
     private static let powerShellTextPatternsMigrationKey = "powerShellTextPatternsMigration.v1"
@@ -21,12 +20,6 @@ final class BrowserSettingsStore {
         }
     }
 
-    var compactSidebar: Bool {
-        didSet {
-            defaults.set(compactSidebar, forKey: Self.compactSidebarKey)
-        }
-    }
-
     private(set) var recentWorkspaceEmojis: [String]
 
     init(
@@ -38,7 +31,6 @@ final class BrowserSettingsStore {
         self.defaults = defaults ?? UserDefaults(suiteName: suiteName) ?? .standard
         key = Self.browserDataScopeKey
         browserDataScope = BrowserDataScope(rawValue: self.defaults.string(forKey: key) ?? "") ?? .workspace
-        compactSidebar = self.defaults.object(forKey: Self.compactSidebarKey) as? Bool ?? true
         recentWorkspaceEmojis = Self.normalizedRecentWorkspaceEmojis(
             self.defaults.stringArray(forKey: Self.recentWorkspaceEmojisKey) ?? []
         )
@@ -55,8 +47,7 @@ final class BrowserSettingsStore {
     var unmigratedLegacyPreferences: LegacyBrowserPreferences? {
         guard !defaults.bool(forKey: Self.terminalPreferencesMigrationKey) else { return nil }
         return LegacyBrowserPreferences(
-            browserDataScope: defaults.object(forKey: Self.browserDataScopeKey) == nil ? nil : browserDataScope,
-            compactSidebar: defaults.object(forKey: Self.compactSidebarKey) == nil ? nil : compactSidebar
+            browserDataScope: defaults.object(forKey: Self.browserDataScopeKey) == nil ? nil : browserDataScope
         )
     }
 
@@ -86,10 +77,9 @@ final class BrowserSettingsStore {
 
 struct LegacyBrowserPreferences: Equatable {
     let browserDataScope: BrowserDataScope?
-    let compactSidebar: Bool?
 
     var hasValues: Bool {
-        browserDataScope != nil || compactSidebar != nil
+        browserDataScope != nil
     }
 }
 
