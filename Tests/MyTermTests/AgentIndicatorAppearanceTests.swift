@@ -1,9 +1,55 @@
+import Foundation
+import Observation
+@testable import MyTerm
 import MyTermCore
 import SwiftUI
 import XCTest
 @testable import MyTermUI
 
 final class AgentIndicatorAppearanceTests: XCTestCase {
+    @MainActor
+    func testModelAppearanceInvalidatesObserversAndReflectsSettingsChangesImmediately() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer {
+            do { try FileManager.default.removeItem(at: directory) }
+            catch { XCTFail("Could not remove test directory: \(error)") }
+        }
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: nil,
+            startsTerminalProcesses: false
+        )
+        XCTAssertEqual(model.agentIndicatorAppearance, AgentIndicatorAppearance())
+
+        let invalidated = XCTestExpectation(description: "Appearance observer invalidated by global settings")
+        withObservationTracking {
+            _ = model.agentIndicatorAppearance
+        } onChange: {
+            invalidated.fulfill()
+        }
+
+        model.updateGlobalSettings {
+            $0.workingIndicatorIcon = .orbit
+            $0.workingIndicatorColor = .teal
+            $0.finishedIndicatorIcon = .star
+            $0.finishedIndicatorColor = .green
+            $0.questionIndicatorIcon = .raisedHand
+            $0.questionIndicatorColor = .orange
+        }
+
+        XCTAssertEqual(XCTWaiter.wait(for: [invalidated], timeout: 0), .completed)
+        let appearance = model.agentIndicatorAppearance
+        XCTAssertEqual(appearance.workingIcon, .orbit)
+        XCTAssertEqual(appearance.workingColor, .teal)
+        XCTAssertEqual(appearance.finishedIcon, .star)
+        XCTAssertEqual(appearance.finishedColor, .green)
+        XCTAssertEqual(appearance.questionIcon, .raisedHand)
+        XCTAssertEqual(appearance.questionColor, .orange)
+        try model.store.flush()
+    }
+
     func testEnvironmentUsesDefaultAppearanceWithoutAppSetup() {
         let appearance = EnvironmentValues().agentIndicatorAppearance
         XCTAssertEqual(appearance.workingIcon, .stirringCook)

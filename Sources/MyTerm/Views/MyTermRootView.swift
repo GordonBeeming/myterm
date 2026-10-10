@@ -35,7 +35,7 @@ struct MyTermRootView: View {
     var body: some View {
         if let model = startup.model {
             WorkspaceContentView(model: model)
-                .environment(\.agentIndicatorAppearance, AgentIndicatorAppearance(preferences: model.store.globalSettings))
+                .environment(\.agentIndicatorAppearance, model.agentIndicatorAppearance)
         } else {
             ContentUnavailableView(
                 "MyTerm could not start",
