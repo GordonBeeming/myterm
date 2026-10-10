@@ -105,10 +105,9 @@ struct BrowserAddressTextField: NSViewRepresentable {
         context.coordinator.moveSelection = moveSelection
         if textField.currentEditor() == nil {
             if let url = displayURL {
-                let host = (url.host ?? (url.isFileURL ? "file://" : url.absoluteString)) + (url.port.map { ":\($0)" } ?? "")
-                let suffix = url.path + (url.query.map { "?\($0)" } ?? "") + (url.fragment.map { "#\($0)" } ?? "")
-                let value = NSMutableAttributedString(string: host, attributes: [.foregroundColor: NSColor(Theme.textStrong)])
-                value.append(NSAttributedString(string: suffix, attributes: [.foregroundColor: NSColor(Theme.textSecondary)]))
+                let parts = BrowserAddressDisplay.parts(for: url)
+                let value = NSMutableAttributedString(string: parts.primary, attributes: [.foregroundColor: NSColor(Theme.textStrong)])
+                value.append(NSAttributedString(string: parts.secondary, attributes: [.foregroundColor: NSColor(Theme.textSecondary)]))
                 value.addAttribute(.font, value: NSFont(name: "Geist", size: 13) ?? .systemFont(ofSize: 13), range: NSRange(location: 0, length: value.length))
                 textField.attributedStringValue = value
             } else if textField.stringValue != text { textField.stringValue = text }
@@ -197,5 +196,18 @@ private final class FocusAwareBrowserTextField: NSTextField {
         let becameFirstResponder = super.becomeFirstResponder()
         if becameFirstResponder { didBecomeFirstResponder?(self) }
         return becameFirstResponder
+    }
+}
+
+enum BrowserAddressDisplay {
+    static func parts(for url: URL) -> (primary: String, secondary: String) {
+        if let host = url.host {
+            let primary = host + (url.port.map { ":\($0)" } ?? "")
+            let secondary = url.path + (url.query.map { "?\($0)" } ?? "")
+                + (url.fragment.map { "#\($0)" } ?? "")
+            return (primary, secondary)
+        }
+        if url.isFileURL { return ("file://", url.path) }
+        return (url.absoluteString, "")
     }
 }
