@@ -161,7 +161,7 @@ final class AppModel {
             reservedChords: MyTermCommandShortcuts.allReserved
         ),
         browserLauncherURL: URL? = MyTermBrowserLauncher.executableURL(),
-        terminalSnapshotDelayNanoseconds: UInt64 = 300_000_000,
+        terminalSnapshotDelayNanoseconds: UInt64 = 30_000_000_000,
         confirmClosingActiveProcesses: @escaping @MainActor (ActiveProcessClosePrompt) -> Bool = AppModel.presentActiveProcessClosePrompt,
         textFileOpenCommandRunner: @escaping TextFileOpenCommandRunner = AppModel.runTextFileOpenCommand,
         textFileOpenCommandAvailabilityChecker: @escaping TextFileOpenCommandAvailabilityChecker = AppModel.isExecutableAvailable,
@@ -2570,7 +2570,15 @@ final class AppModel {
         tabID: TabID,
         sessionID: TerminalSessionID
     ) {
-        terminalSnapshotTasks.removeValue(forKey: sessionID)?.cancel()
+        // A throttle, not a debounce. Restarting the timer on every content change starves a
+        // session that never goes quiet: an agent streaming output would reset the window forever
+        // and never record anything. Leaving a pending capture alone bounds the work at one
+        // snapshot per window per session, measured from the first change of a burst.
+        //
+        // This window runs before the store's own deferred write, so the two add up: output
+        // produced just after a capture is at risk for this delay plus the store's interval, and
+        // it is the pair that sets how much a crash can cost. Quit captures and flushes both.
+        guard terminalSnapshotTasks[sessionID] == nil else { return }
         let delay = terminalSnapshotDelayNanoseconds
         terminalSnapshotTasks[sessionID] = Task { @MainActor [weak self] in
             if delay > 0 {

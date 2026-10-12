@@ -284,6 +284,29 @@ public final class WorkspaceStore {
 
     private var isFlushScheduled = false
 
+    /// How long a `.deferred` mutation may sit in memory before the file catches up.
+    ///
+    /// Only the position-restoring fields defer, and losing them costs a relaunch its "where was
+    /// I", never a setting or a tab. Injectable so tests do not sleep for a minute.
+    ///
+    /// This is one of two delays and they add up. The app throttles its capture of a pane's recent
+    /// output before any of it reaches the store, so the oldest output a crash can lose is that
+    /// throttle plus this interval, not this interval alone. Changing either without the other in
+    /// mind moves a bound nothing else states.
+    private let deferredFlushInterval: TimeInterval
+    private var isDeferredFlushScheduled = false
+
+    /// When a mutation's change has to reach the file.
+    private enum FlushTiming {
+        /// The next turn of the main run loop. Everything a user would expect to survive a crash.
+        case immediate
+        /// Within `deferredFlushInterval`. For state that only restores a view of where the user
+        /// was: recent terminal output, a pane's working directory, a browser pane's address.
+        /// Terminal output alone changed the snapshot several times a second, and at roughly 120 KB
+        /// per encode that was the app's largest ongoing cost.
+        case deferred
+    }
+
     /// Whether the store keeps its state in memory only.
     ///
     /// A repair rewrites the state file, and the backup beside it is the only copy of what the file
@@ -305,8 +328,14 @@ public final class WorkspaceStore {
     }
     public var globalSettings: TerminalPreferences { snapshot.globalSettings }
 
-    public init(persistenceURL: URL, fileManager: FileManager = .default, now: Date = Date()) throws {
+    public init(
+        persistenceURL: URL,
+        fileManager: FileManager = .default,
+        now: Date = Date(),
+        deferredFlushInterval: TimeInterval = 60
+    ) throws {
         self.persistenceURL = persistenceURL
+        self.deferredFlushInterval = deferredFlushInterval
         let migrationBackupURL = persistenceURL.appendingPathExtension("v1-backup")
         let recoveryBackupURL = persistenceURL.appendingPathExtension("recovery-backup")
         if fileManager.fileExists(atPath: persistenceURL.path) {
@@ -1055,7 +1084,12 @@ public final class WorkspaceStore {
         tabID: TabID,
         workingDirectory: URL?
     ) throws {
-        try updateTab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID) { tab in
+        try updateTab(
+            workspaceID: workspaceID,
+            tabGroupID: tabGroupID,
+            tabID: tabID,
+            timing: .deferred
+        ) { tab in
             guard case .terminal(var session) = tab.content else {
                 throw WorkspaceStoreError.terminalTabRequired(tabID)
             }
@@ -1070,7 +1104,12 @@ public final class WorkspaceStore {
         tabID: TabID,
         recentText: String?
     ) throws {
-        try updateTab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID) { tab in
+        try updateTab(
+            workspaceID: workspaceID,
+            tabGroupID: tabGroupID,
+            tabID: tabID,
+            timing: .deferred
+        ) { tab in
             guard case .terminal(var session) = tab.content else {
                 throw WorkspaceStoreError.terminalTabRequired(tabID)
             }
@@ -1115,7 +1154,12 @@ public final class WorkspaceStore {
         tabID: TabID,
         url: URL
     ) throws {
-        try updateTab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID) { tab in
+        try updateTab(
+            workspaceID: workspaceID,
+            tabGroupID: tabGroupID,
+            tabID: tabID,
+            timing: .deferred
+        ) { tab in
             guard case .browser(var session) = tab.content else {
                 throw WorkspaceStoreError.browserTabRequired(tabID)
             }
@@ -1199,9 +1243,10 @@ public final class WorkspaceStore {
         workspaceID: WorkspaceID,
         tabGroupID: TabGroupID,
         tabID: TabID,
+        timing: FlushTiming = .immediate,
         update: (inout Tab) throws -> Void
     ) throws {
-        try mutate { snapshot in
+        try mutate(timing: timing) { snapshot in
             let workspaceIndex = try workspaceIndex(workspaceID, in: snapshot)
             var workspace = snapshot.workspaces[workspaceIndex]
             var group = try tabGroup(tabGroupID, in: workspace)
@@ -1214,34 +1259,61 @@ public final class WorkspaceStore {
         }
     }
 
-    private func mutate(_ body: (inout WorkspaceStoreSnapshot) throws -> Void) throws {
+    private func mutate(
+        timing: FlushTiming = .immediate,
+        _ body: (inout WorkspaceStoreSnapshot) throws -> Void
+    ) throws {
         var next = snapshot
         try body(&next)
         next.repair()
         snapshot = next
         hasUnsavedChanges = true
-        scheduleFlush()
+        scheduleFlush(timing)
     }
 
-    /// One write per turn of the main run loop, however many mutations land in that turn.
+    /// One write per turn of the main run loop, however many mutations land in that turn, or one
+    /// per `deferredFlushInterval` when nothing but deferred state has changed.
     ///
-    /// The block holds the store strongly on purpose. A mutation made just before the last
-    /// reference goes would otherwise be lost with it; a store with a pending flush lives one
-    /// more turn, until the write has been attempted.
-    private func scheduleFlush() {
-        guard !isFlushScheduled, !isPersistenceSuspended else { return }
-        isFlushScheduled = true
+    /// The blocks hold the store strongly on purpose. A mutation made just before the last
+    /// reference goes would otherwise be lost with it; a store with a pending flush lives until
+    /// the write has been attempted.
+    private func scheduleFlush(_ timing: FlushTiming) {
+        guard !isPersistenceSuspended else { return }
         // The store is used from one thread (the main actor in the app), so the reference can
         // cross the dispatch boundary without a lock. Marked rather than proven because the store
         // itself is deliberately not `Sendable`.
         nonisolated(unsafe) let store = self
-        DispatchQueue.main.async {
-            store.performScheduledFlush()
+        switch timing {
+        case .immediate:
+            guard !isFlushScheduled else { return }
+            isFlushScheduled = true
+            DispatchQueue.main.async {
+                store.performScheduledFlush()
+            }
+        case .deferred:
+            // A write already due this turn carries the whole snapshot, deferred changes included,
+            // so there is nothing left for a timer to do.
+            guard !isFlushScheduled, !isDeferredFlushScheduled else { return }
+            isDeferredFlushScheduled = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + deferredFlushInterval) {
+                store.performDeferredFlush()
+            }
         }
     }
 
     private func performScheduledFlush() {
         isFlushScheduled = false
+        attemptFlush()
+    }
+
+    /// Fires `deferredFlushInterval` after the first deferred mutation. An immediate flush in the
+    /// meantime leaves nothing unsaved, and `flush()` then returns without writing.
+    private func performDeferredFlush() {
+        isDeferredFlushScheduled = false
+        attemptFlush()
+    }
+
+    private func attemptFlush() {
         do {
             try flush()
         } catch {

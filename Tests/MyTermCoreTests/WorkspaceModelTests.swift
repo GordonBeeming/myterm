@@ -194,6 +194,40 @@ final class WorkspaceModelTests: XCTestCase {
         XCTAssertLessThanOrEqual(byteBounded.recentText?.utf8.count ?? 0, TerminalSession.maximumRecentTextBytes)
     }
 
+    func testTerminalSessionEqualityIgnoresRecentTextAndNothingElse() {
+        let id = TerminalSessionID()
+        let paneID = PaneID()
+        let base = TerminalSession(
+            id: id,
+            paneID: paneID,
+            workingDirectory: URL(fileURLWithPath: "/tmp/work"),
+            recentText: "some output",
+            agentTitle: "Agent"
+        )
+
+        var otherOutput = base
+        otherOutput.recentText = "completely different output"
+        XCTAssertEqual(base, otherOutput, "comparing restore-only output is what made SwiftUI slow")
+        XCTAssertEqual(base.hashValue, otherOutput.hashValue)
+
+        // The other half: a field that is displayed must still break equality, or a view that
+        // reads it stops refreshing.
+        var otherDirectory = base
+        otherDirectory.workingDirectory = URL(fileURLWithPath: "/tmp/elsewhere")
+        XCTAssertNotEqual(base, otherDirectory)
+
+        var otherTitle = base
+        otherTitle.agentTitle = "Another Agent"
+        XCTAssertNotEqual(base, otherTitle)
+
+        var otherAgentSession = base
+        otherAgentSession.agentSession = AgentSessionHandle(agent: "claude", sessionID: UUID().uuidString)
+        XCTAssertNotEqual(base, otherAgentSession)
+
+        XCTAssertNotEqual(base, TerminalSession(paneID: paneID, workingDirectory: base.workingDirectory))
+        XCTAssertNotEqual(base, TerminalSession(id: id, workingDirectory: base.workingDirectory))
+    }
+
     func testEmptyTabGroupInputRepairsToStableNonemptySelection() throws {
         let groupID = TabGroupID()
         let json = Data("""
