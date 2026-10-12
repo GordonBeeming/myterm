@@ -99,10 +99,14 @@ CREATE TABLE IF NOT EXISTS owner_enrollment_tokens (
     consumed_at INTEGER
 );
 
+-- consumed_at separates a client retrying for a reply it never received from a token being
+-- replayed much later, which is the difference between one more rotation and revoking the device.
+-- Databases created before it exists get the column from ensureColumn at startup.
 CREATE TABLE IF NOT EXISTS used_refresh_tokens (
     token_hash BLOB PRIMARY KEY,
     device_id TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
-    expires_at INTEGER NOT NULL
+    expires_at INTEGER NOT NULL,
+    consumed_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_used_refresh_expiry ON used_refresh_tokens(expires_at);
 

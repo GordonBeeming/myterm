@@ -375,13 +375,20 @@ func (s *Server) exchangeToken(w http.ResponseWriter, r *http.Request) {
 			err = s.store.CreateDeviceTokens(r.Context(), device, access, refresh, accessExpiry, refreshExpiry, now)
 		}
 	case "refresh_token":
-		device, err = s.store.RotateRefresh(r.Context(), request.RefreshToken, refresh, access, accessExpiry, refreshExpiry, now)
+		device, err = s.store.RotateRefresh(r.Context(), request.RefreshToken, refresh, access, accessExpiry, refreshExpiry, now, s.config.RefreshReplayGrace)
 	default:
 		writeError(w, http.StatusBadRequest, "unsupported_grant_type", "grant_type must be authorization_code or refresh_token.")
 		return
 	}
 	if err != nil {
 		if device.ID != "" {
+			// The only way a rejected grant carries a device is the replay path, which has just
+			// revoked it. Logged because nothing else here writes a line: `writeError` is silent
+			// and there is no access log, so a device losing its registration left no trace at all
+			// and had to be found by reading the database.
+			slog.Warn("refresh token replayed outside the grace window; device revoked",
+				"device_id", device.ID, "grant_type", request.GrantType,
+				"request_id", middleware.GetReqID(r.Context()))
 			s.hub.DisconnectDevice(device.ID)
 		}
 		if errors.Is(err, store.ErrUnauthorized) || errors.Is(err, store.ErrExpired) || errors.Is(err, store.ErrConsumed) {

@@ -12,6 +12,17 @@ import (
 	"time"
 )
 
+// How long after a refresh token is consumed a client may still present it and be served a new pair
+// instead of having its device revoked.
+//
+// A rotation that succeeds here but whose reply never reaches the client leaves that client holding
+// a token this relay has already burned, and its next attempt looks exactly like a stolen token
+// being replayed. A machine that sleeps between the request and the response produces that
+// routinely. Inside this window the retry is served; outside it the device is revoked as before.
+//
+// The cost is that a token stolen within the window is worth one more rotation, so keep it small.
+const RefreshReplayGraceDefault = 60 * time.Second
+
 type Config struct {
 	ListenAddress       string
 	PublicURL           *url.URL
@@ -20,6 +31,7 @@ type Config struct {
 	DatabasePath        string
 	AccessTokenTTL      time.Duration
 	RefreshTokenTTL     time.Duration
+	RefreshReplayGrace  time.Duration
 	AuthCodeTTL         time.Duration
 	CeremonyTTL         time.Duration
 	PairingTicketTTL    time.Duration
@@ -87,6 +99,7 @@ func Load() (Config, error) {
 		DatabasePath:        envString("MYTERM_RELAY_DATABASE", "./data/relay.sqlite3"),
 		AccessTokenTTL:      15 * time.Minute,
 		RefreshTokenTTL:     30 * 24 * time.Hour,
+		RefreshReplayGrace:  RefreshReplayGraceDefault,
 		AuthCodeTTL:         2 * time.Minute,
 		CeremonyTTL:         5 * time.Minute,
 		PairingTicketTTL:    5 * time.Minute,
