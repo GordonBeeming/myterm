@@ -84,6 +84,10 @@ final class ScrolledRepaintTests {
             rect.minY <= expectedMinY + 0.5 && rect.maxY >= expectedMaxY - 0.5
         }
         #expect(covered, "no invalidated rect covers view row \(screenRow); got \(view.invalidated)")
+        // Covering the row by repainting everything would satisfy the check above and
+        // throw away the throttling this path depends on, so hold it to a few rows.
+        let tallest = view.invalidated.map(\.height).max() ?? 0
+        #expect(tallest <= cellHeight * 3, "repainted \(tallest)pt for a one-row change")
     }
 
     /// Regression: a feed that rewrites a row and then scrolls records the two under
