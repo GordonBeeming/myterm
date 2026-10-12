@@ -86,11 +86,12 @@ final class ScrolledRepaintTests {
         #expect(covered, "no invalidated rect covers view row \(screenRow); got \(view.invalidated)")
     }
 
-    /// Scrolled back past the whole screen, the rewritten row is off the bottom of
-    /// the viewport. Invalidating anything there would repaint scrollback that did
-    /// not change; scrolling back down refreshes in full.
+    /// Regression: a feed that rewrites a row and then scrolls records the two under
+    /// different yBase values, and the view only sees the range once the whole feed
+    /// has landed. The rewritten line has become visible scrollback by then, and it
+    /// still has to be repainted.
     @MainActor
-    @Test func testRowsScrolledBelowTheViewportAreNotInvalidated() {
+    @Test func testARowRewrittenBeforeAScrollIsStillRepainted() {
         let view = RecordingTerminalView(frame: CGRect(origin: .zero, size: .init(width: 400, height: 200)))
         for i in 0..<60 {
             view.terminal.feed(text: "line \(i)\r\n")
@@ -98,18 +99,28 @@ final class ScrolledRepaintTests {
         view.updateDisplay(notifyAccessibility: false)
 
         let buffer = view.terminal.displayBuffer
+        let scrollBack = 3
+        view.scrollTo(row: buffer.yDisp - scrollBack)
+
         let rows = view.terminal.rows
-        #expect(buffer.yDisp >= rows)
-        view.scrollTo(row: buffer.yDisp - rows)
-
-        view.terminal.feed(text: "\u{1b}[\(rows);1H")
-        view.updateDisplay(notifyAccessibility: false)
-
+        let cellHeight = view.cellDimension.height
+        let rewrittenLine = buffer.yBase
         view.invalidated.removeAll()
-        view.terminal.feed(text: "X")
+
+        // Rewrite the top screen row, then push the screen down one line, both before
+        // the view gets a chance to repaint.
+        view.terminal.feed(text: "\u{1b}[1;1HX")
+        view.terminal.feed(text: "\u{1b}[\(rows);1H\n")
+        #expect(buffer.yBase == rewrittenLine + 1)
         view.updateDisplay(notifyAccessibility: false)
 
-        #expect(view.invalidated.isEmpty, "repainted \(view.invalidated) for a row below the viewport")
+        let viewRow = rewrittenLine - buffer.yDisp
+        let expectedMaxY = view.frame.height - CGFloat(viewRow) * cellHeight
+        let expectedMinY = expectedMaxY - cellHeight
+        let covered = view.invalidated.contains { rect in
+            rect.minY <= expectedMinY + 0.5 && rect.maxY >= expectedMaxY - 0.5
+        }
+        #expect(covered, "no invalidated rect covers view row \(viewRow); got \(view.invalidated)")
     }
 }
 #endif

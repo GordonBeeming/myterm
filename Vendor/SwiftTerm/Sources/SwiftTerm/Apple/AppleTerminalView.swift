@@ -1794,25 +1794,18 @@ extension TerminalView {
         #if os(macOS)
         // getUpdateRange reports screen rows, counted from the active screen's first
         // line (yBase), while the view paints from yDisp. Those agree only while the
-        // viewport follows the output: scrolled up, using the screen row as a view row
-        // invalidates a line that did not change and leaves the one that did stale.
-        let scrollOffset = max (0, terminal.displayBuffer.yBase - terminal.displayBuffer.yDisp)
-        let lastVisibleRow = terminal.rows - 1
-        let viewRowStart = max (0, rowStart + scrollOffset)
-        let viewRowEnd = min (lastVisibleRow, rowEnd + scrollOffset)
-        // Scrolled far enough up, the changed rows sit below the viewport entirely and
-        // there is nothing on screen to repaint; scrolling back down refreshes in full.
-        var region: CGRect? = nil
-        if viewRowStart <= viewRowEnd {
+        // viewport follows the output.
+        let region: CGRect
+        if terminal.displayBuffer.yDisp == terminal.displayBuffer.yBase {
             let baseLine = frame.height
             var rect = CGRect (x: 0,
-                               y: baseLine - (cellDimension.height + CGFloat(viewRowEnd) * cellDimension.height),
+                               y: baseLine - (cellDimension.height + CGFloat(rowEnd) * cellDimension.height),
                                width: frame.width,
-                               height: CGFloat(viewRowEnd-viewRowStart + 1) * cellDimension.height)
+                               height: CGFloat(rowEnd-rowStart + 1) * cellDimension.height)
 
             // If we are the last line, we should also queue a refresh for the "remaining" bits at the
             // end which can be redrawn by large unicode
-            if viewRowEnd == lastVisibleRow {
+            if rowEnd == terminal.rows - 1 {
                 let oh = rect.height
                 let oy = rect.origin.y
                 rect = CGRect (x: 0, y: 0, width: frame.width, height: oh + oy)
@@ -1826,6 +1819,14 @@ extension TerminalView {
                 rect = CGRect (x: 0, y: newY, width: frame.width, height: rect.maxY - newY)
             }
             region = rect
+        } else {
+            // Scrolled back, the range cannot be placed on screen from the screen rows
+            // alone. It accumulates across a whole feed, and a feed that rewrites a row
+            // and then scrolls records the two under different yBase values, so any one
+            // offset applied at the end puts part of the range on the wrong line. The
+            // viewport is held still while this happens, so repainting all of it is both
+            // correct and bounded by a screenful.
+            region = bounds
         }
 #if canImport(MetalKit)
         if metalView != nil {
@@ -1836,7 +1837,10 @@ extension TerminalView {
                 let maxRow = buffer.lines.count - 1
                 let visibleStart = buffer.yDisp
                 let visibleEnd = min(maxRow, buffer.yDisp + buffer.rows - 1)
-                if rowStart >= 0 && rowEnd >= rowStart && rowEnd < terminal.rows {
+                if buffer.yDisp != buffer.yBase {
+                    // Scrolled back the range mixes yBase frames; see the region above.
+                    metalDirtyRange = visibleStart <= visibleEnd ? visibleStart...visibleEnd : nil
+                } else if rowStart >= 0 && rowEnd >= rowStart && rowEnd < terminal.rows {
                     // Screen rows are relative to yBase, not to the scroll position.
                     let absStart = buffer.yBase + rowStart
                     let absEnd = buffer.yBase + rowEnd
@@ -1857,13 +1861,11 @@ extension TerminalView {
             }
             lastRenderedCursor = (x: buffer.x, y: buffer.yBase + buffer.y, hidden: terminal.cursorHidden)
             requestMetalDisplay()
-        } else if let region {
+        } else {
             setNeedsDisplay(region)
         }
 #else
-        if let region {
-            setNeedsDisplay(region)
-        }
+        setNeedsDisplay(region)
 #endif
         #else
         // TODO iOS: need to update the code above, but will do that when I get some real
