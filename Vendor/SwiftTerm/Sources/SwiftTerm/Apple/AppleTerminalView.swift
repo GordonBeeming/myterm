@@ -1792,26 +1792,41 @@ extension TerminalView {
         terminal.clearUpdateRange ()
 
         #if os(macOS)
-        let baseLine = frame.height
-        var region = CGRect (x: 0,
-                             y: baseLine - (cellDimension.height + CGFloat(rowEnd) * cellDimension.height),
-                             width: frame.width,
-                             height: CGFloat(rowEnd-rowStart + 1) * cellDimension.height)
-        
-        // If we are the last line, we should also queue a refresh for the "remaining" bits at the
-        // end which can be redrawn by large unicode
-        if rowEnd == terminal.rows - 1 {
-            let oh = region.height
-            let oy = region.origin.y
-            region = CGRect (x: 0, y: 0, width: frame.width, height: oh + oy)
+        // getUpdateRange reports screen rows, counted from the active screen's first
+        // line (yBase), while the view paints from yDisp. Those agree only while the
+        // viewport follows the output.
+        let region: CGRect
+        if terminal.displayBuffer.yDisp == terminal.displayBuffer.yBase {
+            let baseLine = frame.height
+            var rect = CGRect (x: 0,
+                               y: baseLine - (cellDimension.height + CGFloat(rowEnd) * cellDimension.height),
+                               width: frame.width,
+                               height: CGFloat(rowEnd-rowStart + 1) * cellDimension.height)
+
+            // If we are the last line, we should also queue a refresh for the "remaining" bits at the
+            // end which can be redrawn by large unicode
+            if rowEnd == terminal.rows - 1 {
+                let oh = rect.height
+                let oy = rect.origin.y
+                rect = CGRect (x: 0, y: 0, width: frame.width, height: oh + oy)
+            } else {
+                // Region ends mid-screen (a restricted DECSTBM region): extend the
+                // invalidation down by one cell so the sub-cell remainder just below the
+                // band's bottom row (descenders / tall unicode) is cleared too. Previously
+                // only rowEnd == rows-1 got this, leaving a one-row ghost below the region.
+                let extra = cellDimension.height
+                let newY = max (0, rect.origin.y - extra)
+                rect = CGRect (x: 0, y: newY, width: frame.width, height: rect.maxY - newY)
+            }
+            region = rect
         } else {
-            // Region ends mid-screen (a restricted DECSTBM region): extend the
-            // invalidation down by one cell so the sub-cell remainder just below the
-            // band's bottom row (descenders / tall unicode) is cleared too. Previously
-            // only rowEnd == rows-1 got this, leaving a one-row ghost below the region.
-            let extra = cellDimension.height
-            let newY = max (0, region.origin.y - extra)
-            region = CGRect (x: 0, y: newY, width: frame.width, height: region.maxY - newY)
+            // Scrolled back, the range cannot be placed on screen from the screen rows
+            // alone. It accumulates across a whole feed, and a feed that rewrites a row
+            // and then scrolls records the two under different yBase values, so any one
+            // offset applied at the end puts part of the range on the wrong line. The
+            // viewport is held still while this happens, so repainting all of it is both
+            // correct and bounded by a screenful.
+            region = bounds
         }
 #if canImport(MetalKit)
         if metalView != nil {
@@ -1822,9 +1837,13 @@ extension TerminalView {
                 let maxRow = buffer.lines.count - 1
                 let visibleStart = buffer.yDisp
                 let visibleEnd = min(maxRow, buffer.yDisp + buffer.rows - 1)
-                if rowStart >= 0 && rowEnd >= rowStart && rowEnd < terminal.rows {
-                    let absStart = buffer.yDisp + rowStart
-                    let absEnd = buffer.yDisp + rowEnd
+                if buffer.yDisp != buffer.yBase {
+                    // Scrolled back the range mixes yBase frames; see the region above.
+                    metalDirtyRange = visibleStart <= visibleEnd ? visibleStart...visibleEnd : nil
+                } else if rowStart >= 0 && rowEnd >= rowStart && rowEnd < terminal.rows {
+                    // Screen rows are relative to yBase, not to the scroll position.
+                    let absStart = buffer.yBase + rowStart
+                    let absEnd = buffer.yBase + rowEnd
                     let clampedStart = max(0, min(absStart, maxRow))
                     let clampedEnd = max(0, min(absEnd, maxRow))
                     if clampedStart <= clampedEnd {
