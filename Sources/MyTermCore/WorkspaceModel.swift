@@ -65,6 +65,32 @@ public struct TerminalSession: Codable, Equatable, Hashable, Sendable, Identifia
         }
         return bounded.isEmpty ? nil : bounded
     }
+
+    /// Every field but `recentText`, deliberately.
+    ///
+    /// `recentText` holds up to `maximumRecentTextBytes` of terminal output per session and is read
+    /// in exactly one place, when a relaunched pane restores what it was showing. Nothing draws it.
+    /// SwiftUI compares the whole workspace tree on every graph update, so leaving it in the
+    /// synthesized `==` made every comparison walk kilobytes of text per session and showed up as
+    /// the hottest frame in the app while terminals were merely producing output.
+    ///
+    /// `hash(into:)` has to skip it for the same reason and to stay consistent with `==`. A field
+    /// added to this struct later belongs in both.
+    public static func == (lhs: TerminalSession, rhs: TerminalSession) -> Bool {
+        lhs.id == rhs.id
+            && lhs.paneID == rhs.paneID
+            && lhs.workingDirectory == rhs.workingDirectory
+            && lhs.agentSession == rhs.agentSession
+            && lhs.agentTitle == rhs.agentTitle
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(paneID)
+        hasher.combine(workingDirectory)
+        hasher.combine(agentSession)
+        hasher.combine(agentTitle)
+    }
 }
 
 public enum BrowserDataScope: String, Codable, Equatable, Hashable, Sendable {

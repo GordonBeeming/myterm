@@ -1500,4 +1500,60 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertNil(try XCTUnwrap(store.workspaces.first).settingsOverrides?.fontSize)
     }
 
+    private func persistedText(_ url: URL) throws -> String {
+        String(decoding: try Data(contentsOf: url), as: UTF8.self)
+    }
+
+    func testStateThatOnlyRestoresAViewWaitsForTheDeferredWrite() async throws {
+        let url = temporaryURL()
+        let store = try WorkspaceStore(persistenceURL: url, deferredFlushInterval: 0.2)
+        let workspaceID = store.selectedWorkspaceID
+        let groupID = store.selectedWorkspace.focusedTabGroupID
+        let tabID = try XCTUnwrap(store.selectedWorkspace.selectedTabID)
+
+        try store.updateTerminalRecentText(
+            workspaceID: workspaceID,
+            tabGroupID: groupID,
+            tabID: tabID,
+            recentText: "deferred-output"
+        )
+        XCTAssertEqual(
+            store.selectedWorkspace.tab(groupID: groupID, tabID: tabID)?.terminalSession?.recentText,
+            "deferred-output",
+            "the snapshot is current immediately; only the file waits"
+        )
+
+        // Long enough for the next run loop turn, which is when an immediate write would land.
+        try await Task.sleep(for: .milliseconds(80))
+        XCTAssertTrue(store.hasUnsavedChanges)
+        XCTAssertFalse(try persistedText(url).contains("deferred-output"))
+
+        try await Task.sleep(for: .milliseconds(500))
+        XCTAssertFalse(store.hasUnsavedChanges)
+        XCTAssertTrue(try persistedText(url).contains("deferred-output"))
+    }
+
+    func testAChangeThatMustSurviveACrashCarriesTheWaitingPositionState() async throws {
+        let url = temporaryURL()
+        // Far longer than the test runs, so only the immediate write can put either change on disk.
+        let store = try WorkspaceStore(persistenceURL: url, deferredFlushInterval: 600)
+        let workspaceID = store.selectedWorkspaceID
+        let groupID = store.selectedWorkspace.focusedTabGroupID
+        let tabID = try XCTUnwrap(store.selectedWorkspace.selectedTabID)
+
+        try store.updateTerminalRecentText(
+            workspaceID: workspaceID,
+            tabGroupID: groupID,
+            tabID: tabID,
+            recentText: "carried-output"
+        )
+        try store.renameWorkspace(workspaceID, title: "Renamed")
+
+        try await Task.sleep(for: .milliseconds(80))
+        XCTAssertFalse(store.hasUnsavedChanges)
+        let persisted = try persistedText(url)
+        XCTAssertTrue(persisted.contains("Renamed"))
+        XCTAssertTrue(persisted.contains("carried-output"))
+    }
+
 }
