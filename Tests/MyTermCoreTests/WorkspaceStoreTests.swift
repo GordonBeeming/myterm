@@ -1504,9 +1504,22 @@ final class WorkspaceStoreTests: XCTestCase {
         String(decoding: try Data(contentsOf: url), as: UTF8.self)
     }
 
+    /// Returns once every block already on the main queue has run.
+    ///
+    /// The queue is FIFO, so a flush enqueued before this call is finished by the time it returns.
+    /// Sleeping for a plausible number of milliseconds proves nothing on a loaded machine; this is
+    /// the same check without the race.
+    private func drainMainQueue() async {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+    }
+
     func testStateThatOnlyRestoresAViewWaitsForTheDeferredWrite() async throws {
         let url = temporaryURL()
-        let store = try WorkspaceStore(persistenceURL: url, deferredFlushInterval: 0.2)
+        // Far beyond the test's lifetime, so the next turn of the run loop is the only thing that
+        // could put this on disk, and it must not.
+        let store = try WorkspaceStore(persistenceURL: url, deferredFlushInterval: 600)
         let workspaceID = store.selectedWorkspaceID
         let groupID = store.selectedWorkspace.focusedTabGroupID
         let tabID = try XCTUnwrap(store.selectedWorkspace.selectedTabID)
@@ -1523,14 +1536,34 @@ final class WorkspaceStoreTests: XCTestCase {
             "the snapshot is current immediately; only the file waits"
         )
 
-        // Long enough for the next run loop turn, which is when an immediate write would land.
-        try await Task.sleep(for: .milliseconds(80))
+        await drainMainQueue()
         XCTAssertTrue(store.hasUnsavedChanges)
         XCTAssertFalse(try persistedText(url).contains("deferred-output"))
+    }
 
-        try await Task.sleep(for: .milliseconds(500))
+    func testTheDeferredWriteLandsOnItsOwnWithNothingElseToCarryIt() async throws {
+        let url = temporaryURL()
+        let store = try WorkspaceStore(persistenceURL: url, deferredFlushInterval: 0.05)
+        let workspaceID = store.selectedWorkspaceID
+        let groupID = store.selectedWorkspace.focusedTabGroupID
+        let tabID = try XCTUnwrap(store.selectedWorkspace.selectedTabID)
+
+        try store.updateTerminalRecentText(
+            workspaceID: workspaceID,
+            tabGroupID: groupID,
+            tabID: tabID,
+            recentText: "eventual-output"
+        )
+
+        // Waiting for the condition rather than for a duration: a slow machine makes this test
+        // slower, never wrong.
+        let deadline = ContinuousClock().now.advanced(by: .seconds(10))
+        while store.hasUnsavedChanges, ContinuousClock().now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
         XCTAssertFalse(store.hasUnsavedChanges)
-        XCTAssertTrue(try persistedText(url).contains("deferred-output"))
+        XCTAssertTrue(try persistedText(url).contains("eventual-output"))
     }
 
     func testAChangeThatMustSurviveACrashCarriesTheWaitingPositionState() async throws {
@@ -1549,7 +1582,7 @@ final class WorkspaceStoreTests: XCTestCase {
         )
         try store.renameWorkspace(workspaceID, title: "Renamed")
 
-        try await Task.sleep(for: .milliseconds(80))
+        await drainMainQueue()
         XCTAssertFalse(store.hasUnsavedChanges)
         let persisted = try persistedText(url)
         XCTAssertTrue(persisted.contains("Renamed"))

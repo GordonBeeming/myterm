@@ -288,6 +288,11 @@ public final class WorkspaceStore {
     ///
     /// Only the position-restoring fields defer, and losing them costs a relaunch its "where was
     /// I", never a setting or a tab. Injectable so tests do not sleep for a minute.
+    ///
+    /// This is one of two delays and they add up. The app throttles its capture of a pane's recent
+    /// output before any of it reaches the store, so the oldest output a crash can lose is that
+    /// throttle plus this interval, not this interval alone. Changing either without the other in
+    /// mind moves a bound nothing else states.
     private let deferredFlushInterval: TimeInterval
     private var isDeferredFlushScheduled = false
 
