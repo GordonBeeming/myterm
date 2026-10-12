@@ -99,14 +99,23 @@ CREATE TABLE IF NOT EXISTS owner_enrollment_tokens (
     consumed_at INTEGER
 );
 
--- consumed_at separates a client retrying for a reply it never received from a token being
--- replayed much later, which is the difference between one more rotation and revoking the device.
--- Databases created before it exists get the column from ensureColumn at startup.
+-- consumed_at separates a client retrying for a reply it never received from a token being replayed
+-- much later, which is the difference between answering and revoking the device.
+--
+-- The replay_* columns hold the answer that rotation produced, so a retry inside the window is told
+-- the same thing again instead of being rotated a second time. They are the only place this relay
+-- keeps a usable token rather than a hash, so they are cleared as soon as the window closes and the
+-- read path refuses them on time regardless.
+--
+-- Databases created before these exist get the columns from ensureColumn at startup.
 CREATE TABLE IF NOT EXISTS used_refresh_tokens (
     token_hash BLOB PRIMARY KEY,
     device_id TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
     expires_at INTEGER NOT NULL,
-    consumed_at INTEGER
+    consumed_at INTEGER,
+    replay_access TEXT,
+    replay_refresh TEXT,
+    replay_access_expires_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_used_refresh_expiry ON used_refresh_tokens(expires_at);
 

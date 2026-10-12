@@ -34,18 +34,18 @@ func TestAuthorizationCodeRefreshRotationAndRevocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rotated.ID != device.ID {
-		t.Fatalf("refresh changed device identity: %s != %s", rotated.ID, device.ID)
+	if rotated.Device.ID != device.ID {
+		t.Fatalf("refresh changed device identity: %s != %s", rotated.Device.ID, device.ID)
 	}
 	if _, err := storage.AuthenticateAccess(context.Background(), "access-one", now); !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("old access token survived rotation: %v", err)
 	}
 	// Past the grace window, so this still asserts what it was written to assert: a replay that is
 	// not a client catching up on a lost reply costs the device its registration. The clock has to
-	// move or the grace path would answer and the theft response would go untested.
+	// move or the grace path would answer it and the theft response would go untested.
 	late := now.Add(testReplayGrace + time.Minute)
 	replayed, err := storage.RotateRefresh(context.Background(), "refresh-one", "refresh-three", "access-three", late.Add(time.Minute), late.Add(time.Hour), late, testReplayGrace)
-	if !errors.Is(err, ErrUnauthorized) || replayed.ID != device.ID {
+	if !errors.Is(err, ErrReplayRevoked) || replayed.Device.ID != device.ID {
 		t.Fatalf("old refresh token survived rotation: %v", err)
 	}
 	if _, err := storage.AuthenticateAccess(context.Background(), "access-two", late); !errors.Is(err, ErrUnauthorized) {
@@ -103,28 +103,79 @@ func TestOpeningADatabaseWithoutConsumedAtAddsItAndStaysOpenable(t *testing.T) {
 	}
 }
 
-func TestRefreshReplayInsideGraceServesTheClientInsteadOfRevokingIt(t *testing.T) {
+func TestRefreshRetryInsideGraceIsAnsweredWithTheSamePairAndRotatesNothing(t *testing.T) {
 	storage, device, now := newDeviceWithTokens(t)
 
-	if _, err := storage.RotateRefresh(context.Background(), "refresh-one", "refresh-two", "access-two", now.Add(time.Minute), now.Add(time.Hour), now, testReplayGrace); err != nil {
+	first, err := storage.RotateRefresh(context.Background(), "refresh-one", "refresh-two", "access-two", now.Add(time.Minute), now.Add(time.Hour), now, testReplayGrace)
+	if err != nil {
 		t.Fatal(err)
 	}
 
 	// The client never saw that reply, so it asks again with the token it still holds. This is the
 	// shape a Mac produces when it sleeps between the request and the response.
 	retry := now.Add(4 * time.Second)
-	served, err := storage.RotateRefresh(context.Background(), "refresh-one", "refresh-three", "access-three", retry.Add(time.Minute), retry.Add(time.Hour), retry, testReplayGrace)
+	again, err := storage.RotateRefresh(context.Background(), "refresh-one", "refresh-three", "access-three", retry.Add(time.Minute), retry.Add(time.Hour), retry, testReplayGrace)
 	if err != nil {
 		t.Fatalf("a retry inside the grace window was refused: %v", err)
 	}
-	if served.ID != device.ID {
-		t.Fatalf("grace rotation changed device identity: %s != %s", served.ID, device.ID)
+	if again.Access != first.Access || again.Refresh != first.Refresh {
+		t.Fatalf("a retry was answered with a different pair: %q/%q vs %q/%q",
+			again.Access, again.Refresh, first.Access, first.Refresh)
+	}
+	if !again.Replayed {
+		t.Fatal("a replayed answer was not reported as one")
+	}
+	if again.Device.ID != device.ID || again.Device.OwnerID != device.OwnerID {
+		t.Fatalf("a retry lost the device it belongs to: %+v", again.Device)
+	}
+	// Whole seconds: the expiry round-trips through the database as a Unix timestamp.
+	if again.AccessExpiresAt.Unix() != first.AccessExpiresAt.Unix() {
+		t.Fatalf("a retry moved the access token's expiry: %v vs %v", again.AccessExpiresAt, first.AccessExpiresAt)
 	}
 	if revoked := revokedAt(t, storage, device.ID); revoked.Valid {
 		t.Fatal("a retry inside the grace window revoked the device")
 	}
-	if _, err := storage.AuthenticateAccess(context.Background(), "access-three", retry); err != nil {
-		t.Fatalf("grace rotation did not issue a usable access token: %v", err)
+	// Nothing rotated, so the pair the first reply carried is still the live one. This is the whole
+	// point: a client that did receive that reply is untouched by someone else replaying.
+	if _, err := storage.AuthenticateAccess(context.Background(), "access-two", retry); err != nil {
+		t.Fatalf("a retry invalidated the access token it had already issued: %v", err)
+	}
+	if _, err := storage.AuthenticateAccess(context.Background(), "access-three", retry); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("a retry minted a new access token: %v", err)
+	}
+}
+
+func TestRepeatedRetriesInsideGraceNeverEscalate(t *testing.T) {
+	storage, device, now := newDeviceWithTokens(t)
+
+	first, err := storage.RotateRefresh(context.Background(), "refresh-one", "refresh-two", "access-two", now.Add(time.Minute), now.Add(time.Hour), now, testReplayGrace)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Presenting the consumed token over and over must stay idempotent. Serving it by rotating the
+	// device's current token instead would hand out a fresh thirty-day token every time and cut off
+	// whoever held the previous one.
+	for attempt := 1; attempt <= 5; attempt++ {
+		at := now.Add(time.Duration(attempt) * time.Second)
+		again, err := storage.RotateRefresh(context.Background(), "refresh-one", "refresh-spare", "access-spare", at.Add(time.Minute), at.Add(time.Hour), at, testReplayGrace)
+		if err != nil {
+			t.Fatalf("retry %d was refused: %v", attempt, err)
+		}
+		if again.Access != first.Access || again.Refresh != first.Refresh {
+			t.Fatalf("retry %d was answered with a different pair", attempt)
+		}
+	}
+	if revoked := revokedAt(t, storage, device.ID); revoked.Valid {
+		t.Fatal("repeated retries revoked the device")
+	}
+	if _, err := storage.AuthenticateAccess(context.Background(), "access-two", now.Add(5*time.Second)); err != nil {
+		t.Fatalf("repeated retries invalidated the live access token: %v", err)
+	}
+	// And the token the first reply handed over is still the one that rotates.
+	next := now.Add(10 * time.Second)
+	if _, err := storage.RotateRefresh(context.Background(), "refresh-two", "refresh-four", "access-four", next.Add(time.Minute), next.Add(time.Hour), next, testReplayGrace); err != nil {
+		t.Fatalf("the pair handed back by the retries did not rotate: %v", err)
 	}
 }
 
@@ -136,8 +187,12 @@ func TestRefreshReplayOutsideGraceStillRevokesTheDevice(t *testing.T) {
 	}
 
 	late := now.Add(testReplayGrace + time.Second)
-	if _, err := storage.RotateRefresh(context.Background(), "refresh-one", "refresh-three", "access-three", late.Add(time.Minute), late.Add(time.Hour), late, testReplayGrace); !errors.Is(err, ErrUnauthorized) {
+	revokedResult, err := storage.RotateRefresh(context.Background(), "refresh-one", "refresh-three", "access-three", late.Add(time.Minute), late.Add(time.Hour), late, testReplayGrace)
+	if !errors.Is(err, ErrReplayRevoked) {
 		t.Fatalf("a replay past the grace window was served: %v", err)
+	}
+	if revokedResult.Device.ID != device.ID {
+		t.Fatalf("the revocation did not report the device: %+v", revokedResult.Device)
 	}
 	if revoked := revokedAt(t, storage, device.ID); !revoked.Valid {
 		t.Fatal("a replay past the grace window left the device live")
@@ -147,28 +202,88 @@ func TestRefreshReplayOutsideGraceStillRevokesTheDevice(t *testing.T) {
 	}
 }
 
-func TestGraceRotationIssuesATokenThatWorksAndRetiresTheOneReplayed(t *testing.T) {
+func TestAnAnswerIsNotServedForADeviceRevokedSinceItWasRecorded(t *testing.T) {
+	storage, device, now := newDeviceWithTokens(t)
+
+	if _, err := storage.RotateRefresh(context.Background(), "refresh-one", "refresh-two", "access-two", now.Add(time.Minute), now.Add(time.Hour), now, testReplayGrace); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := storage.db.Exec("UPDATE devices SET revoked_at=? WHERE id=?", now.Unix(), device.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	retry := now.Add(4 * time.Second)
+	if _, err := storage.RotateRefresh(context.Background(), "refresh-one", "refresh-three", "access-three", retry.Add(time.Minute), retry.Add(time.Hour), retry, testReplayGrace); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("a recorded answer outlived the device it belonged to: %v", err)
+	}
+}
+
+func TestARetryNearTheEndOfARefreshTokensLifeIsStillAnswered(t *testing.T) {
+	storage, owner := newStoreTest(t)
+	now := time.Now()
+	oauth := OAuthContext{RedirectURI: "myterm-companion://auth/callback", CodeChallenge: "challenge", DeviceName: "blastoise", DeviceKind: "host"}
+	if err := storage.SaveAuthCode(context.Background(), "code", owner.ID, oauth, now.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	device, err := storage.ExchangeAuthCode(context.Background(), "code", oauth.RedirectURI, oauth.CodeChallenge, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A refresh token with ten seconds left on it, rotated at the last moment. Deciding eligibility
+	// on the presented token's own expiry rather than when it was consumed stranded this client
+	// permanently, because it cannot know the token that replaced the one it is holding.
+	if err := storage.CreateDeviceTokens(context.Background(), device, "access-one", "refresh-one", now.Add(time.Minute), now.Add(10*time.Second), now); err != nil {
+		t.Fatal(err)
+	}
+	first, err := storage.RotateRefresh(context.Background(), "refresh-one", "refresh-two", "access-two", now.Add(time.Minute), now.Add(30*24*time.Hour), now, testReplayGrace)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	retry := now.Add(20 * time.Second)
+	again, err := storage.RotateRefresh(context.Background(), "refresh-one", "refresh-three", "access-three", retry.Add(time.Minute), retry.Add(time.Hour), retry, testReplayGrace)
+	if err != nil {
+		t.Fatalf("a retry was refused because the token it presented had expired: %v", err)
+	}
+	if again.Refresh != first.Refresh {
+		t.Fatal("the retry was answered with a different pair")
+	}
+}
+
+func TestPruningClearsTheStoredAnswerOnceTheWindowHasClosed(t *testing.T) {
 	storage, _, now := newDeviceWithTokens(t)
 
 	if _, err := storage.RotateRefresh(context.Background(), "refresh-one", "refresh-two", "access-two", now.Add(time.Minute), now.Add(time.Hour), now, testReplayGrace); err != nil {
 		t.Fatal(err)
 	}
-	retry := now.Add(4 * time.Second)
-	if _, err := storage.RotateRefresh(context.Background(), "refresh-one", "refresh-three", "access-three", retry.Add(time.Minute), retry.Add(time.Hour), retry, testReplayGrace); err != nil {
-		t.Fatal(err)
+	if stored := storedAnswers(t, storage); stored != 1 {
+		t.Fatalf("the answer was not recorded: %d", stored)
 	}
 
-	// The token the grace path handed back has to be a real rotation, or the fix degrades into
-	// accepting a consumed token forever.
-	next := retry.Add(time.Second)
-	if _, err := storage.RotateRefresh(context.Background(), "refresh-three", "refresh-five", "access-five", next.Add(time.Minute), next.Add(time.Hour), next, testReplayGrace); err != nil {
-		t.Fatalf("the token issued by the grace rotation did not work: %v", err)
+	// The issued pair is the only usable token this relay holds rather than a hash, so it must not
+	// outlive the window that can serve it.
+	if err := storage.PruneExpired(context.Background(), now.Add(testReplayGrace+time.Second), testReplayGrace); err != nil {
+		t.Fatal(err)
 	}
-	// And the one it replaced must not still rotate once the window has passed.
-	late := next.Add(testReplayGrace + time.Second)
-	if _, err := storage.RotateRefresh(context.Background(), "refresh-two", "refresh-six", "access-six", late.Add(time.Minute), late.Add(time.Hour), late, testReplayGrace); !errors.Is(err, ErrUnauthorized) {
-		t.Fatalf("a token superseded by the grace rotation still rotated: %v", err)
+	if stored := storedAnswers(t, storage); stored != 0 {
+		t.Fatalf("pruning left %d usable token(s) in the database", stored)
 	}
+	// The row itself stays, so a late replay is still recognised as one and still revokes.
+	late := now.Add(testReplayGrace + 2*time.Second)
+	if _, err := storage.RotateRefresh(context.Background(), "refresh-one", "refresh-three", "access-three", late.Add(time.Minute), late.Add(time.Hour), late, testReplayGrace); !errors.Is(err, ErrReplayRevoked) {
+		t.Fatalf("pruning the answer also lost the ability to spot a replay: %v", err)
+	}
+}
+
+func storedAnswers(t *testing.T, storage *Store) int {
+	t.Helper()
+	var count int
+	if err := storage.db.QueryRow(
+		"SELECT COUNT(*) FROM used_refresh_tokens WHERE replay_access IS NOT NULL OR replay_refresh IS NOT NULL",
+	).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	return count
 }
 
 // A device holding "access-one" / "refresh-one", the starting point for the replay tests.

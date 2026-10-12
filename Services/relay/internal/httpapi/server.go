@@ -358,6 +358,7 @@ func (s *Server) exchangeToken(w http.ResponseWriter, r *http.Request) {
 	accessExpiry := now.Add(s.config.AccessTokenTTL)
 	refreshExpiry := now.Add(s.config.RefreshTokenTTL)
 	var device store.Device
+	var rotated store.RotatedTokens
 	switch request.GrantType {
 	case "authorization_code":
 		var challenge string
@@ -375,30 +376,47 @@ func (s *Server) exchangeToken(w http.ResponseWriter, r *http.Request) {
 			err = s.store.CreateDeviceTokens(r.Context(), device, access, refresh, accessExpiry, refreshExpiry, now)
 		}
 	case "refresh_token":
-		device, err = s.store.RotateRefresh(r.Context(), request.RefreshToken, refresh, access, accessExpiry, refreshExpiry, now, s.config.RefreshReplayGrace)
+		rotated, err = s.store.RotateRefresh(r.Context(), request.RefreshToken, refresh, access, accessExpiry, refreshExpiry, now, s.config.RefreshReplayGrace)
+		device = rotated.Device
+		if err == nil {
+			// A replay inside the grace window answers with the pair already issued, so the
+			// response carries those and their real remaining life rather than the ones generated
+			// for this request and a full TTL.
+			access, refresh, accessExpiry = rotated.Access, rotated.Refresh, rotated.AccessExpiresAt
+		}
 	default:
 		writeError(w, http.StatusBadRequest, "unsupported_grant_type", "grant_type must be authorization_code or refresh_token.")
 		return
 	}
 	if err != nil {
-		if device.ID != "" {
-			// The only way a rejected grant carries a device is the replay path, which has just
-			// revoked it. Logged because nothing else here writes a line: `writeError` is silent
-			// and there is no access log, so a device losing its registration left no trace at all
-			// and had to be found by reading the database.
+		// Only the refresh replay path reports a revocation, and it says so with its own error. An
+		// authorization-code replay and an internal failure can both arrive here with a device
+		// attached, and neither has revoked anything, so neither may claim to have.
+		if errors.Is(err, store.ErrReplayRevoked) {
+			// Logged because nothing else here writes a line: `writeError` is silent and there is
+			// no access log, so a device losing its registration left no trace at all and had to
+			// be found by reading the production database.
 			slog.Warn("refresh token replayed outside the grace window; device revoked",
-				"device_id", device.ID, "grant_type", request.GrantType,
-				"request_id", middleware.GetReqID(r.Context()))
+				"device_id", device.ID, "request_id", middleware.GetReqID(r.Context()))
+		}
+		if device.ID != "" {
 			s.hub.DisconnectDevice(device.ID)
 		}
-		if errors.Is(err, store.ErrUnauthorized) || errors.Is(err, store.ErrExpired) || errors.Is(err, store.ErrConsumed) {
+		if errors.Is(err, store.ErrUnauthorized) || errors.Is(err, store.ErrExpired) ||
+			errors.Is(err, store.ErrConsumed) || errors.Is(err, store.ErrReplayRevoked) {
 			writeError(w, http.StatusUnauthorized, "invalid_grant", "The authorization grant is invalid or expired.")
 		} else {
 			s.internalError(w)
 		}
 		return
 	}
-	writeJSON(w, http.StatusOK, tokenResponse{AccessToken: access, TokenType: "Bearer", ExpiresIn: int64(s.config.AccessTokenTTL.Seconds()), RefreshToken: refresh, DeviceID: device.ID, AccountID: device.OwnerID})
+	// A replayed answer carries the access token issued earlier, so its life is what is left of
+	// that one. Reporting a full TTL would have the client sit on an expired token.
+	expiresIn := int64(s.config.AccessTokenTTL.Seconds())
+	if rotated.Replayed {
+		expiresIn = int64(accessExpiry.Sub(now).Seconds())
+	}
+	writeJSON(w, http.StatusOK, tokenResponse{AccessToken: access, TokenType: "Bearer", ExpiresIn: expiresIn, RefreshToken: refresh, DeviceID: device.ID, AccountID: device.OwnerID})
 }
 
 func (s *Server) revokeToken(w http.ResponseWriter, r *http.Request) {
