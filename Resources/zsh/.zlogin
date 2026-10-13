@@ -7,3 +7,8 @@ _myterm_dotfile=".zlogin"
 if [ -r "${ZDOTDIR:-}/_myterm_common" ]; then
   . "${ZDOTDIR:-}/_myterm_common"
 fi
+
+# Login startup may replace the hooks installed by .zshrc.
+if (( $+functions[_myterm_register_readiness] )); then
+  precmd_functions=("${(@)precmd_functions:#_myterm_register_readiness}" _myterm_register_readiness)
+fi

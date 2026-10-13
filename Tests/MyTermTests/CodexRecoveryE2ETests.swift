@@ -18,11 +18,16 @@ final class CodexRecoveryE2ETests: XCTestCase {
         try await verify(.statusline, binaryVariable: "MYTERM_STATUSLINE_CODEX_BINARY")
     }
 
+    func testStatuslineCodexResumesAfterZshStartupReadsInput() async throws {
+        try await verify(.statusline, binaryVariable: "MYTERM_STATUSLINE_CODEX_BINARY", startupReadsInput: true)
+    }
+
     func testAbsoluteStatuslineCodexSurvivesTwoRestarts() async throws {
         try await verify(.statusline, binaryVariable: "MYTERM_STATUSLINE_CODEX_BINARY", absoluteLaunch: true)
     }
 
-    private func verify(_ launcher: CodexLauncher, binaryVariable: String, absoluteLaunch: Bool = false) async throws {
+    private func verify(_ launcher: CodexLauncher, binaryVariable: String, absoluteLaunch: Bool = false,
+                        startupReadsInput: Bool = false) async throws {
         guard ProcessInfo.processInfo.environment["MYTERM_CODEX_E2E"] == "1",
               let binary = ProcessInfo.processInfo.environment[binaryVariable] else {
             throw XCTSkip("Set MYTERM_CODEX_E2E=1 and both CLI binary paths to run real-PTY checks")
@@ -42,7 +47,7 @@ final class CodexRecoveryE2ETests: XCTestCase {
             model?.terminateTerminalSessions()
             try? FileManager.default.removeItem(at: root)
         }
-        let testEnvironment = [
+        var testEnvironment = [
             "CODEX_HOME": home.path,
             "OPENAI_API_KEY": "myterm-invalid-test-key",
             // npm's CLI needs node beside its launcher; keep that dependency in the
@@ -50,6 +55,13 @@ final class CodexRecoveryE2ETests: XCTestCase {
             "PATH": "\(resources.path):\(bin.path):\(URL(fileURLWithPath: binary).deletingLastPathComponent().path):/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
             "PS1": "$ "
         ]
+        testEnvironment["ZDOTDIR"] = resources.appending(path: "zsh").path
+        testEnvironment["MYTERM_ORIGINAL_ZDOTDIR"] = root.path
+        testEnvironment["MYTERM_TEST_PATH"] = testEnvironment["PATH"]
+        let inputRead = startupReadsInput ? "read -t 0.5 startup_input\n" : ""
+        try "HISTFILE=/dev/null\nexport PATH=\"$MYTERM_TEST_PATH\"\n\(inputRead)PS1='$ '\n".write(
+            to: root.appending(path: ".zshrc"), atomically: true, encoding: .utf8
+        )
         let config = """
         check_for_update_on_startup = false
         [features]
@@ -73,13 +85,8 @@ final class CodexRecoveryE2ETests: XCTestCase {
         let testLauncher = bin.appending(path: launcher.rawValue)
         try executable.write(to: testLauncher, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: testLauncher.path)
-        // SwiftTerm uses a login argv[0]. A script interpreter avoids /etc/profile's
-        // path_helper changing the fixture PATH before the production launcher runs.
-        let shell = bin.appending(path: "test-shell")
-        try "#!/bin/sh\nexec /bin/sh -i\n".write(to: shell, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: shell.path)
         let seed = try AppModel(channel: .development, applicationSupportDirectory: support, startsTerminalProcesses: false)
-        seed.updateGlobalSettings { $0.shell = .custom(path: shell.path) }
+        seed.updateGlobalSettings { $0.shell = .custom(path: "/bin/zsh") }
         seed.persistWorkspaceStore()
 
         func boot() throws -> AppModel {
@@ -116,6 +123,7 @@ final class CodexRecoveryE2ETests: XCTestCase {
             // The first restart gets no prompt: the next restart must still recover.
             try await Task.sleep(for: .seconds(2))
             try await wait(resumed, until: { resumed.activeForegroundProcessName != nil })
+            try await wait(resumed, until: { rebooted.agentIdentity(forTab: tabID) == .codex })
             if restart == 1 {
                 // A submitted turn proves the final resumed runtime has the same ID.
                 try send("Reply only OK. Do not use tools.", to: resumed)

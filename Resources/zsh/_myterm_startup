@@ -1,0 +1,31 @@
+# MyTerm shell readiness v1
+# Remove the exported token before user startup can launch nested shells.
+_myterm_startup_token=${MYTERM_STARTUP_TOKEN:-}
+typeset +x _myterm_startup_token
+unset MYTERM_STARTUP_TOKEN MYTERM_STARTUP_PARENT_PID
+if [[ -n $_myterm_startup_token && -o interactive ]]; then
+  _myterm_shell_ready() {
+    # Startup scripts can invoke vared; only the top-level command editor is ready.
+    [[ $CONTEXT == start ]] || return 0
+    local token=$_myterm_startup_token
+    unset _myterm_startup_token
+    precmd_functions=("${(@)precmd_functions:#_myterm_register_readiness}")
+    add-zle-hook-widget -d line-init _myterm_shell_ready
+    zle -D _myterm_shell_ready
+    unfunction _myterm_shell_ready _myterm_register_readiness
+    builtin printf '\033]7338;%s\007' "$token"
+  }
+  _myterm_register_readiness() {
+    # Run last in precmd so deferred editor plugins have installed their widgets.
+    # The editor then starts after both prompts expand, with user widgets first.
+    autoload -Uz add-zle-hook-widget
+    add-zle-hook-widget -d line-init _myterm_shell_ready 2>/dev/null
+    if [[ ! -o zle ]] || ! add-zle-hook-widget line-init _myterm_shell_ready 2>/dev/null; then
+      print -u2 'myterm: automatic recovery needs the zsh line editor. Run the saved command manually.'
+      unset _myterm_startup_token
+      precmd_functions=("${(@)precmd_functions:#_myterm_register_readiness}")
+      unfunction _myterm_shell_ready _myterm_register_readiness
+      return 1
+    fi
+  }
+fi

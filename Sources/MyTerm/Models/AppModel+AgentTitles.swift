@@ -59,6 +59,7 @@ extension AppModel {
 
     func forgetAgentPresence(forTab tabID: TabID) {
         liveAgentTabs.removeValue(forKey: tabID)
+        foregroundAgentTabs.removeValue(forKey: tabID)
     }
 
     /// Whether something other than the shell is in front of the pane. A pane with no process

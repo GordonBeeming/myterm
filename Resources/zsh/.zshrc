@@ -23,6 +23,12 @@
 # else in the shell. Unquoted here, that would corrupt any pre-existing PATH
 # entry containing a space rather than just reordering it.
 
+# macOS /etc/zshrc derives its default history path from ZDOTDIR. At that point
+# ZDOTDIR is our shim; remap that default before the user's own rc reads it.
+if [ -n "${ZDOTDIR:-}" ] && [ "${HISTFILE:-}" = "$ZDOTDIR/.zsh_history" ]; then
+  HISTFILE="${MYTERM_ORIGINAL_ZDOTDIR:-${HOME:-/nonexistent}}/.zsh_history"
+fi
+
 _myterm_dotfile=".zshrc"
 if [ -r "${ZDOTDIR:-}/_myterm_common" ]; then
   . "${ZDOTDIR:-}/_myterm_common"
@@ -39,4 +45,8 @@ if [ -n "${MYTERM_RESOURCE_DIR:-}" ]; then
   path=("$MYTERM_RESOURCE_DIR" "${(@)_myterm_kept_path}")
   export PATH
   unset _myterm_kept_path _myterm_entry
+fi
+
+if (( $+functions[_myterm_register_readiness] )); then
+  precmd_functions+=( _myterm_register_readiness )
 fi

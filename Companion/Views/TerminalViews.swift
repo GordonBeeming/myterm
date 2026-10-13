@@ -180,13 +180,14 @@ struct TerminalScreen: View {
                 }
             }
         }
-        // Keyed on the connection as well as the size class. This screen used to be torn out of
-        // the hierarchy when a reconnect cleared the workspaces, which is what re-ran this on the
-        // way back; now that the list is kept, a screen that stays up has to attach again itself
-        // or it sits on "Attaching terminal" until the user leaves and returns.
-        .task(id: "\(String(describing: horizontalSizeClass))|\(scene.connectionID?.uuidString ?? "none")") {
+        // The relay ID arrives before authentication. Readiness must change the
+        // task identity too, or an early attach fails without another chance to run.
+        .task(id: "\(String(describing: horizontalSizeClass))|\(scene.terminalAttachmentConnectionID?.uuidString ?? "none")") {
+            guard scene.terminalAttachmentConnectionID != nil, !Task.isCancelled else { return }
             if horizontalSizeClass != .regular { await scene.setSecondaryTerminal(nil) }
-            await scene.attach(route)
+            for visibleRoute in scene.terminalScreenRoutes(route, includesSecondary: horizontalSizeClass == .regular) {
+                await scene.attach(visibleRoute)
+            }
         }
         .onDisappear {
             let secondary = scene.secondaryTerminal

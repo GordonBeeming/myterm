@@ -9,6 +9,9 @@
 # is found before anything on PATH, which is what makes the redirect survive a
 # user config that rebuilds PATH from scratch.
 
+if [ -r "${ZDOTDIR:-}/_myterm_startup" ]; then
+  . "${ZDOTDIR:-}/_myterm_startup"
+fi
 _myterm_dotfile=".zshenv"
 if [ -r "${ZDOTDIR:-}/_myterm_common" ]; then
   . "${ZDOTDIR:-}/_myterm_common"

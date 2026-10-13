@@ -15,9 +15,8 @@ enum WorkspacePresentationStyle: String, CaseIterable {
 
 private struct WorkspaceVisibilityRequest: Hashable {
     let ownerID: UUID?
-    /// The live relay connection. Without it a reconnect leaves this request unchanged, so the
-    /// terminals are never re-attached and the pane keeps its "Attaching terminal" placeholder
-    /// until the view is rebuilt by leaving the workspace and coming back.
+    /// Becomes available after the Mac handshake, so authentication completing
+    /// restarts attachment even when the relay connection identifier stays unchanged.
     let connectionID: UUID?
     let routes: [TerminalRoute]
 }
@@ -63,7 +62,7 @@ struct AdaptiveWorkspaceView: View {
 
     var body: some View {
         let visibility = WorkspaceVisibilityRequest(ownerID: visibilityOwnerID,
-                                                    connectionID: scene.connectionID,
+                                                    connectionID: scene.terminalAttachmentConnectionID,
                                                     routes: visibleRoutes)
         Group {
             if usesWideLayout, let layout = workspace.layout {

@@ -69,6 +69,24 @@ run_zsh() {
     zsh "$@" </dev/null
 }
 
+history_output="$(run_zsh -ic 'printf "HISTFILE=%s\n" "$HISTFILE"' 2>&1)"
+assert_contains "HISTFILE=$FAKE_HOME/.zsh_history" "$history_output" \
+  "macOS default history must stay in the user's home, outside the app bundle"
+
+HISTORY_ZDOTDIR="$SCRATCH_DIR/history-zdotdir"
+mkdir -p "$HISTORY_ZDOTDIR"
+history_output="$(env -i HOME="$FAKE_HOME" ZDOTDIR="$RESOURCE_DIR/zsh" \
+  MYTERM_ORIGINAL_ZDOTDIR="$HISTORY_ZDOTDIR" PATH="/usr/bin:/bin" \
+  zsh -ic 'printf "HISTFILE=%s\n" "$HISTFILE"' </dev/null 2>&1)"
+assert_contains "HISTFILE=$HISTORY_ZDOTDIR/.zsh_history" "$history_output" \
+  "a user's relocated dotfiles must keep their native default history location"
+printf 'HISTFILE="%s/custom-history"\n' "$HISTORY_ZDOTDIR" > "$HISTORY_ZDOTDIR/.zshrc"
+history_output="$(env -i HOME="$FAKE_HOME" ZDOTDIR="$RESOURCE_DIR/zsh" \
+  MYTERM_ORIGINAL_ZDOTDIR="$HISTORY_ZDOTDIR" PATH="/usr/bin:/bin" \
+  zsh -ic 'printf "HISTFILE=%s\n" "$HISTFILE"' </dev/null 2>&1)"
+assert_contains "HISTFILE=$HISTORY_ZDOTDIR/custom-history" "$history_output" \
+  "a user's explicit history choice must win over the platform default"
+
 type_output="$(run_zsh -c 'type open')"
 assert_contains "shell function" "$type_output" "'zsh -c type open' must report a shell function, not a PATH lookup"
 
