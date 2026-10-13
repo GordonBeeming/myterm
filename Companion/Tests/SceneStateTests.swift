@@ -33,6 +33,36 @@ final class SceneStateTests: XCTestCase {
         XCTAssertNil(releasedScene)
     }
 
+    func testForegroundReconnectWaitsForHostAuthenticationBeforeAttaching() {
+        let scene = SceneModel()
+        let relayConnection = UUID()
+        scene.connectionID = relayConnection
+        for phase in [ConnectionPhase.transportOnline, .authenticating] {
+            scene.connectionPhase = phase
+            XCTAssertNil(scene.terminalAttachmentConnectionID,
+                         "A relay connection cannot attach a terminal before the Mac handshake completes")
+        }
+        let waitingIdentity = scene.terminalAttachmentConnectionID
+        scene.connectionPhase = .online
+        XCTAssertEqual(scene.terminalAttachmentConnectionID, relayConnection)
+        XCTAssertNotEqual(scene.terminalAttachmentConnectionID, waitingIdentity,
+                          "Finishing authentication must restart the terminal view's attachment task")
+    }
+
+    func testReturningToATerminalScreenRestoresBothVisiblePanes() {
+        let scene = SceneModel()
+        let connectionID = testConnection()
+        let primary = testTerminalRoute(connectionID: connectionID)
+        let secondary = testTerminalRoute(connectionID: connectionID)
+        scene.secondaryTerminal = secondary
+        scene.terminalStates.removeAll()
+
+        XCTAssertEqual(scene.terminalScreenRoutes(primary, includesSecondary: true), [primary, secondary])
+        XCTAssertEqual(scene.terminalScreenRoutes(primary, includesSecondary: false), [primary])
+        scene.secondaryTerminal = primary
+        XCTAssertEqual(scene.terminalScreenRoutes(primary, includesSecondary: true), [primary])
+    }
+
     func testClipboardImagePasteRequiresControlAndUsesPNG() throws {
         let view = ClipboardTerminalView(frame: .zero)
         let image = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).image { context in
@@ -551,6 +581,57 @@ final class SceneStateTests: XCTestCase {
         scene.path.removeAll()
         await scene.terminalScreenDidDisappear(moved, secondary: nil)
         XCTAssertNil(scene.terminalStates[original.id])
+    }
+
+    func testLateDisappearanceDoesNotStrandTheReturnedTerminalAtRestoring() async throws {
+        let scene = SceneModel()
+        let route = testTerminalRoute(connectionID: testConnection())
+        scene.selectedConnectionID = route.connectionID
+        scene.path = [.terminal(route)]
+        let state = TerminalSurfaceState(route: route)
+        let checkpoint = try await CheckpointAssembler().ingest(
+            metadata: MessageMetadata(hostID: route.hostID, runtimeID: UUID(), sessionID: route.sessionID),
+            chunk: CheckpointChunkParameters(transferID: UUID(), generation: UUID(), sequence: 0,
+                chunkIndex: 0, chunkCount: 1, totalBytes: 1, bytes: Data([1]))
+        )
+        state.apply(checkpoint: try XCTUnwrap(checkpoint))
+        scene.terminalStates[route.id] = state
+
+        // A replaced view's onDisappear task can arrive after this route is visible again.
+        await scene.terminalScreenDidDisappear(route, secondary: nil)
+
+        XCTAssertTrue(scene.terminalStates[route.id] === state)
+        XCTAssertFalse(state.isAwaitingCheckpoint,
+                       "A late disappearance must not put the current screen back on Restoring terminal")
+    }
+
+    func testOldSecondaryCleanupCannotDetachTheNewPrimary() async {
+        let scene = SceneModel()
+        let connectionID = testConnection()
+        let oldPrimary = testTerminalRoute(connectionID: connectionID)
+        let newPrimary = testTerminalRoute(connectionID: connectionID)
+        scene.selectedConnectionID = connectionID
+        scene.path = [.terminal(newPrimary)]
+        let state = TerminalSurfaceState(route: newPrimary)
+        scene.terminalStates[newPrimary.id] = state
+
+        await scene.terminalScreenDidDisappear(oldPrimary, secondary: newPrimary)
+
+        XCTAssertTrue(scene.terminalStates[newPrimary.id] === state)
+    }
+
+    func testDisappearanceDetachesATerminalCoveredByABrowserRoute() async {
+        let scene = SceneModel()
+        let route = testTerminalRoute(connectionID: testConnection())
+        scene.selectedConnectionID = route.connectionID
+        let browser = BrowserRoute(connectionID: route.connectionID, workspaceID: route.workspaceID,
+            groupID: UUID(), tabID: UUID(), title: "Browser", url: nil)
+        scene.path = [.terminal(route), .browser(browser)]
+        scene.terminalStates[route.id] = TerminalSurfaceState(route: route)
+
+        await scene.terminalScreenDidDisappear(route, secondary: nil)
+
+        XCTAssertNil(scene.terminalStates[route.id])
     }
 
     /// A reconnect to the same Mac keeps the workspaces it last reported. Dropping them emptied

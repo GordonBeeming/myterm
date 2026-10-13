@@ -333,6 +333,10 @@ final class SceneModel {
     var secondaryTerminal: TerminalRoute?
     var connectionPhase: ConnectionPhase = .disconnected
     var connectionID: UUID?
+    /// Relay readiness precedes the Mac handshake; terminal messages need the authenticated channel.
+    var terminalAttachmentConnectionID: UUID? {
+        connectionPhase == .online ? connectionID : nil
+    }
     var projection: RemoteWorkspaceProjection?
     /// Process-wide, not per scene: the one-live-view-per-profile rule only means anything if every
     /// browser view in the app consults the same cache, and the companion supports multiple scenes.
@@ -927,6 +931,12 @@ final class SceneModel {
         if let route { await attach(route) }
     }
 
+    func terminalScreenRoutes(_ primary: TerminalRoute, includesSecondary: Bool) -> [TerminalRoute] {
+        guard includesSecondary, let secondary = secondaryTerminal,
+              secondary.id != primary.id else { return [primary] }
+        return [primary, secondary]
+    }
+
     func selectPrimaryTerminal(_ route: TerminalRoute,
                                replacing current: TerminalRoute) async {
         guard route.connectionID == selectedConnectionID,
@@ -944,14 +954,14 @@ final class SceneModel {
 
     func terminalScreenDidDisappear(_ route: TerminalRoute,
                                     secondary: TerminalRoute?) async {
-        let stableSessionIsStillRouted = path.contains { element in
-            if case .terminal(let current) = element { return current.id == route.id }
-            return false
+        // Disappearance tasks can outlive their view. A former primary or secondary
+        // may already be visible in the replacement screen when cleanup runs.
+        func isCurrentlyPresented(_ id: TerminalSurfaceID) -> Bool {
+            guard case .terminal(let visible) = path.last else { return false }
+            return visible.id == id || secondaryTerminal?.id == id
         }
-        if let current = terminalStates[route.id]?.route,
-           current != route, stableSessionIsStillRouted { return }
-        await detach(route)
-        if let secondary { await detach(secondary) }
+        if !isCurrentlyPresented(route.id) { await detach(route) }
+        if let secondary, !isCurrentlyPresented(secondary.id) { await detach(secondary) }
     }
 
     func sendInput(_ data: Data, route: TerminalRoute) async {
