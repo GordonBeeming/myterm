@@ -77,7 +77,10 @@ EOF
     fi
     case "${MYTERM_CODEX_LAUNCHER:-}" in codex|codex-statusline) launcher=$MYTERM_CODEX_LAUNCHER;; esac
     if [ -z "$launcher" ]; then
-      case "${owner_command##*/}" in codex|codex-statusline) launcher=${owner_command##*/};; esac
+      case "$owner_command" in
+        */.local/share/codex-statusline/current/bin/codex|*/.local/share/codex-statusline/releases/*/bin/codex) launcher=codex-statusline;;
+        *) case "${owner_command##*/}" in codex|codex-statusline) launcher=${owner_command##*/};; esac;;
+      esac
     fi
   fi
   tty=$(ps -o tty= -p "$PPID" 2>/dev/null | tr -d '[:space:]')

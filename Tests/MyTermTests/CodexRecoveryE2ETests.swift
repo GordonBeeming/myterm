@@ -55,13 +55,13 @@ final class CodexRecoveryE2ETests: XCTestCase {
             "PATH": "\(resources.path):\(bin.path):\(URL(fileURLWithPath: binary).deletingLastPathComponent().path):/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
             "PS1": "$ "
         ]
-        if startupReadsInput {
-            testEnvironment["ZDOTDIR"] = resources.appending(path: "zsh").path
-            testEnvironment["MYTERM_ORIGINAL_ZDOTDIR"] = root.path
-            try "HISTFILE=/dev/null\nread -t 0.5 startup_input\nPS1='$ '\n".write(
-                to: root.appending(path: ".zshrc"), atomically: true, encoding: .utf8
-            )
-        }
+        testEnvironment["ZDOTDIR"] = resources.appending(path: "zsh").path
+        testEnvironment["MYTERM_ORIGINAL_ZDOTDIR"] = root.path
+        testEnvironment["MYTERM_TEST_PATH"] = testEnvironment["PATH"]
+        let inputRead = startupReadsInput ? "read -t 0.5 startup_input\n" : ""
+        try "HISTFILE=/dev/null\nexport PATH=\"$MYTERM_TEST_PATH\"\n\(inputRead)PS1='$ '\n".write(
+            to: root.appending(path: ".zshrc"), atomically: true, encoding: .utf8
+        )
         let config = """
         check_for_update_on_startup = false
         [features]
@@ -85,13 +85,8 @@ final class CodexRecoveryE2ETests: XCTestCase {
         let testLauncher = bin.appending(path: launcher.rawValue)
         try executable.write(to: testLauncher, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: testLauncher.path)
-        // SwiftTerm uses a login argv[0]. A script interpreter avoids /etc/profile's
-        // path_helper changing the fixture PATH before the production launcher runs.
-        let shell = bin.appending(path: "test-shell")
-        try "#!/bin/sh\nexec /bin/sh -i\n".write(to: shell, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: shell.path)
         let seed = try AppModel(channel: .development, applicationSupportDirectory: support, startsTerminalProcesses: false)
-        seed.updateGlobalSettings { $0.shell = .custom(path: startupReadsInput ? "/bin/zsh" : shell.path) }
+        seed.updateGlobalSettings { $0.shell = .custom(path: "/bin/zsh") }
         seed.persistWorkspaceStore()
 
         func boot() throws -> AppModel {

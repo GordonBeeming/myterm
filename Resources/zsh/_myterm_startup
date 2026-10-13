@@ -1,7 +1,7 @@
 # MyTerm shell readiness v1
 # Remove the exported token before user startup can launch nested shells.
 _myterm_startup_token=${MYTERM_STARTUP_TOKEN:-}
-unset MYTERM_STARTUP_TOKEN
+unset MYTERM_STARTUP_TOKEN MYTERM_STARTUP_PARENT_PID
 if [[ -n $_myterm_startup_token && -o interactive ]]; then
   _myterm_shell_ready() {
     local token=$_myterm_startup_token

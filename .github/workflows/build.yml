@@ -42,6 +42,11 @@ jobs:
       - name: Build all targets
         run: swift build --build-tests
 
+      - name: Install fish for real shell startup tests
+        run: |
+          brew install fish
+          echo "MYTERM_TEST_FISH_BINARY=$(command -v fish)" >> "$GITHUB_ENV"
+
       - name: Run tests
         run: swift test --parallel
 
@@ -82,7 +87,7 @@ jobs:
         run: |
           resources="dist/myterm.app/Contents/Resources"
           missing=0
-          for shim in myterm-browser open myterm-bash-env myterm-agent-hook codex codex-statusline myterm-codex \
+          for shim in myterm-browser open myterm-bash-env myterm-agent-hook myterm-bash-startup myterm-fish-startup.fish codex codex-statusline myterm-codex \
                       zsh/_myterm_common zsh/_myterm_startup zsh/.zshenv zsh/.zprofile zsh/.zshrc zsh/.zlogin zsh/.zlogout; do
             if [ ! -f "$resources/$shim" ]; then
               echo "missing from the bundle: $shim" >&2

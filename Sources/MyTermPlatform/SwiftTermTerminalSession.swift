@@ -145,17 +145,48 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         startupReadinessTimer?.invalidate()
         startupReadinessTimer = nil
         startupToken = nil
-        if configuration.initialCommand?.isEmpty == false,
-           configuration.shell.lastPathComponent == "zsh",
-           let zdotdir = environment["ZDOTDIR"],
-           let readiness = try? String(contentsOfFile: "\(zdotdir)/_myterm_startup", encoding: .utf8),
-           readiness.hasPrefix("# MyTerm shell readiness v1\n") {
+        var arguments = configuration.shellArguments
+        var startupFailure: TerminalSessionFailure?
+        if configuration.initialCommand?.isEmpty == false {
             startupToken = UUID().uuidString
             environment["MYTERM_STARTUP_TOKEN"] = startupToken
+            environment["MYTERM_STARTUP_PARENT_PID"] = String(getpid())
+            do {
+                switch configuration.shell.lastPathComponent {
+                case "zsh":
+                    guard let zdotdir = environment["ZDOTDIR"],
+                          let readiness = try? String(contentsOfFile: "\(zdotdir)/_myterm_startup", encoding: .utf8),
+                          readiness.hasPrefix("# MyTerm shell readiness v1\n") else {
+                        throw TerminalSessionFailure(message: "The zsh startup integration is unavailable. The saved command was not sent.")
+                    }
+                case "bash":
+                    guard let resources = environment["MYTERM_RESOURCE_DIR"],
+                          FileManager.default.isReadableFile(atPath: "\(resources)/myterm-bash-startup") else {
+                        throw TerminalSessionFailure(message: "The bash startup integration is unavailable. The saved command was not sent.")
+                    }
+                    let home = environment["HOME"] ?? ProcessInfo.processInfo.environment["HOME"]
+                        ?? FileManager.default.homeDirectoryForCurrentUser.path
+                    _ = try BashStartupIntegration.install(in: URL(fileURLWithPath: home, isDirectory: true))
+                case "fish":
+                    guard let resources = environment["MYTERM_RESOURCE_DIR"],
+                          FileManager.default.isReadableFile(atPath: "\(resources)/myterm-fish-startup.fish") else {
+                        throw TerminalSessionFailure(message: "The fish startup integration is unavailable. The saved command was not sent.")
+                    }
+                    let path = "\(resources)/myterm-fish-startup.fish".replacingOccurrences(of: "'", with: "'\\''")
+                    arguments += ["--init-command", "source '\(path)'"]
+                default:
+                    throw TerminalSessionFailure(message: "Automatic startup commands require zsh, bash or fish. Run the saved command manually in this custom shell.")
+                }
+            } catch {
+                startupFailure = TerminalSessionFailure(message: error.localizedDescription)
+                startupToken = nil
+                environment.removeValue(forKey: "MYTERM_STARTUP_TOKEN")
+                environment.removeValue(forKey: "MYTERM_STARTUP_PARENT_PID")
+            }
         }
         terminal.startProcess(
             executable: configuration.shell.path,
-            args: configuration.shellArguments,
+            args: arguments,
             environment: Self.processEnvironment(overrides: environment),
             execName: "-\(configuration.shell.lastPathComponent)",
             currentDirectory: configuration.workingDirectory.path
@@ -167,7 +198,9 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
             throw failure
         }
         isRunning = true
-        if startupToken == nil {
+        if let startupFailure {
+            onEvent?(.initialCommandFailed(startupFailure))
+        } else if startupToken == nil {
             sendInitialCommand()
         } else {
             let timer = Timer(timeInterval: 10, repeats: false) { [weak self] _ in
@@ -198,7 +231,8 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
 
     private func sendInitialCommand() {
         if let command = configuration.initialCommand, !command.isEmpty {
-            terminal.send(txt: command + "\n")
+            let cleanup = configuration.shell.lastPathComponent == "bash" ? " _myterm_finish_startup 2>/dev/null; " : ""
+            terminal.send(txt: cleanup + command + "\n")
         }
     }
 

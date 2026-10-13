@@ -8,6 +8,135 @@ private final class FocusableTerminalTestView: NSView {
 
 final class TerminalSessionConfigurationTests: XCTestCase {
     @MainActor
+    func testUnsupportedShellWarnsWithoutSendingTheSavedCommand() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "myterm-custom-shell-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let marker = root.appending(path: "command-ran")
+        let session = try SwiftTermTerminalSession(configuration: TerminalSessionConfiguration(
+            shell: URL(fileURLWithPath: "/bin/sh"), workingDirectory: root, shellArguments: ["-i"],
+            initialCommand: "printf ran > '\(marker.path)'", environment: ["HOME": root.path, "ENV": ""]
+        ))
+        defer { session.terminate() }
+        var warned = false
+        var failed = false
+        session.onEvent = { event in
+            if case .initialCommandFailed = event { warned = true }
+            if case .failed = event { failed = true }
+        }
+        try session.start()
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertTrue(warned)
+        XCTAssertFalse(failed)
+        XCTAssertTrue(session.isRunning)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path))
+        try session.sendRemoteInput(Data("printf manual > '\(marker.path)'\r".utf8),
+                                    generation: session.remoteCheckpoint().generation)
+        for _ in 0..<100 {
+            if FileManager.default.fileExists(atPath: marker.path) { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertEqual(try String(contentsOf: marker, encoding: .utf8), "manual")
+    }
+
+    @MainActor
+    func testBashLoginStartupCannotConsumeTheRestoredCommand() async throws {
+        try await verifyStartupInput(shell: URL(fileURLWithPath: "/bin/bash"), fish: false)
+    }
+
+    @MainActor
+    func testBashPromptChangesMadeDuringFirstRenderSurviveRecovery() async throws {
+        try await verifyStartupInput(shell: URL(fileURLWithPath: "/bin/bash"), fish: false, promptRewritesItself: true)
+    }
+
+    @MainActor
+    func testBashPromptCommandsAppendedDuringFirstRenderSurviveRecovery() async throws {
+        try await verifyStartupInput(shell: URL(fileURLWithPath: "/bin/bash"), fish: false, promptAppendsCommand: true)
+    }
+
+    @MainActor
+    func testBashSemicolonPromptAppendKeepsLaterPromptsWorking() async throws {
+        try await verifyStartupInput(shell: URL(fileURLWithPath: "/bin/bash"), fish: false, promptAppendsSemicolon: true)
+    }
+
+    @MainActor
+    func testFishStartupCannotConsumeTheRestoredCommand() async throws {
+        guard let path = ProcessInfo.processInfo.environment["MYTERM_TEST_FISH_BINARY"] else {
+            throw XCTSkip("Set MYTERM_TEST_FISH_BINARY to run the real fish integration")
+        }
+        try await verifyStartupInput(shell: URL(fileURLWithPath: path), fish: true)
+    }
+
+    @MainActor
+    private func verifyStartupInput(shell: URL, fish: Bool, promptRewritesItself: Bool = false,
+                                    promptAppendsCommand: Bool = false, promptAppendsSemicolon: Bool = false) async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "myterm-shell-startup-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let marker = root.appending(path: "command-ran")
+        if fish {
+            let config = root.appending(path: "config/fish")
+            try FileManager.default.createDirectory(at: config, withIntermediateDirectories: true)
+            try "set fish_greeting\n/bin/bash --noprofile --norc -c 'read -t 1 startup_input'\nfunction fish_prompt; printf '$ '; end\n".write(
+                to: config.appending(path: "config.fish"), atomically: true, encoding: .utf8)
+        } else {
+            let promptCommand = promptAppendsSemicolon
+                ? #"PROMPT_COMMAND="printf user-prompt > prompt-ran; PROMPT_COMMAND+=';:'""#
+                : promptAppendsCommand
+                ? #"PROMPT_COMMAND="printf user-prompt > prompt-ran; PROMPT_COMMAND+=\$'\n:'""#
+                : promptRewritesItself
+                ? #"PROMPT_COMMAND="printf user-prompt > prompt-ran; PROMPT_COMMAND='printf user-prompt > prompt-ran'""#
+                : "PROMPT_COMMAND='printf user-prompt > prompt-ran'"
+            try "HISTFILE='\(root.appending(path: "history").path)'\nhistory -s 'echo previous'\nread -t 1 startup_input\n\(promptCommand)\nPS1='$ '\n".write(
+                to: root.appending(path: ".bash_profile"), atomically: true, encoding: .utf8)
+        }
+        let resources = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().appending(path: "Resources")
+        let bashPromptReset = promptAppendsSemicolon ? "" : "PROMPT_COMMAND=''; "
+        // HOME here is the child shell's actual isolated home, never the runner's environment.
+        let session = try SwiftTermTerminalSession(configuration: TerminalSessionConfiguration(
+            shell: shell, workingDirectory: root, shellArguments: ["-l", "-i"],
+            initialCommand: fish ? "printf ran > '\(marker.path)'" :
+                "printf '%s\\n%s' \"$PS1\" \"$PROMPT_COMMAND\" > '\(marker.path)'; \(bashPromptReset)history > '\(root.appending(path: "history-state").path)'",
+            environment: ["HOME": root.path, "XDG_CONFIG_HOME": root.appending(path: "config").path,
+                          "XDG_DATA_HOME": root.appending(path: "data").path, "BASH_ENV": "",
+                          "MYTERM_RESOURCE_DIR": resources.path]
+        ))
+        defer { session.terminate() }
+        try session.start()
+        for _ in 0..<150 {
+            if FileManager.default.fileExists(atPath: marker.path) { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path), "\(shell.lastPathComponent) startup consumed the restored command")
+        if !fish {
+            let restoredPrompt = try String(contentsOf: marker, encoding: .utf8)
+            if promptAppendsSemicolon {
+                XCTAssertTrue(restoredPrompt.hasSuffix(";:"))
+                let second = root.appending(path: "second-command")
+                try session.sendRemoteInput(Data("printf second > '\(second.path)'\r".utf8),
+                                            generation: session.remoteCheckpoint().generation)
+                for _ in 0..<100 {
+                    if FileManager.default.fileExists(atPath: second.path) { break }
+                    try await Task.sleep(for: .milliseconds(20))
+                }
+                XCTAssertEqual(try String(contentsOf: second, encoding: .utf8), "second")
+                XCTAssertFalse(session.contentSnapshot(maximumCharacters: 8_000).contains("command not found"))
+            } else if promptAppendsCommand {
+                XCTAssertFalse(restoredPrompt.contains("_myterm_prepare_prompt"))
+                XCTAssertTrue(restoredPrompt.hasSuffix("\n:"))
+            } else {
+                XCTAssertEqual(restoredPrompt, "$ \nprintf user-prompt > prompt-ran")
+            }
+            XCTAssertEqual(try String(contentsOf: root.appending(path: "prompt-ran"), encoding: .utf8), "user-prompt")
+            XCTAssertFalse(try String(contentsOf: root.appending(path: "history-state"), encoding: .utf8)
+                .contains("_myterm_finish_startup"))
+            XCTAssertTrue(try String(contentsOf: root.appending(path: "history-state"), encoding: .utf8)
+                .contains("echo previous"))
+        }
+    }
+
+    @MainActor
     func testInitialCommandSurvivesStartupReadingTerminalInput() async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: "myterm-startup-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -81,10 +210,13 @@ final class TerminalSessionConfigurationTests: XCTestCase {
 
     @MainActor
     func testForegroundProcessDetectionIgnoresIdleShellAndFindsActiveJob() async throws {
+        let resources = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().appending(path: "Resources")
         let session = try SwiftTermTerminalSession(
             configuration: TerminalSessionConfiguration(
                 workingDirectory: FileManager.default.temporaryDirectory,
-                initialCommand: "sleep 5"
+                initialCommand: "sleep 5",
+                environment: ["ZDOTDIR": resources.appending(path: "zsh").path]
             )
         )
         defer { session.terminate() }

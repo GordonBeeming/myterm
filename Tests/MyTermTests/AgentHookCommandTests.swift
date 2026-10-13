@@ -135,6 +135,10 @@ final class AgentHookCommandTests: XCTestCase {
             let written = try run(agent: "codex", stdin: #"{"session_id":"abc","cwd":"/tmp/a project"}"#)
             XCTAssertEqual(report(in: written)?.codexLauncher, launcher)
         }
+        try configureProcessAncestors([], ownerCommand: "/Users/a/.local/share/codex-statusline/current/bin/codex")
+        XCTAssertEqual(report(in: try run(agent: "codex", stdin: #"{"session_id":"abc"}"#))?.codexLauncher, .statusline)
+        try configureProcessAncestors([], ownerCommand: "/Users/a/src/codex-statusline/node_modules/.bin/codex")
+        XCTAssertEqual(report(in: try run(agent: "codex", stdin: #"{"session_id":"abc"}"#))?.codexLauncher, .standard)
     }
 
     func testTheHookIsSilentOutsideMyTerm() throws {

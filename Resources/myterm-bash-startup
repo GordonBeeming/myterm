@@ -1,0 +1,106 @@
+# MyTerm bash readiness v1
+# shellcheck shell=bash
+case $- in *i*) ;; *) return 0;; esac
+[ -n "${MYTERM_STARTUP_TOKEN:-}" ] || return 0
+# Nested shells opened by a profile must not release their parent's queued command.
+if [ "$PPID" != "${MYTERM_STARTUP_PARENT_PID:-}" ]; then
+  unset MYTERM_STARTUP_TOKEN MYTERM_STARTUP_PARENT_PID
+  return 0
+fi
+_myterm_startup_token=$MYTERM_STARTUP_TOKEN
+export -n _myterm_startup_token
+unset MYTERM_STARTUP_TOKEN MYTERM_STARTUP_PARENT_PID
+_myterm_prompt_declaration=$(declare -p PROMPT_COMMAND 2>/dev/null) || _myterm_prompt_declaration=''
+_myterm_prompt_flags=${_myterm_prompt_declaration#declare }
+_myterm_prompt_flags=${_myterm_prompt_flags%% *}
+_myterm_ps1_declaration=$(declare -p PS1 2>/dev/null) || _myterm_ps1_declaration=''
+_myterm_ps1_flags=${_myterm_ps1_declaration#declare }
+_myterm_ps1_flags=${_myterm_ps1_flags%% *}
+case "$_myterm_prompt_flags:$_myterm_ps1_flags" in
+  *r*) unset _myterm_startup_token _myterm_prompt_declaration _myterm_prompt_flags _myterm_ps1_declaration _myterm_ps1_flags; return 0;;
+esac
+_myterm_prompt_was_set=${PROMPT_COMMAND+x}
+_myterm_prompt_is_array=false
+case $_myterm_prompt_flags in *a*) _myterm_prompt_is_array=true;; esac
+_myterm_prompt_was_exported=false
+case $_myterm_prompt_flags in *x*) _myterm_prompt_was_exported=true;; esac
+_myterm_saved_histcontrol=${HISTCONTROL-}
+_myterm_histcontrol_was_set=${HISTCONTROL+x}
+_myterm_histcontrol_declaration=$(declare -p HISTCONTROL 2>/dev/null) || _myterm_histcontrol_declaration=''
+_myterm_histcontrol_flags=${_myterm_histcontrol_declaration#declare }
+_myterm_histcontrol_flags=${_myterm_histcontrol_flags%% *}
+case $_myterm_histcontrol_flags in
+  *r*) _myterm_ignorespace_added=false;;
+  *) HISTCONTROL=${HISTCONTROL:+$HISTCONTROL:}ignorespace; _myterm_ignorespace_added=true;;
+esac
+_myterm_prompt_suffix='\[\e]7338;'"$_myterm_startup_token"'\a\]'
+_myterm_prepare_prompt() {
+  local previous_status=$?
+  if [ "${_myterm_prompt_has_run:-false}" = true ]; then
+    _myterm_finish_startup
+  else
+    # PS1 renders the nonce after the full user prompt, including substitutions.
+    case ${PS1-} in *"$_myterm_prompt_suffix") ;; *) PS1=${PS1-}$_myterm_prompt_suffix;; esac
+    _myterm_prompt_has_run=true
+  fi
+  return "$previous_status"
+}
+_myterm_finish_startup() {
+  while :; do
+    case ${PS1-} in *"$_myterm_prompt_suffix") PS1=${PS1%"$_myterm_prompt_suffix"};; *) break;; esac
+  done
+  # Remove only our entry: prompt managers may change their commands on first render.
+  local current_declaration current_flags prompt_entry
+  current_declaration=$(declare -p PROMPT_COMMAND 2>/dev/null) || current_declaration=''
+  current_flags=${current_declaration#declare }
+  current_flags=${current_flags%% *}
+  case $current_flags in
+    *a*)
+      local kept_commands=()
+      for prompt_entry in "${PROMPT_COMMAND[@]}"; do
+        [ "$prompt_entry" = _myterm_prepare_prompt ] || kept_commands+=("$prompt_entry")
+      done
+      PROMPT_COMMAND=("${kept_commands[@]}")
+      ;;
+    *)
+      local prompt_commands=$'\n'${PROMPT_COMMAND-}$'\n'
+      while :; do
+        case $prompt_commands in
+          *$'\n'_myterm_prepare_prompt$'\n'*)
+            prompt_commands=${prompt_commands/$'\n'_myterm_prepare_prompt$'\n'/$'\n'};;
+          *) break;;
+        esac
+      done
+      prompt_commands=${prompt_commands#$'\n'}
+      prompt_commands=${prompt_commands%$'\n'}
+      # shellcheck disable=SC2178
+      PROMPT_COMMAND=$prompt_commands
+      if [ -z "${PROMPT_COMMAND[0]-}" ] && [ "$_myterm_prompt_was_set" != x ]; then unset PROMPT_COMMAND; fi
+      ;;
+  esac
+  if [ "$_myterm_prompt_was_exported" = true ]; then export PROMPT_COMMAND; fi
+  # A leading-space automatic command avoids history deletion and its counters.
+  if [ "$_myterm_ignorespace_added" = true ] &&
+     [ "${HISTCONTROL-}" = "${_myterm_saved_histcontrol:+$_myterm_saved_histcontrol:}ignorespace" ]; then
+    if [ "$_myterm_histcontrol_was_set" = x ]; then HISTCONTROL=$_myterm_saved_histcontrol; else unset HISTCONTROL; fi
+  fi
+  unset _myterm_saved_histcontrol _myterm_histcontrol_was_set _myterm_ignorespace_added _myterm_histcontrol_declaration _myterm_histcontrol_flags
+  unset _myterm_prompt_was_set _myterm_prompt_is_array
+  unset _myterm_prompt_suffix _myterm_startup_token _myterm_prompt_has_run
+  # A prompt manager can wrap or join our entry with semicolons. Any retained
+  # reference stays harmless, including in children of an exported prompt command.
+  # shellcheck disable=SC2329
+  _myterm_prepare_prompt() { return "$?"; }
+  if [ "$_myterm_prompt_was_exported" = true ]; then export -f _myterm_prepare_prompt; fi
+  unset _myterm_prompt_was_exported
+  unset -f _myterm_finish_startup
+  return 0
+}
+if [ "$_myterm_prompt_is_array" = true ]; then
+  PROMPT_COMMAND+=( _myterm_prepare_prompt )
+else
+  # shellcheck disable=SC2178
+  PROMPT_COMMAND=${PROMPT_COMMAND-}$'\n''_myterm_prepare_prompt'
+fi
+export -n PROMPT_COMMAND
+unset _myterm_prompt_declaration _myterm_prompt_flags _myterm_ps1_declaration _myterm_ps1_flags
