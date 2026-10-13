@@ -210,20 +210,25 @@ final class TerminalSessionConfigurationTests: XCTestCase {
 
     @MainActor
     func testForegroundProcessDetectionIgnoresIdleShellAndFindsActiveJob() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "myterm-foreground-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
         let resources = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().appending(path: "Resources")
         let session = try SwiftTermTerminalSession(
             configuration: TerminalSessionConfiguration(
-                workingDirectory: FileManager.default.temporaryDirectory,
-                initialCommand: "sleep 5",
-                environment: ["ZDOTDIR": resources.appending(path: "zsh").path]
+                shell: URL(fileURLWithPath: "/bin/zsh"), workingDirectory: root,
+                initialCommand: "/bin/sleep 30",
+                environment: ["ZDOTDIR": resources.appending(path: "zsh").path,
+                              "MYTERM_ORIGINAL_ZDOTDIR": root.path]
             )
         )
         defer { session.terminate() }
 
         try session.start()
         var activeProcessName: String?
-        for _ in 0..<100 {
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline {
             activeProcessName = session.activeForegroundProcessName
             if activeProcessName == "sleep" { break }
             try await Task.sleep(nanoseconds: 20_000_000)
