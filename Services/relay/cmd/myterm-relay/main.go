@@ -117,7 +117,7 @@ func bootstrapOwner(ctx context.Context, cfg config.Config, storage *store.Store
 }
 
 func serve(cfg config.Config, storage *store.Store) error {
-	if err := storage.PruneExpired(context.Background(), time.Now()); err != nil {
+	if err := storage.PruneExpired(context.Background(), time.Now(), cfg.RefreshReplayGrace); err != nil {
 		return fmt.Errorf("prune expired relay state: %w", err)
 	}
 	hub := transport.New(cfg)
@@ -137,7 +137,7 @@ func serve(cfg config.Config, storage *store.Store) error {
 	stopCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	serveErrors := make(chan error, 1)
-	go pruneLoop(stopCtx, storage)
+	go pruneLoop(stopCtx, storage, cfg.RefreshReplayGrace)
 	go func() {
 		slog.Info("relay listening", "address", cfg.ListenAddress, "public_origin", cfg.PublicURL.String())
 		serveErrors <- server.ListenAndServe()
@@ -155,7 +155,7 @@ func serve(cfg config.Config, storage *store.Store) error {
 	}
 }
 
-func pruneLoop(ctx context.Context, storage *store.Store) {
+func pruneLoop(ctx context.Context, storage *store.Store, replayGrace time.Duration) {
 	ticker := time.NewTicker(time.Hour)
 	defer ticker.Stop()
 	for {
@@ -163,7 +163,7 @@ func pruneLoop(ctx context.Context, storage *store.Store) {
 		case <-ctx.Done():
 			return
 		case now := <-ticker.C:
-			if err := storage.PruneExpired(ctx, now); err != nil && !errors.Is(err, context.Canceled) {
+			if err := storage.PruneExpired(ctx, now, replayGrace); err != nil && !errors.Is(err, context.Canceled) {
 				slog.Error("could not prune expired relay state", "error_type", fmt.Sprintf("%T", err))
 			}
 		}
