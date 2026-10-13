@@ -9,6 +9,6 @@ if [ -r "${ZDOTDIR:-}/_myterm_common" ]; then
 fi
 
 # Login startup may replace the hooks installed by .zshrc.
-if (( $+functions[_myterm_shell_ready] )); then
-  precmd_functions=("${(@)precmd_functions:#_myterm_shell_ready}" _myterm_shell_ready)
+if (( $+functions[_myterm_register_readiness] )); then
+  precmd_functions=("${(@)precmd_functions:#_myterm_register_readiness}" _myterm_register_readiness)
 fi

@@ -68,8 +68,26 @@ final class TerminalSessionConfigurationTests: XCTestCase {
     }
 
     @MainActor
+    func testFishDefaultPromptCanResumeAfterStartupReadsInput() async throws {
+        guard let path = ProcessInfo.processInfo.environment["MYTERM_TEST_FISH_BINARY"] else {
+            throw XCTSkip("Set MYTERM_TEST_FISH_BINARY to run the real fish integration")
+        }
+        try await verifyStartupInput(shell: URL(fileURLWithPath: path), fish: true, fishUsesDefaultPrompt: true)
+    }
+
+    @MainActor
+    func testFishAutoloadedPromptCanResumeAfterStartupReadsInput() async throws {
+        guard let path = ProcessInfo.processInfo.environment["MYTERM_TEST_FISH_BINARY"] else {
+            throw XCTSkip("Set MYTERM_TEST_FISH_BINARY to run the real fish integration")
+        }
+        try await verifyStartupInput(shell: URL(fileURLWithPath: path), fish: true, fishUsesDefaultPrompt: true,
+                                    fishAutoloadedPrompt: true)
+    }
+
+    @MainActor
     private func verifyStartupInput(shell: URL, fish: Bool, promptRewritesItself: Bool = false,
-                                    promptAppendsCommand: Bool = false, promptAppendsSemicolon: Bool = false) async throws {
+                                    promptAppendsCommand: Bool = false, promptAppendsSemicolon: Bool = false,
+                                    fishUsesDefaultPrompt: Bool = false, fishAutoloadedPrompt: Bool = false) async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: "myterm-shell-startup-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -77,7 +95,14 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         if fish {
             let config = root.appending(path: "config/fish")
             try FileManager.default.createDirectory(at: config, withIntermediateDirectories: true)
-            try "set fish_greeting\n/bin/bash --noprofile --norc -c 'read -t 1 startup_input'\nfunction fish_prompt; printf '$ '; end\n".write(
+            if fishAutoloadedPrompt {
+                let functions = config.appending(path: "functions")
+                try FileManager.default.createDirectory(at: functions, withIntermediateDirectories: true)
+                try "function fish_prompt; printf 'autoloaded> '; end\n".write(
+                    to: functions.appending(path: "fish_prompt.fish"), atomically: true, encoding: .utf8)
+            }
+            let prompt = fishUsesDefaultPrompt ? "" : "function fish_prompt; printf '$ '; end\n"
+            try "set fish_greeting\n/bin/bash --noprofile --norc -c 'read -t 1 startup_input'\n\(prompt)".write(
                 to: config.appending(path: "config.fish"), atomically: true, encoding: .utf8)
         } else {
             let promptCommand = promptAppendsSemicolon
@@ -109,6 +134,9 @@ final class TerminalSessionConfigurationTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(20))
         }
         XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path), "\(shell.lastPathComponent) startup consumed the restored command")
+        if fishAutoloadedPrompt {
+            XCTAssertTrue(session.contentSnapshot(maximumCharacters: 8_000).contains("autoloaded> "))
+        }
         if !fish {
             let restoredPrompt = try String(contentsOf: marker, encoding: .utf8)
             if promptAppendsSemicolon {
@@ -138,12 +166,38 @@ final class TerminalSessionConfigurationTests: XCTestCase {
 
     @MainActor
     func testInitialCommandSurvivesStartupReadingTerminalInput() async throws {
+        try await verifyZshStartupInput(promptReadsInput: false)
+    }
+
+    @MainActor
+    func testInitialCommandSurvivesZshPromptReadingTerminalInput() async throws {
+        try await verifyZshStartupInput(promptReadsInput: true)
+    }
+
+    @MainActor
+    func testInitialCommandWaitsForZshRightPromptAndEditorQueries() async throws {
+        try await verifyZshStartupInput(promptReadsInput: true, rightPromptAndEditorRead: true)
+    }
+
+    @MainActor
+    private func verifyZshStartupInput(promptReadsInput: Bool, rightPromptAndEditorRead: Bool = false) async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: "myterm-startup-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let marker = root.appending(path: "command-ran")
         // Prompt tooling can consume queued terminal input while querying the terminal.
-        try "HISTFILE=/dev/null\nread -t 0.5 startup_input\nPS1='$ '\n".write(
+        let startup = promptReadsInput
+            ? "setopt PROMPT_SUBST\nstartup_prompt() { read -t 0.5 prompt_input; print -nr '$ '; }\nPS1='$(startup_prompt)'\n"
+            : "read -t 0.5 startup_input\nPS1='$ '\n"
+        let editorStartup = rightPromptAndEditorRead ? """
+        right_prompt() { read -t 0.5 right_input; print -nr right; }
+        RPROMPT='$(right_prompt)'
+        late_prompt() { PS1='$(startup_prompt)'; }
+        precmd() { precmd_functions+=(late_prompt); zle -N zle-line-init user_editor_init; }
+        user_editor_init() { read -t 0.5 editor_input; return 0; }
+        zle -N zle-line-init user_editor_init
+        """ : ""
+        try "HISTFILE=/dev/null\n\(startup)\(editorStartup)\n".write(
             to: root.appending(path: ".zshrc"), atomically: true, encoding: .utf8
         )
         let resources = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
@@ -156,7 +210,8 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         ))
         defer { session.terminate() }
         try session.start()
-        for _ in 0..<100 {
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline {
             if FileManager.default.fileExists(atPath: marker.path) { break }
             try await Task.sleep(for: .milliseconds(20))
         }
@@ -213,6 +268,7 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         let root = FileManager.default.temporaryDirectory.appending(path: "myterm-foreground-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
+        try "HISTFILE=/dev/null\n".write(to: root.appending(path: ".zshrc"), atomically: true, encoding: .utf8)
         let resources = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().appending(path: "Resources")
         let session = try SwiftTermTerminalSession(
@@ -220,7 +276,7 @@ final class TerminalSessionConfigurationTests: XCTestCase {
                 shell: URL(fileURLWithPath: "/bin/zsh"), workingDirectory: root,
                 initialCommand: "/bin/sleep 30",
                 environment: ["ZDOTDIR": resources.appending(path: "zsh").path,
-                              "MYTERM_ORIGINAL_ZDOTDIR": root.path]
+                              "MYTERM_ORIGINAL_ZDOTDIR": root.path, "HISTFILE": "/dev/null"]
             )
         )
         defer { session.terminate() }
