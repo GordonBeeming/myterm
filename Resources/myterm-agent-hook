@@ -82,7 +82,7 @@ EOF
   fi
   tty=$(ps -o tty= -p "$PPID" 2>/dev/null | tr -d '[:space:]')
   case "$tty" in *[0-9]*) tty="/dev/${tty#/dev/}";; *) tty=/dev/tty;; esac
-  printf '\033]7337;agent=%s;event=%s;session=%s;cwd64=%s;launcher=%s;tool=%s\033\\' \
+  printf '\033]7337;agent=%s;event=%s;session=%s;cwd64=%s;launcher=%s;tool=%s\033\134' \
     "$agent" "$activity" "$session" "$cwd" "$launcher" "$tool" > "$tty"
 }
 report_agent "$@" >/dev/null 2>&1 || true
