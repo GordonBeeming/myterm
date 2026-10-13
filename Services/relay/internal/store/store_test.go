@@ -202,6 +202,39 @@ func TestRefreshReplayOutsideGraceStillRevokesTheDevice(t *testing.T) {
 	}
 }
 
+func TestAnAnswerSupersededByAFurtherRotationIsRefusedWithoutRevoking(t *testing.T) {
+	storage, device, now := newDeviceWithTokens(t)
+
+	// The client did receive the first reply and rotated again, still inside the window. That
+	// second rotation consumed refresh-two and deleted access-two.
+	if _, err := storage.RotateRefresh(context.Background(), "refresh-one", "refresh-two", "access-two", now.Add(time.Minute), now.Add(time.Hour), now, testReplayGrace); err != nil {
+		t.Fatal(err)
+	}
+	second := now.Add(2 * time.Second)
+	if _, err := storage.RotateRefresh(context.Background(), "refresh-two", "refresh-three", "access-three", second.Add(time.Minute), second.Add(time.Hour), second, testReplayGrace); err != nil {
+		t.Fatal(err)
+	}
+
+	// Serving the answer recorded for refresh-one would hand back access-two, which no longer
+	// exists, and refresh-two, which is spent. Spending a consumed refresh token is what revokes a
+	// device, so that reply would walk the client into the very failure this path exists to prevent.
+	retry := now.Add(4 * time.Second)
+	if _, err := storage.RotateRefresh(context.Background(), "refresh-one", "refresh-four", "access-four", retry.Add(time.Minute), retry.Add(time.Hour), retry, testReplayGrace); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("a superseded answer was served: %v", err)
+	}
+	// Refused, not revoked: inside the window a stale request is stale, not theft, and the client
+	// that is up to date must keep working.
+	if revoked := revokedAt(t, storage, device.ID); revoked.Valid {
+		t.Fatal("a superseded retry revoked the device")
+	}
+	if _, err := storage.AuthenticateAccess(context.Background(), "access-three", retry); err != nil {
+		t.Fatalf("a superseded retry disturbed the live access token: %v", err)
+	}
+	if _, err := storage.RotateRefresh(context.Background(), "refresh-three", "refresh-five", "access-five", retry.Add(time.Minute), retry.Add(time.Hour), retry, testReplayGrace); err != nil {
+		t.Fatalf("a superseded retry disturbed the live refresh token: %v", err)
+	}
+}
+
 func TestAnAnswerIsNotServedForADeviceRevokedSinceItWasRecorded(t *testing.T) {
 	storage, device, now := newDeviceWithTokens(t)
 

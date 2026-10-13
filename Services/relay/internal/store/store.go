@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -698,15 +699,26 @@ func (s *Store) answerReplay(ctx context.Context, tx *sql.Tx, oldRefresh string,
 		// working pair by an answer recorded before that. The rest of the row is read here because
 		// the reply carries the owner, exactly as the first one did.
 		var device Device
+		var currentHash []byte
 		var revoked sql.NullInt64
-		if err := tx.QueryRowContext(ctx, "SELECT id, owner_id, kind, name, revoked_at FROM devices WHERE id=?", deviceID).
-			Scan(&device.ID, &device.OwnerID, &device.Kind, &device.Name, &revoked); err != nil {
+		if err := tx.QueryRowContext(ctx, "SELECT id, owner_id, kind, name, refresh_hash, revoked_at FROM devices WHERE id=?", deviceID).
+			Scan(&device.ID, &device.OwnerID, &device.Kind, &device.Name, &currentHash, &revoked); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return RotatedTokens{}, ErrUnauthorized
 			}
 			return RotatedTokens{}, err
 		}
 		if revoked.Valid {
+			return RotatedTokens{}, ErrUnauthorized
+		}
+		// The recorded answer is only worth sending while it is still the device's current one.
+		// Whoever received the first reply may have rotated again inside the window, and that
+		// rotation consumed this refresh token and deleted the access token beside it. Sending the
+		// pair anyway would hand back an access token that no longer works and a refresh token
+		// already spent, and spending a consumed token is what revokes a device: the reply would
+		// walk the client into the failure this whole path exists to prevent. Refused instead, and
+		// without revoking, because inside the window a stale request is stale, not theft.
+		if !bytes.Equal(currentHash, HashToken(replayRefresh.String)) {
 			return RotatedTokens{}, ErrUnauthorized
 		}
 		if replayAccessExpiry.Int64 <= now.Unix() {
