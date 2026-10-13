@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -124,6 +125,17 @@ func Open(ctx context.Context, path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate sqlite: %w", err)
 	}
+	for column, definition := range map[string]string{
+		"consumed_at":              "INTEGER",
+		"replay_access":            "TEXT",
+		"replay_refresh":           "TEXT",
+		"replay_access_expires_at": "INTEGER",
+	} {
+		if err := ensureColumn(ctx, db, "used_refresh_tokens", column, definition); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("migrate sqlite: %w", err)
+		}
+	}
 	if path != ":memory:" && !strings.HasPrefix(path, "file:") {
 		if err := os.Chmod(path, 0o600); err != nil {
 			db.Close()
@@ -133,14 +145,58 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
+// Adds a column to an existing table when it is missing.
+//
+// `migrations.sql` runs in full on every start, and SQLite has no `ADD COLUMN IF NOT EXISTS`, so a
+// bare ALTER there would fail every launch after the first. The column is checked rather than added
+// and the error ignored, because a genuine failure to migrate has to stop the relay rather than
+// leave it running against a schema it cannot use. Table and column names are compile-time
+// constants from this file, never request data, so interpolating them carries no injection risk.
+func ensureColumn(ctx context.Context, db *sql.DB, table, column, definition string) error {
+	rows, err := db.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s)", table))
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			id         int
+			name       string
+			columnType string
+			notNull    int
+			defaultTo  sql.NullString
+			primaryKey int
+		)
+		if err := rows.Scan(&id, &name, &columnType, &notNull, &defaultTo, &primaryKey); err != nil {
+			return err
+		}
+		if name == column {
+			return rows.Err()
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	_, err = db.ExecContext(ctx, fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, definition))
+	return err
+}
+
 func (s *Store) Close() error { return s.db.Close() }
 
-func (s *Store) PruneExpired(ctx context.Context, now time.Time) error {
+func (s *Store) PruneExpired(ctx context.Context, now time.Time, replayGrace time.Duration) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	// The recorded answer to a refresh is the only usable token this relay keeps rather than a
+	// hash, so it is cleared as soon as it can no longer be served. The row itself stays until the
+	// token expires, because that is what still recognises a late replay as one.
+	if _, err := tx.ExecContext(ctx,
+		"UPDATE used_refresh_tokens SET replay_access=NULL, replay_refresh=NULL, replay_access_expires_at=NULL WHERE replay_access IS NOT NULL AND consumed_at<=?",
+		now.Add(-replayGrace).Unix()); err != nil {
+		return err
+	}
 	statements := []string{
 		"DELETE FROM ceremonies WHERE expires_at<=?",
 		"DELETE FROM auth_codes WHERE expires_at<=?",
@@ -466,7 +522,10 @@ func (s *Store) ExchangeAuthCode(ctx context.Context, code, redirectURI, challen
 		if _, historyErr = tx.ExecContext(ctx, "DELETE FROM access_tokens WHERE device_id=?", replayedDeviceID); historyErr != nil {
 			return Device{}, historyErr
 		}
-		markerExpiry:=expires;if markerExpiry<=now.Unix(){markerExpiry=now.Add(5*time.Minute).Unix()}
+		markerExpiry := expires
+		if markerExpiry <= now.Unix() {
+			markerExpiry = now.Add(5 * time.Minute).Unix()
+		}
 		if _, historyErr = tx.ExecContext(ctx, "INSERT OR IGNORE INTO revoked_device_ids(device_id,expires_at) VALUES(?,?)", replayedDeviceID, markerExpiry); historyErr != nil {
 			return Device{}, historyErr
 		}
@@ -533,10 +592,42 @@ func (s *Store) AuthenticateAccess(ctx context.Context, access string, now time.
 	return device, nil
 }
 
-func (s *Store) RotateRefresh(ctx context.Context, oldRefresh, newRefresh, access string, accessExpiry, refreshExpiry, now time.Time) (Device, error) {
+// What a caller should send back for a refresh grant. `Replayed` marks the answer as one already
+// given, so the caller can report the access token's real remaining life rather than a full TTL.
+type RotatedTokens struct {
+	Device          Device
+	Access          string
+	Refresh         string
+	AccessExpiresAt time.Time
+	Replayed        bool
+}
+
+// ErrReplayRevoked reports that the presented token was replayed too late to be a lost reply, so
+// the device it belonged to has just been revoked. Callers get the device back so they can close
+// its connections and say so in the log.
+var ErrReplayRevoked = errors.New("refresh token replayed outside the grace window")
+
+// Exchanges a refresh token for a new pair.
+//
+// `grace` is how long after a token is consumed the same token may be presented again and answered
+// rather than treated as theft. A rotation that commits here but whose reply never reaches the
+// client leaves that client holding a token this relay has already burned, and its next attempt is
+// indistinguishable from a stolen token being replayed. A machine that sleeps between the request
+// and the response produces exactly that, and revoking cost the user their sign-in with no way back
+// but signing in again in person.
+//
+// Inside the window the answer is the one already given, byte for byte: nothing rotates, so the
+// client that did receive the first reply keeps working and the two cannot leapfrog each other into
+// a revocation. Outside the window the device is revoked as before.
+//
+// The replay is answered, not re-authorised, which is why this cannot be done from the device's
+// current token: that would mint a fresh thirty-day refresh token for whoever presented a stale one
+// and invalidate the legitimate holder. The cost of answering instead is that the issued pair is
+// readable in the database for the length of the window, which is why the window stays short.
+func (s *Store) RotateRefresh(ctx context.Context, oldRefresh, newRefresh, access string, accessExpiry, refreshExpiry, now time.Time, grace time.Duration) (RotatedTokens, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return Device{}, err
+		return RotatedTokens{}, err
 	}
 	defer tx.Rollback()
 	var device Device
@@ -544,51 +635,123 @@ func (s *Store) RotateRefresh(ctx context.Context, oldRefresh, newRefresh, acces
 	var revoked sql.NullInt64
 	err = tx.QueryRowContext(ctx, "SELECT id, owner_id, kind, name, refresh_expires_at, revoked_at FROM devices WHERE refresh_hash=?", HashToken(oldRefresh)).Scan(&device.ID, &device.OwnerID, &device.Kind, &device.Name, &expires, &revoked)
 	if errors.Is(err, sql.ErrNoRows) {
-		var replayedDeviceID string
-		historyErr := tx.QueryRowContext(ctx, "SELECT device_id FROM used_refresh_tokens WHERE token_hash=? AND expires_at>?", HashToken(oldRefresh), now.Unix()).Scan(&replayedDeviceID)
-		if errors.Is(historyErr, sql.ErrNoRows) {
-			return Device{}, ErrUnauthorized
-		}
-		if historyErr != nil {
-			return Device{}, historyErr
-		}
-		if _, historyErr = tx.ExecContext(ctx, "UPDATE devices SET revoked_at=?,updated_at=? WHERE id=? AND revoked_at IS NULL", now.Unix(), now.Unix(), replayedDeviceID); historyErr != nil {
-			return Device{}, historyErr
-		}
-		if _, historyErr = tx.ExecContext(ctx, "DELETE FROM access_tokens WHERE device_id=?", replayedDeviceID); historyErr != nil {
-			return Device{}, historyErr
-		}
-		if historyErr = tx.Commit(); historyErr != nil {
-			return Device{}, historyErr
-		}
-		return Device{ID: replayedDeviceID}, ErrUnauthorized
+		return s.answerReplay(ctx, tx, oldRefresh, now, grace)
 	}
 	if err != nil {
-		return Device{}, err
+		return RotatedTokens{}, err
 	}
 	if revoked.Valid || expires <= now.Unix() {
-		return Device{}, ErrUnauthorized
+		return RotatedTokens{}, ErrUnauthorized
 	}
-	if _, err := tx.ExecContext(ctx, "INSERT INTO used_refresh_tokens(token_hash,device_id,expires_at) VALUES(?,?,?)", HashToken(oldRefresh), device.ID, expires); err != nil {
-		return Device{}, err
+	if _, err := tx.ExecContext(ctx,
+		"INSERT INTO used_refresh_tokens(token_hash,device_id,expires_at,consumed_at,replay_access,replay_refresh,replay_access_expires_at) VALUES(?,?,?,?,?,?,?)",
+		HashToken(oldRefresh), device.ID, expires, now.Unix(), access, newRefresh, accessExpiry.Unix()); err != nil {
+		return RotatedTokens{}, err
 	}
 	result, err := tx.ExecContext(ctx, "UPDATE devices SET refresh_hash=?, refresh_expires_at=?, updated_at=? WHERE id=? AND refresh_hash=?", HashToken(newRefresh), refreshExpiry.Unix(), now.Unix(), device.ID, HashToken(oldRefresh))
 	if err != nil {
-		return Device{}, err
+		return RotatedTokens{}, err
 	}
 	if affected, _ := result.RowsAffected(); affected != 1 {
-		return Device{}, ErrUnauthorized
+		return RotatedTokens{}, ErrUnauthorized
 	}
 	if _, err := tx.ExecContext(ctx, "DELETE FROM access_tokens WHERE device_id=?", device.ID); err != nil {
-		return Device{}, err
+		return RotatedTokens{}, err
 	}
 	if _, err := tx.ExecContext(ctx, "INSERT INTO access_tokens(token_hash, device_id, expires_at, created_at) VALUES (?, ?, ?, ?)", HashToken(access), device.ID, accessExpiry.Unix(), now.Unix()); err != nil {
-		return Device{}, err
+		return RotatedTokens{}, err
 	}
 	if err := tx.Commit(); err != nil {
-		return Device{}, err
+		return RotatedTokens{}, err
 	}
-	return device, nil
+	return RotatedTokens{Device: device, Access: access, Refresh: newRefresh, AccessExpiresAt: accessExpiry}, nil
+}
+
+// The presented token is not the device's current one: either a client asking again for a reply it
+// never received, or a token replayed long after the fact.
+//
+// Eligibility is decided on `consumed_at`, never on the presented token's own expiry. Keying it to
+// the old expiry stranded a client whose rotation happened to land in the last seconds of a refresh
+// token's life, which is permanent for that client because it cannot know the token that replaced
+// the one it holds.
+func (s *Store) answerReplay(ctx context.Context, tx *sql.Tx, oldRefresh string, now time.Time, grace time.Duration) (RotatedTokens, error) {
+	var deviceID string
+	var consumedAt sql.NullInt64
+	var replayAccess, replayRefresh sql.NullString
+	var replayAccessExpiry sql.NullInt64
+	err := tx.QueryRowContext(ctx,
+		"SELECT device_id, consumed_at, replay_access, replay_refresh, replay_access_expires_at FROM used_refresh_tokens WHERE token_hash=?",
+		HashToken(oldRefresh)).
+		Scan(&deviceID, &consumedAt, &replayAccess, &replayRefresh, &replayAccessExpiry)
+	if errors.Is(err, sql.ErrNoRows) {
+		return RotatedTokens{}, ErrUnauthorized
+	}
+	if err != nil {
+		return RotatedTokens{}, err
+	}
+
+	// Rows written before these columns existed read as nil, as do rows whose answer has already
+	// been cleared. Both are older than any window worth honouring, so they take the revoking path.
+	withinWindow := consumedAt.Valid && grace > 0 && !now.After(time.Unix(consumedAt.Int64, 0).Add(grace))
+	haveAnswer := replayAccess.Valid && replayRefresh.Valid && replayAccessExpiry.Valid
+	if withinWindow && haveAnswer {
+		// A device revoked in the meantime, by its owner or by a later replay, must not be handed a
+		// working pair by an answer recorded before that. The rest of the row is read here because
+		// the reply carries the owner, exactly as the first one did.
+		var device Device
+		var currentHash []byte
+		var revoked sql.NullInt64
+		if err := tx.QueryRowContext(ctx, "SELECT id, owner_id, kind, name, refresh_hash, revoked_at FROM devices WHERE id=?", deviceID).
+			Scan(&device.ID, &device.OwnerID, &device.Kind, &device.Name, &currentHash, &revoked); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return RotatedTokens{}, ErrUnauthorized
+			}
+			return RotatedTokens{}, err
+		}
+		if revoked.Valid {
+			return RotatedTokens{}, ErrUnauthorized
+		}
+		// The recorded answer is only worth sending while it is still the device's current one.
+		// Whoever received the first reply may have rotated again inside the window, and that
+		// rotation consumed this refresh token and deleted the access token beside it. Sending the
+		// pair anyway would hand back an access token that no longer works and a refresh token
+		// already spent, and spending a consumed token is what revokes a device: the reply would
+		// walk the client into the failure this whole path exists to prevent. Refused instead, and
+		// without revoking, because inside the window a stale request is stale, not theft.
+		if !bytes.Equal(currentHash, HashToken(replayRefresh.String)) {
+			return RotatedTokens{}, ErrUnauthorized
+		}
+		if replayAccessExpiry.Int64 <= now.Unix() {
+			// The answer is intact but its access token has since run out. Re-sending it would be a
+			// token the client cannot use, and rotating would be the escalation this path exists to
+			// avoid, so the client is told to come back with the refresh token it was given.
+			return RotatedTokens{}, ErrUnauthorized
+		}
+		// Nothing is written. The answer is the one already recorded, so a retry leaves the device,
+		// its current refresh token and its access token exactly where the first reply left them.
+		return RotatedTokens{
+			Device:          device,
+			Access:          replayAccess.String,
+			Refresh:         replayRefresh.String,
+			AccessExpiresAt: time.Unix(replayAccessExpiry.Int64, 0),
+			Replayed:        true,
+		}, nil
+	}
+
+	if _, err = tx.ExecContext(ctx, "UPDATE devices SET revoked_at=?,updated_at=? WHERE id=? AND revoked_at IS NULL", now.Unix(), now.Unix(), deviceID); err != nil {
+		return RotatedTokens{}, err
+	}
+	if _, err = tx.ExecContext(ctx, "DELETE FROM access_tokens WHERE device_id=?", deviceID); err != nil {
+		return RotatedTokens{}, err
+	}
+	// The device is gone, so no answer held for it is worth keeping readable.
+	if _, err = tx.ExecContext(ctx, "UPDATE used_refresh_tokens SET replay_access=NULL, replay_refresh=NULL, replay_access_expires_at=NULL WHERE device_id=?", deviceID); err != nil {
+		return RotatedTokens{}, err
+	}
+	if err = tx.Commit(); err != nil {
+		return RotatedTokens{}, err
+	}
+	return RotatedTokens{Device: Device{ID: deviceID}}, ErrReplayRevoked
 }
 
 func (s *Store) RevokeToken(ctx context.Context, token string, now time.Time) (string, error) {

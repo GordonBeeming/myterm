@@ -1106,6 +1106,36 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(persistedSession.recentText, "last session id: before-quit")
     }
 
+    func testASessionThatNeverGoesQuietStillGetsSnapshotted() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory,
+            terminalEngine: engine,
+            startsTerminalProcesses: true,
+            terminalSnapshotDelayNanoseconds: 100_000_000
+        )
+        let session = try XCTUnwrap(engine.sessions.first)
+        session.snapshotText = "streaming output"
+
+        // An agent streaming output changes content far faster than the window. A debounce would
+        // restart on every change and never capture anything; a throttle records once per window.
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(5))
+        while session.snapshotCallCount == 0, clock.now < deadline {
+            session.emitContentChanged()
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertGreaterThan(session.snapshotCallCount, 0, "a continuously busy session never recorded its output")
+        let persistedSession = try XCTUnwrap(
+            model.selectedWorkspace.selectedTab?.terminalSession
+        )
+        XCTAssertEqual(persistedSession.recentText, "streaming output")
+    }
+
     func testTabRenameActionsPersistCustomTitlesAndWhitespaceClearsThem() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
