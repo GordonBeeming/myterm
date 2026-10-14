@@ -658,9 +658,11 @@ final class AppModel {
         let offersReleaseNotes = updates.upgradeCommand != nil
         if offersReleaseNotes { alert.addButton(withTitle: "Release Notes") }
         alert.addButton(withTitle: "Later")
+        let skipButton = alert.addButton(withTitle: "Skip This Version")
         switch alert.runModal() {
         case .alertFirstButtonReturn: startUpgrade(for: release)
         case .alertSecondButtonReturn where offersReleaseNotes: _ = externalFileOpener(release.releaseURL)
+        case NSApplication.ModalResponse(rawValue: skipButton.tag): updates.skip(release)
         default: break
         }
     }

@@ -141,6 +141,29 @@ final class UpdateControllerTests: XCTestCase {
         XCTAssertNil(controller(currentVersion: "0.25", defaults: store).status.release)
     }
 
+    func testASkippedReleaseHidesTheBadgeButStaysKnown() async throws {
+        let store = try defaults()
+        let controller = controller(defaults: store)
+        let checked = await controller.check()
+        let release = try XCTUnwrap(checked.release)
+        controller.skip(release)
+
+        XCTAssertNil(controller.unskippedRelease)
+        XCTAssertEqual(controller.status.release, release, "Check for Updates… still reports it")
+        XCTAssertNil(self.controller(defaults: store).unskippedRelease, "the skip survives a relaunch")
+    }
+
+    func testANewerReleaseThanTheSkippedOneShowsAgain() async throws {
+        let store = try defaults()
+        let skipping = controller(defaults: store)
+        let checked = await skipping.check()
+        skipping.skip(try XCTUnwrap(checked.release))
+
+        let later = controller(latestTag: "v0.25", defaults: store)
+        _ = await later.check()
+        XCTAssertEqual(later.unskippedRelease?.version.description, "0.25")
+    }
+
     func testOverlappingChecksRunOnceAndAgreeOnTheResult() async throws {
         let calls = Counter()
         let gate = Gate()
