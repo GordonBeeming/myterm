@@ -578,7 +578,7 @@ private struct WorkspaceSidebar: View {
                 .accessibilityLabel("Close selected workspace")
                 .help("Close Workspace")
                 Spacer()
-                if let release = model.updates.status.release {
+                if let release = model.updates.unskippedRelease {
                     Button {
                         model.presentAvailableUpdate()
                     } label: {

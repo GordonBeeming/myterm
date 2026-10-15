@@ -42,9 +42,13 @@ final class UpdateController {
     private static let lastCheckedAtKey = "updates.lastCheckedAt"
     private static let knownReleaseTagKey = "updates.knownRelease.tag"
     private static let knownReleaseURLKey = "updates.knownRelease.url"
+    private static let skippedVersionKey = "updates.skippedVersion"
 
     private(set) var status: Status = .idle
     private(set) var lastCheckedAt: Date?
+    /// A release the user chose not to be reminded about. Only that exact version goes quiet: a
+    /// newer release brings the badge back.
+    private(set) var skippedVersion: AppVersion?
 
     var automaticallyChecks: Bool {
         didSet {
@@ -85,10 +89,23 @@ final class UpdateController {
         self.upgradeRoute = upgradeRoute ?? Self.detectUpgradeRoute()
         automaticallyChecks = defaults.object(forKey: Self.automaticChecksKey) as? Bool ?? true
         lastCheckedAt = defaults.object(forKey: Self.lastCheckedAtKey) as? Date
+        skippedVersion = defaults.string(forKey: Self.skippedVersionKey).flatMap(AppVersion.init)
         // Only the check timestamp used to survive a relaunch, so a known update went quiet until
         // the next one fell due — up to a day of the app knowing and not saying.
         status = Self.restoredStatus(currentVersion: currentVersion, defaults: defaults)
         if automaticallyChecks { startPolling() }
+    }
+
+    /// The release the sidebar badge advertises. A skipped version stays in `status`, so "Check for
+    /// Updates…" still reports it when asked.
+    var unskippedRelease: AppRelease? {
+        guard let release = status.release, release.version != skippedVersion else { return nil }
+        return release
+    }
+
+    func skip(_ release: AppRelease) {
+        skippedVersion = release.version
+        defaults.set(release.version.description, forKey: Self.skippedVersionKey)
     }
 
     var isDueForCheck: Bool {
