@@ -103,6 +103,31 @@ final class AgentAttentionTests: XCTestCase {
         XCTAssertNil(model.agentAttention(forWorkspace: workspace.id))
     }
 
+    func testUpdateRestartCountsHiddenWorkingAgentsAndUnansweredQuestions() throws {
+        let harness = try makeHarness()
+        let model = harness.model
+        let workspace = model.selectedWorkspace
+        let group = try XCTUnwrap(workspace.orderedGroups.first)
+        let first = group.selectedTabID
+        model.createTerminalTab()
+        let second = try XCTUnwrap(model.selectedWorkspace.orderedGroups.first?.selectedTabID)
+        model.createWorkspace()
+        harness.record(.working, workspaceID: workspace.id, tabGroupID: group.id, tabID: first)
+        harness.record(.awaitingInput, workspaceID: workspace.id, tabGroupID: group.id, tabID: second)
+        XCTAssertEqual(model.updateRestartBlockingAgentCount, 2)
+        model.markAsRead(tabID: second)
+        XCTAssertEqual(model.updateRestartBlockingAgentCount, 2)
+        harness.record(.finished, workspaceID: workspace.id, tabGroupID: group.id, tabID: first)
+        XCTAssertEqual(model.updateRestartBlockingAgentCount, 1)
+        harness.record(.working, workspaceID: workspace.id, tabGroupID: group.id, tabID: first)
+        XCTAssertEqual(model.updateRestartBlockingAgentCount, 2, "New work must join the wait")
+        harness.record(.exited, workspaceID: workspace.id, tabGroupID: group.id, tabID: second)
+        XCTAssertEqual(model.updateRestartBlockingAgentCount, 1)
+        model.selectWorkspace(workspace.id)
+        model.closeTab(first)
+        XCTAssertEqual(model.updateRestartBlockingAgentCount, 0)
+    }
+
     private func makeHarness() throws -> AgentTestHarness {
         try AgentTestHarness { directory in
             addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
@@ -125,7 +150,7 @@ final class AgentTestHarness {
 
     private let activeFlag: ActiveFlag
 
-    init(registerTeardown: (URL) -> Void) throws {
+    init(updates: UpdateController? = nil, registerTeardown: (URL) -> Void) throws {
         let poster = RecordingNotificationPoster()
         let activeFlag = ActiveFlag()
         self.poster = poster
@@ -143,6 +168,7 @@ final class AgentTestHarness {
             applicationSupportDirectory: directory,
             terminalEngine: nil,
             startsTerminalProcesses: false,
+            updates: updates,
             agentNotifications: notifications,
             makeAgentNotificationPoster: { poster },
             isApplicationActive: { activeFlag.isActive }

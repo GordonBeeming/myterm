@@ -3679,6 +3679,25 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(relaunchEngine.configurations.first?.initialCommand, "claude --resume 'abc-123'")
     }
 
+    func testExecAgentConversationSurvivesPersistenceAndRelaunch() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let engine = CapturingTerminalEngine()
+        let model = try AppModel(channel: .development, applicationSupportDirectory: directory,
+                                 terminalEngine: engine, startsTerminalProcesses: true)
+        let session = try XCTUnwrap(engine.sessions.first)
+        XCTAssertTrue(session.isRunning)
+        session.activeForegroundProcessName = nil
+        session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .finished, sessionID: "exec-session")))
+        XCTAssertNil(model.updateRestartRecoveryWarning)
+        model.persistTerminalSnapshots()
+        model.persistWorkspaceStore()
+        let relaunched = CapturingTerminalEngine()
+        _ = try AppModel(channel: .development, applicationSupportDirectory: directory,
+                         terminalEngine: relaunched, startsTerminalProcesses: true)
+        XCTAssertEqual(relaunched.configurations.first?.initialCommand, "claude --resume 'exec-session'")
+    }
+
     func testAnAgentThatStoppedLeavesNothingToResume() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
@@ -3710,6 +3729,7 @@ final class AppModelTests: XCTestCase {
         let session = try XCTUnwrap(engine.sessions.first)
         session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .finished, sessionID: "abc-123")))
         session.activeForegroundProcessName = nil
+        session.emit(.foregroundProcessChanged(nil))
 
         model.persistTerminalSnapshots()
 

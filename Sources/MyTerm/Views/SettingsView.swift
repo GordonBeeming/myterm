@@ -174,9 +174,9 @@ struct SettingsView: View {
     }
 
     private var updatesFootnote: String {
-        var lines = ["Checks GitHub for a newer release once a day. Nothing is downloaded or installed for you."]
+        var lines = ["Checks GitHub for a newer release once a day. Updates install only when you choose Update Now."]
         if let command = model.updates.upgradeCommand {
-            lines.append("Updating runs `\(command)` in a new tab.")
+            lines.append("Updating runs `\(command)` in the update dialog. Restart immediately or wait for hook-connected agents to finish.")
         } else {
             lines.append("This copy was not installed with Homebrew, so updating opens the release page.")
         }
