@@ -9,6 +9,7 @@ struct UpdateDialog: View {
     @State private var advanced = false
 
     private var updates: UpdateController { model.updates }
+    private var installation: UpdateController.Installation { updates.installation(for: release) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -23,11 +24,12 @@ struct UpdateDialog: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Restart when every hook-connected agent has finished its turn. Agents waiting for input keep the restart paused. Agents without hooks cannot report whether they’re idle.")
                         .font(.callout).foregroundStyle(.secondary)
-                    Text("\(model.updateRestartBlockingAgentCount) agents still working or waiting for input.")
+                    let count = model.updateRestartBlockingAgentCount
+                    Text("\(count) \(count == 1 ? "agent" : "agents") still working or waiting for input.")
                     if let warning = model.updateRestartRecoveryWarning {
                         Text(warning).foregroundStyle(.orange)
                     }
-                    if updates.installation == .installed {
+                    if installation == .installed {
                         Button(model.waitsToRestartAfterUpdate ? "Cancel Scheduled Restart" : "Restart When Agents Are Idle") {
                             if model.waitsToRestartAfterUpdate { model.cancelUpdateRestart() }
                             else { model.waitToRestartAfterUpdate() }
@@ -48,34 +50,41 @@ struct UpdateDialog: View {
                     }
                 }.padding(.top, 8)
             }
-            if updates.installation == .installed, let warning = model.updateRestartRecoveryWarning {
+            if installation == .installed, let warning = model.updateRestartRecoveryWarning {
                 Text(warning).font(.callout).foregroundStyle(.orange)
             }
             if let error = model.updateRestartError {
                 Text(error).foregroundStyle(.red).textSelection(.enabled)
             }
+            if installation != .installed, updates.canRestartAfterUpdate,
+               let installed = updates.verifiedInstalledVersion {
+                HStack {
+                    Text("Version \(installed.description) is already installed.").font(.callout)
+                    Button("Restart Installed Update") { model.restartAfterUpdate() }
+                }
+            }
             HStack {
                 Link("Release Notes", destination: release.releaseURL)
-                if updates.installation != .installed {
+                if installation != .installed {
                     Button("Skip This Version") {
                         updates.skip(release)
                         close()
                     }
-                    .disabled(updates.installation == .running)
+                    .disabled(installation == .running)
                 }
                 Spacer()
                 Button("Later", action: close)
                     .keyboardShortcut(.cancelAction)
-                    .disabled(updates.installation == .running || model.waitsToRestartAfterUpdate)
-                if updates.installation == .installed {
+                    .disabled(installation == .running || model.waitsToRestartAfterUpdate)
+                if installation == .installed {
                     Button("Restart Now") { model.restartAfterUpdate() }
                         .keyboardShortcut(.defaultAction)
                 } else {
-                    Button(updates.installation == .ready ? "Update Now" : "Try Again") {
+                    Button(installation == .ready ? "Update Now" : "Try Again") {
                         Task { await updates.install(release: release) }
                     }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(updates.installation == .running)
+                    .disabled(installation == .running)
                 }
             }
         }
@@ -85,7 +94,7 @@ struct UpdateDialog: View {
     }
 
     @ViewBuilder private var installationStatus: some View {
-        switch updates.installation {
+        switch installation {
         case .ready:
             Text("Your tabs and resumable agent conversations are saved when myterm restarts. Restarting ends running terminal processes.")
                 .font(.callout)

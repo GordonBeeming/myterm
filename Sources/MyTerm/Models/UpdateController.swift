@@ -43,7 +43,8 @@ final class UpdateController {
     private(set) var installationOutput = ""
     private var outputData = Data()
     private let runUpgrade: UpgradeRunner
-    private let installedVersion: @MainActor () throws -> String
+    private let readInstalledVersion: @MainActor () throws -> String
+    private(set) var verifiedInstalledVersion: AppVersion?
 
     static let caskToken = "gordonbeeming/tap/myterm"
     static let checkInterval: TimeInterval = 60 * 60 * 24
@@ -96,7 +97,7 @@ final class UpdateController {
         self.currentVersion = currentVersion
         self.now = now
         self.runUpgrade = runUpgrade ?? Self.runHeadlessUpgrade
-        self.installedVersion = installedVersion ?? {
+        self.readInstalledVersion = installedVersion ?? {
             // Bundle caches its Info.plist, including the old version after brew replaces it.
             let url = Bundle.main.bundleURL.appendingPathComponent("Contents/Info.plist")
             let data = try Data(contentsOf: url)
@@ -153,14 +154,33 @@ final class UpdateController {
         return command
     }
 
+    var canRestartAfterUpdate: Bool {
+        installation != .running && verifiedInstalledVersion != nil
+    }
+
+    func validateRestart() throws {
+        guard let verifiedInstalledVersion,
+              let diskVersion = AppVersion(try readInstalledVersion()), diskVersion >= verifiedInstalledVersion else {
+            throw NSError(domain: "MyTermUpdate", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "The installed update could not be verified. Try installing again before restarting."
+            ])
+        }
+    }
+
+    func installation(for release: AppRelease) -> Installation {
+        if installation == .running { return .running }
+        if let verifiedInstalledVersion, verifiedInstalledVersion >= release.version { return .installed }
+        return installation == .installed ? .ready : installation
+    }
+
     /// Installation is independent of checking: a timer cannot erase progress or enable a second brew.
     func install(release requestedRelease: AppRelease? = nil) async {
-        guard installation != .running, installation != .installed,
-              let command = upgradeCommand else { return }
+        guard installation != .running, let command = upgradeCommand else { return }
         guard let release = requestedRelease ?? status.release else {
             installation = .failed("Check for an available update before installing.")
             return
         }
+        guard installation(for: release) != .installed else { return }
         installation = .running
         outputData = Data()
         installationOutput = ""
@@ -172,10 +192,11 @@ final class UpdateController {
                 installation = .failed("Homebrew exited with status \(code). See the update log for details.")
                 return
             }
-            guard let version = AppVersion(try installedVersion()), version >= release.version else {
+            guard let version = AppVersion(try readInstalledVersion()), version >= release.version else {
                 installation = .failed("Homebrew finished, but version \(release.version) is not installed yet. Try again once the cask is available.")
                 return
             }
+            verifiedInstalledVersion = version
             installation = .installed
         } catch {
             installation = .failed(error.localizedDescription)

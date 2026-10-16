@@ -27,16 +27,24 @@ extension AppModel {
         return missing ? "Some detected agents have not reported a resumable conversation. Automatic restart is unavailable until they do." : nil
     }
 
-    func waitToRestartAfterUpdate(restart: (@MainActor () -> Void)? = nil) {
-        guard updates.installation == .installed, updateRestartRecoveryWarning == nil else { return }
+    func waitToRestartAfterUpdate(
+        sleep: @escaping @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(1)) },
+        restart: (@MainActor () -> Void)? = nil
+    ) {
+        guard updates.canRestartAfterUpdate, updateRestartRecoveryWarning == nil else { return }
         cancelUpdateRestart()
         waitsToRestartAfterUpdate = true
         updateRestartTask = Task { @MainActor [weak self] in
             // Let the final hook finish recording its recovery metadata before terminating.
             while !Task.isCancelled {
-                do { try await Task.sleep(for: .seconds(1)) }
+                do { try await sleep() }
                 catch { return }
-                guard let self, self.waitsToRestartAfterUpdate else { return }
+                guard !Task.isCancelled, let self, self.waitsToRestartAfterUpdate else { return }
+                if self.updates.installation == .running { continue }
+                guard self.updates.canRestartAfterUpdate else {
+                    self.cancelUpdateRestart()
+                    return
+                }
                 if self.updateRestartRecoveryWarning != nil {
                     self.cancelUpdateRestart()
                     return
@@ -61,10 +69,11 @@ extension AppModel {
     }
 
     func restartAfterUpdate() {
-        guard updates.installation == .installed else { return }
+        guard updates.canRestartAfterUpdate else { return }
         cancelUpdateRestart()
         updateRestartError = nil
         do {
+            try updates.validateRestart()
             // LaunchServices must see the old process exit first, otherwise it can activate the
             // running copy. Positional arguments keep bundle paths out of shell source.
             let helper = Process()

@@ -150,6 +150,9 @@ extension AppModel {
     ) {
         guard let process = terminalSessions[sessionID],
               process.activeForegroundProcessName == nil else { return }
+        // exec can replace the shell without creating a separate foreground group. A live hook
+        // identity is stronger evidence than the absence of a separate process name.
+        guard !process.isRunning || liveAgentTabs[tabID] == nil else { return }
         forgetAgentSession(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID, sessionID: sessionID)
     }
 

@@ -288,6 +288,52 @@ final class UpdateControllerTests: XCTestCase {
         XCTAssertEqual(controller.installation, .installed)
     }
 
+    func testANewerReleaseCanInstallBeforeRestartingAnEarlierUpgrade() async throws {
+        var diskVersion = "0.24"
+        let calls = Counter()
+        let controller = UpdateController(
+            currentVersion: "0.23", upgradeRoute: .homebrew(command: "unused"), defaults: try defaults(),
+            fetch: { [json = releaseJSON(tag: "v0.24")] _ in json },
+            runUpgrade: { _, _ in await calls.increment(); return 0 }, installedVersion: { diskVersion }
+        )
+        await controller.check()
+        let first = try XCTUnwrap(controller.status.release)
+        await controller.install(release: first)
+        let newer = AppRelease(version: try XCTUnwrap(AppVersion("0.25")), tag: "v0.25",
+                               releaseURL: try XCTUnwrap(URL(string: "https://example.com/v0.25")))
+        XCTAssertEqual(controller.installation(for: first), .installed)
+        XCTAssertEqual(controller.installation(for: newer), .ready)
+        diskVersion = "0.25"
+        await controller.install(release: newer)
+        XCTAssertEqual(controller.installation(for: newer), .installed)
+        XCTAssertEqual(controller.verifiedInstalledVersion?.description, "0.25")
+        let count = await calls.value
+        XCTAssertEqual(count, 2)
+    }
+
+    func testFailedNewerUpgradeKeepsEarlierUpdateRestartableButVerifiesDiskAgain() async throws {
+        var diskVersion = "0.24"
+        let calls = Counter()
+        let controller = UpdateController(
+            currentVersion: "0.23", upgradeRoute: .homebrew(command: "unused"), defaults: try defaults(),
+            fetch: { [json = releaseJSON(tag: "v0.24")] _ in json },
+            runUpgrade: { _, _ in await calls.increment(); return await calls.value == 1 ? 0 : 1 },
+            installedVersion: { diskVersion }
+        )
+        await controller.check()
+        let first = try XCTUnwrap(controller.status.release)
+        await controller.install(release: first)
+        let newer = AppRelease(version: try XCTUnwrap(AppVersion("0.25")), tag: "v0.25",
+                               releaseURL: try XCTUnwrap(URL(string: "https://example.com/v0.25")))
+        await controller.install(release: newer)
+        XCTAssertEqual(controller.installation(for: first), .installed)
+        guard case .failed = controller.installation(for: newer) else { return XCTFail("Expected newer upgrade failure") }
+        XCTAssertTrue(controller.canRestartAfterUpdate)
+        XCTAssertNoThrow(try controller.validateRestart())
+        diskVersion = "0.23"
+        XCTAssertThrowsError(try controller.validateRestart())
+    }
+
     func testLongUpdateOutputKeepsOnlyABoundedTail() async throws {
         let controller = try installer { _, output in
             await output(Data(repeating: 65, count: 100_000))
