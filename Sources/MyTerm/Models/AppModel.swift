@@ -671,8 +671,8 @@ final class AppModel {
             return
         }
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 568, height: 300),
-            styleMask: [.titled], backing: .buffered, defer: false
+            contentRect: NSRect(x: 0, y: 0, width: 568, height: 420),
+            styleMask: [.titled, .resizable], backing: .buffered, defer: false
         )
         window.title = "Update myterm"
         window.isReleasedWhenClosed = false
@@ -680,6 +680,7 @@ final class AppModel {
             self?.updateWindow?.close()
             self?.updateWindow = nil
         })
+        window.contentMinSize = NSSize(width: 568, height: 300)
         updateWindow = window
         window.center()
         window.makeKeyAndOrderFront(nil)
@@ -2682,7 +2683,7 @@ final class AppModel {
             .first
     }
 
-    private func validDirectory(_ directory: URL) -> URL? {
+    func validDirectory(_ directory: URL) -> URL? {
         let standardizedDirectory = directory.standardizedFileURL
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(

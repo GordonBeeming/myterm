@@ -21,10 +21,17 @@ extension AppModel {
         if !store.globalSettings.restoresAgentSessions {
             return "Agent session restoration is off. Enable it in Settings before scheduling a restart."
         }
-        let missing = workspaces.flatMap(\.allTabs).contains {
-            liveAgentTabs[$0.id] != nil && $0.terminalSession?.agentSession == nil
+        for tab in workspaces.flatMap(\.allTabs) where liveAgentTabs[tab.id] != nil {
+            guard let session = tab.terminalSession, let handle = session.agentSession,
+                  AgentSessionResume.canResume(handle) else {
+                return "Some detected agents have not reported a resumable conversation. Automatic restart is unavailable until they do."
+            }
+            guard let directory = handle.workingDirectory ?? session.workingDirectory,
+                  validDirectory(directory) != nil else {
+                return "An agent’s recovery directory is missing. Restore that directory before scheduling a restart."
+            }
         }
-        return missing ? "Some detected agents have not reported a resumable conversation. Automatic restart is unavailable until they do." : nil
+        return nil
     }
 
     func waitToRestartAfterUpdate(

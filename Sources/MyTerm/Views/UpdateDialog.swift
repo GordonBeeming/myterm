@@ -12,85 +12,87 @@ struct UpdateDialog: View {
     private var installation: UpdateController.Installation { updates.installation(for: release) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Label("Update available — \(release.version.description)", systemImage: "arrow.down.circle")
-                .font(.title2)
-            Text("You’re running \(updates.currentVersion). Homebrew installs the update in the background.")
-                .foregroundStyle(.secondary)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Label("Update available — \(release.version.description)", systemImage: "arrow.down.circle")
+                    .font(.title2)
+                Text("You’re running \(updates.currentVersion). Homebrew installs the update in the background.")
+                    .foregroundStyle(.secondary)
 
-            installationStatus
+                installationStatus
 
-            DisclosureGroup("Advanced", isExpanded: $advanced) {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Restart when every hook-connected agent has finished its turn. Agents waiting for input keep the restart paused. Agents without hooks cannot report whether they’re idle.")
-                        .font(.callout).foregroundStyle(.secondary)
-                    let count = model.updateRestartBlockingAgentCount
-                    Text("\(count) \(count == 1 ? "agent" : "agents") still working or waiting for input.")
-                    if let warning = model.updateRestartRecoveryWarning {
-                        Text(warning).foregroundStyle(.orange)
-                    }
-                    if installation == .installed {
-                        Button(model.waitsToRestartAfterUpdate ? "Cancel Scheduled Restart" : "Restart When Agents Are Idle") {
-                            if model.waitsToRestartAfterUpdate { model.cancelUpdateRestart() }
-                            else { model.waitToRestartAfterUpdate() }
+                DisclosureGroup("Advanced", isExpanded: $advanced) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Restart when every hook-connected agent has finished its turn. Agents waiting for input keep the restart paused. Agents without hooks cannot report whether they’re idle.")
+                            .font(.callout).foregroundStyle(.secondary)
+                        let count = model.updateRestartBlockingAgentCount
+                        Text("\(count) \(count == 1 ? "agent" : "agents") still working or waiting for input.")
+                        if let warning = model.updateRestartRecoveryWarning {
+                            Text(warning).foregroundStyle(.orange)
                         }
-                        .disabled(!model.waitsToRestartAfterUpdate && model.updateRestartRecoveryWarning != nil)
-                    }
-                    if !updates.installationOutput.isEmpty {
-                        ScrollView {
-                            Text(updates.installationOutput)
-                                .font(.system(.caption, design: .monospaced))
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                        if installation == .installed {
+                            Button(model.waitsToRestartAfterUpdate ? "Cancel Scheduled Restart" : "Restart When Agents Are Idle") {
+                                if model.waitsToRestartAfterUpdate { model.cancelUpdateRestart() }
+                                else { model.waitToRestartAfterUpdate() }
+                            }
+                            .disabled(!model.waitsToRestartAfterUpdate && model.updateRestartRecoveryWarning != nil)
                         }
-                        .frame(height: 180)
-                        .padding(8)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
-                        .accessibilityLabel("Homebrew update log")
+                        if !updates.installationOutput.isEmpty {
+                            ScrollView {
+                                Text(updates.installationOutput)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .frame(height: 180)
+                            .padding(8)
+                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+                            .accessibilityLabel("Homebrew update log")
+                        }
+                    }.padding(.top, 8)
+                }
+                if installation == .installed, let warning = model.updateRestartRecoveryWarning {
+                    Text(warning).font(.callout).foregroundStyle(.orange)
+                }
+                if let error = model.updateRestartError {
+                    Text(error).foregroundStyle(.red).textSelection(.enabled)
+                }
+                if installation != .installed, updates.canRestartAfterUpdate,
+                   let installed = updates.verifiedInstalledVersion {
+                    HStack {
+                        Text("Version \(installed.description) is already installed.").font(.callout)
+                        Button("Restart Installed Update") { model.restartAfterUpdate() }
                     }
-                }.padding(.top, 8)
-            }
-            if installation == .installed, let warning = model.updateRestartRecoveryWarning {
-                Text(warning).font(.callout).foregroundStyle(.orange)
-            }
-            if let error = model.updateRestartError {
-                Text(error).foregroundStyle(.red).textSelection(.enabled)
-            }
-            if installation != .installed, updates.canRestartAfterUpdate,
-               let installed = updates.verifiedInstalledVersion {
+                }
                 HStack {
-                    Text("Version \(installed.description) is already installed.").font(.callout)
-                    Button("Restart Installed Update") { model.restartAfterUpdate() }
-                }
-            }
-            HStack {
-                Link("Release Notes", destination: release.releaseURL)
-                if installation != .installed {
-                    Button("Skip This Version") {
-                        updates.skip(release)
-                        close()
+                    Link("Release Notes", destination: release.releaseURL)
+                    if installation != .installed {
+                        Button("Skip This Version") {
+                            updates.skip(release)
+                            close()
+                        }
+                        .disabled(installation == .running)
                     }
-                    .disabled(installation == .running)
-                }
-                Spacer()
-                Button("Later", action: close)
-                    .keyboardShortcut(.cancelAction)
-                    .disabled(installation == .running || model.waitsToRestartAfterUpdate)
-                if installation == .installed {
-                    Button("Restart Now") { model.restartAfterUpdate() }
+                    Spacer()
+                    Button("Later", action: close)
+                        .keyboardShortcut(.cancelAction)
+                        .disabled(installation == .running || model.waitsToRestartAfterUpdate)
+                    if installation == .installed {
+                        Button("Restart Now") { model.restartAfterUpdate() }
+                            .keyboardShortcut(.defaultAction)
+                    } else {
+                        Button(installation == .ready ? "Update Now" : "Try Again") {
+                            Task { await updates.install(release: release) }
+                        }
                         .keyboardShortcut(.defaultAction)
-                } else {
-                    Button(installation == .ready ? "Update Now" : "Try Again") {
-                        Task { await updates.install(release: release) }
+                        .disabled(installation == .running)
                     }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(installation == .running)
                 }
             }
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(24)
-        .frame(width: 520)
-        .fixedSize(horizontal: false, vertical: true)
+        .frame(minWidth: 568, minHeight: 300)
     }
 
     @ViewBuilder private var installationStatus: some View {

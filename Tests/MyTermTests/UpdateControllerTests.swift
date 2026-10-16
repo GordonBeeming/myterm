@@ -357,6 +357,22 @@ final class UpdateControllerTests: XCTestCase {
         XCTAssertTrue(output.contains("stderr"))
     }
 
+    func testHomebrewRouteUsesTheCaskOwningPrefixEvenWhenNativeBrewExists() {
+        let route = UpdateController.detectUpgradeRoute(
+            bundleURL: URL(fileURLWithPath: "/Applications/myterm.app"),
+            fileExists: { ["/usr/local/Caskroom/myterm", "/opt/homebrew/bin/brew"].contains($0) }
+        )
+        XCTAssertEqual(route, .homebrew(command: "/usr/local/bin/brew upgrade --cask gordonbeeming/tap/myterm"))
+    }
+
+    func testNativeHomebrewRouteUsesItsAbsoluteExecutable() {
+        let route = UpdateController.detectUpgradeRoute(
+            bundleURL: URL(fileURLWithPath: "/Applications/myterm.app"),
+            fileExists: { $0 == "/opt/homebrew/Caskroom/myterm" }
+        )
+        XCTAssertEqual(route, .homebrew(command: "/opt/homebrew/bin/brew upgrade --cask gordonbeeming/tap/myterm"))
+    }
+
     func testNonHomebrewCopyOffersTheReleaseInstead() throws {
         let controller = controller(route: .releasePage, defaults: try defaults())
 

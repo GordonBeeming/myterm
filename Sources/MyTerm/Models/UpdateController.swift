@@ -315,7 +315,7 @@ final class UpdateController {
         poll.stop()
     }
 
-    private static func detectUpgradeRoute(
+    static func detectUpgradeRoute(
         bundleURL: URL = Bundle.main.bundleURL,
         fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
     ) -> UpgradeRoute {
@@ -324,8 +324,8 @@ final class UpdateController {
         // replaced by a manual download.
         guard bundleURL.standardizedFileURL.path == "/Applications/myterm.app" else { return .releasePage }
         let prefixes = ["/opt/homebrew", "/usr/local", "/home/linuxbrew/.linuxbrew"]
-        guard prefixes.contains(where: { fileExists("\($0)/Caskroom/myterm") }) else { return .releasePage }
-        return .homebrew(command: "brew upgrade --cask \(caskToken)")
+        guard let prefix = prefixes.first(where: { fileExists("\($0)/Caskroom/myterm") }) else { return .releasePage }
+        return .homebrew(command: "\(prefix)/bin/brew upgrade --cask \(caskToken)")
     }
 }
 

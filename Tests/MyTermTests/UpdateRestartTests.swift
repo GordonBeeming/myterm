@@ -79,6 +79,44 @@ final class UpdateRestartTests: XCTestCase {
         XCTAssertFalse(model.waitsToRestartAfterUpdate)
     }
 
+    func testDeletedRecoveryDirectoryPreventsScheduledRestart() async throws {
+        let harness = try await harness()
+        let model = harness.model
+        let workspace = model.selectedWorkspace
+        let group = try XCTUnwrap(workspace.orderedGroups.first)
+        let tab = try XCTUnwrap(workspace.selectedTab)
+        let session = try XCTUnwrap(tab.terminalSession)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        model.liveAgentTabs[tab.id] = "claude"
+        model.recordAgentSession(
+            AgentActivityReport(agent: "claude", activity: .finished, sessionID: "directory-test", workingDirectory: directory),
+            workspaceID: workspace.id, tabGroupID: group.id, tabID: tab.id, sessionID: session.id
+        )
+        XCTAssertNil(model.updateRestartRecoveryWarning)
+        try FileManager.default.removeItem(at: directory)
+        XCTAssertNotNil(model.updateRestartRecoveryWarning)
+        model.waitToRestartAfterUpdate(restart: { XCTFail("Deleted directory cannot recover") })
+        XCTAssertFalse(model.waitsToRestartAfterUpdate)
+    }
+
+    func testRecoveryUsesTheSavedPaneDirectoryWhenTheHookHasNone() async throws {
+        let harness = try await harness()
+        let model = harness.model
+        let workspace = model.selectedWorkspace
+        let group = try XCTUnwrap(workspace.orderedGroups.first)
+        let tab = try XCTUnwrap(workspace.selectedTab)
+        let session = try XCTUnwrap(tab.terminalSession)
+        try model.store.updateTerminalWorkingDirectory(workspaceID: workspace.id, tabGroupID: group.id,
+                                                       tabID: tab.id, workingDirectory: FileManager.default.temporaryDirectory)
+        model.liveAgentTabs[tab.id] = "claude"
+        model.recordAgentSession(
+            AgentActivityReport(agent: "claude", activity: .finished, sessionID: "pane-directory-test"),
+            workspaceID: workspace.id, tabGroupID: group.id, tabID: tab.id, sessionID: session.id
+        )
+        XCTAssertNil(model.updateRestartRecoveryWarning)
+    }
+
     func testMissingRecoveryMetadataPreventsScheduling() async throws {
         let harness = try await harness()
         let model = harness.model
