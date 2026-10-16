@@ -6,6 +6,7 @@ import MyTermPlatform
 import Observation
 import OSLog
 import UniformTypeIdentifiers
+import class SwiftUI.NSHostingView
 
 enum TerminalSettingsScope: Equatable, Hashable, Sendable {
     case global
@@ -17,6 +18,7 @@ struct ActiveProcessClosePrompt: Equatable {
     let title: String
     let confirmButtonTitle: String
     let processNames: [String]
+    var informativeText: String? = nil
 }
 
 typealias TextFileOpenCommandRunner = @MainActor (
@@ -146,6 +148,11 @@ final class AppModel {
     var newFolderDraft = ""
     var settingsScope = TerminalSettingsScope.global
     private(set) var stateVersion = 0
+    @ObservationIgnored var updateWindow: NSWindow?
+    @ObservationIgnored var updateRestartTask: Task<Void, Never>?
+    var waitsToRestartAfterUpdate = false
+    var isRestartingAfterUpdate = false
+    var updateRestartError: String?
     let updates: UpdateController
     @ObservationIgnored lazy var companionHost = makeCompanionHost(
         self,
@@ -645,26 +652,37 @@ final class AppModel {
     }
 
     private func presentUpdateAvailable(_ release: AppRelease) {
-        let alert = NSAlert()
-        alert.alertStyle = .informational
-        alert.messageText = "Update available — \(release.version)"
-        let howItInstalls = updates.upgradeCommand.map {
-            "Updating runs `\($0)` in a new tab. Quit and reopen myterm once it finishes."
-        } ?? "This copy was not installed with Homebrew, so the release page has the download."
-        alert.informativeText = "You have \(updates.currentVersion).\n\n\(howItInstalls)"
-        alert.addButton(withTitle: updates.upgradeActionTitle)
-        // Without a Homebrew command to offer, the primary button already opens the release, and a
-        // separate "Release Notes" button would be a second way to do the identical thing.
-        let offersReleaseNotes = updates.upgradeCommand != nil
-        if offersReleaseNotes { alert.addButton(withTitle: "Release Notes") }
-        alert.addButton(withTitle: "Later")
-        let skipButton = alert.addButton(withTitle: "Skip This Version")
-        switch alert.runModal() {
-        case .alertFirstButtonReturn: startUpgrade(for: release)
-        case .alertSecondButtonReturn where offersReleaseNotes: _ = externalFileOpener(release.releaseURL)
-        case NSApplication.ModalResponse(rawValue: skipButton.tag): updates.skip(release)
-        default: break
+        if let updateWindow {
+            updateWindow.makeKeyAndOrderFront(nil)
+            return
         }
+        guard updates.upgradeCommand != nil else {
+            let alert = NSAlert()
+            alert.messageText = "Update available — \(release.version)"
+            alert.informativeText = "This copy was not installed with Homebrew, so the release page has the download."
+            alert.addButton(withTitle: "Open the Release")
+            alert.addButton(withTitle: "Later")
+            alert.addButton(withTitle: "Skip This Version")
+            switch alert.runModal() {
+            case .alertFirstButtonReturn: _ = externalFileOpener(release.releaseURL)
+            case .alertThirdButtonReturn: updates.skip(release)
+            default: break
+            }
+            return
+        }
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 568, height: 300),
+            styleMask: [.titled], backing: .buffered, defer: false
+        )
+        window.title = "Update myterm"
+        window.isReleasedWhenClosed = false
+        window.contentView = NSHostingView(rootView: UpdateDialog(model: self, release: release) { [weak self] in
+            self?.updateWindow?.close()
+            self?.updateWindow = nil
+        })
+        updateWindow = window
+        window.center()
+        window.makeKeyAndOrderFront(nil)
     }
 
     private func presentUpToDate(_ version: AppVersion) {
@@ -674,19 +692,6 @@ final class AppModel {
         alert.informativeText = "You are running \(version), the newest published release."
         alert.addButton(withTitle: "OK")
         alert.runModal()
-    }
-
-    private func startUpgrade(for release: AppRelease) {
-        // Running the upgrade in a tab is the honest version of "update from the app": Homebrew
-        // owns the install, and the user watches it happen rather than trusting a progress bar.
-        guard let command = updates.upgradeCommand else {
-            _ = externalFileOpener(release.releaseURL)
-            return
-        }
-        createTerminalTab(
-            workingDirectory: FileManager.default.homeDirectoryForCurrentUser,
-            initialCommand: command
-        )
     }
 
     func beginCreatingFolder() {
@@ -2787,7 +2792,16 @@ final class AppModel {
     }
 
     func shouldTerminateApplication() -> Bool {
-        confirmClose(
+        if isRestartingAfterUpdate { return true }
+        if updates.installation == .running {
+            return confirmClose(
+                processNames: ["Homebrew update"],
+                title: "Quit While Updating?",
+                confirmButtonTitle: "Quit Anyway",
+                informativeText: "Homebrew is still installing. Quitting closes the update dialog and ends running terminal sessions. Homebrew may continue in the background; check the installed version after reopening myterm."
+            )
+        }
+        return confirmClose(
             processNames: store.workspaces.flatMap(activeProcessNames(in:)),
             title: "Quit MyTerm?",
             confirmButtonTitle: "Quit"
@@ -2816,14 +2830,16 @@ final class AppModel {
     private func confirmClose(
         processNames: [String],
         title: String,
-        confirmButtonTitle: String
+        confirmButtonTitle: String,
+        informativeText: String? = nil
     ) -> Bool {
         guard !processNames.isEmpty else { return true }
         return confirmClosingActiveProcesses(
             ActiveProcessClosePrompt(
                 title: title,
                 confirmButtonTitle: confirmButtonTitle,
-                processNames: processNames
+                processNames: processNames,
+                informativeText: informativeText
             )
         )
     }
@@ -2837,7 +2853,7 @@ final class AppModel {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = prompt.title
-        alert.informativeText = "The following process\(prompt.processNames.count == 1 ? " is" : "es are") still running: \(groupedNames.joined(separator: ", ")). Closing will terminate \(prompt.processNames.count == 1 ? "it" : "them")."
+        alert.informativeText = prompt.informativeText ?? "The following process\(prompt.processNames.count == 1 ? " is" : "es are") still running: \(groupedNames.joined(separator: ", ")). Closing will terminate \(prompt.processNames.count == 1 ? "it" : "them")."
         alert.addButton(withTitle: prompt.confirmButtonTitle)
         alert.buttons.first?.hasDestructiveAction = true
         alert.addButton(withTitle: "Cancel")

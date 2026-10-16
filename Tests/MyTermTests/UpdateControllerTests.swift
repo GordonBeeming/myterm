@@ -191,7 +191,124 @@ final class UpdateControllerTests: XCTestCase {
         )
 
         XCTAssertEqual(controller.upgradeCommand, "brew upgrade --cask gordonbeeming/tap/myterm")
-        XCTAssertEqual(controller.upgradeActionTitle, "Update in a New Tab")
+        XCTAssertEqual(controller.upgradeActionTitle, "Update Now")
+    }
+
+    private func installer(
+        version: String = "0.24",
+        runner: @escaping UpdateController.UpgradeRunner
+    ) throws -> UpdateController {
+        UpdateController(
+            currentVersion: "0.23",
+            upgradeRoute: .homebrew(command: "brew upgrade --cask x"),
+            defaults: try defaults(), environment: [:],
+            fetch: { [json = releaseJSON(tag: "v0.24")] _ in json },
+            runUpgrade: runner, installedVersion: { version }
+        )
+    }
+
+    func testInstallStreamsOutputAndVerifiesInstalledVersion() async throws {
+        let controller = try installer { command, output in
+            XCTAssertEqual(command, "brew upgrade --cask x")
+            await output(Data("Downloading…\n".utf8))
+            await output(Data("Installed\n".utf8))
+            return 0
+        }
+        await controller.check()
+        await controller.install()
+        XCTAssertEqual(controller.installation, .installed)
+        XCTAssertEqual(controller.installationOutput, "Downloading…\nInstalled\n")
+    }
+
+    func testFailedInstallKeepsOutputAndCanBeRetried() async throws {
+        let calls = Counter()
+        let controller = try installer { _, output in
+            await calls.increment()
+            await output(Data("brew error".utf8))
+            return await calls.value == 1 ? 1 : 0
+        }
+        await controller.check()
+        await controller.install()
+        guard case .failed = controller.installation else { return XCTFail("Expected failure") }
+        XCTAssertEqual(controller.installationOutput, "brew error")
+        await controller.install()
+        XCTAssertEqual(controller.installation, .installed)
+    }
+
+    func testSuccessfulBrewWithAnOldCaskDoesNotOfferRestart() async throws {
+        let controller = try installer(version: "0.23") { _, _ in 0 }
+        await controller.check()
+        await controller.install()
+        guard case .failed = controller.installation else { return XCTFail("Old cask must not count as installed") }
+    }
+
+    func testConcurrentInstallAndReinstallDoNotRunBrewTwice() async throws {
+        let calls = Counter()
+        let gate = Gate()
+        let controller = try installer { _, _ in
+            await calls.increment()
+            await gate.wait()
+            return 0
+        }
+        await controller.check()
+        let first = Task { await controller.install() }
+        while controller.installation != .running { await Task.yield() }
+        await controller.install()
+        await gate.open()
+        await first.value
+        await controller.install()
+        let count = await calls.value
+        XCTAssertEqual(count, 1)
+    }
+
+    func testProcessLaunchFailureIsReported() async throws {
+        let controller = try installer { _, _ in throw CocoaError(.executableNotLoadable) }
+        await controller.check()
+        await controller.install()
+        guard case .failed = controller.installation else { return XCTFail("Expected launch failure") }
+    }
+
+    func testDialogReleaseCanStillInstallAfterAnotherCheckFails() async throws {
+        let calls = Counter()
+        let store = try defaults()
+        store.set(false, forKey: "updates.automaticChecks")
+        let controller = UpdateController(
+            currentVersion: "0.23", upgradeRoute: .homebrew(command: "unused"), defaults: store,
+            fetch: { [json = releaseJSON(tag: "v0.24")] _ in
+                await calls.increment()
+                if await calls.value > 1 { throw CocoaError(.fileReadUnknown) }
+                return json
+            }, runUpgrade: { _, _ in 0 }, installedVersion: { "0.24" }
+        )
+        await controller.check()
+        let dialogRelease = try XCTUnwrap(controller.status.release)
+        await controller.check()
+        guard case .failed = controller.status else { return XCTFail("Expected check failure") }
+        await controller.install(release: dialogRelease)
+        XCTAssertEqual(controller.installation, .installed)
+    }
+
+    func testLongUpdateOutputKeepsOnlyABoundedTail() async throws {
+        let controller = try installer { _, output in
+            await output(Data(repeating: 65, count: 100_000))
+            await output(Data("done".utf8))
+            return 0
+        }
+        await controller.check()
+        await controller.install()
+        XCTAssertEqual(controller.installationOutput.utf8.count, 65_536)
+        XCTAssertTrue(controller.installationOutput.hasSuffix("done"))
+    }
+
+    func testHeadlessRunnerCapturesBothStreamsAndExitStatusWithoutATerminal() async throws {
+        let buffer = UpgradeOutputBuffer()
+        let code = try await UpdateController.runHeadlessUpgrade(
+            command: "if [ -t 0 ]; then exit 99; fi; printf stdout; printf stderr >&2; read value; exit 7"
+        ) { data in await buffer.append(data) }
+        let output = await buffer.text
+        XCTAssertEqual(code, 7)
+        XCTAssertTrue(output.contains("stdout"))
+        XCTAssertTrue(output.contains("stderr"))
     }
 
     func testNonHomebrewCopyOffersTheReleaseInstead() throws {
@@ -223,4 +340,10 @@ private actor Gate {
         waiting.removeAll()
         for continuation in resuming { continuation.resume() }
     }
+}
+
+private actor UpgradeOutputBuffer {
+    private var data = Data()
+    var text: String { String(decoding: data, as: UTF8.self) }
+    func append(_ chunk: Data) { data.append(chunk) }
 }

@@ -4,10 +4,8 @@ import Observation
 
 /// Checks GitHub for a newer release and works out how this copy should be upgraded.
 ///
-/// Deliberately not a self-updater. myterm ships as a notarized DMG and a Homebrew cask, and
-/// replacing the bundle in place would leave Homebrew's records pointing at a version that is no
-/// longer installed. Instead the app finds the update and hands the actual upgrade to whichever
-/// mechanism installed it.
+/// Homebrew owns bundle replacement and its installation records; the app runs that upgrade
+/// without a terminal and keeps its output available until the user restarts.
 @MainActor
 @Observable
 final class UpdateController {
@@ -26,11 +24,26 @@ final class UpdateController {
 
     /// How this copy of the app should be upgraded.
     enum UpgradeRoute: Equatable {
-        /// Installed by Homebrew; the upgrade is a command the user can watch run.
+        /// Installed by Homebrew; the upgrade runs without a terminal.
         case homebrew(command: String)
         /// Anything else — a DMG drag, or a build from source. Send them to the release.
         case releasePage
     }
+
+    enum Installation: Equatable {
+        case ready
+        case running
+        case installed
+        case failed(String)
+    }
+
+    typealias UpgradeRunner = @Sendable (String, @escaping @Sendable (Data) async -> Void) async throws -> Int32
+
+    private(set) var installation: Installation = .ready
+    private(set) var installationOutput = ""
+    private var outputData = Data()
+    private let runUpgrade: UpgradeRunner
+    private let installedVersion: @MainActor () throws -> String
 
     static let caskToken = "gordonbeeming/tap/myterm"
     static let checkInterval: TimeInterval = 60 * 60 * 24
@@ -73,13 +86,27 @@ final class UpdateController {
         defaults: UserDefaults? = nil,
         environment: [String: String] = ProcessInfo.processInfo.environment,
         now: @escaping () -> Date = Date.init,
-        fetch: (@Sendable (URL) async throws -> Data)? = nil
+        fetch: (@Sendable (URL) async throws -> Data)? = nil,
+        runUpgrade: UpgradeRunner? = nil,
+        installedVersion: (@MainActor () throws -> String)? = nil
     ) {
         let suiteName = environment["MYTERM_USER_DEFAULTS_SUITE"] ?? channel.bundleIdentifier
         let defaults = defaults ?? UserDefaults(suiteName: suiteName) ?? .standard
         self.defaults = defaults
         self.currentVersion = currentVersion
         self.now = now
+        self.runUpgrade = runUpgrade ?? Self.runHeadlessUpgrade
+        self.installedVersion = installedVersion ?? {
+            // Bundle caches its Info.plist, including the old version after brew replaces it.
+            let url = Bundle.main.bundleURL.appendingPathComponent("Contents/Info.plist")
+            let data = try Data(contentsOf: url)
+            let plist = try PropertyListSerialization.propertyList(from: data, format: nil)
+            guard let values = plist as? [String: Any],
+                  let version = values["CFBundleShortVersionString"] as? String else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+            return version
+        }
         self.fetch = fetch ?? { url in
             var request = URLRequest(url: url)
             request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
@@ -116,7 +143,7 @@ final class UpdateController {
     /// The action offered alongside a found update.
     var upgradeActionTitle: String {
         switch upgradeRoute {
-        case .homebrew: "Update in a New Tab"
+        case .homebrew: "Update Now"
         case .releasePage: "Open the Release"
         }
     }
@@ -124,6 +151,72 @@ final class UpdateController {
     var upgradeCommand: String? {
         guard case .homebrew(let command) = upgradeRoute else { return nil }
         return command
+    }
+
+    /// Installation is independent of checking: a timer cannot erase progress or enable a second brew.
+    func install(release requestedRelease: AppRelease? = nil) async {
+        guard installation != .running, installation != .installed,
+              let command = upgradeCommand else { return }
+        guard let release = requestedRelease ?? status.release else {
+            installation = .failed("Check for an available update before installing.")
+            return
+        }
+        installation = .running
+        outputData = Data()
+        installationOutput = ""
+        do {
+            let code = try await runUpgrade(command) { [weak self] data in
+                await self?.appendOutput(data)
+            }
+            guard code == 0 else {
+                installation = .failed("Homebrew exited with status \(code). See the update log for details.")
+                return
+            }
+            guard let version = AppVersion(try installedVersion()), version >= release.version else {
+                installation = .failed("Homebrew finished, but version \(release.version) is not installed yet. Try again once the cask is available.")
+                return
+            }
+            installation = .installed
+        } catch {
+            installation = .failed(error.localizedDescription)
+        }
+    }
+
+    private func appendOutput(_ data: Data) {
+        outputData.append(data)
+        // A long Homebrew log should not grow the app's memory without bound.
+        if outputData.count > 65_536 { outputData = Data(outputData.suffix(65_536)) }
+        installationOutput = String(decoding: outputData, as: UTF8.self)
+    }
+
+    nonisolated static func runHeadlessUpgrade(
+        command: String,
+        output: @escaping @Sendable (Data) async -> Void
+    ) async throws -> Int32 {
+        try await Task.detached {
+            let process = Process()
+            let pipe = Pipe()
+            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+            process.arguments = ["-c", command]
+            var environment = ProcessInfo.processInfo.environment
+            environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+            environment["HOMEBREW_NO_COLOR"] = "1"
+            process.environment = environment
+            process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
+            process.standardInput = FileHandle.nullDevice
+            process.standardOutput = pipe
+            process.standardError = pipe
+            try process.run()
+            pipe.fileHandleForWriting.closeFile()
+            while true {
+                let data = pipe.fileHandleForReading.availableData
+                if data.isEmpty { break }
+                await output(data)
+            }
+            pipe.fileHandleForReading.closeFile()
+            process.waitUntilExit()
+            return process.terminationStatus
+        }.value
     }
 
     /// Concurrent callers join the check already running rather than starting a second one.
