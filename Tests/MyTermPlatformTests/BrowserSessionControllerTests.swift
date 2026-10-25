@@ -220,57 +220,128 @@ final class BrowserSessionControllerTests: XCTestCase {
         XCTAssertEqual(callbackCount, 1)
     }
 
-    func testMiddleClickNewWindowRequestUsesNewTabCallback() throws {
+    func testNewWindowLinkActivationOpensANewTabForTheMiddleButton() throws {
         let controller = BrowserSessionController()
         let expectedURL = try XCTUnwrap(URL(string: "https://example.com/middle-click"))
         var requestedURL: URL?
-        controller.onNewTabRequest = { requestedURL = $0 }
+        controller.onNewTabRequest = {
+            requestedURL = $0
+            return true
+        }
 
         controller.handleNewWindowRequest(
             URLRequest(url: expectedURL),
-            buttonNumber: 2
+            navigationType: .linkActivated,
+            buttonNumber: BrowserSessionController.middleMouseButtonMask,
+            modifierFlags: []
         )
 
         XCTAssertEqual(requestedURL, expectedURL)
         XCTAssertNil(controller.webView.url)
     }
 
-    func testMiddleClickHitTestsAnOrdinarySameFrameLink() async throws {
+    func testNewWindowLinkActivationLoadsInThePaneForTheLeftButton() throws {
         let controller = BrowserSessionController()
-        let webView = try XCTUnwrap(controller.webView as? MyTermWebView)
-        webView.frame = NSRect(x: 0, y: 0, width: 320, height: 200)
-        await loadHTML(
-            "<a href='https://example.com/middle-click' style='position:fixed;inset:0'>Open</a>",
-            in: webView
-        )
-        let expectedURL = try XCTUnwrap(URL(string: "https://example.com/middle-click"))
         var requestedURL: URL?
-        controller.onNewTabRequest = { requestedURL = $0 }
-
-        let handled = await withCheckedContinuation { continuation in
-            webView.openLinkUnderMiddleClick(at: CGPoint(x: 20, y: 180)) {
-                continuation.resume(returning: $0)
-            }
+        controller.onNewTabRequest = {
+            requestedURL = $0
+            return true
         }
 
-        XCTAssertTrue(handled)
-        XCTAssertEqual(requestedURL, expectedURL)
-        XCTAssertEqual(webView.url?.host, "myterm.test")
+        controller.handleNewWindowRequest(
+            URLRequest(url: try XCTUnwrap(URL(string: "https://example.com/target-blank"))),
+            navigationType: .linkActivated,
+            buttonNumber: 1,
+            modifierFlags: []
+        )
+
+        XCTAssertNil(requestedURL)
     }
 
-    func testMiddleClickWithoutALinkAlwaysCallsCompletion() async throws {
+    func testMiddleButtonLinkActivationOpensANewTabInsteadOfNavigating() throws {
         let controller = BrowserSessionController()
-        let webView = try XCTUnwrap(controller.webView as? MyTermWebView)
-        webView.frame = NSRect(x: 0, y: 0, width: 320, height: 200)
-        await loadHTML("<p>No link here</p>", in: webView)
-
-        let handled = await withCheckedContinuation { continuation in
-            webView.openLinkUnderMiddleClick(at: CGPoint(x: 20, y: 180)) {
-                continuation.resume(returning: $0)
-            }
+        let expectedURL = try XCTUnwrap(URL(string: "https://example.com/in-frame"))
+        var requestedURL: URL?
+        controller.onNewTabRequest = {
+            requestedURL = $0
+            return true
         }
 
-        XCTAssertFalse(handled)
+        let policy = decision(
+            controller,
+            url: expectedURL,
+            buttonNumber: BrowserSessionController.middleMouseButtonMask
+        )
+
+        XCTAssertEqual(policy, .cancel)
+        XCTAssertEqual(requestedURL, expectedURL)
+        XCTAssertNil(controller.webView.url)
+    }
+
+    func testCommandClickLinkActivationOpensANewTab() throws {
+        let controller = BrowserSessionController()
+        let expectedURL = try XCTUnwrap(URL(string: "https://example.com/command-click"))
+        var requestedURL: URL?
+        controller.onNewTabRequest = {
+            requestedURL = $0
+            return true
+        }
+
+        let policy = decision(controller, url: expectedURL, buttonNumber: 1, modifiers: [.command])
+
+        XCTAssertEqual(policy, .cancel)
+        XCTAssertEqual(requestedURL, expectedURL)
+    }
+
+    func testOrdinaryClicksAndRightClicksKeepNavigatingThePane() throws {
+        let controller = BrowserSessionController()
+        let url = try XCTUnwrap(URL(string: "https://example.com/ordinary"))
+        var requestCount = 0
+        controller.onNewTabRequest = { _ in
+            requestCount += 1
+            return true
+        }
+
+        // 2 is the right button's mask, and the value the pressed-button mask was once mistaken for.
+        for buttonNumber in [1, 2] {
+            XCTAssertEqual(decision(controller, url: url, buttonNumber: buttonNumber), .allow)
+        }
+        XCTAssertEqual(
+            decision(
+                controller,
+                url: url,
+                navigationType: .other,
+                buttonNumber: BrowserSessionController.middleMouseButtonMask
+            ),
+            .allow
+        )
+
+        XCTAssertEqual(requestCount, 0)
+    }
+
+    func testMiddleClickedLinkTheHostWontTakeStaysInThePane() throws {
+        let controller = BrowserSessionController()
+        controller.onNewTabRequest = { _ in false }
+
+        let policy = decision(
+            controller,
+            url: try XCTUnwrap(URL(string: "mailto:test@example.com")),
+            buttonNumber: BrowserSessionController.middleMouseButtonMask
+        )
+
+        XCTAssertEqual(policy, .allow)
+    }
+
+    func testMiddleClickedLinkIsAllowedWhenNoHostIsListening() throws {
+        let controller = BrowserSessionController()
+
+        let policy = decision(
+            controller,
+            url: try XCTUnwrap(URL(string: "https://example.com/no-host")),
+            buttonNumber: BrowserSessionController.middleMouseButtonMask
+        )
+
+        XCTAssertEqual(policy, .allow)
     }
 
     func testTargetBlankNavigationLoadsInTheExistingWebView() async {
@@ -301,6 +372,10 @@ final class BrowserSessionControllerTests: XCTestCase {
         var localDecision: WKNavigationActionPolicy?
         controller.decideNavigationPolicy(
             for: URL(fileURLWithPath: "/tmp/local.html"),
+            navigationType: .other,
+            buttonNumber: 0,
+            modifierFlags: [],
+            isTargetingAFrame: true,
             preferences: localPreferences
         ) { policy, preferences in
             localDecision = policy
@@ -313,6 +388,10 @@ final class BrowserSessionControllerTests: XCTestCase {
         var webDecision: WKNavigationActionPolicy?
         controller.decideNavigationPolicy(
             for: try XCTUnwrap(URL(string: "https://example.com")),
+            navigationType: .other,
+            buttonNumber: 0,
+            modifierFlags: [],
+            isTargetingAFrame: true,
             preferences: webPreferences
         ) { policy, preferences in
             webDecision = policy
@@ -328,6 +407,10 @@ final class BrowserSessionControllerTests: XCTestCase {
 
         controller.decideNavigationPolicy(
             for: URL(fileURLWithPath: "/tmp/local.html"),
+            navigationType: .other,
+            buttonNumber: 0,
+            modifierFlags: [],
+            isTargetingAFrame: true,
             preferences: localPreferences
         ) { policy, preferences in
             localDecision = policy
@@ -448,6 +531,28 @@ final class BrowserSessionControllerTests: XCTestCase {
 
         XCTAssertTrue(results.matching.contains("\(cookieName)=\(cookieValue)"))
         XCTAssertFalse(results.isolated.contains("\(cookieName)=\(cookieValue)"))
+    }
+
+    private func decision(
+        _ controller: BrowserSessionController,
+        url: URL?,
+        navigationType: WKNavigationType = .linkActivated,
+        buttonNumber: Int,
+        modifiers: NSEvent.ModifierFlags = [],
+        isTargetingAFrame: Bool = true
+    ) -> WKNavigationActionPolicy? {
+        var policy: WKNavigationActionPolicy?
+        controller.decideNavigationPolicy(
+            for: url,
+            navigationType: navigationType,
+            buttonNumber: buttonNumber,
+            modifierFlags: modifiers,
+            isTargetingAFrame: isTargetingAFrame,
+            preferences: WKWebpagePreferences()
+        ) { decided, _ in
+            policy = decided
+        }
+        return policy
     }
 
     private func loadHTML(_ html: String, in webView: WKWebView) async {

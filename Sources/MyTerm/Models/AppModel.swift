@@ -1799,8 +1799,8 @@ final class AppModel {
                 )
             }
             controller.onNewTabRequest = { [weak self, weak controller] url in
-                guard let controller else { return }
-                self?.requestBrowserNewTab(
+                guard let self, let controller else { return false }
+                return requestBrowserNewTab(
                     url,
                     workspaceID: workspaceID,
                     tabGroupID: tabGroupID,
@@ -2294,8 +2294,8 @@ final class AppModel {
             )
         }
         controller.onNewTabRequest = { [weak self, weak controller] url in
-            guard let controller else { return }
-            self?.requestBrowserNewTab(
+            guard let self, let controller else { return false }
+            return requestBrowserNewTab(
                 url,
                 workspaceID: workspaceID,
                 tabGroupID: tabGroupID,
@@ -2308,6 +2308,8 @@ final class AppModel {
         browserControllers[browser.id] = controller
     }
 
+    /// Answers whether a tab was opened, so a caller that cancelled a navigation to ask knows to let
+    /// the original one through instead.
     private func requestBrowserNewTab(
         _ url: URL,
         workspaceID: WorkspaceID,
@@ -2315,13 +2317,13 @@ final class AppModel {
         tabID: TabID,
         browserID: BrowserSessionID,
         controller: BrowserSessionController
-    ) {
+    ) -> Bool {
         guard browserControllers[browserID] === controller,
               let tab = tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID),
               let browser = tab.browserSession,
               browser.id == browserID,
               Self.canOpenNewBrowserTab(url, from: controller.webView.url) else {
-            return
+            return false
         }
         createBrowserTab(
             url: url,
@@ -2330,6 +2332,7 @@ final class AppModel {
             profile: browser.profile,
             selectsNewTab: false
         )
+        return true
     }
 
     private static func canOpenNewBrowserTab(_ url: URL, from sourceURL: URL?) -> Bool {

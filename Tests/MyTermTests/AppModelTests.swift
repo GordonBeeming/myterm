@@ -1316,7 +1316,7 @@ final class AppModelTests: XCTestCase {
         let destination = try XCTUnwrap(URL(string: "https://example.com/background"))
         let initialTabCount = model.selectedWorkspace.tabs.count
 
-        originalController.onNewTabRequest?(destination)
+        XCTAssertEqual(originalController.onNewTabRequest?(destination), true)
 
         let group = try XCTUnwrap(model.selectedWorkspace.group(id: groupID))
         XCTAssertEqual(group.selectedTabID, originalTabID)
@@ -1337,8 +1337,8 @@ final class AppModelTests: XCTestCase {
         }
         let initialTabCount = model.selectedWorkspace.tabs.count
 
-        controller.onNewTabRequest?(try XCTUnwrap(URL(string: "mailto:test@example.com")))
-        controller.onNewTabRequest?(URL(fileURLWithPath: "/tmp/untrusted.html"))
+        XCTAssertEqual(controller.onNewTabRequest?(try XCTUnwrap(URL(string: "mailto:test@example.com"))), false)
+        XCTAssertEqual(controller.onNewTabRequest?(URL(fileURLWithPath: "/tmp/untrusted.html")), false)
 
         XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount)
     }
