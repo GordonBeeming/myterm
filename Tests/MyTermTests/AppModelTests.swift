@@ -1343,6 +1343,33 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount)
     }
 
+    func testBrowserNewTabCallbackLeavesNoTabBehindWhenThePageCannotLoad() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let model = try makeModel(applicationSupportDirectory: directory)
+        model.createBrowserTab()
+        guard case .browser(let browser) = try XCTUnwrap(model.selectedTab?.content),
+              let controller = model.browserController(for: browser.id) else {
+            return XCTFail("Expected a browser tab and controller")
+        }
+        // A file page is what makes a file link trusted, so the missing file gets past that guard
+        // and fails later, while the controller loads its own tab.
+        let sourceFile = directory.appending(path: "source.html", directoryHint: .notDirectory)
+        try Data("<html><body>source</body></html>".utf8).write(to: sourceFile)
+        try controller.load(url: sourceFile)
+        let sourceLoaded = try await waitUntil("the source page to become the controller's URL") {
+            controller.webView.url == sourceFile
+        }
+        XCTAssertTrue(sourceLoaded)
+        let initialTabCount = model.selectedWorkspace.tabs.count
+        let missingFile = directory.appending(path: "missing.html", directoryHint: .notDirectory)
+
+        let opened = controller.onNewTabRequest?(missingFile)
+
+        XCTAssertEqual(opened, false)
+        XCTAssertEqual(model.selectedWorkspace.tabs.count, initialTabCount)
+    }
+
     func testLocalFileJavaScriptSettingUpdatesAnExistingBrowserController() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }
@@ -3896,6 +3923,19 @@ final class AppModelTests: XCTestCase {
         )
 
         XCTAssertNil(relaunchEngine.configurations.first?.initialCommand)
+    }
+
+    private func waitUntil(
+        _ description: String,
+        condition: @escaping @MainActor () -> Bool
+    ) async throws -> Bool {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(5))
+        while !condition() {
+            guard clock.now < deadline else { return false }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        return true
     }
 
     private func makeModel(applicationSupportDirectory: URL) throws -> AppModel {

@@ -1197,6 +1197,9 @@ final class AppModel {
         createBrowserTab(url: url, in: store.selectedWorkspaceID)
     }
 
+    /// Answers whether the tab is open and showing the URL, so a caller that cancelled a navigation
+    /// to ask for it knows whether the navigation still has to happen.
+    @discardableResult
     private func createBrowserTab(
         url: URL,
         in workspaceID: WorkspaceID,
@@ -1204,7 +1207,8 @@ final class AppModel {
         sourceWorkingDirectory: URL? = nil,
         profile sourceProfile: BrowserDataProfile? = nil,
         selectsNewTab: Bool = true
-    ) {
+    ) -> Bool {
+        var created = false
         perform {
             guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
                 throw AppModelError.workspaceUnavailable(workspaceID)
@@ -1234,13 +1238,34 @@ final class AppModel {
                 throw AppModelError.tabUnavailable(tabID)
             }
             if store.selectedWorkspaceID == workspaceID {
-                try restoreBrowserController(for: tab, tabGroupID: targetGroupID, workspaceID: workspaceID)
+                do {
+                    try restoreBrowserController(
+                        for: tab,
+                        tabGroupID: targetGroupID,
+                        workspaceID: workspaceID
+                    )
+                } catch {
+                    // The tab record is already in the store by now, and a controller that never
+                    // loaded leaves a pane with nothing behind it. Take the tab back out so the
+                    // caller can fall back to whatever it would have done without a tab.
+                    let lifecycle = try? store.closeTab(
+                        workspaceID: workspaceID,
+                        tabGroupID: targetGroupID,
+                        tabID: tabID
+                    )
+                    if let lifecycle {
+                        handle(lifecycle)
+                    }
+                    throw error
+                }
             }
             if selectsNewTab {
                 restoreSplitLayoutIfFocusing(workspaceID: workspaceID, tabGroupID: targetGroupID)
                 focusContent(of: tab)
             }
+            created = true
         }
+        return created
     }
 
     private func createBrowserPane(
@@ -2325,14 +2350,13 @@ final class AppModel {
               Self.canOpenNewBrowserTab(url, from: controller.webView.url) else {
             return false
         }
-        createBrowserTab(
+        return createBrowserTab(
             url: url,
             in: workspaceID,
             tabGroupID: tabGroupID,
             profile: browser.profile,
             selectsNewTab: false
         )
-        return true
     }
 
     private static func canOpenNewBrowserTab(_ url: URL, from sourceURL: URL?) -> Bool {
