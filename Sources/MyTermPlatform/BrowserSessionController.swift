@@ -38,7 +38,6 @@ final class MyTermWebView: WKWebView {
     /// Chords the app owns. Empty means "let the page have everything", which is what the plain
     /// `WKWebView` behaviour was before this existed.
     var reservedChords: [KeyChord] = []
-    var onMiddleClickURL: ((URL) -> Void)?
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
@@ -57,52 +56,6 @@ final class MyTermWebView: WKWebView {
             return false
         }
         return super.performKeyEquivalent(with: event)
-    }
-
-    override func otherMouseDown(with event: NSEvent) {
-        guard event.buttonNumber == 2 else {
-            super.otherMouseDown(with: event)
-            return
-        }
-
-        let point = convert(event.locationInWindow, from: nil)
-        openLinkUnderMiddleClick(at: point) { [weak self] handled in
-            if !handled {
-                self?.forwardOtherMouseDown(event)
-            }
-        }
-    }
-
-    func openLinkUnderMiddleClick(at point: CGPoint, completion: ((Bool) -> Void)? = nil) {
-        let documentPoint = CGPoint(x: point.x, y: bounds.height - point.y)
-        evaluateJavaScript(Self.linkLookupScript(at: documentPoint)) { [weak self] result, _ in
-            guard let self else {
-                completion?(false)
-                return
-            }
-            guard let href = result as? String,
-                  let url = URL(string: href),
-                  let onMiddleClickURL else {
-                completion?(false)
-                return
-            }
-            onMiddleClickURL(url)
-            completion?(true)
-        }
-    }
-
-    private func forwardOtherMouseDown(_ event: NSEvent) {
-        super.otherMouseDown(with: event)
-    }
-
-    static func linkLookupScript(at point: CGPoint) -> String {
-        """
-        (() => {
-          const element = document.elementFromPoint(\(point.x), \(point.y));
-          const link = element?.closest?.('a[href]');
-          return link?.href ?? null;
-        })()
-        """
     }
 }
 
@@ -132,7 +85,9 @@ public final class BrowserSessionController: NSObject, ObservableObject {
 
     public let webView: WKWebView
     public var onCloseRequest: (() -> Void)?
-    public var onNewTabRequest: ((URL) -> Void)?
+    /// Answers `true` when the host opened a tab for the URL. A `false` leaves the click to its
+    /// ordinary navigation, so links a tab cannot own (mail links, untrusted files) still work.
+    public var onNewTabRequest: ((URL) -> Bool)?
     public var allowsLocalFileJavaScript: Bool {
         didSet {
             guard allowsLocalFileJavaScript != oldValue,
@@ -185,9 +140,6 @@ public final class BrowserSessionController: NSObject, ObservableObject {
         self.allowsLocalFileJavaScript = allowsLocalFileJavaScript
         super.init()
 
-        webView.onMiddleClickURL = { [weak self] url in
-            self?.onNewTabRequest?(url)
-        }
         webView.navigationDelegate = self
         webView.uiDelegate = self
         observations = [
@@ -305,6 +257,20 @@ public final class BrowserSessionController: NSObject, ObservableObject {
         webView.pageZoom = 1
     }
 
+    /// WebKit reports the mouse button as a pressed-button mask (`1 << NSEvent.buttonNumber`), so the
+    /// middle button arrives as 4 while AppKit calls that same button 2. Reading it as an index sends
+    /// middle clicks down the same path as an ordinary click.
+    static let middleMouseButtonMask = 4
+
+    static func opensInNewTab(
+        navigationType: WKNavigationType,
+        buttonNumber: Int,
+        modifierFlags: NSEvent.ModifierFlags
+    ) -> Bool {
+        guard navigationType == .linkActivated else { return false }
+        return buttonNumber & middleMouseButtonMask != 0 || modifierFlags.contains(.command)
+    }
+
     static func configureNavigationPreferences(
         _ preferences: WKWebpagePreferences,
         for url: URL?,
@@ -322,6 +288,10 @@ public final class BrowserSessionController: NSObject, ObservableObject {
 
     func decideNavigationPolicy(
         for url: URL?,
+        navigationType: WKNavigationType,
+        buttonNumber: Int,
+        modifierFlags: NSEvent.ModifierFlags,
+        isTargetingAFrame: Bool,
         preferences: WKWebpagePreferences,
         decisionHandler: @escaping @MainActor @Sendable (
             WKNavigationActionPolicy,
@@ -333,14 +303,39 @@ public final class BrowserSessionController: NSObject, ObservableObject {
             for: url,
             allowsLocalFileJavaScript: allowsLocalFileJavaScript
         )
+        // A middle or command click on a link already targeting a frame would replace this pane, so the
+        // navigation is cancelled and handed to a new tab instead. WebKit resolves the link itself,
+        // which is why no hit-testing happens here: it sees shadow roots and subframes that a script
+        // reading `document.elementFromPoint` cannot.
+        if isTargetingAFrame,
+           Self.opensInNewTab(
+               navigationType: navigationType,
+               buttonNumber: buttonNumber,
+               modifierFlags: modifierFlags
+           ),
+           let url,
+           let onNewTabRequest,
+           onNewTabRequest(url) {
+            decisionHandler(.cancel, preferences)
+            return
+        }
         decisionHandler(.allow, preferences)
     }
 
-    func handleNewWindowRequest(_ request: URLRequest, buttonNumber: Int?) {
-        if buttonNumber == 2,
+    func handleNewWindowRequest(
+        _ request: URLRequest,
+        navigationType: WKNavigationType,
+        buttonNumber: Int,
+        modifierFlags: NSEvent.ModifierFlags
+    ) {
+        if Self.opensInNewTab(
+               navigationType: navigationType,
+               buttonNumber: buttonNumber,
+               modifierFlags: modifierFlags
+           ),
            let url = request.url,
-           let onNewTabRequest {
-            onNewTabRequest(url)
+           let onNewTabRequest,
+           onNewTabRequest(url) {
             return
         }
         webView.load(request)
@@ -376,7 +371,9 @@ extension BrowserSessionController: WKUIDelegate {
         guard navigationAction.targetFrame == nil else { return nil }
         handleNewWindowRequest(
             navigationAction.request,
-            buttonNumber: navigationAction.buttonNumber
+            navigationType: navigationAction.navigationType,
+            buttonNumber: navigationAction.buttonNumber,
+            modifierFlags: navigationAction.modifierFlags
         )
         return nil
     }
@@ -398,6 +395,10 @@ extension BrowserSessionController: WKNavigationDelegate {
     ) {
         decideNavigationPolicy(
             for: navigationAction.request.url,
+            navigationType: navigationAction.navigationType,
+            buttonNumber: navigationAction.buttonNumber,
+            modifierFlags: navigationAction.modifierFlags,
+            isTargetingAFrame: navigationAction.targetFrame != nil,
             preferences: preferences,
             decisionHandler: decisionHandler
         )
