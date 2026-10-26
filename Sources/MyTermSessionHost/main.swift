@@ -9,8 +9,20 @@ import OSLog
 final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency TerminalDelegate {
     private var listener: Int32 = -1
     private var client: Int32 = -1
+    private var clientIdentity = UUID()
     private var listenerSource: DispatchSourceRead?
     private var clientSource: DispatchSourceRead?
+    private var outputSource: DispatchSourceWrite?
+    private var outputIdleTimer: DispatchSourceTimer?
+    private var pendingOutput: [Data?] = []
+    private var outputFrameIndex = 0
+    private var outputFrameOffset = 0
+    private var pendingOutputBytes = 0
+    private var closingClient = false
+    // One maximum-sized checkpoint plus ordinary output fits, with bounded memory even
+    // when a controller stops reading. Overflow detaches it; the host retains its state.
+    private let maximumPendingOutputBytes = 64 * 1_024 * 1_024
+    private var finishing = false
     private var decoder = SessionHostDecoder()
     private let initialColumns: Int
     private let initialRows: Int
@@ -115,6 +127,8 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
             try flushPendingGeometry()
             reportForeground()
             client = descriptor
+            clientIdentity = UUID()
+            let identity = clientIdentity
             decoder = SessionHostDecoder()
             let checkpoint = try emulator.exportBoundedCheckpoint()
             clientHasOmittedHistory = checkpoint.omittedScrollbackLines > 0
@@ -124,10 +138,14 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
                                               activity: latestActivity,
                                               pendingActivities: pendingActivities.values.flatMap { $0 },
                                               omittedScrollbackLines: checkpoint.omittedScrollbackLines), to: descriptor)
+            let flags = fcntl(descriptor, F_GETFL)
+            guard flags >= 0, fcntl(descriptor, F_SETFL, flags | O_NONBLOCK) == 0 else {
+                throw SessionHostError.system("nonblocking controller", errno)
+            }
             clientSource = DispatchSource.makeReadSource(fileDescriptor: descriptor, queue: .main)
             clientSource?.setEventHandler { [weak self] in
                 MainActor.assumeIsolated {
-                    guard self?.client == descriptor else { return }
+                    guard self?.client == descriptor, self?.clientIdentity == identity else { return }
                     self?.readClient()
                 }
             }
@@ -142,7 +160,9 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
     private func readClient() {
         var bytes = [UInt8](repeating: 0, count: 64 * 1_024)
         let count = read(client, &bytes, bytes.count)
+        if count < 0, errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK { return }
         guard count > 0 else { disconnect(); return }
+        guard !closingClient, !finishing else { return }
         do {
             for message in try decoder.append(Data(bytes.prefix(count))) {
                 switch message.kind {
@@ -175,7 +195,7 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
         } catch {
             log(error)
             sendToClient(.init(kind: "error", text: error.localizedDescription))
-            disconnect()
+            closeAfterFlushingOutput()
         }
     }
 
@@ -190,7 +210,7 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
                 catch {
                     self.log(error)
                     self.sendToClient(.init(kind: "error", text: error.localizedDescription))
-                    self.disconnect()
+                    self.closeAfterFlushingOutput()
                 }
             }
         }
@@ -264,9 +284,90 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
     }
 
     private func sendToClient(_ message: SessionHostMessage) {
-        guard client >= 0 else { return }
-        do { try SessionHostSocket.write(message, to: client) }
+        guard client >= 0, !closingClient, !finishing || message.kind == "exited" else { return }
+        do {
+            let frame = try message.encoded()
+            guard pendingOutputBytes + frame.count <= maximumPendingOutputBytes else {
+                throw SessionHostError.system("controller output queue full; reattach to restore terminal state", ENOBUFS)
+            }
+            pendingOutput.append(frame)
+            pendingOutputBytes += frame.count
+            if outputSource == nil {
+                let descriptor = client
+                let identity = clientIdentity
+                outputSource = DispatchSource.makeWriteSource(fileDescriptor: descriptor, queue: .main)
+                outputSource?.setEventHandler { [weak self] in
+                    MainActor.assumeIsolated {
+                        guard self?.client == descriptor, self?.clientIdentity == identity else { return }
+                        self?.drainOutput()
+                    }
+                }
+                outputSource?.resume()
+            }
+        }
         catch { log(error); disconnect() }
+    }
+
+    private func drainOutput() {
+        var budget = 64 * 1_024
+        var madeProgress = false
+        defer {
+            if madeProgress, pendingOutputBytes > 0, finishing || closingClient { scheduleOutputIdleDeadline() }
+        }
+        while client >= 0, pendingOutputBytes > 0, budget > 0 {
+            guard let frame = pendingOutput[outputFrameIndex] else { return }
+            let count = frame.withUnsafeBytes { bytes in
+                Darwin.write(client, bytes.baseAddress?.advanced(by: outputFrameOffset), min(bytes.count - outputFrameOffset, budget))
+            }
+            if count < 0, errno == EINTR { continue }
+            if count < 0, errno == EAGAIN || errno == EWOULDBLOCK { return }
+            guard count > 0 else {
+                log(SessionHostError.system("controller output", errno))
+                disconnect()
+                return
+            }
+            outputFrameOffset += count
+            madeProgress = true
+            pendingOutputBytes -= count
+            budget -= count
+            if outputFrameOffset == frame.count {
+                pendingOutput[outputFrameIndex] = nil
+                outputFrameIndex += 1
+                outputFrameOffset = 0
+                if outputFrameIndex >= 64 {
+                    pendingOutput.removeFirst(outputFrameIndex)
+                    outputFrameIndex = 0
+                }
+            }
+        }
+        if pendingOutputBytes == 0 {
+            pendingOutput = []; outputFrameIndex = 0; outputFrameOffset = 0
+            outputSource?.cancel(); outputSource = nil
+            if finishing { completeFinish() }
+            if closingClient { disconnect() }
+        }
+    }
+
+    private func closeAfterFlushingOutput() {
+        closingClient = true
+        guard pendingOutputBytes > 0 else { disconnect(); return }
+        scheduleOutputIdleDeadline()
+    }
+
+    private func scheduleOutputIdleDeadline() {
+        if outputIdleTimer == nil {
+            let identity = clientIdentity
+            outputIdleTimer = DispatchSource.makeTimerSource(queue: .main)
+            outputIdleTimer?.setEventHandler { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self, self.clientIdentity == identity else { return }
+                    if self.finishing { self.completeFinish() }
+                    else { self.disconnect() }
+                }
+            }
+            outputIdleTimer?.resume()
+        }
+        outputIdleTimer?.schedule(deadline: .now() + 3)
     }
 
     private func reportForeground(force: Bool = false) {
@@ -321,8 +422,15 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
 
     private func disconnect() {
         clientSource?.cancel(); clientSource = nil
+        outputSource?.cancel(); outputSource = nil
+        outputIdleTimer?.cancel(); outputIdleTimer = nil
+        pendingOutput.removeAll(keepingCapacity: false)
+        pendingOutputBytes = 0; outputFrameIndex = 0; outputFrameOffset = 0
+        closingClient = false
         if client >= 0 { close(client) }
         client = -1
+        clientIdentity = UUID()
+        if finishing { completeFinish() }
     }
 
     private func log(_ error: Error) {
@@ -350,12 +458,20 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
     }
 
     private func finish(exitCode: Int32?) {
-        sendToClient(.init(kind: "exited", exitCode: exitCode))
-        disconnect()
+        guard !finishing else { return }
+        finishing = true
         cancelInput()
         listenerSource?.cancel()
         close(listener)
         unlink(path)
+        sendToClient(.init(kind: "exited", exitCode: exitCode))
+        if pendingOutputBytes == 0 { completeFinish() }
+        // Preserve a progressing reader's final output; bound inactivity by the former
+        // socket send timeout while letting the main queue continue draining.
+        scheduleOutputIdleDeadline()
+    }
+
+    private func completeFinish() {
         exit(0)
     }
 

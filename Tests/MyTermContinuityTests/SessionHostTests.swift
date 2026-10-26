@@ -265,6 +265,199 @@ final class SessionHostTests: XCTestCase {
         XCTAssertFalse(process.isRunning, "PTY input backpressure must never block processing a stop request")
     }
 
+    func testLargePasteProgressesWhileHostOutputIsBackpressured() throws {
+        let directory = URL(fileURLWithPath: "/private/tmp/myterm-pressure-\(UUID().uuidString.prefix(8))")
+        try SessionHostSocket.prepareDirectory(directory)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let path = directory.appendingPathComponent("s.sock").path
+        let ready = directory.appendingPathComponent("ready")
+        let release = directory.appendingPathComponent("release")
+        let received = directory.appendingPathComponent("received")
+        let host = Process()
+        host.executableURL = try helperExecutable()
+        host.arguments = [path, "/bin/sh", directory.path, "80", "25", "-c",
+            "stty raw -echo; touch '\(ready.path)'; while [ ! -e '\(release.path)' ]; do sleep 0.01; done; awk 'BEGIN { for (i=0;i<32768;i++) printf \"sustained-output-0123456789\\r\\n\"; }' & head -c 65536 > '\(received.path)'; wait; printf paste-accepted"]
+        host.standardOutput = FileHandle.nullDevice
+        host.standardError = FileHandle.nullDevice
+        try host.run()
+        defer { if host.isRunning { host.terminate(); host.waitUntilExit() } }
+        let socket = try connectEventually(path: path)
+        defer { close(socket) }
+        var decoder = SessionHostDecoder()
+        let attached = try readMessage(socket, decoder: &decoder, kind: "attached")
+        let readyDeadline = Date().addingTimeInterval(3)
+        while !FileManager.default.fileExists(atPath: ready.path), Date() < readyDeadline { usleep(10_000) }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: ready.path))
+        // Match the application's synchronous MainActor send: no socket reads run during it.
+        XCTAssertTrue(FileManager.default.createFile(atPath: release.path, contents: Data()))
+        var queued = 0
+        var peek = [UInt8](repeating: 0, count: 64 * 1_024)
+        let backlogDeadline = Date().addingTimeInterval(1)
+        repeat {
+            queued = recv(socket, &peek, peek.count, MSG_PEEK | MSG_DONTWAIT)
+            if queued >= 4_096 { break }
+            usleep(10_000)
+        } while Date() < backlogDeadline
+        XCTAssertGreaterThanOrEqual(queued, 4_096, "fixture must establish unread host output before input")
+        usleep(100_000)
+        let started = Date()
+        do {
+            try SessionHostSocket.write(.init(kind: "input", bytes: Data(repeating: 65, count: 65_536), generation: attached.generation), to: socket)
+        } catch {
+            XCTFail("64 KiB input failed after \(Date().timeIntervalSince(started))s with \(queued) unread output bytes: \(error)")
+            return
+        }
+        let inputDeadline = Date().addingTimeInterval(3)
+        while ((try? Data(contentsOf: received).count) ?? 0) < 65_536, Date() < inputDeadline { usleep(10_000) }
+        XCTAssertEqual(try Data(contentsOf: received), Data(repeating: 65, count: 65_536),
+                       "helper must deliver every input byte while client reads remain paused")
+        var output = Data()
+        var lastSequence = try XCTUnwrap(attached.sequence)
+        var exited = false
+        let expected = Data((String(repeating: "sustained-output-0123456789\r\n", count: 32_768) + "paste-accepted").utf8)
+        let responseDeadline = Date().addingTimeInterval(5)
+        while Date() < responseDeadline, output.count < expected.count || !exited {
+            var bytes = [UInt8](repeating: 0, count: 64 * 1_024)
+            let count = Darwin.read(socket, &bytes, bytes.count)
+            guard count > 0 else { throw SessionHostError.disconnected }
+            for message in try decoder.append(Data(bytes.prefix(count))) {
+                if message.kind == "exited" { exited = true; continue }
+                guard message.kind == "output" else { continue }
+                XCTAssertFalse(exited, "exit must follow all queued output")
+                XCTAssertEqual(message.generation, attached.generation)
+                XCTAssertEqual(message.sequence, lastSequence + 1)
+                lastSequence += 1
+                output.append(message.bytes ?? Data())
+            }
+        }
+        XCTAssertEqual(output, expected, "resuming reads must preserve complete output bytes and frame order")
+        XCTAssertTrue(exited, "the final exit event must follow the complete output")
+        let exitDeadline = Date().addingTimeInterval(3)
+        while host.isRunning, Date() < exitDeadline { usleep(10_000) }
+        XCTAssertFalse(host.isRunning)
+    }
+
+    func testBackpressuredControllerCanReconnectAndStopWithoutReadingOutput() throws {
+        let directory = URL(fileURLWithPath: "/private/tmp/myterm-pressure-\(UUID().uuidString.prefix(8))")
+        try SessionHostSocket.prepareDirectory(directory)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let path = directory.appendingPathComponent("s.sock").path
+        let release = directory.appendingPathComponent("release")
+        let more = directory.appendingPathComponent("more")
+        let produced = directory.appendingPathComponent("produced")
+        let producedMore = directory.appendingPathComponent("produced-more")
+        let output = "awk 'BEGIN { for (i=0;i<32768;i++) printf \"backpressure-output-0123456789\\r\\n\"; printf \"retained-tail\\r\\n\"; }'"
+        let host = Process()
+        host.executableURL = try helperExecutable()
+        host.arguments = [path, "/bin/sh", directory.path, "80", "25", "-c",
+            "while [ ! -e '\(release.path)' ]; do sleep 0.01; done; \(output); touch '\(produced.path)'; while [ ! -e '\(more.path)' ]; do sleep 0.01; done; \(output); touch '\(producedMore.path)'; sleep 20"]
+        host.standardOutput = FileHandle.nullDevice; host.standardError = FileHandle.nullDevice
+        try host.run()
+        defer { if host.isRunning { host.terminate(); host.waitUntilExit() } }
+        let first = try connectEventually(path: path)
+        var firstOpen = true
+        defer { if firstOpen { close(first) } }
+        var decoder = SessionHostDecoder()
+        let initial = try readMessage(first, decoder: &decoder, kind: "attached")
+        XCTAssertTrue(FileManager.default.createFile(atPath: release.path, contents: Data()))
+        let producerDeadline = Date().addingTimeInterval(5)
+        while !FileManager.default.fileExists(atPath: produced.path), Date() < producerDeadline { usleep(10_000) }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: produced.path), "host must keep draining PTY while its controller does not read")
+        close(first); firstOpen = false
+        var second: Int32 = -1
+        var restored: SessionHostMessage?
+        let reconnectDeadline = Date().addingTimeInterval(3)
+        while second < 0, Date() < reconnectDeadline {
+            let candidate = try SessionHostSocket.connect(path: path)
+            do {
+                decoder = SessionHostDecoder()
+                restored = try readMessage(candidate, decoder: &decoder, kind: "attached")
+                second = candidate
+            } catch { close(candidate); usleep(10_000) }
+        }
+        XCTAssertGreaterThanOrEqual(second, 0)
+        guard second >= 0 else { return }
+        defer { close(second) }
+        let attachment = try XCTUnwrap(restored)
+        XCTAssertEqual(attachment.pid, initial.pid)
+        let emulator = Terminal(delegate: CheckpointDelegate())
+        try emulator.importCheckpoint(XCTUnwrap(attachment.bytes))
+        // The producer's file publication precedes PTY drain. Bytes still in the PTY
+        // at attachment correctly follow the snapshot in the ordered output stream.
+        let tailDeadline = Date().addingTimeInterval(3)
+        var sawTail = String(decoding: emulator.getBufferAsData(kind: .normal), as: UTF8.self).contains("retained-tail")
+        var tailBytes = Data()
+        while !sawTail, Date() < tailDeadline {
+            var bytes = [UInt8](repeating: 0, count: 64 * 1_024)
+            let count = Darwin.read(second, &bytes, bytes.count)
+            guard count > 0 else { throw SessionHostError.disconnected }
+            for message in try decoder.append(Data(bytes.prefix(count))) where message.kind == "output" {
+                let data = message.bytes ?? Data()
+                emulator.feed(buffer: Array(data)[...])
+                tailBytes.append(data)
+                sawTail = sawTail || String(decoding: tailBytes, as: UTF8.self).contains("retained-tail")
+                tailBytes = Data(tailBytes.suffix(128))
+            }
+        }
+        XCTAssertTrue(String(decoding: emulator.getBufferAsData(kind: .normal), as: UTF8.self).contains("retained-tail"), String(decoding: emulator.getBufferAsData(kind: .normal).suffix(512), as: UTF8.self))
+        XCTAssertTrue(FileManager.default.createFile(atPath: more.path, contents: Data()))
+        let secondProducerDeadline = Date().addingTimeInterval(5)
+        while !FileManager.default.fileExists(atPath: producedMore.path), Date() < secondProducerDeadline { usleep(10_000) }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: producedMore.path))
+        try SessionHostSocket.write(.init(kind: "stop", generation: attachment.generation), to: second)
+        let stopDeadline = Date().addingTimeInterval(6)
+        while host.isRunning, Date() < stopDeadline { usleep(10_000) }
+        XCTAssertFalse(host.isRunning, "explicit stop must be processed even while host output is backpressured")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: path))
+    }
+
+    func testOutputOverflowDetachesOnlyControllerAndProtocolErrorFlushesBeforeEOF() throws {
+        let directory = URL(fileURLWithPath: "/private/tmp/myterm-pressure-\(UUID().uuidString.prefix(8))")
+        try SessionHostSocket.prepareDirectory(directory)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let path = directory.appendingPathComponent("s.sock").path
+        let release = directory.appendingPathComponent("release")
+        let produced = directory.appendingPathComponent("produced")
+        let host = Process()
+        host.executableURL = try helperExecutable()
+        // Base64 framing of 52 MiB exceeds the 64 MiB outbound bound. NUL bytes
+        // exercise transport volume without allocating enormous terminal history.
+        host.arguments = [path, "/bin/sh", directory.path, "80", "25", "-c",
+            "while [ ! -e '\(release.path)' ]; do sleep 0.01; done; dd if=/dev/zero bs=1048576 count=52 2>/dev/null; touch '\(produced.path)'; sleep 30"]
+        host.standardOutput = FileHandle.nullDevice; host.standardError = FileHandle.nullDevice
+        try host.run()
+        defer { if host.isRunning { host.terminate(); host.waitUntilExit() } }
+        let first = try connectEventually(path: path)
+        defer { close(first) }
+        var decoder = SessionHostDecoder()
+        let initial = try readMessage(first, decoder: &decoder, kind: "attached")
+        XCTAssertTrue(FileManager.default.createFile(atPath: release.path, contents: Data()))
+        let producerDeadline = Date().addingTimeInterval(20)
+        while !FileManager.default.fileExists(atPath: produced.path), Date() < producerDeadline { usleep(10_000) }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: produced.path))
+        XCTAssertTrue(host.isRunning, "overflow must detach the controller without stopping its host")
+        var bytes = [UInt8](repeating: 0, count: 64 * 1_024)
+        var count = Darwin.read(first, &bytes, bytes.count)
+        while count > 0 { count = Darwin.read(first, &bytes, bytes.count) }
+        XCTAssertEqual(count, 0, "overflow must close the old controller stream")
+        let second = try SessionHostSocket.connect(path: path)
+        defer { close(second) }
+        decoder = SessionHostDecoder()
+        let restored = try readMessage(second, decoder: &decoder, kind: "attached")
+        XCTAssertEqual(restored.pid, initial.pid)
+        try SessionHostSocket.write(.init(kind: "invalid-request", generation: restored.generation), to: second)
+        let error = try readMessage(second, decoder: &decoder, kind: "error")
+        XCTAssertNotNil(error.text)
+        XCTAssertEqual(Darwin.read(second, &bytes, bytes.count), 0, "protocol error must arrive before EOF")
+        XCTAssertTrue(host.isRunning)
+        let third = try SessionHostSocket.connect(path: path)
+        defer { close(third) }
+        decoder = SessionHostDecoder()
+        let final = try readMessage(third, decoder: &decoder, kind: "attached")
+        XCTAssertEqual(final.pid, initial.pid)
+        try SessionHostSocket.write(.init(kind: "stop", generation: final.generation), to: third)
+    }
+
     private func helperExecutable() throws -> URL {
         if let path = ProcessInfo.processInfo.environment["MYTERM_TEST_SESSION_HOST"] {
             return URL(fileURLWithPath: path)
@@ -291,10 +484,22 @@ final class SessionHostTests: XCTestCase {
 
     private func readMessage(_ descriptor: Int32, decoder: inout SessionHostDecoder, kind: String) throws -> SessionHostMessage {
         while true {
-            var bytes = [UInt8](repeating: 0, count: 64 * 1_024)
-            let count = Darwin.read(descriptor, &bytes, bytes.count)
-            guard count > 0 else { throw SessionHostError.disconnected }
-            let messages = try decoder.append(Data(bytes.prefix(count)))
+            // Consume one complete frame, leaving coalesced output in the socket for
+            // the caller. Returning a match must never discard subsequent frames.
+            func readExactly(_ length: Int) throws -> Data {
+                var result = Data()
+                while result.count < length {
+                    var bytes = [UInt8](repeating: 0, count: min(length - result.count, 64 * 1_024))
+                    let count = Darwin.read(descriptor, &bytes, bytes.count)
+                    guard count > 0 else { throw SessionHostError.disconnected }
+                    result.append(contentsOf: bytes.prefix(count))
+                }
+                return result
+            }
+            let header = try readExactly(4)
+            let length = header.reduce(0) { ($0 << 8) | Int($1) }
+            guard length > 0, length <= SessionHostMessage.maximumFrameBytes else { throw SessionHostError.invalidFrame }
+            let messages = try decoder.append(header + readExactly(length))
             if let found = messages.first(where: { $0.kind == kind }) { return found }
             if let error = messages.first(where: { $0.kind == "error" }) { XCTFail(error.text ?? "host error") }
         }
