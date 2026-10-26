@@ -75,6 +75,7 @@ extension AppModel {
             tabID: tabID,
             isTabVisible: isInFrontOfUser
         )
+        companionHost.workspaceDidChange()
         // A banner is for being away from the app. With MyTerm in front, the cook has already said it.
         guard !isApplicationActive() else { return }
         postAgentNotification(for: report, workspaceID: workspaceID, tabID: tabID)
@@ -97,9 +98,12 @@ extension AppModel {
     }
 
     func markAsRead(tabID: TabID) {
-        agentInbox.markRead(tabID: tabID)
-        guard let activity = agentAttention[tabID] else { return }
-        agentAttention[tabID] = activity.afterReading
+        let didRead = agentInbox.markRead(tabID: tabID)
+        let activity = agentAttention[tabID]
+        agentAttention[tabID] = activity?.afterReading
+        if didRead || activity != agentAttention[tabID] {
+            companionHost.workspaceDidChange()
+        }
     }
 
     func forgetAgentAttention(forTab tabID: TabID) {

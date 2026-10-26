@@ -1276,11 +1276,18 @@ public final class Buffer {
 }
 
 extension Buffer {
-    func makeCheckpoint() throws -> CheckpointBuffer {
+    func makeCheckpoint(maximumLines: Int? = nil) throws -> CheckpointBuffer {
+        let omitted = maximumLines.map { min(max(0, _lines.count - max(_rows, $0)), _yBase) } ?? 0
         var checkpointLines: [CheckpointLine] = []
-        checkpointLines.reserveCapacity(_lines.count)
-        for index in 0..<_lines.count {
-            checkpointLines.append(try _lines[index].makeCheckpoint())
+        checkpointLines.reserveCapacity(_lines.count - omitted)
+        for index in omitted..<_lines.count {
+            var line = try _lines[index].makeCheckpoint()
+            if omitted > 0 {
+                for imageIndex in line.images.indices where line.images[imageIndex].isKitty {
+                    line.images[imageIndex].kittyRow -= omitted
+                }
+            }
+            checkpointLines.append(line)
         }
         return CheckpointBuffer(
             columns: _cols,
@@ -1289,12 +1296,12 @@ extension Buffer {
             maximumLines: _lines.maxLength,
             lines: checkpointLines,
             xDisplay: xDisp,
-            yDisplay: _yDisp,
+            yDisplay: max(0, _yDisp - omitted),
             xBase: xBase,
             x: _x,
             y: _y,
-            yBase: _yBase,
-            linesTop: linesTop,
+            yBase: _yBase - omitted,
+            linesTop: linesTop + omitted,
             scrollBottom: _scrollBottom,
             scrollTop: _scrollTop,
             tabStops: tabStops,
@@ -1312,7 +1319,7 @@ extension Buffer {
             insertMode: insertMode,
             marginMode: marginMode,
             wraparound: wraparound,
-            lastStorageY: lastBufferStorage.y,
+            lastStorageY: max(0, lastBufferStorage.y - omitted),
             lastStorageX: lastBufferStorage.x,
             lastStorageColumns: lastBufferStorage.cols,
             lastStorageRows: lastBufferStorage.rows

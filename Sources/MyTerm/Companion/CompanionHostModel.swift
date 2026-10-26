@@ -26,7 +26,7 @@ enum CompanionSignInRequirement: Equatable {
     var message: String {
         switch self {
         case .credentialsUnavailable:
-            "Your saved relay sign-in is unavailable. Sign in again in Companion settings to reconnect."
+            "Your saved relay sign-in is unavailable. Check this app's access in Keychain Access before signing in again in Companion settings."
         case .authorizationRejected:
             "Your relay sign-in could not be renewed. Sign in again in Companion settings to reconnect."
         }
@@ -231,7 +231,8 @@ final class CompanionHostModel {
         hasLinkedRelay = linkedRelay
         status = savedRelay.isEmpty ? .notConfigured : linkedRelay ? .disconnected : .signedOut
         let service = "\(channel.bundleIdentifier).companion.\(storageNamespace)"
-        let secrets = injectedSecrets ?? KeychainSecretStore(service: service)
+        let secrets = injectedSecrets ?? KeychainSecretStore(
+            service: service, authenticationUI: Self.credentialAuthenticationUI(for: channel))
         self.secrets = secrets
         identityStore = CompanionHostIdentityStore(secrets: secrets)
         tokenStore = TokenStore(secrets: secrets)
@@ -675,6 +676,10 @@ final class CompanionHostModel {
         }
     }
 
+    static func credentialAuthenticationUI(for channel: MyTermChannel) -> KeychainAuthenticationUI {
+        channel == .development ? .fail : .allow
+    }
+
     private func connectConfiguredRelay(allowSignIn: Bool = false) async {
         guard transportTask == nil, status != .connecting else { return }
         reconnectTask?.cancel()
@@ -769,6 +774,11 @@ final class CompanionHostModel {
             }
         } catch {
             guard connectionFence.accepts(generation) else { return }
+            if error is KeychainError || error is KeychainInteractionPolicyError {
+                logger.error("Companion credentials unavailable: \(error.localizedDescription, privacy: .public)")
+                requireSignIn(.credentialsUnavailable, generation: generation, allowSignIn: allowSignIn)
+                return
+            }
             if Self.isAuthenticationFailure(error) {
                 requireSignIn(.authorizationRejected, generation: generation, allowSignIn: allowSignIn)
                 return
@@ -1621,6 +1631,29 @@ final class CompanionHostModel {
         peer: PeerConnection
     ) async throws {
         let target = try terminalTarget(metadata)
+        // A detached terminal host starts asynchronously. Waiting here keeps a companion from
+        // spending its attach retry budget before the original process is ready for a checkpoint.
+        let startupDeadline = ContinuousClock.now.advanced(by: .seconds(6))
+        while target.session.isStarting {
+            try Task.checkCancellation()
+            guard peersByConnection[peer.connectionID] === peer,
+                  peer.applicationChannel != nil else { throw CancellationError() }
+            guard try terminalTarget(metadata).session === target.session else {
+                throw TerminalRemoteSessionError.staleGeneration
+            }
+            guard ContinuousClock.now < startupDeadline else {
+                throw TerminalRemoteSessionError.notRunning
+            }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        // The await also lets a tab close, move, restart, or a peer disconnect. Re-resolve both
+        // identities before enabling capture or using the old target's terminal checkpoint.
+        try Task.checkCancellation()
+        guard peersByConnection[peer.connectionID] === peer,
+              peer.applicationChannel != nil else { throw CancellationError() }
+        guard try terminalTarget(metadata).session === target.session else {
+            throw TerminalRemoteSessionError.staleGeneration
+        }
         target.session.setRemoteCaptureEnabled(true)
         // A resume is only honoured for the run the sequence was counted in. `remoteReplay` checks
         // the sequence alone, and a restarted terminal begins again at zero, so an old sequence
@@ -2334,6 +2367,11 @@ final class CompanionHostModel {
             do { try await transport.reauthenticate(accessToken: try await manager.accessToken()) }
             catch {
                 guard !Task.isCancelled, connectionFence.accepts(generation) else { return }
+                if error is KeychainError || error is KeychainInteractionPolicyError {
+                    logger.error("Companion credentials unavailable during refresh: \(error.localizedDescription, privacy: .public)")
+                    requireSignIn(.credentialsUnavailable, generation: generation)
+                    return
+                }
                 if Self.isAuthenticationFailure(error) {
                     requireSignIn(.authorizationRejected, generation: generation)
                     return

@@ -44,6 +44,9 @@ private struct ObservedBrowserTabContent: View {
     @State private var suggestionIndex = 0
     @State private var isFindVisible = false
     @State private var findQuery = ""
+    @State private var contextReview: BrowserContextReview?
+    @State private var isCapturingContext = false
+    @State private var contextError: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -75,6 +78,12 @@ private struct ObservedBrowserTabContent: View {
                     if isFindVisible { browserFindBar.padding(8) }
                 }
         }
+        .sheet(item: $contextReview) { review in
+            BrowserContextView(model: model, workspaceID: workspaceID, capture: review.capture)
+        }
+        .alert("Could not capture page", isPresented: Binding(
+            get: { contextError != nil }, set: { if !$0 { contextError = nil } }
+        )) { Button("OK") { contextError = nil } } message: { Text(contextError ?? "") }
         .onAppear { addressState.synchronizeNavigationText(controller.state.url?.absoluteString ?? "") }
         .onChange(of: controller.state.url) { _, url in
             guard let url else { return }
@@ -107,6 +116,23 @@ private struct ObservedBrowserTabContent: View {
                 }
             }
             .background(isFindVisible ? Theme.selectedFill : .clear, in: RoundedRectangle(cornerRadius: 8))
+
+            Button {
+                guard !isCapturingContext else { return }
+                isCapturingContext = true
+                Task { @MainActor in
+                    defer { isCapturingContext = false }
+                    do { contextReview = BrowserContextReview(capture: try await controller.captureContext()) }
+                    catch { contextError = error.localizedDescription }
+                }
+            } label: {
+                Image(systemName: isCapturingContext ? "hourglass" : "text.bubble")
+                    .frame(width: 24, height: 24)
+            }
+            .buttonStyle(.plain)
+            .disabled(isCapturingContext || controller.state.url == nil)
+            .help("Capture page context for a terminal")
+            .accessibilityLabel("Capture browser context")
 
             PaneActionsMenu(
                 select: select,

@@ -20,51 +20,140 @@ public enum KeychainAccessibility: Sendable {
     }
 }
 
+/// Interactive access remains the default. Unattended macOS development hosts fail instead of
+/// displaying a Keychain authorization dialog when their current signature cannot read an item.
+public enum KeychainAuthenticationUI: Sendable, Equatable {
+    case allow, fail
+}
+
+protocol KeychainOperations: Sendable {
+    func copyMatching(_ query: CFDictionary, result: UnsafeMutablePointer<CFTypeRef?>) -> OSStatus
+    func update(_ query: CFDictionary, attributes: CFDictionary) -> OSStatus
+    func add(_ attributes: CFDictionary) -> OSStatus
+    func delete(_ query: CFDictionary) -> OSStatus
+    #if os(macOS)
+    func interactionAllowed() throws -> Bool
+    func setInteractionAllowed(_ allowed: Bool) throws
+    #endif
+}
+
+private struct SystemKeychainOperations: KeychainOperations {
+    func copyMatching(_ query: CFDictionary, result: UnsafeMutablePointer<CFTypeRef?>) -> OSStatus {
+        SecItemCopyMatching(query, result)
+    }
+    func update(_ query: CFDictionary, attributes: CFDictionary) -> OSStatus { SecItemUpdate(query, attributes) }
+    func add(_ attributes: CFDictionary) -> OSStatus { SecItemAdd(attributes, nil) }
+    func delete(_ query: CFDictionary) -> OSStatus { SecItemDelete(query) }
+    #if os(macOS)
+    func interactionAllowed() throws -> Bool {
+        var allowed = DarwinBoolean(false)
+        let status = SecKeychainGetUserInteractionAllowed(&allowed)
+        guard status == errSecSuccess else { throw KeychainError(status: status) }
+        return allowed.boolValue
+    }
+    func setInteractionAllowed(_ allowed: Bool) throws {
+        let status = SecKeychainSetUserInteractionAllowed(allowed)
+        guard status == errSecSuccess else { throw KeychainError(status: status) }
+    }
+    #endif
+}
+
+public struct KeychainInteractionPolicyError: LocalizedError, Sendable {
+    public let message: String
+    public var errorDescription: String? { message }
+}
+
 public final class KeychainSecretStore: SecretStore, @unchecked Sendable {
     private let service: String
     private let accessGroup: String?
     private let accessibility: KeychainAccessibility
+    private let authenticationUI: KeychainAuthenticationUI
+    private let operations: any KeychainOperations
+    // Legacy Keychain interaction is process-wide. Serialize every operation through this store
+    // so an interactive store never runs inside another store's temporarily noninteractive scope.
+    #if os(macOS)
+    private static let interactionLock = NSLock()
+    #endif
 
-    public init(service: String, accessGroup: String? = nil,
-                accessibility: KeychainAccessibility = .terminalIdentity) {
+    public convenience init(service: String, accessGroup: String? = nil,
+                            accessibility: KeychainAccessibility = .terminalIdentity,
+                            authenticationUI: KeychainAuthenticationUI = .allow) {
+        self.init(service: service, accessGroup: accessGroup, accessibility: accessibility,
+                  authenticationUI: authenticationUI, operations: SystemKeychainOperations())
+    }
+
+    init(service: String, accessGroup: String? = nil,
+         accessibility: KeychainAccessibility = .terminalIdentity,
+         authenticationUI: KeychainAuthenticationUI = .allow,
+         operations: any KeychainOperations) {
         self.service = service
         self.accessGroup = accessGroup
         self.accessibility = accessibility
+        self.authenticationUI = authenticationUI
+        self.operations = operations
     }
 
     public func read(account: String) throws -> Data? {
-        var query = baseQuery(account: account)
-        query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
-        var result: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        if status == errSecItemNotFound { return nil }
-        guard status == errSecSuccess, let data = result as? Data else {
-            throw KeychainError(status: status)
+        try withInteractionPolicy {
+            var query = baseQuery(account: account)
+            query[kSecReturnData as String] = true
+            query[kSecMatchLimit as String] = kSecMatchLimitOne
+            var result: CFTypeRef?
+            let status = operations.copyMatching(query as CFDictionary, result: &result)
+            if status == errSecItemNotFound { return nil }
+            guard status == errSecSuccess, let data = result as? Data else {
+                throw KeychainError(status: status)
+            }
+            return data
         }
-        return data
     }
 
     public func write(_ data: Data, account: String) throws {
-        let query = baseQuery(account: account)
-        let attributes: [String: Any] = [
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: accessibility.value,
-        ]
-        let updated = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
-        if updated == errSecSuccess { return }
-        guard updated == errSecItemNotFound else { throw KeychainError(status: updated) }
-        var insertion = query
-        insertion.merge(attributes) { _, new in new }
-        let status = SecItemAdd(insertion as CFDictionary, nil)
-        guard status == errSecSuccess else { throw KeychainError(status: status) }
+        try withInteractionPolicy {
+            let query = baseQuery(account: account)
+            let attributes: [String: Any] = [
+                kSecValueData as String: data,
+                kSecAttrAccessible as String: accessibility.value,
+            ]
+            let updated = operations.update(query as CFDictionary, attributes: attributes as CFDictionary)
+            if updated == errSecSuccess { return }
+            guard updated == errSecItemNotFound else { throw KeychainError(status: updated) }
+            var insertion = query
+            insertion.merge(attributes) { _, new in new }
+            let status = operations.add(insertion as CFDictionary)
+            guard status == errSecSuccess else { throw KeychainError(status: status) }
+        }
     }
 
     public func delete(account: String) throws {
-        let status = SecItemDelete(baseQuery(account: account) as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else {
-            throw KeychainError(status: status)
+        try withInteractionPolicy {
+            let status = operations.delete(baseQuery(account: account) as CFDictionary)
+            guard status == errSecSuccess || status == errSecItemNotFound else {
+                throw KeychainError(status: status)
+            }
         }
+    }
+
+    private func withInteractionPolicy<T>(_ operation: () throws -> T) throws -> T {
+        #if os(macOS)
+        Self.interactionLock.lock()
+        defer { Self.interactionLock.unlock() }
+        if authenticationUI == .fail {
+            let previous = try operations.interactionAllowed()
+            do { try operations.setInteractionAllowed(false) }
+            catch {
+                let applyError = error
+                do { try operations.setInteractionAllowed(previous) }
+                catch { throw KeychainInteractionPolicyError(message: "Could not restore Keychain interaction policy: \(error.localizedDescription)") }
+                throw applyError
+            }
+            let result = Result { try operation() }
+            do { try operations.setInteractionAllowed(previous) }
+            catch { throw KeychainInteractionPolicyError(message: "Could not restore Keychain interaction policy: \(error.localizedDescription)") }
+            return try result.get()
+        }
+        #endif
+        return try operation()
     }
 
     private func baseQuery(account: String) -> [String: Any] {
@@ -74,6 +163,7 @@ public final class KeychainSecretStore: SecretStore, @unchecked Sendable {
             kSecAttrAccount as String: account,
         ]
         if let accessGroup { query[kSecAttrAccessGroup as String] = accessGroup }
+        if authenticationUI == .fail { query[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail }
         return query
     }
 }

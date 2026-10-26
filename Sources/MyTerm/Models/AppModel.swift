@@ -46,6 +46,7 @@ final class AppModel {
     let companionStorageNamespace: String
 
     private let terminalEngine: (any TerminalEngine)?
+    private let terminalContinuityDirectory: URL
     private let startsTerminalProcesses: Bool
     private let browserDataProfileResolver: BrowserDataProfileResolver
     private let browserSessionFactory: any BrowserSessionFactory
@@ -115,6 +116,11 @@ final class AppModel {
     @ObservationIgnored let agentInboxURL: URL
     /// Whether the notifications popover is open. The toolbar bell and the menu command share it.
     var isAgentNotificationsPresented = false
+    var isSessionJumpPresented = false
+    var recentSessionTabIDs: [TabID] = []
+    var isSessionInboxPresented = false
+    var isTerminalSnippetsPresented = false
+    var terminalSnippetStore = DesktopTerminalSnippetStore.shared
     var paneTabDragSession: PaneTabDragSession?
     var paneTabDragRegistrations: [TabGroupID: PaneTabDragRegistration] = [:]
     var nextBrowserAddressFocusToken: UInt64 = 0
@@ -190,6 +196,7 @@ final class AppModel {
             SHA256.hash(data: Data(supportDirectory.standardizedFileURL.path.utf8))
         ).base64EncodedString()
         let persistenceURL = channel.persistenceURL(applicationSupportDirectory: supportDirectory)
+        terminalContinuityDirectory = persistenceURL.deletingLastPathComponent()
         store = try WorkspaceStore(persistenceURL: persistenceURL)
         agentInboxURL = persistenceURL.deletingLastPathComponent()
             .appending(path: "agent-notifications.json", directoryHint: .notDirectory)
@@ -1367,6 +1374,7 @@ final class AppModel {
             guard let tab = tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID) else {
                 throw AppModelError.tabUnavailable(tabID)
             }
+            recordSessionDestination(tabID)
             if focusContent {
                 self.focusContent(of: tab)
             }
@@ -1768,7 +1776,14 @@ final class AppModel {
         browserControllers[sessionID]
     }
 
+    func recordSessionDestination(_ tabID: TabID) {
+        recentSessionTabIDs.removeAll { $0 == tabID }
+        recentSessionTabIDs.insert(tabID, at: 0)
+        recentSessionTabIDs = Array(recentSessionTabIDs.prefix(32))
+    }
+
     func focusContent(of tab: Tab) {
+        recordSessionDestination(tab.id)
         if let sessionID = tab.terminalSession?.id {
             terminalSessions[sessionID]?.focus()
         } else if let browserID = tab.browserSession?.id,
@@ -2203,7 +2218,9 @@ final class AppModel {
                     paneID: session.paneID
                 ),
                 runtimeConfiguration: runtimeConfiguration(for: settings),
-                restoredOutput: session.recentText
+                restoredOutput: session.recentText,
+                continuityIdentifier: session.id.rawValue,
+                continuityDirectory: terminalContinuityDirectory
             )
         )
         process.onEvent = { [weak self] event in
@@ -2234,6 +2251,8 @@ final class AppModel {
         }
         terminalSessions[session.id] = process
         do {
+            // A helper must never outlive an app crash before its pane identity reaches disk.
+            try store.flush()
             try process.start()
         } catch {
             terminalSessions.removeValue(forKey: session.id)
@@ -2243,7 +2262,7 @@ final class AppModel {
         // its prompt has left its conversation. The name goes with it, whether or not there was a
         // handle to resume. Cleared only once the pane is running: a pane that failed to start has
         // no prompt either, and keeps its conversation for the next attempt.
-        if keepsSavedDirectory, initialCommand == nil, resumeCommand == nil,
+        if process.isRunning, keepsSavedDirectory, initialCommand == nil, resumeCommand == nil,
            session.agentSession != nil || session.agentTitle != nil {
             do {
                 try store.updateTerminalAgentSession(
@@ -2442,6 +2461,11 @@ final class AppModel {
                 tabID: tabID,
                 message: error.localizedDescription
             )
+        case .idleShellStarted:
+            guard liveAgentTabs[tabID] == nil else { return }
+            forgetAgent(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID, sessionID: sessionID)
+        case .runtimeNotice(let message):
+            errorDescription = message
         case .initialCommandFailed(let error):
             present(error)
         case .processTerminated(let exitCode):
@@ -2579,7 +2603,20 @@ final class AppModel {
 
     private func removeTerminalRuntime(_ sessionID: TerminalSessionID) {
         terminalSnapshotTasks.removeValue(forKey: sessionID)?.cancel()
-        guard let process = terminalSessions.removeValue(forKey: sessionID) else { return }
+        guard let process = terminalSessions.removeValue(forKey: sessionID) else {
+            let directory = terminalContinuityDirectory
+            Task { @MainActor [weak self] in
+                let result = await Task.detached {
+                    Result { try PersistentTerminalRuntime.stopExisting(identifier: sessionID.rawValue, directory: directory) }
+                }.value
+                if case .failure(let error) = result {
+                    Logger(subsystem: "com.gordonbeeming.myterm", category: "terminal-continuity")
+                        .error("Could not close terminal host: \(error.localizedDescription, privacy: .public)")
+                    self?.present(error)
+                }
+            }
+            return
+        }
         // Bytes the process already wrote can still be parsed after this, and a hook that fires
         // as the agent is hung up can still reach the PTY. Neither may touch a tab that is gone,
         // or undo the snapshot a quit has just written.
@@ -2594,16 +2631,25 @@ final class AppModel {
         perform { try store.flush() }
     }
 
-    /// Quitting never routes through the per-tab close path, so it relies on the kernel's SIGHUP when the
-    /// PTY master closes. That signal only reaches the controlling terminal's foreground process group,
-    /// which leaves a background group — or a child that outlives its shell — running after the app is gone.
-    /// Tearing sessions down explicitly gives quit the same foreground-process-group SIGHUP that closing a
-    /// tab performs, which is what the quit confirmation already promises the user.
+    /// Stops all sessions deliberately, including PTYs owned by persistent helpers.
     func terminateTerminalSessions() {
         // removeTerminalRuntime mutates terminalSessions, so iterate a snapshot of the keys.
         for sessionID in Array(terminalSessions.keys) {
             removeTerminalRuntime(sessionID)
         }
+    }
+
+    /// The helper owns the PTY across app lifetimes. Closing an individual pane still calls
+    /// terminate(), while quitting only releases attachments after the workspace has been saved.
+    func detachTerminalSessions() {
+        for task in terminalSnapshotTasks.values { task.cancel() }
+        terminalSnapshotTasks.removeAll()
+        for process in terminalSessions.values {
+            process.onEvent = nil
+            process.setContentChangeHandler(nil)
+            process.detach()
+        }
+        terminalSessions.removeAll()
     }
 
     private func scheduleTerminalSnapshot(
@@ -2826,11 +2872,17 @@ final class AppModel {
                 processNames: ["Homebrew update"],
                 title: "Quit While Updating?",
                 confirmButtonTitle: "Quit Anyway",
-                informativeText: "Homebrew is still installing. Quitting closes the update dialog and ends running terminal sessions. Homebrew may continue in the background; check the installed version after reopening myterm."
+                informativeText: "Homebrew is still installing. Quitting closes the update dialog. Persistent terminal sessions and Homebrew can continue in the background; check the installed version after reopening myterm."
             )
         }
         return confirmClose(
-            processNames: store.workspaces.flatMap(activeProcessNames(in:)),
+            processNames: store.workspaces.flatMap { workspace in
+                workspace.allTabs.flatMap { tab -> [String] in
+                    guard let id = tab.terminalSession?.id,
+                          terminalSessions[id]?.survivesApplicationTermination != true else { return [] }
+                    return activeProcessNames(in: tab)
+                }
+            },
             title: "Quit MyTerm?",
             confirmButtonTitle: "Quit"
         )

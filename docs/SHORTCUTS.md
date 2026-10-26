@@ -15,6 +15,8 @@ MyTerm exposes its shortcuts through native macOS menus. Pane and navigation key
 
 | Action | Shortcut |
 | --- | --- |
+| Jump to a tab | <kbd>⌘P</kbd> |
+| Session inbox | <kbd>⌥⌘I</kbd> |
 | New workspace | <kbd>⌘N</kbd> |
 | New folder | <kbd>⇧⌘N</kbd> |
 | Rename workspace | <kbd>⇧⌘R</kbd> |
@@ -64,7 +66,7 @@ These commands apply only when the focused pane's selected tab is a browser. The
 
 **Move Tab to New Pane on Left / Right / Above / Below** are in the Pane menu and the tab's context menu. They intentionally have no shortcut.
 
-Closing a pane, tab, or workspace asks for confirmation when it would terminate a foreground process. Quitting with <kbd>⌘Q</kbd> checks every terminal in the app; idle shells do not trigger the warning.
+Closing a pane, tab, or workspace asks for confirmation when it would terminate a foreground process. Quitting with <kbd>⌘Q</kbd> detaches persistent terminal hosts so work can continue; legacy terminals still require confirmation for foreground processes.
 
 When a terminal pane has focus, MyTerm also handles the text-editing keys below. Apps that enable the Kitty keyboard protocol keep their enhanced key reporting.
 

@@ -9,7 +9,9 @@ final class LiveDeviceLayoutTests: XCTestCase {
         XCUIDevice.shared.orientation = .landscapeLeft
         defer { XCUIDevice.shared.orientation = oldOrientation }
         let app = XCUIApplication()
-        app.launchArguments = ["-workspacePresentation", "adaptive"]
+        // This test selects a workspace from the workspace list. The argument-domain override
+        // is scoped to this app launch and leaves the person's saved inbox preference intact.
+        app.launchArguments = ["-workspacePresentation", "adaptive", "-showsSessionInbox", "NO"]
         app.launch()
         let hostName = ProcessInfo.processInfo.environment["MYTERM_LIVE_HOST_NAME"] ?? "blastoise"
         let host = app.staticTexts[hostName].firstMatch

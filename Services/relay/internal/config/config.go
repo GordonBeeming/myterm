@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net"
@@ -41,6 +42,50 @@ type Config struct {
 	SlowReceiverGrace   time.Duration
 	HeartbeatTimeout    time.Duration
 	TrustedProxyCIDRs   []netip.Prefix
+	DevTestAuthEnabled  bool
+	DevTestAuthToken    string
+}
+
+// ValidateDevTestAuth is also called by server and auth constructors: constructing Config
+// directly must never expose the test credential endpoint on a production origin.
+func (c Config) ValidateDevTestAuth() error {
+	if !c.DevTestAuthEnabled {
+		return nil
+	}
+	u := c.PublicURL
+	if u == nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Opaque != "" ||
+		u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
+		return errors.New("dev test authentication requires an approved HTTPS development origin")
+	}
+	hostname := strings.ToLower(u.Hostname())
+	local := hostname == "localhost" || (strings.HasSuffix(hostname, ".localhost") && !strings.HasPrefix(hostname, "."))
+	if local {
+		for _, label := range strings.Split(hostname, ".") {
+			if len(label) == 0 || len(label) > 63 || strings.HasPrefix(label, "-") || strings.HasSuffix(label, "-") {
+				local = false
+			}
+			for _, character := range label {
+				if !(character >= 'a' && character <= 'z') && !(character >= '0' && character <= '9') && character != '-' {
+					local = false
+				}
+			}
+		}
+	}
+	if port := u.Port(); port != "" {
+		parsed, err := strconv.Atoi(port)
+		if err != nil || parsed < 1 || parsed > 65535 {
+			return errors.New("development relay port is invalid")
+		}
+	}
+	remote := u.String() == "https://myterm-relay-dev.gordonbeeming.dev"
+	if !local && !remote {
+		return errors.New("dev test authentication is restricted to localhost or the dedicated development relay")
+	}
+	decoded, err := base64.RawURLEncoding.Strict().DecodeString(c.DevTestAuthToken)
+	if err != nil || len(decoded) < 32 || len(decoded) > 512 || base64.RawURLEncoding.EncodeToString(decoded) != c.DevTestAuthToken {
+		return errors.New("MYTERM_RELAY_DEV_TEST_AUTH_TOKEN must contain 32 through 512 random bytes encoded as unpadded base64url")
+	}
+	return nil
 }
 
 func Load() (Config, error) {
@@ -91,7 +136,11 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
-	return Config{
+	enabled := strings.TrimSpace(os.Getenv("MYTERM_RELAY_DEV_TEST_AUTH_ENABLED"))
+	if enabled != "" && enabled != "0" && enabled != "1" {
+		return Config{}, errors.New("MYTERM_RELAY_DEV_TEST_AUTH_ENABLED must be 0 or 1")
+	}
+	cfg := Config{
 		ListenAddress:       envString("MYTERM_RELAY_LISTEN", "127.0.0.1:8787"),
 		PublicURL:           publicURL,
 		RPID:                rpID,
@@ -109,7 +158,13 @@ func Load() (Config, error) {
 		SlowReceiverGrace:   slowReceiverGrace,
 		HeartbeatTimeout:    10 * time.Second,
 		TrustedProxyCIDRs:   trustedProxies,
-	}, nil
+		DevTestAuthEnabled:  enabled == "1",
+		DevTestAuthToken:    os.Getenv("MYTERM_RELAY_DEV_TEST_AUTH_TOKEN"),
+	}
+	if err := cfg.ValidateDevTestAuth(); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
 }
 
 func parseCIDRs(name, value string) ([]netip.Prefix, error) {

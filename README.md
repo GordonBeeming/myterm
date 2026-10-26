@@ -121,9 +121,13 @@ The state is not saved. After a relaunch, no tab carries a cook until its agent 
 
 ### Come back to a live agent
 
-A pane running Claude Code or Codex rejoins the same conversation when MyTerm starts again.
-The pane restores its working directory and recent output, then runs `claude --resume <id>` or
-`codex resume <id>`.
+Terminal processes live in a separate local host and continue across an app quit, update or
+crash. Reopening MyTerm reattaches to the same process. Closing a terminal tab or workspace
+explicitly stops it. A machine reboot still ends the process.
+
+If the host is gone, supported Claude Code and Codex conversations can be recovered from the
+saved working directory, output and conversation identifier, using `claude --resume <id>` or
+`codex resume <id>`. This fallback does not recover a running shell command.
 
 The conversation identifier comes from the hooks above, so agent recovery needs them installed.
 MyTerm keeps the identifier, conversation directory, and Codex launcher reported by the hooks.
@@ -141,7 +145,8 @@ A pane left at its shell prompt when you quit comes back to a shell prompt. Leav
 you tell MyTerm the work is finished. An agent killed without the chance to say so counts as left
 too: the shell coming back in front of the pane retires the conversation the way its own hook would.
 
-Turn the whole behavior off with **Restore agent sessions** in General Settings. Like the other
+Turn conversation recovery off with **Restore agent sessions** in General Settings. This does
+not disable process continuity across an app quit. Like the other
 terminal settings, it can be overridden for one folder or one workspace.
 
 ### Notifications when you are somewhere else
@@ -235,6 +240,14 @@ Pairing combines relay passkey sign-in with a one-use QR code and approval on th
 
 The companion supports iOS and iPadOS 26 or later. Browser tabs have a prototype toggle between native proxy browsing and Mac-rendered browsing. Localhost tabs use Mac rendering because WebKit bypasses proxies for loopback addresses. See [the browser prototype notes](docs/REMOTE_BROWSER_PROTOTYPE.md) for setup, security boundaries, and limitations, [the companion setup guide](docs/COMPANION.md) for pairing and layouts, and [the TestFlight deployment guide](docs/TESTFLIGHT.md) for building and uploading through GitHub Actions.
 
+## Session workflows
+
+MyTerm includes a workspace/tab jump picker, an optional desktop session inbox, shared saved
+prompts and commands, durable companion drafts, and browser context handoff. The companion
+inbox keeps sessions visible and moves those needing attention to the top. See
+[the session workflow guide](docs/AGENT_WORKFLOWS.md) for controls, limits and terminal-host
+lifecycle details.
+
 ## Everyday shortcuts
 
 | Action | Shortcut |
@@ -276,6 +289,21 @@ Run the development channel from the repository:
 ```
 
 This builds and launches `myterm-dev`. It has its own bundle identifier, browser settings, website-data profiles, and workspace state, so it can live beside production `myterm`.
+
+Development bundles prefer an Apple Development signing identity, then Developer ID Application.
+If neither is available, bundling stops. Ad-hoc signing requires an explicit
+`CODESIGN_IDENTITY=-`; repeated ad-hoc builds change the app's designated requirement and can
+leave existing Keychain items inaccessible to the next build.
+
+The development Companion host uses noninteractive Keychain operations: denied access becomes
+“saved relay sign-in is unavailable” in Companion settings rather than a password dialog.
+Production and iOS retain their existing interactive defaults. This does not change item ACLs or
+migrate credentials. An item created by an older ad-hoc build may still need manual authorization
+in Keychain Access under a stable signing identity. Signing in again cannot repair an item that
+denies the app access; a fresh sign-in works once access is authorized, or when credentials are
+missing or expired. Unattended builds cannot grant themselves access to an existing item.
+Test policy behavior without touching the Keychain
+with `bash script/test_signing_identity.sh` and the remote package's `KeychainInteractionPolicyTests`.
 
 Development and test builds register only `myterm-dev:`. They do not claim production's
 `myterm:`, HTTP, HTTPS, or SSH handlers. Use the development channel for interactive testing;

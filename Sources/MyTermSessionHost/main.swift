@@ -1,0 +1,345 @@
+import Darwin
+import Foundation
+import MyTermContinuity
+import MyTermCore
+import OSLog
+@preconcurrency import SwiftTerm
+
+@MainActor
+final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency TerminalDelegate {
+    private var listener: Int32 = -1
+    private var client: Int32 = -1
+    private var listenerSource: DispatchSourceRead?
+    private var clientSource: DispatchSourceRead?
+    private var decoder = SessionHostDecoder()
+    private let initialColumns: Int
+    private let initialRows: Int
+    private let shellName: String
+    private let ownershipDescriptor: Int32
+    private lazy var emulator: Terminal = {
+        var options = TerminalOptions.default
+        options.cols = initialColumns; options.rows = initialRows
+        let configured = Int(ProcessInfo.processInfo.environment["MYTERM_PERSISTENT_SCROLLBACK_LINES"] ?? "5000") ?? 5_000
+        options.scrollback = min(max(configured, 0), 100_000)
+        options.kittyImageCacheLimitBytes = 8 * 1_024 * 1_024
+        let terminal = Terminal(delegate: self, options: options)
+        terminal.registerOscHandler(code: 7338) { [weak self] bytes in
+            self?.readyToken = String(bytes: bytes, encoding: .utf8)
+        }
+        terminal.registerOscHandler(code: AgentActivityMarker.oscCode) { [weak self] bytes in
+            guard let payload = String(bytes: bytes, encoding: .utf8),
+                  let report = AgentActivityMarker.report(fromPayload: payload) else { return }
+            self?.recordActivity(report)
+        }
+        return terminal
+    }()
+    private lazy var process = LocalProcess(delegate: self)
+    private let path: String
+    private let generation = UUID()
+    private var sequence: UInt64 = 0
+    private var stopping = false
+    private var readyToken: String?
+    private var inputSource: DispatchSourceWrite?
+    private var terminationSource: DispatchSourceSignal?
+    private var pendingInput = Data()
+    private var foregroundTimer: Timer?
+    private var lastForegroundName: String?
+    private var latestActivity: AgentActivityReport?
+    private var pendingActivities: [String: [AgentActivityReport]] = [:]
+    private let logger = Logger(subsystem: "com.gordonbeeming.myterm.session-host", category: "lifecycle")
+
+    init(path: String, shell: String, arguments: [String], directory: String, columns: Int, rows: Int) throws {
+        self.path = path
+        self.initialColumns = columns
+        self.initialRows = rows
+        self.shellName = URL(fileURLWithPath: shell).resolvingSymlinksInPath().lastPathComponent
+        try SessionHostSocket.prepareDirectory(URL(fileURLWithPath: path).deletingLastPathComponent())
+        ownershipDescriptor = try SessionHostSocket.acquireOwnership(path: path + ".lock")
+        // The lifetime lock is acquired before removing a stale endpoint. A host between bind
+        // and listen, or with a full socket backlog, can never be replaced by a second shell.
+        if unlink(path) != 0, errno != ENOENT { throw SessionHostError.system("remove stale endpoint", errno) }
+        listener = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard listener >= 0 else { throw SessionHostError.system("socket", errno) }
+        try SessionHostSocket.configure(listener)
+        var address = try SessionHostSocket.address(path: path)
+        let result = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.bind(listener, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+            }
+        }
+        guard result == 0 else { throw SessionHostError.system("bind", errno) }
+        guard chmod(path, 0o600) == 0, listen(listener, 4) == 0 else { throw SessionHostError.system("listen", errno) }
+        var environment = ProcessInfo.processInfo.environment
+        environment["MYTERM_STARTUP_PARENT_PID"] = String(getpid())
+        process.startProcess(executable: shell, args: arguments,
+                             environment: environment.map { "\($0.key)=\($0.value)" },
+                             execName: "-\(URL(fileURLWithPath: shell).lastPathComponent)", currentDirectory: directory)
+        guard process.running else { throw SessionHostError.system("shell", errno) }
+        // Install after spawning the shell, so interactive programs retain their normal
+        // signal dispositions. The helper's SIGTERM deliberately means stop, never detach.
+        terminationSource = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        terminationSource?.setEventHandler { [weak self] in MainActor.assumeIsolated { self?.stop() } }
+        terminationSource?.resume()
+        signal(SIGTERM, SIG_IGN)
+        let flags = fcntl(process.childfd, F_GETFL)
+        guard flags >= 0, fcntl(process.childfd, F_SETFL, flags | O_NONBLOCK) == 0 else {
+            throw SessionHostError.system("nonblocking terminal", errno)
+        }
+        listenerSource = DispatchSource.makeReadSource(fileDescriptor: listener, queue: .main)
+        listenerSource?.setEventHandler { [weak self] in MainActor.assumeIsolated { self?.acceptClient() } }
+        listenerSource?.resume()
+        foregroundTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reportForeground() }
+        }
+    }
+
+    private func acceptClient() {
+        let descriptor = accept(listener, nil, nil)
+        guard descriptor >= 0 else { return }
+        do {
+            try SessionHostSocket.configure(descriptor)
+            try SessionHostSocket.authenticate(descriptor)
+            guard !stopping else {
+                try SessionHostSocket.write(.init(kind: "error", text: "This terminal is stopping. Try again after it exits."), to: descriptor)
+                close(descriptor)
+                return
+            }
+            guard client < 0 else {
+                try SessionHostSocket.write(.init(kind: "error", text: "This terminal already has an attached controller."), to: descriptor)
+                close(descriptor)
+                return
+            }
+            reportForeground()
+            client = descriptor
+            decoder = SessionHostDecoder()
+            let checkpoint = try emulator.exportBoundedCheckpoint()
+            try SessionHostSocket.write(.init(kind: "attached", bytes: checkpoint.bytes, pid: process.shellPid,
+                                              columns: emulator.cols, rows: emulator.rows,
+                                              generation: generation, sequence: sequence, text: readyToken,
+                                              activity: latestActivity,
+                                              pendingActivities: pendingActivities.values.flatMap { $0 },
+                                              omittedScrollbackLines: checkpoint.omittedScrollbackLines), to: descriptor)
+            clientSource = DispatchSource.makeReadSource(fileDescriptor: descriptor, queue: .main)
+            clientSource?.setEventHandler { [weak self] in
+                MainActor.assumeIsolated {
+                    guard self?.client == descriptor else { return }
+                    self?.readClient()
+                }
+            }
+            clientSource?.resume()
+            reportForeground(force: true)
+        } catch {
+            log(error)
+            if client == descriptor { disconnect() } else { close(descriptor) }
+        }
+    }
+
+    private func readClient() {
+        var bytes = [UInt8](repeating: 0, count: 64 * 1_024)
+        let count = read(client, &bytes, bytes.count)
+        guard count > 0 else { disconnect(); return }
+        do {
+            for message in try decoder.append(Data(bytes.prefix(count))) {
+                switch message.kind {
+                case "input":
+                    guard let bytes = message.bytes, !bytes.isEmpty,
+                          bytes.count <= SessionHostMessage.maximumInputBytes,
+                          message.generation == generation else { throw SessionHostError.invalidFrame }
+                    try writeInput(bytes)
+                case "resize":
+                    guard let columns = message.columns, let rows = message.rows,
+                          (2...1_024).contains(columns), (1...1_024).contains(rows),
+                          columns * rows <= SessionHostGeometry.maximumCellsPerBuffer,
+                          message.generation == generation else { throw SessionHostError.invalidFrame }
+                    emulator.resize(cols: columns, rows: rows)
+                    var size = getWindowSize()
+                    guard ioctl(process.childfd, TIOCSWINSZ, &size) == 0 else { throw SessionHostError.system("resize", errno) }
+                case "stop":
+                    guard message.generation == generation else { throw SessionHostError.invalidFrame }
+                    stop()
+                case "configure":
+                    guard let lines = message.scrollbackLines, (0...100_000).contains(lines),
+                          message.generation == generation else { throw SessionHostError.invalidFrame }
+                    emulator.changeScrollback(lines)
+                case "detach": disconnect()
+                default: throw SessionHostError.invalidFrame
+                }
+            }
+        } catch {
+            log(error)
+            sendToClient(.init(kind: "error", text: error.localizedDescription))
+            disconnect()
+        }
+    }
+
+    private func writeInput(_ bytes: Data) throws {
+        guard !stopping, process.running else {
+            sendToClient(.init(kind: "inputError", text: "This terminal process is stopping and did not accept the input."))
+            return
+        }
+        guard pendingInput.count + bytes.count <= SessionHostMessage.maximumInputBytes else {
+            sendToClient(.init(kind: "inputError", text: "Terminal input is full because the foreground process is not reading. This input was not queued; try again after it resumes."))
+            return
+        }
+        pendingInput.append(bytes)
+        if inputSource == nil {
+            inputSource = DispatchSource.makeWriteSource(fileDescriptor: process.childfd, queue: .main)
+            inputSource?.setEventHandler { [weak self] in MainActor.assumeIsolated { self?.drainInput() } }
+            inputSource?.resume()
+        }
+    }
+
+    private func drainInput() {
+        guard process.running, !stopping else { cancelInput(); return }
+        var budget = 64 * 1_024
+        while !pendingInput.isEmpty, budget > 0 {
+            let count = pendingInput.withUnsafeBytes { bytes in
+                Darwin.write(process.childfd, bytes.baseAddress, min(bytes.count, budget))
+            }
+            if count < 0, errno == EINTR { continue }
+            if count < 0, errno == EAGAIN || errno == EWOULDBLOCK { return }
+            guard count > 0 else {
+                let error = SessionHostError.system("input (a prefix may have reached the process)", errno)
+                log(error)
+                sendToClient(.init(kind: "inputError", text: error.localizedDescription))
+                cancelInput()
+                return
+            }
+            pendingInput.removeFirst(count)
+            budget -= count
+        }
+        if pendingInput.isEmpty { cancelInput() }
+    }
+
+    private func cancelInput() {
+        inputSource?.cancel(); inputSource = nil
+        pendingInput.removeAll(keepingCapacity: true)
+    }
+
+    private func sendToClient(_ message: SessionHostMessage) {
+        guard client >= 0 else { return }
+        do { try SessionHostSocket.write(message, to: client) }
+        catch { log(error); disconnect() }
+    }
+
+    private func reportForeground(force: Bool = false) {
+        let foreground = tcgetpgrp(process.childfd)
+        let shellGroup = getpgid(process.shellPid)
+        var name: String?
+        if foreground > 0, foreground != shellGroup {
+            name = processName(foreground) ?? "Unknown foreground process"
+        } else if foreground > 0, foreground == shellGroup {
+            if processName(process.shellPid) == shellName {
+                latestActivity = nil
+                pendingActivities.removeAll()
+            } else {
+                // `exec agent` retains the shell's PID and process group. Its validated hook
+                // remains authoritative until that process exits, even with no separate group.
+                name = processName(process.shellPid)
+            }
+        }
+        guard force || name != lastForegroundName else { return }
+        lastForegroundName = name
+        sendToClient(.init(kind: "foreground", text: name))
+    }
+
+    private func processName(_ pid: pid_t) -> String? {
+        var bytes = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+        let length = bytes.withUnsafeMutableBytes { proc_name(pid, $0.baseAddress, UInt32($0.count)) }
+        guard length > 0 else { return nil }
+        return String(decoding: bytes.prefix(Int(length)).map { UInt8(bitPattern: $0) }, as: UTF8.self)
+    }
+
+    private func recordActivity(_ report: AgentActivityReport) {
+        if report.agent == "codex", let tool = report.toolRequestID {
+            switch report.activity {
+            case .awaitingInput:
+                // A malicious terminal stream cannot grow the detached helper without bound.
+                guard pendingActivities.values.reduce(0, { $0 + $1.count }) < 4_096 else {
+                    logger.error("Too many pending terminal tool requests; retaining the existing waiting state.")
+                    return
+                }
+                pendingActivities[tool, default: []].append(report)
+            case .working:
+                if pendingActivities[tool]?.isEmpty == false { pendingActivities[tool]?.removeLast() }
+                if pendingActivities[tool]?.isEmpty == true { pendingActivities[tool] = nil }
+                if let waiting = pendingActivities.values.first?.first { latestActivity = waiting; return }
+            case .ready, .finished, .exited: pendingActivities.removeAll()
+            }
+        } else if report.activity != .awaitingInput {
+            pendingActivities.removeAll()
+        }
+        latestActivity = report.activity == .exited ? nil : report
+    }
+
+    private func disconnect() {
+        clientSource?.cancel(); clientSource = nil
+        if client >= 0 { close(client) }
+        client = -1
+    }
+
+    private func log(_ error: Error) {
+        logger.error("\(error.localizedDescription, privacy: .public)")
+    }
+
+    private func stop() {
+        guard !stopping else { return }
+        stopping = true
+        cancelInput()
+        let foreground = tcgetpgrp(process.childfd)
+        let shellGroup = getpgid(process.shellPid)
+        if foreground > 0, foreground != shellGroup { _ = kill(-foreground, SIGHUP) }
+        if shellGroup > 0 { _ = kill(-shellGroup, SIGHUP) }
+        process.terminate()
+        // An unresponsive process must not leave a deleted pane's host running indefinitely.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if foreground > 0 { _ = kill(-foreground, SIGKILL) }
+                if shellGroup > 0 { _ = kill(-shellGroup, SIGKILL) }
+                self.finish(exitCode: nil)
+            }
+        }
+    }
+
+    private func finish(exitCode: Int32?) {
+        sendToClient(.init(kind: "exited", exitCode: exitCode))
+        disconnect()
+        cancelInput()
+        listenerSource?.cancel()
+        close(listener)
+        unlink(path)
+        exit(0)
+    }
+
+    func processTerminated(_ source: LocalProcess, exitCode: Int32?) { finish(exitCode: exitCode) }
+    func dataReceived(slice: ArraySlice<UInt8>) {
+        emulator.feed(buffer: slice)
+        sequence &+= 1
+        sendToClient(.init(kind: "output", bytes: Data(slice), generation: generation, sequence: sequence))
+    }
+    func getWindowSize() -> winsize {
+        winsize(ws_row: UInt16(emulator.rows), ws_col: UInt16(emulator.cols), ws_xpixel: 0, ws_ypixel: 0)
+    }
+    func send(source: Terminal, data: ArraySlice<UInt8>) {
+        // While attached the visible emulator answers queries. Detached sessions still need
+        // cursor and capability responses so their foreground applications can keep working.
+        guard client < 0 else { return }
+        do { try writeInput(Data(data)) }
+        catch { log(error); stop() }
+    }
+}
+
+let args = CommandLine.arguments
+guard args.count >= 6, let columns = Int(args[4]), let rows = Int(args[5]),
+      (2...1_024).contains(columns), (1...1_024).contains(rows) else { exit(64) }
+_ = setsid()
+do {
+    let geometry = SessionHostGeometry.fit(columns: columns, rows: rows)
+    let host = try SessionHost(path: args[1], shell: args[2], arguments: Array(args.dropFirst(6)),
+                               directory: args[3], columns: geometry.columns, rows: geometry.rows)
+    withExtendedLifetime(host) { RunLoop.main.run() }
+} catch {
+    FileHandle.standardError.write(Data((error.localizedDescription + "\n").utf8))
+    exit(1)
+}

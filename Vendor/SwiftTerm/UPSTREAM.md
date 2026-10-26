@@ -7,6 +7,8 @@ This is a library-focused source subset for MyTerm. The upstream `termcast` exec
 The myterm additions provide a bounded, versioned terminal checkpoint and native view controls for remote presentation:
 
 - `Terminal.exportCheckpoint()` and `Terminal.importCheckpoint(_:)` preserve emulator state for late attachment.
+- `Terminal.exportBoundedCheckpoint()` exports the most recent history within checkpoint limits without trimming the live host. Its omission count lets a reconnecting UI report reduced visible history.
+- The macOS local process view exposes its process reference for the separately owned PTY adapter; the default local-process behavior remains available.
 - `TerminalView.invalidateAfterCheckpointImport()` prepares native images and refreshes rendering after import.
 - `sendsTerminalResponses`, `acceptsUserInput`, and `automaticallyResizesTerminal` separate the authoritative host from spectator views. They default to the original behavior.
 - `resizeToFit()` reapplies the view's current geometry after it gains control.

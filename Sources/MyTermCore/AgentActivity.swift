@@ -18,7 +18,7 @@ public enum AgentActivity: String, Codable, Equatable, Hashable, Sendable {
     case exited
 }
 
-public struct AgentActivityReport: Equatable, Hashable, Sendable {
+public struct AgentActivityReport: Codable, Equatable, Hashable, Sendable {
     /// The agent that reported, lowercased. "claude" and "codex" are the ones MyTerm installs hooks for.
     public let agent: String
     public let activity: AgentActivity

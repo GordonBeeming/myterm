@@ -82,6 +82,8 @@ Recovery preserves the owner account ID. It replaces the credential set and revo
 
 ## Operations
 
+Automated Debug simulator tests have a [separately enabled development authentication mode](../../docs/COMPANION.md#opt-in-authentication-for-automated-simulator-tests). Its endpoint is absent by default, and production origins reject the configuration. Normal sign-ins continue to use passkeys.
+
 `GET /healthz` returns a small readiness response. It does not inspect the database, so use a separate SQLite backup check if storage health needs monitoring.
 
 The service deliberately avoids request logging. Caddy access logs are optional; if you enable them, configure retention and avoid logging authorization headers. Bootstrap tokens remain absent because URL fragments never reach the server.

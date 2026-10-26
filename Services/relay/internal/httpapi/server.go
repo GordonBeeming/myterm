@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -29,12 +31,13 @@ import (
 const ceremonyCookie = "__Host-myterm_relay_ceremony"
 
 type Server struct {
-	config      config.Config
-	store       *store.Store
-	auth        *auth.Manager
-	hub         *transport.Hub
-	now         func() time.Time
-	authLimiter *ipLimiter
+	config           config.Config
+	store            *store.Store
+	auth             *auth.Manager
+	hub              *transport.Hub
+	now              func() time.Time
+	authLimiter      *ipLimiter
+	devTestTokenHash [32]byte
 }
 
 type contextKey int
@@ -95,6 +98,9 @@ type limiterEntry struct {
 }
 
 func New(cfg config.Config, storage *store.Store, hub *transport.Hub) (*Server, error) {
+	if err := cfg.ValidateDevTestAuth(); err != nil {
+		return nil, err
+	}
 	authManager, err := auth.New(cfg, storage)
 	if err != nil {
 		return nil, err
@@ -103,9 +109,12 @@ func New(cfg config.Config, storage *store.Store, hub *transport.Hub) (*Server, 
 	// Lets a live transport connection extend itself with a refreshed token instead of being
 	// dropped when the token it was opened with expires.
 	hub.SetAuthenticator(storage.AuthenticateAccess)
+	devTestTokenHash := sha256.Sum256([]byte(cfg.DevTestAuthToken))
+	cfg.DevTestAuthToken = ""
 	return &Server{
 		config: cfg, store: storage, auth: authManager, hub: hub, now: now,
-		authLimiter: newIPLimiter(rate.Every(6*time.Second), 10, now),
+		authLimiter:      newIPLimiter(rate.Every(6*time.Second), 10, now),
+		devTestTokenHash: devTestTokenHash,
 	}, nil
 }
 
@@ -123,6 +132,9 @@ func (s *Server) Handler() http.Handler {
 	router.With(s.authRateLimit, s.requirePublicHost).Post("/v1/webauthn/login/finish", s.loginFinish)
 	router.With(s.authRateLimit).Post("/v1/oauth/token", s.exchangeToken)
 	router.With(s.authRateLimit).Post("/v1/oauth/revoke", s.revokeToken)
+	if s.config.DevTestAuthEnabled {
+		router.With(s.authRateLimit, s.requirePublicHost).Post("/v1/dev-test/authorize", s.devTestAuthorize)
+	}
 	router.Group(func(protected chi.Router) {
 		protected.Use(s.authenticate)
 		protected.Get("/v1/hosts", s.listHosts)
@@ -134,6 +146,43 @@ func (s *Server) Handler() http.Handler {
 		protected.Get("/v1/transport/ws", s.webSocket)
 	})
 	return router
+}
+
+func (s *Server) devTestAuthorize(w http.ResponseWriter, r *http.Request) {
+	header := r.Header.Get("Authorization")
+	if !strings.HasPrefix(header, "Bearer ") || len(header) > 700 {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "A valid development test credential is required.")
+		return
+	}
+	hash := sha256.Sum256([]byte(strings.TrimPrefix(header, "Bearer ")))
+	if subtle.ConstantTimeCompare(hash[:], s.devTestTokenHash[:]) != 1 {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "A valid development test credential is required.")
+		return
+	}
+	var request oauthBrowserRequest
+	if !decodeJSON(w, r, 16<<10, &request) {
+		return
+	}
+	oauth, err := request.oauthContext()
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	if oauth.RedirectURI != "myterm-companion-dev://auth/callback" || oauth.DeviceKind != "client" ||
+		request.BootstrapToken != "" || request.OwnerName != "" || request.DisplayName != "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "Only a development companion client may use test authentication.")
+		return
+	}
+	code, err := s.auth.AuthorizeDevTest(r.Context(), oauth)
+	if errors.Is(err, store.ErrOwnerMissing) {
+		writeError(w, http.StatusConflict, "owner_required", "Enroll the relay owner with a passkey before using development test authentication.")
+		return
+	}
+	if err != nil {
+		s.internalError(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"code": code, "state": oauth.State})
 }
 
 func (s *Server) securityHeaders(next http.Handler) http.Handler {

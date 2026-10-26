@@ -221,6 +221,9 @@ struct RemoteBrowserView: View {
     /// an accessory that has nothing to do with them.
     var accessory: () -> AnyView = { AnyView(EmptyView()) }
     @State private var native = NativeRemoteBrowser()
+    @State private var contextCapture: CompanionBrowserCapture?
+    @State private var contextComposer: TerminalRoute?
+    @State private var isCapturingContext = false
     @State private var mode = "native"
     @State private var rendered: RemoteBrowserFrame?
     @State private var renderAddress = ""
@@ -244,6 +247,42 @@ struct RemoteBrowserView: View {
     /// two scenes, and both would claim the same route.
     @State private var storeOwner = UUID()
 
+    private func captureContext() async {
+        isCapturingContext = true
+        defer { isCapturingContext = false }
+        var notes: [String] = []
+        if mode == "rendered" {
+            guard let rendered else {
+                renderError = "Wait for a Mac-rendered frame before capturing context."
+                return
+            }
+            notes.append("Screenshot is the last displayed Mac-rendered frame. Selected text is unavailable in this mode.")
+            contextCapture = CompanionBrowserCapture(url: rendered.url, title: route.title,
+                selectedText: "", screenshot: rendered.image, notes: notes)
+        } else {
+            guard let webView = native.webView else {
+                native.error = "Wait for the browser to connect before capturing context."
+                return
+            }
+            let capturedURL = webView.url
+            var selected = ""
+            do {
+                selected = (try await webView.evaluateJavaScript("String(window.getSelection() || '').slice(0, 16000)")) as? String ?? ""
+            } catch { notes.append("Selected text could not be captured from this page.") }
+            var screenshot: Data?
+            do { screenshot = try await webView.takeSnapshot(configuration: nil).pngData() }
+            catch { notes.append("Screenshot unavailable: " + error.localizedDescription) }
+            guard native.webView === webView, webView.url == capturedURL else {
+                native.error = "The page changed while capturing. Capture it again."
+                return
+            }
+            let sourceURL = capturedURL?.host == native.artifactHost ? route.url : capturedURL
+            contextCapture = CompanionBrowserCapture(url: sourceURL?.absoluteString ?? native.address,
+                title: webView.title ?? route.title, selectedText: selected,
+                screenshot: screenshot, notes: notes)
+        }
+    }
+
     private var preferenceKey: String { "browserMode." + route.connectionID.relayOrigin + "." + route.hostID.uuidString }
 
     var body: some View {
@@ -257,6 +296,11 @@ struct RemoteBrowserView: View {
                     Text("Native proxy").tag("native")
                     Text("Mac rendered").tag("rendered")
                 }.pickerStyle(.segmented)
+                Button("Capture browser context", systemImage: "camera.viewfinder") {
+                    Task { await captureContext() }
+                }
+                .disabled(isCapturingContext)
+                .accessibilityIdentifier("capture-browser-context")
                 accessory()
             }.padding(8)
             if mode == "native" {
@@ -294,6 +338,14 @@ struct RemoteBrowserView: View {
                 renderedBrowser
             }
         }.buttonStyle(.plain)
+        .sheet(item: $contextCapture, onDismiss: {
+            if let destination = contextComposer {
+                contextComposer = nil
+                scene.sheet = .terminalComposer(destination)
+            }
+        }) { capture in
+            BrowserContextHandoffView(scene: scene, browser: route, capture: capture) { contextComposer = $0 }
+        }
         .onAppear {
             guard !initialized else { return }
             if let url = route.url, NativeRemoteBrowser.requiresMacRendering(url) { mode = "rendered" }

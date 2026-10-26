@@ -409,6 +409,35 @@ Pair each newly configured Mac. Complete both environments after a fresh setup; 
 
 The QR code refreshes every 30 seconds. Each code stays valid for 60 seconds, so the previous and current codes overlap. Each code can be used only once. Scan the current code if pairing expires. Pair the iPad separately. One companion installation can retain connections to both relays and multiple Macs; separate side-by-side dev/prod iOS bundle identities are not configured in the current project.
 
+### Optional authentication for automated Debug Simulators
+
+Passkeys remain the normal sign-in method. The [development test-authentication guide](COMPANION.md#opt-in-authentication-for-automated-simulator-tests) describes the separately enabled server/client flags, approved development origins and secret handling. Pairing still requires approval on the Mac.
+
+The existing development installation can use `/opt/myterm-relay/compose.dev-test-auth.yaml` alongside its normal `compose.yaml`. Its matching server credential belongs in the root-owned, mode `0600` file `/opt/myterm-relay/dev-test-auth.env`, outside the checkout. Keep the base Compose file and production configuration unchanged. Read current image references and take a consistent development-data backup before a deployment; keep that backup private.
+
+For an explicitly authorized development deployment, validate and apply only that project's override:
+
+```sh
+cd /opt/myterm-relay
+docker compose --env-file dev.env --env-file dev-test-auth.env \
+  -f compose.yaml -f compose.dev-test-auth.yaml \
+  -p myterm-relay-dev config --quiet
+docker compose --env-file dev.env --env-file dev-test-auth.env \
+  -f compose.yaml -f compose.dev-test-auth.yaml \
+  -p myterm-relay-dev up -d --no-deps relay
+```
+
+Use `config --quiet`; rendered configuration can reveal the credential. Verify dev health, normal passkey availability and the test route's rejection of an unauthenticated request. Confirm the production container was not replaced.
+
+Returning to the base configuration is a code-and-configuration rollback: it can select the base relay image as well as remove test authentication. Record that image before applying the override. When that rollback is intended:
+
+```sh
+docker compose --env-file dev.env -f compose.yaml \
+  -p myterm-relay-dev up -d --no-deps relay
+```
+
+Routine app tests use the existing development deployment. They do not deploy, reset its owner, rotate its passkeys, remove the override or change production. Devices already enrolled retain normal revocable credentials after test authentication is disabled.
+
 ## 9. Test before using real workspaces
 
 Use synthetic terminal output and disposable folders during testing.

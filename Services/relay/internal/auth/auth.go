@@ -50,6 +50,9 @@ func (u User) WebAuthnDisplayName() string                { return u.owner.Displ
 func (u User) WebAuthnCredentials() []webauthn.Credential { return u.credentials }
 
 func New(cfg config.Config, storage *store.Store) (*Manager, error) {
+	if err := cfg.ValidateDevTestAuth(); err != nil {
+		return nil, err
+	}
 	wa, err := webauthn.New(&webauthn.Config{
 		RPID:                  cfg.RPID,
 		RPDisplayName:         cfg.RPDisplayName,
@@ -63,7 +66,25 @@ func New(cfg config.Config, storage *store.Store) (*Manager, error) {
 	if err != nil {
 		return nil, fmt.Errorf("configure WebAuthn: %w", err)
 	}
+	cfg.DevTestAuthToken = ""
 	return &Manager{webAuthn: wa, store: storage, config: cfg, now: time.Now}, nil
+}
+
+func (m *Manager) AuthorizeDevTest(ctx context.Context, oauth store.OAuthContext) (string, error) {
+	if !m.config.DevTestAuthEnabled {
+		return "", errors.New("development test authentication is disabled")
+	}
+	if oauth.RedirectURI != "myterm-companion-dev://auth/callback" || oauth.DeviceKind != "client" {
+		return "", errors.New("development test authentication accepts only development companion clients")
+	}
+	owner, records, err := m.store.OwnerWithCredentials(ctx)
+	if err != nil {
+		return "", err
+	}
+	if len(records) == 0 {
+		return "", store.ErrOwnerMissing
+	}
+	return m.issueAuthCode(ctx, owner.ID, oauth, m.now())
 }
 
 func ValidateOAuthContext(values url.Values) (store.OAuthContext, error) {

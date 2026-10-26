@@ -87,8 +87,12 @@ if [[ "$MODE" == "--print-plan" ]]; then
   exit 0
 fi
 
+source "$ROOT_DIR/script/select_signing_identity.sh"
+SIGNING_IDENTITY="$(myterm_select_signing_identity "$DISTRIBUTION")"
+
 cd "$ROOT_DIR"
 swift build --product MyTerm "${BUILD_ARGS[@]}"
+swift build --product MyTermSessionHost "${BUILD_ARGS[@]}"
 BUILD_BINARY="$(swift build --show-bin-path "${BUILD_ARGS[@]}")/MyTerm"
 RESOURCE_BUNDLE="$(dirname "$BUILD_BINARY")/SwiftTerm_SwiftTerm.bundle"
 if [[ ! -d "$RESOURCE_BUNDLE" ]]; then
@@ -99,6 +103,7 @@ fi
 rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_MACOS" "$APP_RESOURCES"
 cp "$BUILD_BINARY" "$APP_BINARY"
+cp "$(dirname "$BUILD_BINARY")/MyTermSessionHost" "$APP_MACOS/MyTermSessionHost"
 cp -R "$RESOURCE_BUNDLE" "$APP_RESOURCES/"
 cp "$ROOT_DIR/Resources/MyTerm.icns" "$APP_RESOURCES/MyTerm.icns"
 cp "$ROOT_DIR/Resources/myterm-browser" "$APP_RESOURCES/myterm-browser"
@@ -127,22 +132,6 @@ cp "$ROOT_DIR/Packaging/Info.plist" "$INFO_PLIST"
 bash "$ROOT_DIR/script/configure_url_handlers.sh" "$CHANNEL" "$BUNDLE_ID" "$INFO_PLIST"
 /usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion $MIN_SYSTEM_VERSION" "$INFO_PLIST"
 
-SIGNING_IDENTITY="${CODESIGN_IDENTITY:-}"
-if [[ -z "$SIGNING_IDENTITY" ]]; then
-  SIGNING_PATTERN="Apple Development"
-  if [[ "$DISTRIBUTION" == "1" ]]; then
-    SIGNING_PATTERN="Developer ID Application"
-  fi
-  SIGNING_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk -F '"' -v pattern="$SIGNING_PATTERN" '$0 ~ pattern {print $2; exit}')"
-fi
-if [[ -z "$SIGNING_IDENTITY" ]]; then
-  SIGNING_IDENTITY="-"
-fi
-
-if [[ "$DISTRIBUTION" == "1" && "$SIGNING_IDENTITY" == "-" ]]; then
-  echo "Distribution bundling requires a Developer ID Application identity" >&2
-  exit 1
-fi
 
 CODESIGN_ARGS=(--force --sign "$SIGNING_IDENTITY" --identifier "$BUNDLE_ID")
 if [[ "$DISTRIBUTION" == "1" ]]; then
@@ -151,6 +140,11 @@ fi
 if [[ -f "$ENTITLEMENTS_PATH" ]]; then
   CODESIGN_ARGS+=(--entitlements "$ENTITLEMENTS_PATH")
 fi
+HOST_CODESIGN_ARGS=(--force --sign "$SIGNING_IDENTITY" --identifier "$BUNDLE_ID.session-host")
+if [[ "$DISTRIBUTION" == "1" ]]; then
+  HOST_CODESIGN_ARGS+=(--options runtime --timestamp)
+fi
+codesign "${HOST_CODESIGN_ARGS[@]}" "$APP_MACOS/MyTermSessionHost"
 codesign "${CODESIGN_ARGS[@]}" "$APP_BUNDLE"
 
 open_app() {

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Test MyTerm"
+  short_description: "Test desktop, iPhone and iPad MyTerm workflows"
+  default_prompt: "Use $test-myterm to set up and verify the requested MyTerm platforms with current test results and live evidence."
