@@ -14,13 +14,16 @@ final class PersistentTerminalConnection {
     var onFailure: ((Error) -> Void)?
 
     nonisolated init(identifier: UUID, namespace: URL, shell: URL, arguments: [String],
-         environment: [String], directory: URL, columns: Int, rows: Int, helperURL: URL? = nil) throws {
+         environment: [String], directory: URL, columns: Int, rows: Int, helperURL: URL? = nil,
+         imageGeometry: SessionHostImageGeometry? = nil) throws {
         let path = try Self.socketPath(identifier: identifier, namespace: namespace)
         var created = false
         var socket: Int32 = -1
         var launchedProcess: Process?
         var connectionTransferred = false
         var ownedHostTransferred = false
+        let authenticationEnvironment = Self.environmentDictionary(environment)
+        var authentication: SessionHostServerAuthentication?
         defer {
             if !connectionTransferred, socket >= 0 { close(socket) }
             // Only the Process launched by this attempt is eligible for rollback. A peer
@@ -37,6 +40,9 @@ final class PersistentTerminalConnection {
             guard let helper, FileManager.default.isExecutableFile(atPath: helper.path) else {
                 throw TerminalSessionFailure(message: "MyTermSessionHost is missing. Rebuild or reinstall the complete MyTerm app bundle to start persistent terminals.")
             }
+            let verifier = try SessionHostServerAuthentication(environment: authenticationEnvironment, helperURL: helperURL)
+            try verifier.validateExecutable(helper)
+            authentication = verifier
             let process = Process()
             launchedProcess = process
             process.executableURL = helper
@@ -45,6 +51,10 @@ final class PersistentTerminalConnection {
                 let pieces = entry.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
                 return (String(pieces[0]), pieces.count == 2 ? String(pieces[1]) : "")
             }, uniquingKeysWith: { _, last in last })
+            if let imageGeometry {
+                guard imageGeometry.isValid else { throw SessionHostError.invalidFrame }
+                process.environment?["MYTERM_PERSISTENT_IMAGE_GEOMETRY"] = try JSONEncoder().encode(imageGeometry).base64EncodedString()
+            }
             process.standardInput = FileHandle.nullDevice
             process.standardOutput = FileHandle.nullDevice
             process.standardError = FileHandle.nullDevice
@@ -61,6 +71,8 @@ final class PersistentTerminalConnection {
             }
             created = try SessionHostSocket.peerProcessID(socket) == process.processIdentifier
         }
+        let verifier = try authentication ?? SessionHostServerAuthentication(environment: authenticationEnvironment, helperURL: helperURL)
+        try verifier.authenticate(socket)
         let busyDeadline = Date().addingTimeInterval(1)
         var decoder = SessionHostDecoder()
         let attached: SessionHostMessage
@@ -81,6 +93,7 @@ final class PersistentTerminalConnection {
                 socket = -1
                 usleep(20_000)
                 socket = try SessionHostSocket.connect(path: path)
+                try verifier.authenticate(socket)
                 created = false
             }
         }
@@ -93,22 +106,23 @@ final class PersistentTerminalConnection {
     }
 
     nonisolated static func connectAsync(identifier: UUID, namespace: URL, shell: URL, arguments: [String],
-        environment: [String], directory: URL, columns: Int, rows: Int, helperURL: URL?) async -> Result<PersistentTerminalConnection, Error> {
+        environment: [String], directory: URL, columns: Int, rows: Int, helperURL: URL?,
+        imageGeometry: SessionHostImageGeometry? = nil) async -> Result<PersistentTerminalConnection, Error> {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 continuation.resume(returning: Result {
                     try PersistentTerminalConnection(identifier: identifier, namespace: namespace, shell: shell,
                         arguments: arguments, environment: environment, directory: directory, columns: columns,
-                        rows: rows, helperURL: helperURL)
+                        rows: rows, helperURL: helperURL, imageGeometry: imageGeometry)
                 })
             }
         }
     }
 
-    nonisolated static func stopExistingAsync(identifier: UUID, namespace: URL) async -> Result<Void, Error> {
+    nonisolated static func stopExistingAsync(identifier: UUID, namespace: URL, environment: [String: String] = [:], helperURL: URL? = nil) async -> Result<Void, Error> {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
-                continuation.resume(returning: Result { try stopExisting(identifier: identifier, namespace: namespace) })
+                continuation.resume(returning: Result { try stopExisting(identifier: identifier, namespace: namespace, environment: environment, helperURL: helperURL) })
             }
         }
     }
@@ -125,9 +139,10 @@ final class PersistentTerminalConnection {
         return directory.appendingPathComponent(identifier.uuidString + ".sock").path
     }
 
-    nonisolated static func stopExisting(identifier: UUID, namespace: URL) throws {
+    nonisolated static func stopExisting(identifier: UUID, namespace: URL, environment: [String: String] = [:], helperURL: URL? = nil) throws {
         let path = try socketPath(identifier: identifier, namespace: namespace)
         let deadline = Date().addingTimeInterval(1)
+        var authentication: SessionHostServerAuthentication?
         while true {
             let descriptor: Int32
             do { descriptor = try SessionHostSocket.connect(path: path) }
@@ -136,19 +151,19 @@ final class PersistentTerminalConnection {
             }
             do {
                 defer { close(descriptor) }
-                var decoder = SessionHostDecoder()
-                let attachment = try readAttachment(descriptor, decoder: &decoder)
-                try SessionHostSocket.write(.init(kind: "stop", generation: attachment.generation), to: descriptor)
+                if authentication == nil {
+                    authentication = try SessionHostServerAuthentication(environment: environment, helperURL: helperURL)
+                }
+                guard let authentication else { throw SessionHostError.untrustedHost }
+                try authentication.authenticate(descriptor)
+                let request = try readStopRequest(descriptor)
+                try stopAndDrain(descriptor, request: request)
                 return
             } catch SessionHostError.incompatibleVersion {
-                // The authenticated socket still identifies the exact helper even when its
-                // wire schema belongs to another app version. SIGTERM is its stable stop API.
-                // readAttachment's descriptor is closed by the defer above before entering a
-                // catch, so reconnect to obtain a live kernel-authenticated peer reference.
-                let peer = try SessionHostSocket.connect(path: path)
-                defer { close(peer) }
-                try SessionHostSocket.terminatePeer(peer)
-                return
+                // Unknown protocol versions are never grounds to signal a process by PID.
+                throw SessionHostError.incompatibleVersion
+            } catch SessionHostError.untrustedHost {
+                throw SessionHostError.untrustedHost
             } catch {
                 // An EOF from the previous app attachment can be queued just behind this
                 // accept. Wait briefly for it to drain before retrying the explicit stop.
@@ -156,6 +171,43 @@ final class PersistentTerminalConnection {
                 usleep(20_000)
             }
         }
+    }
+
+    /// Only the known v3/v4 attachment envelope is understood for explicit deletion. Ordinary
+    /// attachments retain strict current-version decoding, and unknown versions never get input.
+    nonisolated static func stopRequest(forAttachment payload: Data) throws -> SessionHostMessage {
+        guard payload.count <= SessionHostMessage.maximumFrameBytes else { throw SessionHostError.invalidFrame }
+        let attachment = try JSONDecoder().decode(SessionHostMessage.self, from: payload)
+        guard [3, 4].contains(attachment.version) else { throw SessionHostError.incompatibleVersion }
+        if attachment.kind == "busy" { throw SessionHostError.busy }
+        guard attachment.kind == "attached", let generation = attachment.generation else {
+            throw SessionHostError.invalidFrame
+        }
+        var request = SessionHostMessage(kind: "stop", generation: generation)
+        request.version = attachment.version
+        return request
+    }
+
+    nonisolated private static func readStopRequest(_ descriptor: Int32) throws -> SessionHostMessage {
+        let deadline = Date().addingTimeInterval(10)
+        var header = Data()
+        while header.count < 4 {
+            header.append(try read(descriptor, maximum: 4 - header.count, deadline: deadline))
+        }
+        let length = header.reduce(0) { ($0 << 8) | Int($1) }
+        guard length > 0, length <= SessionHostMessage.maximumFrameBytes else { throw SessionHostError.invalidFrame }
+        var payload = Data()
+        while payload.count < length {
+            payload.append(try read(descriptor, maximum: min(length - payload.count, 64 * 1_024), deadline: deadline))
+        }
+        return try stopRequest(forAttachment: payload)
+    }
+
+    nonisolated private static func environmentDictionary(_ entries: [String]) -> [String: String] {
+        Dictionary(entries.map { entry in
+            let pieces = entry.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            return (String(pieces[0]), pieces.count == 2 ? String(pieces[1]) : "")
+        }, uniquingKeysWith: { _, last in last })
     }
 
     nonisolated private static func readAttachment(_ descriptor: Int32, decoder: inout SessionHostDecoder) throws -> SessionHostMessage {
@@ -208,6 +260,49 @@ final class PersistentTerminalConnection {
         try SessionHostSocket.write(message, to: descriptor)
     }
 
+    func stop() async throws {
+        guard descriptor >= 0 else { throw SessionHostError.disconnected }
+        let ownedDescriptor = descriptor
+        // Transfer ownership before yielding. Cancelled main-queue callbacks see -1, and close,
+        // deinit or a second stop cannot close a descriptor now owned by the drain operation.
+        descriptor = -1
+        source?.cancel()
+        source = nil
+        let request = SessionHostMessage(kind: "stop", generation: attachment.generation)
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            DispatchQueue.global(qos: .userInitiated).async {
+                defer { close(ownedDescriptor) }
+                continuation.resume(with: Result { try Self.stopAndDrain(ownedDescriptor, request: request) })
+            }
+        }
+    }
+
+    nonisolated private static func stopAndDrain(_ descriptor: Int32, request: SessionHostMessage) throws {
+        try SessionHostSocket.write(request, to: descriptor)
+        guard shutdown(descriptor, SHUT_WR) == 0 else { throw SessionHostError.system("stop write shutdown", errno) }
+        // Keep the read half alive until EOF so an output-side EPIPE cannot make the helper
+        // disconnect before consuming the queued stop. Bound both inactivity and total work.
+        let absoluteDeadline = ContinuousClock.now.advanced(by: .seconds(10))
+        var idleDeadline = ContinuousClock.now.advanced(by: .seconds(3))
+        var bytes = [UInt8](repeating: 0, count: 64 * 1_024)
+        while true {
+            let now = ContinuousClock.now
+            let deadline = min(absoluteDeadline, idleDeadline)
+            guard now < deadline else { throw SessionHostError.system("stop drain deadline", ETIMEDOUT) }
+            let remaining = now.duration(to: deadline).components
+            let milliseconds = max(1, min(Int64(Int32.max), remaining.seconds * 1_000 + remaining.attoseconds / 1_000_000_000_000_000))
+            var readiness = pollfd(fd: descriptor, events: Int16(POLLIN), revents: 0)
+            let ready = poll(&readiness, 1, Int32(milliseconds))
+            if ready < 0, errno == EINTR { continue }
+            guard ready > 0 else { throw SessionHostError.system("stop drain wait", ready == 0 ? ETIMEDOUT : errno) }
+            let count = Darwin.read(descriptor, &bytes, bytes.count)
+            if count == 0 { return }
+            if count < 0, errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK { continue }
+            guard count > 0 else { throw SessionHostError.system("stop drain read", errno) }
+            idleDeadline = ContinuousClock.now.advanced(by: .seconds(3))
+        }
+    }
+
     func closeConnection() {
         source?.cancel(); source = nil
         if descriptor >= 0 { close(descriptor) }
@@ -237,10 +332,10 @@ final class PersistentTerminalConnection {
 /// Explicit pane deletion can happen before its workspace has created any terminal views.
 @MainActor
 public enum PersistentTerminalRuntime {
-    public static func stopExistingAsync(identifier: UUID, directory: URL) async throws {
-        try await PersistentTerminalConnection.stopExistingAsync(identifier: identifier, namespace: directory).get()
+    public static func stopExistingAsync(identifier: UUID, directory: URL, environment: [String: String] = [:], helperURL: URL? = nil) async throws {
+        try await PersistentTerminalConnection.stopExistingAsync(identifier: identifier, namespace: directory, environment: environment, helperURL: helperURL).get()
     }
-    public nonisolated static func stopExisting(identifier: UUID, directory: URL) throws {
-        try PersistentTerminalConnection.stopExisting(identifier: identifier, namespace: directory)
+    public nonisolated static func stopExisting(identifier: UUID, directory: URL, environment: [String: String] = [:], helperURL: URL? = nil) throws {
+        try PersistentTerminalConnection.stopExisting(identifier: identifier, namespace: directory, environment: environment, helperURL: helperURL)
     }
 }

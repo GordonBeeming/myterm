@@ -13,7 +13,7 @@ public enum SessionHostGeometry {
 }
 
 public enum SessionHostError: Error, LocalizedError {
-    case invalidFrame, incompatibleVersion, insecureDirectory, invalidPath, disconnected, busy
+    case invalidFrame, incompatibleVersion, insecureDirectory, invalidPath, disconnected, busy, untrustedController, untrustedHost
     case system(String, Int32)
 
     public var errorDescription: String? {
@@ -24,6 +24,8 @@ public enum SessionHostError: Error, LocalizedError {
         case .invalidPath: "The terminal host socket path is too long."
         case .disconnected: "The terminal host disconnected. Reopen MyTerm to reattach; the process may still be running."
         case .busy: "This terminal still has an attached controller. Try attaching again after it disconnects."
+        case .untrustedHost: "The terminal helper's code-signing identity could not be verified. Use the matching signed MyTerm app and helper."
+        case .untrustedController: "The terminal controller's code-signing identity could not be verified. Use the matching signed MyTerm app."
         case let .system(operation, code): "Terminal host \(operation) failed: \(String(cString: strerror(code)))"
         }
     }
@@ -31,8 +33,30 @@ public enum SessionHostError: Error, LocalizedError {
 
 /// The checkpoint and its following byte suffix share one stream, so attaching cannot lose
 /// output between a snapshot request and subscribing to subsequent output.
+/// Measured by the native terminal view, not inferred from rows or an arbitrary host font.
+public struct SessionHostImageGeometry: Codable, Equatable, Sendable {
+    public let cellWidth: Double
+    public let cellHeight: Double
+    public let viewportWidth: Double
+    public let viewportHeight: Double
+    public let displayScale: Double
+
+    public init(cellWidth: Double, cellHeight: Double, viewportWidth: Double,
+                viewportHeight: Double, displayScale: Double) {
+        self.cellWidth = cellWidth; self.cellHeight = cellHeight
+        self.viewportWidth = viewportWidth; self.viewportHeight = viewportHeight
+        self.displayScale = displayScale
+    }
+    public var isValid: Bool {
+        [cellWidth, cellHeight, viewportWidth, viewportHeight, displayScale].allSatisfy(\.isFinite)
+            && (0.01...1_024).contains(cellWidth) && (0.01...1_024).contains(cellHeight)
+            && (0...100_000).contains(viewportWidth) && (0...100_000).contains(viewportHeight)
+            && (0.1...8).contains(displayScale)
+    }
+}
+
 public struct SessionHostMessage: Codable, Sendable {
-    public static let protocolVersion = 3
+    public static let protocolVersion = 4
     public static let maximumFrameBytes = 48 * 1_024 * 1_024
     public static let maximumInputBytes = 1_024 * 1_024
     public var version = protocolVersion
@@ -41,6 +65,7 @@ public struct SessionHostMessage: Codable, Sendable {
     public var pid: Int32?
     public var columns: Int?
     public var rows: Int?
+    public var imageGeometry: SessionHostImageGeometry?
     public var exitCode: Int32?
     public var generation: UUID?
     public var sequence: UInt64?
@@ -54,7 +79,7 @@ public struct SessionHostMessage: Codable, Sendable {
                 rows: Int? = nil, exitCode: Int32? = nil, generation: UUID? = nil,
                 sequence: UInt64? = nil, text: String? = nil, activity: AgentActivityReport? = nil,
                 pendingActivities: [AgentActivityReport]? = nil, scrollbackLines: Int? = nil,
-                omittedScrollbackLines: Int? = nil) {
+                omittedScrollbackLines: Int? = nil, imageGeometry: SessionHostImageGeometry? = nil) {
         self.kind = kind; self.bytes = bytes; self.pid = pid; self.columns = columns
         self.rows = rows; self.exitCode = exitCode; self.generation = generation
         self.sequence = sequence; self.text = text
@@ -62,6 +87,7 @@ public struct SessionHostMessage: Codable, Sendable {
         self.pendingActivities = pendingActivities
         self.scrollbackLines = scrollbackLines
         self.omittedScrollbackLines = omittedScrollbackLines
+        self.imageGeometry = imageGeometry
     }
 
     public func encoded() throws -> Data {
@@ -191,11 +217,6 @@ public enum SessionHostSocket {
         guard getsockopt(descriptor, SOL_LOCAL, LOCAL_PEERPID, &pid, &size) == 0,
               pid > 1, pid != getpid() else { throw SessionHostError.system("identify host", errno) }
         return pid
-    }
-
-    public static func terminatePeer(_ descriptor: Int32) throws {
-        let pid = try peerProcessID(descriptor)
-        guard kill(pid, SIGTERM) == 0 || errno == ESRCH else { throw SessionHostError.system("stop incompatible host", errno) }
     }
 
     public static func write(_ message: SessionHostMessage, to descriptor: Int32) throws {

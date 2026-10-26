@@ -56,6 +56,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
     private var hostSequence: UInt64 = 0
     private struct RequestedHostGeometry: Equatable { let columns: Int; let rows: Int }
     private var requestedHostGeometry: RequestedHostGeometry?
+    private var requestedImageGeometry: SessionHostImageGeometry?
     private var persistentStartTask: Task<Void, Never>?
     private enum PendingStartDisposition { case attach, stop, detach }
     private var pendingStartDisposition = PendingStartDisposition.attach
@@ -215,6 +216,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
             let launchArguments = arguments
             let columns = terminal.getTerminal().cols
             let rows = terminal.getTerminal().rows
+            let imageGeometry = imageHostGeometry
             let preparedFailure = startupFailure
             let helperURL = configuration.continuityHelperURL
             terminal.acceptsUserInput = false
@@ -224,13 +226,14 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
             persistentStartTask = Task { @MainActor in
                 let result = await PersistentTerminalConnection.connectAsync(identifier: identifier, namespace: directory,
                     shell: shell, arguments: launchArguments, environment: processEnvironment,
-                    directory: workingDirectory, columns: columns, rows: rows, helperURL: helperURL)
+                    directory: workingDirectory, columns: columns, rows: rows, helperURL: helperURL,
+                    imageGeometry: imageGeometry)
                 defer { self.persistentStartTask = nil; self.terminal.setConnectionPending(false) }
                 switch result {
                 case .success(let connection):
                     if self.pendingStartDisposition != .attach {
                         if self.pendingStartDisposition == .stop {
-                            do { try connection.send(.init(kind: "stop", generation: connection.attachment.generation)) }
+                            do { try await connection.stop() }
                             catch {
                                 connection.closeConnection()
                                 await self.stopPersistentHost(identifier: identifier, directory: directory)
@@ -271,6 +274,8 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         persistentConnection = connection
         hostSequence = connection.attachment.sequence ?? 0
         requestedHostGeometry = nil
+        requestedImageGeometry = nil
+        try applyAuthoritativeImageGeometry(connection.attachment.imageGeometry)
         if let checkpoint = connection.attachment.bytes { try terminal.getTerminal().importCheckpoint(checkpoint) }
         recordRemoteGeometry(columns: terminal.getTerminal().cols, rows: terminal.getTerminal().rows)
         terminal.needsDisplay = true
@@ -278,6 +283,14 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
             guard let self else { return }
             do { try self.sendProcessInput(bytes) }
             catch { self.onEvent?(.failed(TerminalSessionFailure(message: error.localizedDescription))) }
+        }
+        terminal.onPersistentImageGeometryChanged = { [weak self] in
+            guard let self, let connection = self.persistentConnection else { return }
+            do {
+                try connection.send(.init(kind: "configure", generation: connection.attachment.generation,
+                    scrollbackLines: min(self.runtimeConfiguration.scrollbackLines, 100_000),
+                    imageGeometry: self.imageHostGeometry))
+            } catch { self.onEvent?(.failed(TerminalSessionFailure(message: error.localizedDescription))) }
         }
         terminal.onPersistentResizeRequest = { [weak self] columns, rows in
             guard let self else { return }
@@ -289,7 +302,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         // Checkpoints include the old emulator options and dimensions. Reapply the
         // current preferences, then explicitly fit both emulators to the native view.
         terminal.apply(runtimeConfiguration: runtimeConfiguration)
-        try connection.send(.init(kind: "configure", generation: connection.attachment.generation, scrollbackLines: min(runtimeConfiguration.scrollbackLines, 100_000)))
+        try connection.send(.init(kind: "configure", generation: connection.attachment.generation, scrollbackLines: min(runtimeConfiguration.scrollbackLines, 100_000), imageGeometry: imageHostGeometry))
         terminal.resizeToFit()
         if !remoteControllerActive {
             let fitted = terminal.fittedTerminalGeometry()
@@ -309,9 +322,9 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         }
         isRunning = true
         if let pending = connection.attachment.pendingActivities, !pending.isEmpty {
-            for activity in pending { onEvent?(.agentActivity(activity)) }
+            for activity in pending { onEvent?(.restoredAgentActivity(activity)) }
         } else if let activity = connection.attachment.activity {
-            onEvent?(.agentActivity(activity))
+            onEvent?(.restoredAgentActivity(activity))
         }
         if connection.createdHost, connection.attachment.text == startupToken,
            startupToken != nil {
@@ -435,16 +448,16 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         }
         stopWorkingDirectoryPolling()
         if let connection = persistentConnection {
-            do { try connection.send(.init(kind: "stop", generation: connection.attachment.generation)) }
-            catch {
-                connection.closeConnection()
-                if let identifier = configuration.continuityIdentifier, let directory = configuration.continuityDirectory {
-                    Task { await stopPersistentHost(identifier: identifier, directory: directory) }
-                } else { onEvent?(.failed(TerminalSessionFailure(message: error.localizedDescription))) }
-            }
-            connection.closeConnection()
             persistentConnection = nil
             isRunning = false
+            Task { @MainActor in
+                do { try await connection.stop() }
+                catch {
+                    if let identifier = configuration.continuityIdentifier, let directory = configuration.continuityDirectory {
+                        await stopPersistentHost(identifier: identifier, directory: directory)
+                    } else { onEvent?(.failed(TerminalSessionFailure(message: error.localizedDescription))) }
+                }
+            }
             return
         }
         if let identifier = configuration.continuityIdentifier, let directory = configuration.continuityDirectory {
@@ -481,7 +494,8 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
     }
 
     private func stopPersistentHost(identifier: UUID, directory: URL) async {
-        let result = await PersistentTerminalConnection.stopExistingAsync(identifier: identifier, namespace: directory)
+        let result = await PersistentTerminalConnection.stopExistingAsync(identifier: identifier, namespace: directory,
+            environment: configuration.environment, helperURL: configuration.continuityHelperURL)
         if case .failure(let error) = result {
             Logger(subsystem: "com.gordonbeeming.myterm", category: "terminal-continuity")
                 .error("Could not stop persistent terminal: \(error.localizedDescription, privacy: .public)")
@@ -513,6 +527,22 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         }
     }
 
+    private func applyAuthoritativeImageGeometry(_ geometry: SessionHostImageGeometry?) throws {
+        guard let geometry else { throw SessionHostError.incompatibleVersion }
+        guard geometry.isValid else { throw SessionHostError.invalidFrame }
+        terminal.authoritativeImageGeometry = TerminalImageGeometry(
+            cellSize: CGSize(width: geometry.cellWidth, height: geometry.cellHeight),
+            viewportSize: CGSize(width: geometry.viewportWidth, height: geometry.viewportHeight),
+            displayScale: geometry.displayScale)
+    }
+
+    private var imageHostGeometry: SessionHostImageGeometry {
+        let metrics = terminal.imageRenderingGeometry
+        return SessionHostImageGeometry(cellWidth: metrics.cellSize.width, cellHeight: metrics.cellSize.height,
+            viewportWidth: metrics.viewportSize.width, viewportHeight: metrics.viewportSize.height,
+            displayScale: metrics.displayScale)
+    }
+
     private func resizePersistentProcess(columns: Int, rows: Int) throws {
         guard let connection = persistentConnection else { return }
         let fitted = SessionHostGeometry.fit(columns: columns, rows: rows)
@@ -523,12 +553,14 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
             }
         } else { reportedGeometryLimit = false }
         let requested = RequestedHostGeometry(columns: fitted.columns, rows: fitted.rows)
-        guard requested != requestedHostGeometry else { return }
-        if requestedHostGeometry == nil,
+        let imageGeometry = imageHostGeometry
+        guard requested != requestedHostGeometry || imageGeometry != requestedImageGeometry else { return }
+        if requestedHostGeometry == nil, imageGeometry == requestedImageGeometry,
            terminal.getTerminal().cols == fitted.columns, terminal.getTerminal().rows == fitted.rows { return }
         try connection.send(.init(kind: "resize", columns: fitted.columns, rows: fitted.rows,
-                                  generation: connection.attachment.generation))
+                                  generation: connection.attachment.generation, imageGeometry: imageGeometry))
         requestedHostGeometry = requested
+        requestedImageGeometry = imageGeometry
     }
 
     private func handleHostMessage(_ message: SessionHostMessage) {
@@ -539,6 +571,13 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
                 persistentConnection?.closeConnection()
                 isRunning = false
                 onEvent?(.failed(TerminalSessionFailure(message: "The terminal host stream lost its output order. Reattach before continuing.")))
+                return
+            }
+            do { try applyAuthoritativeImageGeometry(message.imageGeometry) }
+            catch {
+                persistentConnection?.closeConnection()
+                isRunning = false
+                onEvent?(.failed(TerminalSessionFailure(message: "The terminal host sent invalid image geometry.")))
                 return
             }
             hostSequence += 1
@@ -595,7 +634,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         self.runtimeConfiguration = runtimeConfiguration
         terminal.apply(runtimeConfiguration: runtimeConfiguration)
         if let connection = persistentConnection {
-            do { try connection.send(.init(kind: "configure", generation: connection.attachment.generation, scrollbackLines: min(runtimeConfiguration.scrollbackLines, 100_000))) }
+            do { try connection.send(.init(kind: "configure", generation: connection.attachment.generation, scrollbackLines: min(runtimeConfiguration.scrollbackLines, 100_000), imageGeometry: imageHostGeometry)) }
             catch { onEvent?(.initialCommandFailed(TerminalSessionFailure(message: error.localizedDescription))) }
         }
     }
@@ -796,6 +835,7 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
     var onPersistentInput: ((Data) -> Void)?
     var onPersistentResize: ((Int, Int) -> Void)?
     var onPersistentResizeRequest: ((Int, Int) -> Void)?
+    var onPersistentImageGeometryChanged: (() -> Void)?
     var persistentShellIsForeground = true
 
     override func terminalResizeRequested(source: TerminalView, columns: Int, rows: Int) -> Bool {
@@ -942,8 +982,20 @@ final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
         }
     }
 
+    override func setFrameSize(_ newSize: NSSize) {
+        let previous = frame.size
+        super.setFrameSize(newSize)
+        if previous != newSize { onPersistentImageGeometryChanged?() }
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        if window != nil { onPersistentImageGeometryChanged?() }
+    }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        if window != nil { onPersistentImageGeometryChanged?() }
         guard window != nil, shouldFocusWhenAttachedToWindow else { return }
         focusWhenPossible()
     }

@@ -6,6 +6,8 @@ Read `docs/AGENT_WORKFLOWS.md` for intended behavior and limits. Use disposable 
 
 Generate real waiting/working/completed events and verify attention ordering and stable session identity. Open a session, return to the inbox and tap that same row again; the detail must reopen. Create a workspace from the inbox and from a folder's plus control; the new workspace must open immediately, with its controls and first terminal available. Return and reselect it. Search/jump must reuse an existing tab without duplicating it or moving another device's focus. Disconnect the host and verify cached information is visibly offline.
 
+After reading an agent completion, switch workspaces and restart the desktop UI. The restored snapshot must not create another unread inbox entry, a fresh completion timestamp, banner or push notification. Restore genuinely outstanding questions and agent identity; verify new live activity still produces the normal attention events.
+
 ## Drafts and shared catalog
 
 Write a distinct draft for one terminal, dismiss/reopen Compose, terminate/relaunch the app and confirm the text restores only to that pairing/workspace/session. Use a separate disposable pairing if testing removal. Revoke no existing user pairing merely to obtain cleanup coverage. Check interrupted insertion restores as unconfirmed and never automatically replays; transport success is not proof that an agent accepted the prompt. Multiline insertion without bracketed paste must fail safely.
@@ -19,6 +21,8 @@ Capture a real development page containing a recognizable URL, selection and vis
 ## Persistent terminal restart
 
 Start a harmless identifiable long-running command in a disposable terminal and record its shell/helper identity and output. Quit only the MyTerm UI, leave the helper running, reopen the same development state and verify reattachment to the same process, current output and correct geometry. Startup commands must not be repeated. Separately test explicit terminal/workspace close stops its helper. Helper exit or machine reboot is a distinct restart/fallback case, never proof of uninterrupted PTY survival. Keep the Mac UI running during mobile checks because the helper does not own companion connectivity.
+
+Include inline images and text immediately after them when checking checkpoint fidelity. Compare restored cursor position, cells, image stripes and Kitty placement metadata using the view's actual font metrics, viewport and backing scale. Test font/viewport changes while output is in flight. Older incompatible helpers must fail explicitly; never claim they recovered images that their emulator already discarded.
 
 ## Completion evidence
 

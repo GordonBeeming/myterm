@@ -109,7 +109,7 @@ final class SessionHostTests: XCTestCase {
         let ready = directory.appendingPathComponent("ready")
         let host = Process()
         host.executableURL = helper
-        host.environment = ProcessInfo.processInfo.environment.merging(["MYTERM_PERSISTENT_SCROLLBACK_LINES": "100000"]) { _, value in value }
+        host.environment = try testEnvironment().merging(["MYTERM_PERSISTENT_SCROLLBACK_LINES": "100000"]) { _, value in value }
         host.arguments = [path, "/bin/sh", directory.path, "80", "25", "-c",
                           "awk 'BEGIN { for (i=0;i<30000;i++) print \"history-\"i; print \"latest-host-tail-marker\"; }'; touch '\(ready.path)'; sleep 20"]
         host.standardOutput = FileHandle.nullDevice; host.standardError = FileHandle.nullDevice
@@ -149,7 +149,7 @@ final class SessionHostTests: XCTestCase {
         process.executableURL = helper
         process.arguments = [path, "/bin/sh", directory.path, "80", "25", "-c",
                              "printf x >> '\(counter.path)'; while IFS= read -r line; do printf 'reply:%s\\n' \"$line\"; if [ \"$line\" = before ]; then sleep 0.2; printf 'detached-output\\n'; fi; done"]
-        process.environment = ProcessInfo.processInfo.environment.merging(["MYTERM_PERSISTENT_SCROLLBACK_LINES": "9876"]) { _, value in value }
+        process.environment = try testEnvironment().merging(["MYTERM_PERSISTENT_SCROLLBACK_LINES": "9876"]) { _, value in value }
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         try process.run()
@@ -167,6 +167,7 @@ final class SessionHostTests: XCTestCase {
         try SessionHostSocket.write(.init(kind: "configure", generation: initial.generation, scrollbackLines: 12_345), to: first)
         try SessionHostSocket.write(.init(kind: "resize", columns: 91, rows: 31, generation: initial.generation), to: first)
         let competingHost = Process()
+        competingHost.environment = try testEnvironment()
         competingHost.executableURL = helper; competingHost.arguments = process.arguments
         competingHost.standardOutput = FileHandle.nullDevice; competingHost.standardError = FileHandle.nullDevice
         try competingHost.run(); competingHost.waitUntilExit()
@@ -208,26 +209,69 @@ final class SessionHostTests: XCTestCase {
         try SessionHostSocket.prepareDirectory(directory)
         defer { try? FileManager.default.removeItem(at: directory) }
         let path = directory.appendingPathComponent("s.sock").path
+        let shellReadyPrompt = "shell-ready-" + UUID().uuidString
         let process = Process()
         process.executableURL = helper
         process.arguments = [path, "/bin/zsh", directory.path, "80", "25", "-f"]
+        process.environment = try testEnvironment().merging(["PS1": shellReadyPrompt, "PROMPT": shellReadyPrompt]) { _, value in value }
         process.standardOutput = FileHandle.nullDevice; process.standardError = FileHandle.nullDevice
         try process.run()
         defer { if process.isRunning { process.terminate(); process.waitUntilExit() } }
         let first = try connectEventually(path: path)
         var decoder = SessionHostDecoder()
         let attached = try readMessage(first, decoder: &decoder, kind: "attached")
+        // A PTY exists before zsh finishes configuring it. Its first prompt proves
+        // initialization has completed, so startup input flushing cannot eat the command.
+        let initialTerminal = Terminal(delegate: CheckpointDelegate())
+        try initialTerminal.importCheckpoint(XCTUnwrap(attached.bytes))
+        var shellReady = String(decoding: initialTerminal.getBufferAsData(kind: .normal), as: UTF8.self).contains(shellReadyPrompt)
+        var promptTail = Data()
+        let shellReadyDeadline = Date().addingTimeInterval(5)
+        while !shellReady, Date() < shellReadyDeadline {
+            let message = try readMessage(first, decoder: &decoder, kind: "output")
+            promptTail.append(message.bytes ?? Data())
+            shellReady = String(decoding: promptTail, as: UTF8.self).contains(shellReadyPrompt)
+            promptTail = Data(promptTail.suffix(256))
+        }
+        XCTAssertTrue(shellReady, "zsh must finish initialization before the test sends its foreground command")
         let toolA = String(repeating: "a", count: 64), toolB = String(repeating: "b", count: 64)
-        let script = "sleep 0.2; printf '\\033]7337;agent=codex;event=awaiting_input;session=test;tool=\(toolA)\\033\\\\'; printf '\\033]7337;agent=codex;event=working;session=test;tool=\(toolB)\\033\\\\'; sleep 10"
-        // This foreground command emits its hook after the UI client has disappeared.
+        let started = directory.appendingPathComponent("foreground-started")
+        let release = directory.appendingPathComponent("release-hooks")
+        let emitted = directory.appendingPathComponent("hooks-emitted")
+        let completionToken = "hooks-processed-" + UUID().uuidString
+        let script = "touch '\(started.path)'; while [ ! -e '\(release.path)' ]; do sleep 0.01; done; printf '\\033]7337;agent=codex;event=awaiting_input;session=test;tool=\(toolA)\\033\\\\'; printf '\\033]7337;agent=codex;event=working;session=test;tool=\(toolB)\\033\\\\'; printf '\\033]7338;\(completionToken)\\033\\\\'; touch '\(emitted.path)'; while :; do sleep 1; done"
+        // Release the producer only after detaching. Its final OSC token follows
+        // both hooks in the PTY stream, proving the host parser has processed them.
         let command = "/bin/sh -c '\(script.replacingOccurrences(of: "'", with: "'\\''"))'\n"
         try SessionHostSocket.write(.init(kind: "input", bytes: Data(command.utf8), generation: attached.generation), to: first)
+        let startDeadline = Date().addingTimeInterval(5)
+        while !FileManager.default.fileExists(atPath: started.path), Date() < startDeadline { usleep(10_000) }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: started.path), "the foreground command must be running before the client detaches")
         close(first)
-        usleep(800_000)
-        let second = try SessionHostSocket.connect(path: path)
-        defer { close(second) }
-        var secondDecoder = SessionHostDecoder()
-        let restored = try readMessage(second, decoder: &secondDecoder, kind: "attached")
+        XCTAssertTrue(FileManager.default.createFile(atPath: release.path, contents: Data()))
+        let emissionDeadline = Date().addingTimeInterval(5)
+        while !FileManager.default.fileExists(atPath: emitted.path), Date() < emissionDeadline { usleep(10_000) }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: emitted.path), "both hooks must be emitted while no controller is attached")
+        var second: Int32 = -1
+        defer { if second >= 0 { close(second) } }
+        var completedAttachment: SessionHostMessage?
+        let hooksDeadline = Date().addingTimeInterval(5)
+        while Date() < hooksDeadline {
+            let candidate = try SessionHostSocket.connect(path: path)
+            do {
+                var candidateDecoder = SessionHostDecoder()
+                let snapshot = try readMessage(candidate, decoder: &candidateDecoder, kind: "attached")
+                if snapshot.text == completionToken {
+                    completedAttachment = snapshot
+                    second = candidate
+                    break
+                }
+                close(candidate)
+            } catch SessionHostError.disconnected { close(candidate) }
+            catch { close(candidate); throw error }
+            usleep(10_000)
+        }
+        let restored = try XCTUnwrap(completedAttachment, "the helper must parse the completion token after both detached activity hooks")
         XCTAssertEqual(restored.activity?.activity.rawValue, "awaitingInput")
         XCTAssertEqual(restored.pendingActivities?.count, 1)
         XCTAssertEqual(restored.pendingActivities?.first?.toolRequestID, toolA)
@@ -246,6 +290,7 @@ final class SessionHostTests: XCTestCase {
         let process = Process()
         process.executableURL = helper
         process.arguments = [path, "/bin/sh", directory.path, "80", "25", "-c", "stty -icanon -echo; printf ready; sleep 10"]
+        process.environment = try testEnvironment()
         process.standardOutput = FileHandle.nullDevice; process.standardError = FileHandle.nullDevice
         try process.run()
         defer { if process.isRunning { process.terminate(); process.waitUntilExit() } }
@@ -275,6 +320,7 @@ final class SessionHostTests: XCTestCase {
         let received = directory.appendingPathComponent("received")
         let host = Process()
         host.executableURL = try helperExecutable()
+        host.environment = try testEnvironment()
         host.arguments = [path, "/bin/sh", directory.path, "80", "25", "-c",
             "stty raw -echo; touch '\(ready.path)'; while [ ! -e '\(release.path)' ]; do sleep 0.01; done; awk 'BEGIN { for (i=0;i<32768;i++) printf \"sustained-output-0123456789\\r\\n\"; }' & head -c 65536 > '\(received.path)'; wait; printf paste-accepted"]
         host.standardOutput = FileHandle.nullDevice
@@ -315,7 +361,9 @@ final class SessionHostTests: XCTestCase {
         var lastSequence = try XCTUnwrap(attached.sequence)
         var exited = false
         let expected = Data((String(repeating: "sustained-output-0123456789\r\n", count: 32_768) + "paste-accepted").utf8)
-        let responseDeadline = Date().addingTimeInterval(5)
+        // Bound inactivity rather than total render time under concurrent test load.
+        // Only verified output progress extends this budget; the byte count is finite.
+        var responseDeadline = Date().addingTimeInterval(5)
         while Date() < responseDeadline, output.count < expected.count || !exited {
             var bytes = [UInt8](repeating: 0, count: 64 * 1_024)
             let count = Darwin.read(socket, &bytes, bytes.count)
@@ -326,8 +374,16 @@ final class SessionHostTests: XCTestCase {
                 XCTAssertFalse(exited, "exit must follow all queued output")
                 XCTAssertEqual(message.generation, attached.generation)
                 XCTAssertEqual(message.sequence, lastSequence + 1)
+                if message.generation == attached.generation, message.sequence == lastSequence + 1,
+                   let data = message.bytes, !data.isEmpty {
+                    responseDeadline = Date().addingTimeInterval(5)
+                }
                 lastSequence += 1
                 output.append(message.bytes ?? Data())
+                guard output.count <= expected.count else {
+                    XCTFail("helper emitted more bytes than the finite expected output")
+                    return
+                }
             }
         }
         XCTAssertEqual(output, expected, "resuming reads must preserve complete output bytes and frame order")
@@ -349,6 +405,7 @@ final class SessionHostTests: XCTestCase {
         let output = "awk 'BEGIN { for (i=0;i<32768;i++) printf \"backpressure-output-0123456789\\r\\n\"; printf \"retained-tail\\r\\n\"; }'"
         let host = Process()
         host.executableURL = try helperExecutable()
+        host.environment = try testEnvironment()
         host.arguments = [path, "/bin/sh", directory.path, "80", "25", "-c",
             "while [ ! -e '\(release.path)' ]; do sleep 0.01; done; \(output); touch '\(produced.path)'; while [ ! -e '\(more.path)' ]; do sleep 0.01; done; \(output); touch '\(producedMore.path)'; sleep 20"]
         host.standardOutput = FileHandle.nullDevice; host.standardError = FileHandle.nullDevice
@@ -384,7 +441,13 @@ final class SessionHostTests: XCTestCase {
         try emulator.importCheckpoint(XCTUnwrap(attachment.bytes))
         // The producer's file publication precedes PTY drain. Bytes still in the PTY
         // at attachment correctly follow the snapshot in the ordered output stream.
-        let tailDeadline = Date().addingTimeInterval(3)
+        // Replaying queued output may span multiple time slices on a loaded runner.
+        // Keep the same idle budget while requiring ordered, finite output progress.
+        var tailDeadline = Date().addingTimeInterval(3)
+        var tailSequence = try XCTUnwrap(attachment.sequence)
+        var tailOutputBytes = 0
+        let maximumTailOutputBytes = "backpressure-output-0123456789\r\n".utf8.count * 32_768
+            + "retained-tail\r\n".utf8.count
         var sawTail = String(decoding: emulator.getBufferAsData(kind: .normal), as: UTF8.self).contains("retained-tail")
         var tailBytes = Data()
         while !sawTail, Date() < tailDeadline {
@@ -393,6 +456,17 @@ final class SessionHostTests: XCTestCase {
             guard count > 0 else { throw SessionHostError.disconnected }
             for message in try decoder.append(Data(bytes.prefix(count))) where message.kind == "output" {
                 let data = message.bytes ?? Data()
+                XCTAssertEqual(message.generation, attachment.generation)
+                XCTAssertEqual(message.sequence, tailSequence + 1)
+                if message.generation == attachment.generation, message.sequence == tailSequence + 1, !data.isEmpty {
+                    tailDeadline = Date().addingTimeInterval(3)
+                }
+                tailSequence += 1
+                tailOutputBytes += data.count
+                guard tailOutputBytes <= maximumTailOutputBytes else {
+                    XCTFail("post-attachment output exceeded the finite producer's byte bound")
+                    return
+                }
                 emulator.feed(buffer: Array(data)[...])
                 tailBytes.append(data)
                 sawTail = sawTail || String(decoding: tailBytes, as: UTF8.self).contains("retained-tail")
@@ -420,6 +494,7 @@ final class SessionHostTests: XCTestCase {
         let produced = directory.appendingPathComponent("produced")
         let host = Process()
         host.executableURL = try helperExecutable()
+        host.environment = try testEnvironment()
         // Base64 framing of 52 MiB exceeds the 64 MiB outbound bound. NUL bytes
         // exercise transport volume without allocating enormous terminal history.
         host.arguments = [path, "/bin/sh", directory.path, "80", "25", "-c",
@@ -456,6 +531,120 @@ final class SessionHostTests: XCTestCase {
         let final = try readMessage(third, decoder: &decoder, kind: "attached")
         XCTAssertEqual(final.pid, initial.pid)
         try SessionHostSocket.write(.init(kind: "stop", generation: final.generation), to: third)
+    }
+
+    func testDifferentProcessWithSameUIDCannotReadCheckpointOrControlTheHost() throws {
+        let directory = URL(fileURLWithPath: "/private/tmp/myterm-peer-\(UUID().uuidString.prefix(8))")
+        try SessionHostSocket.prepareDirectory(directory)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let path = directory.appendingPathComponent("s.sock").path
+        let host = Process()
+        host.executableURL = try helperExecutable()
+        host.environment = try testEnvironment()
+        host.arguments = [path, "/bin/sh", directory.path, "80", "25", "-c", "sleep 20"]
+        host.standardOutput = FileHandle.nullDevice; host.standardError = FileHandle.nullDevice
+        try host.run()
+        defer { if host.isRunning { host.terminate(); host.waitUntilExit() } }
+        let deadline = Date().addingTimeInterval(3)
+        while !FileManager.default.fileExists(atPath: path), Date() < deadline { usleep(10_000) }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: path))
+
+        // It inherits the public test allowlist value and the same UID, but its
+        // kernel audit token identifies a different process incarnation.
+        let stranger = Process()
+        stranger.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        stranger.environment = host.environment
+        stranger.arguments = ["python3", "-c",
+            "import socket,sys; s=socket.socket(socket.AF_UNIX); s.settimeout(3); s.connect(sys.argv[1]); sys.exit(0 if s.recv(4)==b'' else 1)", path]
+        stranger.standardOutput = FileHandle.nullDevice
+        stranger.standardError = FileHandle.nullDevice
+        try stranger.run(); stranger.waitUntilExit()
+        XCTAssertEqual(stranger.terminationStatus, 0, "same-UID peers must receive no checkpoint header")
+        XCTAssertTrue(host.isRunning, "rejecting an untrusted peer must preserve the shell")
+
+        let trusted = try connectEventually(path: path)
+        defer { close(trusted) }
+        var decoder = SessionHostDecoder()
+        let attachment = try readMessage(trusted, decoder: &decoder, kind: "attached")
+        XCTAssertNotNil(attachment.pid)
+        try SessionHostSocket.write(.init(kind: "stop", generation: attachment.generation), to: trusted)
+    }
+
+    func testPackagedDevelopmentHostIgnoresTestAllowlistAndPinsSignedController() throws {
+        let directory = URL(fileURLWithPath: "/private/tmp/myterm-signing-\(UUID().uuidString.prefix(8))")
+        try SessionHostSocket.prepareDirectory(directory)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let app = directory.appendingPathComponent("Controller.app")
+        let contents = app.appendingPathComponent("Contents")
+        let macOS = contents.appendingPathComponent("MacOS")
+        try FileManager.default.createDirectory(at: macOS, withIntermediateDirectories: true)
+        let controller = macOS.appendingPathComponent("myterm-dev")
+        let helper = macOS.appendingPathComponent("MyTermSessionHost")
+        try FileManager.default.copyItem(at: URL(fileURLWithPath: "/usr/bin/nc"), to: controller)
+        try FileManager.default.copyItem(at: helperExecutable(), to: helper)
+        let info: [String: String] = ["CFBundleIdentifier": "com.gordonbeeming.myterm.dev",
+                                     "CFBundleExecutable": "myterm-dev", "CFBundlePackageType": "APPL",
+                                     "CFBundleVersion": "1"]
+        try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+            .write(to: contents.appendingPathComponent("Info.plist"))
+        func sign(_ url: URL, identifier: String) throws {
+            let signer = Process()
+            signer.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+            signer.arguments = ["--force", "--sign", "-", "--identifier", identifier, url.path]
+            signer.standardOutput = FileHandle.nullDevice; signer.standardError = FileHandle.nullDevice
+            try signer.run(); signer.waitUntilExit()
+            XCTAssertEqual(signer.terminationStatus, 0)
+        }
+        try sign(helper, identifier: "com.gordonbeeming.myterm.dev.session-host")
+        try sign(app, identifier: "com.gordonbeeming.myterm.dev")
+
+        let path = directory.appendingPathComponent("s.sock").path
+        let host = Process()
+        host.executableURL = helper
+        host.environment = try testEnvironment()
+        host.arguments = [path, "/bin/sh", directory.path, "80", "25", "-c", "sleep 20"]
+        host.standardOutput = FileHandle.nullDevice; host.standardError = FileHandle.nullDevice
+        try host.run()
+        defer { if host.isRunning { host.terminate(); host.waitUntilExit() } }
+        let deadline = Date().addingTimeInterval(3)
+        while !FileManager.default.fileExists(atPath: path), Date() < deadline { usleep(10_000) }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: path))
+        // Packaged builds must reject even the explicitly allowlisted test runner.
+        let untrusted = try SessionHostSocket.connect(path: path)
+        var header = [UInt8](repeating: 0, count: 4)
+        XCTAssertEqual(Darwin.read(untrusted, &header, header.count), 0)
+        close(untrusted)
+
+        // The signed app's actual executable satisfies the pinned requirement.
+        // This is a headless netcat fixture, with no GUI application or focus change.
+        let trusted = Process()
+        trusted.executableURL = controller
+        trusted.arguments = ["-d", "-w", "3", "-U", path]
+        let output = Pipe()
+        trusted.standardOutput = output; trusted.standardError = FileHandle.nullDevice
+        trusted.standardInput = FileHandle.nullDevice
+        try trusted.run()
+        defer { if trusted.isRunning { trusted.terminate(); trusted.waitUntilExit() } }
+        let acceptedHeader = try output.fileHandleForReading.read(upToCount: 4)
+        XCTAssertEqual(acceptedHeader?.count, 4, "only the pinned signed controller receives the attachment")
+        XCTAssertTrue(host.isRunning)
+    }
+
+    private func testEnvironment() throws -> [String: String] {
+        let measured: TerminalImageGeometry
+        if Thread.isMainThread {
+            measured = MainActor.assumeIsolated { TerminalImageGeometry.measuredDefault(columns: 80, rows: 25) }
+        } else {
+            measured = DispatchQueue.main.sync {
+                MainActor.assumeIsolated { TerminalImageGeometry.measuredDefault(columns: 80, rows: 25) }
+            }
+        }
+        let geometry = SessionHostImageGeometry(cellWidth: measured.cellSize.width, cellHeight: measured.cellSize.height,
+            viewportWidth: measured.viewportSize.width, viewportHeight: measured.viewportSize.height,
+            displayScale: measured.displayScale)
+        var environment = ProcessInfo.processInfo.environment.merging(try SessionHostClientAuthentication.testEnvironment()) { _, value in value }
+        environment["MYTERM_PERSISTENT_IMAGE_GEOMETRY"] = try JSONEncoder().encode(geometry).base64EncodedString()
+        return environment
     }
 
     private func helperExecutable() throws -> URL {

@@ -2,6 +2,7 @@ import AppKit
 import Darwin
 import Foundation
 import MyTermCore
+@testable import MyTermContinuity
 @preconcurrency import SwiftTerm
 import XCTest
 @testable import MyTermPlatform
@@ -284,7 +285,7 @@ final class PersistentTerminalStartupTests: XCTestCase {
         second.onEvent = { if case .failed(let failure) = $0 { failures.append(failure) } }
         try second.start()
         try await waitUntil { !failures.isEmpty }
-        XCTAssertTrue(failures[0].message.contains("attached controller"))
+        XCTAssertTrue(failures[0].message.contains("attached controller"), failures[0].message)
         XCTAssertFalse(second.isRunning)
         XCTAssertTrue(first.isRunning)
         XCTAssertNoThrow(try first.insertLocalText("busy-controller-preserved"))
@@ -336,7 +337,7 @@ private final class StartupFixture {
     func session(scrollback: Int = 5_000, initialCommand: String? = nil, helperOverride: URL? = nil) throws -> SwiftTermTerminalSession {
         try SwiftTermTerminalSession(configuration: TerminalSessionConfiguration(
             shell: URL(fileURLWithPath: "/bin/sh"), workingDirectory: directory,
-            shellArguments: shellArguments, initialCommand: initialCommand,
+            shellArguments: shellArguments, initialCommand: initialCommand, environment: try PersistentTerminalTestEnvironment.make(),
             runtimeConfiguration: TerminalRuntimeConfiguration(fontSize: 15, scrollbackLines: scrollback),
             continuityIdentifier: identifier, continuityDirectory: directory, continuityHelperURL: helperOverride ?? helper))
     }
@@ -347,6 +348,7 @@ private final class StartupFixture {
 
     func launchHost() throws -> Process {
         let host = Process()
+        host.environment = ProcessInfo.processInfo.environment.merging(try PersistentTerminalTestEnvironment.make()) { _, value in value }
         host.executableURL = helper
         host.arguments = [socketPath, "/bin/sh", directory.path, "80", "25"] + shellArguments
         host.standardOutput = FileHandle.nullDevice; host.standardError = FileHandle.nullDevice
@@ -385,7 +387,8 @@ private final class StartupFixture {
     }
 
     func cleanUp() {
-        try? PersistentTerminalRuntime.stopExisting(identifier: identifier, directory: directory)
+        try? PersistentTerminalRuntime.stopExisting(identifier: identifier, directory: directory,
+            environment: try PersistentTerminalTestEnvironment.make(), helperURL: helper)
         try? FileManager.default.removeItem(at: directory)
         try? FileManager.default.removeItem(at: URL(fileURLWithPath: socketPath).deletingLastPathComponent())
     }

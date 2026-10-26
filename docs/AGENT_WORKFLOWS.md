@@ -82,6 +82,17 @@ are bounded to 1,024 columns/rows and 262,144 cells per buffer, with matching na
 geometry and a notice if an unusually large viewport is limited.
 Attachment runs off the UI thread; a connecting pane rejects input until ready.
 
+Restoring agent activity reconstructs the session and outstanding questions without creating
+another completion notification or marking already-read work as new. Retained inline images
+and text after them restore using the native view's measured image geometry. Image sizes and
+retained raster memory are bounded; older image stripes can be evicted to preserve a usable
+checkpoint. A helper with an incompatible checkpoint protocol must be closed explicitly.
+
+The app and helper verify each other's code-signing identities before exchanging terminal
+state or input. Production uses matching Developer ID signatures and hardened runtime.
+Stable development signing supports reconnecting after a rebuild; explicit ad-hoc dev builds
+pin the exact matching executable and should close disposable panes before replacing it.
+
 Closing a terminal tab or workspace explicitly stops its host while the app is running. That also applies when its
 view has not been attached or a connection attempt fails. If the app crashes during an explicit close before the stop completes, a helper can remain
 running without a listed pane. Startup does not automatically stop unlisted helpers.

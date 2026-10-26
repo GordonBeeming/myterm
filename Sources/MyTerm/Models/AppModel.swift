@@ -2501,7 +2501,10 @@ final class AppModel {
             // its own hook saying so. Everything that hook would have retired is retired here.
             guard name == nil, liveAgentTabs[tabID] != nil else { return }
             forgetAgent(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID, sessionID: sessionID)
-        case .agentActivity(let report):
+        case .agentActivity(let report), .restoredAgentActivity(let report):
+            let isRestoration: Bool
+            if case .restoredAgentActivity = event { isRestoration = true }
+            else { isRestoration = false }
             // A report about a conversation the pane has already left says nothing about the one
             // it is in now, so neither the cook nor the session hears it.
             if let terminal = tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)?.terminalSession,
@@ -2512,7 +2515,8 @@ final class AppModel {
                 report,
                 workspaceID: workspaceID,
                 tabGroupID: tabGroupID,
-                tabID: tabID
+                tabID: tabID,
+                isRestoration: isRestoration
             )
             recordAgentSession(
                 report,

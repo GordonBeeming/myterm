@@ -1,13 +1,36 @@
 import AppKit
 import Darwin
 import Foundation
-import MyTermContinuity
+@testable import MyTermContinuity
+import MyTermCore
 @preconcurrency import SwiftTerm
 import XCTest
 @testable import MyTermPlatform
 
 @MainActor
 final class PersistentTerminalGeometryTests: XCTestCase {
+    func testAttachmentReportsRememberedActivityAsRestoredRatherThanNewEvent() async throws {
+        let fixture = try GeometryFixture(prefix: #"printf '\033]7337;agent=claude;event=finished;session=restored\033\\';"#)
+        defer { fixture.cleanUp() }
+        let process = try fixture.launchUnattached()
+        defer { if process.isRunning { process.terminate(); process.waitUntilExit() } }
+        try await waitUntil { fixture.exists("ready") }
+        let connection = try await fixture.connect(columns: 80, rows: 25)
+        let remembered = try XCTUnwrap(connection.attachment.activity)
+        XCTAssertEqual(remembered.activity, .finished)
+        let session = try fixture.session()
+        defer { session.terminate() }
+        var restored: [AgentActivityReport] = []
+        var fresh: [AgentActivityReport] = []
+        session.onEvent = { event in
+            if case .restoredAgentActivity(let report) = event { restored.append(report) }
+            if case .agentActivity(let report) = event { fresh.append(report) }
+        }
+        try session.attachPersistentConnection(connection, startupFailure: nil)
+        XCTAssertEqual(restored, [remembered])
+        XCTAssertTrue(fresh.isEmpty, "Attaching to remembered process state must not announce a new completion")
+    }
+
     func testAttachmentParsesQueuedOldSizeOutputBeforeApplyingFittedGeometry() async throws {
         let fixture = try GeometryFixture()
         defer { fixture.cleanUp() }
@@ -171,8 +194,10 @@ private final class GeometryFixture {
     let directory: URL
     let helper: URL
     let prefix: String
+    let authenticationEnvironment: [String: String]
     init(prefix: String = "") throws {
         self.prefix = prefix
+        authenticationEnvironment = try PersistentTerminalTestEnvironment.make()
         directory = FileManager.default.temporaryDirectory.appendingPathComponent("myterm-geometry-\(UUID())")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         var path = Bundle(for: PersistentTerminalGeometryTests.self).bundleURL
@@ -192,13 +217,14 @@ private final class GeometryFixture {
     func session() throws -> SwiftTermTerminalSession {
         try SwiftTermTerminalSession(configuration: TerminalSessionConfiguration(shell: URL(fileURLWithPath: "/bin/sh"),
             workingDirectory: directory, shellArguments: arguments,
+            environment: authenticationEnvironment,
             runtimeConfiguration: TerminalRuntimeConfiguration(scrollbackLines: prefix.isEmpty ? 5_000 : 100_000),
             continuityIdentifier: identifier,
             continuityDirectory: directory, continuityHelperURL: helper))
     }
     func connect(columns: Int, rows: Int) async throws -> PersistentTerminalConnection {
         try await PersistentTerminalConnection.connectAsync(identifier: identifier, namespace: directory,
-            shell: URL(fileURLWithPath: "/bin/sh"), arguments: arguments, environment: ProcessInfo.processInfo.environment.merging(["MYTERM_PERSISTENT_SCROLLBACK_LINES": "100000"]) { _, new in new }.map { "\($0.key)=\($0.value)" },
+            shell: URL(fileURLWithPath: "/bin/sh"), arguments: arguments, environment: ProcessInfo.processInfo.environment.merging(authenticationEnvironment) { _, value in value }.merging(["MYTERM_PERSISTENT_SCROLLBACK_LINES": "100000"]) { _, new in new }.map { "\($0.key)=\($0.value)" },
             directory: directory, columns: columns, rows: rows, helperURL: helper).get()
     }
     func launchUnattached() throws -> Process {
@@ -206,7 +232,7 @@ private final class GeometryFixture {
         process.executableURL = helper
         let path = try PersistentTerminalConnection.socketPath(identifier: identifier, namespace: directory)
         process.arguments = [path, "/bin/sh", directory.path, "80", "25"] + arguments
-        process.environment = ProcessInfo.processInfo.environment.merging(["MYTERM_PERSISTENT_SCROLLBACK_LINES": "100000"]) { _, new in new }
+        process.environment = ProcessInfo.processInfo.environment.merging(authenticationEnvironment) { _, value in value }.merging(["MYTERM_PERSISTENT_SCROLLBACK_LINES": "100000"]) { _, new in new }
         process.standardOutput = FileHandle.nullDevice; process.standardError = FileHandle.nullDevice
         try process.run()
         return process
@@ -223,7 +249,8 @@ private final class GeometryFixture {
         usleep(100_000)
     }
     func cleanUp() {
-        try? PersistentTerminalRuntime.stopExisting(identifier: identifier, directory: directory)
+        try? PersistentTerminalRuntime.stopExisting(identifier: identifier, directory: directory,
+            environment: authenticationEnvironment, helperURL: helper)
         try? FileManager.default.removeItem(at: directory)
         try? FileManager.default.removeItem(at: PersistentTerminalConnection.socketDirectory(namespace: directory))
     }

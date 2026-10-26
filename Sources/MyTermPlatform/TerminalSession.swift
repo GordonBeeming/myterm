@@ -242,6 +242,8 @@ public struct TerminalSessionConfiguration: Equatable, Sendable {
 public enum TerminalSessionEvent: Equatable, Sendable {
     case titleChanged(String)
     case agentActivity(AgentActivityReport)
+    /// An attachment snapshot restores state; it is not a newly occurring agent event.
+    case restoredAgentActivity(AgentActivityReport)
     case workingDirectoryChanged(URL)
     case openURL(URL)
     case processTerminated(exitCode: Int32?)

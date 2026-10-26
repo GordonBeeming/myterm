@@ -1,3 +1,4 @@
+import AppKit
 import Darwin
 import Foundation
 import MyTermContinuity
@@ -8,10 +9,13 @@ import OSLog
 @MainActor
 final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency TerminalDelegate {
     private var listener: Int32 = -1
+    private let controllerAuthentication: SessionHostClientAuthentication
     private var client: Int32 = -1
     private var clientIdentity = UUID()
     private var listenerSource: DispatchSourceRead?
     private var clientSource: DispatchSourceRead?
+    private var rejectedClients: [Int32: (identity: UUID, source: DispatchSourceRead)] = [:]
+    private var hasDelayedFixtureRead = false
     private var outputSource: DispatchSourceWrite?
     private var outputIdleTimer: DispatchSourceTimer?
     private var pendingOutput: [Data?] = []
@@ -45,7 +49,7 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
         }
         return terminal
     }()
-    private lazy var process = LocalProcess(delegate: self)
+    private lazy var process = LocalProcess(delegate: self, deliversTerminationAfterOutput: true)
     private let path: String
     private let generation = UUID()
     private var sequence: UInt64 = 0
@@ -57,14 +61,21 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
     private var foregroundTimer: Timer?
     private var lastForegroundName: String?
     private var clientHasOmittedHistory = false
-    private var pendingGeometry: (columns: Int, rows: Int)?
+    private var pendingGeometry: (columns: Int, rows: Int, imageGeometry: SessionHostImageGeometry?)?
+    private var imageGeometry: SessionHostImageGeometry
     private var geometryFlushScheduled = false
     private var latestActivity: AgentActivityReport?
     private var pendingActivities: [String: [AgentActivityReport]] = [:]
     private let logger = Logger(subsystem: "com.gordonbeeming.myterm.session-host", category: "lifecycle")
 
     init(path: String, shell: String, arguments: [String], directory: String, columns: Int, rows: Int) throws {
+        guard let encodedGeometry = ProcessInfo.processInfo.environment["MYTERM_PERSISTENT_IMAGE_GEOMETRY"],
+              let geometryBytes = Data(base64Encoded: encodedGeometry),
+              let measuredGeometry = try? JSONDecoder().decode(SessionHostImageGeometry.self, from: geometryBytes),
+              measuredGeometry.isValid else { throw SessionHostError.invalidFrame }
+        self.imageGeometry = measuredGeometry
         self.path = path
+        controllerAuthentication = try SessionHostClientAuthentication()
         self.initialColumns = columns
         self.initialRows = rows
         self.shellName = URL(fileURLWithPath: shell).resolvingSymlinksInPath().lastPathComponent
@@ -113,15 +124,13 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
         guard descriptor >= 0 else { return }
         do {
             try SessionHostSocket.configure(descriptor)
-            try SessionHostSocket.authenticate(descriptor)
+            try controllerAuthentication.authenticate(descriptor)
             guard !stopping else {
-                try SessionHostSocket.write(.init(kind: "error", text: "This terminal is stopping. Try again after it exits."), to: descriptor)
-                close(descriptor)
+                try rejectClient(descriptor, message: .init(kind: "error", text: "This terminal is stopping. Try again after it exits."))
                 return
             }
             guard client < 0 else {
-                try SessionHostSocket.write(.init(kind: "busy", text: "This terminal already has an attached controller."), to: descriptor)
-                close(descriptor)
+                try rejectClient(descriptor, message: .init(kind: "busy", text: "This terminal already has an attached controller."))
                 return
             }
             try flushPendingGeometry()
@@ -137,7 +146,7 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
                                               generation: generation, sequence: sequence, text: readyToken,
                                               activity: latestActivity,
                                               pendingActivities: pendingActivities.values.flatMap { $0 },
-                                              omittedScrollbackLines: checkpoint.omittedScrollbackLines), to: descriptor)
+                                              omittedScrollbackLines: checkpoint.omittedScrollbackLines, imageGeometry: imageGeometry), to: descriptor)
             let flags = fcntl(descriptor, F_GETFL)
             guard flags >= 0, fcntl(descriptor, F_SETFL, flags | O_NONBLOCK) == 0 else {
                 throw SessionHostError.system("nonblocking controller", errno)
@@ -149,7 +158,19 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
                     self?.readClient()
                 }
             }
+            #if DEBUG
+            if controllerAuthentication.usesTestHarnessIdentity, !hasDelayedFixtureRead,
+               ProcessInfo.processInfo.environment["MYTERM_TEST_DELAY_FIRST_CLIENT_READ"] == "1",
+               let source = clientSource {
+                hasDelayedFixtureRead = true
+                // Scheduler fault injection for the real helper/PTY regression: let output
+                // observe peer closure before the first controller read. Retain and resume
+                // even a cancelled source so teardown cannot release a suspended source.
+                DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(100)) { source.resume() }
+            } else { clientSource?.resume() }
+            #else
             clientSource?.resume()
+            #endif
             reportForeground(force: true)
         } catch {
             log(error)
@@ -177,16 +198,27 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
                           (2...1_024).contains(columns), (1...1_024).contains(rows),
                           columns * rows <= SessionHostGeometry.maximumCellsPerBuffer,
                           message.generation == generation else { throw SessionHostError.invalidFrame }
+                    if let geometry = message.imageGeometry, !geometry.isValid { throw SessionHostError.invalidFrame }
                     if clientHasOmittedHistory {
-                        pendingGeometry = (columns, rows)
+                        pendingGeometry = (columns, rows, message.imageGeometry)
                         scheduleGeometryFlush()
-                    } else { try applyGeometry(columns: columns, rows: rows) }
+                    } else { try applyGeometry(columns: columns, rows: rows, imageGeometry: message.imageGeometry) }
                 case "stop":
                     guard message.generation == generation else { throw SessionHostError.invalidFrame }
                     stop()
                 case "configure":
                     guard let lines = message.scrollbackLines, (0...100_000).contains(lines),
                           message.generation == generation else { throw SessionHostError.invalidFrame }
+                    if let geometry = message.imageGeometry {
+                        guard geometry.isValid else { throw SessionHostError.invalidFrame }
+                        if var pending = pendingGeometry {
+                            pending.imageGeometry = geometry
+                            pendingGeometry = pending
+                        }
+                        if imageGeometry != geometry {
+                            try applyGeometry(columns: emulator.cols, rows: emulator.rows, imageGeometry: geometry)
+                        }
+                    }
                     emulator.changeScrollback(lines)
                 case "detach": disconnect()
                 default: throw SessionHostError.invalidFrame
@@ -220,10 +252,11 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
         guard let geometry = pendingGeometry else { return }
         pendingGeometry = nil
         guard !stopping else { return }
-        try applyGeometry(columns: geometry.columns, rows: geometry.rows)
+        try applyGeometry(columns: geometry.columns, rows: geometry.rows, imageGeometry: geometry.imageGeometry)
     }
 
-    private func applyGeometry(columns: Int, rows: Int) throws {
+    private func applyGeometry(columns: Int, rows: Int, imageGeometry: SessionHostImageGeometry? = nil) throws {
+        if let imageGeometry { self.imageGeometry = imageGeometry }
         let changed = emulator.cols != columns || emulator.rows != rows
         emulator.resize(cols: columns, rows: rows)
         var size = getWindowSize()
@@ -236,7 +269,7 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
         sequence &+= 1
         sendToClient(.init(kind: "geometry", bytes: checkpoint?.bytes, columns: columns, rows: rows,
                            generation: generation, sequence: sequence,
-                           omittedScrollbackLines: checkpoint?.omittedScrollbackLines))
+                           omittedScrollbackLines: checkpoint?.omittedScrollbackLines, imageGeometry: imageGeometry))
     }
 
     private func writeInput(_ bytes: Data) throws {
@@ -433,6 +466,42 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
         if finishing { completeFinish() }
     }
 
+    /// Keep the server endpoint alive while the rejected client authenticates its kernel peer.
+    /// Darwin drops LOCAL_PEERTOKEN after peer close even while the busy frame is buffered.
+    private func rejectClient(_ descriptor: Int32, message: SessionHostMessage) throws {
+        guard rejectedClients.count < 8 else { close(descriptor); return }
+        try SessionHostSocket.write(message, to: descriptor)
+        let flags = fcntl(descriptor, F_GETFL)
+        guard flags >= 0, fcntl(descriptor, F_SETFL, flags | O_NONBLOCK) == 0 else {
+            throw SessionHostError.system("rejected client flags", errno)
+        }
+        let identity = UUID()
+        let source = DispatchSource.makeReadSource(fileDescriptor: descriptor, queue: .main)
+        rejectedClients[descriptor] = (identity, source)
+        source.setCancelHandler { close(descriptor) }
+        source.setEventHandler { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.rejectedClients[descriptor]?.identity == identity else { return }
+                var byte: UInt8 = 0
+                let count = Darwin.read(descriptor, &byte, 1)
+                // EOF or unsolicited input closes this rejected connection. No command is decoded.
+                if count >= 0 || (errno != EAGAIN && errno != EINTR) {
+                    self.closeRejectedClient(descriptor, identity: identity)
+                }
+            }
+        }
+        source.resume()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+            MainActor.assumeIsolated { self?.closeRejectedClient(descriptor, identity: identity) }
+        }
+    }
+
+    private func closeRejectedClient(_ descriptor: Int32, identity: UUID) {
+        guard let rejected = rejectedClients[descriptor], rejected.identity == identity else { return }
+        rejectedClients.removeValue(forKey: descriptor)
+        rejected.source.cancel() // The cancel handler closes this exact descriptor once.
+    }
+
     private func log(_ error: Error) {
         logger.error("\(error.localizedDescription, privacy: .public)")
     }
@@ -460,6 +529,9 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
     private func finish(exitCode: Int32?) {
         guard !finishing else { return }
         finishing = true
+        for (descriptor, rejected) in rejectedClients {
+            closeRejectedClient(descriptor, identity: rejected.identity)
+        }
         cancelInput()
         listenerSource?.cancel()
         close(listener)
@@ -479,10 +551,32 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
     func dataReceived(slice: ArraySlice<UInt8>) {
         emulator.feed(buffer: slice)
         sequence &+= 1
-        sendToClient(.init(kind: "output", bytes: Data(slice), generation: generation, sequence: sequence))
+        sendToClient(.init(kind: "output", bytes: Data(slice), generation: generation, sequence: sequence,
+                           imageGeometry: imageGeometry))
     }
+    private func imageRenderer(for source: Terminal) -> TerminalImageRenderer {
+        TerminalImageRenderer(terminal: source, geometry: TerminalImageGeometry(
+            cellSize: CGSize(width: imageGeometry.cellWidth, height: imageGeometry.cellHeight),
+            viewportSize: CGSize(width: imageGeometry.viewportWidth, height: imageGeometry.viewportHeight),
+            displayScale: imageGeometry.displayScale))
+    }
+
+    func createImage(source: Terminal, data: Data, width: ImageSizeRequest,
+                     height: ImageSizeRequest, preserveAspectRatio: Bool) {
+        imageRenderer(for: source).createImage(source: source, data: data, width: width,
+                                               height: height, preserveAspectRatio: preserveAspectRatio)
+    }
+
+    func createImageFromBitmap(source: Terminal, bytes: inout [UInt8], width: Int, height: Int) {
+        imageRenderer(for: source).createImageFromBitmap(source: source, bytes: &bytes, width: width, height: height)
+    }
+
     func getWindowSize() -> winsize {
-        winsize(ws_row: UInt16(emulator.rows), ws_col: UInt16(emulator.cols), ws_xpixel: 0, ws_ypixel: 0)
+        let pixelWidth = imageGeometry.cellWidth * imageGeometry.displayScale * Double(emulator.cols)
+        let pixelHeight = imageGeometry.cellHeight * imageGeometry.displayScale * Double(emulator.rows)
+        return winsize(ws_row: UInt16(emulator.rows), ws_col: UInt16(emulator.cols),
+                       ws_xpixel: UInt16(min(65_535, max(0, pixelWidth.rounded()))),
+                       ws_ypixel: UInt16(min(65_535, max(0, pixelHeight.rounded()))))
     }
     func send(source: Terminal, data: ArraySlice<UInt8>) {
         // While attached the visible emulator answers queries. Detached sessions still need

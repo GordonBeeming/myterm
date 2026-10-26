@@ -109,6 +109,18 @@ public class LocalProcess {
     // can still be running when the next one starts, and its pause-restore path
     // would otherwise re-suspend reads that belong to the new process.
     private var processGeneration: UInt64 = 0
+    private let deliversTerminationAfterOutput: Bool
+    // Protected by pendingLock, including reads made by the DispatchIO queue.
+    private var outputExitObserved = false
+    private var outputExitCode: Int32 = 0
+    private var ptyReadFinished = false
+    private var outputDrainExpired = false
+    private var outputTerminationNotified = false
+    private var lastOutputProgress: UInt64 = 0
+    private var outputCallbacksInFlight = 0
+    // Created and used only on dispatchQueue after the process monitor reports exit.
+    private var outputDrainTimer: DispatchSourceTimer?
+    private let outputDrainIdleNanoseconds: UInt64 = 3_000_000_000
 
     #if false //canImport(Subprocess)
     // Swift Subprocess related properties
@@ -124,19 +136,29 @@ public class LocalProcess {
      * - Parameter dispatchQueue: this is the queue that will be used to post data received from the
      * child process when calling the `send(dataReceived:)` delegate method.  If the value provided is `nil`,
      * then this will default to `DispatchQueue.main`
+     * - Parameter deliversTerminationAfterOutput: Opt in to reporting exit only after PTY EOF and queued
+     * output delivery. After shell exit, a descendant-held PTY is closed after three seconds without
+     * received bytes. Already-collected output is always delivered before the exit callback.
      */
-    public init (delegate: LocalProcessDelegate, dispatchQueue: DispatchQueue? = nil)
+    public init (delegate: LocalProcessDelegate, dispatchQueue: DispatchQueue? = nil,
+                 deliversTerminationAfterOutput: Bool = false)
     {
         self.delegate = delegate
         self.dispatchQueue = dispatchQueue ?? DispatchQueue.main
         self.readQueue = DispatchQueue(label: "sender")
         self.usesMainQueue = self.dispatchQueue === DispatchQueue.main
+        self.deliversTerminationAfterOutput = deliversTerminationAfterOutput
     }
 
     // Returns false when the backlog passed the high-water mark; the caller
     // must then skip re-arming the PTY read (drainReceivedData resumes it).
-    private func enqueueReceivedData(_ bytes: [UInt8]) -> Bool {
+    private func enqueueReceivedData(_ bytes: [UInt8], generation: UInt64) -> Bool {
         pendingLock.lock()
+        guard processGeneration == generation else { pendingLock.unlock(); return false }
+        if deliversTerminationAfterOutput, outputDrainExpired || outputTerminationNotified {
+            pendingLock.unlock()
+            return false
+        }
         pendingChunks.append(bytes)
         pendingBytes += bytes.count
         let keepReading = pendingBytes < pendingHighWaterBytes
@@ -161,11 +183,21 @@ public class LocalProcess {
     // read is the only thing that can deliver another byte, so a caller that
     // clears the flag without arming one strands the session with no way back.
     private func resumePtyRead() -> Bool {
-        guard running, let io else { return false }
-        io.read(offset: 0, length: readSize, queue: readQueue) { [weak self] done, data, errno in
-            self?.childProcessRead(done: done, data: data, errno: errno)
-        }
+        pendingLock.lock()
+        let drainingExit = deliversTerminationAfterOutput && outputExitObserved && !ptyReadFinished
+        pendingLock.unlock()
+        guard running || drainingExit, let io else { return false }
+        armPtyRead(io)
         return true
+    }
+
+    private func armPtyRead(_ io: DispatchIO, generation: UInt64? = nil) {
+        pendingLock.lock()
+        let generation = generation ?? processGeneration
+        pendingLock.unlock()
+        io.read(offset: 0, length: readSize, queue: readQueue) { [weak self] done, data, errno in
+            self?.childProcessRead(done: done, data: data, errno: errno, generation: generation)
+        }
     }
 
     private func drainReceivedData() {
@@ -199,6 +231,7 @@ public class LocalProcess {
                 pendingBytes = 0
                 pendingScheduled = false
                 pendingLock.unlock()
+                notifyTerminationAfterOutputIfReady()
                 return
             }
             pendingLock.unlock()
@@ -298,13 +331,39 @@ public class LocalProcess {
 
     /* Total number of bytes read */
     var totalRead = 0
-    func childProcessRead (done: Bool, data: DispatchData?, errno: Int32) {
+    func childProcessRead (done: Bool, data: DispatchData?, errno: Int32, generation: UInt64? = nil) {
+        pendingLock.lock()
+        let generation = generation ?? processGeneration
+        guard self.processGeneration == generation else { pendingLock.unlock(); return }
+        pendingLock.unlock()
+        var admittedOutput = false
+        if deliversTerminationAfterOutput {
+            pendingLock.lock()
+            let ignore = processGeneration != generation || outputDrainExpired || outputTerminationNotified
+            if !ignore, let data, !data.isEmpty {
+                lastOutputProgress = DispatchTime.now().uptimeNanoseconds
+                outputCallbacksInFlight += 1
+                admittedOutput = true
+            }
+            pendingLock.unlock()
+            if ignore { return }
+        }
+        defer {
+            if admittedOutput {
+                pendingLock.lock()
+                if processGeneration == generation { outputCallbacksInFlight -= 1 }
+                pendingLock.unlock()
+                dispatchQueue.async { [weak self] in self?.notifyTerminationAfterOutputIfReady() }
+            }
+        }
         guard let data else {
+            if done, deliversTerminationAfterOutput {
+                recordPtyReadFinished(generation: generation)
+                return
+            }
             // Re-schedule the read on transient errors to keep the chain alive
             if !done, running {
-                io?.read(offset: 0, length: readSize, queue: readQueue) { [weak self] done, data, errno in
-                    self?.childProcessRead(done: done, data: data, errno: errno)
-                }
+                if let io { armPtyRead(io, generation: generation) }
             }
             return
         }
@@ -314,6 +373,7 @@ public class LocalProcess {
         }
         
         if data.count == 0 {
+            if deliversTerminationAfterOutput { recordPtyReadFinished(generation: generation); return }
             childfd = -1
             if running {
                 // Keep process monitor alive so the exit event can still deliver
@@ -349,16 +409,14 @@ public class LocalProcess {
         //    otherwise.
         var keepReading = true
         if usesMainQueue {
-            keepReading = enqueueReceivedData(b)
+            keepReading = enqueueReceivedData(b, generation: generation)
         } else {
             dispatchQueue.sync {
                 self.delegate?.dataReceived(slice: b[...])
             }
         }
         if done && keepReading {
-            io?.read(offset: 0, length: readSize, queue: readQueue) { [weak self] done, data, errno in
-                self?.childProcessRead(done: done, data: data, errno: errno)
-            }
+            if let io { armPtyRead(io, generation: generation) }
         }
     }
 
@@ -367,6 +425,7 @@ public class LocalProcess {
 #endif
 
     deinit {
+        outputDrainTimer?.cancel()
 #if os(macOS)
         childMonitor?.cancel()
         childMonitor = nil
@@ -386,8 +445,101 @@ public class LocalProcess {
     {
         var n: Int32 = 0
         waitpid (shellPid, &n, WNOHANG)
+        observedProcessExit(status: n)
+    }
+
+    // Separate the monitor observation from output-drain completion. Kept internal
+    // so deterministic lifecycle tests can exercise a still-open PTY after exit.
+    func observedProcessExit(status n: Int32) {
+        if deliversTerminationAfterOutput {
+            pendingLock.lock()
+            outputExitObserved = true
+            outputExitCode = n
+            lastOutputProgress = max(lastOutputProgress, DispatchTime.now().uptimeNanoseconds)
+            pendingLock.unlock()
+            childStopped()
+            startOutputDrainDeadline()
+            notifyTerminationAfterOutputIfReady()
+            return
+        }
         delegate?.processTerminated(self, exitCode: n)
         childStopped()
+    }
+
+    private func recordPtyReadFinished(generation: UInt64) {
+        pendingLock.lock()
+        guard processGeneration == generation else { pendingLock.unlock(); return }
+        ptyReadFinished = true
+        pendingLock.unlock()
+        // PTY EOF can precede the process monitor. Keep that monitor until it
+        // supplies the exit status, then join it with the queued output delivery.
+        dispatchQueue.async { [weak self] in
+            guard let self else { return }
+            self.pendingLock.lock()
+            let current = self.processGeneration == generation
+            self.pendingLock.unlock()
+            guard current else { return }
+            self.childfd = -1
+            if self.running { self.childStopped(cancelProcessMonitor: false) }
+            self.notifyTerminationAfterOutputIfReady()
+        }
+    }
+
+    private func notifyTerminationAfterOutputIfReady() {
+        guard deliversTerminationAfterOutput else { return }
+        pendingLock.lock()
+        let ready = outputExitObserved && ptyReadFinished && pendingBytes == 0
+            && pendingChunkIndex == pendingChunks.count && outputCallbacksInFlight == 0 && !outputTerminationNotified
+        let status = outputExitCode
+        if ready { outputTerminationNotified = true }
+        pendingLock.unlock()
+        guard ready else { return }
+        outputDrainTimer?.cancel(); outputDrainTimer = nil
+        delegate?.processTerminated(self, exitCode: status)
+    }
+
+    private func startOutputDrainDeadline() {
+        pendingLock.lock()
+        let generation = processGeneration
+        pendingLock.unlock()
+        let timer = DispatchSource.makeTimerSource(queue: dispatchQueue)
+        outputDrainTimer = timer
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            self.pendingLock.lock()
+            guard self.processGeneration == generation else { self.pendingLock.unlock(); return }
+            let now = DispatchTime.now().uptimeNanoseconds
+            let elapsed = now - self.lastOutputProgress
+            let finished = self.ptyReadFinished
+            let delivering = self.readSuspendedForBackpressure || self.pendingBytes > 0
+                || self.pendingChunkIndex < self.pendingChunks.count || self.outputCallbacksInFlight > 0
+            if !finished, delivering {
+                self.pendingLock.unlock()
+                // A consumer backlog is not PTY inactivity. Give queued delivery
+                // and any paused read a chance to progress, without fabricating
+                // received bytes or changing lastOutputProgress.
+                self.outputDrainTimer?.schedule(deadline: .now() + .nanoseconds(Int(self.outputDrainIdleNanoseconds)))
+                return
+            }
+            if !finished, elapsed >= self.outputDrainIdleNanoseconds {
+                self.outputDrainExpired = true
+                self.ptyReadFinished = true
+            }
+            let expired = self.outputDrainExpired
+            self.pendingLock.unlock()
+            if expired {
+                // A descendant can hold the slave open after the shell exits.
+                // Cancel only this runner's read, then deliver every collected chunk.
+                self.io?.close(flags: .stop)
+                self.childfd = -1
+            } else if !finished {
+                self.outputDrainTimer?.schedule(deadline: .now() + .nanoseconds(Int(self.outputDrainIdleNanoseconds - elapsed)))
+                return
+            }
+            self.notifyTerminationAfterOutputIfReady()
+        }
+        timer.schedule(deadline: .now() + .nanoseconds(Int(outputDrainIdleNanoseconds)))
+        timer.resume()
     }
 
     /// Indicates if the child process is currently running
@@ -419,7 +571,11 @@ public class LocalProcess {
         pendingBytes = 0
         pendingScheduled = false
         readSuspendedForBackpressure = false
+        outputExitObserved = false; ptyReadFinished = false; outputDrainExpired = false
+        outputTerminationNotified = false; lastOutputProgress = 0
+        outputCallbacksInFlight = 0
         pendingLock.unlock()
+        outputDrainTimer?.cancel(); outputDrainTimer = nil
 
 
         #if false //canImport(Subprocess)
@@ -472,9 +628,7 @@ public class LocalProcess {
             }
             io.setLimit(lowWater: 1)
             io.setLimit(highWater: readSize)
-            io.read(offset: 0, length: readSize, queue: readQueue) { [weak self] done, data, errno in
-                self?.childProcessRead(done: done, data: data, errno: errno)
-            }
+            armPtyRead(io)
 
             // Start subprocess with swift-subprocess asynchronously
             Task {
@@ -573,9 +727,7 @@ public class LocalProcess {
             }
             io.setLimit(lowWater: 1)
             io.setLimit(highWater: readSize)
-            io.read(offset: 0, length: readSize, queue: readQueue) { [weak self] done, data, errno in
-                self?.childProcessRead(done: done, data: data, errno: errno)
-            }
+            armPtyRead(io)
         }
     }
 
