@@ -70,6 +70,8 @@ final class KeyChordTableTests: XCTestCase {
         ("nextWorkspace", MyTermCommandShortcuts.nextWorkspace),
         ("toggleSidebar", MyTermCommandShortcuts.toggleSidebar),
         ("showNotifications", MyTermCommandShortcuts.showNotifications),
+        ("quickJump", MyTermCommandShortcuts.quickJump),
+        ("sessionInbox", MyTermCommandShortcuts.sessionInbox),
         ("newTerminalTab", MyTermCommandShortcuts.newTerminalTab),
         ("newBrowserTab", MyTermCommandShortcuts.newBrowserTab),
         ("renameTab", MyTermCommandShortcuts.renameTab),

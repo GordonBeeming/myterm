@@ -282,9 +282,26 @@ final class CompanionServices {
             stage = .authorizationURL
             let loginURL = try attempt.loginURL(deviceName: deviceName, deviceKind: "client")
             stage = .browserSession
-            let callback = try await browserAuthentication.authenticate(
-                url: loginURL, callbackScheme: AppConfiguration.urlScheme
-            )
+            let callback: URL
+            #if DEBUG && targetEnvironment(simulator)
+            if let configuration = try DevTestAuthorizationConfiguration.resolve(
+                environment: ProcessInfo.processInfo.environment, supportedBuild: true,
+                relay: relay, redirectURI: redirect
+            ) {
+                callback = try await RelayHTTPClient(endpoint: relay).devTestAuthorizationCallback(
+                    configuration: configuration, attempt: attempt, deviceName: deviceName)
+            } else {
+                callback = try await browserAuthentication.authenticate(
+                    url: loginURL, callbackScheme: AppConfiguration.urlScheme)
+            }
+            #else
+            // An unsupported explicit request must never silently enter the passkey workflow.
+            if let flag = ProcessInfo.processInfo.environment["MYTERM_DEV_TEST_AUTH_ENABLED"], flag != "0" {
+                throw DevTestAuthorizationError.unsupportedBuild
+            }
+            callback = try await browserAuthentication.authenticate(
+                url: loginURL, callbackScheme: AppConfiguration.urlScheme)
+            #endif
             stage = .callbackValidation
             if let failure = attempt.callbackValidationFailure(from: callback) {
                 callbackFailure = failure
@@ -431,6 +448,7 @@ final class CompanionServices {
             // Only here. Pruning against a freshly loaded host list would erase the user's aliases
             // any time the keychain read failed once.
             machinePreferencesStore.forget(SavedConnectionID(host))
+            TerminalDraftStore.shared.forget(SavedConnectionID(host))
             machinePreferences = machinePreferencesStore.all()
         } catch { errorMessage = error.localizedDescription }
     }
@@ -570,6 +588,7 @@ final class CompanionServices {
             return "The sign-in response was rejected because \(callbackFailure.clientDescription). Start pairing again."
         }
         let detail: String
+        if let devTest = error as? DevTestAuthorizationError { return devTest.localizedDescription }
         if let browser = error as? BrowserAuthenticationError {
             detail = browser.localizedDescription
         } else if let remote = error as? RemoteError {
@@ -592,6 +611,7 @@ final class CompanionServices {
     }
 
     private static func sanitizedSignInReason(_ error: Error) -> String {
+        if let devTest = error as? DevTestAuthorizationError { return "dev_test_" + devTest.rawValue }
         if let browser = error as? BrowserAuthenticationError { return browser.rawValue }
         guard let remote = error as? RemoteError else {
             let value = error as NSError

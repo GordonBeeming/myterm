@@ -7,7 +7,7 @@ final class LiveDeviceTerminalTests: XCTestCase {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["MYTERM_LIVE_DEVICE_TEST"] == "1",
                           "Requires an explicitly selected paired development Mac and physical device.")
         let app = XCUIApplication()
-        app.launchArguments = ["-workspacePresentation", "adaptive"]
+        app.launchArguments = ["-workspacePresentation", "adaptive", "-showsSessionInbox", "YES"]
         app.launch()
         let hostName = ProcessInfo.processInfo.environment["MYTERM_LIVE_HOST_NAME"] ?? "blastoise"
         let host = app.staticTexts[hostName].firstMatch
@@ -20,8 +20,16 @@ final class LiveDeviceTerminalTests: XCTestCase {
         let workspaceBar = app.navigationBars.matching(
             NSPredicate(format: "identifier MATCHES %@", "^Workspace [0-9]+$")
         ).firstMatch
-        XCTAssertTrue(workspaceBar.waitForExistence(timeout: 10),
-                      "The automatically named workspace must open after creation")
+        guard workspaceBar.waitForExistence(timeout: 10) else {
+            XCTFail("The automatically named workspace must open after creation from the session inbox")
+            return
+        }
+        XCTAssertTrue(app.buttons["manage-workspace"].waitForExistence(timeout: 5),
+                      "Creation must reveal the workspace detail controls, not only add an inbox row")
+        let createdWorkspace = XCTAttachment(screenshot: app.screenshot())
+        createdWorkspace.name = "live-created-workspace-opened-from-inbox"
+        createdWorkspace.lifetime = .keepAlways
+        add(createdWorkspace)
         let name = workspaceBar.identifier
         XCTAssertFalse(app.navigationBars.buttons[name].exists,
                        "Workspace creation must not push another copy of its own detail page")

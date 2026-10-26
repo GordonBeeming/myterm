@@ -62,20 +62,22 @@ extension AppModel {
                                 let kind: RemoteTabKind = tab.terminalSession == nil ? .browser : .terminal
                                 return RemoteTabProjection(
                                     id: tab.id,
-                                    title: tab.customTitle ?? (kind == .terminal ? "Terminal" : "Browser"),
+                                    title: tab.customTitle ?? tab.automaticDisplayTitle,
                                     kind: kind,
                                     terminalSessionID: tab.terminalSession?.id,
                                     browserURL: tab.browserSession?.url,
                                     workingDirectory: tab.terminalSession?.workingDirectory,
                                     isRunning: tab.terminalSession.flatMap { terminalSessions[$0.id]?.isRunning },
                                     agentActivity: agentAttention[tab.id],
+                                    agentActivityDate: agentInbox.history.first { $0.tabID == tab.id }?.date,
                                     browserProfileStoreID: tab.browserSession?.profile?.persistentStoreID
                                 )
                             }
                         )
                     }
                 )
-            }
+            },
+            terminalSnippets: terminalSnippetStore.snippets
         )
     }
 
@@ -86,6 +88,32 @@ extension AppModel {
         switch command.operation {
         case .browserInteract, .browserCookiePull, .browserCookiePush:
             throw CompanionCommandError.unsupportedOperation
+        case .snippetUpsert:
+            guard command.payload.count <= 96 * 1_024 else { throw CompanionCommandError.invalidPayload }
+            let snippet: TerminalSnippet = try decodeCompanionPayload(command.payload)
+            if let existing = terminalSnippetStore.snippets.first(where: { $0.id == snippet.id }),
+               let existingWorkspaceID = existing.workspaceID {
+                guard metadata.workspaceID == existingWorkspaceID else { throw CompanionCommandError.wrongTarget }
+            }
+            if let workspaceID = snippet.workspaceID {
+                guard metadata.workspaceID == workspaceID,
+                      store.workspaces.contains(where: { $0.id.rawValue == workspaceID }) else {
+                    throw CompanionCommandError.wrongTarget
+                }
+            }
+            guard terminalSnippetStore.save(snippet) else { throw CompanionCommandError.invalidPayload }
+            return try encodeCompanionResult(terminalSnippetStore.snippets)
+
+        case .snippetDelete:
+            guard command.payload.count <= 1_024 else { throw CompanionCommandError.invalidPayload }
+            let payload: RemoteIdentifierResult = try decodeCompanionPayload(command.payload)
+            if let entry = terminalSnippetStore.snippets.first(where: { $0.id == payload.id }),
+               let workspaceID = entry.workspaceID {
+                guard metadata.workspaceID == workspaceID else { throw CompanionCommandError.wrongTarget }
+            }
+            terminalSnippetStore.remove(payload.id)
+            return try encodeCompanionResult(terminalSnippetStore.snippets)
+
         case .workspaceCreate:
             let payload: RemoteWorkspaceCreatePayload = try decodeCompanionPayload(command.payload)
             if let folderID = payload.folderID {

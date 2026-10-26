@@ -56,6 +56,21 @@ Subsequent sign-ins use the passkey stored by Apple Passwords or another credent
 
 LAN-only hosting uses the same flow. It still requires a hostname and a certificate trusted by the phone. A QR code supplies connection details but does not bypass TLS validation.
 
+### Opt-in authentication for automated simulator tests
+
+Passkeys remain the default. Debug iOS Simulator builds can use a separate test credential when a simulator cannot complete a passkey ceremony. Enable this mode explicitly at both ends:
+
+| Process | Environment variables |
+|---|---|
+| Development relay | `MYTERM_RELAY_DEV_TEST_AUTH_ENABLED=1` and `MYTERM_RELAY_DEV_TEST_AUTH_TOKEN` |
+| Debug simulator app | `MYTERM_DEV_TEST_AUTH_ENABLED=1` and `MYTERM_DEV_TEST_AUTH_TOKEN` |
+
+Both token variables must contain the same randomly generated credential: 32–512 bytes encoded as unpadded base64url. Keep it in a secret store and inject it into the processes; never put it in a URL, source file, screenshot or test log. The local test credential is stored in the `ai-secrets` vault as **MyTerm Dev - automated test authentication**. When launching through `simctl`, prefix the app variables with `SIMCTL_CHILD_` and use `op run` to resolve their secret references.
+
+The relay accepts this mode only on HTTPS `localhost`, a `.localhost` hostname, or `myterm-relay-dev.gordonbeeming.dev`. It rejects production origins and requires an existing owner with an enrolled passkey. Release builds and physical-device builds cannot use the simulator path. An invalid explicit configuration fails instead of silently opening passkey sign-in.
+
+The test credential authorizes a normal one-use PKCE code through `POST /v1/dev-test/authorize`. The usual token exchange, encrypted pairing and approval on the Mac follow. Disabling the mode removes that authorization endpoint; devices already enrolled retain their normal revocable credentials. Unset the flags to return new sign-ins to passkeys.
+
 ## Pair and use a Mac
 
 Connect the Mac to its relay and start Pair Mode in Companion settings. Scan that QR code in the phone app, or paste the pairing link when using a simulator. Complete relay sign-in, then approve the phone on the Mac.
@@ -72,9 +87,9 @@ When a connection fault needs explaining, turn on the Mac's own connection log f
 
 The terminal follows live output even in view-only mode. Scrolling up pauses following so you can read earlier output. **Jump to live** resumes it. Each device keeps its own reading position through screen updates, keyboard changes, and reconnects, without resizing the Mac's terminal while viewing.
 
-Use **Compose** beside the control button to write a longer prompt or command in a native text editor. **Insert into terminal** pastes the text; **Insert + Enter** also sends Return. Sending requires control, but drafting does not. Drafts stay in the current app window until cleared, including after insertion or dismissal. They are not saved across app restarts. Terminals that support bracketed paste receive the text as a paste; the composer warns when multiple lines may run commands in a terminal without that support.
+Use **Compose** beside the control button to write a longer prompt or command in a native text editor. **Insert into terminal** pastes the text; **Insert + Enter** also sends Return. Sending requires control, but drafting does not. Drafts are persisted by pairing, workspace and terminal, including after insertion or dismissal. Interrupted insertions restore as unconfirmed and are never replayed automatically. Multiline insertion requires bracketed paste. Storage limits and uncertainty messages are described in [the session workflow guide](AGENT_WORKFLOWS.md).
 
-Browser tabs offer Native proxy and Mac rendered modes. Localhost tabs start in Mac rendered mode. Native mode accepts public destinations only; use Mac rendered mode for private-network websites. The modes have separate sessions, so switching may require signing into the website again. See [the browser prototype notes](REMOTE_BROWSER_PROTOTYPE.md) for controls, artifact access, and the native mode's WebRTC limitation. The plus button beside a folder creates a workspace that inherits that folder's settings.
+Browser tabs offer Native proxy and Mac rendered modes. Localhost tabs start in Mac rendered mode. Native mode accepts public destinations only; use Mac rendered mode for private-network websites. The modes synchronize cookies when Share sign-ins with companion is enabled; see the browser prototype notes for profile-sharing constraints. See [the browser prototype notes](REMOTE_BROWSER_PROTOTYPE.md) for controls, artifact access, and the native mode's WebRTC limitation. The plus button beside a folder creates a workspace that inherits that folder's settings.
 
 ## Notifications
 

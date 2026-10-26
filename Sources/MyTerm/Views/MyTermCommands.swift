@@ -45,6 +45,8 @@ enum MyTermCommandShortcuts {
     static let previousWorkspace = KeyChord(key: "[", modifiers: [.command, .control])
     static let nextWorkspace = KeyChord(key: "]", modifiers: [.command, .control])
     static let toggleSidebar = KeyChord(key: "b", modifiers: [.command])
+    static let quickJump = KeyChord(key: "p", modifiers: [.command])
+    static let sessionInbox = KeyChord(key: "i", modifiers: [.command, .option])
     static let showNotifications = KeyChord(key: "i", modifiers: [.command, .shift])
 
     // Edit
@@ -87,7 +89,7 @@ enum MyTermCommandShortcuts {
         globalSettings,
         newWorkspace, newFolder, renameWorkspace,
         decreaseWorkspaceFontSize, increaseWorkspaceFontSize,
-        closeWorkspace, previousWorkspace, nextWorkspace, toggleSidebar, showNotifications,
+        closeWorkspace, previousWorkspace, nextWorkspace, toggleSidebar, showNotifications, quickJump, sessionInbox,
         find,
         newTerminalTab, newBrowserTab, renameTab, previousTab, nextTab,
         togglePaneFullScreen, splitRight, splitBelow, closeFocusedPaneOrTab,
@@ -122,6 +124,11 @@ struct MyTermCommands: Commands {
         }
 
         CommandMenu("Workspace") {
+            Button("Jump to a Tab…") { startup.model?.isSessionJumpPresented = true }
+                .shortcut(MyTermCommandShortcuts.quickJump)
+            Button("Session Inbox…") { startup.model?.isSessionInboxPresented = true }
+                .shortcut(MyTermCommandShortcuts.sessionInbox)
+            Divider()
             Button("New Workspace") { startup.model?.createWorkspace() }
                 .shortcut(MyTermCommandShortcuts.newWorkspace)
             Button("New Folder…") { startup.model?.beginCreatingFolder() }
@@ -164,6 +171,10 @@ struct MyTermCommands: Commands {
         }
 
         CommandMenu("Tabs") {
+            Button("Saved Prompts and Commands…") {
+                startup.model?.isTerminalSnippetsPresented = true
+            }
+            Divider()
             Button("New Terminal Tab") { startup.model?.createTerminalTab() }
                 .shortcut(MyTermCommandShortcuts.newTerminalTab)
             Button("New Browser Tab") { startup.model?.createBrowserTab() }

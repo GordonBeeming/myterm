@@ -667,6 +667,52 @@ final class AgentLifecycleTests: XCTestCase {
         XCTAssertTrue(relaunched.model.liveAgentTabs.isEmpty, "nothing has reported yet")
     }
 
+    func testRestoredFinishedSnapshotDoesNotReopenReadCompletionOrChangeHistory() throws {
+        let fixture = try makeFixture(isActive: false)
+        fixture.emit(.finished, session: "restored")
+        fixture.model.markAsRead(tabID: fixture.tabID)
+        let history = fixture.model.agentInbox.history
+        fixture.session.emit(.restoredAgentActivity(AgentActivityReport(agent: "claude",
+            activity: .finished, sessionID: "restored")))
+        XCTAssertEqual(fixture.model.agentInbox.history, history,
+                       "A helper attachment must not file another event with a fresh timestamp")
+        XCTAssertNil(fixture.model.agentActivity(forTab: fixture.tabID))
+        XCTAssertNil(fixture.model.agentAttention(forTab: fixture.tabID))
+        XCTAssertEqual(fixture.model.liveAgentTabs[fixture.tabID], "claude")
+    }
+
+    func testRestoredFinishedSnapshotPreservesExistingUnreadEventIdentity() throws {
+        let fixture = try makeFixture(isActive: false)
+        fixture.emit(.finished, session: "restored")
+        let history = fixture.model.agentInbox.history
+        fixture.session.emit(.restoredAgentActivity(AgentActivityReport(agent: "claude",
+            activity: .finished, sessionID: "restored")))
+        XCTAssertEqual(fixture.model.agentInbox.history, history)
+        XCTAssertEqual(fixture.model.agentActivity(forTab: fixture.tabID), .finished)
+        XCTAssertEqual(fixture.model.agentAttention(forTab: fixture.tabID), .finished)
+    }
+
+    func testRestoredPendingPermissionsRebuildStateWithoutFilingFreshQuestions() throws {
+        let fixture = try makeFixture(isActive: false)
+        let first = String(repeating: "a", count: 64), second = String(repeating: "b", count: 64)
+        for tool in [first, second] {
+            fixture.session.emit(.restoredAgentActivity(AgentActivityReport(agent: "codex",
+                activity: .awaitingInput, sessionID: "restored", toolRequestID: tool)))
+        }
+        XCTAssertTrue(fixture.model.agentInbox.history.isEmpty)
+        XCTAssertEqual(fixture.model.agentAttention(forTab: fixture.tabID), .awaitingInput)
+        XCTAssertEqual(fixture.model.liveAgentTabs[fixture.tabID], "codex")
+        fixture.session.emit(.agentActivity(AgentActivityReport(agent: "codex", activity: .working,
+            sessionID: "restored", toolRequestID: first)))
+        XCTAssertEqual(fixture.model.agentAttention(forTab: fixture.tabID), .awaitingInput,
+                       "Restoring must retain the other pending permission request")
+        fixture.session.emit(.agentActivity(AgentActivityReport(agent: "codex", activity: .working,
+            sessionID: "restored", toolRequestID: second)))
+        XCTAssertEqual(fixture.model.agentAttention(forTab: fixture.tabID), .working)
+        fixture.emit(.finished, agent: "codex", session: "restored")
+        XCTAssertEqual(fixture.model.agentInbox.history.count, 1, "A later live completion remains a new event")
+    }
+
     // MARK: - Fixture
 
     @MainActor

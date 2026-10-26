@@ -3,10 +3,14 @@ import Foundation
 public struct RemoteWorkspaceProjection: Codable, Equatable, Sendable {
     public let folders: [RemoteFolderProjection]
     public let workspaces: [RemoteWorkspaceItem]
+    /// nil identifies an older host without a shared snippet catalog.
+    public let terminalSnippets: [TerminalSnippet]?
 
-    public init(folders: [RemoteFolderProjection], workspaces: [RemoteWorkspaceItem]) {
+    public init(folders: [RemoteFolderProjection], workspaces: [RemoteWorkspaceItem],
+                terminalSnippets: [TerminalSnippet]? = nil) {
         self.folders = folders
         self.workspaces = workspaces
+        self.terminalSnippets = terminalSnippets
     }
 }
 
@@ -136,6 +140,8 @@ public struct RemoteTabProjection: Codable, Equatable, Sendable {
     public let workingDirectory: URL?
     public let isRunning: Bool?
     public let agentActivity: AgentActivity?
+    /// Host event time, absent when connected to an older host.
+    public let agentActivityDate: Date?
     /// Identifies the website data store backing this browser tab on the host, so a companion can
     /// key its own store the same way and inherit the workspace's browser-data boundary instead of
     /// inventing one. Absent from hosts that predate companion cookie sharing.
@@ -144,7 +150,7 @@ public struct RemoteTabProjection: Codable, Equatable, Sendable {
     public init(id: TabID, title: String, kind: RemoteTabKind,
                 terminalSessionID: TerminalSessionID?, browserURL: URL? = nil,
                 workingDirectory: URL? = nil, isRunning: Bool? = nil,
-                agentActivity: AgentActivity? = nil,
+                agentActivity: AgentActivity? = nil, agentActivityDate: Date? = nil,
                 browserProfileStoreID: UUID? = nil) {
         self.id = id
         self.title = title
@@ -154,6 +160,7 @@ public struct RemoteTabProjection: Codable, Equatable, Sendable {
         self.workingDirectory = workingDirectory
         self.isRunning = isRunning
         self.agentActivity = agentActivity
+        self.agentActivityDate = agentActivityDate
         self.browserProfileStoreID = browserProfileStoreID
     }
 }

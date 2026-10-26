@@ -230,6 +230,9 @@ extension TerminalView {
         let newRows = Int (newSize.height / cellDimension.height)
         let newCols = Int (getEffectiveWidth (size: newSize) / cellDimension.width)
         
+        if terminalDelegate?.terminalResizeRequested(source: self, columns: newCols, rows: newRows) == true {
+            return false
+        }
         if newCols != terminal.cols || newRows != terminal.rows {
             selection.active = false
             terminal.resize (cols: newCols, rows: newRows)
@@ -2332,9 +2335,21 @@ extension TerminalView {
      */
     public func resize (cols: Int, rows: Int)
     {
+        if terminalDelegate?.terminalResizeRequested(source: self, columns: cols, rows: rows) == true { return }
         terminal.resize (cols: cols, rows: rows)
         sizeChanged (source: terminal)
         terminal.softReset()
+    }
+
+    /// Applies transport-authoritative geometry after all earlier output has been parsed.
+    /// It deliberately preserves terminal modes, matching the terminal core's resize.
+    public func applyTerminalGeometry(columns: Int, rows: Int) {
+        selection.active = false
+        terminal.resize(cols: columns, rows: rows)
+        accessibility.invalidate()
+        search.invalidate()
+        updateScroller()
+        queuePendingDisplay()
     }
 
     /// Recomputes the terminal grid from the current native view size even when
@@ -2345,6 +2360,19 @@ extension TerminalView {
         automaticallyResizesTerminal = true
         defer { automaticallyResizesTerminal = previous }
         _ = processSizeChange(newSize: frame.size)
+    }
+
+    public func fittedTerminalGeometry() -> (columns: Int, rows: Int) {
+#if os(macOS)
+        guard let dimension = cellDimension else { return (terminal.cols, terminal.rows) }
+#else
+        let dimension = cellDimension
+#endif
+        guard dimension.width > 0, dimension.height > 0 else {
+            return (terminal.cols, terminal.rows)
+        }
+        return (max(2, Int(getEffectiveWidth(size: frame.size) / dimension.width)),
+                max(1, Int(frame.height / dimension.height)))
     }
 
     /**
@@ -2518,204 +2546,24 @@ extension TerminalView {
                 rows: Int ((size.height+cellDimension.height-1)/cellDimension.height))
     }
     
+    /// Measured from this view, including its current font, viewport and actual backing scale.
+    public var imageRenderingGeometry: TerminalImageGeometry {
+        TerminalImageGeometry(cellSize: CGSize(width: cellDimension.width, height: cellDimension.height),
+                              viewportSize: frame.size, displayScale: getImageScale())
+    }
+
     public func createImageFromBitmap(source: Terminal, bytes: inout [UInt8], width: Int, height: Int) {
-        let rgbColorSpace = CGColorSpaceCreateDeviceRGB()
-        let bitmapInfo: CGBitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)
-        let pixelData = NSData(bytes: bytes, length: bytes.count)
-        guard let providerRef: CGDataProvider = CGDataProvider(data: pixelData) else {
-            return
-        }
-        guard let cgimage: CGImage = CGImage(
-                width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
-                bytesPerRow: width * 4, space: rgbColorSpace, bitmapInfo: bitmapInfo,
-                provider: providerRef, decode: nil, shouldInterpolate: true,
-                intent: .defaultIntent) else {
-            return
-        }
-        
-        let image = TTImage (cgImage: cgimage, size: CGSize (width: width, height: height))
-        if let context = terminal.kittyPlacementContext {
-            insertImage (image, width: context.widthRequest, height: context.heightRequest, preserveAspectRatio: context.preserveAspectRatio)
-        } else {
-            insertImage (image, width: CGFloat (width) > frame.width ? .percent(100) : .auto, height: .auto, preserveAspectRatio: true)
-        }
+        TerminalImageRenderer(terminal: source, geometry: authoritativeImageGeometry ?? imageRenderingGeometry)
+            .createImageFromBitmap(source: source, bytes: &bytes, width: width, height: height)
     }
-   
-    public func createImage (source: Terminal, data: Data, width widthRequest: ImageSizeRequest, height heightRequest: ImageSizeRequest, preserveAspectRatio: Bool)
-    {
-        guard let img = TTImage(data: data) else {
-            return
-        }
-        insertImage (img, width: widthRequest, height: heightRequest, preserveAspectRatio: preserveAspectRatio)
+
+    public func createImage(source: Terminal, data: Data, width: ImageSizeRequest,
+                            height: ImageSizeRequest, preserveAspectRatio: Bool) {
+        TerminalImageRenderer(terminal: source, geometry: authoritativeImageGeometry ?? imageRenderingGeometry)
+            .createImage(source: source, data: data, width: width, height: height,
+                         preserveAspectRatio: preserveAspectRatio)
     }
-    
-    // Inserts the specified image at the current buffer position (x, y) using the specified size requests
-    // and aspect ratio request.   The insertion is done by adding slices of the image, one per line
-    // to the buffer.
-    func insertImage (_ image: TTImage, width widthRequest: ImageSizeRequest, height heightRequest: ImageSizeRequest, preserveAspectRatio: Bool)
-    {
-        let buffer = terminal.buffer
-        var img = image
-        let displayScale = getImageScale ()
-        let placementContext = terminal.kittyPlacementContext
-        
-        // Converts a size request in a single dimension into an absolute pixel value, where
-        // the `dim` is the request, `regionSize` is the available view space, and `imageSize` is
-        // the size of the image along the dimension being requested
-        func getPixels (fromDim dim: ImageSizeRequest, regionSize: CGFloat, imageSize: CGFloat, cellSize: CGFloat) -> CGFloat {
-            switch dim {
-            case .auto:
-                return imageSize/displayScale
-            case .cells(let n):
-                return cellSize * CGFloat (n)
-            case .pixels(let n):
-                return CGFloat (n)
-            case .percent(let pct):
-                return CGFloat (pct) * 0.01 * regionSize
-            }
-        }
 
-        func pixelSizeForImage (_ image: TTImage) -> CGSize? {
-            #if os(macOS)
-            for rep in image.representations {
-                if rep.pixelsWide > 0 && rep.pixelsHigh > 0 {
-                    return CGSize(width: rep.pixelsWide, height: rep.pixelsHigh)
-                }
-            }
-            return nil
-            #else
-            if let cgImage = image.cgImage {
-                return CGSize(width: cgImage.width, height: cgImage.height)
-            }
-            let scale = image.scale
-            if scale > 0 {
-                return CGSize(width: image.size.width * scale, height: image.size.height * scale)
-            }
-            return nil
-            #endif
-        }
-
-        let pixelSize = placementContext == nil ? nil : pixelSizeForImage(img)
-        let widthImageSize: CGFloat
-        let heightImageSize: CGFloat
-        switch widthRequest {
-        case .auto:
-            widthImageSize = pixelSize?.width ?? img.size.width
-        default:
-            widthImageSize = img.size.width
-        }
-        switch heightRequest {
-        case .auto:
-            heightImageSize = pixelSize?.height ?? img.size.height
-        default:
-            heightImageSize = img.size.height
-        }
-
-        var width = getPixels (fromDim: widthRequest, regionSize: frame.width, imageSize: widthImageSize, cellSize: cellDimension.width)
-        var height = getPixels (fromDim: heightRequest, regionSize: frame.height, imageSize: heightImageSize, cellSize: cellDimension.height)
-        
-        if preserveAspectRatio {
-            switch (widthRequest, heightRequest) {
-            case (.auto, .auto):
-                break
-            case (_, .auto):
-                height = (width * img.size.height) / img.size.width
-            case (.auto, _):
-                width = (height * img.size.width) / img.size.height
-            case (_, _):
-                img = scale (image: img, size: CGSize (width: width, height: height))
-            }
-        }
-        
-        let rows = Int (ceil (height/cellDimension.height))
-        let cols = Int (ceil (width/cellDimension.width))
-        let placementRow = buffer.y + buffer.yBase
-        let placementCol = buffer.x
-        if let context = placementContext,
-           let imageId = context.imageId,
-           let placementId = context.placementId {
-            terminal.registerKittyPlacement(imageId: imageId,
-                                            placementId: placementId,
-                                            parentImageId: context.parentImageId,
-                                            parentPlacementId: context.parentPlacementId,
-                                            parentOffsetH: context.parentOffsetH,
-                                            parentOffsetV: context.parentOffsetV,
-                                            pixelOffsetX: context.pixelOffsetX,
-                                            pixelOffsetY: context.pixelOffsetY,
-                                            col: placementCol,
-                                            row: placementRow,
-                                            cols: cols,
-                                            rows: rows,
-                                            zIndex: context.zIndex,
-                                            isVirtual: false)
-        }
-        
-        let stripeSize = CGSize (width: width, height: cellDimension.height)
-        var didScroll = false
-        #if os(iOS) || os(visionOS)
-        var srcY: CGFloat = 0
-        #else
-        var srcY: CGFloat = img.size.height
-        #endif
-        
-        let heightRatio = img.size.height/height
-        for _ in 0..<rows {
-            #if os(macOS)
-            srcY -= cellDimension.height * heightRatio
-            #endif
-            guard let stripe = drawImageInStripe (image: img, srcY: srcY, width: width, srcHeight: cellDimension.height * heightRatio, dstHeight: cellDimension.height, size: stripeSize) else {
-                continue
-            }
-            #if os(iOS) || os(visionOS)
-            srcY += cellDimension.height * heightRatio
-            #endif
-            
-            let attachedImage = AppleImage (image: stripe, width: Int (stripeSize.width), height: Int (cellDimension.height), onCol: terminal.buffer.x)
-            if let context = placementContext {
-                attachedImage.kittyIsKitty = true
-                attachedImage.kittyImageId = context.imageId
-                attachedImage.kittyImageNumber = context.imageNumber
-                attachedImage.kittyPlacementId = context.placementId
-                attachedImage.kittyZIndex = context.zIndex
-                attachedImage.kittyCol = placementCol
-                attachedImage.kittyRow = placementRow
-                attachedImage.kittyCols = cols
-                attachedImage.kittyRows = rows
-                attachedImage.kittyPixelOffsetX = context.pixelOffsetX
-                attachedImage.kittyPixelOffsetY = context.pixelOffsetY
-            }
-            
-            buffer.attachImage(attachedImage, toLineAt: buffer.y+buffer.yBase)
-
-            terminal.updateRange (buffer.y)
-
-            // The buffer.x position would have changed depending on the lineFeedMode (LNM)
-            // for image rendering, we want the x to remain the same
-            let savedX = buffer.x
-            let previousYBase = buffer.yBase
-            let previousLinesTop = buffer.linesTop
-            terminal.cmdLineFeed()
-            if buffer.yBase != previousYBase || buffer.linesTop != previousLinesTop {
-                didScroll = true
-            }
-            buffer.x = savedX
-        }
-        if didScroll {
-            terminal.updateFullScreen()
-        }
-        if let context = placementContext,
-           context.cursorPolicy == 0,
-           !context.isRelative {
-            let moveCols = max(1, cols)
-            let moveRows = max(1, rows)
-            let targetCol = placementCol + moveCols
-            let targetRow = placementRow + moveRows
-            buffer.x = targetCol
-            buffer.y = targetRow - buffer.yBase
-            terminal.restrictCursor()
-        }
-    }
-    
     /// Set to true if the selection is active, false otherwise
     public var selectionActive: Bool {
         get {

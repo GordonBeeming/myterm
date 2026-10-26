@@ -13,6 +13,8 @@ public protocol TerminalEngine: AnyObject {
 @MainActor
 public protocol TerminalProcessSession: AnyObject {
     var isRunning: Bool { get }
+    var isStarting: Bool { get }
+    var survivesApplicationTermination: Bool { get }
     var activeForegroundProcessName: String? { get }
     var onEvent: (@MainActor (TerminalSessionEvent) -> Void)? { get set }
 
@@ -24,6 +26,9 @@ public protocol TerminalProcessSession: AnyObject {
     /// Opens the engine's find bar over the scrollback, if it has one.
     func showFind()
     func terminate()
+    /// Releases the view's attachment while leaving a persistent host running.
+    func detach()
+    func insertLocalText(_ text: String) throws
     func apply(runtimeConfiguration: TerminalRuntimeConfiguration)
     func contentSnapshot(maximumCharacters: Int) -> String
     func setContentChangeHandler(_ handler: (@MainActor () -> Void)?)
@@ -102,6 +107,8 @@ public protocol TerminalRemoteSession: TerminalProcessSession {
 }
 
 public extension TerminalProcessSession {
+    var isStarting: Bool { false }
+    var survivesApplicationTermination: Bool { false }
     var activeForegroundProcessName: String? { nil }
 
     func showFind() {}
@@ -113,6 +120,10 @@ public extension TerminalProcessSession {
     func setContentChangeHandler(_ handler: (@MainActor () -> Void)?) {}
 
     func setPaneActive(_ isActive: Bool) {}
+
+    func detach() { terminate() }
+
+    func insertLocalText(_ text: String) throws { throw TerminalRemoteSessionError.unavailable }
 }
 
 public struct TerminalColor: Equatable, Sendable {
@@ -192,6 +203,9 @@ public struct TerminalSessionConfiguration: Equatable, Sendable {
     public let environment: [String: String]
     public let runtimeConfiguration: TerminalRuntimeConfiguration
     public let restoredOutput: String?
+    public let continuityIdentifier: UUID?
+    public let continuityDirectory: URL?
+    public let continuityHelperURL: URL?
 
     public init(
         shell: URL = TerminalSessionConfiguration.loginShellURL(),
@@ -200,7 +214,10 @@ public struct TerminalSessionConfiguration: Equatable, Sendable {
         initialCommand: String? = nil,
         environment: [String: String] = [:],
         runtimeConfiguration: TerminalRuntimeConfiguration = TerminalRuntimeConfiguration(),
-        restoredOutput: String? = nil
+        restoredOutput: String? = nil,
+        continuityIdentifier: UUID? = nil,
+        continuityDirectory: URL? = nil,
+        continuityHelperURL: URL? = nil
     ) {
         self.shell = shell
         self.workingDirectory = workingDirectory.standardizedFileURL
@@ -209,6 +226,9 @@ public struct TerminalSessionConfiguration: Equatable, Sendable {
         self.environment = environment
         self.runtimeConfiguration = runtimeConfiguration
         self.restoredOutput = restoredOutput
+        self.continuityIdentifier = continuityIdentifier
+        self.continuityDirectory = continuityDirectory
+        self.continuityHelperURL = continuityHelperURL
     }
 
     public static func loginShellURL() -> URL {
@@ -222,12 +242,16 @@ public struct TerminalSessionConfiguration: Equatable, Sendable {
 public enum TerminalSessionEvent: Equatable, Sendable {
     case titleChanged(String)
     case agentActivity(AgentActivityReport)
+    /// An attachment snapshot restores state; it is not a newly occurring agent event.
+    case restoredAgentActivity(AgentActivityReport)
     case workingDirectoryChanged(URL)
     case openURL(URL)
     case processTerminated(exitCode: Int32?)
     case failed(TerminalSessionFailure)
     /// A startup command could not be sent, but the terminal process is still usable.
     case initialCommandFailed(TerminalSessionFailure)
+    case runtimeNotice(String)
+    case idleShellStarted
     /// The process in front of the pane's shell changed. `nil` means the shell has the pane
     /// back, which is the one thing an agent killed without its own hook cannot report.
     case foregroundProcessChanged(String?)

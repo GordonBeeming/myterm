@@ -18,7 +18,24 @@ public enum AgentActivity: String, Codable, Equatable, Hashable, Sendable {
     case exited
 }
 
-public struct AgentActivityReport: Equatable, Hashable, Sendable {
+public struct AgentActivityReport: Codable, Equatable, Hashable, Sendable {
+    private enum CodingKeys: String, CodingKey {
+        case agent, activity, sessionID, workingDirectory, codexLauncher, toolRequestID
+    }
+
+    // Socket reports must obey the same resume-identifier limits as terminal hook reports.
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            agent: try values.decode(String.self, forKey: .agent),
+            activity: try values.decode(AgentActivity.self, forKey: .activity),
+            sessionID: try values.decodeIfPresent(String.self, forKey: .sessionID),
+            workingDirectory: try values.decodeIfPresent(URL.self, forKey: .workingDirectory),
+            codexLauncher: try values.decodeIfPresent(CodexLauncher.self, forKey: .codexLauncher),
+            toolRequestID: try values.decodeIfPresent(String.self, forKey: .toolRequestID)
+        )
+    }
+
     /// The agent that reported, lowercased. "claude" and "codex" are the ones MyTerm installs hooks for.
     public let agent: String
     public let activity: AgentActivity

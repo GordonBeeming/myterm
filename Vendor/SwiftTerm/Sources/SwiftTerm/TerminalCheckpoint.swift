@@ -647,6 +647,11 @@ extension CheckpointImage {
     }
 }
 
+public struct TerminalBoundedCheckpoint {
+    public let bytes: Data
+    public let omittedScrollbackLines: Int
+}
+
 extension Terminal {
     /// Serializes all emulator state needed to continue parsing a future byte suffix.
     /// Delegate references and registered handler closures remain local to each Terminal.
@@ -667,6 +672,35 @@ extension Terminal {
             )
         }
         return data
+    }
+
+    /// Copies the current screen, parser and the newest history that fits the checkpoint
+    /// contract. The running terminal keeps its entire configured history unchanged.
+    public func exportBoundedCheckpoint() throws -> TerminalBoundedCheckpoint {
+        guard kittyPlacementContext == nil else {
+            throw TerminalCheckpointError.corrupt("checkpoint requested during image placement")
+        }
+        let alternateCells = altBuffer.lines.count * cols
+        let encodedCellBudget = max(0, TerminalCheckpointLimits.encodedBytes - 8 * 1_024 * 1_024
+                                    - kittyGraphicsState.totalImageBytes) / CheckpointCellCodec.encodedCellBytes
+        let cellBudget = min(TerminalCheckpointLimits.cells, encodedCellBudget)
+        let availableLines = max(rows, (cellBudget - alternateCells) / cols)
+        var retainedLines = min(normalBuffer.lines.count, availableLines)
+        while true {
+            let state = try makeCheckpointState(maximumNormalLines: retainedLines)
+            try state.validate()
+            let encoder = PropertyListEncoder()
+            encoder.outputFormat = .binary
+            let bytes = try encoder.encode(TerminalCheckpointEnvelope(version: TerminalCheckpointEnvelope.currentVersion, state: state))
+            if bytes.count <= TerminalCheckpointLimits.encodedBytes {
+                return TerminalBoundedCheckpoint(bytes: bytes,
+                    omittedScrollbackLines: state.normalBuffer.linesTop - normalBuffer.totalLinesTrimmed)
+            }
+            guard retainedLines > rows else {
+                throw TerminalCheckpointError.checkpointTooLarge(actual: bytes.count, maximum: TerminalCheckpointLimits.encodedBytes)
+            }
+            retainedLines = rows + (retainedLines - rows) / 2
+        }
     }
 
     /// Replaces emulator state without invoking delegate callbacks. The receiver keeps
@@ -972,14 +1006,23 @@ extension TerminalCheckpointState {
 }
 
 extension Terminal {
-    private func makeCheckpointState() throws -> TerminalCheckpointState {
+    private func makeCheckpointState(maximumNormalLines: Int? = nil) throws -> TerminalCheckpointState {
+        let normal = try normalBuffer.makeCheckpoint(maximumLines: maximumNormalLines)
+        let omitted = normal.linesTop - normalBuffer.totalLinesTrimmed
         let hyperlinkPosition = hyperLinkTracking.map {
-            CheckpointPosition(column: $0.start.col, row: $0.start.row)
+            CheckpointPosition(column: !isCurrentBufferAlternate && $0.start.row < omitted ? 0 : $0.start.col,
+                               row: isCurrentBufferAlternate ? $0.start.row : max(0, $0.start.row - omitted))
+        }
+        var kitty = kittyGraphicsState.makeCheckpoint()
+        if omitted > 0 {
+            for index in kitty.placements.indices where !kitty.placements[index].isAlternateBuffer {
+                kitty.placements[index].row -= omitted
+            }
         }
         return TerminalCheckpointState(
             columns: cols, rows: rows, tabStopWidth: tabStopWidth,
             options: Self.checkpointOptions(options),
-            normalBuffer: try normalBuffer.makeCheckpoint(),
+            normalBuffer: normal,
             alternateBuffer: try altBuffer.makeCheckpoint(),
             alternateActive: isCurrentBufferAlternate,
             synchronizedOutputActive: synchronizedOutputActive,
@@ -1006,7 +1049,7 @@ extension Terminal {
             lastCharIndex: lastCharIndex, gLevel: gLevel, cursorBlink: cursorBlink,
             allow80To132: allow80To132,
             parser: try parser.makeCheckpoint(pendingUtf8: readingBuffer.putbackBuffer),
-            kitty: kittyGraphicsState.makeCheckpoint(),
+            kitty: kitty,
             userScrolling: userScrolling, lineFeedMode: lineFeedMode, smoothScroll: smoothScroll,
             installedColors: installedColors.map(CheckpointColor.init),
             defaultAnsiColors: defaultAnsiColors.map(CheckpointColor.init),

@@ -7,9 +7,14 @@ This is a library-focused source subset for MyTerm. The upstream `termcast` exec
 The myterm additions provide a bounded, versioned terminal checkpoint and native view controls for remote presentation:
 
 - `Terminal.exportCheckpoint()` and `Terminal.importCheckpoint(_:)` preserve emulator state for late attachment.
+- `Terminal.exportBoundedCheckpoint()` exports the most recent history within checkpoint limits without trimming the live host. Its omission count lets a reconnecting UI report reduced visible history.
+- The macOS local process view exposes its process reference for the separately owned PTY adapter; the default local-process behavior remains available.
+- `LocalProcess` can opt into `deliversTerminationAfterOutput` for the persistent helper. It joins process exit with PTY EOF and queued output delivery, preserves backpressure reads after shell exit, and bounds a descendant-held PTY by three seconds without received bytes. The default exit callback behavior stays unchanged.
+- `TerminalImageRenderer` shares Apple image decoding, placement, cursor movement and checkpoint stripes between native views and the detached PTY host. `imageRenderingGeometry` exposes measured font cells, viewport and backing scale; `authoritativeImageGeometry` keeps an attached spectator consistent while native geometry changes are in flight. macOS image rasterization uses bitmap graphics contexts without a window or focus requirement.
 - `TerminalView.invalidateAfterCheckpointImport()` prepares native images and refreshes rendering after import.
 - `sendsTerminalResponses`, `acceptsUserInput`, and `automaticallyResizesTerminal` separate the authoritative host from spectator views. They default to the original behavior.
 - `resizeToFit()` reapplies the view's current geometry after it gains control.
+- `TerminalViewDelegate.terminalResizeRequested` lets an asynchronous transport defer native and font-driven grid changes. `applyTerminalGeometry` applies the authoritative change without resetting terminal modes, and `fittedTerminalGeometry` calculates the requested native grid without mutating the emulator. The default delegate keeps immediate local resizing.
 - On iOS, `usesIndependentViewport` lets a viewer follow output within its own visible height. `captureViewport()`, `restoreViewport(_:)`, and `followOutput()` preserve local reading intent across checkpoint imports. `onViewportChanged` and `onFollowOutputChanged` report local scrolling changes.
 - The iOS `coalescesInteractiveOutput` option keeps remote echo on the normal display timer while typing, so separate output chunks can be drawn together. It defaults to `false`.
 

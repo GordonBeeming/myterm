@@ -83,6 +83,8 @@ public struct WorkspaceRequestParameters: Codable, Equatable, Sendable {
 }
 
 public enum CommandOperation: String, Codable, CaseIterable, Sendable {
+    case snippetUpsert = "snippet_upsert"
+    case snippetDelete = "snippet_delete"
     case workspaceCreate = "workspace_create"
     case workspaceRename = "workspace_rename"
     case workspaceClose = "workspace_close"
@@ -572,7 +574,7 @@ extension InnerMessage: Codable {
                 throw RemoteError.invalidMessage
             }
             switch value.operation {
-            case .workspaceCreate, .folderCreate, .tabCreate, .settingsUpdate,
+            case .snippetUpsert, .snippetDelete, .workspaceCreate, .folderCreate, .tabCreate, .settingsUpdate,
                  .notificationRegister, .notificationRevoke:
                 break
             case .workspaceRename, .workspaceClose, .workspaceReorder, .workspaceMove, .workspacePin,

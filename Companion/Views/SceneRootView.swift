@@ -6,6 +6,7 @@ struct SceneRootView: View {
     let services: CompanionServices
     @State private var scene = SceneModel()
     @State private var hasOfferedAutoSelect = false
+    @State private var preferredCompactColumn: NavigationSplitViewColumn = .content
     @AppStorage("machineColumnCollapsed") private var machineColumnCollapsed = false
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -85,6 +86,9 @@ struct SceneRootView: View {
                 }
                 Task { await scene.connect(to: host, services: services) }
             }
+            .onChange(of: scene.path) { _, path in
+                if !path.isEmpty { preferredCompactColumn = .detail }
+            }
             .onChange(of: services.isLoading) { _, _ in offerAutoSelect() }
             .onChange(of: services.hostStatuses) { _, _ in offerAutoSelect() }
     }
@@ -96,10 +100,12 @@ struct SceneRootView: View {
             // exist only to say nothing has been chosen yet.
             MachineListView(services: services, scene: scene)
         } else {
-            NavigationSplitView(columnVisibility: columnVisibility) {
+            NavigationSplitView(columnVisibility: columnVisibility, preferredCompactColumn: $preferredCompactColumn) {
                 HostSidebar(services: services, scene: scene)
             } content: {
-                WorkspaceColumn(services: services, scene: scene)
+                WorkspaceColumn(services: services, scene: scene) {
+                    preferredCompactColumn = .detail
+                }
             } detail: {
                 DetailColumn(services: services, scene: scene)
             }
@@ -351,7 +357,10 @@ private func machineListToolbar(services: CompanionServices, scene: SceneModel) 
 private struct WorkspaceColumn: View {
     let services: CompanionServices
     let scene: SceneModel
+    let revealWorkspace: () -> Void
     @State private var isCreating = false
+    @AppStorage("showsSessionInbox") private var showsSessionInbox = true
+    @State private var showsQuickJump = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
@@ -366,6 +375,8 @@ private struct WorkspaceColumn: View {
                 ContentUnavailableView(scene.connectionPhase.title,
                                        systemImage: "network.slash",
                                        description: Text(connectionDescription))
+            } else if showsSessionInbox {
+                CompanionSessionNavigationView(scene: scene, inbox: true, didOpen: revealWorkspace)
             } else if let projection = scene.projection {
                 List(selection: $scene.selectedWorkspaceID) {
                     if scene.connectionPhase != .online {
@@ -409,8 +420,24 @@ private struct WorkspaceColumn: View {
                 ProgressView("Loading workspaces")
             }
         }
-        .navigationTitle(workspaceColumnTitle)
+        .navigationTitle(showsSessionInbox && scene.projection != nil ? "Inbox" : workspaceColumnTitle)
+        .sheet(isPresented: $showsQuickJump) {
+            NavigationStack {
+                CompanionSessionNavigationView(scene: scene, inbox: false) {
+                    showsQuickJump = false
+                    revealWorkspace()
+                }
+                    .navigationTitle("Jump to a tab")
+                    .toolbar { Button("Done") { showsQuickJump = false } }
+            }
+        }
         .toolbar {
+            Button(showsSessionInbox ? "Show workspaces" : "Show inbox",
+                   systemImage: showsSessionInbox ? "rectangle.grid.1x2" : "tray") {
+                showsSessionInbox.toggle()
+            }
+            Button("Jump to a tab", systemImage: "magnifyingglass") { showsQuickJump = true }
+                .keyboardShortcut("p", modifiers: .command)
             if scene.connectionPhase == .online {
                 Menu("Add folder or workspace", systemImage: "plus") {
                     Button("Add workspace", systemImage: "terminal") { Task { await create(workspace: true) } }
@@ -488,6 +515,10 @@ private struct WorkspaceColumn: View {
             if workspace, let result {
                 let created = try JSONDecoder().decode(RemoteIdentifierResult.self, from: result)
                 scene.navigateToWorkspace(created.id)
+                // Inbox rows use explicit destinations rather than List(selection:), so changing
+                // the selected workspace alone cannot advance a collapsed split view. Creation
+                // must reveal its existing detail column, without pushing a second detail page.
+                revealWorkspace()
             }
         } catch { scene.errorMessage = error.localizedDescription }
     }

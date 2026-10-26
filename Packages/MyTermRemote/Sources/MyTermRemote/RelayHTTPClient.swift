@@ -173,6 +173,39 @@ public final class RelayHTTPClient: @unchecked Sendable {
         )
     }
 
+    #if DEBUG
+    public func devTestAuthorizationCallback(configuration: DevTestAuthorizationConfiguration,
+                                              attempt: SignInAttempt, deviceName: String) async throws -> URL {
+        guard configuration.relay == endpoint, attempt.relay == endpoint,
+              attempt.redirectURI.absoluteString == "myterm-companion-dev://auth/callback" else {
+            throw DevTestAuthorizationError.invalidOrigin
+        }
+        // Reuse the normal device-name bounds before preparing the test-only request.
+        _ = try attempt.loginURL(deviceName: deviceName, deviceKind: "client")
+        try Task.checkCancellation()
+        let response: DevTestAuthorizationResponse
+        do {
+            response = try await send(
+                method: "POST", path: "v1/dev-test/authorize", bearer: configuration.bearer,
+                body: DevTestAuthorizationRequest(redirectURI: attempt.redirectURI.absoluteString,
+                    state: attempt.state, codeChallenge: SignInAttempt.challenge(for: attempt.verifier),
+                    deviceName: deviceName), maximumResponseBytes: 4_096)
+        } catch {
+            if Task.isCancelled { throw CancellationError() }
+            throw error
+        }
+        try Task.checkCancellation()
+        guard var callback = URLComponents(url: attempt.redirectURI, resolvingAgainstBaseURL: false) else {
+            throw RemoteError.invalidCallback
+        }
+        callback.queryItems = [URLQueryItem(name: "code", value: response.code),
+                               URLQueryItem(name: "state", value: response.state)]
+        guard let url = callback.url else { throw RemoteError.invalidCallback }
+        _ = try attempt.authorizationCode(from: url)
+        return url
+    }
+    #endif
+
     private func post<Body: Encodable, Response: Decodable>(path: String, bearer: String?,
                                                              body: Body,
                                                              permitsEmptyResponse: Bool = false) async throws -> Response {
@@ -182,7 +215,8 @@ public final class RelayHTTPClient: @unchecked Sendable {
 
     private func send<Body: Encodable, Response: Decodable>(method: String, path: String,
                                                              bearer: String?, body: Body,
-                                                             permitsEmptyResponse: Bool = false) async throws -> Response {
+                                                             permitsEmptyResponse: Bool = false,
+                                                             maximumResponseBytes: Int = 2 * 1_024 * 1_024) async throws -> Response {
         let url = endpoint.appending(path: path)
         guard endpoint.hasSameOrigin(as: url) else { throw RemoteError.invalidEndpoint }
         var request = URLRequest(url: url, timeoutInterval: timeout)
@@ -201,7 +235,19 @@ public final class RelayHTTPClient: @unchecked Sendable {
         }
         let data: Data
         let response: URLResponse
-        do { (data, response) = try await session.data(for: request) }
+        do {
+            #if DEBUG
+            if path == "v1/dev-test/authorize" {
+                // A task delegate takes precedence over caller-owned session delegates, so even
+                // injected sessions cannot forward the test Bearer credential on a redirect.
+                (data, response) = try await session.data(for: request, delegate: DevTestNoRedirectDelegate())
+            } else {
+                (data, response) = try await session.data(for: request)
+            }
+            #else
+            (data, response) = try await session.data(for: request)
+            #endif
+        }
         catch { throw Self.classify(error) }
         guard let http = response as? HTTPURLResponse,
               endpoint.hasSameOrigin(as: http.url ?? url) else { throw RemoteError.unsafeRedirect }
@@ -212,7 +258,7 @@ public final class RelayHTTPClient: @unchecked Sendable {
         case 403: throw RemoteError.server(status: 403)
         default: throw RemoteError.server(status: http.statusCode)
         }
-        guard data.count <= 2 * 1_024 * 1_024 else { throw RemoteError.messageTooLarge }
+        guard data.count <= maximumResponseBytes else { throw RemoteError.messageTooLarge }
         if data.isEmpty && permitsEmptyResponse, let empty = EmptyResponse() as? Response { return empty }
         do {
             let decoder = JSONDecoder()
@@ -234,7 +280,18 @@ public final class RelayHTTPClient: @unchecked Sendable {
     }
 }
 
-private final class RelaySessionDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+#if DEBUG
+private final class DevTestNoRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    func urlSession(_ session: URLSession, task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest,
+                    completionHandler: @escaping (URLRequest?) -> Void) {
+        completionHandler(nil)
+    }
+}
+#endif
+
+final class RelaySessionDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
     private let endpoint: RelayEndpoint
     init(endpoint: RelayEndpoint) { self.endpoint = endpoint }
 
@@ -242,6 +299,12 @@ private final class RelaySessionDelegate: NSObject, URLSessionTaskDelegate, @unc
                     willPerformHTTPRedirection response: HTTPURLResponse,
                     newRequest request: URLRequest,
                     completionHandler: @escaping (URLRequest?) -> Void) {
+        #if DEBUG
+        if task.originalRequest?.url?.path == "/v1/dev-test/authorize" {
+            completionHandler(nil)
+            return
+        }
+        #endif
         guard let url = request.url, endpoint.hasSameOrigin(as: url) else {
             completionHandler(nil)
             return

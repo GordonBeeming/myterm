@@ -38,7 +38,7 @@ final class LiveDeviceTouchTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["You have control"].firstMatch.waitForExistence(timeout: 5))
         surface.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10), "Taking control shows the keyboard")
-        let ready = "MYTERM_READY_" + String(UUID().uuidString.prefix(6))
+        let ready = "MYTERM_READY_" + screenNonce()
         typeCommand("printf '\(octal(ready))\\n'")
         XCTAssertTrue(waitForText(ready, timeout: 20), "The Mac shell must echo back before touch tests start")
 
@@ -65,9 +65,29 @@ final class LiveDeviceTouchTests: XCTestCase {
         attach("live-touch-link-opened")
         app.activate()
         XCTAssertTrue(surface.waitForExistence(timeout: 10))
+        // Backgrounding intentionally disconnects the authenticated channel and releases its
+        // control lease. A retained terminal view is not proof that input is authorised again.
+        // Request control appears only once the reconnected terminal checkpoint is restored.
+        guard requestControl.waitForExistence(timeout: 20) else {
+            attach("live-touch-return-not-ready")
+            return XCTFail("Returning from Safari must restore the terminal and offer Request control")
+        }
+        XCTAssertTrue(app.staticTexts["View only"].firstMatch.exists,
+                      "Returning from another app must not silently reacquire terminal control")
+        attach("live-touch-return-view-only")
+        requestControl.tap()
+        guard app.staticTexts["You have control"].firstMatch.waitForExistence(timeout: 10) else {
+            attach("live-touch-return-control-not-granted")
+            return XCTFail("The reconnected terminal must grant requested control before typing")
+        }
+        surface.tap()
+        guard app.keyboards.firstMatch.waitForExistence(timeout: 5) else {
+            return XCTFail("The terminal keyboard must be ready after reacquiring control")
+        }
+        attach("live-touch-return-control-restored")
 
         // 3. Double-tap selects a word and offers Copy.
-        let word = "SELECTME" + String(UUID().uuidString.prefix(6)).lowercased()
+        let word = "SELECTME" + screenNonce()
         surface.tap()
         typeCommand("printf '\(octal(word))\\n'")
         XCTAssertTrue(waitForText(word, timeout: 20))
@@ -107,6 +127,13 @@ final class LiveDeviceTouchTests: XCTestCase {
     }
 
     // MARK: - Helpers
+
+    /// Vision reads the terminal font's slashed zero as Ø. Use distinct uppercase
+    /// letters so exact matching avoids digits and lowercase glyph ambiguities.
+    private func screenNonce() -> String {
+        let alphabet = Array("ABDEFHKNPRTUY")
+        return String((0..<8).map { _ in alphabet[Int.random(in: alphabet.indices)] })
+    }
 
     @MainActor
     private func typeCommand(_ command: String) {

@@ -364,6 +364,15 @@ private struct WorkspaceContentView: View {
             }
         }
         .navigationTitle(model.selectedWorkspace.displayTitle)
+        .sheet(isPresented: $model.isSessionJumpPresented) {
+            SessionNavigationView(model: model, inbox: false)
+        }
+        .sheet(isPresented: $model.isSessionInboxPresented) {
+            SessionNavigationView(model: model, inbox: true)
+        }
+        .sheet(isPresented: $model.isTerminalSnippetsPresented) {
+            TerminalSnippetsView(model: model)
+        }
         .sheet(isPresented: isRenamingWorkspace) {
             RenameItemSheet(
                 title: "Rename Workspace",
@@ -417,6 +426,12 @@ private struct WorkspaceContentView: View {
         }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
+                Button("Jump to a tab", systemImage: "magnifyingglass") {
+                    model.isSessionJumpPresented = true
+                }
+                Button("Session inbox", systemImage: "tray") {
+                    model.isSessionInboxPresented = true
+                }
                 Button(action: model.createTerminalTab) {
                     Label("New Terminal Tab", systemImage: "plus.rectangle.on.rectangle")
                 }

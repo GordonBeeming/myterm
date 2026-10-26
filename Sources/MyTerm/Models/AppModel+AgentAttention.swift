@@ -23,7 +23,8 @@ extension AppModel {
         _ report: AgentActivityReport,
         workspaceID: WorkspaceID,
         tabGroupID: TabGroupID,
-        tabID: TabID
+        tabID: TabID,
+        isRestoration: Bool = false
     ) {
         if report.agent == "codex", let tool = report.toolRequestID {
             switch report.activity {
@@ -54,6 +55,15 @@ extension AppModel {
         // Setting nil removes the entry, which is how a read tab loses its cook. A session that
         // only started, or has ended, has no cook to show and clears the tab the same way.
         let shown: AgentActivity? = report.activity.showsCook ? report.activity : nil
+        if isRestoration {
+            // The helper remembers process state, not which user already read its last turn.
+            // Reconstruct questions/working state without manufacturing a fresh inbox event.
+            agentAttention[tabID] = report.activity == .finished
+                ? (agentInbox.activity(forTab: tabID) == .finished ? .finished : nil)
+                : (isInFrontOfUser ? shown.flatMap(\.afterReading) : shown)
+            companionHost.workspaceDidChange()
+            return
+        }
         agentAttention[tabID] = isInFrontOfUser ? shown.flatMap(\.afterReading) : shown
         if let sessionID = store.workspaces
             .first(where: { $0.id == workspaceID })?
@@ -75,6 +85,7 @@ extension AppModel {
             tabID: tabID,
             isTabVisible: isInFrontOfUser
         )
+        companionHost.workspaceDidChange()
         // A banner is for being away from the app. With MyTerm in front, the cook has already said it.
         guard !isApplicationActive() else { return }
         postAgentNotification(for: report, workspaceID: workspaceID, tabID: tabID)
@@ -97,9 +108,12 @@ extension AppModel {
     }
 
     func markAsRead(tabID: TabID) {
-        agentInbox.markRead(tabID: tabID)
-        guard let activity = agentAttention[tabID] else { return }
-        agentAttention[tabID] = activity.afterReading
+        let didRead = agentInbox.markRead(tabID: tabID)
+        let activity = agentAttention[tabID]
+        agentAttention[tabID] = activity?.afterReading
+        if didRead || activity != agentAttention[tabID] {
+            companionHost.workspaceDidChange()
+        }
     }
 
     func forgetAgentAttention(forTab tabID: TabID) {

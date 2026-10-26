@@ -201,7 +201,7 @@ final class MyTermApplicationDelegate: NSObject, NSApplicationDelegate {
         model?.persistBrowserURLs()
         // Snapshots read live session content, so they have to be captured before the sessions are torn down.
         model?.persistTerminalSnapshots()
-        model?.terminateTerminalSessions()
+        model?.detachTerminalSessions()
         // Last, so it carries the snapshots and browser URLs the lines above just recorded.
         model?.persistWorkspaceStore()
     }
@@ -319,6 +319,7 @@ final class MyTermStartup {
                     hookFailures.append("Could not refresh \(target.displayName) hooks: \(message)")
                 }
             }
+            BrowserContextArtifacts.pruneExpired()
             let instance = try AppModel(channel: MyTermChannel.active, applicationSupportDirectory: supportDirectory)
             if !hookFailures.isEmpty { instance.errorDescription = hookFailures.joined(separator: "\n") }
             self.lease = lease

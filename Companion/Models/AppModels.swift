@@ -325,7 +325,28 @@ final class SceneModel {
         self.now = now
     }
 
-    var path: [CompanionRoute] = []
+    var path: [CompanionRoute] = [] {
+        didSet {
+            guard let destination = path.last else { return }
+            let connection: SavedConnectionID
+            let tabID: TabID
+            switch destination {
+            case .terminal(let route):
+                connection = route.connectionID; tabID = TabID(rawValue: route.tabID)
+            case .browser(let route):
+                connection = route.connectionID; tabID = TabID(rawValue: route.tabID)
+            }
+            var recent = recentSessionDestinations[connection] ?? []
+            recent.removeAll { $0 == tabID }
+            recent.insert(tabID, at: 0)
+            recentSessionDestinations[connection] = Array(recent.prefix(32))
+        }
+    }
+    private var recentSessionDestinations: [SavedConnectionID: [TabID]] = [:]
+    var recentSessionTabIDs: [TabID] {
+        guard let connection = selectedConnectionID else { return [] }
+        return recentSessionDestinations[connection] ?? []
+    }
     var sheet: CompanionSheet?
     var selectedConnectionID: SavedConnectionID?
     var selectedHostID: UUID? { selectedConnectionID?.hostID }
@@ -350,13 +371,8 @@ final class SceneModel {
     private(set) var hasFreshProjection = false
     var errorMessage: String?
     var terminalStates: [TerminalSurfaceID: TerminalSurfaceState] = [:]
-    @ObservationIgnored private var terminalDrafts: [TerminalSurfaceID: TerminalComposerDraft] = [:]
-
     func composerDraft(for route: TerminalRoute) -> TerminalComposerDraft {
-        if let draft = terminalDrafts[route.id] { return draft }
-        let draft = TerminalComposerDraft()
-        terminalDrafts[route.id] = draft
-        return draft
+        TerminalDraftStore.shared.draft(for: route)
     }
 
     private var connection: CompanionHostConnection?
@@ -1086,6 +1102,9 @@ final class SceneModel {
         case .workspaces(let projection):
             self.projection = projection
             hasFreshProjection = true
+            if let connectionID = activeHost?.connectionID {
+                TerminalDraftStore.shared.pruneClosedTerminals(for: connectionID, projection: projection)
+            }
             await reconcileRoutes(in: projection)
             resolveNotification(in: projection)
         case .checkpoint(let route, let checkpoint):
