@@ -105,6 +105,10 @@ public final class SessionHostServerAuthentication {
                     [], &peer) == errSecSuccess, let peer,
                   SecCodeCheckValidity(peer, [], requirement) == errSecSuccess else { throw SessionHostError.untrustedHost }
             if requiresHardenedRuntime { try SessionHostClientAuthentication.validateHardenedRuntime(peer) }
+        } catch SessionHostError.disconnected {
+            // No peer credentials were obtained: the connection vanished, rather than proving
+            // a mismatched identity. Callers may retry, but must authenticate the fresh socket.
+            throw SessionHostError.disconnected
         } catch { throw SessionHostError.untrustedHost }
     }
 

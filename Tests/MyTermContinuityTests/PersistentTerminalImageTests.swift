@@ -30,6 +30,8 @@ final class PersistentTerminalImageTests: XCTestCase {
             try restored.getTerminal().importCheckpoint(checkpoint)
             let expected = try normalBuffer(native.getTerminal().exportCheckpoint())
             let actual = try normalBuffer(restored.getTerminal().exportCheckpoint())
+            XCTAssertFalse(String(decoding: restored.getTerminal().getBufferAsData(kind: .normal), as: UTF8.self).contains(";OK"),
+                           "Kitty acknowledgements are PTY input and must not be echoed into the image-placement oracle")
             XCTAssertEqual(actual["x"] as? Int, expected["x"] as? Int)
             XCTAssertEqual(actual["y"] as? Int, expected["y"] as? Int,
                            "Image insertion must advance the authoritative cursor exactly like the native view")
@@ -219,7 +221,11 @@ final class PersistentTerminalImageTests: XCTestCase {
         let geometryDeadline = Date().addingTimeInterval(10)
         while Date() < geometryDeadline {
             let message = try readMessage(descriptor)
-            if message.kind == "geometry", message.columns == 81, message.rows == 26 { applied = message; break }
+            if message.kind == "geometry" {
+                XCTAssertEqual(message.columns, 81, "A configure must not publish the old grid while a resize is pending")
+                XCTAssertEqual(message.rows, 26, "The first geometry acknowledgement must use the pending grid")
+                if message.columns == 81, message.rows == 26 { applied = message; break }
+            }
         }
         XCTAssertEqual(applied?.imageGeometry, latest,
                        "Flushing an older pending resize must not revert a later font/viewport configuration")
@@ -249,11 +255,14 @@ final class PersistentTerminalImageTests: XCTestCase {
         try SessionHostSocket.prepareDirectory(folder)
         defer { try? FileManager.default.removeItem(at: folder) }
         let output = folder.appendingPathComponent("output.bin")
+        let produced = folder.appendingPathComponent("produced")
         try stream.write(to: output)
         let path = folder.appendingPathComponent("s.sock").path
         let host = Process()
         host.executableURL = try helperExecutable()
-        host.arguments = [path, "/bin/sh", folder.path, "60", "24", "-c", "cat '\(output.path)'; sleep 30"]
+        // Match the native oracle's byte stream: terminal replies are input, not extra echoed
+        // display text. Leave Kitty replies enabled so the helper still exercises that path.
+        host.arguments = [path, "/bin/sh", folder.path, "60", "24", "-c", "stty raw -echo; cat '\(output.path)'; touch '\(produced.path)'; sleep 30"]
         var environment = ProcessInfo.processInfo.environment.merging(try SessionHostClientAuthentication.testEnvironment()) { _, new in new }
         environment["MYTERM_PERSISTENT_IMAGE_GEOMETRY"] = try JSONEncoder().encode(geometry).base64EncodedString()
         host.environment = environment
@@ -261,6 +270,8 @@ final class PersistentTerminalImageTests: XCTestCase {
         try host.run()
         defer { if host.isRunning { host.terminate(); host.waitUntilExit() } }
         let deadline = Date().addingTimeInterval(5)
+        while !FileManager.default.fileExists(atPath: produced.path), Date() < deadline { usleep(10_000) }
+        guard FileManager.default.fileExists(atPath: produced.path) else { throw SessionHostError.disconnected }
         while Date() < deadline {
             guard let descriptor = try? SessionHostSocket.connect(path: path) else { usleep(20_000); continue }
             let checkpoint: Data

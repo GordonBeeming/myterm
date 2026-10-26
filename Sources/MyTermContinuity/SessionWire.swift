@@ -205,9 +205,8 @@ public enum SessionHostSocket {
 
     public static func authenticate(_ descriptor: Int32) throws {
         var uid: uid_t = 0; var gid: gid_t = 0
-        guard getpeereid(descriptor, &uid, &gid) == 0, uid == getuid() else {
-            throw SessionHostError.insecureDirectory
-        }
+        guard getpeereid(descriptor, &uid, &gid) == 0 else { throw SessionHostError.disconnected }
+        guard uid == getuid() else { throw SessionHostError.insecureDirectory }
     }
 
     public static func peerProcessID(_ descriptor: Int32) throws -> pid_t {

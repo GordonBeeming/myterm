@@ -167,6 +167,38 @@ for index in range(2):
         XCTAssertFalse(FileManager.default.fileExists(atPath: path), "A stop must be consumed, not discarded by output-side disconnect")
     }
 
+    @MainActor
+    func testClosedPeerIsTransportDisconnectionRatherThanAnIdentityMismatch() throws {
+        let verifier = try SessionHostServerAuthentication(environment: PersistentTerminalTestEnvironment.make(),
+                                                           helperURL: Self.helperExecutable())
+        var pair: [Int32] = [-1, -1]
+        XCTAssertEqual(socketpair(AF_UNIX, SOCK_STREAM, 0, &pair), 0)
+        guard pair[0] >= 0, pair[1] >= 0 else { throw POSIXError(.EIO) }
+        defer { close(pair[0]) }
+        close(pair[1])
+        XCTAssertThrowsError(try verifier.authenticate(pair[0])) { error in
+            guard case SessionHostError.disconnected = error else {
+                return XCTFail("A vanished peer must remain retryable transport failure: \(error)")
+            }
+        }
+    }
+
+    func testUnconnectedPeerCredentialQueriesAreTransportFailures() throws {
+        let descriptor = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard descriptor >= 0 else { throw POSIXError(.EIO) }
+        defer { close(descriptor) }
+        XCTAssertThrowsError(try SessionHostSocket.authenticate(descriptor)) { error in
+            guard case SessionHostError.disconnected = error else {
+                return XCTFail("Missing peer UID is not a valid UID mismatch: \(error)")
+            }
+        }
+        XCTAssertThrowsError(try SessionHostClientAuthentication.peerAuditToken(descriptor)) { error in
+            guard case SessionHostError.disconnected = error else {
+                return XCTFail("Missing audit credentials are not a signature mismatch: \(error)")
+            }
+        }
+    }
+
     private static func helperExecutable() throws -> URL {
         var directory = Bundle(for: Self.self).bundleURL
         for _ in 0..<6 {

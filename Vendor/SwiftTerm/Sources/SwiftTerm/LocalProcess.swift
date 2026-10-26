@@ -178,6 +178,14 @@ public class LocalProcess {
         return keepReading
     }
 
+    // Internal observation seam for deterministic backpressure fixtures. Holding
+    // the consumer queue until this state is reached avoids guessing PTY speed.
+    func outputDeliveryStatus() -> (pendingByteCount: Int, isBackpressured: Bool) {
+        pendingLock.lock()
+        defer { pendingLock.unlock() }
+        return (pendingBytes, readSuspendedForBackpressure)
+    }
+
     // Re-arm the PTY read loop after a backpressure pause. Returns whether a read
     // was actually armed: once `readSuspendedForBackpressure` is cleared, an armed
     // read is the only thing that can deliver another byte, so a caller that

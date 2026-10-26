@@ -33,13 +33,13 @@ final class LocalProcessOutputDrainTests: XCTestCase {
 
     func testBackpressuredReadResumesAndDeliversEveryByteBeforeExit() async {
         let exited = expectation(description: "output beyond the PTY delivery high water mark")
-        let delegate = OutputDrainDelegate(exited: exited, delay: 500)
+        let delegate = OutputDrainDelegate(exited: exited)
         let process = LocalProcess(delegate: delegate, deliversTerminationAfterOutput: true)
         process.startProcess(executable: "/bin/sh", args: ["-c", "dd if=/dev/zero bs=1048576 count=6 2>/dev/null"])
         defer { if process.running { process.terminate() } }
-        usleep(300_000)
+        holdConsumerUntilPTYReadPauses(process)
         await fulfillment(of: [exited], timeout: 12)
-        XCTAssertEqual(delegate.bytesAtExit, 6 * 1_024 * 1_024)
+        XCTAssertEqual(delegate.bytesAtExit, 6 * 1_024 * 1_024, delegate.progressDescription(process: process))
     }
 
     func testObservedExitWithOpenPTYUsesActualByteProgressThenInactivityDeadline() async {
@@ -66,7 +66,7 @@ final class LocalProcessOutputDrainTests: XCTestCase {
 
     func testObservedExitDoesNotExpireWhileConsumerBackpressurePausesPTYRead() async {
         let exited = expectation(description: "slow consumer retains paused PTY output")
-        let delegate = OutputDrainDelegate(exited: exited, delay: 500)
+        let delegate = OutputDrainDelegate(exited: exited)
         let process = LocalProcess(delegate: delegate, deliversTerminationAfterOutput: true)
         process.startProcess(executable: "/bin/sh", args: ["-c", "dd if=/dev/zero bs=1048576 count=6 2>/dev/null"])
         defer {
@@ -79,11 +79,21 @@ final class LocalProcessOutputDrainTests: XCTestCase {
         // Fill the four-MiB delivery backlog while the consumer cannot run, then
         // inject the exit observation and stall beyond the inactivity interval.
         // The timer must distinguish its own read pause from a quiet open PTY.
-        usleep(300_000)
+        holdConsumerUntilPTYReadPauses(process)
         process.observedProcessExit(status: 0)
         usleep(3_200_000)
         await fulfillment(of: [exited], timeout: 15)
-        XCTAssertEqual(delegate.bytesAtExit, 6 * 1_024 * 1_024)
+        XCTAssertEqual(delegate.bytesAtExit, 6 * 1_024 * 1_024, delegate.progressDescription(process: process))
+    }
+
+    private func holdConsumerUntilPTYReadPauses(_ process: LocalProcess) {
+        let deadline = Date().addingTimeInterval(5)
+        var status = process.outputDeliveryStatus()
+        while !status.isBackpressured, Date() < deadline {
+            usleep(1_000)
+            status = process.outputDeliveryStatus()
+        }
+        XCTAssertTrue(status.isBackpressured, "the real producer must pause its PTY read before the consumer is released; pending=\(status.pendingByteCount)")
     }
 }
 
@@ -91,22 +101,27 @@ final class LocalProcessOutputDrainTests: XCTestCase {
 private final class OutputDrainDelegate: @preconcurrency LocalProcessDelegate {
     private let exited: XCTestExpectation
     private var bytes = 0
-    private let delay: useconds_t
+    private var callbackCount = 0
+    private var lastReceivedAt = DispatchTime.now().uptimeNanoseconds
     var bytesAtExit: Int?
     var exitStatus: Int32?
 
-    init(exited: XCTestExpectation, delay: useconds_t = 0) { self.exited = exited; self.delay = delay }
+    init(exited: XCTestExpectation) { self.exited = exited }
     func getWindowSize() -> winsize { winsize(ws_row: 25, ws_col: 80, ws_xpixel: 0, ws_ypixel: 0) }
     func dataReceived(slice: ArraySlice<UInt8>) {
+        callbackCount += 1
+        lastReceivedAt = DispatchTime.now().uptimeNanoseconds
         bytes += slice.count
         // One callback must cross the delivery time slice, allowing an already
         // queued exit observation to overtake the remaining buffered chunks.
         if bytes == slice.count { usleep(5_000) }
-        usleep(delay)
     }
     func processTerminated(_ source: LocalProcess, exitCode: Int32?) {
         bytesAtExit = bytes
         exitStatus = exitCode
         exited.fulfill()
+    }
+    func progressDescription(process: LocalProcess) -> String {
+        "bytes=\(bytes), callbacks=\(callbackCount), bytesAtExit=\(String(describing: bytesAtExit)), gapSinceData=\(Double(DispatchTime.now().uptimeNanoseconds - lastReceivedAt) / 1_000_000_000)s, running=\(process.running), childfd=\(process.childfd)"
     }
 }

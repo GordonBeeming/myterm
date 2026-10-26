@@ -148,10 +148,10 @@ public final class SessionHostClientAuthentication {
     static func peerAuditToken(_ descriptor: Int32) throws -> Data {
         var token = audit_token_t()
         var size = socklen_t(MemoryLayout.size(ofValue: token))
-        guard getsockopt(descriptor, SOL_LOCAL, LOCAL_PEERTOKEN, &token, &size) == 0,
-              size == MemoryLayout.size(ofValue: token) else {
-            throw SessionHostError.untrustedController
+        guard getsockopt(descriptor, SOL_LOCAL, LOCAL_PEERTOKEN, &token, &size) == 0 else {
+            throw SessionHostError.disconnected
         }
+        guard size == MemoryLayout.size(ofValue: token) else { throw SessionHostError.untrustedController }
         return withUnsafeBytes(of: &token) { Data($0) }
     }
 

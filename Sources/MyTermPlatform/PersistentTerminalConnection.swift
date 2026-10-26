@@ -148,6 +148,11 @@ final class PersistentTerminalConnection {
             do { descriptor = try SessionHostSocket.connect(path: path) }
             catch SessionHostError.system("connect", let code) where code == ENOENT || code == ECONNREFUSED {
                 return
+            } catch SessionHostError.disconnected {
+                // Peer credentials can disappear before connect's UID query completes too.
+                guard Date() < deadline else { throw SessionHostError.disconnected }
+                usleep(20_000)
+                continue
             }
             do {
                 defer { close(descriptor) }

@@ -214,8 +214,8 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
                         if var pending = pendingGeometry {
                             pending.imageGeometry = geometry
                             pendingGeometry = pending
-                        }
-                        if imageGeometry != geometry {
+                            self.imageGeometry = geometry
+                        } else if imageGeometry != geometry {
                             try applyGeometry(columns: emulator.cols, rows: emulator.rows, imageGeometry: geometry)
                         }
                     }
