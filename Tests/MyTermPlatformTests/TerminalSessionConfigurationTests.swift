@@ -50,6 +50,12 @@ final class TerminalSessionConfigurationTests: XCTestCase {
     }
 
     @MainActor
+    func testBashRecoveryWaitsForAllCommandOutputs() async throws {
+        try await verifyStartupInput(shell: URL(fileURLWithPath: "/bin/bash"), fish: false,
+                                     promptRewritesItself: true, pauseBeforeHistory: true)
+    }
+
+    @MainActor
     func testBashPromptCommandsAppendedDuringFirstRenderSurviveRecovery() async throws {
         try await verifyStartupInput(shell: URL(fileURLWithPath: "/bin/bash"), fish: false, promptAppendsCommand: true)
     }
@@ -87,11 +93,13 @@ final class TerminalSessionConfigurationTests: XCTestCase {
     @MainActor
     private func verifyStartupInput(shell: URL, fish: Bool, promptRewritesItself: Bool = false,
                                     promptAppendsCommand: Bool = false, promptAppendsSemicolon: Bool = false,
-                                    fishUsesDefaultPrompt: Bool = false, fishAutoloadedPrompt: Bool = false) async throws {
+                                    fishUsesDefaultPrompt: Bool = false, fishAutoloadedPrompt: Bool = false,
+                                    pauseBeforeHistory: Bool = false) async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: "myterm-shell-startup-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let marker = root.appending(path: "command-ran")
+        let completion = root.appending(path: "command-completed")
         if fish {
             let config = root.appending(path: "config/fish")
             try FileManager.default.createDirectory(at: config, withIntermediateDirectories: true)
@@ -118,11 +126,13 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         let resources = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().appending(path: "Resources")
         let bashPromptReset = promptAppendsSemicolon ? "" : "PROMPT_COMMAND=''; "
+        let historyDelay = pauseBeforeHistory ? "/bin/sleep 0.2; " : ""
         // HOME here is the child shell's actual isolated home, never the runner's environment.
         let session = try SwiftTermTerminalSession(configuration: TerminalSessionConfiguration(
             shell: shell, workingDirectory: root, shellArguments: ["-l", "-i"],
-            initialCommand: fish ? "printf ran > '\(marker.path)'" :
-                "printf '%s\\n%s' \"$PS1\" \"$PROMPT_COMMAND\" > '\(marker.path)'; \(bashPromptReset)history > '\(root.appending(path: "history-state").path)'",
+            initialCommand: (fish ? "printf ran > '\(marker.path)'" :
+                "printf '%s\\n%s' \"$PS1\" \"$PROMPT_COMMAND\" > '\(marker.path)'; \(historyDelay)\(bashPromptReset)history > '\(root.appending(path: "history-state").path)'")
+                + "; printf complete > '\(completion.path)'",
             environment: ["HOME": root.path, "XDG_CONFIG_HOME": root.appending(path: "config").path,
                           "XDG_DATA_HOME": root.appending(path: "data").path, "BASH_ENV": "",
                           "MYTERM_RESOURCE_DIR": resources.path]
@@ -130,9 +140,12 @@ final class TerminalSessionConfigurationTests: XCTestCase {
         defer { session.terminate() }
         try session.start()
         for _ in 0..<150 {
-            if FileManager.default.fileExists(atPath: marker.path) { break }
+            // The prompt snapshot is the first command output, so it can exist while
+            // Bash is still writing history. Only the final publication completes the list.
+            if FileManager.default.fileExists(atPath: completion.path) { break }
             try await Task.sleep(for: .milliseconds(20))
         }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: completion.path), "\(shell.lastPathComponent) did not finish the restored command list")
         XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path), "\(shell.lastPathComponent) startup consumed the restored command")
         if fishAutoloadedPrompt {
             XCTAssertTrue(session.contentSnapshot(maximumCharacters: 8_000).contains("autoloaded> "))
