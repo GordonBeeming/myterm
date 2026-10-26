@@ -87,14 +87,25 @@ final class TerminalDraftStore {
     static let shared = TerminalDraftStore()
     nonisolated static let maximumEntries = 128
     private let defaults: UserDefaults
-    private let storageKey = "companionTerminalDrafts.v1"
+    private static let legacyStorageKey = "companionTerminalDrafts.v1"
+    private static let indexKey = "companionTerminalDrafts.v2.index"
+    private static let entryPrefix = "companionTerminalDrafts.v2.entry."
     private var drafts: [String: TerminalComposerDraft] = [:]
-    private struct Entry: Codable {
+    private var stored: [String: Entry] = [:]
+    private struct Entry: Codable, Equatable {
         var text: String
         var outcome: TerminalInsertionOutcome?
     }
 
-    init(defaults: UserDefaults = .standard) { self.defaults = defaults }
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        for key in defaults.stringArray(forKey: Self.indexKey) ?? [] {
+            guard let data = defaults.data(forKey: Self.entryPrefix + key),
+                  let entry = try? JSONDecoder().decode(Entry.self, from: data) else { continue }
+            stored[key] = entry
+        }
+        migrateLegacyEntries()
+    }
 
     private func key(for route: TerminalRoute) -> String {
         "\(route.connectionID.storageKey)|\(route.workspaceID)|\(route.sessionID)"
@@ -103,24 +114,31 @@ final class TerminalDraftStore {
     func draft(for route: TerminalRoute) -> TerminalComposerDraft {
         let key = key(for: route)
         if let draft = drafts[key] { return draft }
-        let entry = entries()[key]
+        let entry = stored[key]
         let draft = TerminalComposerDraft(text: entry?.text ?? "", insertionOutcome: entry?.outcome)
         draft.onChange = { [weak self, weak draft] text, outcome in
             guard let self, let draft else { return }
-            var stored = self.entries()
-            if text.isEmpty && outcome == nil { stored.removeValue(forKey: key) }
+            if text.isEmpty && outcome == nil { self.removeStoredEntry(key) }
             else {
                 guard text.utf8.count <= TerminalComposerDraft.maximumUTF8Bytes else {
                     draft.persistenceErrorMessage = "Latest changes are only in memory: this draft exceeds 64 KiB. Shorten it to save across app restarts."
                     return
                 }
-                guard stored[key] != nil || stored.count < Self.maximumEntries else {
+                guard self.stored[key] != nil || self.stored.count < Self.maximumEntries else {
                     draft.persistenceErrorMessage = "This draft is only in memory: 128 drafts are already saved. Clear a saved draft, then edit this one to save it across app restarts."
                     return
                 }
-                stored[key] = Entry(text: text, outcome: outcome)
+                let entry = Entry(text: text, outcome: outcome)
+                guard self.stored[key] != entry else { draft.persistenceErrorMessage = nil; return }
+                guard let encoded = try? JSONEncoder().encode(entry) else {
+                    draft.persistenceErrorMessage = "Latest changes could not be saved and are only in memory."
+                    return
+                }
+                let isNew = self.stored[key] == nil
+                self.defaults.set(encoded, forKey: Self.entryPrefix + key)
+                self.stored[key] = entry
+                if isNew { self.publishIndex() }
             }
-            self.write(stored)
             draft.persistenceErrorMessage = nil
         }
         drafts[key] = draft
@@ -141,18 +159,18 @@ final class TerminalDraftStore {
                 }
             }
         }
-        var stored = entries()
         for key in Set(stored.keys).union(drafts.keys) where key.hasPrefix(prefix) && !active.contains(key) {
-            let outcome = stored[key]?.outcome
+            // A full catalog can leave a draft only in memory. Its latest insertion outcome is
+            // authoritative even when there is no persisted entry (or it contains older text).
+            let outcome = drafts[key]?.insertionOutcome ?? stored[key]?.outcome
             // An interrupted write may have reached the terminal. Retain it for explicit review.
             guard drafts[key]?.isSending != true, outcome != .sending, outcome != .unconfirmed else { continue }
-            stored.removeValue(forKey: key)
+            removeStoredEntry(key)
             if let draft = drafts.removeValue(forKey: key) {
                 draft.onChange = nil
                 draft.persistenceErrorMessage = "This terminal has closed. The remaining draft is only in memory."
             }
         }
-        write(stored)
     }
 
     func forget(_ connectionID: SavedConnectionID) {
@@ -163,16 +181,33 @@ final class TerminalDraftStore {
             draft?.text = ""
             draft?.insertionOutcome = nil
         }
-        write(entries().filter { !$0.key.hasPrefix(prefix) })
+        for key in stored.keys.filter({ $0.hasPrefix(prefix) }) { removeStoredEntry(key) }
     }
 
-    private func entries() -> [String: Entry] {
-        guard let data = defaults.data(forKey: storageKey) else { return [:] }
-        return (try? JSONDecoder().decode([String: Entry].self, from: data)) ?? [:]
+    private func removeStoredEntry(_ key: String) {
+        guard stored.removeValue(forKey: key) != nil else { return }
+        defaults.removeObject(forKey: Self.entryPrefix + key)
+        publishIndex()
     }
 
-    private func write(_ entries: [String: Entry]) {
-        if let data = try? JSONEncoder().encode(entries) { defaults.set(data, forKey: storageKey) }
+    private func publishIndex() { defaults.set(stored.keys.sorted(), forKey: Self.indexKey) }
+
+    /// The v1 blob remains recoverable until every v2 entry has been encoded and written.
+    /// A partially completed migration can be retried: existing v2 values take precedence.
+    private func migrateLegacyEntries() {
+        guard let data = defaults.data(forKey: Self.legacyStorageKey),
+              let legacy = try? JSONDecoder().decode([String: Entry].self, from: data) else { return }
+        var merged = legacy
+        merged.merge(stored) { _, current in current }
+        var encoded: [String: Data] = [:]
+        for (key, entry) in merged {
+            guard let data = try? JSONEncoder().encode(entry) else { return }
+            encoded[key] = data
+        }
+        for (key, data) in encoded { defaults.set(data, forKey: Self.entryPrefix + key) }
+        stored = merged
+        publishIndex()
+        defaults.removeObject(forKey: Self.legacyStorageKey)
     }
 }
 

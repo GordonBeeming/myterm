@@ -45,8 +45,8 @@ final class PersistentTerminalStartupTests: XCTestCase {
         let first = try fixture.session(scrollback: 3_333)
         defer { first.terminate() }
         try first.start()
-        try await waitUntil { first.isRunning && FileManager.default.fileExists(atPath: fixture.pidFile.path) }
-        let pidBefore = try String(contentsOf: fixture.pidFile, encoding: .utf8)
+        try await waitUntil { first.isRunning && ((try? fixture.recordedShellPIDs().isEmpty) == false) }
+        let pidBefore = try fixture.recordedShellPIDs()
         try first.sendRemoteInput(Data("printf 'checkpoint-before-detach\\n'\n".utf8), generation: first.remoteGeneration)
         try await waitUntil { first.contentSnapshot(maximumCharacters: 8_192).contains("checkpoint-before-detach") }
         first.resize(columns: 91, rows: 31)
@@ -67,7 +67,13 @@ final class PersistentTerminalStartupTests: XCTestCase {
         let fittedRows = view.getTerminal().rows
         try second.start()
         try await waitUntil { second.isRunning }
-        XCTAssertEqual(try String(contentsOf: fixture.pidFile, encoding: .utf8), pidBefore,
+        let reply = "reattached-" + UUID().uuidString
+        let encodedReply = reply.utf8.map { String(format: "\\%03o", Int($0)) }.joined()
+        try second.sendRemoteInput(Data("printf '\(encodedReply)'\r".utf8), generation: second.remoteGeneration)
+        // The expected output is absent from terminal input echo, and this command cannot
+        // run until this shell has published its own start record.
+        try await waitUntil { second.contentSnapshot(maximumCharacters: 8_192).contains(reply) }
+        XCTAssertEqual(try fixture.recordedShellPIDs(), pidBefore,
                        "reattachment must not spawn another shell or run its startup script")
         XCTAssertTrue(second.contentSnapshot(maximumCharacters: 8_192).contains("checkpoint-before-detach"))
         XCTAssertEqual(view.getTerminal().options.scrollback, 9_999)
@@ -83,7 +89,7 @@ final class PersistentTerminalStartupTests: XCTestCase {
         let helperPIDFile = fixture.directory.appendingPathComponent("helper-pid")
         let launcher = fixture.directory.appendingPathComponent("record-helper-launch")
         func quote(_ text: String) -> String { "'" + text.replacingOccurrences(of: "'", with: "'\\''") + "'" }
-        let script = "#!/bin/sh\nprintf '%s\\n' \"$$\" > \(quote(helperPIDFile.path))\nexec \(quote(fixture.helper.path)) \"$@\"\n"
+        let script = "#!/bin/sh\n\(fixture.publishPID(to: helperPIDFile))exec \(quote(fixture.helper.path)) \"$@\"\n"
         try script.write(to: launcher, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: launcher.path)
         let session = try fixture.session(helperOverride: launcher)
@@ -103,9 +109,7 @@ final class PersistentTerminalStartupTests: XCTestCase {
         try await waitUntil(timeout: 6, phase: "helper endpoint removal") { !FileManager.default.fileExists(atPath: fixture.socketPath) }
         XCTAssertFalse(session.isRunning)
         XCTAssertTrue(failures.isEmpty)
-        if FileManager.default.fileExists(atPath: fixture.pidFile.path) {
-            let pidText = try String(contentsOf: fixture.pidFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
-            let pid = try XCTUnwrap(Int32(pidText))
+        for pid in try fixture.recordedShellPIDs() {
             // The endpoint is removed just before helper exit. Reaping its terminated shell
             // can finish on the following scheduler turn, especially during parallel tests.
             try await waitUntil(timeout: 3, phase: "shell process \(pid) exit", diagnostic: { self.processState(pid) }) { kill(pid, 0) != 0 && errno == ESRCH }
@@ -119,7 +123,7 @@ final class PersistentTerminalStartupTests: XCTestCase {
         let pidFile = fixture.directory.appendingPathComponent("delayed-helper-pid")
         let launcher = fixture.directory.appendingPathComponent("delayed-helper-launch")
         func quote(_ text: String) -> String { "'" + text.replacingOccurrences(of: "'", with: "'\\''") + "'" }
-        let script = "#!/bin/sh\nprintf '%s\\n' \"$$\" > \(quote(pidFile.path))\nsleep 3.3\nexec \(quote(fixture.helper.path)) \"$@\"\n"
+        let script = "#!/bin/sh\n\(fixture.publishPID(to: pidFile))sleep 3.3\nexec \(quote(fixture.helper.path)) \"$@\"\n"
         try script.write(to: launcher, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: launcher.path)
         let session = try fixture.session(helperOverride: launcher)
@@ -151,6 +155,57 @@ final class PersistentTerminalStartupTests: XCTestCase {
             kill(pid, 0) != 0 && errno == ESRCH
         }
         XCTAssertFalse(session.isRunning)
+    }
+
+    func testRecordedLauncherPublishesACompletePIDAtomically() async throws {
+        let fixture = try StartupFixture()
+        defer { fixture.cleanUp() }
+        let release = fixture.directory.appendingPathComponent("release-pid-publication")
+        let launcher = try fixture.recordedLauncher(beforeExec: "exit 0", beforePIDWrite:
+            "while [ -d \(fixture.quote(fixture.directory.path)) ] && [ ! -f \(fixture.quote(release.path)) ]; do /bin/sleep 0.02; done")
+        let process = Process()
+        process.executableURL = launcher.executable
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        defer { if process.isRunning { process.terminate(); process.waitUntilExit() } }
+        try await waitUntil { FileManager.default.fileExists(atPath: launcher.pidFile.appendingPathExtension("pending").path) }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: launcher.pidFile.path))
+        try Data().write(to: release, options: .atomic)
+        try await waitUntil { FileManager.default.fileExists(atPath: launcher.pidFile.path) }
+        let published = try String(contentsOf: launcher.pidFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertEqual(try XCTUnwrap(Int32(published)), process.processIdentifier)
+    }
+
+    func testConcurrentShellPublishersRetainEveryPIDRecord() async throws {
+        let fixture = try StartupFixture()
+        defer { fixture.cleanUp() }
+        let release = fixture.directory.appendingPathComponent("release-shell-pids")
+        let barrier = "while [ -d \(fixture.quote(fixture.directory.path)) ] && [ ! -f \(fixture.quote(release.path)) ]; do /bin/sleep 0.02; done"
+        var publishers: [Process] = []
+        defer {
+            for process in publishers where process.isRunning {
+                process.terminate()
+                process.waitUntilExit()
+            }
+        }
+        for _ in 0..<8 {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/sh")
+            process.arguments = ["-c", fixture.publishShellPID(beforeRename: barrier)]
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+            try process.run()
+            publishers.append(process)
+        }
+        try await waitUntil {
+            let pending = try? FileManager.default.contentsOfDirectory(at: fixture.shellPIDDirectory, includingPropertiesForKeys: nil)
+            return pending?.filter { $0.pathExtension == "pending" }.count == 8
+        }
+        XCTAssertTrue(try fixture.recordedShellPIDs().isEmpty)
+        try Data().write(to: release, options: .atomic)
+        try await waitUntil { (try? fixture.recordedShellPIDs().count) == 8 }
+        XCTAssertEqual(try fixture.recordedShellPIDs(), publishers.map(\.processIdentifier).sorted())
     }
 
     func testSuccessfulRaceWinnerSurvivesWhileOwnedDelayedLauncherStops() async throws {
@@ -196,6 +251,46 @@ final class PersistentTerminalStartupTests: XCTestCase {
         try await waitUntil { first.contentSnapshot(maximumCharacters: 8_192).contains("existing-host-survived") }
     }
 
+    func testBusyAttachmentRetriesUntilPriorControllerDetaches() async throws {
+        let fixture = try StartupFixture()
+        defer { fixture.cleanUp() }
+        let first = try fixture.session()
+        defer { first.terminate() }
+        try first.start()
+        try await waitUntil { first.isRunning }
+        let second = try fixture.session()
+        defer { second.terminate() }
+        var failures: [TerminalSessionFailure] = []
+        second.onEvent = { if case .failed(let failure) = $0 { failures.append(failure) } }
+        try second.start()
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertFalse(second.isRunning)
+        first.detach()
+        try await waitUntil { second.isRunning }
+        XCTAssertTrue(failures.isEmpty)
+        XCTAssertNoThrow(try second.insertLocalText("reattached-after-busy"))
+        try await waitUntil { second.contentSnapshot(maximumCharacters: 8_192).contains("reattached-after-busy") }
+    }
+
+    func testPersistentBusyAttachmentStopsRetryingAndPreservesTheController() async throws {
+        let fixture = try StartupFixture()
+        defer { fixture.cleanUp() }
+        let first = try fixture.session()
+        defer { first.terminate() }
+        try first.start()
+        try await waitUntil { first.isRunning }
+        let second = try fixture.session()
+        var failures: [TerminalSessionFailure] = []
+        second.onEvent = { if case .failed(let failure) = $0 { failures.append(failure) } }
+        try second.start()
+        try await waitUntil { !failures.isEmpty }
+        XCTAssertTrue(failures[0].message.contains("attached controller"))
+        XCTAssertFalse(second.isRunning)
+        XCTAssertTrue(first.isRunning)
+        XCTAssertNoThrow(try first.insertLocalText("busy-controller-preserved"))
+        try await waitUntil { first.contentSnapshot(maximumCharacters: 8_192).contains("busy-controller-preserved") }
+    }
+
     private func processState(_ pid: pid_t) -> String {
         var info = proc_bsdinfo()
         let size = Int32(MemoryLayout.size(ofValue: info))
@@ -220,7 +315,7 @@ private final class StartupFixture {
     let directory: URL
     let helper: URL
     let socketPath: String
-    var pidFile: URL { directory.appendingPathComponent("shell-pids") }
+    var shellPIDDirectory: URL { directory.appendingPathComponent("shell-pids") }
 
     init() throws {
         directory = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("myterm-startup-\(UUID().uuidString)")
@@ -247,7 +342,7 @@ private final class StartupFixture {
     }
 
     private var shellArguments: [String] {
-        ["-c", "printf '%s\\n' \"$$\" >> '\(pidFile.path)'; exec /bin/sh -i"]
+        ["-c", "\(publishShellPID())exec /bin/sh -i"]
     }
 
     func launchHost() throws -> Process {
@@ -261,10 +356,29 @@ private final class StartupFixture {
 
     func quote(_ text: String) -> String { "'" + text.replacingOccurrences(of: "'", with: "'\\''") + "'" }
 
-    func recordedLauncher(beforeExec: String) throws -> (executable: URL, pidFile: URL) {
+    func publishPID(to destination: URL, beforeWrite: String = "") -> String {
+        let pending = destination.appendingPathExtension("pending")
+        let preparation = beforeWrite.isEmpty ? "" : ": > \(quote(pending.path))\n\(beforeWrite)\n"
+        return "\(preparation){ printf '%s\\n' \"$$\"; } > \(quote(pending.path)) && /bin/mv -f \(quote(pending.path)) \(quote(destination.path))\n"
+    }
+
+    func publishShellPID(beforeRename: String = "") -> String {
+        let records = quote(shellPIDDirectory.path)
+        return "/bin/mkdir -p \(records)\nprintf '%s\\n' \"$$\" > \(records)/\"$$.pending\"\n\(beforeRename)\n/bin/mv -f \(records)/\"$$.pending\" \(records)/\"$$.pid\"\n"
+    }
+
+    func recordedShellPIDs() throws -> [pid_t] {
+        guard FileManager.default.fileExists(atPath: shellPIDDirectory.path) else { return [] }
+        return try FileManager.default.contentsOfDirectory(at: shellPIDDirectory, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "pid" }
+            .map { try XCTUnwrap(Int32(try String(contentsOf: $0, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines))) }
+            .sorted()
+    }
+
+    func recordedLauncher(beforeExec: String, beforePIDWrite: String = "") throws -> (executable: URL, pidFile: URL) {
         let pidFile = directory.appendingPathComponent(UUID().uuidString + "-pid")
         let executable = directory.appendingPathComponent(UUID().uuidString + "-launcher")
-        let script = "#!/bin/sh\nprintf '%s\\n' \"$$\" > \(quote(pidFile.path))\n\(beforeExec)\n[ -d \(quote(directory.path)) ] || exit 0\nexec \(quote(helper.path)) \"$@\"\n"
+        let script = "#!/bin/sh\n\(publishPID(to: pidFile, beforeWrite: beforePIDWrite))\(beforeExec)\n[ -d \(quote(directory.path)) ] || exit 0\nexec \(quote(helper.path)) \"$@\"\n"
         try script.write(to: executable, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
         return (executable, pidFile)

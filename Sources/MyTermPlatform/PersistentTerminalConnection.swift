@@ -61,14 +61,56 @@ final class PersistentTerminalConnection {
             }
             created = try SessionHostSocket.peerProcessID(socket) == process.processIdentifier
         }
+        let busyDeadline = Date().addingTimeInterval(1)
         var decoder = SessionHostDecoder()
-        let attached = try Self.readAttachment(socket, decoder: &decoder)
+        let attached: SessionHostMessage
+        while true {
+            do {
+                decoder = SessionHostDecoder()
+                attached = try Self.readAttachment(socket, decoder: &decoder)
+                break
+            } catch SessionHostError.busy {
+                if let launchedProcess,
+                   try SessionHostSocket.peerProcessID(socket) == launchedProcess.processIdentifier {
+                    // Another controller claimed our newly launched host before us. It now
+                    // owns that process, so a failed retry must not terminate its session.
+                    ownedHostTransferred = true
+                }
+                guard Date() < busyDeadline else { throw SessionHostError.busy }
+                close(socket)
+                socket = -1
+                usleep(20_000)
+                socket = try SessionHostSocket.connect(path: path)
+                created = false
+            }
+        }
         self.attachment = attached
         self.createdHost = created
         self.descriptor = socket
         self.decoder = decoder
         connectionTransferred = true
-        ownedHostTransferred = created
+        ownedHostTransferred = ownedHostTransferred || created
+    }
+
+    nonisolated static func connectAsync(identifier: UUID, namespace: URL, shell: URL, arguments: [String],
+        environment: [String], directory: URL, columns: Int, rows: Int, helperURL: URL?) async -> Result<PersistentTerminalConnection, Error> {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(returning: Result {
+                    try PersistentTerminalConnection(identifier: identifier, namespace: namespace, shell: shell,
+                        arguments: arguments, environment: environment, directory: directory, columns: columns,
+                        rows: rows, helperURL: helperURL)
+                })
+            }
+        }
+    }
+
+    nonisolated static func stopExistingAsync(identifier: UUID, namespace: URL) async -> Result<Void, Error> {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(returning: Result { try stopExisting(identifier: identifier, namespace: namespace) })
+            }
+        }
     }
 
     nonisolated static func socketDirectory(namespace: URL) -> URL {
@@ -134,8 +176,10 @@ final class PersistentTerminalConnection {
             messages += try decoder.append(chunk)
         }
         guard messages.count == 1, let attached = messages.first else { throw SessionHostError.invalidFrame }
+        if attached.kind == "busy" { throw SessionHostError.busy }
         guard attached.kind == "attached", attached.bytes != nil,
-              attached.generation != nil, attached.pid != nil else {
+              attached.generation != nil, attached.pid != nil, attached.sequence != nil,
+              attached.columns != nil, attached.rows != nil else {
             throw TerminalSessionFailure(message: attached.text ?? "The terminal host could not attach.")
         }
         return attached
@@ -193,6 +237,9 @@ final class PersistentTerminalConnection {
 /// Explicit pane deletion can happen before its workspace has created any terminal views.
 @MainActor
 public enum PersistentTerminalRuntime {
+    public static func stopExistingAsync(identifier: UUID, directory: URL) async throws {
+        try await PersistentTerminalConnection.stopExistingAsync(identifier: identifier, namespace: directory).get()
+    }
     public nonisolated static func stopExisting(identifier: UUID, directory: URL) throws {
         try PersistentTerminalConnection.stopExisting(identifier: identifier, namespace: directory)
     }

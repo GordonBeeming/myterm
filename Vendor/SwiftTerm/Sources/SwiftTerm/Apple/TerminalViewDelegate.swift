@@ -10,6 +10,9 @@ import Foundation
 /// Delegate used by ``TerminalView`` to notify the user of events happening
 /// in it.
 public protocol TerminalViewDelegate: AnyObject {
+    /// Return true when a transport must apply this grid change in its ordered output
+    /// stream. The view keeps its current emulator geometry until the transport applies it.
+    func terminalResizeRequested(source: TerminalView, columns: Int, rows: Int) -> Bool
     /**
      * The client code sending commands to the terminal has requested a new size for the terminal
      * Applications that support this should call the `TerminalView.getOptimalFrameSize`
@@ -103,5 +106,9 @@ public protocol TerminalViewDelegate: AnyObject {
      */
     func rangeChanged (source: TerminalView, startY: Int, endY: Int)
 
+}
+
+public extension TerminalViewDelegate {
+    func terminalResizeRequested(source: TerminalView, columns: Int, rows: Int) -> Bool { false }
 }
 #endif

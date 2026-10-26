@@ -1,12 +1,45 @@
 import MyTermCore
 import SwiftUI
 
-/// The destination is pinned when the sheet opens so a later selection never redirects input.
-struct TerminalSnippetsView: View {
-    let model: AppModel
+/// Captured by AppModel when presentation starts, rather than by a recreatable View initializer.
+struct TerminalSnippetDestination: Equatable {
     let workspaceID: UUID
     let sessionID: TerminalSessionID?
-    let destinationTitle: String
+    let title: String
+
+    @MainActor
+    init(model: AppModel) {
+        workspaceID = model.selectedWorkspace.id.rawValue
+        sessionID = model.selectedTab?.terminalSession?.id
+        title = model.selectedTab?.displayTitle ?? "No terminal selected"
+    }
+
+    @MainActor
+    func insert(_ text: String, into model: AppModel) throws {
+        guard let sessionID,
+              let workspace = model.workspaces.first(where: { $0.id.rawValue == workspaceID }),
+              workspace.allTabs.contains(where: { $0.terminalSession?.id == sessionID }),
+              let process = model.terminalSession(for: sessionID) else {
+            throw TerminalSnippetDestinationError.unavailable
+        }
+        try process.insertLocalText(text)
+    }
+}
+
+private enum TerminalSnippetDestinationError: LocalizedError {
+    case unavailable
+    var errorDescription: String? {
+        "The selected terminal is no longer available. Your draft is still here."
+    }
+}
+
+/// The upstream presentation owns the destination for the whole sheet lifetime.
+struct TerminalSnippetsView: View {
+    let model: AppModel
+    let destination: TerminalSnippetDestination
+    private var workspaceID: UUID { destination.workspaceID }
+    private var sessionID: TerminalSessionID? { destination.sessionID }
+    private var destinationTitle: String { destination.title }
     private var store: DesktopTerminalSnippetStore { model.terminalSnippetStore }
     @State private var editing = TerminalSnippet(title: "", text: "")
     @State private var message: String?
@@ -15,15 +48,14 @@ struct TerminalSnippetsView: View {
 
     init(model: AppModel) {
         self.model = model
-        workspaceID = model.selectedWorkspace.id.rawValue
-        sessionID = model.selectedTab?.terminalSession?.id
-        destinationTitle = model.selectedTab?.displayTitle ?? "No terminal selected"
+        destination = model.terminalSnippetDestination ?? TerminalSnippetDestination(model: model)
     }
 
     private var canSave: Bool {
         !editing.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !editing.text.isEmpty
             && editing.text.utf8.count <= DesktopTerminalSnippetStore.maximumUTF8Bytes
+            && (editing.workspaceID == nil || model.workspaces.contains { $0.id.rawValue == editing.workspaceID })
     }
 
     var body: some View {
@@ -124,12 +156,8 @@ struct TerminalSnippetsView: View {
     }
 
     private func insert() {
-        guard let sessionID, let process = model.terminalSession(for: sessionID) else {
-            message = "The selected terminal is no longer available. Your draft is still here."
-            return
-        }
         do {
-            try process.insertLocalText(editing.text)
+            try destination.insert(editing.text, into: model)
             message = "Inserted into \(destinationTitle) without Return. Check the terminal before inserting again."
         } catch { message = error.localizedDescription }
     }

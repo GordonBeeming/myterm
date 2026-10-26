@@ -65,7 +65,9 @@ func (c Config) ValidateDevTestAuth() error {
 				local = false
 			}
 			for _, character := range label {
-				if !(character >= 'a' && character <= 'z') && !(character >= '0' && character <= '9') && character != '-' {
+				isLower := character >= 'a' && character <= 'z'
+				isDigit := character >= '0' && character <= '9'
+				if !isLower && !isDigit && character != '-' {
 					local = false
 				}
 			}

@@ -90,6 +90,8 @@ open class LocalProcessTerminalView: TerminalView, TerminalViewDelegate, LocalPr
      * The `processDelegate` is used to deliver messages and information relevant t
      */
     public weak var processDelegate: LocalProcessTerminalViewDelegate?
+
+    open func terminalResizeRequested(source: TerminalView, columns: Int, rows: Int) -> Bool { false }
     
     /**
      * This method is invoked to notify the client of the new columsn and rows that have been set by the UI

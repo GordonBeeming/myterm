@@ -1,5 +1,6 @@
 import MyTermCore
 import SwiftUI
+import UIKit
 
 struct CompanionBrowserCapture: Identifiable {
     let id = UUID()
@@ -7,7 +8,19 @@ struct CompanionBrowserCapture: Identifiable {
     let title: String
     let selectedText: String
     let screenshot: Data?
+    /// Decoded once for this immutable capture, including when the preview is unavailable.
+    /// A replacement capture owns its own image, so editing instructions never decodes it again.
+    let previewImage: UIImage?
     let notes: [String]
+
+    init(url: String, title: String, selectedText: String, screenshot: Data?, notes: [String]) {
+        self.url = url
+        self.title = title
+        self.selectedText = selectedText
+        self.screenshot = screenshot
+        self.previewImage = screenshot.flatMap { UIImage(data: $0) }
+        self.notes = notes
+    }
 
     func appending(instructions: String, to existing: String,
                    capturedConnection: SavedConnectionID, currentConnection: SavedConnectionID?) throws -> String {
@@ -91,7 +104,7 @@ struct BrowserContextHandoffView: View {
                     Text("Adds URL, selected text and your instruction to the existing draft for review. Nothing is sent.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                if let screenshot = capture.screenshot, let image = UIImage(data: screenshot) {
+                if let screenshot = capture.screenshot, let image = capture.previewImage {
                     Section("Screenshot") {
                         Image(uiImage: image).resizable().scaledToFit().frame(maxHeight: 230)
                         Button(isPasting ? "Pasting screenshot…" : "Paste screenshot to terminal") {

@@ -33,4 +33,28 @@ final class TerminalSnippetStoreTests: XCTestCase {
         XCTAssertFalse(store.save(invalid))
         XCTAssertEqual(store.snippets, [original])
     }
+    func testRemovingWorkspaceFreesFullCatalogQuotaAndPersistsOtherScopes() throws {
+        let name = "TerminalSnippetStoreTests.\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let store = DesktopTerminalSnippetStore(defaults: defaults)
+        let closed = UUID(), surviving = UUID()
+        let global = TerminalSnippet(title: "Global", text: "global")
+        let other = TerminalSnippet(title: "Other", text: "other", workspaceID: surviving)
+        XCTAssertTrue(store.save(global))
+        XCTAssertTrue(store.save(other))
+        for index in 0..<98 {
+            XCTAssertTrue(store.save(TerminalSnippet(title: "Scoped \(index)", text: "run", workspaceID: closed)))
+        }
+        XCTAssertFalse(store.save(TerminalSnippet(title: "Over quota", text: "extra")))
+        store.removeWorkspace(closed)
+        XCTAssertEqual(store.snippets, [global, other])
+        XCTAssertEqual(DesktopTerminalSnippetStore(defaults: defaults).snippets, [global, other])
+        for index in 0..<98 {
+            XCTAssertTrue(store.save(TerminalSnippet(title: "Replacement \(index)", text: "run")))
+        }
+        XCTAssertEqual(store.snippets.count, 100)
+        XCTAssertFalse(store.save(TerminalSnippet(title: "Still bounded", text: "extra")))
+    }
+
 }

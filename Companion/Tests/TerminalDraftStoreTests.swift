@@ -4,6 +4,23 @@ import MyTermRemote
 import XCTest
 @testable import MyTermCompanion
 
+private final class DraftRecordingDefaults: UserDefaults, @unchecked Sendable {
+    private let recordedLock = NSLock()
+    private var recordedWrites: [(String, Int?)] = []
+
+    override func set(_ value: Any?, forKey defaultName: String) {
+        recordedLock.withLock { recordedWrites.append((defaultName, (value as? Data)?.count)) }
+        super.set(value, forKey: defaultName)
+    }
+
+    func takeWrites() -> [(String, Int?)] {
+        recordedLock.withLock {
+            defer { recordedWrites.removeAll() }
+            return recordedWrites
+        }
+    }
+}
+
 @MainActor
 final class TerminalDraftStoreTests: XCTestCase {
     private func defaults() -> UserDefaults {
@@ -181,6 +198,96 @@ final class TerminalDraftStoreTests: XCTestCase {
         draft.text = "Shortened"
         XCTAssertNil(draft.persistenceErrorMessage)
         XCTAssertEqual(TerminalDraftStore(defaults: defaults).draft(for: route).text, "Shortened")
+    }
+
+    func testLegacyMigrationRestoresScopedDraftsAndInterruptedOutcomeWithoutKeepingWholeBlob() throws {
+        let defaults = defaults()
+        let first = route()
+        let second = route(connection: first.connectionID)
+        func key(_ route: TerminalRoute) -> String {
+            "\(route.connectionID.storageKey)|\(route.workspaceID)|\(route.sessionID)"
+        }
+        let legacy = [key(first): ["text": "Interrupted legacy draft", "outcome": "sending"],
+                      key(second): ["text": "Other destination"]]
+        defaults.set(try JSONSerialization.data(withJSONObject: legacy), forKey: "companionTerminalDrafts.v1")
+        let migrated = TerminalDraftStore(defaults: defaults)
+        XCTAssertEqual(migrated.draft(for: first).text, "Interrupted legacy draft")
+        XCTAssertEqual(migrated.draft(for: first).insertionOutcome, .unconfirmed)
+        XCTAssertEqual(migrated.draft(for: second).text, "Other destination")
+        XCTAssertNil(defaults.data(forKey: "companionTerminalDrafts.v1"))
+        let reopened = TerminalDraftStore(defaults: defaults)
+        XCTAssertEqual(reopened.draft(for: first).insertionOutcome, .unconfirmed)
+        XCTAssertFalse(reopened.draft(for: first).isSending)
+        XCTAssertEqual(reopened.draft(for: second).text, "Other destination")
+    }
+
+    func testTypingOnlyWritesTheChangedEntryAndImmediatelyRestoresLatestTextAndOutcomes() throws {
+        let name = "TerminalDraftStoreWrites.\(UUID())"
+        let defaults = try XCTUnwrap(DraftRecordingDefaults(suiteName: name))
+        addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: name) }
+        let store = TerminalDraftStore(defaults: defaults)
+        let edited = route()
+        store.draft(for: edited).text = "before"
+        for _ in 1..<TerminalDraftStore.maximumEntries {
+            store.draft(for: route()).text = String(repeating: "x", count: TerminalComposerDraft.maximumUTF8Bytes)
+        }
+        _ = defaults.takeWrites()
+        let draft = store.draft(for: edited)
+        draft.text = "latest keystroke"
+        let writes = defaults.takeWrites()
+        XCTAssertEqual(writes.count, 1, "Typing must not rewrite the index or any other draft")
+        XCTAssertLessThan(try XCTUnwrap(writes.compactMap { $0.1 }.first), 1_024,
+                          "A small edit must not encode the other megabytes of saved text")
+        XCTAssertEqual(TerminalDraftStore(defaults: defaults).draft(for: edited).text, "latest keystroke")
+        draft.text = "latest keystroke"
+        XCTAssertTrue(defaults.takeWrites().isEmpty, "Unchanged values should not create persistence work")
+        draft.beginInsertion()
+        XCTAssertEqual(TerminalDraftStore(defaults: defaults).draft(for: edited).insertionOutcome, .unconfirmed)
+        draft.finishInsertion(error: nil)
+        XCTAssertEqual(TerminalDraftStore(defaults: defaults).draft(for: edited).insertionOutcome, .transportSent)
+    }
+
+    func testPruningRetainsMemoryOnlyUnconfirmedDraftWhenCatalogIsFull() {
+        let defaults = defaults()
+        let store = TerminalDraftStore(defaults: defaults)
+        let overflowRoute = route()
+        for _ in 0..<TerminalDraftStore.maximumEntries {
+            store.draft(for: route(connection: overflowRoute.connectionID)).text = "Saved"
+        }
+        let overflow = store.draft(for: overflowRoute)
+        overflow.text = "Potentially delivered input"
+        overflow.beginInsertion()
+        overflow.finishInsertion(error: RemoteError.disconnected)
+        XCTAssertNotNil(overflow.persistenceErrorMessage)
+        XCTAssertEqual(overflow.insertionOutcome, .unconfirmed)
+        store.pruneClosedTerminals(for: overflowRoute.connectionID,
+                                   projection: RemoteWorkspaceProjection(folders: [], workspaces: []))
+        XCTAssertTrue(store.draft(for: overflowRoute) === overflow)
+        XCTAssertEqual(overflow.text, "Potentially delivered input")
+        XCTAssertEqual(overflow.insertionOutcome, .unconfirmed)
+        // Pruning freed saved slots; an explicit subsequent edit can persist the retained draft.
+        overflow.text += " reviewed"
+        XCTAssertNil(overflow.persistenceErrorMessage)
+        let restored = TerminalDraftStore(defaults: defaults).draft(for: overflowRoute)
+        XCTAssertEqual(restored.text, overflow.text)
+        XCTAssertEqual(restored.insertionOutcome, .unconfirmed)
+    }
+
+    func testInterruptedMigrationKeepsNewerIndexedEntriesAndRecoversOtherLegacyDestinations() throws {
+        let defaults = defaults()
+        let current = route()
+        let missing = route(connection: current.connectionID)
+        let original = TerminalDraftStore(defaults: defaults)
+        original.draft(for: current).text = "Newer v2 text"
+        func key(_ route: TerminalRoute) -> String {
+            "\(route.connectionID.storageKey)|\(route.workspaceID)|\(route.sessionID)"
+        }
+        let legacy = [key(current): ["text": "Older v1 text"], key(missing): ["text": "Unmigrated legacy text"]]
+        defaults.set(try JSONSerialization.data(withJSONObject: legacy), forKey: "companionTerminalDrafts.v1")
+        let recovered = TerminalDraftStore(defaults: defaults)
+        XCTAssertEqual(recovered.draft(for: current).text, "Newer v2 text")
+        XCTAssertEqual(recovered.draft(for: missing).text, "Unmigrated legacy text")
+        XCTAssertNil(defaults.data(forKey: "companionTerminalDrafts.v1"))
     }
 
 }

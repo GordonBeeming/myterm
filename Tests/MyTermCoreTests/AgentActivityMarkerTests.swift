@@ -2,6 +2,30 @@ import XCTest
 @testable import MyTermCore
 
 final class AgentActivityMarkerTests: XCTestCase {
+    func testDecodedReportsValidateRecoveryIdentifiers() throws {
+        for session in ["session; echo unsafe", "$(echo unsafe)", "line\nbreak", String(repeating: "x", count: 65)] {
+            let data = try JSONSerialization.data(withJSONObject: [
+                "agent": "codex", "activity": "working", "sessionID": session,
+                "toolRequestID": String(repeating: "A", count: 64)
+            ])
+            let report = try JSONDecoder().decode(AgentActivityReport.self, from: data)
+            XCTAssertEqual(report.agent, "codex")
+            XCTAssertEqual(report.activity, .working)
+            XCTAssertNil(report.sessionID)
+            XCTAssertNil(report.toolRequestID)
+        }
+    }
+
+    func testDecodedReportsKeepValidMetadataAndOptionalFieldCompatibility() throws {
+        let report = AgentActivityReport(agent: "codex", activity: .awaitingInput,
+            sessionID: "session_123-abc.def", workingDirectory: URL(fileURLWithPath: "/tmp/a project"),
+            codexLauncher: .statusline, toolRequestID: String(repeating: "a", count: 64))
+        XCTAssertEqual(try JSONDecoder().decode(AgentActivityReport.self, from: JSONEncoder().encode(report)), report)
+        let minimal = try JSONSerialization.data(withJSONObject: ["agent": "claude", "activity": "finished"])
+        XCTAssertEqual(try JSONDecoder().decode(AgentActivityReport.self, from: minimal),
+                       AgentActivityReport(agent: "claude", activity: .finished))
+    }
+
     func testReportsTheAgentAndWhatItIsDoing() {
         XCTAssertEqual(
             AgentActivityMarker.report(fromPayload: "agent=claude;event=finished"),

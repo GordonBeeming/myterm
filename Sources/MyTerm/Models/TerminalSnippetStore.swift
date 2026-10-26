@@ -41,6 +41,13 @@ final class DesktopTerminalSnippetStore {
         persist()
     }
 
+    /// A workspace's entries belong to its lifetime. Globals and other workspaces are untouched.
+    func removeWorkspace(_ workspaceID: UUID) {
+        let previousCount = snippets.count
+        snippets.removeAll { $0.workspaceID == workspaceID }
+        if snippets.count != previousCount { persist() }
+    }
+
     private func persist() {
         if let data = try? JSONEncoder().encode(snippets) { defaults.set(data, forKey: Self.storageKey) }
     }

@@ -44,6 +44,9 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
     private var pendingInput = Data()
     private var foregroundTimer: Timer?
     private var lastForegroundName: String?
+    private var clientHasOmittedHistory = false
+    private var pendingGeometry: (columns: Int, rows: Int)?
+    private var geometryFlushScheduled = false
     private var latestActivity: AgentActivityReport?
     private var pendingActivities: [String: [AgentActivityReport]] = [:]
     private let logger = Logger(subsystem: "com.gordonbeeming.myterm.session-host", category: "lifecycle")
@@ -105,14 +108,16 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
                 return
             }
             guard client < 0 else {
-                try SessionHostSocket.write(.init(kind: "error", text: "This terminal already has an attached controller."), to: descriptor)
+                try SessionHostSocket.write(.init(kind: "busy", text: "This terminal already has an attached controller."), to: descriptor)
                 close(descriptor)
                 return
             }
+            try flushPendingGeometry()
             reportForeground()
             client = descriptor
             decoder = SessionHostDecoder()
             let checkpoint = try emulator.exportBoundedCheckpoint()
+            clientHasOmittedHistory = checkpoint.omittedScrollbackLines > 0
             try SessionHostSocket.write(.init(kind: "attached", bytes: checkpoint.bytes, pid: process.shellPid,
                                               columns: emulator.cols, rows: emulator.rows,
                                               generation: generation, sequence: sequence, text: readyToken,
@@ -145,15 +150,17 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
                     guard let bytes = message.bytes, !bytes.isEmpty,
                           bytes.count <= SessionHostMessage.maximumInputBytes,
                           message.generation == generation else { throw SessionHostError.invalidFrame }
+                    try flushPendingGeometry()
                     try writeInput(bytes)
                 case "resize":
                     guard let columns = message.columns, let rows = message.rows,
                           (2...1_024).contains(columns), (1...1_024).contains(rows),
                           columns * rows <= SessionHostGeometry.maximumCellsPerBuffer,
                           message.generation == generation else { throw SessionHostError.invalidFrame }
-                    emulator.resize(cols: columns, rows: rows)
-                    var size = getWindowSize()
-                    guard ioctl(process.childfd, TIOCSWINSZ, &size) == 0 else { throw SessionHostError.system("resize", errno) }
+                    if clientHasOmittedHistory {
+                        pendingGeometry = (columns, rows)
+                        scheduleGeometryFlush()
+                    } else { try applyGeometry(columns: columns, rows: rows) }
                 case "stop":
                     guard message.generation == generation else { throw SessionHostError.invalidFrame }
                     stop()
@@ -170,6 +177,46 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
             sendToClient(.init(kind: "error", text: error.localizedDescription))
             disconnect()
         }
+    }
+
+    private func scheduleGeometryFlush() {
+        guard !geometryFlushScheduled else { return }
+        geometryFlushScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.geometryFlushScheduled = false
+                do { try self.flushPendingGeometry() }
+                catch {
+                    self.log(error)
+                    self.sendToClient(.init(kind: "error", text: error.localizedDescription))
+                    self.disconnect()
+                }
+            }
+        }
+    }
+
+    private func flushPendingGeometry() throws {
+        guard let geometry = pendingGeometry else { return }
+        pendingGeometry = nil
+        guard !stopping else { return }
+        try applyGeometry(columns: geometry.columns, rows: geometry.rows)
+    }
+
+    private func applyGeometry(columns: Int, rows: Int) throws {
+        let changed = emulator.cols != columns || emulator.rows != rows
+        emulator.resize(cols: columns, rows: rows)
+        var size = getWindowSize()
+        guard ioctl(process.childfd, TIOCSWINSZ, &size) == 0 else { throw SessionHostError.system("resize", errno) }
+        // Reflow needs any omitted prefix of a wrapped logical line. Only the host has
+        // that prefix, so an elided attachment receives an authoritative bounded result.
+        let checkpoint = changed && client >= 0 && clientHasOmittedHistory
+            ? try emulator.exportBoundedCheckpoint() : nil
+        if let checkpoint { clientHasOmittedHistory = checkpoint.omittedScrollbackLines > 0 }
+        sequence &+= 1
+        sendToClient(.init(kind: "geometry", bytes: checkpoint?.bytes, columns: columns, rows: rows,
+                           generation: generation, sequence: sequence,
+                           omittedScrollbackLines: checkpoint?.omittedScrollbackLines))
     }
 
     private func writeInput(_ bytes: Data) throws {

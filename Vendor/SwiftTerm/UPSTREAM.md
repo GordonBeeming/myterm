@@ -12,6 +12,7 @@ The myterm additions provide a bounded, versioned terminal checkpoint and native
 - `TerminalView.invalidateAfterCheckpointImport()` prepares native images and refreshes rendering after import.
 - `sendsTerminalResponses`, `acceptsUserInput`, and `automaticallyResizesTerminal` separate the authoritative host from spectator views. They default to the original behavior.
 - `resizeToFit()` reapplies the view's current geometry after it gains control.
+- `TerminalViewDelegate.terminalResizeRequested` lets an asynchronous transport defer native and font-driven grid changes. `applyTerminalGeometry` applies the authoritative change without resetting terminal modes, and `fittedTerminalGeometry` calculates the requested native grid without mutating the emulator. The default delegate keeps immediate local resizing.
 - On iOS, `usesIndependentViewport` lets a viewer follow output within its own visible height. `captureViewport()`, `restoreViewport(_:)`, and `followOutput()` preserve local reading intent across checkpoint imports. `onViewportChanged` and `onFollowOutputChanged` report local scrolling changes.
 - The iOS `coalescesInteractiveOutput` option keeps remote echo on the normal display timer while typing, so separate output chunks can be drawn together. It defaults to `false`.
 

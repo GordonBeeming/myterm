@@ -41,10 +41,7 @@ struct BrowserContextView: View {
                 TextEditor(text: $text).font(.body.monospaced())
                     .frame(minWidth: 300, minHeight: 240)
                     .accessibilityLabel("Browser feedback draft")
-                if let image = NSImage(data: capture.screenshotPNG) {
-                    Image(nsImage: image).resizable().scaledToFit().frame(width: 250, height: 240)
-                        .accessibilityLabel("Captured visible page")
-                }
+                BrowserScreenshotPreview(png: capture.screenshotPNG)
             }
             Toggle("Include screenshot file reference", isOn: $includesScreenshot)
             Text("The screenshot is saved locally for up to 24 hours (cleaned on next capture or launch), and its path is inserted with the text. Your coding agent must read the image file; it is not automatically attached. No Return is added. Multiline insertion requires bracketed paste.")
@@ -75,5 +72,29 @@ struct BrowserContextView: View {
             try model.insertBrowserContext(text, screenshot: includesScreenshot ? capture.screenshotPNG : nil, target: target)
             dismiss()
         } catch { errorMessage = error.localizedDescription }
+    }
+}
+
+/// Image decoding follows screenshot changes, rather than editor updates. Keep the source bytes
+/// with the decoded image so a replaced capture can never briefly display the previous page.
+private struct BrowserScreenshotPreview: View {
+    let png: Data
+    @State private var decoded: DecodedScreenshot?
+
+    private struct DecodedScreenshot {
+        let png: Data
+        let image: NSImage?
+    }
+
+    var body: some View {
+        Group {
+            if let decoded, decoded.png == png, let image = decoded.image {
+                Image(nsImage: image).resizable().scaledToFit().frame(width: 250, height: 240)
+                    .accessibilityLabel("Captured visible page")
+            }
+        }
+        .onChange(of: png, initial: true) { _, png in
+            decoded = DecodedScreenshot(png: png, image: NSImage(data: png))
+        }
     }
 }

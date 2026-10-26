@@ -230,6 +230,9 @@ extension TerminalView {
         let newRows = Int (newSize.height / cellDimension.height)
         let newCols = Int (getEffectiveWidth (size: newSize) / cellDimension.width)
         
+        if terminalDelegate?.terminalResizeRequested(source: self, columns: newCols, rows: newRows) == true {
+            return false
+        }
         if newCols != terminal.cols || newRows != terminal.rows {
             selection.active = false
             terminal.resize (cols: newCols, rows: newRows)
@@ -2332,9 +2335,21 @@ extension TerminalView {
      */
     public func resize (cols: Int, rows: Int)
     {
+        if terminalDelegate?.terminalResizeRequested(source: self, columns: cols, rows: rows) == true { return }
         terminal.resize (cols: cols, rows: rows)
         sizeChanged (source: terminal)
         terminal.softReset()
+    }
+
+    /// Applies transport-authoritative geometry after all earlier output has been parsed.
+    /// It deliberately preserves terminal modes, matching the terminal core's resize.
+    public func applyTerminalGeometry(columns: Int, rows: Int) {
+        selection.active = false
+        terminal.resize(cols: columns, rows: rows)
+        accessibility.invalidate()
+        search.invalidate()
+        updateScroller()
+        queuePendingDisplay()
     }
 
     /// Recomputes the terminal grid from the current native view size even when
@@ -2345,6 +2360,19 @@ extension TerminalView {
         automaticallyResizesTerminal = true
         defer { automaticallyResizesTerminal = previous }
         _ = processSizeChange(newSize: frame.size)
+    }
+
+    public func fittedTerminalGeometry() -> (columns: Int, rows: Int) {
+#if os(macOS)
+        guard let dimension = cellDimension else { return (terminal.cols, terminal.rows) }
+#else
+        let dimension = cellDimension
+#endif
+        guard dimension.width > 0, dimension.height > 0 else {
+            return (terminal.cols, terminal.rows)
+        }
+        return (max(2, Int(getEffectiveWidth(size: frame.size) / dimension.width)),
+                max(1, Int(frame.height / dimension.height)))
     }
 
     /**

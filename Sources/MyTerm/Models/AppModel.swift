@@ -119,7 +119,14 @@ final class AppModel {
     var isSessionJumpPresented = false
     var recentSessionTabIDs: [TabID] = []
     var isSessionInboxPresented = false
-    var isTerminalSnippetsPresented = false
+    var isTerminalSnippetsPresented = false {
+        didSet {
+            if isTerminalSnippetsPresented && !oldValue {
+                terminalSnippetDestination = TerminalSnippetDestination(model: self)
+            }
+        }
+    }
+    private(set) var terminalSnippetDestination: TerminalSnippetDestination?
     var terminalSnippetStore = DesktopTerminalSnippetStore.shared
     var paneTabDragSession: PaneTabDragSession?
     var paneTabDragRegistrations: [TabGroupID: PaneTabDragRegistration] = [:]
@@ -797,6 +804,7 @@ final class AppModel {
 
         perform {
             try store.removeWorkspace(workspaceID)
+            terminalSnippetStore.removeWorkspace(workspaceID.rawValue)
             maximizedTabGroupsByWorkspace[workspaceID] = nil
             cleanUpRuntimeObjects(in: workspace)
             restoreRuntimeObjects(in: store.selectedWorkspace)
@@ -2583,6 +2591,11 @@ final class AppModel {
 
     private func handle(_ lifecycle: WorkspaceLifecycleChange) {
         if let removedWorkspace = lifecycle.removedWorkspace {
+            // Closing a final tab can remove its workspace too. Preserve scoped entries only if
+            // the store retained that identity, rather than treating every tab close as deletion.
+            if !store.workspaces.contains(where: { $0.id == removedWorkspace.id }) {
+                terminalSnippetStore.removeWorkspace(removedWorkspace.id.rawValue)
+            }
             maximizedTabGroupsByWorkspace[removedWorkspace.id] = nil
             cleanUpRuntimeObjects(in: removedWorkspace)
         }
@@ -2606,10 +2619,9 @@ final class AppModel {
         guard let process = terminalSessions.removeValue(forKey: sessionID) else {
             let directory = terminalContinuityDirectory
             Task { @MainActor [weak self] in
-                let result = await Task.detached {
-                    Result { try PersistentTerminalRuntime.stopExisting(identifier: sessionID.rawValue, directory: directory) }
-                }.value
-                if case .failure(let error) = result {
+                do {
+                    try await PersistentTerminalRuntime.stopExistingAsync(identifier: sessionID.rawValue, directory: directory)
+                } catch {
                     Logger(subsystem: "com.gordonbeeming.myterm", category: "terminal-continuity")
                         .error("Could not close terminal host: \(error.localizedDescription, privacy: .public)")
                     self?.present(error)
@@ -3067,6 +3079,7 @@ final class AppModel {
         }
         try performCompanionMutation {
             try store.removeWorkspace(workspaceID)
+            terminalSnippetStore.removeWorkspace(workspaceID.rawValue)
             maximizedTabGroupsByWorkspace[workspaceID] = nil
             cleanUpRuntimeObjects(in: workspace)
             restoreRuntimeObjects(in: store.selectedWorkspace)

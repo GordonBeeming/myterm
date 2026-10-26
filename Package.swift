@@ -51,6 +51,7 @@ let package = Package(
             name: "MyTermPlatformTests",
             dependencies: [
                 "MyTermPlatform",
+                "MyTermContinuity",
                 .product(name: "SwiftTerm", package: "SwiftTerm"),
             ]
         ),

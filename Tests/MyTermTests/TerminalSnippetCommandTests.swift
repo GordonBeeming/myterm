@@ -86,4 +86,99 @@ final class TerminalSnippetCommandTests: XCTestCase {
                                   workspaceID: originalWorkspace), [changed])
     }
 
+    func testSnippetSheetRecreationKeepsOriginalDestinationAfterCompanionClosesItsTab() throws {
+        let model = try makeModel()
+        model.createTerminalTab()
+        let workspaceID = model.selectedWorkspace.id
+        let original = try XCTUnwrap(model.selectedTab)
+        let groupID = model.selectedWorkspace.focusedTabGroupID
+        model.isTerminalSnippetsPresented = true
+        let before = TerminalSnippetsView(model: model)
+        try model.closeCompanionTab(workspaceID: workspaceID, groupID: groupID, tabID: original.id)
+        XCTAssertNotEqual(model.selectedTab?.terminalSession?.id, original.terminalSession?.id,
+                          "The closed terminal must have an actual neighboring replacement")
+        // SwiftUI may call init again while retaining the sheet's edit state. Exercise the real
+        // View initializer after the companion mutation, rather than testing a copied capture.
+        let recreated = TerminalSnippetsView(model: model)
+        XCTAssertEqual(recreated.destination, before.destination)
+        XCTAssertEqual(recreated.destination.sessionID, original.terminalSession?.id)
+        XCTAssertThrowsError(try recreated.destination.insert("do not redirect", into: model))
+        model.isTerminalSnippetsPresented = false
+        model.isTerminalSnippetsPresented = true
+        XCTAssertEqual(TerminalSnippetsView(model: model).destination.sessionID, model.selectedTab?.terminalSession?.id,
+                       "Only a newly opened sheet captures the current destination")
+    }
+
+    func testDesktopAndCompanionWorkspaceClosureRemoveOnlyOwnedSnippets() throws {
+        for throughCompanion in [false, true] {
+            let model = try makeModel()
+            let closed = model.selectedWorkspace.id
+            let other = try model.store.createWorkspace(title: "Other")
+            let global = TerminalSnippet(title: "Global", text: "global")
+            let scoped = TerminalSnippet(title: "Scoped", text: "scoped", workspaceID: closed.rawValue)
+            let otherScoped = TerminalSnippet(title: "Other", text: "other", workspaceID: other.rawValue)
+            for entry in [global, scoped, otherScoped] { XCTAssertTrue(model.terminalSnippetStore.save(entry)) }
+            if throughCompanion {
+                _ = try model.performCompanionCommand(
+                    metadata: MessageMetadata(hostID: UUID(), workspaceID: closed.rawValue),
+                    command: CommandParameters(operation: .workspaceClose,
+                        payload: JSONEncoder().encode(RemoteClosePayload())))
+            } else {
+                model.deleteWorkspace(closed)
+            }
+            XCTAssertFalse(model.workspaces.contains { $0.id == closed })
+            XCTAssertEqual(model.terminalSnippetStore.snippets, [global, otherScoped])
+            XCTAssertEqual(model.companionWorkspaceProjection().terminalSnippets, [global, otherScoped])
+        }
+    }
+
+    func testClosingLastTabViaDesktopAndCompanionCleansOnlyRemovedWorkspaceScope() throws {
+        for throughCompanion in [false, true] {
+            for hasNeighbor in [false, true] {
+                let model = try makeModel()
+                let closed = model.selectedWorkspace.id
+                let closingTab = try XCTUnwrap(model.selectedTab)
+                let groupID = model.selectedWorkspace.focusedTabGroupID
+                let global = TerminalSnippet(title: "Global", text: "global")
+                let scoped = TerminalSnippet(title: "Closed", text: "closed", workspaceID: closed.rawValue)
+                var retained = [global]
+                if hasNeighbor {
+                    let otherID = try model.store.createWorkspace(title: "Other")
+                    retained.append(TerminalSnippet(title: "Other", text: "other", workspaceID: otherID.rawValue))
+                }
+                for entry in retained + [scoped] { XCTAssertTrue(model.terminalSnippetStore.save(entry)) }
+                model.selectWorkspace(closed)
+                if throughCompanion {
+                    try model.closeCompanionTab(workspaceID: closed, groupID: groupID, tabID: closingTab.id)
+                } else {
+                    model.closeTab(closingTab.id)
+                }
+                XCTAssertFalse(model.workspaces.contains { $0.id == closed },
+                               "The closed workspace identity must disappear even when it was the final workspace")
+                XCTAssertFalse(model.workspaces.isEmpty, "The store replaces the final workspace with a new identity")
+                XCTAssertEqual(model.terminalSnippetStore.snippets, retained)
+                XCTAssertEqual(model.companionWorkspaceProjection().terminalSnippets, retained)
+            }
+        }
+    }
+
+    func testClosingOneOfSeveralTabsPreservesSurvivingWorkspaceSnippets() throws {
+        for throughCompanion in [false, true] {
+            let model = try makeModel()
+            let workspaceID = model.selectedWorkspace.id
+            model.createTerminalTab()
+            let closingTab = try XCTUnwrap(model.selectedTab)
+            let groupID = model.selectedWorkspace.focusedTabGroupID
+            let scoped = TerminalSnippet(title: "Kept", text: "kept", workspaceID: workspaceID.rawValue)
+            XCTAssertTrue(model.terminalSnippetStore.save(scoped))
+            if throughCompanion {
+                try model.closeCompanionTab(workspaceID: workspaceID, groupID: groupID, tabID: closingTab.id)
+            } else {
+                model.closeTab(closingTab.id)
+            }
+            XCTAssertTrue(model.workspaces.contains { $0.id == workspaceID })
+            XCTAssertEqual(model.terminalSnippetStore.snippets, [scoped])
+        }
+    }
+
 }

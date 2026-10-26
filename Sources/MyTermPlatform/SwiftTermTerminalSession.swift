@@ -53,6 +53,9 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
     private var runtimeConfiguration: TerminalRuntimeConfiguration
     private let terminal: MyTermLocalProcessTerminalView
     private var persistentConnection: PersistentTerminalConnection?
+    private var hostSequence: UInt64 = 0
+    private struct RequestedHostGeometry: Equatable { let columns: Int; let rows: Int }
+    private var requestedHostGeometry: RequestedHostGeometry?
     private var persistentStartTask: Task<Void, Never>?
     private enum PendingStartDisposition { case attach, stop, detach }
     private var pendingStartDisposition = PendingStartDisposition.attach
@@ -219,13 +222,9 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
             // Process launch and the socket handshake can wait on another process. They must
             // not serialize the main thread while dozens of saved panes are being restored.
             persistentStartTask = Task { @MainActor in
-                let result = await Task.detached(priority: .userInitiated) {
-                    Result {
-                        try PersistentTerminalConnection(identifier: identifier, namespace: directory,
-                            shell: shell, arguments: launchArguments, environment: processEnvironment,
-                            directory: workingDirectory, columns: columns, rows: rows, helperURL: helperURL)
-                    }
-                }.value
+                let result = await PersistentTerminalConnection.connectAsync(identifier: identifier, namespace: directory,
+                    shell: shell, arguments: launchArguments, environment: processEnvironment,
+                    directory: workingDirectory, columns: columns, rows: rows, helperURL: helperURL)
                 defer { self.persistentStartTask = nil; self.terminal.setConnectionPending(false) }
                 switch result {
                 case .success(let connection):
@@ -266,10 +265,12 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         try finishStartup(startupFailure: startupFailure)
     }
 
-    private func attachPersistentConnection(_ connection: PersistentTerminalConnection,
+    func attachPersistentConnection(_ connection: PersistentTerminalConnection,
                                             startupFailure: TerminalSessionFailure?) throws {
         var startupFailure = startupFailure
         persistentConnection = connection
+        hostSequence = connection.attachment.sequence ?? 0
+        requestedHostGeometry = nil
         if let checkpoint = connection.attachment.bytes { try terminal.getTerminal().importCheckpoint(checkpoint) }
         recordRemoteGeometry(columns: terminal.getTerminal().cols, rows: terminal.getTerminal().rows)
         terminal.needsDisplay = true
@@ -278,18 +279,22 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
             do { try self.sendProcessInput(bytes) }
             catch { self.onEvent?(.failed(TerminalSessionFailure(message: error.localizedDescription))) }
         }
-        terminal.onPersistentResize = { [weak self] columns, rows in
+        terminal.onPersistentResizeRequest = { [weak self] columns, rows in
             guard let self else { return }
+            guard !self.remoteControllerActive else { return }
             do { try self.resizePersistentProcess(columns: columns, rows: rows) }
             catch { self.onEvent?(.failed(TerminalSessionFailure(message: error.localizedDescription))) }
-            self.recordRemoteGeometry(columns: self.terminal.getTerminal().cols, rows: self.terminal.getTerminal().rows)
         }
+        terminal.onPersistentResize = { [weak self] columns, rows in self?.recordRemoteGeometry(columns: columns, rows: rows) }
         // Checkpoints include the old emulator options and dimensions. Reapply the
         // current preferences, then explicitly fit both emulators to the native view.
         terminal.apply(runtimeConfiguration: runtimeConfiguration)
         try connection.send(.init(kind: "configure", generation: connection.attachment.generation, scrollbackLines: min(runtimeConfiguration.scrollbackLines, 100_000)))
         terminal.resizeToFit()
-        try resizePersistentProcess(columns: terminal.getTerminal().cols, rows: terminal.getTerminal().rows)
+        if !remoteControllerActive {
+            let fitted = terminal.fittedTerminalGeometry()
+            try resizePersistentProcess(columns: fitted.columns, rows: fitted.rows)
+        }
         connection.onMessage = { [weak self] message in self?.handleHostMessage(message) }
         connection.onFailure = { [weak self] error in
             guard let self else { return }
@@ -398,6 +403,12 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
             return
         }
 
+        if persistentConnection != nil {
+            do { try resizePersistentProcess(columns: columns, rows: rows) }
+            catch { onEvent?(.failed(TerminalSessionFailure(message: error.localizedDescription))) }
+            return
+        }
+
         terminal.getTerminal().resize(cols: columns, rows: rows)
         terminal.sizeChanged(source: terminal, newCols: columns, newRows: rows)
         terminal.needsDisplay = true
@@ -470,9 +481,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
     }
 
     private func stopPersistentHost(identifier: UUID, directory: URL) async {
-        let result = await Task.detached {
-            Result { try PersistentTerminalConnection.stopExisting(identifier: identifier, namespace: directory) }
-        }.value
+        let result = await PersistentTerminalConnection.stopExistingAsync(identifier: identifier, namespace: directory)
         if case .failure(let error) = result {
             Logger(subsystem: "com.gordonbeeming.myterm", category: "terminal-continuity")
                 .error("Could not stop persistent terminal: \(error.localizedDescription, privacy: .public)")
@@ -508,20 +517,65 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         guard let connection = persistentConnection else { return }
         let fitted = SessionHostGeometry.fit(columns: columns, rows: rows)
         if fitted.columns != columns || fitted.rows != rows {
-            terminal.getTerminal().resize(cols: fitted.columns, rows: fitted.rows)
-            terminal.needsDisplay = true
             if !reportedGeometryLimit {
                 reportedGeometryLimit = true
                 onEvent?(.runtimeNotice("This terminal viewport was limited to \(fitted.columns) columns by \(fitted.rows) rows so it can be restored safely. Increase the font size or reduce the pane size to use fewer cells."))
             }
         } else { reportedGeometryLimit = false }
+        let requested = RequestedHostGeometry(columns: fitted.columns, rows: fitted.rows)
+        guard requested != requestedHostGeometry else { return }
+        if requestedHostGeometry == nil,
+           terminal.getTerminal().cols == fitted.columns, terminal.getTerminal().rows == fitted.rows { return }
         try connection.send(.init(kind: "resize", columns: fitted.columns, rows: fitted.rows,
                                   generation: connection.attachment.generation))
+        requestedHostGeometry = requested
     }
 
     private func handleHostMessage(_ message: SessionHostMessage) {
         switch message.kind {
-        case "output":
+        case "output", "geometry":
+            guard message.generation == persistentConnection?.attachment.generation,
+                  message.sequence == hostSequence + 1 else {
+                persistentConnection?.closeConnection()
+                isRunning = false
+                onEvent?(.failed(TerminalSessionFailure(message: "The terminal host stream lost its output order. Reattach before continuing.")))
+                return
+            }
+            hostSequence += 1
+            if message.kind == "geometry" {
+                guard let columns = message.columns, let rows = message.rows,
+                      (2...1_024).contains(columns), (1...1_024).contains(rows),
+                      columns * rows <= SessionHostGeometry.maximumCellsPerBuffer else {
+                    onEvent?(.failed(TerminalSessionFailure(message: "The terminal host sent invalid geometry.")))
+                    return
+                }
+                if let checkpoint = message.bytes {
+                    do {
+                        try terminal.getTerminal().importCheckpoint(checkpoint)
+                        guard terminal.getTerminal().cols == columns, terminal.getTerminal().rows == rows else {
+                            throw SessionHostError.invalidFrame
+                        }
+                        try terminal.invalidateAfterCheckpointImport()
+                        // An authoritative checkpoint replaces the rendering baseline, not
+                        // the process. Remote viewers use generation mismatch to resync.
+                        remoteGeneration = UUID()
+                        remoteSequence = 0
+                        remoteReplayBuffer.removeAll(keepingCapacity: true)
+                        remoteReplayHead = 0
+                        remoteReplayBytes = 0
+                    } catch {
+                        persistentConnection?.closeConnection()
+                        isRunning = false
+                        onEvent?(.failed(TerminalSessionFailure(message: error.localizedDescription)))
+                        return
+                    }
+                } else { terminal.applyTerminalGeometry(columns: columns, rows: rows) }
+                if requestedHostGeometry == RequestedHostGeometry(columns: columns, rows: rows) {
+                    requestedHostGeometry = nil
+                }
+                recordRemoteGeometry(columns: columns, rows: rows)
+                return
+            }
             guard let bytes = message.bytes else { return }
             terminal.dataReceived(slice: [UInt8](bytes)[...])
         case "foreground":
@@ -741,7 +795,14 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
 final class MyTermLocalProcessTerminalView: LocalProcessTerminalView {
     var onPersistentInput: ((Data) -> Void)?
     var onPersistentResize: ((Int, Int) -> Void)?
+    var onPersistentResizeRequest: ((Int, Int) -> Void)?
     var persistentShellIsForeground = true
+
+    override func terminalResizeRequested(source: TerminalView, columns: Int, rows: Int) -> Bool {
+        guard let onPersistentResizeRequest else { return false }
+        onPersistentResizeRequest(columns, rows)
+        return true
+    }
 
     override func send(source: TerminalView, data: ArraySlice<UInt8>) {
         if let onPersistentInput { onPersistentInput(Data(data)) }

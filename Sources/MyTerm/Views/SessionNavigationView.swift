@@ -9,13 +9,15 @@ struct SessionNavigationView: View {
     @FocusState private var searchFocused: Bool
     @Environment(\.dismiss) private var dismiss
 
-    private var items: [SessionNavigationItem] {
+    private var navigationItems: [SessionNavigationItem] {
         SessionNavigationItem.items(in: model.companionWorkspaceProjection(), query: query, prioritizeAttention: inbox,
                                     recentTabIDs: model.recentSessionTabIDs)
             .filter { !inbox || $0.tab.kind == .terminal }
     }
 
     var body: some View {
+        // One projection/search snapshot per render, shared by the list and action closures.
+        let items = navigationItems
         VStack(spacing: 12) {
             HStack {
                 Text(inbox ? "Session inbox" : "Jump to a tab").font(.headline)

@@ -276,8 +276,12 @@ struct RemoteBrowserView: View {
                 native.error = "The page changed while capturing. Capture it again."
                 return
             }
-            let sourceURL = capturedURL?.host == native.artifactHost ? route.url : capturedURL
-            contextCapture = CompanionBrowserCapture(url: sourceURL?.absoluteString ?? native.address,
+            guard let sourceURL = Self.captureSourceURL(capturedURL, source: route.url,
+                                                         artifactHost: native.artifactHost) else {
+                native.error = "The current page URL could not be captured safely. Reload the page and capture it again."
+                return
+            }
+            contextCapture = CompanionBrowserCapture(url: sourceURL.absoluteString,
                 title: webView.title ?? route.title, selectedText: selected,
                 screenshot: screenshot, notes: notes)
         }
@@ -525,6 +529,15 @@ struct RemoteBrowserView: View {
                 Button("Tab") { send(.key, key: .tab) }
             }.padding(8)
         }
+    }
+
+    /// Captures require a real source URL. The private artifact transport address is never context
+    /// for an agent, including when a source mapping is missing or navigation reaches another host.
+    static func captureSourceURL(_ url: URL?, source: URL?, artifactHost: String) -> URL? {
+        guard let resolved = renderingURL(url, source: source, artifactHost: artifactHost) else { return nil }
+        let host = resolved.host?.lowercased() ?? ""
+        guard host != "myterm-artifact.invalid", !host.hasSuffix(".myterm-artifact.invalid") else { return nil }
+        return resolved
     }
 
     static func renderingURL(_ url: URL?, source: URL?, artifactHost: String) -> URL? {

@@ -13,7 +13,7 @@ public enum SessionHostGeometry {
 }
 
 public enum SessionHostError: Error, LocalizedError {
-    case invalidFrame, incompatibleVersion, insecureDirectory, invalidPath, disconnected
+    case invalidFrame, incompatibleVersion, insecureDirectory, invalidPath, disconnected, busy
     case system(String, Int32)
 
     public var errorDescription: String? {
@@ -23,6 +23,7 @@ public enum SessionHostError: Error, LocalizedError {
         case .insecureDirectory: "The terminal host directory must belong to your account and be private."
         case .invalidPath: "The terminal host socket path is too long."
         case .disconnected: "The terminal host disconnected. Reopen MyTerm to reattach; the process may still be running."
+        case .busy: "This terminal still has an attached controller. Try attaching again after it disconnects."
         case let .system(operation, code): "Terminal host \(operation) failed: \(String(cString: strerror(code)))"
         }
     }
@@ -31,7 +32,7 @@ public enum SessionHostError: Error, LocalizedError {
 /// The checkpoint and its following byte suffix share one stream, so attaching cannot lose
 /// output between a snapshot request and subscribing to subsequent output.
 public struct SessionHostMessage: Codable, Sendable {
-    public static let protocolVersion = 2
+    public static let protocolVersion = 3
     public static let maximumFrameBytes = 48 * 1_024 * 1_024
     public static let maximumInputBytes = 1_024 * 1_024
     public var version = protocolVersion
