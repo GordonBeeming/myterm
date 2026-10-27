@@ -15,7 +15,7 @@ final class PersistentTerminalConnection {
 
     nonisolated init(identifier: UUID, namespace: URL, shell: URL, arguments: [String],
          environment: [String], directory: URL, columns: Int, rows: Int, helperURL: URL? = nil,
-         imageGeometry: SessionHostImageGeometry? = nil) throws {
+         imageGeometry: SessionHostImageGeometry? = nil, bundledHelperURL: URL? = nil) throws {
         let path = try Self.socketPath(identifier: identifier, namespace: namespace)
         var created = false
         var socket: Int32 = -1
@@ -35,12 +35,16 @@ final class PersistentTerminalConnection {
         do {
             socket = try SessionHostSocket.connect(path: path)
         } catch SessionHostError.system("connect", let code) where code == ENOENT || code == ECONNREFUSED {
-            let helper = helperURL ?? Bundle.main.executableURL?.deletingLastPathComponent()
-                .appendingPathComponent("MyTermSessionHost")
-            guard let helper, FileManager.default.isExecutableFile(atPath: helper.path) else {
+            let source = helperURL ?? bundledHelperURL ?? SessionHostInstallation.bundledHelper()
+            guard let source, FileManager.default.isExecutableFile(atPath: source.path) else {
                 throw TerminalSessionFailure(message: "MyTermSessionHost is missing. Rebuild or reinstall the complete MyTerm app bundle to start persistent terminals.")
             }
             let verifier = try SessionHostServerAuthentication(environment: authenticationEnvironment, helperURL: helperURL)
+            // An explicit helper is a test fixture launched in place; the shipped helper always
+            // runs from its private copy so an app update cannot orphan the terminal.
+            let helper = helperURL == nil
+                ? try SessionHostInstallation.stableHelper(for: source, namespace: namespace, verifier: verifier)
+                : source
             try verifier.validateExecutable(helper)
             authentication = verifier
             let process = Process()
@@ -342,5 +346,9 @@ public enum PersistentTerminalRuntime {
     }
     public nonisolated static func stopExisting(identifier: UUID, directory: URL, environment: [String: String] = [:], helperURL: URL? = nil) throws {
         try PersistentTerminalConnection.stopExisting(identifier: identifier, namespace: directory, environment: environment, helperURL: helperURL)
+    }
+    /// Deletes helper copies left by earlier builds once no running terminal still uses them.
+    public nonisolated static func pruneUnusedHelperCopies(directory: URL) {
+        SessionHostInstallation.pruneUnusedCopies(namespace: directory, keeping: SessionHostInstallation.bundledHelper())
     }
 }
