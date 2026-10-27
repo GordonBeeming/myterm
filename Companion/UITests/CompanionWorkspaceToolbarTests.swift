@@ -1,12 +1,9 @@
-import UIKit
 import XCTest
 
-/// The wide iPad workspace toolbar, driven against the split workspace fixture. The only other
-/// coverage of this arrangement needs a paired Mac and a selected development iPad, so it skips
-/// everywhere, which is how three broken controls reached a device.
+/// The regular-width workspace toolbar, driven against the split workspace fixture. It runs on
+/// iPad and the iPhone Duo inner display instead of assuming regular width identifies an iPad.
 final class CompanionWorkspaceToolbarTests: XCTestCase {
-    private func launchWideWorkspace() throws -> XCUIApplication {
-        try XCTSkipUnless(UIDevice.isPad, "The wide layout needs a regular horizontal size class.")
+    private func launchWideWorkspace() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
             "-MyTermUITestIsolated", "1",
@@ -20,10 +17,9 @@ final class CompanionWorkspaceToolbarTests: XCTestCase {
 
     @MainActor
     func testWideWorkspaceShowsPanesRatherThanTheCompactSwitcher() throws {
-        let app = try launchWideWorkspace()
+        let app = launchWideWorkspace()
         let maximise = app.buttons["toggle-maximise-pane"]
-        XCTAssertTrue(maximise.waitForExistence(timeout: 10),
-                      "A split workspace on a regular width renders the wide layout")
+        guard try regularWidthAvailable(in: app, marker: maximise) else { return }
         XCTAssertFalse(app.scrollViews["workspace-pane-switcher"].exists,
                        "Wide layout shows every pane, so it needs no pane switcher")
         attach(app, named: "wide-workspace-toolbar")
@@ -31,9 +27,9 @@ final class CompanionWorkspaceToolbarTests: XCTestCase {
 
     @MainActor
     func testMaximisingCollapsesTheLayoutToOnePaneAndBack() throws {
-        let app = try launchWideWorkspace()
+        let app = launchWideWorkspace()
         let maximise = app.buttons["toggle-maximise-pane"]
-        XCTAssertTrue(maximise.waitForExistence(timeout: 10))
+        guard try regularWidthAvailable(in: app, marker: maximise) else { return }
         XCTAssertEqual(maximise.label, "Maximise pane")
 
         let paneHeaders = app.descendants(matching: .any).matching(identifier: "pane-tab-picker")
@@ -62,8 +58,16 @@ final class CompanionWorkspaceToolbarTests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
     }
-}
 
-private extension UIDevice {
-    static var isPad: Bool { current.userInterfaceIdiom == .pad }
+    @MainActor
+    private func regularWidthAvailable(in app: XCUIApplication, marker: XCUIElement) throws -> Bool {
+        if marker.waitForExistence(timeout: 10) { return true }
+        let root = app.otherElements["workspace-fixture-root"]
+        XCTAssertTrue(root.waitForExistence(timeout: 2), "The workspace fixture must expose its width class.")
+        if root.value as? String == "regular" {
+            XCTFail("A regular-width destination must expose the workspace toolbar controls.")
+            return false
+        }
+        throw XCTSkip("This test requires a regular-width destination.")
+    }
 }

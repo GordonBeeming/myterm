@@ -2,14 +2,14 @@
 
 The companion connects to running myterm apps through an HTTPS relay you operate. Each Mac owns its terminal processes and workspace state. Closing myterm, sleeping the Mac, or losing its connection makes that host unavailable. The relay does not run replacement shells.
 
-The app supports iOS and iPadOS 26 or later. Adaptive panes respond to the available window size. Device-specific iPhone Duo layout work still requires its own SDK and device validation.
+The app supports iOS and iPadOS 26 or later. Builds use the iOS 27.1 SDK so iPhone Duo can fill the inner and outer displays, including the system's vertical navigation bars. The main Mac and workspace navigation uses a native split view, which collapses on the outer display and keeps its sidebar on the regular-width inner display. Custom terminal splits avoid active fold regions while preserving the Mac's saved proportions when the device is flat.
 
 ## Build and test
 
-Use Xcode 27.0 or newer with its matching Metal component. CI pins Xcode 27.0 on GitHub’s [xcode-27 runner](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md), which is still a public preview. Check the selected installation with:
+Use Xcode 27.1 or newer with its matching Metal component. CI pins Xcode 27.1 on GitHub’s [xcode-27 runner](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md), which includes the iPhone Duo simulator and iOS 27.1 runtime. Check the selected installation with:
 
 ```sh
-bash script/verify_companion_toolchain.sh 27.0
+bash script/verify_companion_toolchain.sh 27.1
 ```
 
 If Xcode reports a missing Metal component, install it with `xcodebuild -downloadComponent MetalToolchain`. After upgrading Xcode, finish its component setup before running simulator tests. Changing `DEVELOPER_DIR` for one command allows a particular installation to be used without changing the machine's default selection.
@@ -36,11 +36,18 @@ Run the native protocol tests and the phone/tablet suites:
 swift test --package-path Packages/MyTermRemote
 COMPANION_DEVICE_FAMILY=iPhone bash script/test_companion.sh
 COMPANION_DEVICE_FAMILY=iPad bash script/test_companion.sh
+COMPANION_DEVICE_FAMILY=iPhoneDuo bash script/test_companion.sh
 ```
 
 The native interoperability tests also require Go. They compile a temporary relay fixture before starting its readiness check; the service modules declare the minimum Go version.
 
-The simulator script chooses an installed runtime matching the selected Xcode SDK’s major version, creates a dedicated device, saves an `.xcresult` under `dist`, and deletes that device afterward. `COMPANION_SIMULATOR_UDID` selects an explicitly supplied device instead; the script never deletes a supplied device. Move previous result bundles before rerunning. Set `COMPANION_KEEP_SIMULATOR=1` when an automatically created device needs further inspection.
+The simulator script chooses an installed runtime matching the selected Xcode SDK’s major version, creates a dedicated device, saves an `.xcresult` under `dist`, and deletes that device afterward. The Duo suite selects the iOS 27.1 runtime and iPhone Duo device type explicitly. `COMPANION_SIMULATOR_UDID` selects an existing device, which the script never deletes. Move previous result bundles before rerunning. Set `COMPANION_KEEP_SIMULATOR=1` when an automatically created device needs further inspection.
+
+### iPhone Duo screenshots
+
+Apple accepts 1398 × 2034 or 2034 × 1398 pixels for the outer display, and 2007 × 2853 or 2853 × 2007 pixels for the inner display. Capture the app running in the iPhone Duo simulator; resized iPhone or iPad screenshots do not qualify. Xcode 27.1 exposes fold and orientation controls in Device Hub, so set the closed and open poses there before taking each screenshot. Check every PNG's pixel dimensions and confirm it has no alpha channel before uploading it in App Store Connect.
+
+The outer-display screenshot should show the compact terminal or Mac picker with every toolbar action reachable. The inner-display screenshot should show the Mac sidebar, workspace column, and terminal detail together. Also inspect book, tent, and Split View poses even though App Store Connect only needs outer and inner display images.
 
 Existing desktop validation remains `swift test --parallel`, `bash script/channel_isolation_test.sh`, and `make verify`. Use `--bundle` when running the desktop build script without launching the app. Normal launches now focus the existing healthy instance. Quit it explicitly before launching a rebuilt version.
 

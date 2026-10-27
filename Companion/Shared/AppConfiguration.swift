@@ -53,9 +53,8 @@ enum UITestConfiguration {
         #endif
     }
 
-    /// The workspace fixture with a split layout, so the wide iPad arrangement and its toolbar can
-    /// be driven on a simulator. Without it `usesWideLayout` is false whatever the size class, and
-    /// the only coverage of that path needs a paired Mac.
+    /// The workspace fixture with a split layout, so the regular-width arrangement and its toolbar
+    /// can be driven on iPad and the iPhone Duo inner display without a paired Mac.
     static var showsSplitWorkspaceFixture: Bool {
         #if DEBUG
         ProcessInfo.processInfo.arguments.contains("-MyTermUITestWorkspaceSplitLayout")
