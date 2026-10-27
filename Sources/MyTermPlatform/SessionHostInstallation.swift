@@ -113,12 +113,20 @@ enum SessionHostInstallation {
                                   Int32(pids.count * MemoryLayout<pid_t>.size))
         guard bytes > 0 else { throw SessionHostError.system("list processes", errno) }
         var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN) * 4)
-        return pids.prefix(Int(bytes) / MemoryLayout<pid_t>.size).compactMap { pid in
-            guard pid > 0 else { return nil }
+        var paths: [String] = []
+        for pid in pids.prefix(Int(bytes) / MemoryLayout<pid_t>.size) where pid > 0 {
             let length = proc_pidpath(pid, &buffer, UInt32(buffer.count))
-            guard length > 0 else { return nil }
+            guard length > 0 else {
+                // ESRCH is an exited process, reaped or still a zombie, which holds nothing.
+                // ENOENT is one whose executable's directory is gone, so it cannot hold a copy
+                // that still exists. Anything else could be a live helper whose copy must stay.
+                let lookupError = errno
+                if lookupError == ESRCH || lookupError == ENOENT { continue }
+                throw SessionHostError.system("read process path", lookupError)
+            }
             let path = String(decoding: buffer.prefix(Int(length)).map { UInt8(bitPattern: $0) }, as: UTF8.self)
-            return URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+            paths.append(URL(fileURLWithPath: path).resolvingSymlinksInPath().path)
         }
+        return paths
     }
 }
