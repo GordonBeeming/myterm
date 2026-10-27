@@ -232,3 +232,21 @@ public enum SessionHostSocket {
         }
     }
 }
+
+/// How a host's shell ended, in words a person can act on.
+public enum SessionHostEnding {
+    /// LocalProcess reports the raw waitpid status. Nil only comes from the stop deadline, when
+    /// something still held the terminal open after the hang-up.
+    public static func describe(waitStatus: Int32?, stopReason: String?) -> String {
+        let cause = stopReason.map { "MyTerm stopped this terminal: \($0)." }
+        guard let waitStatus else {
+            return [cause, "The shell did not exit within 2 seconds of the hang-up and was killed."]
+                .compactMap { $0 }.joined(separator: " ")
+        }
+        let signal = waitStatus & 0x7f
+        let outcome = signal == 0
+            ? "The shell exited with code \((waitStatus >> 8) & 0xff)."
+            : "The shell was ended by signal \(signal) (\(String(cString: strsignal(signal))))."
+        return [cause, outcome].compactMap { $0 }.joined(separator: " ")
+    }
+}

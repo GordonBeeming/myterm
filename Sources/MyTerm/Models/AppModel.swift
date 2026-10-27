@@ -806,7 +806,7 @@ final class AppModel {
             try store.removeWorkspace(workspaceID)
             terminalSnippetStore.removeWorkspace(workspaceID.rawValue)
             maximizedTabGroupsByWorkspace[workspaceID] = nil
-            cleanUpRuntimeObjects(in: workspace)
+            cleanUpRuntimeObjects(in: workspace, reason: .workspaceDeleted)
             restoreRuntimeObjects(in: store.selectedWorkspace)
         }
     }
@@ -1424,7 +1424,8 @@ final class AppModel {
             try closeTab(
                 workspaceID: store.selectedWorkspaceID,
                 tabGroupID: tabGroupID,
-                tabID: tabID
+                tabID: tabID,
+                reason: .tabClosed
             )
         }
     }
@@ -1459,7 +1460,7 @@ final class AppModel {
                 tabID: tab.id
             )
             if let terminalSession {
-                removeTerminalRuntime(terminalSession.id)
+                removeTerminalRuntime(terminalSession.id, reason: .paneClosed)
             } else if let browserSession {
                 browserControllers.removeValue(forKey: browserSession.id)?.webView.stopLoading()
             }
@@ -2286,7 +2287,7 @@ final class AppModel {
                     agentTitle: nil
                 )
             } catch {
-                removeTerminalRuntime(session.id)
+                removeTerminalRuntime(session.id, reason: .restoreFailed)
                 throw error
             }
         }
@@ -2542,18 +2543,18 @@ final class AppModel {
         }
     }
 
-    private func cleanUpRuntimeObjects(in workspace: Workspace) {
+    private func cleanUpRuntimeObjects(in workspace: Workspace, reason: TerminalStopReason) {
         for tab in workspace.allTabs {
-            cleanUpRuntimeObjects(in: tab)
+            cleanUpRuntimeObjects(in: tab, reason: reason)
         }
     }
 
-    private func cleanUpRuntimeObjects(in tab: Tab) {
+    private func cleanUpRuntimeObjects(in tab: Tab, reason: TerminalStopReason) {
         if let browser = tab.browserSession {
             browserControllers.removeValue(forKey: browser.id)?.webView.stopLoading()
         }
         if let sessionID = tab.terminalSession?.id {
-            removeTerminalRuntime(sessionID)
+            removeTerminalRuntime(sessionID, reason: reason)
         }
         forgetAgentAttention(forTab: tab.id)
         forgetAgentPresence(forTab: tab.id)
@@ -2563,7 +2564,8 @@ final class AppModel {
     private func closeTab(
         workspaceID: WorkspaceID,
         tabGroupID: TabGroupID,
-        tabID: TabID
+        tabID: TabID,
+        reason: TerminalStopReason
     ) throws {
         guard let closingTab = tab(
             workspaceID: workspaceID,
@@ -2585,7 +2587,7 @@ final class AppModel {
             tabGroupID: tabGroupID,
             tabID: tabID
         )
-        cleanUpRuntimeObjects(in: closingTab)
+        cleanUpRuntimeObjects(in: closingTab, reason: reason)
         handle(lifecycle)
     }
 
@@ -2601,7 +2603,7 @@ final class AppModel {
                 terminalSnippetStore.removeWorkspace(removedWorkspace.id.rawValue)
             }
             maximizedTabGroupsByWorkspace[removedWorkspace.id] = nil
-            cleanUpRuntimeObjects(in: removedWorkspace)
+            cleanUpRuntimeObjects(in: removedWorkspace, reason: .workspaceRemovedWithLastTab)
         }
         if let replacementWorkspace = lifecycle.replacementWorkspace {
             restoreRuntimeObjects(in: replacementWorkspace)
@@ -2618,7 +2620,11 @@ final class AppModel {
         }
     }
 
-    private func removeTerminalRuntime(_ sessionID: TerminalSessionID) {
+    private func removeTerminalRuntime(_ sessionID: TerminalSessionID, reason: TerminalStopReason) {
+        // A stopped host hangs up its shell and every job in it. Recording the cause here is the
+        // only way to tell a deliberate close apart from an unexplained exit after the fact.
+        Logger(subsystem: "com.gordonbeeming.myterm", category: "terminal-continuity")
+            .notice("Stopping terminal \(sessionID.rawValue.uuidString.lowercased(), privacy: .public): \(reason.rawValue, privacy: .public)")
         terminalSnapshotTasks.removeValue(forKey: sessionID)?.cancel()
         guard let process = terminalSessions.removeValue(forKey: sessionID) else {
             let directory = terminalContinuityDirectory
@@ -2651,7 +2657,7 @@ final class AppModel {
     func terminateTerminalSessions() {
         // removeTerminalRuntime mutates terminalSessions, so iterate a snapshot of the keys.
         for sessionID in Array(terminalSessions.keys) {
-            removeTerminalRuntime(sessionID)
+            removeTerminalRuntime(sessionID, reason: .allSessionsTerminated)
         }
     }
 
@@ -3085,7 +3091,7 @@ final class AppModel {
             try store.removeWorkspace(workspaceID)
             terminalSnippetStore.removeWorkspace(workspaceID.rawValue)
             maximizedTabGroupsByWorkspace[workspaceID] = nil
-            cleanUpRuntimeObjects(in: workspace)
+            cleanUpRuntimeObjects(in: workspace, reason: .workspaceClosedFromCompanion)
             restoreRuntimeObjects(in: store.selectedWorkspace)
         }
     }
@@ -3103,7 +3109,8 @@ final class AppModel {
             throw CompanionCommandError.activeProcessRequiresDesktopConfirmation
         }
         try performCompanionMutation {
-            try closeTab(workspaceID: workspaceID, tabGroupID: groupID, tabID: tabID)
+            try closeTab(workspaceID: workspaceID, tabGroupID: groupID, tabID: tabID,
+                         reason: .tabClosedFromCompanion)
         }
     }
 
@@ -3330,4 +3337,16 @@ enum AppModelError: LocalizedError {
         case .noFocusedTerminalTab: "Select a pane before splitting it."
         }
     }
+}
+
+/// Why the app stopped a terminal. Logged so a hung-up shell can be traced to the action behind it.
+enum TerminalStopReason: String {
+    case paneClosed = "pane closed"
+    case tabClosed = "tab closed"
+    case tabClosedFromCompanion = "tab closed from Companion"
+    case workspaceDeleted = "workspace deleted"
+    case workspaceClosedFromCompanion = "workspace closed from Companion"
+    case workspaceRemovedWithLastTab = "workspace removed with its last tab"
+    case restoreFailed = "restored agent state could not be saved"
+    case allSessionsTerminated = "all terminal sessions stopped"
 }

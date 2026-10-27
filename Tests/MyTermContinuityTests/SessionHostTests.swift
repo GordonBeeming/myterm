@@ -38,6 +38,39 @@ final class SessionHostTests: XCTestCase {
         try SessionHostSocket.write(.init(kind: "stop", generation: attachment.generation), to: socket)
     }
 
+    func testStoppedHostTellsTheControllerWhoStoppedTheShell() throws {
+        let directory = URL(fileURLWithPath: "/private/tmp/myterm-stop-\(UUID().uuidString.prefix(8))")
+        try SessionHostSocket.prepareDirectory(directory)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let path = directory.appendingPathComponent("s.sock").path
+        let host = Process()
+        host.executableURL = try helperExecutable()
+        host.environment = try testEnvironment()
+        host.arguments = [path, "/bin/sh", directory.path, "80", "25", "-c", "printf ready; sleep 30"]
+        host.standardOutput = FileHandle.nullDevice; host.standardError = FileHandle.nullDevice
+        try host.run()
+        defer { if host.isRunning { host.terminate(); host.waitUntilExit() } }
+        let socket = try connectEventually(path: path)
+        defer { close(socket) }
+        var decoder = SessionHostDecoder()
+        let attachment = try readMessage(socket, decoder: &decoder, kind: "attached")
+        var output = String(decoding: attachment.bytes ?? Data(), as: UTF8.self)
+        while !output.contains("ready") {
+            output += String(decoding: try readMessage(socket, decoder: &decoder, kind: "output").bytes ?? Data(), as: UTF8.self)
+        }
+        try SessionHostSocket.write(.init(kind: "stop", generation: attachment.generation), to: socket)
+        let exited = try readMessage(socket, decoder: &decoder, kind: "exited")
+        XCTAssertEqual(exited.text, "MyTerm stopped this terminal: MyTerm asked this terminal to stop. The shell was ended by signal 1 (Hangup: 1).")
+    }
+
+    func testEndingDescriptionDecodesTheRawWaitStatus() {
+        XCTAssertEqual(SessionHostEnding.describe(waitStatus: 3 << 8, stopReason: nil), "The shell exited with code 3.")
+        XCTAssertEqual(SessionHostEnding.describe(waitStatus: SIGHUP, stopReason: "pane closed"),
+                       "MyTerm stopped this terminal: pane closed. The shell was ended by signal 1 (Hangup: 1).")
+        XCTAssertEqual(SessionHostEnding.describe(waitStatus: nil, stopReason: nil),
+                       "The shell did not exit within 2 seconds of the hang-up and was killed.")
+    }
+
     func testDecoderHandlesFragmentedAndCoalescedFrames() throws {
         let first = try SessionHostMessage(kind: "output", bytes: Data([0, 1, 255]), sequence: 1).encoded()
         let second = try SessionHostMessage(kind: "output", bytes: Data("tail".utf8), sequence: 2).encoded()

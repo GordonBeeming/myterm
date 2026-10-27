@@ -626,7 +626,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         case "exited":
             persistentConnection?.closeConnection()
             persistentConnection = nil
-            emitTermination(exitCode: message.exitCode)
+            emitTermination(exitCode: message.exitCode, explanation: message.text)
         case "error": onEvent?(.failed(TerminalSessionFailure(message: message.text ?? "Terminal host error.")))
         case "inputError": onEvent?(.initialCommandFailed(TerminalSessionFailure(message: message.text ?? "The terminal could not accept this input.")))
         default: onEvent?(.failed(TerminalSessionFailure(message: "Unexpected terminal host message.")))
@@ -758,11 +758,17 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         remoteTakeControlHandler = handler
     }
 
-    private func emitTermination(exitCode: Int32?) {
+    private func emitTermination(exitCode: Int32?, explanation: String? = nil) {
         guard !didTerminate else { return }
         didTerminate = true
         stopWorkingDirectoryPolling()
         isRunning = false
+        if let explanation {
+            // A raw status would replace the host's account of who stopped the shell and why.
+            onEvent?(.failed(TerminalSessionFailure(message: explanation)))
+            onEvent?(.processTerminated(exitCode: nil))
+            return
+        }
         if exitCode == nil {
             onEvent?(.failed(TerminalSessionFailure(message: "The terminal process ended before reporting an exit code.")))
         }
