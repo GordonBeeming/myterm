@@ -21,6 +21,11 @@ enum SessionHostInstallation {
     nonisolated static func stableHelper(for bundled: URL, namespace: URL,
                                          verifier: SessionHostServerAuthentication) throws -> URL {
         try verifier.validateExecutable(bundled)
+        // An ad-hoc development helper has no team identity, so it pins its controller by finding
+        // the app bundle around it. Moving it would lose that app. Ad-hoc builds already pin one
+        // exact executable, so they are documented as closing their panes before a rebuild.
+        if try teamIdentifier(of: bundled) == nil,
+           bundled.pathComponents.contains(where: { $0.hasSuffix(".app") }) { return bundled }
         let identity = try codeDirectoryHash(of: bundled)
         let root = namespace.appendingPathComponent(directoryName, isDirectory: true)
         let directory = root.appendingPathComponent(identity, isDirectory: true)
@@ -81,6 +86,16 @@ enum SessionHostInstallation {
             throw SessionHostError.untrustedHost
         }
         return unique.map { String(format: "%02x", $0) }.joined()
+    }
+
+    nonisolated static func teamIdentifier(of url: URL) throws -> String? {
+        var code: SecStaticCode?
+        var rawInfo: CFDictionary?
+        guard SecStaticCodeCreateWithPath(url as CFURL, [], &code) == errSecSuccess, let code,
+              SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &rawInfo) == errSecSuccess,
+              let info = rawInfo as? [String: Any] else { throw SessionHostError.untrustedHost }
+        guard let team = info[kSecCodeInfoTeamIdentifier as String] as? String, !team.isEmpty else { return nil }
+        return team
     }
 
     private nonisolated static func verifyCopy(_ url: URL, identity: String,

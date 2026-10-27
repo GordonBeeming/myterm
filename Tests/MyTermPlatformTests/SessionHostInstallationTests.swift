@@ -26,6 +26,21 @@ final class SessionHostInstallationTests: XCTestCase {
         XCTAssertNoThrow(try verifier.validateExecutable(repaired))
     }
 
+    @MainActor
+    func testAdHocHelperInsideAnAppBundleRunsInPlaceToFindItsController() throws {
+        let helper = try Self.helperExecutable()
+        XCTAssertNil(try SessionHostInstallation.teamIdentifier(of: helper), "The fixture must be an ad-hoc build")
+        let namespace = try Self.makeNamespace()
+        defer { try? FileManager.default.removeItem(at: namespace) }
+        let bundled = namespace.appendingPathComponent("MyTerm Dev.app/Contents/MacOS/MyTermSessionHost")
+        try FileManager.default.createDirectory(at: bundled.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: helper, to: bundled)
+        let verifier = try SessionHostServerAuthentication(environment: PersistentTerminalTestEnvironment.make(),
+                                                           helperURL: helper)
+        XCTAssertEqual(try SessionHostInstallation.stableHelper(for: bundled, namespace: namespace, verifier: verifier), bundled)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: namespace.appendingPathComponent("session-hosts").path))
+    }
+
     func testRunningTerminalReattachesAfterTheAppBundleHelperIsReplaced() async throws {
         try await MainActor.run {
             let helper = try Self.helperExecutable()
@@ -34,7 +49,9 @@ final class SessionHostInstallationTests: XCTestCase {
             let identifier = UUID()
             let path = try PersistentTerminalConnection.socketPath(identifier: identifier, namespace: namespace)
             defer { try? FileManager.default.removeItem(at: URL(fileURLWithPath: path).deletingLastPathComponent()) }
-            let bundled = namespace.appendingPathComponent("Old.app/Contents/MacOS/MyTermSessionHost")
+            // The fixture helper is ad-hoc signed, and an ad-hoc helper inside a `.app` deliberately
+            // runs in place. A plain directory stands in for the signed release bundle.
+            let bundled = namespace.appendingPathComponent("OldRelease/Contents/MacOS/MyTermSessionHost")
             try FileManager.default.createDirectory(at: bundled.deletingLastPathComponent(), withIntermediateDirectories: true)
             try FileManager.default.copyItem(at: helper, to: bundled)
             let environment = try PersistentTerminalTestEnvironment.make()

@@ -103,7 +103,8 @@ New terminals run the helper from a private copy of its exact signed build under
 a running helper against the file at its launch path, so a helper started from the bundle would
 fail authentication once an update replaced that bundle, leaving its live terminal unattachable.
 An updated app keeps attaching to terminals started by the previous build. Each launch removes
-copies that no running process uses.
+copies that no running process uses. Explicit ad-hoc development builds still run the helper in
+place, because without a team identity it finds its controller through the surrounding app.
 
 Quitting during a new terminal's first attachment can leave its shell running before the
 initial command is sent. Check that command's terminal after reopening before retrying it.
