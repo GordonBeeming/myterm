@@ -3,11 +3,19 @@ import MyTermRemote
 import SwiftUI
 
 struct SceneRootView: View {
+    private static let legacyMachineColumnCollapsed: Bool? = {
+        guard UserDefaults.standard.object(forKey: "machineColumnCollapsed") != nil else { return nil }
+        return UserDefaults.standard.bool(forKey: "machineColumnCollapsed")
+    }()
+
     let services: CompanionServices
     @State private var scene = SceneModel()
     @State private var hasOfferedAutoSelect = false
-    @State private var preferredCompactColumn: NavigationSplitViewColumn = .content
-    @AppStorage("machineColumnCollapsed") private var machineColumnCollapsed = false
+    @State private var preferredCompactColumn: NavigationSplitViewColumn = .sidebar
+    /// Kept as the default for scenes that have no restored state. SceneStorage takes over after
+    /// that scene first records a visibility change.
+    @SceneStorage("machineColumnCollapsedForScene") private var machineColumnCollapsed =
+        Self.legacyMachineColumnCollapsed ?? false
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
@@ -76,9 +84,10 @@ struct SceneRootView: View {
             .onReceive(NotificationCenter.default.publisher(for: .myTermNotificationRoute)) { _ in
                 if !services.isLoading { consumePendingNotification() }
             }
-            // Lives here rather than in the sidebar because the machine list is shown outside the
-            // split view when no Mac is chosen, and picking one there must connect just the same.
+            // Connection ownership stays at the scene root so changing the sidebar selection has
+            // the same lifecycle in compact, expanded and multi-window layouts.
             .onChange(of: scene.selectedConnectionID) { _, connectionID in
+                preferredCompactColumn = connectionID == nil ? .sidebar : .content
                 guard let connectionID,
                       let host = services.savedHosts.first(where: { $0.connectionID == connectionID }) else {
                     Task { await scene.disconnect() }
@@ -95,20 +104,17 @@ struct SceneRootView: View {
 
     @ViewBuilder
     private var shell: some View {
-        if scene.selectedConnectionID == nil {
-            // One decision filling the screen, rather than a narrow list beside two columns that
-            // exist only to say nothing has been chosen yet.
-            MachineListView(services: services, scene: scene)
-        } else {
-            NavigationSplitView(columnVisibility: columnVisibility, preferredCompactColumn: $preferredCompactColumn) {
-                HostSidebar(services: services, scene: scene)
-            } content: {
-                WorkspaceColumn(services: services, scene: scene) {
-                    preferredCompactColumn = .detail
-                }
-            } detail: {
-                DetailColumn(services: services, scene: scene)
+        NavigationSplitView(columnVisibility: columnVisibility, preferredCompactColumn: $preferredCompactColumn) {
+            HostSidebar(services: services, scene: scene) { connectionID in
+                scene.selectedConnectionID = connectionID
+                preferredCompactColumn = .content
             }
+        } content: {
+            WorkspaceColumn(services: services, scene: scene) {
+                preferredCompactColumn = .detail
+            }
+        } detail: {
+            DetailColumn(services: services, scene: scene)
         }
     }
 
@@ -117,7 +123,10 @@ struct SceneRootView: View {
     /// the user collapsing the column would hide it on the next launch on a wide screen.
     private var columnVisibility: Binding<NavigationSplitViewVisibility> {
         Binding(
-            get: { machineColumnCollapsed ? .doubleColumn : .all },
+            get: {
+                guard horizontalSizeClass == .regular else { return .automatic }
+                return machineColumnCollapsed ? .doubleColumn : .all
+            },
             set: { visibility in
                 guard horizontalSizeClass == .regular else { return }
                 machineColumnCollapsed = visibility != .all
@@ -154,36 +163,10 @@ struct SceneRootView: View {
     }
 }
 
-/// The machine list as its own screen, shown while no Mac is selected.
-private struct MachineListView: View {
-    let services: CompanionServices
-    let scene: SceneModel
-
-    var body: some View {
-        NavigationStack {
-            Group {
-                if services.isLoading {
-                    ProgressView("Loading Macs")
-                } else if services.savedHosts.isEmpty {
-                    ContentUnavailableView("No paired Macs", systemImage: "desktopcomputer",
-                                           description: Text("Scan the pairing code shown by MyTerm on your Mac."))
-                } else {
-                    List {
-                        MachineSections(services: services, scene: scene) { host in
-                            scene.selectedConnectionID = host.connectionID
-                        }
-                    }
-                }
-            }
-            .navigationTitle("Macs")
-            .toolbar { machineListToolbar(services: services, scene: scene) }
-        }
-    }
-}
-
 private struct HostSidebar: View {
     let services: CompanionServices
     let scene: SceneModel
+    let openConnection: (SavedConnectionID) -> Void
 
     var body: some View {
         @Bindable var scene = scene
@@ -194,7 +177,7 @@ private struct HostSidebar: View {
                 ContentUnavailableView("No paired Macs", systemImage: "desktopcomputer",
                                        description: Text("Scan the pairing code shown by MyTerm on your Mac."))
             } else {
-                MachineSections(services: services, scene: scene, select: nil)
+                MachineSections(services: services, scene: scene, openConnection: openConnection)
             }
         }
         .navigationTitle("Macs")
@@ -202,21 +185,12 @@ private struct HostSidebar: View {
     }
 }
 
-/// The starred and unstarred sections, shared by the full-screen list and the sidebar.
-///
-/// `select` is what separates them: the sidebar is a `List(selection:)` and tags its rows, while a
-/// plain list does not respond to a tap without one, so that one takes a closure and uses buttons.
+/// The starred and unstarred sections in the Mac sidebar. Each row keeps an explicit open action
+/// so tapping the selected Mac can reveal the workspace column again on a compact display.
 private struct MachineSections: View {
     let services: CompanionServices
     let scene: SceneModel
-    let select: ((SavedHostDescriptor) -> Void)?
-
-    init(services: CompanionServices, scene: SceneModel,
-         select: ((SavedHostDescriptor) -> Void)? = nil) {
-        self.services = services
-        self.scene = scene
-        self.select = select
-    }
+    let openConnection: (SavedConnectionID) -> Void
 
     var body: some View {
         let starred = services.savedHosts.filter { services.isStarred($0.connectionID) }
@@ -232,8 +206,9 @@ private struct MachineSections: View {
     @ViewBuilder
     private func rows(_ hosts: [SavedHostDescriptor]) -> some View {
         ForEach(hosts, id: \.connectionID) { host in
-            MachineRow(services: services, scene: scene, host: host,
-                       select: select.map { select in { select(host) } })
+            MachineRow(services: services, scene: scene, host: host) {
+                openConnection(host.connectionID)
+            }
                 .tag(host.connectionID)
                 .contextMenu {
                     starButton(for: host)
@@ -260,8 +235,7 @@ private struct MachineRow: View {
     let services: CompanionServices
     let scene: SceneModel
     let host: SavedHostDescriptor
-    /// Set outside a `List(selection:)`, where a plain row does not respond to a tap on its own.
-    let select: (() -> Void)?
+    let openConnection: () -> Void
 
     var body: some View {
         let starred = services.isStarred(host.connectionID)
@@ -269,12 +243,10 @@ private struct MachineRow: View {
         HStack(spacing: 12) {
             // The star must never be a child of this button. A Button inside a Button's label is
             // not hittable on iOS, which a UI test caught doing exactly that.
-            if let select {
-                Button(action: select) { identity(displayName: displayName) }
-                    .buttonStyle(.plain)
-            } else {
+            Button(action: openConnection) {
                 identity(displayName: displayName)
             }
+            .buttonStyle(.plain)
             Spacer(minLength: 8)
             connectionIndicator
             Button {

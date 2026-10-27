@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 /// Drives the machine list against seeded pairings. Reading the view code is not evidence that a
@@ -36,9 +37,7 @@ final class CompanionMachineListTests: XCTestCase {
                        "Unstarring the last starred Mac collapses the sections again")
     }
 
-    /// Choosing a Mac has to land on that Mac. The shell swaps from the full-screen list to a split
-    /// view at this moment, and on a compact width that split view's root is the machine list
-    /// again, so getting this wrong puts the user back where they started.
+    /// Choosing a Mac has to advance the collapsed split view to that Mac's workspace column.
     @MainActor
     func testChoosingAMacLeavesTheMachineList() {
         let app = launch()
@@ -51,6 +50,18 @@ final class CompanionMachineListTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["pikachu"].waitForExistence(timeout: 5),
                       "Selecting a Mac must open it, not return to the list")
         attachScreenshot(app, name: "machine-chosen")
+    }
+
+    @MainActor
+    func testRegularWidthKeepsMacSidebarBesideTheWorkspaceColumn() throws {
+        let app = launch()
+        let emptyWorkspace = app.staticTexts["Choose a Mac"]
+        guard try regularWidthAvailable(emptyWorkspace) else { return }
+
+        XCTAssertTrue(app.navigationBars["Macs"].exists)
+        XCTAssertTrue(app.staticTexts["pikachu"].exists)
+        XCTAssertTrue(emptyWorkspace.exists)
+        attachScreenshot(app, name: "machine-sidebar-regular-width")
     }
 
     @MainActor
@@ -149,5 +160,15 @@ final class CompanionMachineListTests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    @MainActor
+    private func regularWidthAvailable(_ marker: XCUIElement) throws -> Bool {
+        if marker.waitForExistence(timeout: 5) { return true }
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            XCTFail("The iPad destination must keep the Mac sidebar beside the workspace column.")
+            return false
+        }
+        throw XCTSkip("This phone test requires an unfolded regular-width destination.")
     }
 }

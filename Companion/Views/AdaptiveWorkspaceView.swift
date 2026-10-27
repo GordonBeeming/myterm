@@ -25,6 +25,7 @@ struct AdaptiveWorkspaceView: View {
     let scene: SceneModel
     let workspace: RemoteWorkspaceItem
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.layoutDirection) private var layoutDirection
     @AppStorage("showTerminalKeys") private var showTerminalKeys = false
     private let paneSelections = PaneSelectionStore()
     @State private var visibilityOwnerID: UUID?
@@ -436,30 +437,32 @@ struct AdaptiveWorkspaceView: View {
             return AnyView(groupPane(id))
         case .split(_, let orientation, let children, let weights):
             return AnyView(GeometryReader { geometry in
-                let portions = normalizedWeights(weights, count: children.count)
                 let horizontal = orientation == .horizontal
-                let length = max(0, (horizontal ? geometry.size.width : geometry.size.height)
-                                 - CGFloat(max(0, children.count - 1)))
-                let layout = horizontal ? AnyLayout(HStackLayout(spacing: 1)) : AnyLayout(VStackLayout(spacing: 1))
-                layout {
+                let divisionFrames: [CGRect] = if #available(iOS 27.1, *) {
+                    geometry.reservedRegions(kind: .division, layoutDirectionBehavior: .fixed)
+                        .filter(\.isActive)
+                        .map(\.frame)
+                } else {
+                    []
+                }
+                let frames = ReservedRegionSplitLayout.frames(
+                    in: geometry.size,
+                    horizontal: horizontal,
+                    itemCount: children.count,
+                    weights: weights,
+                    reservedRegions: divisionFrames,
+                    rightToLeft: layoutDirection == .rightToLeft
+                )
+                ZStack {
                     ForEach(children.indices, id: \.self) { index in
                         layoutView(children[index])
-                            .frame(width: horizontal ? length * portions[index] : geometry.size.width,
-                                   height: horizontal ? geometry.size.height : length * portions[index])
+                            .frame(width: frames[index].width, height: frames[index].height)
                             .clipped()
+                            .position(x: frames[index].midX, y: frames[index].midY)
                     }
                 }
+                .frame(width: geometry.size.width, height: geometry.size.height)
             })
         }
-    }
-
-    private func normalizedWeights(_ weights: [Double], count: Int) -> [CGFloat] {
-        guard count > 0 else { return [] }
-        guard weights.count == count, weights.allSatisfy({ $0.isFinite && $0 > 0 }),
-              weights.reduce(0, +).isFinite else {
-            return Array(repeating: 1 / CGFloat(count), count: count)
-        }
-        let total = weights.reduce(0, +)
-        return weights.map { CGFloat($0 / total) }
     }
 }

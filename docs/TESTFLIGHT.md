@@ -56,7 +56,7 @@ Apple's [encryption documentation table](https://developer.apple.com/help/app-st
 
 The deploy job:
 
-1. Selects release Xcode 26.6, verifies the iOS 26 SDK, and installs its matching Metal toolchain.
+1. Selects Xcode 27.1, verifies the iOS 27.1 SDK, and installs its matching Metal toolchain.
 2. Imports the distribution certificate into a new runner-only keychain.
 3. Installs the app and notification service profiles after validating their names and bundle IDs.
 4. Generates an isolated Release project and archives both targets with manual signing.

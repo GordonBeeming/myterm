@@ -23,6 +23,7 @@
 		3462F39D2A0C7225443E1279 /* TerminalDraftStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21AC7E3FC5A5E5C0DBC0AEE4 /* TerminalDraftStoreTests.swift */; };
 		3610251539859561DE72ED80 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = D02D7C3B605BC41C6D6B704D /* PrivacyInfo.xcprivacy */; };
 		3A678F85425E96553FEDB51F /* DiagnosticsLogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75DA0C73070BF0DBCA490961 /* DiagnosticsLogTests.swift */; };
+		3AAA890CAEEE79DA96F3B57F /* ReservedRegionSplitLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAC2D7336E6D2C6628022F7C /* ReservedRegionSplitLayout.swift */; };
 		3BD17EF126C1CC0BD162D44F /* MyTermNotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 167672F5922523F7E84346F5 /* MyTermNotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		3F261753A48CA260470CAEDB /* WorkspaceVisibilityGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC712012DD4935B1A1E9C804 /* WorkspaceVisibilityGateTests.swift */; };
 		3FF2B070EC5BD131809326C0 /* WorkspaceUITestFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B0D1091518E911593A9F7C5 /* WorkspaceUITestFixture.swift */; };
@@ -34,6 +35,7 @@
 		539F4D9A61C7A9B49E66E966 /* TerminalExperienceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FA4675623DF3E1DFDD6B478 /* TerminalExperienceTests.swift */; };
 		5598108FD9270769EA71E632 /* DiagnosticsLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A712E8DD129C2743246D7947 /* DiagnosticsLog.swift */; };
 		5631CB2A9640AE4154540BC6 /* CompanionMachineListTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93E79C1EF3D2A1358196D31C /* CompanionMachineListTests.swift */; };
+		5D54A071E87E451B0E2B1B48 /* ReservedRegionSplitLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20D76B37F282486AE3707E08 /* ReservedRegionSplitLayoutTests.swift */; };
 		62023C04E4A2B662B40F6398 /* NotificationEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D3ECF4B3194B81DF0DA4E1 /* NotificationEnvelope.swift */; };
 		64E399E0F3FB05E2B1E0139B /* AdaptiveWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E81C624FBFF3B575146385EC /* AdaptiveWorkspaceView.swift */; };
 		6B5E55B92FDC88FB3693C7A0 /* AppModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53A2B5E6871C55271FDA9849 /* AppModels.swift */; };
@@ -118,6 +120,7 @@
 		15A442D19CA92622A5D83225 /* PairingCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingCoordinator.swift; sourceTree = "<group>"; };
 		15CE946E75B4FCF6C271546A /* MyTermCompanionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyTermCompanionApp.swift; sourceTree = "<group>"; };
 		167672F5922523F7E84346F5 /* MyTermNotificationService.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = MyTermNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		20D76B37F282486AE3707E08 /* ReservedRegionSplitLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReservedRegionSplitLayoutTests.swift; sourceTree = "<group>"; };
 		21AC7E3FC5A5E5C0DBC0AEE4 /* TerminalDraftStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalDraftStoreTests.swift; sourceTree = "<group>"; };
 		242FCDCEC5B800E20925A07C /* CompanionServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionServices.swift; sourceTree = "<group>"; };
 		27C622664DAC55550E0B02B8 /* RemoteBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteBrowserView.swift; sourceTree = "<group>"; };
@@ -172,6 +175,7 @@
 		DE42220FFB1AF6F3FFB21CE2 /* CompanionHostConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionHostConnection.swift; sourceTree = "<group>"; };
 		E81C624FBFF3B575146385EC /* AdaptiveWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveWorkspaceView.swift; sourceTree = "<group>"; };
 		EABF08F1180E6CF131038913 /* SceneRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneRootView.swift; sourceTree = "<group>"; };
+		EAC2D7336E6D2C6628022F7C /* ReservedRegionSplitLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReservedRegionSplitLayout.swift; sourceTree = "<group>"; };
 		F0106875153A768AF1311D01 /* ReconnectBackoffTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReconnectBackoffTests.swift; sourceTree = "<group>"; };
 		F652502288C33AA2EDD07BE2 /* CompanionLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionLaunchTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -221,6 +225,7 @@
 				01E2B01D02870D4686EFFA95 /* ManagementViews.swift */,
 				27C622664DAC55550E0B02B8 /* RemoteBrowserView.swift */,
 				69775211DDE86AF39BD85C5F /* RemoteSettingsEditor.swift */,
+				EAC2D7336E6D2C6628022F7C /* ReservedRegionSplitLayout.swift */,
 				EABF08F1180E6CF131038913 /* SceneRootView.swift */,
 				3994E92DEFC56739AD8C198D /* SessionNavigationView.swift */,
 				31B0811434D4E738285EBA29 /* TerminalComposerView.swift */,
@@ -330,6 +335,7 @@
 				503B2B9BD6C4D836A5169CD4 /* RemoteBrowserProxyWebViewTests.swift */,
 				7C06C69D3EAC48C20C32C255 /* RemoteBrowserTests.swift */,
 				BFA88151878C429986196266 /* RemoteSettingsDraftTests.swift */,
+				20D76B37F282486AE3707E08 /* ReservedRegionSplitLayoutTests.swift */,
 				4C16667DB8CC7675CEFC6E88 /* SceneStateTests.swift */,
 				21AC7E3FC5A5E5C0DBC0AEE4 /* TerminalDraftStoreTests.swift */,
 				4FA4675623DF3E1DFDD6B478 /* TerminalExperienceTests.swift */,
@@ -554,6 +560,7 @@
 				4052949354AD1631457521E5 /* PaneSelectionStore.swift in Sources */,
 				4244C73558FE87B4D69117D7 /* RemoteBrowserView.swift in Sources */,
 				EF15BAB06B72B6593A67C359 /* RemoteSettingsEditor.swift in Sources */,
+				3AAA890CAEEE79DA96F3B57F /* ReservedRegionSplitLayout.swift in Sources */,
 				F192A2A9C31134D2CFCAE42F /* SceneRootView.swift in Sources */,
 				D33708431104CB29688C9AA8 /* SessionNavigationView.swift in Sources */,
 				4535B244FCE8884F027AC5E9 /* TerminalComposerDraft.swift in Sources */,
@@ -581,6 +588,7 @@
 				23953A02AC331EC7D7BC3F1D /* RemoteBrowserProxyWebViewTests.swift in Sources */,
 				F6D7CC9485F41B40AD646203 /* RemoteBrowserTests.swift in Sources */,
 				C3E364CB2489742AC305E98E /* RemoteSettingsDraftTests.swift in Sources */,
+				5D54A071E87E451B0E2B1B48 /* ReservedRegionSplitLayoutTests.swift in Sources */,
 				941ECD6CF20B3D428F38FDC0 /* SceneStateTests.swift in Sources */,
 				3462F39D2A0C7225443E1279 /* TerminalDraftStoreTests.swift in Sources */,
 				539F4D9A61C7A9B49E66E966 /* TerminalExperienceTests.swift in Sources */,

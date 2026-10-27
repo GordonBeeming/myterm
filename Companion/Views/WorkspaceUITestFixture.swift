@@ -65,8 +65,8 @@ struct WorkspaceUITestFixture: View {
 
     @State private var scene = SceneModel()
     /// The split variant goes through `WorkspaceDetail` rather than straight to the adaptive view,
-    /// because the toolbar under test is split across both views and the controls reported broken
-    /// on an iPad live in the half the adaptive view does not own.
+    /// because the toolbar under test is split across both views and the regular-width controls
+    /// live in the half the adaptive view does not own.
     var usesSplitLayout = UITestConfiguration.showsSplitWorkspaceFixture
 
     var body: some View {
