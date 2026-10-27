@@ -64,6 +64,7 @@ struct WorkspaceUITestFixture: View {
                                                         hostID: fixtureUUID(3))
 
     @State private var scene = SceneModel()
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     /// The split variant goes through `WorkspaceDetail` rather than straight to the adaptive view,
     /// because the toolbar under test is split across both views and the regular-width controls
     /// live in the half the adaptive view does not own.
@@ -77,6 +78,8 @@ struct WorkspaceUITestFixture: View {
                 AdaptiveWorkspaceView(scene: scene, workspace: Self.workspace)
             }
         }
+        .accessibilityIdentifier("workspace-fixture-root")
+        .accessibilityValue(horizontalSizeClass == .regular ? "regular" : "compact")
         .onAppear {
             // Routes only resolve against a selected connection; the fixture never reaches a relay.
             scene.selectedConnectionID = Self.connectionID

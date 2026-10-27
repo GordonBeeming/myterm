@@ -161,17 +161,21 @@ final class ReservedRegionSplitLayoutTests: XCTestCase {
     }
 
     func testRightToLeftKeepsAnOffCentreFoldInItsPhysicalPosition() {
-        XCTAssertEqual(ReservedRegionSplitLayout.frames(
+        let frames = ReservedRegionSplitLayout.frames(
             in: CGSize(width: 1_000, height: 600),
             horizontal: true,
             itemCount: 2,
             weights: [0.4, 0.6],
             reservedRegions: [CGRect(x: 390, y: 0, width: 20, height: 600)],
             rightToLeft: true
-        ), [
+        )
+        XCTAssertEqual(frames, [
             CGRect(x: 410, y: 0, width: 590, height: 600),
             CGRect(x: 0, y: 0, width: 390, height: 600),
         ])
+        XCTAssertEqual(ReservedRegionSplitLayout.logicalPositionX(
+            for: frames[0], containerWidth: 1_000, rightToLeft: true
+        ), 295)
     }
 
     private func assertFrames(

@@ -458,7 +458,13 @@ struct AdaptiveWorkspaceView: View {
                         layoutView(children[index])
                             .frame(width: frames[index].width, height: frames[index].height)
                             .clipped()
-                            .position(x: frames[index].midX, y: frames[index].midY)
+                            .position(
+                                x: ReservedRegionSplitLayout.logicalPositionX(
+                                    for: frames[index], containerWidth: geometry.size.width,
+                                    rightToLeft: layoutDirection == .rightToLeft
+                                ),
+                                y: frames[index].midY
+                            )
                     }
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)

@@ -1,4 +1,3 @@
-import UIKit
 import XCTest
 
 /// The regular-width workspace toolbar, driven against the split workspace fixture. It runs on
@@ -20,7 +19,7 @@ final class CompanionWorkspaceToolbarTests: XCTestCase {
     func testWideWorkspaceShowsPanesRatherThanTheCompactSwitcher() throws {
         let app = launchWideWorkspace()
         let maximise = app.buttons["toggle-maximise-pane"]
-        guard try regularWidthAvailable(maximise) else { return }
+        guard try regularWidthAvailable(in: app, marker: maximise) else { return }
         XCTAssertFalse(app.scrollViews["workspace-pane-switcher"].exists,
                        "Wide layout shows every pane, so it needs no pane switcher")
         attach(app, named: "wide-workspace-toolbar")
@@ -30,7 +29,7 @@ final class CompanionWorkspaceToolbarTests: XCTestCase {
     func testMaximisingCollapsesTheLayoutToOnePaneAndBack() throws {
         let app = launchWideWorkspace()
         let maximise = app.buttons["toggle-maximise-pane"]
-        guard try regularWidthAvailable(maximise) else { return }
+        guard try regularWidthAvailable(in: app, marker: maximise) else { return }
         XCTAssertEqual(maximise.label, "Maximise pane")
 
         let paneHeaders = app.descendants(matching: .any).matching(identifier: "pane-tab-picker")
@@ -61,12 +60,14 @@ final class CompanionWorkspaceToolbarTests: XCTestCase {
     }
 
     @MainActor
-    private func regularWidthAvailable(_ marker: XCUIElement) throws -> Bool {
+    private func regularWidthAvailable(in app: XCUIApplication, marker: XCUIElement) throws -> Bool {
         if marker.waitForExistence(timeout: 10) { return true }
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            XCTFail("The iPad destination must expose the regular-width workspace layout.")
+        let root = app.otherElements["workspace-fixture-root"]
+        XCTAssertTrue(root.waitForExistence(timeout: 2), "The workspace fixture must expose its width class.")
+        if root.value as? String == "regular" {
+            XCTFail("A regular-width destination must expose the workspace toolbar controls.")
             return false
         }
-        throw XCTSkip("This phone test requires an unfolded regular-width destination.")
+        throw XCTSkip("This test requires a regular-width destination.")
     }
 }

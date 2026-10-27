@@ -1,4 +1,3 @@
-import UIKit
 import XCTest
 
 /// Drives the machine list against seeded pairings. Reading the view code is not evidence that a
@@ -56,7 +55,7 @@ final class CompanionMachineListTests: XCTestCase {
     func testRegularWidthKeepsMacSidebarBesideTheWorkspaceColumn() throws {
         let app = launch()
         let emptyWorkspace = app.staticTexts["Choose a Mac"]
-        guard try regularWidthAvailable(emptyWorkspace) else { return }
+        guard try regularWidthAvailable(in: app, marker: emptyWorkspace) else { return }
 
         XCTAssertTrue(app.navigationBars["Macs"].exists)
         XCTAssertTrue(app.staticTexts["pikachu"].exists)
@@ -163,12 +162,14 @@ final class CompanionMachineListTests: XCTestCase {
     }
 
     @MainActor
-    private func regularWidthAvailable(_ marker: XCUIElement) throws -> Bool {
+    private func regularWidthAvailable(in app: XCUIApplication, marker: XCUIElement) throws -> Bool {
         if marker.waitForExistence(timeout: 5) { return true }
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            XCTFail("The iPad destination must keep the Mac sidebar beside the workspace column.")
+        let root = app.otherElements["host-picker"]
+        XCTAssertTrue(root.waitForExistence(timeout: 2), "The app root must expose its width class.")
+        if root.value as? String == "regular" {
+            XCTFail("A regular-width destination must keep the Mac sidebar beside the workspace column.")
             return false
         }
-        throw XCTSkip("This phone test requires an unfolded regular-width destination.")
+        throw XCTSkip("This test requires a regular-width destination.")
     }
 }

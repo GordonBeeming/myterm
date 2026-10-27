@@ -135,6 +135,11 @@ enum ReservedRegionSplitLayout {
         return Array(frames.reversed())
     }
 
+    static func logicalPositionX(for frame: CGRect, containerWidth: CGFloat,
+                                 rightToLeft: Bool) -> CGFloat {
+        rightToLeft ? containerWidth - frame.midX : frame.midX
+    }
+
     private static func frames(
         for indices: Range<Int>,
         origin: CGFloat,

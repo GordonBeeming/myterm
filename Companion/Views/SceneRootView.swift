@@ -22,6 +22,7 @@ struct SceneRootView: View {
     var body: some View {
         shell
             .accessibilityIdentifier("host-picker")
+            .accessibilityValue(horizontalSizeClass == .regular ? "regular" : "compact")
             .sheet(item: $scene.sheet) { sheet in
                 switch sheet {
                 case .settings:
