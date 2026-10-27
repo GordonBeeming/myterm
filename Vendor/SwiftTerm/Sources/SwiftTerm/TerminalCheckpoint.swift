@@ -680,7 +680,9 @@ extension Terminal {
         guard kittyPlacementContext == nil else {
             throw TerminalCheckpointError.corrupt("checkpoint requested during image placement")
         }
-        let alternateCells = altBuffer.lines.count * cols
+        // Non-reflowing alternate lines retain offscreen cells after narrowing.
+        // Budget their actual storage, not the current viewport width.
+        let alternateCells = (0..<altBuffer.lines.count).reduce(0) { $0 + altBuffer.lines[$1].count }
         let encodedCellBudget = max(0, TerminalCheckpointLimits.encodedBytes - 8 * 1_024 * 1_024
                                     - kittyGraphicsState.totalImageBytes) / CheckpointCellCodec.encodedCellBytes
         let cellBudget = min(TerminalCheckpointLimits.cells, encodedCellBudget)
@@ -973,15 +975,19 @@ extension TerminalCheckpointState {
             )
         }
         for line in buffer.lines {
-            guard line.cellCount == columns,
+            // Buffer.resize preserves the hidden right-hand cells of alternate
+            // lines. Normal scrollback reflows and still requires exact width.
+            guard line.cellCount >= columns,
+                  line.cellCount <= TerminalCheckpointLimits.columns,
+                  expectedScrollback == nil || line.cellCount == columns,
                   line.cellData.count == line.cellCount * CheckpointCellCodec.encodedCellBytes else {
-                throw TerminalCheckpointError.corrupt("line width does not match terminal width")
+                throw TerminalCheckpointError.corrupt("line storage width is invalid for its buffer")
             }
             try line.hyperlinks.forEach(validateString)
             cellCount += line.cellCount
             for image in line.images {
                 guard image.pixelWidth > 0, image.pixelHeight > 0,
-                      image.column >= 0, image.column < columns else {
+                      image.column >= 0, image.column < line.cellCount else {
                     throw TerminalCheckpointError.corrupt("line image geometry is invalid")
                 }
                 imageBytes += image.data.count

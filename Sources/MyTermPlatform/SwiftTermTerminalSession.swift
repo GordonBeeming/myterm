@@ -519,6 +519,9 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
     }
 
     private func sendProcessInput(_ bytes: Data) throws {
+        // AppKit may commit empty text (for example a paste without a text value).
+        // It is a no-op, not a terminal protocol message.
+        guard !bytes.isEmpty else { return }
         guard isRunning else { throw TerminalRemoteSessionError.notRunning }
         if let connection = persistentConnection {
             try connection.send(.init(kind: "input", bytes: bytes, generation: connection.attachment.generation))

@@ -5,6 +5,39 @@ import XCTest
 @testable import MyTermContinuity
 
 final class SessionHostTests: XCTestCase {
+    func testEmptyInputKeepsTheControllerAttachedAndShellUsable() throws {
+        let directory = URL(fileURLWithPath: "/private/tmp/myterm-empty-\(UUID().uuidString.prefix(8))")
+        try SessionHostSocket.prepareDirectory(directory)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let path = directory.appendingPathComponent("s.sock").path
+        let release = directory.appendingPathComponent("release")
+        let host = Process()
+        host.executableURL = try helperExecutable()
+        host.environment = try testEnvironment()
+        host.arguments = [path, "/bin/sh", directory.path, "80", "25", "-c",
+            "while [ ! -f '\(release.path)' ]; do sleep 0.01; done; stty raw -echo; printf ready-for-input; cat"]
+        host.standardOutput = FileHandle.nullDevice; host.standardError = FileHandle.nullDevice
+        try host.run()
+        defer { if host.isRunning { host.terminate(); host.waitUntilExit() } }
+        let socket = try connectEventually(path: path)
+        defer { close(socket) }
+        var decoder = SessionHostDecoder()
+        let attachment = try readMessage(socket, decoder: &decoder, kind: "attached")
+        XCTAssertTrue(FileManager.default.createFile(atPath: release.path, contents: Data()))
+        var output = Data()
+        while !String(decoding: output, as: UTF8.self).contains("ready-for-input") {
+            output.append(try readMessage(socket, decoder: &decoder, kind: "output").bytes ?? Data())
+        }
+        try SessionHostSocket.write(.init(kind: "input", bytes: Data(), generation: attachment.generation), to: socket)
+        let marker = "live-after-empty-frame"
+        try SessionHostSocket.write(.init(kind: "input", bytes: Data(marker.utf8), generation: attachment.generation), to: socket)
+        while !String(decoding: output, as: UTF8.self).contains(marker) {
+            output.append(try readMessage(socket, decoder: &decoder, kind: "output").bytes ?? Data())
+        }
+        XCTAssertTrue(host.isRunning)
+        try SessionHostSocket.write(.init(kind: "stop", generation: attachment.generation), to: socket)
+    }
+
     func testDecoderHandlesFragmentedAndCoalescedFrames() throws {
         let first = try SessionHostMessage(kind: "output", bytes: Data([0, 1, 255]), sequence: 1).encoded()
         let second = try SessionHostMessage(kind: "output", bytes: Data("tail".utf8), sequence: 2).encoded()
@@ -628,6 +661,57 @@ final class SessionHostTests: XCTestCase {
         let acceptedHeader = try output.fileHandleForReading.read(upToCount: 4)
         XCTAssertEqual(acceptedHeader?.count, 4, "only the pinned signed controller receives the attachment")
         XCTAssertTrue(host.isRunning)
+    }
+
+    func testAlternateBufferShrinkDetachesAndReattachesWithHiddenCellsAndSameShell() throws {
+        let directory = URL(fileURLWithPath: "/private/tmp/myterm-alt-\(UUID().uuidString.prefix(8))")
+        try SessionHostSocket.prepareDirectory(directory)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let path = directory.appendingPathComponent("s.sock").path
+        let release = directory.appendingPathComponent("release")
+        let host = Process()
+        host.executableURL = try helperExecutable()
+        host.environment = try testEnvironment()
+        host.arguments = [path, "/bin/sh", directory.path, "12", "4", "-c",
+            "while [ ! -e '\(release.path)' ]; do sleep 0.01; done; printf '\\033[?1049h\\033[2;1HABCDEFGHIJKL\\033]7338;alternate-ready\\033\\\\'; while :; do sleep 1; done"]
+        host.standardOutput = FileHandle.nullDevice; host.standardError = FileHandle.nullDevice
+        try host.run()
+        defer { if host.isRunning { host.terminate(); host.waitUntilExit() } }
+        let first = try connectEventually(path: path)
+        var firstOpen = true
+        defer { if firstOpen { close(first) } }
+        var decoder = SessionHostDecoder()
+        let initial = try readMessage(first, decoder: &decoder, kind: "attached")
+        XCTAssertTrue(FileManager.default.createFile(atPath: release.path, contents: Data()))
+        var output = Data()
+        while !String(decoding: output, as: UTF8.self).contains("alternate-ready") {
+            output.append(try readMessage(first, decoder: &decoder, kind: "output").bytes ?? Data())
+        }
+        try SessionHostSocket.write(.init(kind: "resize", columns: 6, rows: 4, generation: initial.generation), to: first)
+        let resized = try readMessage(first, decoder: &decoder, kind: "geometry")
+        XCTAssertEqual(resized.columns, 6)
+        try SessionHostSocket.write(.init(kind: "detach", generation: initial.generation), to: first)
+        // EOF acknowledges that the old controller has detached; no fixed sleep
+        // or competing attachment is needed before testing the fresh checkpoint.
+        var discarded = [UInt8](repeating: 0, count: 4_096)
+        var readCount = Darwin.read(first, &discarded, discarded.count)
+        while readCount > 0 { readCount = Darwin.read(first, &discarded, discarded.count) }
+        XCTAssertEqual(readCount, 0)
+        close(first); firstOpen = false
+
+        let second = try SessionHostSocket.connect(path: path)
+        defer { close(second) }
+        decoder = SessionHostDecoder()
+        let reattached = try readMessage(second, decoder: &decoder, kind: "attached")
+        XCTAssertEqual(reattached.pid, initial.pid)
+        XCTAssertEqual(reattached.columns, 6)
+        let restored = Terminal(delegate: CheckpointDelegate())
+        try restored.importCheckpoint(XCTUnwrap(reattached.bytes))
+        XCTAssertEqual(restored.getLine(row: 1)?.count, 12)
+        restored.resize(cols: 12, rows: 4)
+        XCTAssertEqual((0..<12).compactMap { restored.getCharacter(col: $0, row: 1) }.map(String.init).joined(), "ABCDEFGHIJKL")
+        XCTAssertTrue(host.isRunning)
+        try SessionHostSocket.write(.init(kind: "stop", generation: reattached.generation), to: second)
     }
 
     private func testEnvironment() throws -> [String: String] {

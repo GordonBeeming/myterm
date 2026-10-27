@@ -1341,7 +1341,8 @@ extension Buffer {
         buffer.setupLinesCallbacks()
         for lineSnapshot in snapshot.lines {
             let line = try BufferLine.restore(from: lineSnapshot, hyperlinkAtoms: &hyperlinkAtoms)
-            guard line.count == snapshot.columns else {
+            guard line.count >= snapshot.columns,
+                  snapshot.scrollback == nil || line.count == snapshot.columns else {
                 throw TerminalCheckpointError.corrupt("line width does not match its buffer")
             }
             buffer._lines.push(line)

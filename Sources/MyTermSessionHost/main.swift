@@ -188,9 +188,10 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
             for message in try decoder.append(Data(bytes.prefix(count))) {
                 switch message.kind {
                 case "input":
-                    guard let bytes = message.bytes, !bytes.isEmpty,
+                    guard let bytes = message.bytes,
                           bytes.count <= SessionHostMessage.maximumInputBytes,
                           message.generation == generation else { throw SessionHostError.invalidFrame }
+                    if bytes.isEmpty { continue }
                     try flushPendingGeometry()
                     try writeInput(bytes)
                 case "resize":

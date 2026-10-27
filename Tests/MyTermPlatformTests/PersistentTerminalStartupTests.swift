@@ -9,6 +9,26 @@ import XCTest
 
 @MainActor
 final class PersistentTerminalStartupTests: XCTestCase {
+    func testEmptyNativeTextDoesNotDisconnectPersistentTerminal() async throws {
+        let fixture = try StartupFixture()
+        defer { fixture.cleanUp() }
+        let session = try fixture.session()
+        defer { session.terminate() }
+        var failures: [TerminalSessionFailure] = []
+        session.onEvent = { if case .failed(let failure) = $0 { failures.append(failure) } }
+        try session.start()
+        try await waitUntil { session.isRunning }
+        let view = try XCTUnwrap(session.terminalView() as? TerminalView)
+        // NSTextInputClient can commit an empty string, including a paste with no text.
+        view.insertText("", replacementRange: NSRange(location: 0, length: 0))
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertTrue(session.isRunning, "An empty native text event must not disconnect the live PTY: \(failures.map(\.message))")
+        guard session.isRunning else { return }
+        try session.insertLocalText("still-connected-after-empty-input")
+        try await waitUntil { session.contentSnapshot(maximumCharacters: 8_192).contains("still-connected-after-empty-input") }
+        XCTAssertTrue(failures.isEmpty)
+    }
+
     func testDelayedHostDoesNotBlockMainActorAndInputWaitsForAttachment() async throws {
         let fixture = try StartupFixture()
         defer { fixture.cleanUp() }
