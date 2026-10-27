@@ -1,5 +1,5 @@
 import Foundation
-import SwiftTerm
+@testable import SwiftTerm
 import XCTest
 
 final class TerminalCheckpointTests: XCTestCase {
@@ -54,6 +54,109 @@ final class TerminalCheckpointTests: XCTestCase {
         original.feed(byteArray: suffix)
         restored.feed(byteArray: suffix)
         XCTAssertEqual(try restored.exportCheckpoint(), try original.exportCheckpoint(), file: file, line: line)
+    }
+
+    func testAlternateBufferShrinkCheckpointPreservesHiddenCellsWhenGrownAgain() throws {
+        let original = terminal(columns: 12, rows: 4, scrollback: 20)
+        original.feed(text: "normal-buffer\u{1B}[?1049h\u{1B}[2;1HABCD\u{1B}[31mEFGHIJKL")
+        original.resize(cols: 6, rows: 4)
+        XCTAssertEqual(original.getLine(row: 1)?.count, 12,
+                       "alternate-buffer resize intentionally retains cells outside the viewport")
+        let checkpoint = try original.exportCheckpoint()
+        let restored = terminal(columns: 4, rows: 2)
+        try restored.importCheckpoint(checkpoint)
+        XCTAssertEqual(try restored.exportCheckpoint(), checkpoint)
+
+        original.resize(cols: 12, rows: 4)
+        restored.resize(cols: 12, rows: 4)
+        XCTAssertEqual((0..<12).compactMap { restored.getCharacter(col: $0, row: 1) }.map(String.init).joined(), "ABCDEFGHIJKL")
+        XCTAssertEqual(try restored.exportCheckpoint(), try original.exportCheckpoint())
+        original.feed(text: "\u{1B}[?1049l-suffix")
+        restored.feed(text: "\u{1B}[?1049l-suffix")
+        XCTAssertEqual(try restored.exportCheckpoint(), try original.exportCheckpoint())
+    }
+
+    func testInactiveAlternateBufferRetainsMixedLineWidthsAcrossBoundedCheckpoint() throws {
+        let original = terminal(columns: 12, rows: 4, scrollback: 20)
+        original.feed(text: "normal\u{1B}[?47h\u{1B}[2;1HABCDEFGHIJKL")
+        original.resize(cols: 6, rows: 6)
+        original.feed(text: "\u{1B}[?47l")
+        let bounded = try original.exportBoundedCheckpoint()
+        XCTAssertEqual(bounded.omittedScrollbackLines, 0)
+        let envelope = try XCTUnwrap(PropertyListSerialization.propertyList(from: bounded.bytes, format: nil) as? [String: Any])
+        let state = try XCTUnwrap(envelope["state"] as? [String: Any])
+        let alternate = try XCTUnwrap(state["alternateBuffer"] as? [String: Any])
+        let lines = try XCTUnwrap(alternate["lines"] as? [[String: Any]])
+        XCTAssertEqual(Set(lines.compactMap { $0["cellCount"] as? Int }), [6, 12])
+        let restored = terminal()
+        try restored.importCheckpoint(bounded.bytes)
+        XCTAssertEqual(try restored.exportCheckpoint(), try original.exportCheckpoint())
+        XCTAssertTrue(String(decoding: restored.getBufferAsData(kind: .alt), as: UTF8.self).contains("ABCDEFGHIJKL"))
+        original.feed(text: "\u{1B}[?47h")
+        restored.feed(text: "\u{1B}[?47h")
+        original.resize(cols: 12, rows: 6)
+        restored.resize(cols: 12, rows: 6)
+        XCTAssertEqual(try restored.exportCheckpoint(), try original.exportCheckpoint())
+    }
+
+    @MainActor
+    func testHiddenAlternateImageAnchorSurvivesCheckpointAndGrowth() throws {
+        let view = TerminalView(frame: CGRect(x: 0, y: 0, width: 640, height: 480))
+        view.terminal.resize(cols: 12, rows: 4)
+        view.feed(text: "\u{1B}[?1049h\u{1B}[2;10H")
+        let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl2IAAAAASUVORK5CYII="
+        view.feed(text: "\u{1B}]1337;File=inline=1;width=1;height=1:\(png)\u{7}")
+        XCTAssertTrue(view.terminal.buffer.hasAnyImages)
+        view.terminal.resize(cols: 6, rows: 4)
+        let checkpoint = try view.terminal.exportCheckpoint()
+        let state = try PropertyListDecoder().decode(TerminalCheckpointEnvelope.self, from: checkpoint).state
+        XCTAssertTrue(state.alternateBuffer.lines.flatMap(\.images).contains { $0.column >= 6 && $0.column < 12 },
+                      "the image anchor must actually be outside the narrow viewport but within retained storage")
+        let restored = terminal()
+        try restored.importCheckpoint(checkpoint)
+        XCTAssertEqual(try restored.exportCheckpoint(), checkpoint)
+        view.terminal.resize(cols: 12, rows: 4)
+        restored.resize(cols: 12, rows: 4)
+        XCTAssertTrue(restored.buffer.hasAnyImages)
+        XCTAssertEqual(try restored.exportCheckpoint(), try view.terminal.exportCheckpoint())
+    }
+
+    func testRetainedAlternateStorageBoundsStillRejectWithoutMutation() throws {
+        let original = terminal(columns: 8, rows: 4)
+        original.feed(text: "\u{1B}[?47hseed\u{1B}[?47l")
+        let before = try original.exportCheckpoint()
+        let root = try XCTUnwrap(PropertyListSerialization.propertyList(from: before, format: nil) as? [String: Any])
+        let control = try PropertyListSerialization.data(fromPropertyList: root, format: .binary, options: 0)
+        try original.importCheckpoint(control)
+        XCTAssertEqual(try original.exportCheckpoint(), before)
+        for (bufferName, width) in [("alternateBuffer", 7), ("alternateBuffer", 4_097), ("normalBuffer", 12)] {
+            var envelope = root
+            var state = try XCTUnwrap(envelope["state"] as? [String: Any])
+            var buffer = try XCTUnwrap(state[bufferName] as? [String: Any])
+            var lines = try XCTUnwrap(buffer["lines"] as? [[String: Any]])
+            lines[0]["cellCount"] = width
+            lines[0]["cellData"] = Data(count: width * 23)
+            buffer["lines"] = lines
+            state[bufferName] = buffer
+            envelope["state"] = state
+            let invalid = try PropertyListSerialization.data(fromPropertyList: envelope, format: .binary, options: 0)
+            XCTAssertThrowsError(try original.importCheckpoint(invalid)) { error in
+                XCTAssertEqual(error as? TerminalCheckpointError, .corrupt("line storage width is invalid for its buffer"))
+            }
+            XCTAssertEqual(try original.exportCheckpoint(), before)
+        }
+        // Test the independent decoded-state cell bound without constructing a
+        // >32-MiB wire payload that the earlier encoded-size guard would reject.
+        var state = try PropertyListDecoder().decode(TerminalCheckpointEnvelope.self, from: before).state
+        var line = try XCTUnwrap(state.alternateBuffer.lines.first)
+        line.cellCount = 4_096
+        line.cellData = Data(count: 4_096 * 23)
+        state.alternateBuffer.lines = Array(repeating: line, count: 489)
+        state.alternateBuffer.maximumLines = 489
+        XCTAssertThrowsError(try state.validate()) { error in
+            XCTAssertEqual(error as? TerminalCheckpointError, .corrupt("checkpoint contains too many cells"))
+        }
+        XCTAssertEqual(try original.exportCheckpoint(), before)
     }
 
     func testRoundTripThenSameSuffixPreservesStyledScrollbackModesAndResize() throws {
