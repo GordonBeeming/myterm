@@ -38,6 +38,79 @@ final class SessionHostTests: XCTestCase {
         try SessionHostSocket.write(.init(kind: "stop", generation: attachment.generation), to: socket)
     }
 
+    func testStoppedHostTellsTheControllerWhoStoppedTheShell() throws {
+        let directory = URL(fileURLWithPath: "/private/tmp/myterm-stop-\(UUID().uuidString.prefix(8))")
+        try SessionHostSocket.prepareDirectory(directory)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let path = directory.appendingPathComponent("s.sock").path
+        let release = directory.appendingPathComponent("release")
+        let host = Process()
+        host.executableURL = try helperExecutable()
+        host.environment = try testEnvironment()
+        // Hold the marker until after attachment, so it arrives as output rather than checkpoint cells.
+        host.arguments = [path, "/bin/sh", directory.path, "80", "25", "-c",
+            "while [ ! -f '\(release.path)' ]; do sleep 0.01; done; printf ready; sleep 30"]
+        host.standardOutput = FileHandle.nullDevice; host.standardError = FileHandle.nullDevice
+        try host.run()
+        defer { if host.isRunning { host.terminate(); host.waitUntilExit() } }
+        let socket = try connectEventually(path: path)
+        defer { close(socket) }
+        var decoder = SessionHostDecoder()
+        let attachment = try readMessage(socket, decoder: &decoder, kind: "attached")
+        XCTAssertTrue(FileManager.default.createFile(atPath: release.path, contents: Data()))
+        var output = ""
+        while !output.contains("ready") {
+            output += String(decoding: try readMessage(socket, decoder: &decoder, kind: "output").bytes ?? Data(), as: UTF8.self)
+        }
+        try SessionHostSocket.write(.init(kind: "stop", generation: attachment.generation), to: socket)
+        let exited = try readMessage(socket, decoder: &decoder, kind: "exited")
+        XCTAssertEqual(exited.text, "MyTerm stopped this terminal: MyTerm asked this terminal to stop. The shell was ended by signal 1 (Hangup: 1).")
+    }
+
+    func testStoppedHostKillsAJobThatIgnoresTheHangUpBeforeExiting() throws {
+        let directory = URL(fileURLWithPath: "/private/tmp/myterm-hup-\(UUID().uuidString.prefix(8))")
+        try SessionHostSocket.prepareDirectory(directory)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let path = directory.appendingPathComponent("s.sock").path
+        let pidFile = directory.appendingPathComponent("job.pid")
+        let release = directory.appendingPathComponent("release")
+        let host = Process()
+        host.executableURL = try helperExecutable()
+        host.environment = try testEnvironment()
+        // The job shares the shell's process group, ignores SIGHUP and releases the terminal,
+        // so the shell's exit is reported before the host's group cleanup runs.
+        host.arguments = [path, "/bin/sh", directory.path, "80", "25", "-c",
+            "(trap '' HUP; exec sleep 30 </dev/null >/dev/null 2>&1) & echo $! > '\(pidFile.path)'; "
+            + "while [ ! -f '\(release.path)' ]; do sleep 0.01; done; printf ready; wait"]
+        host.standardOutput = FileHandle.nullDevice; host.standardError = FileHandle.nullDevice
+        try host.run()
+        defer { if host.isRunning { host.terminate(); host.waitUntilExit() } }
+        let socket = try connectEventually(path: path)
+        defer { close(socket) }
+        var decoder = SessionHostDecoder()
+        let attachment = try readMessage(socket, decoder: &decoder, kind: "attached")
+        XCTAssertTrue(FileManager.default.createFile(atPath: release.path, contents: Data()))
+        var output = ""
+        while !output.contains("ready") {
+            output += String(decoding: try readMessage(socket, decoder: &decoder, kind: "output").bytes ?? Data(), as: UTF8.self)
+        }
+        let jobText = try String(contentsOf: pidFile, encoding: .utf8)
+        let job = try XCTUnwrap(pid_t(jobText.trimmingCharacters(in: .whitespacesAndNewlines)))
+        try SessionHostSocket.write(.init(kind: "stop", generation: attachment.generation), to: socket)
+        _ = try readMessage(socket, decoder: &decoder, kind: "exited")
+        host.waitUntilExit()
+        XCTAssertNotEqual(kill(job, 0), 0, "A job that ignored the hang-up must not outlive its stopped host")
+        if kill(job, 0) == 0 { kill(job, SIGKILL) }
+    }
+
+    func testEndingDescriptionDecodesTheRawWaitStatus() {
+        XCTAssertEqual(SessionHostEnding.describe(waitStatus: 3 << 8, stopReason: nil), "The shell exited with code 3.")
+        XCTAssertEqual(SessionHostEnding.describe(waitStatus: SIGHUP, stopReason: "pane closed"),
+                       "MyTerm stopped this terminal: pane closed. The shell was ended by signal 1 (Hangup: 1).")
+        XCTAssertEqual(SessionHostEnding.describe(waitStatus: nil, stopReason: nil),
+                       "The shell did not exit within 2 seconds of the hang-up and was killed.")
+    }
+
     func testDecoderHandlesFragmentedAndCoalescedFrames() throws {
         let first = try SessionHostMessage(kind: "output", bytes: Data([0, 1, 255]), sequence: 1).encoded()
         let second = try SessionHostMessage(kind: "output", bytes: Data("tail".utf8), sequence: 2).encoded()

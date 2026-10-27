@@ -54,6 +54,9 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
     private let generation = UUID()
     private var sequence: UInt64 = 0
     private var stopping = false
+    private var stopReason: String?
+    private var awaitingGroupCleanup = false
+    private var completionDeferred = false
     private var readyToken: String?
     private var inputSource: DispatchSourceWrite?
     private var terminationSource: DispatchSourceSignal?
@@ -104,7 +107,10 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
         // Install after spawning the shell, so interactive programs retain their normal
         // signal dispositions. The helper's SIGTERM deliberately means stop, never detach.
         terminationSource = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
-        terminationSource?.setEventHandler { [weak self] in MainActor.assumeIsolated { self?.stop() } }
+        terminationSource?.setEventHandler { [weak self] in
+            // A kqueue signal source cannot report the sender, so the parent is the best lead.
+            MainActor.assumeIsolated { self?.stop(reason: "received SIGTERM (parent pid \(getppid()))") }
+        }
         terminationSource?.resume()
         signal(SIGTERM, SIG_IGN)
         let flags = fcntl(process.childfd, F_GETFL)
@@ -206,7 +212,7 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
                     } else { try applyGeometry(columns: columns, rows: rows, imageGeometry: message.imageGeometry) }
                 case "stop":
                     guard message.generation == generation else { throw SessionHostError.invalidFrame }
-                    stop()
+                    stop(reason: "MyTerm asked this terminal to stop")
                 case "configure":
                     guard let lines = message.scrollbackLines, (0...100_000).contains(lines),
                           message.generation == generation else { throw SessionHostError.invalidFrame }
@@ -507,22 +513,38 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
         logger.error("\(error.localizedDescription, privacy: .public)")
     }
 
-    private func stop() {
+    private func stop(reason: String) {
         guard !stopping else { return }
         stopping = true
+        stopReason = reason
         cancelInput()
         let foreground = tcgetpgrp(process.childfd)
         let shellGroup = getpgid(process.shellPid)
+        logger.notice("Stopping terminal host: \(reason, privacy: .public); hanging up shell \(self.process.shellPid) and foreground \(self.lastForegroundName ?? "shell", privacy: .public)")
         if foreground > 0, foreground != shellGroup { _ = kill(-foreground, SIGHUP) }
         if shellGroup > 0 { _ = kill(-shellGroup, SIGHUP) }
-        process.terminate()
+        // LocalProcess.terminate() cancels the child monitor, which would discard the shell's
+        // real exit status. Signal directly and leave terminate() to the deadline below.
+        if process.shellPid > 0 { _ = kill(process.shellPid, SIGTERM) }
+        // A prompt shell exit must not let the host leave before a job that ignored the
+        // hang-up is killed, or that job outlives its deleted pane.
+        awaitingGroupCleanup = true
         // An unresponsive process must not leave a deleted pane's host running indefinitely.
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 if foreground > 0 { _ = kill(-foreground, SIGKILL) }
                 if shellGroup > 0 { _ = kill(-shellGroup, SIGKILL) }
-                self.finish(exitCode: nil)
+                self.awaitingGroupCleanup = false
+                if self.finishing {
+                    if self.completionDeferred || self.pendingOutputBytes == 0 { self.completeFinish() }
+                    return
+                }
+                // A descendant holding the terminal open delays the delegate past this deadline,
+                // but the shell's status may already have been observed.
+                let status = self.process.observedExitStatus
+                self.process.terminate()
+                self.finish(exitCode: status)
             }
         }
     }
@@ -537,7 +559,12 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
         listenerSource?.cancel()
         close(listener)
         unlink(path)
-        sendToClient(.init(kind: "exited", exitCode: exitCode))
+        let ending = SessionHostEnding.describe(waitStatus: exitCode, stopReason: stopReason)
+        logger.notice("Terminal shell ended: \(ending, privacy: .public)")
+        // An ordinary exit needs no explanation; a stop, a signal or a forced kill does.
+        let signaled = exitCode.map { $0 & 0x7f != 0 } ?? true
+        let explanation = stopReason != nil || signaled ? ending : nil
+        sendToClient(.init(kind: "exited", exitCode: exitCode, text: explanation))
         if pendingOutputBytes == 0 { completeFinish() }
         // Preserve a progressing reader's final output; bound inactivity by the former
         // socket send timeout while letting the main queue continue draining.
@@ -545,6 +572,7 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
     }
 
     private func completeFinish() {
+        guard !awaitingGroupCleanup else { completionDeferred = true; return }
         exit(0)
     }
 
@@ -584,7 +612,7 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
         // cursor and capability responses so their foreground applications can keep working.
         guard client < 0 else { return }
         do { try writeInput(Data(data)) }
-        catch { log(error); stop() }
+        catch { log(error); stop(reason: "a reply to the detached terminal could not be written") }
     }
 }
 
