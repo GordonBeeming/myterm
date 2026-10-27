@@ -55,6 +55,8 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
     private var sequence: UInt64 = 0
     private var stopping = false
     private var stopReason: String?
+    private var awaitingGroupCleanup = false
+    private var completionDeferred = false
     private var readyToken: String?
     private var inputSource: DispatchSourceWrite?
     private var terminationSource: DispatchSourceSignal?
@@ -524,15 +526,25 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
         // LocalProcess.terminate() cancels the child monitor, which would discard the shell's
         // real exit status. Signal directly and leave terminate() to the deadline below.
         if process.shellPid > 0 { _ = kill(process.shellPid, SIGTERM) }
+        // A prompt shell exit must not let the host leave before a job that ignored the
+        // hang-up is killed, or that job outlives its deleted pane.
+        awaitingGroupCleanup = true
         // An unresponsive process must not leave a deleted pane's host running indefinitely.
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 if foreground > 0 { _ = kill(-foreground, SIGKILL) }
                 if shellGroup > 0 { _ = kill(-shellGroup, SIGKILL) }
-                guard !self.finishing else { return }
+                self.awaitingGroupCleanup = false
+                if self.finishing {
+                    if self.completionDeferred || self.pendingOutputBytes == 0 { self.completeFinish() }
+                    return
+                }
+                // A descendant holding the terminal open delays the delegate past this deadline,
+                // but the shell's status may already have been observed.
+                let status = self.process.observedExitStatus
                 self.process.terminate()
-                self.finish(exitCode: nil)
+                self.finish(exitCode: status)
             }
         }
     }
@@ -549,8 +561,9 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
         unlink(path)
         let ending = SessionHostEnding.describe(waitStatus: exitCode, stopReason: stopReason)
         logger.notice("Terminal shell ended: \(ending, privacy: .public)")
-        // An ordinary exit needs no explanation; a stop or a forced kill does.
-        let explanation = stopReason != nil || exitCode == nil ? ending : nil
+        // An ordinary exit needs no explanation; a stop, a signal or a forced kill does.
+        let signaled = exitCode.map { $0 & 0x7f != 0 } ?? true
+        let explanation = stopReason != nil || signaled ? ending : nil
         sendToClient(.init(kind: "exited", exitCode: exitCode, text: explanation))
         if pendingOutputBytes == 0 { completeFinish() }
         // Preserve a progressing reader's final output; bound inactivity by the former
@@ -559,6 +572,7 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
     }
 
     private func completeFinish() {
+        guard !awaitingGroupCleanup else { completionDeferred = true; return }
         exit(0)
     }
 

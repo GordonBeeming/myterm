@@ -113,6 +113,12 @@ public class LocalProcess {
     // Protected by pendingLock, including reads made by the DispatchIO queue.
     private var outputExitObserved = false
     private var outputExitCode: Int32 = 0
+    /// The shell's raw wait status once its exit has been observed, even while termination is
+    /// still held back for output that an inheriting descendant keeps open.
+    public var observedExitStatus: Int32? {
+        pendingLock.lock(); defer { pendingLock.unlock() }
+        return outputExitObserved ? outputExitCode : nil
+    }
     private var ptyReadFinished = false
     private var outputDrainExpired = false
     private var outputTerminationNotified = false
