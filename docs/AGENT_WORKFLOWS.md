@@ -98,6 +98,14 @@ view has not been attached or a connection attempt fails. If the app crashes dur
 running without a listed pane. Startup does not automatically stop unlisted helpers.
 The app bundles and signs the helper alongside its own executable. Keep the complete app bundle when moving or updating it.
 
+New terminals run the helper from a private copy of its exact signed build under
+`session-hosts/` in the app's support directory, not from inside the app bundle. macOS checks
+a running helper against the file at its launch path, so a helper started from the bundle would
+fail authentication once an update replaced that bundle, leaving its live terminal unattachable.
+An updated app keeps attaching to terminals started by the previous build. Each launch removes
+copies that no running process uses. Explicit ad-hoc development builds still run the helper in
+place, because without a team identity it finds its controller through the surrounding app.
+
 Quitting during a new terminal's first attachment can leave its shell running before the
 initial command is sent. Check that command's terminal after reopening before retrying it.
 

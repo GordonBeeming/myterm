@@ -204,6 +204,10 @@ final class AppModel {
         ).base64EncodedString()
         let persistenceURL = channel.persistenceURL(applicationSupportDirectory: supportDirectory)
         terminalContinuityDirectory = persistenceURL.deletingLastPathComponent()
+        let continuityDirectory = terminalContinuityDirectory
+        DispatchQueue.global(qos: .utility).async {
+            PersistentTerminalRuntime.pruneUnusedHelperCopies(directory: continuityDirectory)
+        }
         store = try WorkspaceStore(persistenceURL: persistenceURL)
         agentInboxURL = persistenceURL.deletingLastPathComponent()
             .appending(path: "agent-notifications.json", directoryHint: .notDirectory)

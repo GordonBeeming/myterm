@@ -96,6 +96,11 @@ List environment secret names with `gh secret list --repo GordonBeeming/myterm -
 
 4. Write concise release notes from the actual commits. Include the Homebrew install command and any real compatibility or entitlement limitation.
 
+   An update must keep attaching to terminals the previous build started. If
+   `SessionHostMessage.protocolVersion` or the attachment or checkpoint format changed since the
+   last tag, stop and tell Gordon before publishing: running terminals will not reattach after
+   the update, and the notes have to say so.
+
 5. Create a published release targeting `main`. Do not use `--draft`: the `release.published` event is what starts the distribution job.
 
    ```bash
@@ -163,25 +168,10 @@ On failure, inspect `gh run view RUN_ID --log-failed`, report the exact failed g
    behind it, so there's no account to attach a signing key to and no way GitHub could ever verify a
    signature on its commits. Don't expect one, and don't treat its absence as a failed gate.
 
-4. Refresh Homebrew, verify its checksum path, then install or upgrade the cask:
+4. Remove only the temporary verification directory after every check succeeds.
 
-   ```bash
-   brew update
-   brew fetch --cask gordonbeeming/tap/myterm
-   if brew list --cask myterm >/dev/null 2>&1; then
-     brew upgrade --cask gordonbeeming/tap/myterm
-   else
-     brew install --cask gordonbeeming/tap/myterm
-   fi
-   codesign --verify --deep --strict --verbose=2 /Applications/myterm.app
-   spctl --assess --type execute --verbose=2 /Applications/myterm.app
-   ```
+Never install, upgrade, or replace the local `/Applications/myterm.app`, through Homebrew or
+otherwise. Gordon upgrades with the app's own updater. Swapping the bundle under a running myterm
+breaks its helper signature checks, so new panes fail until he restarts it.
 
-5. `brew upgrade` replaces the bundle on disk but leaves an already-running myterm on the old code,
-   so `ps` will show a process older than the upgrade. Quitting it ends Gordon's live terminal
-   sessions, so never do that to finish a check. Report that the new build needs a restart and let
-   him pick the moment.
-
-6. Remove only the temporary verification directory after every check succeeds.
-
-Report the release URL, workflow URL and conclusion, source commit verification, app and DMG trust checks, asset name, signed tap commit, cask SHA verification, and Homebrew install result. Do not call the release complete while any one of these remains unverified.
+Report the release URL, workflow URL and conclusion, source commit verification, app and DMG trust checks, asset name, tap commit, and cask SHA verification. Do not call the release complete while any one of these remains unverified.
