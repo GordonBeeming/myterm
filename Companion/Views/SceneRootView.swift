@@ -105,18 +105,41 @@ struct SceneRootView: View {
 
     @ViewBuilder
     private var shell: some View {
-        NavigationSplitView(columnVisibility: columnVisibility, preferredCompactColumn: $preferredCompactColumn) {
-            HostSidebar(services: services, scene: scene) { connectionID in
-                scene.selectedConnectionID = connectionID
-                preferredCompactColumn = .content
+        if scene.selectedConnectionID == nil {
+            NavigationSplitView(columnVisibility: machineListColumnVisibility,
+                                preferredCompactColumn: $preferredCompactColumn) {
+                hostSidebar
+            } detail: {
+                ContentUnavailableView("Choose a Mac", systemImage: "desktopcomputer")
             }
-        } content: {
-            WorkspaceColumn(services: services, scene: scene) {
-                preferredCompactColumn = .detail
+        } else {
+            NavigationSplitView(columnVisibility: columnVisibility,
+                                preferredCompactColumn: $preferredCompactColumn) {
+                hostSidebar
+            } content: {
+                WorkspaceColumn(services: services, scene: scene) {
+                    preferredCompactColumn = .detail
+                }
+            } detail: {
+                DetailColumn(services: services, scene: scene)
             }
-        } detail: {
-            DetailColumn(services: services, scene: scene)
         }
+    }
+
+    private var hostSidebar: some View {
+        HostSidebar(services: services, scene: scene) { connectionID in
+            scene.selectedConnectionID = connectionID
+            preferredCompactColumn = .content
+        }
+    }
+
+    /// Before a Mac is chosen, the sidebar is the only useful navigation surface. Keep it visible
+    /// beside the prompt on regular widths and let compact navigation show it as the root.
+    private var machineListColumnVisibility: Binding<NavigationSplitViewVisibility> {
+        Binding(
+            get: { horizontalSizeClass == .regular ? .all : .automatic },
+            set: { _ in }
+        )
     }
 
     /// Remembers a collapsed machine column, but only on a regular-width layout. A compact layout
