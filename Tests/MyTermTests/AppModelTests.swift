@@ -3844,7 +3844,9 @@ final class AppModelTests: XCTestCase {
             startsTerminalProcesses: true
         )
 
-        XCTAssertNotNil(relaunched.errorDescription, "the failure is reported")
+        let failedSession = try XCTUnwrap(relaunched.selectedWorkspace.selectedTab?.terminalSession?.id)
+        XCTAssertEqual(relaunched.terminalNotices[failedSession]?.kind, .error, "the failure is reported on its pane")
+        XCTAssertNil(relaunched.errorDescription)
         XCTAssertEqual(
             relaunched.selectedWorkspace.selectedTab?.terminalSession?.agentSession,
             AgentSessionHandle(agent: "claude", sessionID: "abc-123")
@@ -3885,7 +3887,8 @@ final class AppModelTests: XCTestCase {
             terminalEngine: FailingTerminalEngine(),
             startsTerminalProcesses: true
         )
-        XCTAssertNotNil(failed.errorDescription)
+        let failedSession = try XCTUnwrap(failed.selectedWorkspace.selectedTab?.terminalSession?.id)
+        XCTAssertEqual(failed.terminalNotices[failedSession]?.kind, .error)
         XCTAssertNil(failed.selectedWorkspace.selectedTab?.terminalSession?.agentSession)
         failed.persistWorkspaceStore()
 

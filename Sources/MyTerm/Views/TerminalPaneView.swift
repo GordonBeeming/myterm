@@ -12,6 +12,23 @@ struct TerminalPaneView: View {
     let isFocused: Bool
 
     var body: some View {
+        VStack(spacing: 0) {
+            // Above the terminal rather than over it, so a notice never hides the output it is about.
+            if let notice = model.terminalNotices[session.id] {
+                DismissibleBanner(
+                    message: notice.message,
+                    systemImage: notice.kind == .error ? "exclamationmark.triangle.fill" : "info.circle.fill",
+                    tint: notice.kind == .error ? .red : .orange,
+                    accessibilityPrefix: "Terminal \(paneTitle) \(notice.kind == .error ? "error" : "notice")",
+                    dismissLabel: "Dismiss \(paneTitle) \(notice.kind == .error ? "error" : "notice")",
+                    dismiss: { model.dismissTerminalNotice(sessionID: session.id) }
+                )
+            }
+            terminal
+        }
+    }
+
+    private var terminal: some View {
         ZStack(alignment: .topTrailing) {
             if let process = model.terminalSession(for: session.id) {
                 TerminalSessionView(

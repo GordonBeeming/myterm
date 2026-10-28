@@ -25,8 +25,97 @@ final class AgentLifecycleTests: XCTestCase {
         let fixture = try makeFixture(isActive: false)
         let message = "Shell startup did not signal readiness."
         fixture.session.emit(.initialCommandFailed(TerminalSessionFailure(message: message)))
-        XCTAssertEqual(fixture.model.errorDescription, message)
+        XCTAssertEqual(fixture.model.terminalNotices[try fixture.terminalSessionID()]?.message, message)
+        XCTAssertNil(fixture.model.errorDescription, "a pane's warning stays on that pane")
         XCTAssertTrue(fixture.session.isRunning)
+    }
+
+    // MARK: - Terminal problems stay on their own pane
+
+    func testATerminalFailureIsShownOnItsPaneAndFlagsOnlyItsWorkspace() throws {
+        let fixture = try makeFixture(isActive: false)
+        let sessionID = try fixture.terminalSessionID()
+        let other = try fixture.model.store.createWorkspace(title: "Other", selectsCreatedWorkspace: false)
+
+        fixture.session.emit(.failed(TerminalSessionFailure(message: "The terminal host disconnected.")))
+
+        XCTAssertEqual(fixture.model.terminalNotices[sessionID],
+                       TerminalPaneNotice(message: "The terminal host disconnected.", kind: .error))
+        XCTAssertNil(fixture.model.errorDescription, "nothing is shown over whichever workspace is open")
+        XCTAssertTrue(fixture.model.hasTerminalNotice(inWorkspace: fixture.workspaceID))
+        XCTAssertFalse(fixture.model.hasTerminalNotice(inWorkspace: other))
+
+        fixture.model.dismissTerminalNotice(sessionID: sessionID)
+        XCTAssertNil(fixture.model.terminalNotices[sessionID])
+        XCTAssertFalse(fixture.model.hasTerminalNotice(inWorkspace: fixture.workspaceID))
+    }
+
+    func testRuntimeNoticesAndExitStatusesAreShownOnThePane() throws {
+        let fixture = try makeFixture(isActive: false)
+        let sessionID = try fixture.terminalSessionID()
+
+        fixture.session.emit(.runtimeNotice("Reattached with the most recent history."))
+        XCTAssertEqual(fixture.model.terminalNotices[sessionID]?.kind, .notice)
+        XCTAssertFalse(fixture.model.hasTerminalNotice(inWorkspace: fixture.workspaceID),
+                       "an informational notice does not mark the workspace in the sidebar")
+
+        fixture.session.emit(.processTerminated(exitCode: 0))
+        XCTAssertEqual(fixture.model.terminalNotices[sessionID]?.kind, .notice, "a clean exit adds nothing")
+
+        let failing = try makeFixture(isActive: false)
+        failing.session.emit(.processTerminated(exitCode: 256))
+        XCTAssertEqual(failing.model.terminalNotices[try failing.terminalSessionID()],
+                       TerminalPaneNotice(message: "Terminal exited with status 256.", kind: .error))
+        XCTAssertNil(failing.model.errorDescription)
+    }
+
+    func testClosingAPaneDiscardsItsNotice() throws {
+        let fixture = try makeFixture(isActive: false)
+        let sessionID = try fixture.terminalSessionID()
+        fixture.session.emit(.failed(TerminalSessionFailure(message: "boom")))
+        XCTAssertNotNil(fixture.model.terminalNotices[sessionID])
+
+        fixture.model.terminateTerminalSessions()
+
+        XCTAssertNil(fixture.model.terminalNotices[sessionID])
+    }
+
+    // MARK: - A shell taken away keeps its conversation
+
+    func testAShellThatWasHungUpKeepsItsConversationForTheNextLaunch() throws {
+        // A reboot or a stopped helper hangs up the shell while the agent is still in its
+        // conversation. Nothing chose to leave it, so the next launch must resume it.
+        for status: Int32? in [SIGHUP, nil] {
+            let fixture = try makeFixture(isActive: false)
+            fixture.session.activeForegroundProcessName = "claude"
+            fixture.emit(.working, session: "abc")
+
+            fixture.session.emit(.processTerminated(exitCode: status))
+
+            XCTAssertNil(fixture.model.liveAgentTabs[fixture.tabID], "the dead pane holds no live agent")
+            XCTAssertNil(fixture.model.agentAttention(forTab: fixture.tabID))
+            XCTAssertEqual(fixture.savedSession?.sessionID, "abc", "status \(String(describing: status)) keeps it")
+
+            fixture.model.persistWorkspaceStore()
+            let relaunched = try makeFixture(in: fixture.directory, isActive: false)
+            XCTAssertEqual(relaunched.engine.configurations.first?.initialCommand, "claude --resume 'abc'")
+        }
+    }
+
+    func testAShutdownKeepsEveryConversationWhateverItsHooksReport() throws {
+        let fixture = try makeFixture(isActive: false)
+        fixture.session.activeForegroundProcessName = "claude"
+        fixture.emit(.working, session: "abc")
+
+        fixture.model.systemWillPowerOff()
+        fixture.emit(.exited, session: "abc")
+        fixture.session.emit(.foregroundProcessChanged(nil))
+        fixture.session.emit(.processTerminated(exitCode: 0))
+
+        XCTAssertEqual(fixture.savedSession?.sessionID, "abc")
+        fixture.model.persistWorkspaceStore()
+        let relaunched = try makeFixture(in: fixture.directory, isActive: false)
+        XCTAssertEqual(relaunched.engine.configurations.first?.initialCommand, "claude --resume 'abc'")
     }
 
     func testCompletingAnotherToolDoesNotClearAnOutstandingCodexPermission() throws {
@@ -727,6 +816,10 @@ final class AgentLifecycleTests: XCTestCase {
 
         var savedSession: AgentSessionHandle? {
             savedSession(of: tabID)
+        }
+
+        func terminalSessionID() throws -> TerminalSessionID {
+            try XCTUnwrap(model.tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)?.terminalSession?.id)
         }
 
         func savedSession(of tabID: TabID) -> AgentSessionHandle? {
