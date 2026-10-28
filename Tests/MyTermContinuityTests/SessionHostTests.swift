@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import os
 import XCTest
 @preconcurrency import SwiftTerm
 @testable import MyTermContinuity
@@ -109,6 +110,20 @@ final class SessionHostTests: XCTestCase {
                        "MyTerm stopped this terminal: pane closed. The shell was ended by signal 1 (Hangup: 1).")
         XCTAssertEqual(SessionHostEnding.describe(waitStatus: nil, stopReason: nil),
                        "The shell did not exit within 2 seconds of the hang-up and was killed.")
+    }
+
+    func testConcurrentCallersAllSeeANewPrivateDirectoryAsSecure() throws {
+        // Dozens of panes restore at once, and each prepares the same new directory.
+        for _ in 0..<20 {
+            let parent = URL(fileURLWithPath: "/private/tmp/myterm-race-\(UUID().uuidString.prefix(8))")
+            defer { try? FileManager.default.removeItem(at: parent) }
+            let directory = parent.appendingPathComponent("session-hosts")
+            let failures = OSAllocatedUnfairLock(initialState: 0)
+            DispatchQueue.concurrentPerform(iterations: 32) { _ in
+                do { try SessionHostSocket.prepareDirectory(directory) } catch { failures.withLock { $0 += 1 } }
+            }
+            XCTAssertEqual(failures.withLock { $0 }, 0, "every concurrent caller must accept the directory it just created")
+        }
     }
 
     func testDecoderHandlesFragmentedAndCoalescedFrames() throws {

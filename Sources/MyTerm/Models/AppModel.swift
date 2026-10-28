@@ -134,6 +134,13 @@ final class AppModel {
     var nextBrowserFindToken: UInt64 = 0
     @ObservationIgnored private var terminalSnapshotTasks: [TerminalSessionID: Task<Void, Never>] = [:]
     var errorDescription: String?
+    /// A terminal's own problem, shown on its pane rather than over whichever workspace is open.
+    private(set) var terminalNotices: [TerminalSessionID: TerminalPaneNotice] = [:]
+    var isSystemPoweringOff = false
+    @ObservationIgnored var powerOffResetTask: Task<Void, Never>?
+    /// Panes whose shell was stopped rather than exiting. Their conversations wait for the next
+    /// launch, so the idle-pane cleanup on quit must not read the dead shell as a finished agent.
+    @ObservationIgnored var stoppedShellSessions: Set<TerminalSessionID> = []
     // Derived fresh from the store's load report on every launch, so clearing it only hides the
     // banner for this session — a later repair surfaces a new notice.
     private(set) var recoveryNotice: WorkspaceRecoveryNotice?
@@ -2102,18 +2109,17 @@ final class AppModel {
     private func restoreTerminalSessions(in workspace: Workspace) {
         for group in workspace.orderedGroups {
             for tab in group.tabs {
+                guard let session = tab.terminalSession else { continue }
                 do {
-                    if let session = tab.terminalSession {
-                        try restoreTerminalSession(
-                            session,
-                            workspaceID: workspace.id,
-                            tabGroupID: group.id,
-                            tabID: tab.id,
-                            initialCommand: pendingStartupCommands.removeValue(forKey: session.id)
-                        )
-                    }
+                    try restoreTerminalSession(
+                        session,
+                        workspaceID: workspace.id,
+                        tabGroupID: group.id,
+                        tabID: tab.id,
+                        initialCommand: pendingStartupCommands.removeValue(forKey: session.id)
+                    )
                 } catch {
-                    present(error)
+                    presentTerminalNotice(error.localizedDescription, kind: .error, sessionID: session.id)
                 }
             }
         }
@@ -2466,7 +2472,7 @@ final class AppModel {
             }
             open(url, in: workspaceID, besideTabID: tabID, paneID: tab.paneID)
         case .failed(let error):
-            present(error)
+            presentTerminalNotice(error.localizedDescription, kind: .error, sessionID: sessionID)
             companionHost.sessionEnded(
                 sessionID: sessionID,
                 workspaceID: workspaceID,
@@ -2478,12 +2484,12 @@ final class AppModel {
             guard liveAgentTabs[tabID] == nil else { return }
             forgetAgent(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID, sessionID: sessionID)
         case .runtimeNotice(let message):
-            errorDescription = message
+            presentTerminalNotice(message, kind: .notice, sessionID: sessionID)
         case .initialCommandFailed(let error):
-            present(error)
+            presentTerminalNotice(error.localizedDescription, kind: .error, sessionID: sessionID)
         case .processTerminated(let exitCode):
             if let exitCode, exitCode != 0 {
-                errorDescription = "Terminal exited with status \(exitCode)."
+                presentTerminalNotice("Terminal exited with status \(exitCode).", kind: .error, sessionID: sessionID)
             }
             companionHost.sessionEnded(
                 sessionID: sessionID,
@@ -2497,7 +2503,14 @@ final class AppModel {
             // Markers are forwarded asynchronously, so one can still be queued behind this event;
             // dropping the callback keeps it from putting an agent back into a dead pane.
             terminalSessions[sessionID]?.onEvent = nil
-            forgetAgent(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID, sessionID: sessionID)
+            // A shell that was hung up or killed took its agent with it, but the agent never left
+            // its conversation; only a shell that exited by itself has nothing to resume.
+            if Self.shellWasStopped(exitCode: exitCode) || isSystemPoweringOff {
+                stoppedShellSessions.insert(sessionID)
+                retireAgentKeepingConversation(forTab: tabID)
+            } else {
+                forgetAgent(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID, sessionID: sessionID)
+            }
         case .foregroundProcessChanged(let name):
             foregroundAgentTabs[tabID] = name.flatMap {
                 AgentIdentity(agentName: $0 == CodexLauncher.statusline.rawValue ? "codex" : $0)
@@ -2505,7 +2518,11 @@ final class AppModel {
             // The shell back in front of a pane that held an agent means the agent left without
             // its own hook saying so. Everything that hook would have retired is retired here.
             guard name == nil, liveAgentTabs[tabID] != nil else { return }
-            forgetAgent(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID, sessionID: sessionID)
+            if isSystemPoweringOff {
+                retireAgentKeepingConversation(forTab: tabID)
+            } else {
+                forgetAgent(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID, sessionID: sessionID)
+            }
         case .agentActivity(let report), .restoredAgentActivity(let report):
             let isRestoration: Bool
             if case .restoredAgentActivity = event { isRestoration = true }
@@ -2630,6 +2647,8 @@ final class AppModel {
         Logger(subsystem: "com.gordonbeeming.myterm", category: "terminal-continuity")
             .notice("Stopping terminal \(sessionID.rawValue.uuidString.lowercased(), privacy: .public): \(reason.rawValue, privacy: .public)")
         terminalSnapshotTasks.removeValue(forKey: sessionID)?.cancel()
+        terminalNotices.removeValue(forKey: sessionID)
+        stoppedShellSessions.remove(sessionID)
         guard let process = terminalSessions.removeValue(forKey: sessionID) else {
             let directory = terminalContinuityDirectory
             Task { @MainActor [weak self] in
@@ -3308,9 +3327,33 @@ final class AppModel {
         errorDescription = nil
     }
 
+    func presentTerminalNotice(_ message: String, kind: TerminalPaneNotice.Kind, sessionID: TerminalSessionID) {
+        terminalNotices[sessionID] = TerminalPaneNotice(message: message, kind: kind)
+    }
+
+    func dismissTerminalNotice(sessionID: TerminalSessionID) {
+        terminalNotices.removeValue(forKey: sessionID)
+    }
+
+    /// Whether a pane in the workspace has a problem of its own, so the sidebar can point at it
+    /// while another workspace is open.
+    func hasTerminalNotice(inWorkspace workspaceID: WorkspaceID) -> Bool {
+        guard !terminalNotices.isEmpty,
+              let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else { return false }
+        return workspace.allTabs.contains { tab in
+            tab.terminalSession.map { terminalNotices[$0.id]?.kind == .error } ?? false
+        }
+    }
+
     func dismissRecoveryNotice() {
         recoveryNotice = nil
     }
+}
+
+struct TerminalPaneNotice: Equatable {
+    enum Kind: Equatable { case error, notice }
+    let message: String
+    let kind: Kind
 }
 
 enum AppModelError: LocalizedError {

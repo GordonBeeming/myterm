@@ -105,6 +105,12 @@ final class MyTermApplicationDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        // A restart or shut down can stop terminal helpers before this app is asked to quit.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willPowerOffNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.model?.systemWillPowerOff() }
+        }
     }
 
     private func presentSecondaryDecision() {

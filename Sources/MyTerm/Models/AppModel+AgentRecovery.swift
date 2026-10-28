@@ -32,7 +32,8 @@ extension AppModel {
         let handle: AgentSessionHandle?
         switch report.activity {
         case .exited:
-            guard !isExitOfAnotherConversation(report, in: terminal) else { return }
+            // Shutting down hangs up every agent, and none of them chose to end its conversation.
+            guard !isSystemPoweringOff, !isExitOfAnotherConversation(report, in: terminal) else { return }
             if let saved = terminal.agentSession {
                 retiredAgentSessions[tabID, default: []].insert(saved.sessionID)
             }
@@ -136,6 +137,32 @@ extension AppModel {
         forgetAgentSession(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID, sessionID: sessionID)
     }
 
+    /// Retires the live agent of a pane whose shell was taken away, but keeps its conversation and
+    /// name so the next launch resumes it. A hang-up, a forced kill or a system shutdown ends the
+    /// shell without the agent ever deciding to leave its conversation.
+    func retireAgentKeepingConversation(forTab tabID: TabID) {
+        forgetAgentAttention(forTab: tabID)
+        forgetAgentPresence(forTab: tabID)
+    }
+
+    /// Whether a shell ended because something stopped it rather than because it exited. A nil
+    /// status means the helper had to kill it; otherwise the raw wait status carries any signal.
+    nonisolated static func shellWasStopped(exitCode: Int32?) -> Bool {
+        guard let exitCode else { return true }
+        return exitCode & 0x7f != 0
+    }
+
+    /// Marks the rest of this launch as a system power-off, so the hang-ups it brings keep every
+    /// saved conversation. A cancelled shutdown never says so, so the mark lapses on its own.
+    func systemWillPowerOff() {
+        isSystemPoweringOff = true
+        powerOffResetTask?.cancel()
+        powerOffResetTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .seconds(300)) } catch { return }
+            self?.isSystemPoweringOff = false
+        }
+    }
+
     /// Drops the saved conversation of a pane that has nothing running in it, and the name that
     /// went with it.
     ///
@@ -148,7 +175,9 @@ extension AppModel {
         tabID: TabID,
         sessionID: TerminalSessionID
     ) {
-        guard let process = terminalSessions[sessionID],
+        // A shell that was stopped, or one ending in a shutdown, still holds a conversation to resume.
+        guard !isSystemPoweringOff, !stoppedShellSessions.contains(sessionID),
+              let process = terminalSessions[sessionID],
               process.activeForegroundProcessName == nil else { return }
         // exec can replace the shell without creating a separate foreground group. A live hook
         // identity is stronger evidence than the absence of a separate process name.

@@ -151,8 +151,13 @@ public enum SessionHostSocket {
     }
 
     public static func prepareDirectory(_ directory: URL) throws {
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
-                                               attributes: [.posixPermissions: 0o700])
+        try FileManager.default.createDirectory(at: directory.deletingLastPathComponent(),
+                                               withIntermediateDirectories: true)
+        // mkdir applies the private mode as it creates the directory. FileManager creates it and
+        // then changes the mode, and a concurrent caller checking in between saw it as insecure.
+        if mkdir(directory.path, 0o700) != 0, errno != EEXIST {
+            throw SessionHostError.system("create private directory", errno)
+        }
         var info = stat()
         guard lstat(directory.path, &info) == 0,
               info.st_uid == getuid(), info.st_mode & S_IFMT == S_IFDIR,
