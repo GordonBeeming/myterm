@@ -23,6 +23,8 @@ extension AppModel {
             // pane cannot take the first one's name off it.
             guard liveAgentTabs[tabID] == report.agent else { return }
             liveAgentTabs.removeValue(forKey: tabID)
+            // A shutdown's hang-up keeps the conversation, and its name goes with it.
+            guard !isSystemPoweringOff else { return }
             updateAgentTitle(nil, workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)
         }
     }

@@ -111,9 +111,12 @@ final class AgentLifecycleTests: XCTestCase {
         let fixture = try makeFixture(isActive: false)
         fixture.session.activeForegroundProcessName = "claude"
         fixture.emit(.working, session: "abc")
+        fixture.title("Fix the build")
+        XCTAssertEqual(fixture.displayTitle, "Fix the build", "precondition")
 
         fixture.model.systemWillPowerOff()
         fixture.emit(.exited, session: "abc")
+        XCTAssertEqual(fixture.displayTitle, "Fix the build", "the conversation keeps its name")
         fixture.session.emit(.foregroundProcessChanged(nil))
         fixture.session.isRunning = false
         fixture.session.activeForegroundProcessName = nil
