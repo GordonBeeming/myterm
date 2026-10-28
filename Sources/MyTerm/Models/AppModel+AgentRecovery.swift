@@ -175,7 +175,9 @@ extension AppModel {
         tabID: TabID,
         sessionID: TerminalSessionID
     ) {
-        guard let process = terminalSessions[sessionID],
+        // A shell that was stopped, or one ending in a shutdown, still holds a conversation to resume.
+        guard !isSystemPoweringOff, !stoppedShellSessions.contains(sessionID),
+              let process = terminalSessions[sessionID],
               process.activeForegroundProcessName == nil else { return }
         // exec can replace the shell without creating a separate foreground group. A live hook
         // identity is stronger evidence than the absence of a separate process name.

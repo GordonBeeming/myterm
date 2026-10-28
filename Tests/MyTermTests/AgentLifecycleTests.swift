@@ -90,12 +90,17 @@ final class AgentLifecycleTests: XCTestCase {
             fixture.session.activeForegroundProcessName = "claude"
             fixture.emit(.working, session: "abc")
 
+            fixture.session.isRunning = false
+            fixture.session.activeForegroundProcessName = nil
             fixture.session.emit(.processTerminated(exitCode: status))
 
             XCTAssertNil(fixture.model.liveAgentTabs[fixture.tabID], "the dead pane holds no live agent")
             XCTAssertNil(fixture.model.agentAttention(forTab: fixture.tabID))
             XCTAssertEqual(fixture.savedSession?.sessionID, "abc", "status \(String(describing: status)) keeps it")
 
+            // Quitting cleans up idle panes; a stopped shell is not one that finished its agent.
+            fixture.model.persistTerminalSnapshots()
+            XCTAssertEqual(fixture.savedSession?.sessionID, "abc", "the quit keeps it too")
             fixture.model.persistWorkspaceStore()
             let relaunched = try makeFixture(in: fixture.directory, isActive: false)
             XCTAssertEqual(relaunched.engine.configurations.first?.initialCommand, "claude --resume 'abc'")
@@ -110,7 +115,10 @@ final class AgentLifecycleTests: XCTestCase {
         fixture.model.systemWillPowerOff()
         fixture.emit(.exited, session: "abc")
         fixture.session.emit(.foregroundProcessChanged(nil))
+        fixture.session.isRunning = false
+        fixture.session.activeForegroundProcessName = nil
         fixture.session.emit(.processTerminated(exitCode: 0))
+        fixture.model.persistTerminalSnapshots()
 
         XCTAssertEqual(fixture.savedSession?.sessionID, "abc")
         fixture.model.persistWorkspaceStore()

@@ -138,6 +138,9 @@ final class AppModel {
     private(set) var terminalNotices: [TerminalSessionID: TerminalPaneNotice] = [:]
     var isSystemPoweringOff = false
     @ObservationIgnored var powerOffResetTask: Task<Void, Never>?
+    /// Panes whose shell was stopped rather than exiting. Their conversations wait for the next
+    /// launch, so the idle-pane cleanup on quit must not read the dead shell as a finished agent.
+    @ObservationIgnored var stoppedShellSessions: Set<TerminalSessionID> = []
     // Derived fresh from the store's load report on every launch, so clearing it only hides the
     // banner for this session — a later repair surfaces a new notice.
     private(set) var recoveryNotice: WorkspaceRecoveryNotice?
@@ -2503,6 +2506,7 @@ final class AppModel {
             // A shell that was hung up or killed took its agent with it, but the agent never left
             // its conversation; only a shell that exited by itself has nothing to resume.
             if Self.shellWasStopped(exitCode: exitCode) || isSystemPoweringOff {
+                stoppedShellSessions.insert(sessionID)
                 retireAgentKeepingConversation(forTab: tabID)
             } else {
                 forgetAgent(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID, sessionID: sessionID)
@@ -2644,6 +2648,7 @@ final class AppModel {
             .notice("Stopping terminal \(sessionID.rawValue.uuidString.lowercased(), privacy: .public): \(reason.rawValue, privacy: .public)")
         terminalSnapshotTasks.removeValue(forKey: sessionID)?.cancel()
         terminalNotices.removeValue(forKey: sessionID)
+        stoppedShellSessions.remove(sessionID)
         guard let process = terminalSessions.removeValue(forKey: sessionID) else {
             let directory = terminalContinuityDirectory
             Task { @MainActor [weak self] in
