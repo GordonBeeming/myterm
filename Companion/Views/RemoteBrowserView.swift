@@ -214,8 +214,7 @@ private struct NativeBrowserSurface: UIViewRepresentable {
 struct RemoteBrowserView: View {
     let scene: SceneModel
     let route: BrowserRoute
-    /// Sits beside the mode picker rather than over it. Floated on top, the tab's actions menu
-    /// landed on the picker's trailing segment and covered its label.
+    /// Sits at the end of the address row rather than over the page, where it would cover content.
     ///
     /// Erased rather than generic so the pure helpers on this type stay callable without naming
     /// an accessory that has nothing to do with them.
@@ -287,26 +286,28 @@ struct RemoteBrowserView: View {
         }
     }
 
-    private var preferenceKey: String { "browserMode." + route.connectionID.relayOrigin + "." + route.hostID.uuidString }
+    /// The mode the Mac's settings resolve to for this workspace, so it can be set globally, per
+    /// folder or per workspace. A Mac too old to send it leaves the native proxy in place.
+    private var configuredMode: String {
+        let preferences = scene.projection?.workspaces.first { $0.id.rawValue == route.workspaceID }?.preferences
+        return preferences?.companionBrowserMode == .macRendered ? "rendered" : "native"
+    }
+
+    /// Localhost and IP addresses cannot go through the native proxy, so they override the setting.
+    private func mode(for url: URL?) -> String {
+        if let url, NativeRemoteBrowser.requiresMacRendering(url) { return "rendered" }
+        return configuredMode
+    }
+
+    /// Where the tab is now rather than where it opened, which can differ after navigating.
+    private var currentPageURL: URL? {
+        if mode == "rendered", let address = rendered?.url, let url = URL(string: address) { return url }
+        return native.webView?.url ?? route.url
+    }
 
     var body: some View {
         @Bindable var native = native
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Picker("Browser mode", selection: Binding(get: { mode }, set: { value in
-                    UserDefaults.standard.set(value, forKey: preferenceKey)
-                    mode = value
-                })) {
-                    Text("Native proxy").tag("native")
-                    Text("Mac rendered").tag("rendered")
-                }.pickerStyle(.segmented)
-                Button("Capture browser context", systemImage: "camera.viewfinder") {
-                    Task { await captureContext() }
-                }
-                .disabled(isCapturingContext)
-                .accessibilityIdentifier("capture-browser-context")
-                accessory()
-            }.padding(8)
             if mode == "native" {
                 HStack {
                     Button("Back", systemImage: "chevron.left") { native.webView?.goBack() }.disabled(!native.back)
@@ -320,13 +321,14 @@ struct RemoteBrowserView: View {
                         else if native.webView == nil { retryID = UUID() }
                         else { native.webView?.reload() }
                     }
+                    tabControls
                 }.padding(8)
                 if native.loading { ProgressView().progressViewStyle(.linear) }
                 if let error = native.error {
                     errorLabel(error)
+                    // Switches this tab only; the setting stays as the Mac has it.
                     Button("Open with Mac rendered mode") {
                         fallbackURL = NativeRemoteBrowser.addressURL(native.address)
-                        UserDefaults.standard.set("rendered", forKey: preferenceKey)
                         mode = "rendered"
                     }.padding(.bottom, 8)
                 }
@@ -352,9 +354,12 @@ struct RemoteBrowserView: View {
         }
         .onAppear {
             guard !initialized else { return }
-            if let url = route.url, NativeRemoteBrowser.requiresMacRendering(url) { mode = "rendered" }
-            else { mode = UserDefaults.standard.string(forKey: preferenceKey) == "rendered" ? "rendered" : "native" }
+            mode = mode(for: route.url)
             initialized = true
+        }
+        .onChange(of: configuredMode) {
+            guard initialized else { return }
+            mode = mode(for: currentPageURL)
         }
         // The connection is part of the key for the same reason the terminal screen's is: a
         // reconnect stops the old local proxy, and now that a retained list keeps this view alive
@@ -485,6 +490,17 @@ struct RemoteBrowserView: View {
             .submitLabel(.go).onSubmit(submit).accessibilityIdentifier("remote-browser-address")
     }
 
+    private var tabControls: some View {
+        Group {
+            Button("Capture browser context", systemImage: "camera.viewfinder") {
+                Task { await captureContext() }
+            }
+            .disabled(isCapturingContext)
+            .accessibilityIdentifier("capture-browser-context")
+            accessory()
+        }
+    }
+
     private func errorLabel(_ value: String) -> some View {
         Text(value).font(.caption).foregroundStyle(.red).padding(8)
     }
@@ -496,6 +512,7 @@ struct RemoteBrowserView: View {
                 Button("Forward", systemImage: "chevron.right") { send(.forward) }.disabled(rendered?.canGoForward != true)
                 addressField($renderAddress) { send(.navigate, url: NativeRemoteBrowser.addressURL(renderAddress)?.absoluteString ?? renderAddress) }
                 Button("Reload", systemImage: "arrow.clockwise") { send(.reload) }
+                tabControls
             }.padding(8)
             if busy || rendered?.isLoading == true { ProgressView().progressViewStyle(.linear) }
             if let error = renderError ?? rendered?.error {

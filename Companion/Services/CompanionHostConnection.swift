@@ -234,6 +234,10 @@ actor CompanionHostConnection {
         if let proxy = browserProxies.removeValue(forKey: route.tabID) { await proxy.proxy.stop() }
     }
 
+    func supports(_ capability: String) -> Bool {
+        hostCapabilities.contains(capability)
+    }
+
     private func requireBrowserCapability(_ capability: String) throws {
         guard hostCapabilities.contains(capability) else {
             throw RemoteCommandFailure(code: "host_update_required",

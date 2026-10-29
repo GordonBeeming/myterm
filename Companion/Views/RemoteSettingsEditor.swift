@@ -23,6 +23,9 @@ struct RemoteTerminalSettingsDraft {
         if value.optionAsMeta != original.optionAsMeta { patch.optionAsMeta = value.optionAsMeta }
         if value.lineEditingMode != original.lineEditingMode { patch.lineEditingMode = value.lineEditingMode }
         if value.shell != original.shell { patch.shell = value.shell }
+        if value.companionBrowserMode != original.companionBrowserMode {
+            patch.companionBrowserMode = value.companionBrowserMode
+        }
         if value.newSessionWorkingDirectory != original.newSessionWorkingDirectory {
             patch.newSessionWorkingDirectory = value.newSessionWorkingDirectory
         }
@@ -55,6 +58,9 @@ struct RemoteSettingsEditor: View {
     @State private var customDirectoryPath = "/"
     @State private var errorMessage: String?
     @State private var confirmsReset = false
+    /// False until the connected Mac says it can store a browser mode. An older Mac drops the
+    /// field without an error, so the picker would appear to save and change nothing.
+    @State private var supportsBrowserMode = false
     @Environment(\.dismiss) private var dismiss
 
     init(scene: SceneModel, workspaceID: UUID, preferences: TerminalPreferences) {
@@ -76,13 +82,15 @@ struct RemoteSettingsEditor: View {
             appearance
             keyboard
             newTerminals
+            browser
             Section {
                 Button("Use inherited terminal settings", role: .destructive) { confirmsReset = true }
             } footer: {
-                Text("Remove this workspace’s terminal overrides and use its folder or global settings.")
+                Text("Remove this workspace’s overrides, including its browser mode, and use its folder or global settings.")
             }
         }
         .disabled(isSaving)
+        .task { supportsBrowserMode = await hostSupportsBrowserMode() }
         .navigationTitle("Mac terminal settings")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -175,6 +183,22 @@ struct RemoteSettingsEditor: View {
         }
     }
 
+    private var browser: some View {
+        Section {
+            Picker("Browser mode", selection: $draft.value.companionBrowserMode) {
+                Text("Native proxy").tag(CompanionBrowserMode.nativeProxy)
+                Text("Mac rendered").tag(CompanionBrowserMode.macRendered)
+            }
+            .disabled(!supportsBrowserMode)
+        } header: { Text("Browser") } footer: {
+            if supportsBrowserMode {
+                Text("How browser tabs in this workspace open on every paired iPhone or iPad. Localhost and IP addresses always use Mac rendered.")
+            } else {
+                Text("Update MyTerm on the connected Mac to change the browser mode from here.")
+            }
+        }
+    }
+
     private var directoryChoice: Binding<Int> {
         Binding {
             switch draft.value.newSessionWorkingDirectory {
@@ -199,6 +223,11 @@ struct RemoteSettingsEditor: View {
         return true
     }
 
+    private func hostSupportsBrowserMode() async -> Bool {
+        guard let connectionID else { return false }
+        return await scene.hostSupports(CompanionBrowserMode.settingsCapability, hostID: connectionID.hostID)
+    }
+
     private func save(reset: Bool) async {
         guard let connectionID, connectionID == scene.selectedConnectionID,
               scene.connectionPhase == .online else {
@@ -207,11 +236,21 @@ struct RemoteSettingsEditor: View {
         }
         isSaving = true
         defer { isSaving = false }
+        let browserModeSupported = await hostSupportsBrowserMode()
+        if !reset, draft.patch.companionBrowserMode != nil, !browserModeSupported {
+            errorMessage = "Update MyTerm on the connected Mac to change the browser mode from here."
+            return
+        }
         do {
+            var resetFields: [RemoteSettingField] = []
+            if reset {
+                resetFields = RemoteTerminalSettingsDraft.inheritedFields
+                if browserModeSupported { resetFields.append(.companionBrowserMode) }
+            }
             let payload = RemoteSettingsUpdatePayload(
                 scope: .workspace(WorkspaceID(rawValue: workspaceID)),
                 patch: reset ? TerminalPreferencesOverrides() : draft.patch,
-                reset: reset ? RemoteTerminalSettingsDraft.inheritedFields : []
+                reset: resetFields
             )
             _ = try await scene.command(.settingsUpdate, metadata: MessageMetadata(
                 hostID: connectionID.hostID, workspaceID: workspaceID

@@ -1074,6 +1074,11 @@ final class SceneModel {
         return try await connection.command(operation, metadata: metadata, payload: payload)
     }
 
+    func hostSupports(_ capability: String, hostID: UUID) async -> Bool {
+        guard hostID == selectedHostID, let connection else { return false }
+        return await connection.supports(capability)
+    }
+
     func routeNotification(_ destination: NotificationDestination) {
         pendingNotification = destination
         selectedConnectionID = destination.connectionID
