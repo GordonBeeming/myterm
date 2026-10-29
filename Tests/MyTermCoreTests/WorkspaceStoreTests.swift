@@ -228,6 +228,38 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertTrue(try store.resolvedSettings(for: inheritedWorkspaceID).sharesBrowserSignInsWithCompanion)
     }
 
+    func testCompanionBrowserModeDefaultsToNativeProxyAndResolvesAtEveryScope() throws {
+        XCTAssertEqual(TerminalPreferences.default.companionBrowserMode, .nativeProxy)
+
+        let rendered = TerminalPreferences(companionBrowserMode: .macRendered)
+        let restored = try JSONDecoder().decode(
+            TerminalPreferences.self,
+            from: JSONEncoder().encode(rendered)
+        )
+        XCTAssertEqual(restored.companionBrowserMode, .macRendered)
+
+        let legacy = try JSONDecoder().decode(
+            TerminalPreferences.self, from: Data(#"{"browserDataScope":"workspace"}"#.utf8))
+        XCTAssertEqual(legacy.companionBrowserMode, .nativeProxy)
+
+        let url = temporaryURL()
+        let store = try WorkspaceStore(persistenceURL: url)
+        let folderID = try store.createFolder(title: "Work")
+        let workspaceID = store.selectedWorkspaceID
+        try store.moveWorkspace(workspaceID, to: folderID)
+        let inheritedWorkspaceID = try store.createWorkspace(title: "Inherited", folderID: folderID)
+
+        try store.updateGlobalSettings { $0.companionBrowserMode = .macRendered }
+        XCTAssertEqual(try store.resolvedSettings(for: inheritedWorkspaceID).companionBrowserMode, .macRendered)
+
+        try store.updateFolderSettings(folderID) { $0.companionBrowserMode = .nativeProxy }
+        XCTAssertEqual(try store.resolvedSettings(for: inheritedWorkspaceID).companionBrowserMode, .nativeProxy)
+
+        try store.updateWorkspaceSettings(workspaceID) { $0.companionBrowserMode = .macRendered }
+        XCTAssertEqual(try store.resolvedSettings(for: workspaceID).companionBrowserMode, .macRendered)
+        XCTAssertEqual(try store.resolvedSettings(for: inheritedWorkspaceID).companionBrowserMode, .nativeProxy)
+    }
+
     func testTextFileCommandPersistsUnderTheLegacyKeyForGlobalAndScopedSettings() throws {
         let url = temporaryURL()
         let store = try WorkspaceStore(persistenceURL: url)

@@ -661,6 +661,23 @@ struct SettingsView: View {
                     Toggle("Share sign-ins with companion", isOn: value)
                         .labelsHidden()
                 }
+
+                ScopedSettingRow(
+                    model: model,
+                    scope: scope,
+                    title: "Companion browser mode",
+                    caption: "How a paired iPhone or iPad shows browser tabs. Native proxy browses on the device through this Mac; Mac rendered streams the page this Mac draws. Localhost and IP addresses always use Mac rendered.",
+                    global: \TerminalPreferences.companionBrowserMode,
+                    override: \TerminalPreferencesOverrides.companionBrowserMode
+                ) { value in
+                    Picker("Companion browser mode", selection: value) {
+                        ForEach(CompanionBrowserMode.allCases, id: \.self) { mode in
+                            Text(mode.settingsLabel).tag(mode)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 220)
+                }
             }
 
             SettingsCard("Links from terminals") {
@@ -1282,6 +1299,15 @@ private extension TerminalLineEditingMode {
         switch self {
         case .emacs: return "Emacs"
         case .vi: return "Vi"
+        }
+    }
+}
+
+private extension CompanionBrowserMode {
+    var settingsLabel: String {
+        switch self {
+        case .nativeProxy: return "Native proxy"
+        case .macRendered: return "Mac rendered"
         }
     }
 }

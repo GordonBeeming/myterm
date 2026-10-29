@@ -23,6 +23,9 @@ struct RemoteTerminalSettingsDraft {
         if value.optionAsMeta != original.optionAsMeta { patch.optionAsMeta = value.optionAsMeta }
         if value.lineEditingMode != original.lineEditingMode { patch.lineEditingMode = value.lineEditingMode }
         if value.shell != original.shell { patch.shell = value.shell }
+        if value.companionBrowserMode != original.companionBrowserMode {
+            patch.companionBrowserMode = value.companionBrowserMode
+        }
         if value.newSessionWorkingDirectory != original.newSessionWorkingDirectory {
             patch.newSessionWorkingDirectory = value.newSessionWorkingDirectory
         }
@@ -76,6 +79,7 @@ struct RemoteSettingsEditor: View {
             appearance
             keyboard
             newTerminals
+            browser
             Section {
                 Button("Use inherited terminal settings", role: .destructive) { confirmsReset = true }
             } footer: {
@@ -172,6 +176,17 @@ struct RemoteSettingsEditor: View {
             }
         } header: { Text("New terminals") } footer: {
             Text("Shell and starting directory changes apply when a new terminal is created.")
+        }
+    }
+
+    private var browser: some View {
+        Section {
+            Picker("Browser mode", selection: $draft.value.companionBrowserMode) {
+                Text("Native proxy").tag(CompanionBrowserMode.nativeProxy)
+                Text("Mac rendered").tag(CompanionBrowserMode.macRendered)
+            }
+        } header: { Text("Browser") } footer: {
+            Text("How browser tabs in this workspace open on this device. Localhost and IP addresses always use Mac rendered.")
         }
     }
 
