@@ -356,3 +356,7 @@ The app and its disk image therefore each have their own validated distribution 
 - Terminal and browser panes share the same persistent split layout.
 - Chromium remains an optional future download so the main app stays small.
 - Passkey pass-through requires Apple's managed entitlement before it can be enabled in distribution.
+
+## Support development
+
+Support MyTerm through [GitHub Sponsors](https://github.com/sponsors/GordonBeeming), [Patreon](https://www.patreon.com/GordonBeeming), or [Buy Me a Coffee](https://buymeacoffee.com/gordonbeeming).
