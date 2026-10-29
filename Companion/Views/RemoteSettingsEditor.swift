@@ -58,6 +58,9 @@ struct RemoteSettingsEditor: View {
     @State private var customDirectoryPath = "/"
     @State private var errorMessage: String?
     @State private var confirmsReset = false
+    /// False until the connected Mac says it can store a browser mode. An older Mac drops the
+    /// field without an error, so the picker would appear to save and change nothing.
+    @State private var supportsBrowserMode = false
     @Environment(\.dismiss) private var dismiss
 
     init(scene: SceneModel, workspaceID: UUID, preferences: TerminalPreferences) {
@@ -87,6 +90,7 @@ struct RemoteSettingsEditor: View {
             }
         }
         .disabled(isSaving)
+        .task { supportsBrowserMode = await hostSupportsBrowserMode() }
         .navigationTitle("Mac terminal settings")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -185,8 +189,13 @@ struct RemoteSettingsEditor: View {
                 Text("Native proxy").tag(CompanionBrowserMode.nativeProxy)
                 Text("Mac rendered").tag(CompanionBrowserMode.macRendered)
             }
+            .disabled(!supportsBrowserMode)
         } header: { Text("Browser") } footer: {
-            Text("How browser tabs in this workspace open on every paired iPhone or iPad. Localhost and IP addresses always use Mac rendered.")
+            if supportsBrowserMode {
+                Text("How browser tabs in this workspace open on every paired iPhone or iPad. Localhost and IP addresses always use Mac rendered.")
+            } else {
+                Text("Update MyTerm on the connected Mac to change the browser mode from here.")
+            }
         }
     }
 
@@ -214,6 +223,11 @@ struct RemoteSettingsEditor: View {
         return true
     }
 
+    private func hostSupportsBrowserMode() async -> Bool {
+        guard let connectionID else { return false }
+        return await scene.hostSupports(CompanionBrowserMode.settingsCapability, hostID: connectionID.hostID)
+    }
+
     private func save(reset: Bool) async {
         guard let connectionID, connectionID == scene.selectedConnectionID,
               scene.connectionPhase == .online else {
@@ -222,13 +236,16 @@ struct RemoteSettingsEditor: View {
         }
         isSaving = true
         defer { isSaving = false }
+        let browserModeSupported = await hostSupportsBrowserMode()
+        if !reset, draft.patch.companionBrowserMode != nil, !browserModeSupported {
+            errorMessage = "Update MyTerm on the connected Mac to change the browser mode from here."
+            return
+        }
         do {
             var resetFields: [RemoteSettingField] = []
             if reset {
                 resetFields = RemoteTerminalSettingsDraft.inheritedFields
-                if await scene.hostSupports(CompanionBrowserMode.settingsCapability, hostID: connectionID.hostID) {
-                    resetFields.append(.companionBrowserMode)
-                }
+                if browserModeSupported { resetFields.append(.companionBrowserMode) }
             }
             let payload = RemoteSettingsUpdatePayload(
                 scope: .workspace(WorkspaceID(rawValue: workspaceID)),
