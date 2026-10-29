@@ -294,9 +294,15 @@ struct RemoteBrowserView: View {
     }
 
     /// Localhost and IP addresses cannot go through the native proxy, so they override the setting.
-    private var initialMode: String {
-        if let url = route.url, NativeRemoteBrowser.requiresMacRendering(url) { return "rendered" }
+    private func mode(for url: URL?) -> String {
+        if let url, NativeRemoteBrowser.requiresMacRendering(url) { return "rendered" }
         return configuredMode
+    }
+
+    /// Where the tab is now rather than where it opened, which can differ after navigating.
+    private var currentPageURL: URL? {
+        if mode == "rendered", let address = rendered?.url, let url = URL(string: address) { return url }
+        return native.webView?.url ?? route.url
     }
 
     var body: some View {
@@ -348,12 +354,12 @@ struct RemoteBrowserView: View {
         }
         .onAppear {
             guard !initialized else { return }
-            mode = initialMode
+            mode = mode(for: route.url)
             initialized = true
         }
         .onChange(of: configuredMode) {
             guard initialized else { return }
-            mode = initialMode
+            mode = mode(for: currentPageURL)
         }
         // The connection is part of the key for the same reason the terminal screen's is: a
         // reconnect stops the old local proxy, and now that a retained list keeps this view alive

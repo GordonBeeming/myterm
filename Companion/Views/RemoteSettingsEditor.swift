@@ -83,7 +83,7 @@ struct RemoteSettingsEditor: View {
             Section {
                 Button("Use inherited terminal settings", role: .destructive) { confirmsReset = true }
             } footer: {
-                Text("Remove this workspace’s terminal overrides and use its folder or global settings.")
+                Text("Remove this workspace’s overrides, including its browser mode, and use its folder or global settings.")
             }
         }
         .disabled(isSaving)
@@ -186,7 +186,7 @@ struct RemoteSettingsEditor: View {
                 Text("Mac rendered").tag(CompanionBrowserMode.macRendered)
             }
         } header: { Text("Browser") } footer: {
-            Text("How browser tabs in this workspace open on this device. Localhost and IP addresses always use Mac rendered.")
+            Text("How browser tabs in this workspace open on every paired iPhone or iPad. Localhost and IP addresses always use Mac rendered.")
         }
     }
 
@@ -223,10 +223,17 @@ struct RemoteSettingsEditor: View {
         isSaving = true
         defer { isSaving = false }
         do {
+            var resetFields: [RemoteSettingField] = []
+            if reset {
+                resetFields = RemoteTerminalSettingsDraft.inheritedFields
+                if await scene.hostSupports(CompanionBrowserMode.settingsCapability, hostID: connectionID.hostID) {
+                    resetFields.append(.companionBrowserMode)
+                }
+            }
             let payload = RemoteSettingsUpdatePayload(
                 scope: .workspace(WorkspaceID(rawValue: workspaceID)),
                 patch: reset ? TerminalPreferencesOverrides() : draft.patch,
-                reset: reset ? RemoteTerminalSettingsDraft.inheritedFields : []
+                reset: resetFields
             )
             _ = try await scene.command(.settingsUpdate, metadata: MessageMetadata(
                 hostID: connectionID.hostID, workspaceID: workspaceID

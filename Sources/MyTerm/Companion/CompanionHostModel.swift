@@ -1070,7 +1070,8 @@ final class CompanionHostModel {
             agreementKey: identity.agreementKey.publicKey,
             notificationSigningKey: identity.notificationSigningKey.publicKey,
             capabilities: ["workspace-v1", "terminal-checkpoint-v1", "control-lease-v1", "browser-proxy-v1",
-                           RemoteBrowserRequest.capability, RemoteBrowserCookiePullRequest.capability]
+                           RemoteBrowserRequest.capability, RemoteBrowserCookiePullRequest.capability,
+                           CompanionBrowserMode.settingsCapability]
         )
         let peer = PeerConnection(
             connectionID: connectionID,

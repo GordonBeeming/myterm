@@ -29,6 +29,10 @@ public enum TerminalLineEditingMode: String, Codable, CaseIterable, Equatable, H
 public enum CompanionBrowserMode: String, Codable, CaseIterable, Equatable, Hashable, Sendable {
     case nativeProxy
     case macRendered
+
+    /// Advertised by a Mac that can decode `RemoteSettingField.companionBrowserMode`. An older Mac
+    /// rejects a settings update whose reset list names a field it does not know.
+    public static let settingsCapability = "settings-browser-mode-v1"
 }
 
 /// Where a web link opens when MyTerm is asked to show one.
