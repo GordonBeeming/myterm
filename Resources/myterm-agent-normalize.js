@@ -1,5 +1,10 @@
 ObjC.import('Foundation');
 
+function encodedIdentifier(value) {
+    if (typeof value !== 'string') return undefined;
+    return ObjC.unwrap($(value).dataUsingEncoding($.NSUTF8StringEncoding).base64EncodedStringWithOptions(0));
+}
+
 function run(args) {
     const agent = args[0];
     let activity = args[1];
@@ -14,16 +19,21 @@ function run(args) {
         const event = String(p.hookEventName || p.hook_event_name || '').replace(/_/g, '').toLowerCase();
         const notification = p.notificationType || p.notification_type;
         if (event === 'stop' && (p.reason === 'shutdown' || p.reason === 'channel_closed')) return '{}';
-        if (activity === 'awaiting_input' && notification !== 'permission_prompt' && notification !== 'elicitation_dialog') return '{}';
+        if (activity === 'awaiting_input') {
+            if (notification === 'idle_prompt') { activity = 'finished'; result.snapshot = true; }
+            else if (notification !== 'permission_prompt' && notification !== 'elicitation_dialog') return '{}';
+        }
         result.session_id = p.sessionId || p.session_id;
         result.cwd = p.cwd || p.workspaceRoot;
-        result.turn = p.promptId || p.prompt_id;
+        result.turn64 = encodedIdentifier(Object.prototype.hasOwnProperty.call(p, 'promptId') ? p.promptId : p.prompt_id);
         result.turn_start = event === 'userpromptsubmit';
+        result.work_start = event === 'pretooluse';
+        result.tool_call64 = encodedIdentifier(p.toolUseId || p.tool_use_id);
         // Parent-facing notifications describe visible dialogs; inherited Claude hooks
         // are suppressed separately so a notification is reported under one identity.
         if (activity === 'awaiting_input') {
             result.tool_key = notification === 'elicitation_dialog' ? 'grok-question' : 'grok-permission';
-        } else if (event === 'posttooluse' || event === 'posttoolusefailure') {
+        } else if (event === 'pretooluse' || event === 'posttooluse' || event === 'posttoolusefailure' || event === 'permissiondenied') {
             result.tool_key = (p.toolName || p.tool_name) === 'ask_user_question' ? 'grok-question' : 'grok-permission';
         }
     } else if (agent === 'antigravity') {
@@ -31,6 +41,7 @@ function run(args) {
         result.session_id = p.conversationId || p.conversation_id || p.session_id;
         result.cwd = p.cwd || (Array.isArray(p.workspacePaths) ? p.workspacePaths[0] : undefined);
         result.session_title = p.conversation_title;
+        result.work_start = activity !== 'status' && Object.prototype.hasOwnProperty.call(p, 'invocationNum');
         if (activity === 'finished' && p.fullyIdle === false) activity = 'working';
         if (activity === 'status') {
             result.snapshot = true;

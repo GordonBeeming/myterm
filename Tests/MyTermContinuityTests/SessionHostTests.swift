@@ -402,6 +402,67 @@ final class SessionHostTests: XCTestCase {
         XCTAssertFalse(process.isRunning)
     }
 
+    func testNativeParallelWaitsAreRetainedAcrossHostAttachments() throws {
+        let directory = URL(fileURLWithPath: "/private/tmp/myterm-native-\(UUID().uuidString.prefix(8))")
+        try SessionHostSocket.prepareDirectory(directory)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let path = directory.appendingPathComponent("s.sock").path
+        let toolA = String(repeating: "a", count: 64), toolB = String(repeating: "b", count: 64)
+        func marker(_ activity: String, _ tool: String) -> String {
+            "\\e]7337;agent=antigravity;event=\(activity);session=test;tool=\(tool)\\e\\\\"
+        }
+        let script = """
+        $|=1; print "native-ready\\n";
+        while (<STDIN>) {
+          if (/^1/) { print "\(marker("awaiting_input", toolA))\(marker("awaiting_input", toolB))"; }
+          if (/^2/) { print "\(marker("working", toolB))"; }
+          if (/^3/) { print "\(marker("working", toolA))"; }
+          chomp; print "\\e]7338;native-stage-$_\\e\\\\";
+        }
+        """
+        let host = Process()
+        host.executableURL = try helperExecutable()
+        host.environment = try testEnvironment()
+        // Replacing the shell proves this is a live foreground program on reattach.
+        host.arguments = [path, "/bin/sh", directory.path, "80", "25", "-c", "stty raw -echo; exec /usr/bin/perl -e '\(script)'"]
+        host.standardOutput = FileHandle.nullDevice; host.standardError = FileHandle.nullDevice
+        try host.run()
+        defer { if host.isRunning { host.terminate(); host.waitUntilExit() } }
+        var socket = try connectEventually(path: path)
+        defer { if socket >= 0 { close(socket) } }
+        var decoder = SessionHostDecoder()
+        var attachment = try readMessage(socket, decoder: &decoder, kind: "attached")
+        let initial = Terminal(delegate: CheckpointDelegate())
+        try initial.importCheckpoint(XCTUnwrap(attachment.bytes))
+        var ready = String(decoding: initial.getBufferAsData(kind: .normal), as: UTF8.self)
+        while !ready.contains("native-ready") {
+            ready += String(decoding: try readMessage(socket, decoder: &decoder, kind: "output").bytes ?? Data(), as: UTF8.self)
+        }
+        let originalPID = attachment.pid
+        for stage in 1...3 {
+            try SessionHostSocket.write(.init(kind: "input", bytes: Data("\(stage)\n".utf8), generation: attachment.generation), to: socket)
+            var output = ""
+            while !output.contains("native-stage-\(stage)") {
+                output += String(decoding: try readMessage(socket, decoder: &decoder, kind: "output").bytes ?? Data(), as: UTF8.self)
+            }
+            try SessionHostSocket.write(.init(kind: "detach", generation: attachment.generation), to: socket)
+            var discarded = [UInt8](repeating: 0, count: 4096)
+            var count = Darwin.read(socket, &discarded, discarded.count)
+            while count > 0 { count = Darwin.read(socket, &discarded, discarded.count) }
+            XCTAssertEqual(count, 0, "EOF must acknowledge detach before the next attachment")
+            close(socket); socket = -1
+            socket = try SessionHostSocket.connect(path: path)
+            decoder = SessionHostDecoder()
+            attachment = try readMessage(socket, decoder: &decoder, kind: "attached")
+            XCTAssertEqual(attachment.pid, originalPID)
+            XCTAssertEqual(attachment.text, "native-stage-\(stage)")
+            let pending = Set((attachment.pendingActivities ?? []).compactMap(\.toolRequestID))
+            XCTAssertEqual(pending, stage == 1 ? [toolA, toolB] : (stage == 2 ? [toolA] : []))
+            XCTAssertEqual(attachment.activity?.activity.rawValue, stage == 3 ? "working" : "awaitingInput")
+        }
+        try SessionHostSocket.write(.init(kind: "stop", generation: attachment.generation), to: socket)
+    }
+
     func testBlockedPTYInputReportsFullQueueAndStillAcceptsStop() throws {
         let helper = try helperExecutable()
         let directory = URL(fileURLWithPath: "/private/tmp/myterm-test-\(UUID().uuidString.prefix(8))")

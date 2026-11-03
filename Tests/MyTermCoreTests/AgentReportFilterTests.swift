@@ -52,7 +52,8 @@ final class AgentReportFilterTests: XCTestCase {
     func testIdleSnapshotsClearCancelledQuestionsWithoutInventingAStartupCompletion() throws {
         var filter = AgentReportFilter()
         func report(_ activity: AgentActivity, snapshot: Bool = false, tool: String? = nil) -> AgentActivityReport {
-            AgentActivityReport(agent: "antigravity", activity: activity, sessionID: "session", toolRequestID: tool, isStatusSnapshot: snapshot)
+            AgentActivityReport(agent: "antigravity", activity: activity, sessionID: "session", toolRequestID: tool,
+                                isStatusSnapshot: snapshot, isWorkStart: activity == .working && !snapshot)
         }
         XCTAssertEqual(filter.process(report(.finished, snapshot: true))?.activity, .ready)
         XCTAssertNotNil(filter.process(report(.working)))
@@ -83,5 +84,112 @@ final class AgentReportFilterTests: XCTestCase {
         XCTAssertNil(filter.process(.init(agent: "antigravity", activity: .awaitingInput, sessionID: "child")))
         XCTAssertNotNil(filter.process(.init(agent: "antigravity", activity: .ready, sessionID: "new-parent", isStatusSnapshot: true)))
         XCTAssertNotNil(filter.process(.init(agent: "antigravity", activity: .working, sessionID: "new-parent")))
+    }
+
+    func testPendingGrokQuestionsCarryTheirTurnAcrossReattachment() throws {
+        var host = AgentReportFilter()
+        _ = host.process(.init(agent: "grok", activity: .working, sessionID: "session", turnID: "one", beginsTurn: true))
+        _ = host.process(.init(agent: "grok", activity: .working, sessionID: "session", turnID: "two", beginsTurn: true))
+        _ = host.process(.init(agent: "grok", activity: .awaitingInput, sessionID: "session", toolRequestID: String(repeating: "a", count: 64)))
+        let pending = try XCTUnwrap(host.pendingReports.first)
+        XCTAssertEqual(pending.turnID, "two")
+        var restored = AgentReportFilter()
+        XCTAssertNotNil(restored.process(pending))
+        XCTAssertNil(restored.process(.init(agent: "grok", activity: .finished, sessionID: "session", turnID: "one")))
+        XCTAssertEqual(restored.pendingReports.count, 1)
+    }
+
+    func testGrokContinuationStartsNewWorkWithoutRevivingLateCompletions() throws {
+        var filter = AgentReportFilter()
+        _ = filter.process(.init(agent: "grok", activity: .working, sessionID: "session", turnID: "one", beginsTurn: true))
+        _ = filter.process(.init(agent: "grok", activity: .finished, sessionID: "session", turnID: "one"))
+        XCTAssertNil(filter.process(.init(agent: "grok", activity: .working, sessionID: "session", turnID: "one")))
+        let call = String(repeating: "b", count: 64)
+        let continuation = AgentActivityReport(agent: "grok", activity: .working, sessionID: "session", turnID: "one", isWorkStart: true, toolCallID: call, capturedAt: 42)
+        XCTAssertEqual(try JSONDecoder().decode(AgentActivityReport.self, from: JSONEncoder().encode(continuation)), continuation)
+        XCTAssertNotNil(filter.process(continuation))
+        XCTAssertNotNil(filter.process(.init(agent: "grok", activity: .working, sessionID: "session", turnID: "one", toolCallID: call)))
+    }
+
+    func testRestoredCompletionsSurviveIdleSnapshotsAndStaleIdleCannotFinishANewerTurn() {
+        var filter = AgentReportFilter()
+        XCTAssertEqual(filter.process(.init(agent: "antigravity", activity: .finished, sessionID: "session"))?.activity, .finished)
+        XCTAssertEqual(filter.process(.init(agent: "antigravity", activity: .finished, sessionID: "session", isStatusSnapshot: true))?.activity, .finished)
+        var grok = AgentReportFilter()
+        XCTAssertEqual(grok.process(.init(agent: "grok", activity: .finished, sessionID: "session", isStatusSnapshot: true))?.activity, .ready)
+        _ = grok.process(.init(agent: "grok", activity: .working, sessionID: "session", turnID: "two", beginsTurn: true))
+        XCTAssertNil(grok.process(.init(agent: "grok", activity: .finished, sessionID: "session", turnID: "one", isStatusSnapshot: true)))
+        let idle = grok.process(.init(agent: "grok", activity: .finished, sessionID: "session", isStatusSnapshot: true))
+        XCTAssertEqual(idle?.activity, .finished)
+        XCTAssertEqual(idle?.turnID, "two", "The delayed fallback belongs to the same completion, so it must not create another inbox event")
+    }
+
+    func testParallelGrokPermissionsRemainWaitingUntilTheirToolsCompleteAfterReattachment() {
+        let role = String(repeating: "a", count: 64)
+        let first = String(repeating: "b", count: 64)
+        let second = String(repeating: "c", count: 64)
+        let automatic = String(repeating: "d", count: 64)
+        func tool(_ id: String, start: Bool) -> AgentActivityReport {
+            .init(agent: "grok", activity: .working, sessionID: "session", toolRequestID: role,
+                  isWorkStart: start, toolCallID: id)
+        }
+        var host = AgentReportFilter()
+        _ = host.process(tool(first, start: true))
+        _ = host.process(tool(second, start: true))
+        _ = host.process(tool(automatic, start: true))
+        _ = host.process(.init(agent: "grok", activity: .awaitingInput, sessionID: "session", toolRequestID: role))
+        XCTAssertNil(host.process(tool(automatic, start: false)))
+        XCTAssertNil(host.process(tool(first, start: false)))
+        XCTAssertEqual(host.pendingReports.count, 1)
+        var restored = AgentReportFilter()
+        for report in host.restorationReports { _ = restored.process(report) }
+        XCTAssertEqual(restored.pendingReports.count, 1)
+        XCTAssertEqual(restored.process(tool(second, start: false))?.activity, .working)
+        XCTAssertTrue(restored.pendingReports.isEmpty)
+    }
+
+    func testOpaqueTurnIDsAreDistinctFromRecoveryIdentifiers() {
+        let opaque = "client/session:🫖;id\n" + String(repeating: "x", count: 100)
+        let report = AgentActivityReport(agent: "grok", activity: .working, sessionID: opaque, turnID: opaque)
+        XCTAssertNil(report.sessionID)
+        XCTAssertEqual(report.turnID, opaque)
+        let largeID = String(repeating: "x", count: 10_000)
+        let large = AgentActivityReport(agent: "grok", activity: .working, turnID: largeID)
+        XCTAssertEqual(large.turnID, largeID)
+    }
+
+    func testAntigravityStatusStartsWorkWithoutHooksAndRejectsOlderCallbacks() {
+        func snapshot(_ activity: AgentActivity, at time: Double) -> AgentActivityReport {
+            .init(agent: "antigravity", activity: activity, sessionID: "session", isStatusSnapshot: true, capturedAt: time)
+        }
+        var filter = AgentReportFilter()
+        XCTAssertEqual(filter.process(snapshot(.finished, at: 1))?.activity, .ready)
+        XCTAssertEqual(filter.process(snapshot(.working, at: 2))?.activity, .working)
+        XCTAssertEqual(filter.process(snapshot(.finished, at: 4))?.activity, .finished)
+        XCTAssertNil(filter.process(snapshot(.working, at: 3)))
+        XCTAssertEqual(filter.process(snapshot(.working, at: 5))?.activity, .working)
+        XCTAssertNil(filter.process(.init(agent: "antigravity", activity: .finished, sessionID: "session", capturedAt: 4.5)))
+        XCTAssertEqual(filter.process(snapshot(.finished, at: 6))?.activity, .finished)
+    }
+
+    func testCompletionCanResolveAWaitWhenTheToolStartWasNotRecorded() {
+        var filter = AgentReportFilter()
+        let role = String(repeating: "a", count: 64)
+        _ = filter.process(.init(agent: "grok", activity: .awaitingInput, sessionID: "session", toolRequestID: role))
+        XCTAssertEqual(filter.process(.init(agent: "grok", activity: .working, sessionID: "session", toolRequestID: role,
+                                           toolCallID: String(repeating: "b", count: 64)))?.activity, .working)
+        XCTAssertTrue(filter.pendingReports.isEmpty)
+    }
+
+    func testStatusSnapshotsCannotOverrideANewerWorkStart() {
+        var filter = AgentReportFilter()
+        _ = filter.process(.init(agent: "antigravity", activity: .finished, sessionID: "session", isStatusSnapshot: true, capturedAt: 1))
+        XCTAssertNotNil(filter.process(.init(agent: "antigravity", activity: .working, sessionID: "session", isWorkStart: true, capturedAt: 3)))
+        XCTAssertNil(filter.process(.init(agent: "antigravity", activity: .finished, sessionID: "session", isStatusSnapshot: true, capturedAt: 2)))
+        XCTAssertNil(filter.process(.init(agent: "antigravity", activity: .awaitingInput, sessionID: "session", isStatusSnapshot: true, capturedAt: 2.5)))
+        XCTAssertNil(filter.process(.init(agent: "antigravity", activity: .finished, sessionID: "session", capturedAt: 2.75)))
+        XCTAssertEqual(filter.process(.init(agent: "antigravity", activity: .finished, sessionID: "session", isStatusSnapshot: true, capturedAt: 4))?.activity, .finished)
+        XCTAssertEqual(filter.process(.init(agent: "antigravity", activity: .finished, sessionID: "new-session", isStatusSnapshot: true, capturedAt: 5))?.activity, .ready)
+        XCTAssertNil(filter.process(.init(agent: "antigravity", activity: .working, sessionID: "session", isStatusSnapshot: true, capturedAt: 4.9)))
     }
 }

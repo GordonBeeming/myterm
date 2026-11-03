@@ -1,9 +1,13 @@
 #!/bin/sh
 # Preserve the user's status command and stdin, while reporting out of band to MyTerm.
+captured=''
+if [ -n "${MYTERM_PANE_ID:-}" ]; then
+  captured=$(/usr/bin/perl -MTime::HiRes=clock_gettime,CLOCK_MONOTONIC -e 'printf "%.9f", clock_gettime(CLOCK_MONOTONIC)')
+fi
 input=$(cat; printf '.')
 input=${input%.}
 if [ -n "${MYTERM_PANE_ID:-}" ] && [ -r "${MYTERM_RESOURCE_DIR:-}/myterm-agent-hook" ]; then
-  printf '%s' "$input" | /bin/sh "$MYTERM_RESOURCE_DIR/myterm-agent-hook" antigravity status
+  printf '%s' "$input" | MYTERM_AGENT_CAPTURE_TIME="$captured" /bin/sh "$MYTERM_RESOURCE_DIR/myterm-agent-hook" antigravity status
 fi
 if [ -n "${1:-}" ]; then
   printf '%s' "$input" | /bin/sh -c "$1"

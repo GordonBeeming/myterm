@@ -79,9 +79,11 @@ struct AgentHookTarget: Equatable, Sendable {
         events: [
             AgentHookEvent("SessionStart", .ready),
             AgentHookEvent("UserPromptSubmit", .working),
-            AgentHookEvent("Notification", .awaitingInput, matcher: "permission_prompt|elicitation_dialog"),
+            AgentHookEvent("PreToolUse", .working),
+            AgentHookEvent("Notification", .awaitingInput, matcher: "permission_prompt|elicitation_dialog|idle_prompt"),
             AgentHookEvent("PostToolUse", .working),
             AgentHookEvent("PostToolUseFailure", .working),
+            AgentHookEvent("PermissionDenied", .working),
             AgentHookEvent("Stop", .finished),
             AgentHookEvent("StopFailure", .finished),
             AgentHookEvent("StopCancelled", .finished),

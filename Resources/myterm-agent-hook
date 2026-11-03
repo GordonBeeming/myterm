@@ -1,5 +1,11 @@
 #!/bin/sh
-# Hooks must never write replies to stdout or block an agent because reporting failed.
+# Hook stdout belongs to the agent's reply protocol, never to terminal activity.
+fingerprint_field() {
+  printf '%s' "$input" | /usr/bin/plutil -extract "$1" raw -expect string -n -o /dev/null - 2>/dev/null || return 1
+  digest=$(printf '%s' "$input" | /usr/bin/plutil -extract "$1" raw -expect string -n -o - - 2>/dev/null | /usr/bin/shasum -a 256)
+  printf '%s' "${digest%% *}"
+}
+
 report_agent() {
   [ -n "${MYTERM_PANE_ID:-}" ] || return 0
   agent=${1:-}
@@ -9,12 +15,19 @@ report_agent() {
   case "$activity" in ready|working|finished|awaiting_input|exited|status) ;; *) return 0;; esac
   # Grok also loads Claude's settings; only its dedicated MyTerm hooks report it.
   if [ -n "${GROK_HOOK_EVENT:-}" ] && [ "$agent" != grok ]; then return 0; fi
+  captured=''
+  if [ "$agent" = antigravity ]; then
+    captured=${MYTERM_AGENT_CAPTURE_TIME:-$(/usr/bin/perl -MTime::HiRes=clock_gettime,CLOCK_MONOTONIC -e 'printf "%.9f", clock_gettime(CLOCK_MONOTONIC)')}
+    case "$captured" in *[!0-9.]*) captured='';; esac
+  fi
   input=$(cat | tr -d '\n')
   title=''
   turn=''
   turn_start=''
   native_tool=''
   snapshot=''
+  work_start=''
+  tool_call=''
   if [ "$agent" = grok ] || [ "$agent" = antigravity ]; then
     input=$(printf '%s' "$input" | /usr/bin/osascript -l JavaScript "$MYTERM_RESOURCE_DIR/myterm-agent-normalize.js" "$agent" "$activity") || return 0
     activity=$(printf '%s' "$input" | /usr/bin/plutil -extract activity raw -o - - 2>/dev/null) || return 0
@@ -22,12 +35,12 @@ report_agent() {
     if raw_title=$(printf '%s' "$input" | /usr/bin/plutil -extract session_title raw -expect string -n -o - - 2>/dev/null); then
       title=$(printf '%s' "$raw_title" | /usr/bin/base64 | tr -d '\n')
     fi
-    turn=$(printf '%s' "$input" | /usr/bin/plutil -extract turn raw -expect string -n -o - - 2>/dev/null) || turn=''
-    case "$turn" in *[!A-Za-z0-9._-]*) turn='';; esac
-    [ "${#turn}" -le 64 ] || turn=''
+    turn=$(fingerprint_field turn64) || turn=''
+    tool_call=$(fingerprint_field tool_call64) || tool_call=''
     if [ "$(printf '%s' "$input" | /usr/bin/plutil -extract turn_start raw -o - - 2>/dev/null)" = true ]; then turn_start=1; fi
     native_tool=$(printf '%s' "$input" | /usr/bin/plutil -extract tool_key raw -expect string -o - - 2>/dev/null) || native_tool=''
     if [ "$(printf '%s' "$input" | /usr/bin/plutil -extract snapshot raw -o - - 2>/dev/null)" = true ]; then snapshot=1; fi
+    if [ "$(printf '%s' "$input" | /usr/bin/plutil -extract work_start raw -o - - 2>/dev/null)" = true ]; then work_start=1; fi
   fi
   # An idle Claude prompt is not a question. Keep filtering in the shipped script
   # so changes don't alter the hook definitions users have already trusted.
@@ -121,12 +134,9 @@ EOF
   tty=$(ps -o tty= -p "$PPID" 2>/dev/null | tr -d '[:space:]')
   case "$tty" in ''|'??'|'?'|'-') tty=$owner_tty;; esac
   case "$tty" in *[0-9]*) tty="/dev/${tty#/dev/}";; *) tty=/dev/tty;; esac
-  if [ -n "$title" ]; then
-    printf '\033]0;%s\033\134' "$(printf '%s' "$title" | /usr/bin/base64 -D)" > "$tty"
-  fi
   [ "$activity" != title ] || return 0
-  printf '\033]7337;agent=%s;event=%s;session=%s;cwd64=%s;launcher=%s;tool=%s;title64=%s;turn=%s;turn_start=%s;snapshot=%s\033\134' \
-    "$agent" "$activity" "$session" "$cwd" "$launcher" "$tool" "$title" "$turn" "$turn_start" "$snapshot" > "$tty"
+  printf '\033]7337;agent=%s;event=%s;session=%s;cwd64=%s;launcher=%s;tool=%s;title64=%s;turn=%s;turn_start=%s;snapshot=%s;work_start=%s;call=%s;captured=%s\033\134' \
+    "$agent" "$activity" "$session" "$cwd" "$launcher" "$tool" "$title" "$turn" "$turn_start" "$snapshot" "$work_start" "$tool_call" "$captured" > "$tty"
 }
 report_agent "$@" >/dev/null 2>&1 || true
 if [ "${1:-}" = antigravity ] && [ "${2:-}" != status ]; then

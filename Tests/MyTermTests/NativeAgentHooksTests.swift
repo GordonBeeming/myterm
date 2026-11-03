@@ -103,9 +103,9 @@ final class NativeAgentHooksTests: XCTestCase {
         controller.install()
         XCTAssertTrue(controller.isInstalled)
         let hooks = try XCTUnwrap(try read(url)["hooks"] as? [String: Any])
-        for event in ["StopFailure", "StopCancelled", "SessionEnd"] { XCTAssertNotNil(hooks[event]) }
+        for event in ["StopFailure", "StopCancelled", "SessionEnd", "PreToolUse", "PermissionDenied"] { XCTAssertNotNil(hooks[event]) }
         let notification = try XCTUnwrap(hooks["Notification"] as? [[String: Any]])
-        XCTAssertEqual(notification.first?["matcher"] as? String, "permission_prompt|elicitation_dialog")
+        XCTAssertEqual(notification.first?["matcher"] as? String, "permission_prompt|elicitation_dialog|idle_prompt")
         XCTAssertNotEqual(AgentHookTarget.grok.settingsURL, AgentHookTarget.claude.settingsURL)
         controller.remove()
         XCTAssertNil(try read(url)["hooks"])

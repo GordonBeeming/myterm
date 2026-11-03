@@ -97,7 +97,7 @@ own configuration, and **Remove** removes MyTerm's integration:
 | Claude Code | `~/.claude/settings.json` | `SessionStart` | `UserPromptSubmit` | `Stop` | `Notification` | `SessionEnd` |
 | Codex | `~/.codex/hooks.json` | `SessionStart` | `UserPromptSubmit` | `Stop` | `PermissionRequest` | `SessionEnd` |
 | Antigravity | `~/.gemini/config/hooks.json` | `SessionStart` | `PreInvocation` and status callback | `Stop` | `ask_question` hooks and status callback | Foreground process exits |
-| Grok | `~/.grok/hooks/myterm.json` | `SessionStart` | `UserPromptSubmit`, tool completion | `Stop`, `StopFailure`, `StopCancelled` | Actionable `Notification` | `SessionEnd` |
+| Grok | `~/.grok/hooks/myterm.json` | `SessionStart` | `UserPromptSubmit`, tool start/completion | `Stop`, `StopFailure`, `StopCancelled`, idle fallback | Actionable `Notification` | `SessionEnd` |
 
 Antigravity also uses a status callback in `~/.gemini/antigravity-cli/settings.json` for permission
 dialogs and conversation titles. MyTerm preserves the existing status command and feeds it the
@@ -107,6 +107,9 @@ hooks live in a named group, alongside other tools' groups.
 Grok reads Claude settings as well as its own hook files. MyTerm suppresses its inherited Claude
 reporters inside Grok so sessions report under the correct identity. Delayed Grok turn-end events
 that carry a prompt identifier are matched before changing the indicator.
+
+After updating, use a new terminal tab for the new agents' detached activity restoration.
+Existing tabs keep their running processes and the terminal host they started with.
 
 Ready and Stopped put no cook on the tab. They are what tell MyTerm which conversation a pane is
 in, for the section below.

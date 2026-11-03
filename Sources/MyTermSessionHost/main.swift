@@ -151,7 +151,7 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
                                               columns: emulator.cols, rows: emulator.rows,
                                               generation: generation, sequence: sequence, text: readyToken,
                                               activity: latestActivity,
-                                              pendingActivities: pendingActivities.values.flatMap { $0 } + nativeAgentReportFilter.pendingReports,
+                                              pendingActivities: pendingActivities.values.flatMap { $0 } + nativeAgentReportFilter.restorationReports,
                                               omittedScrollbackLines: checkpoint.omittedScrollbackLines, imageGeometry: imageGeometry), to: descriptor)
             let flags = fcntl(descriptor, F_GETFL)
             guard flags >= 0, fcntl(descriptor, F_SETFL, flags | O_NONBLOCK) == 0 else {

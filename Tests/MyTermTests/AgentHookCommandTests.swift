@@ -254,11 +254,14 @@ final class AgentHookCommandTests: XCTestCase {
         let permission = try XCTUnwrap(report(in: written))
         XCTAssertEqual(permission.agent, "grok")
         XCTAssertEqual(permission.sessionID, "grok-session")
-        XCTAssertEqual(permission.turnID, "prompt-1")
+        XCTAssertEqual(permission.turnID?.count, 64)
         XCTAssertEqual(permission.workingDirectory?.path, "/tmp/a project")
         try FileManager.default.removeItem(at: output)
-        XCTAssertEqual(try run(.awaitingInput, agent: "grok", stdin:
-            #"{"sessionId":"grok-session","notificationType":"idle_prompt"}"#), "")
+        let idle = try XCTUnwrap(report(in: run(.awaitingInput, agent: "grok", stdin:
+            #"{"sessionId":"grok-session","notificationType":"idle_prompt"}"#)))
+        XCTAssertEqual(idle.activity, .finished)
+        XCTAssertTrue(idle.isStatusSnapshot)
+        try FileManager.default.removeItem(at: output)
         XCTAssertEqual(try run(.finished, agent: "grok", stdin:
             #"{"sessionId":"child","subagentType":"explorer"}"#), "")
         XCTAssertEqual(try run(.finished, stdin: #"{"sessionId":"grok-session"}"#,
@@ -269,6 +272,9 @@ final class AgentHookCommandTests: XCTestCase {
         let working = try XCTUnwrap(report(in: run(.working, agent: "grok", stdin:
             #"{"sessionId":"session","hookEventName":"user_prompt_submit","promptId":"prompt-1"}"#)))
         XCTAssertTrue(working.beginsTurn)
+        let continuation = try XCTUnwrap(report(in: run(.working, agent: "grok", stdin:
+            #"{"sessionId":"session","hookEventName":"pre_tool_use"}"#)))
+        XCTAssertTrue(continuation.isWorkStart)
         let waiting = try XCTUnwrap(report(in: run(.awaitingInput, agent: "grok", stdin:
             #"{"sessionId":"session","hookEventName":"notification","notificationType":"elicitation_dialog"}"#)))
         let complete = try XCTUnwrap(report(in: run(.working, agent: "grok", stdin:
@@ -279,10 +285,29 @@ final class AgentHookCommandTests: XCTestCase {
         let tool = try XCTUnwrap(report(in: run(.working, agent: "grok", stdin:
             #"{"sessionId":"session","hookEventName":"post_tool_use","toolName":"run_terminal_command"}"#)))
         XCTAssertEqual(permission.toolRequestID, tool.toolRequestID)
+        let denied = try XCTUnwrap(report(in: run(.working, agent: "grok", stdin:
+            #"{"sessionId":"session","hookEventName":"permission_denied","toolName":"run_terminal_command"}"#)))
+        XCTAssertEqual(permission.toolRequestID, denied.toolRequestID)
         XCTAssertNotEqual(waiting.toolRequestID, tool.toolRequestID)
         try FileManager.default.removeItem(at: output)
         XCTAssertEqual(try run(.finished, agent: "grok", stdin:
             #"{"sessionId":"session","hookEventName":"stop","reason":"shutdown"}"#), "")
+    }
+
+    func testOpaqueGrokTurnsAreCorrelatedWithoutEnteringTheEscapeSequence() throws {
+        let opaque = "client/session:🫖;event=exited\n\0" + String(repeating: "x", count: 5000)
+        func payload(_ event: String, _ turn: String) throws -> String {
+            String(decoding: try JSONSerialization.data(withJSONObject: ["sessionId": "session", "hookEventName": event, "promptId": turn]), as: UTF8.self)
+        }
+        let started = try XCTUnwrap(report(in: run(.working, agent: "grok", stdin: payload("user_prompt_submit", opaque))))
+        let finished = try XCTUnwrap(report(in: run(.finished, agent: "grok", stdin: payload("stop", opaque))))
+        let other = try XCTUnwrap(report(in: run(.working, agent: "grok", stdin: payload("user_prompt_submit", opaque + "other"))))
+        let withoutNull = try XCTUnwrap(report(in: run(.working, agent: "grok", stdin: payload("user_prompt_submit", opaque.replacingOccurrences(of: "\0", with: "")))))
+        XCTAssertEqual(started.turnID?.count, 64)
+        XCTAssertEqual(started.turnID, finished.turnID)
+        XCTAssertNotEqual(started.turnID, other.turnID)
+        XCTAssertNotEqual(started.turnID, withoutNull.turnID)
+        XCTAssertEqual(started.sessionID, "session")
     }
 
     func testDetachedHookWrappersFindTheAgentTTYWithoutCrossingAnotherTerminal() throws {
@@ -315,9 +340,12 @@ final class AgentHookCommandTests: XCTestCase {
         try input.fileHandleForWriting.close()
         process.waitUntilExit()
         XCTAssertEqual(process.terminationStatus, 0)
-        let permission = try XCTUnwrap(report(in: String(contentsOf: output, encoding: .utf8)))
+        let written = try String(contentsOf: output, encoding: .utf8)
+        let permission = try XCTUnwrap(report(in: written))
         XCTAssertEqual(permission.activity, .awaitingInput)
         XCTAssertEqual(permission.sessionTitle, "Rename me")
         XCTAssertNotEqual(question.toolRequestID, permission.toolRequestID)
+        XCTAssertGreaterThan(try XCTUnwrap(permission.capturedAt), try XCTUnwrap(question.capturedAt))
+        XCTAssertFalse(written.contains("\u{1B}]0;"), "Structured titles must pass the same ordering filter as activity")
     }
 }

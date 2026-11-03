@@ -60,17 +60,35 @@ MyTerm now registers both agents, reports their activity, retains their conversa
 
 Live checks used Antigravity 1.4.12 and Grok 1.0.70 in headless pseudoterminals. Antigravity produced `PreInvocation`, `PreToolUse` for `ask_question`, `PostToolUse` after skipping the question, and `Stop`. Its status callback wrote working and idle OSC reports to the actual terminal. A newly trusted workspace loaded its project hooks after the first invocation; the next invocation used them. Grok produced `elicitation_dialog` notifications, question-tool completion, session and prompt events. Its native `hookEventName` is snake_case while compatibility `hook_event_name` is PascalCase. Actual Grok OSC titles included transient busy text and an idle conversation name followed by ` - grok`; MyTerm keeps the idle name.
 
-Captured test payloads live under `/tmp/myterm-live-antigravity-9mkzlqy4` and `/tmp/myterm-live-grok-_odf37lq`. These are temporary evidence, not repository fixtures. Regression tests cover equivalent payloads, stale events, independent wait tokens, startup/idle behavior, configuration restoration and failed-install rollback. Claude independently reviewed the implementation and identified lifecycle issues addressed during this work.
+Captured test payloads live under `/tmp/myterm-live-antigravity-9mkzlqy4` and `/tmp/myterm-live-grok-_odf37lq`. These are temporary evidence, not repository fixtures. Regression tests cover equivalent payloads, stale events, independent wait tokens, startup/idle behavior, configuration restoration and failed-install rollback. Independent review identified lifecycle issues addressed during this work.
 
 Live tool-permission dialogs, child-permission dialogs and completion gates that request another turn remain unverified. The Grok test session resolved its requested default permission mode to the account's auto mode, so the harmless test command did not produce a permission prompt. The live checks did not control the MyTerm GUI or exercise a paired companion.
 
 
-## Final validation
+## Initial feature validation
 
 - `swift test --filter 'Agent|NativeAgentHooksTests|CodexHooksTests|PersistentTerminalStartupTests|PersistentTerminalRuntimeTests|LocalProcessOutputDrainTests'`: 304 passed, 0 failed, 0 skipped on macOS. Log: `/tmp/myterm-agent-final-tests.log`.
 - `bash script/build_and_run.sh --bundle`: signed development bundle built at `dist/myterm-dev.app`. Log: `/tmp/myterm-agent-bundle.log`.
 - `codesign --verify --deep --strict dist/myterm-dev.app`: passed. Both new adapter resources are present in the bundle.
 - `git diff --check` and `/bin/sh -n Resources/myterm-agent-hook Resources/myterm-antigravity-status`: passed.
-- Claude Sonnet independently reviewed the diff and the fixes in three rounds. Its final report found no remaining concrete defects in the reviewed fixes. Report: `/tmp/myterm-agent-review-final.json`.
+- Independent review covered the diff and subsequent fixes. Its final report found no remaining concrete defects in the reviewed fixes. Report: `/tmp/myterm-agent-review-final.json`.
 
-No MyTerm GUI, simulator or physical-device validation was performed. No screenshots were captured.
+The initial feature-validation run did not control the MyTerm GUI or use simulators or physical devices. No MyTerm UI screenshots were captured.
+
+
+## PR review corrections
+
+The Grok adapter subscribes to idle notifications as a completion backstop and to tool starts for same-turn continuations. Pending restoration reports retain their known turn, and a restored completion remains completed when the next idle snapshot arrives.
+
+Grok's first-party hook schema includes `toolUseId` on tool events but no request identifier on `Notification`. MyTerm retains distinct active tool IDs and replays them before pending wait reports. A session-wide permission wait remains latched until the potentially affected calls settle, including failures and permission denials. This is conservative when the source cannot identify the individual dialog. [Hook payload schema](https://github.com/xai-org/grok-build/blob/main/crates/codegen/xai-grok-hooks/src/event.rs).
+
+Opaque turn identifiers are encoded before the intermediate property-list parsing and fingerprinted for the bounded OSC transport. The direct report model preserves opaque identifiers and keeps recovery validation separate. Antigravity producers record monotonic capture time before parsing so a fresh working callback can resume activity without invocation hooks while older callbacks cannot overwrite a later completion.
+
+Existing terminal hosts continue using their previous executable and do not retain the new metadata. Existing panes still reattach; a new terminal tab is required for the new agents' full detached activity restoration after upgrading.
+
+
+## PR validation
+
+The complete desktop suite passed with four workers: 1,090 XCTest cases and 19 Swift Testing cases. The initial unbounded parallel run hit two existing terminal-host stress failures; both passed in isolation and in subsequent bounded full-suite runs. Production bundle verification, lint, shell integration, services, remote protocol and browser checks passed locally. The local companion build completed but its simulator runner could not launch; the original PR head passed all three simulator jobs on CI's pinned runtime. The review-fix head is checked by CI again before merge.
+
+Targeted coverage includes a real helper retained across three detach/reattach cycles, with two native waits completed in reverse order. Independent review verified the event-correlation, capture-ordering and structured-title fixes.
