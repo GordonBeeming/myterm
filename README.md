@@ -103,6 +103,8 @@ Antigravity also uses a status callback in `~/.gemini/antigravity-cli/settings.j
 dialogs and conversation titles. MyTerm preserves the existing status command and feeds it the
 same input. Removing the integration restores the previous status configuration. Its native
 hooks live in a named group, alongside other tools' groups.
+Restart Antigravity after an update refreshes its managed callback; a running CLI keeps the
+command it loaded at startup.
 
 Grok reads Claude settings as well as its own hook files. MyTerm suppresses its inherited Claude
 reporters inside Grok so sessions report under the correct identity. Delayed Grok turn-end events

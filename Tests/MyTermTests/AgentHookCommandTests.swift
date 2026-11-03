@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import MyTermCore
 import XCTest
@@ -52,14 +53,19 @@ final class AgentHookCommandTests: XCTestCase {
         _ activity: AgentActivity = .finished,
         agent: String = "claude",
         stdin: String,
-        environment: [String: String] = ["MYTERM_PANE_ID": "pane"]
+        environment: [String: String] = ["MYTERM_PANE_ID": "pane"],
+        rawMode: String? = nil
     ) throws -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = ["-c", AgentHooksController.command(agent: agent, activity: activity)]
         var env = environment
         let resources = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().appending(path: "Resources")
+        if let rawMode {
+            process.arguments = [resources.appending(path: "myterm-agent-hook").path, agent, rawMode]
+        } else {
+            process.arguments = ["-c", AgentHooksController.command(agent: agent, activity: activity)]
+        }
         env["MYTERM_RESOURCE_DIR"] = resources.path
         env["PATH"] = directory.appending(path: "bin").path + ":/usr/bin:/bin"
         process.environment = env
@@ -74,7 +80,7 @@ final class AgentHookCommandTests: XCTestCase {
         let reply = stdout.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         XCTAssertEqual(process.terminationStatus, 0, "the hook must never fail the agent")
-        if agent == "antigravity" {
+        if agent == "antigravity" && rawMode != "status" {
             XCTAssertNotNil(try JSONSerialization.jsonObject(with: reply) as? [String: Any])
         } else {
             XCTAssertEqual(reply, Data(), "A hook must never write to stdout, which the agent reads as its reply")
@@ -310,6 +316,26 @@ final class AgentHookCommandTests: XCTestCase {
         XCTAssertEqual(started.sessionID, "session")
     }
 
+    func testInvalidEntryClockGetsANativeMonotonicFallbackBeforeEmission() throws {
+        let input = #"{"conversationId":"session","invocationNum":0}"#
+        let working = try XCTUnwrap(report(in: run(.working, agent: "antigravity", stdin: input)))
+        let finished = try XCTUnwrap(report(in: run(.finished, agent: "antigravity", stdin: #"{"conversationId":"session"}"#,
+            environment: ["MYTERM_PANE_ID": "pane", "MYTERM_AGENT_CAPTURE_TIME": "invalid"])))
+        XCTAssertGreaterThan(try XCTUnwrap(finished.capturedAt), try XCTUnwrap(working.capturedAt))
+        var filter = AgentReportFilter()
+        _ = filter.process(working)
+        _ = filter.process(finished)
+        XCTAssertNil(filter.process(.init(agent: "antigravity", activity: .awaitingInput, sessionID: "session",
+                                         isStatusSnapshot: true, capturedAt: working.capturedAt)))
+    }
+
+    func testQueuedSnapshotWithoutItsOriginalCaptureTimeIsDropped() throws {
+        let payload = #"{"conversation_id":"session","agent_state":"tool_use","tool_confirmation_pending":true}"#
+        XCTAssertEqual(try run(agent: "antigravity", stdin: payload, rawMode: "status"), "")
+        XCTAssertEqual(try run(agent: "antigravity", stdin: payload,
+            environment: ["MYTERM_PANE_ID": "pane", "MYTERM_AGENT_CAPTURE_TIME": ""], rawMode: "status"), "")
+    }
+
     func testDetachedHookWrappersFindTheAgentTTYWithoutCrossingAnotherTerminal() throws {
         let relative = "../" + output.path.drop(while: { $0 == "/" })
         try configureProcessAncestors([(String(relative), "/bin/grok-macos-aarch")],
@@ -324,23 +350,12 @@ final class AgentHookCommandTests: XCTestCase {
             #"{"conversationId":"conversation","workspacePaths":["/tmp/a project"],"toolCall":{"name":"ask_question"}}"#)))
         XCTAssertEqual(question.sessionID, "conversation")
         XCTAssertEqual(question.workingDirectory?.path, "/tmp/a project")
-        let resource = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-            .deletingLastPathComponent().deletingLastPathComponent().appending(path: "Resources")
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = [resource.appending(path: "myterm-agent-hook").path, "antigravity", "status"]
-        process.environment = ["MYTERM_PANE_ID": "pane", "MYTERM_RESOURCE_DIR": resource.path,
-                               "PATH": directory.appending(path: "bin").path + ":/usr/bin:/bin"]
-        let input = Pipe()
-        process.standardInput = input
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        try process.run()
-        input.fileHandleForWriting.write(Data(#"{"conversation_id":"conversation","cwd":"/tmp/a project","agent_state":"tool_use","tool_confirmation_pending":true,"conversation_title":"Rename me"}"#.utf8))
-        try input.fileHandleForWriting.close()
-        process.waitUntilExit()
-        XCTAssertEqual(process.terminationStatus, 0)
-        let written = try String(contentsOf: output, encoding: .utf8)
+        var instant = timespec()
+        XCTAssertEqual(clock_gettime(CLOCK_MONOTONIC, &instant), 0)
+        let captured = Double(instant.tv_sec) + Double(instant.tv_nsec) / 1e9
+        let written = try run(agent: "antigravity", stdin:
+            #"{"conversation_id":"conversation","cwd":"/tmp/a project","agent_state":"tool_use","tool_confirmation_pending":true,"conversation_title":"Rename me"}"#,
+            environment: ["MYTERM_PANE_ID": "pane", "MYTERM_AGENT_CAPTURE_TIME": String(captured)], rawMode: "status")
         let permission = try XCTUnwrap(report(in: written))
         XCTAssertEqual(permission.activity, .awaitingInput)
         XCTAssertEqual(permission.sessionTitle, "Rename me")

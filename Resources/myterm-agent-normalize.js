@@ -37,6 +37,16 @@ function run(args) {
             result.tool_key = (p.toolName || p.tool_name) === 'ask_user_question' ? 'grok-question' : 'grok-permission';
         }
     } else if (agent === 'antigravity') {
+        let captured = Number(args[2]);
+        if (!args[2] || !Number.isFinite(captured) || captured <= 0) {
+            // An asynchronous snapshot cannot acquire a new age after it was queued.
+            if (activity === 'status') return '{}';
+            // Darwin CLOCK_MONOTONIC (6) matches Time::HiRes; Foundation uptime uses a different clock.
+            ObjC.bindFunction('clock_gettime_nsec_np', ['unsigned long long', ['int']]);
+            captured = Number($.clock_gettime_nsec_np(6)) / 1e9;
+        }
+        if (!Number.isFinite(captured) || captured <= 0) return '{}';
+        result.captured = captured;
         if (p.agent_id || p.subagentType || p.subagent_type || p.parentConversationId || p.parent_conversation_id) return '{}';
         result.session_id = p.conversationId || p.conversation_id || p.session_id;
         result.cwd = p.cwd || (Array.isArray(p.workspacePaths) ? p.workspacePaths[0] : undefined);

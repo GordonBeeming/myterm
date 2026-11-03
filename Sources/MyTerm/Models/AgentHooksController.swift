@@ -159,8 +159,9 @@ final class AgentHooksController {
     func refresh() {
         do {
             let settings = try readSettings()
-            if hasStaleHooks(in: settings) {
-                install()
+            let staleCallback = try target.callbackSettingsURL.map { try AgentStatusCallback.needsRefresh(at: $0) } ?? false
+            if hasStaleHooks(in: settings) || staleCallback {
+                install(preservingCallbackState: true)
                 return
             }
             let hooksInstalled = currentEvents(in: settings).count == target.events.count
@@ -171,7 +172,7 @@ final class AgentHooksController {
         }
     }
 
-    func install() {
+    func install(preservingCallbackState: Bool = false) {
         do {
             try withConfigurationRollback {
                 var settings = try readSettings()
@@ -194,9 +195,12 @@ final class AgentHooksController {
                 }
                 settings["hooks"] = hooks
                 try writeSettings(settings)
-                if let url = target.callbackSettingsURL { try AgentStatusCallback.install(at: url) }
+                if let url = target.callbackSettingsURL {
+                    try AgentStatusCallback.install(at: url, preservingCurrentState: preservingCallbackState)
+                }
             }
-            state = .installed
+            let callbackInstalled = try target.callbackSettingsURL.map { try AgentStatusCallback.isInstalled(at: $0) } ?? true
+            state = callbackInstalled ? .installed : .notInstalled
         } catch {
             state = .failed(error.localizedDescription)
         }

@@ -17,7 +17,10 @@ report_agent() {
   if [ -n "${GROK_HOOK_EVENT:-}" ] && [ "$agent" != grok ]; then return 0; fi
   captured=''
   if [ "$agent" = antigravity ]; then
-    captured=${MYTERM_AGENT_CAPTURE_TIME:-$(/usr/bin/perl -MTime::HiRes=clock_gettime,CLOCK_MONOTONIC -e 'printf "%.9f", clock_gettime(CLOCK_MONOTONIC)')}
+    captured=${MYTERM_AGENT_CAPTURE_TIME:-}
+    if [ "$activity" != status ] && [ -z "$captured" ]; then
+      captured=$(/usr/bin/perl -MTime::HiRes=clock_gettime,CLOCK_MONOTONIC -e 'printf "%.9f", clock_gettime(CLOCK_MONOTONIC)')
+    fi
     case "$captured" in *[!0-9.]*) captured='';; esac
   fi
   input=$(cat | tr -d '\n')
@@ -29,8 +32,11 @@ report_agent() {
   work_start=''
   tool_call=''
   if [ "$agent" = grok ] || [ "$agent" = antigravity ]; then
-    input=$(printf '%s' "$input" | /usr/bin/osascript -l JavaScript "$MYTERM_RESOURCE_DIR/myterm-agent-normalize.js" "$agent" "$activity") || return 0
+    input=$(printf '%s' "$input" | /usr/bin/osascript -l JavaScript "$MYTERM_RESOURCE_DIR/myterm-agent-normalize.js" "$agent" "$activity" "$captured") || return 0
     activity=$(printf '%s' "$input" | /usr/bin/plutil -extract activity raw -o - - 2>/dev/null) || return 0
+    if [ "$agent" = antigravity ]; then
+      captured=$(printf '%s' "$input" | /usr/bin/plutil -extract captured raw -o - - 2>/dev/null) || return 0
+    fi
     case "$activity" in ready|working|finished|awaiting_input|exited|title) ;; *) return 0;; esac
     if raw_title=$(printf '%s' "$input" | /usr/bin/plutil -extract session_title raw -expect string -n -o - - 2>/dev/null); then
       title=$(printf '%s' "$raw_title" | /usr/bin/base64 | tr -d '\n')

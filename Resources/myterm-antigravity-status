@@ -1,22 +1,9 @@
 #!/bin/sh
 # Preserve the user's status command and stdin, while reporting out of band to MyTerm.
 captured=''
-myterm_owner_pid=''
+myterm_owner_pid=$PPID
 if [ -n "${MYTERM_PANE_ID:-}" ]; then
   captured=$(/usr/bin/perl -MTime::HiRes=clock_gettime,CLOCK_MONOTONIC -e 'printf "%.9f", clock_gettime(CLOCK_MONOTONIC)')
-  # Detached reporting cannot rely on the short-lived status shell's ancestry.
-  myterm_parent_pid=$PPID
-  myterm_depth=0
-  while [ "$myterm_depth" -lt 16 ]; do
-    myterm_parent_info=$(ps -o ppid= -o comm= -p "$myterm_parent_pid" 2>/dev/null)
-    read -r myterm_next_pid myterm_owner_command <<EOF
-$myterm_parent_info
-EOF
-    case "${myterm_owner_command##*/}" in agy|antigravity) myterm_owner_pid=$myterm_parent_pid; break;; esac
-    case "$myterm_next_pid" in ''|*[!0-9]*|0|1) break;; esac
-    myterm_parent_pid=$myterm_next_pid
-    myterm_depth=$((myterm_depth + 1))
-  done
 fi
 input=$(cat; printf '.')
 input=${input%.}

@@ -13,7 +13,26 @@ enum AgentStatusCallback {
         return command.hasSuffix(marker) && status["enabled"] as? Bool != false
     }
 
-    static func install(at url: URL) throws {
+    static func needsRefresh(at url: URL) throws -> Bool {
+        let settings = try read(url)
+        guard let status = settings["statusLine"] as? [String: Any],
+              let installed = status["command"] as? String, installed.hasSuffix(marker),
+              status["enabled"] as? Bool != false else { return false }
+        return installed != command(for: status[originalKey] ?? NSNull())
+    }
+
+    private static func command(for original: Any) -> String {
+        let prior = original as? [String: Any] ?? [:]
+        let priorCommand = prior["enabled"] as? Bool == false ? "" : (prior["command"] as? String ?? "")
+        let quoted = "'" + priorCommand.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        // Exec makes the persistent CLI the wrapper's parent, so owner inspection
+        // can happen entirely inside the bounded background reporter.
+        return """
+        if [ -r "${MYTERM_RESOURCE_DIR:-}/myterm-antigravity-status" ]; then exec /bin/sh "$MYTERM_RESOURCE_DIR/myterm-antigravity-status" \(quoted); else exec /bin/sh -c \(quoted); fi \(marker)
+        """
+    }
+
+    static func install(at url: URL, preservingCurrentState: Bool = false) throws {
         var settings = try read(url)
         let current = settings["statusLine"]
         if let current, !(current is [String: Any]) {
@@ -21,18 +40,16 @@ enum AgentStatusCallback {
         }
         let status = current as? [String: Any] ?? [:]
         let managed = (status["command"] as? String)?.hasSuffix(marker) == true
+        if preservingCurrentState && !managed { return }
         let original: Any = managed ? (status[originalKey] ?? NSNull()) : (current ?? NSNull())
         let prior = original as? [String: Any] ?? [:]
         let priorCommand = prior["enabled"] as? Bool == false ? "" : (prior["command"] as? String ?? "")
-        let quoted = "'" + priorCommand.replacingOccurrences(of: "'", with: "'\\''") + "'"
-        var installed = prior
+        var installed = managed ? status : prior
         installed["type"] = "command"
-        installed["enabled"] = true
-        if priorCommand.isEmpty { installed["stack_with_default"] = true }
+        installed["enabled"] = preservingCurrentState ? (status["enabled"] ?? true) : true
+        if !managed && priorCommand.isEmpty { installed["stack_with_default"] = true }
         installed[originalKey] = original
-        installed["command"] = """
-        if [ -r "${MYTERM_RESOURCE_DIR:-}/myterm-antigravity-status" ]; then /bin/sh "$MYTERM_RESOURCE_DIR/myterm-antigravity-status" \(quoted); else /bin/sh -c \(quoted); fi \(marker)
-        """
+        installed["command"] = command(for: original)
         settings["statusLine"] = installed
         try write(settings, to: url)
     }

@@ -59,6 +59,56 @@ final class NativeAgentHooksTests: XCTestCase {
         XCTAssertEqual((try read(url)["statusLine"] as? [String: Any])?["command"] as? String, "replacement")
     }
 
+    func testRefreshingOwnedLegacyCallbackUpgradesExecWithoutLosingTheOriginalCommand() throws {
+        let dir = try directory()
+        let hooksURL = dir.appending(path: "hooks.json")
+        let settingsURL = dir.appending(path: "settings.json")
+        let original: [String: Any] = ["command": "cat", "padding": 2]
+        try JSONSerialization.data(withJSONObject: ["statusLine": original]).write(to: settingsURL)
+        let controller = AgentHooksController(target: .antigravity.writing(to: hooksURL))
+        controller.install()
+        var settings = try read(settingsURL)
+        var status = try XCTUnwrap(settings["statusLine"] as? [String: Any])
+        status["command"] = try XCTUnwrap(status["command"] as? String)
+            .replacingOccurrences(of: "then exec /bin/sh", with: "then /bin/sh")
+            .replacingOccurrences(of: "else exec /bin/sh", with: "else /bin/sh")
+        settings["statusLine"] = status
+        try JSONSerialization.data(withJSONObject: settings).write(to: settingsURL)
+        XCTAssertTrue(try AgentStatusCallback.needsRefresh(at: settingsURL))
+        controller.refresh()
+        XCTAssertTrue(controller.isInstalled)
+        XCTAssertFalse(try AgentStatusCallback.needsRefresh(at: settingsURL))
+        controller.remove()
+        XCTAssertEqual(try read(settingsURL)["statusLine"] as? NSDictionary, original as NSDictionary)
+    }
+
+    func testAutomaticHookRefreshPreservesDisabledCallbackAndItsCurrentOptions() throws {
+        let dir = try directory()
+        let hooksURL = dir.appending(path: "hooks.json")
+        let settingsURL = dir.appending(path: "settings.json")
+        let controller = AgentHooksController(target: .antigravity.writing(to: hooksURL))
+        controller.install()
+        var settings = try read(settingsURL)
+        var status = try XCTUnwrap(settings["statusLine"] as? [String: Any])
+        status["enabled"] = false
+        status["padding"] = 7
+        settings["statusLine"] = status
+        try JSONSerialization.data(withJSONObject: settings).write(to: settingsURL)
+        var hooks = try read(hooksURL)
+        var group = try XCTUnwrap(hooks["myterm-managed-activity"] as? [String: Any])
+        group["PreInvocation"] = [["type": "command", "command": "old " + AgentHooksController.marker, "timeout": 5]]
+        hooks["myterm-managed-activity"] = group
+        try JSONSerialization.data(withJSONObject: hooks).write(to: hooksURL)
+        controller.refresh()
+        let refreshed = try XCTUnwrap(try read(settingsURL)["statusLine"] as? [String: Any])
+        XCTAssertEqual(refreshed["enabled"] as? Bool, false)
+        XCTAssertEqual(refreshed["padding"] as? Int, 7)
+        XCTAssertFalse(controller.isInstalled)
+        controller.install()
+        XCTAssertTrue(controller.isInstalled, "Explicit setup opts back into the callback")
+        XCTAssertEqual((try read(settingsURL)["statusLine"] as? [String: Any])?["padding"] as? Int, 7)
+    }
+
     func testMalformedCallbackIsNeverOverwritten() throws {
         let url = try directory().appending(path: "settings.json")
         let data = Data(#"{"statusLine":false}"#.utf8)
@@ -111,12 +161,17 @@ final class NativeAgentHooksTests: XCTestCase {
         : > "$MYTERM_TEST_FINISHED"
         """
         try fakeHook.write(to: dir.appending(path: "myterm-agent-hook"), atomically: true, encoding: .utf8)
+        let bin = dir.appending(path: "bin")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        let slowPS = bin.appending(path: "ps")
+        try "#!/bin/sh\nsleep 2\nexec /bin/ps \"$@\"\n".write(to: slowPS, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: slowPS.path)
         let resources = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().appending(path: "Resources")
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         process.arguments = [resources.appending(path: "myterm-antigravity-status").path, "cat"]
-        process.environment = ["PATH": "/usr/bin:/bin", "MYTERM_PANE_ID": "test", "MYTERM_RESOURCE_DIR": dir.path,
+        process.environment = ["PATH": bin.path + ":/usr/bin:/bin", "MYTERM_PANE_ID": "test", "MYTERM_RESOURCE_DIR": dir.path,
                                "MYTERM_TEST_STARTED": started.path, "MYTERM_TEST_RELEASE": release.path,
                                "MYTERM_TEST_FINISHED": finished.path]
         let input = Pipe(), output = Pipe()
