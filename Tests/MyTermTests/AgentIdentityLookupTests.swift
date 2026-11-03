@@ -7,7 +7,7 @@ import XCTest
 @MainActor
 final class AgentIdentityLookupTests: XCTestCase {
     func testSavedSessionHasNoIdentityUntilLiveReportAndLosesItOnExit() throws {
-        for identity in [AgentIdentity.claude, .codex] {
+        for identity in AgentIdentity.allCases {
             let model = try makeModel()
             let workspace = model.selectedWorkspace
             let group = try XCTUnwrap(workspace.focusedTabGroup)

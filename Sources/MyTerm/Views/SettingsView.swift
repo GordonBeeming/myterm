@@ -18,6 +18,8 @@ struct SettingsView: View {
     @State private var defaultTerminal = DefaultTerminalController()
     @State private var claudeHooks = AgentHooksController(target: .claude)
     @State private var codexHooks = AgentHooksController(target: .codex)
+    @State private var antigravityHooks = AgentHooksController(target: .antigravity)
+    @State private var grokHooks = AgentHooksController(target: .grok)
     @State private var installedBrowsers = ExternalBrowserCatalog.installedBrowsers()
 
     @State private var section: SettingsSection = .general
@@ -247,8 +249,10 @@ struct SettingsView: View {
 
                 hookButton(for: claudeHooks)
                 hookButton(for: codexHooks)
+                hookButton(for: antigravityHooks)
+                hookButton(for: grokHooks)
 
-                Text("Each agent gets its hooks in its own file: five for Claude Code, five for Codex. They report through the pane's terminal and stay silent outside MyTerm, so other terminals are unaffected. Other tools' hooks in the same file are left alone, and removing takes out only what MyTerm wrote. MyTerm refreshes installed hooks at startup. Restart an agent session for the change to take effect.")
+                Text("Hooks report through the pane's terminal only inside MyTerm. Antigravity also uses a status callback to report permission dialogs; existing status scripts are preserved. Other tools' hooks are left alone, and removing restores the previous status configuration. MyTerm refreshes installed hooks at startup. Restart an agent session for changes to take effect.")
                     .font(Theme.Font.ui(12))
                     .foregroundStyle(Theme.textSecondary)
             }
@@ -360,14 +364,14 @@ struct SettingsView: View {
                 GlobalSettingRow(
                     model: model,
                     title: "Restore agent sessions",
-                    caption: "A pane running Claude Code or Codex rejoins its conversation on the next launch, using the agent's own resume command. A pane left at its shell prompt comes back to a shell prompt. Install the hooks above so MyTerm can save the conversation identifier.",
+                    caption: "A pane running Claude Code, Codex, Antigravity or Grok rejoins its conversation on the next launch, using the agent's own resume command. A pane left at its shell prompt comes back to a shell prompt. Install the hooks above so MyTerm can save the conversation identifier.",
                     setting: \.restoresAgentSessions
                 )
 
                 GlobalSettingRow(
                     model: model,
                     title: "Name tabs after agent sessions",
-                    caption: "A tab takes the name the agent gives its conversation, so /rename in the pane names the tab as well. Until you rename it, the name is the topic Claude Code writes for itself. A tab you named stays as you named it, and that name goes back to Claude Code when the pane rejoins the conversation. Leaving the agent puts the tab back to Terminal. This needs the hooks above.",
+                    caption: "A tab takes the conversation title reported by its agent. A tab you named keeps your name; Claude Code also receives that custom name when its conversation is restored. Leaving the agent puts the tab back to Terminal. This needs the hooks above.",
                     setting: \.namesTabsFromAgentSessions
                 )
                 GlobalSettingRow(
@@ -380,6 +384,10 @@ struct SettingsView: View {
                     Text("Claude Code")
                     AgentIdentityIcon(identity: .codex).frame(width: 16, height: 16)
                     Text("Codex")
+                    AgentIdentityIcon(identity: .antigravity).frame(width: 16, height: 16)
+                    Text("Antigravity")
+                    AgentIdentityIcon(identity: .grok).frame(width: 16, height: 16)
+                    Text("Grok")
                 }
                 .font(Theme.Font.ui(12))
                 .foregroundStyle(Theme.textSecondary)

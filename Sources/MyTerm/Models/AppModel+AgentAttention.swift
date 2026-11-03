@@ -26,6 +26,11 @@ extension AppModel {
         tabID: TabID,
         isRestoration: Bool = false
     ) {
+        if report.agent == "antigravity" || report.agent == "grok" {
+            let previous = nativeAgentLastActivityReports.updateValue(report, forKey: tabID)
+            if previous?.agent == report.agent, previous?.sessionID == report.sessionID,
+               previous?.activity == report.activity, previous?.turnID == report.turnID { return }
+        }
         if report.agent == "codex", let tool = report.toolRequestID {
             switch report.activity {
             case .awaitingInput:

@@ -319,7 +319,7 @@ final class MyTermStartup {
         do {
             // Refresh before restored terminals can start an agent and load its hooks.
             var hookFailures: [String] = []
-            for target in [AgentHookTarget.claude, .codex] {
+            for target in AgentHookTarget.all {
                 let hooks = AgentHooksController(target: target)
                 if case .failed(let message) = hooks.state {
                     hookFailures.append("Could not refresh \(target.displayName) hooks: \(message)")

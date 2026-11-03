@@ -41,6 +41,18 @@ private struct IdentityShape: Shape {
             outline.closeSubpath()
             outline = outline.strokedPath(StrokeStyle(lineWidth: 1.4))
             outline.addEllipse(in: CGRect(x: 6.7, y: 6.7, width: 2.6, height: 2.6))
+        case .antigravity:
+            outline.move(to: CGPoint(x: 3, y: 12))
+            outline.addLine(to: CGPoint(x: 8, y: 3))
+            outline.addLine(to: CGPoint(x: 13, y: 12))
+            outline.move(to: CGPoint(x: 5, y: 9))
+            outline.addLine(to: CGPoint(x: 11, y: 9))
+            outline = outline.strokedPath(StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+        case .grok:
+            outline.addEllipse(in: CGRect(x: 3, y: 3, width: 10, height: 10))
+            outline.move(to: CGPoint(x: 3, y: 13))
+            outline.addLine(to: CGPoint(x: 13, y: 3))
+            outline = outline.strokedPath(StrokeStyle(lineWidth: 1.5, lineCap: .round))
         }
         let scale = min(rect.width, rect.height) / 16
         return outline.applying(CGAffineTransform(

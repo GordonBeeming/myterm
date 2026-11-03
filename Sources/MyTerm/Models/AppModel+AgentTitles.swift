@@ -41,7 +41,7 @@ extension AppModel {
         // seen to be at its prompt.
         guard liveAgentTabs[tabID] != nil,
               paneHasForegroundProcess(sessionID: sessionID),
-              let name = AgentSessionTitle.sanitized(title),
+              let name = AgentSessionTitle.sanitized(title, agentName: liveAgentTabs[tabID]),
               let terminal = tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)?
                   .terminalSession, terminal.id == sessionID,
               (try? store.resolvedSettings(for: workspaceID))?.namesTabsFromAgentSessions == true else {
@@ -62,6 +62,8 @@ extension AppModel {
     func forgetAgentPresence(forTab tabID: TabID) {
         liveAgentTabs.removeValue(forKey: tabID)
         foregroundAgentTabs.removeValue(forKey: tabID)
+        nativeAgentReportFilters.removeValue(forKey: tabID)
+        nativeAgentLastActivityReports.removeValue(forKey: tabID)
     }
 
     /// Whether something other than the shell is in front of the pane. A pane with no process

@@ -69,6 +69,8 @@ final class AppModel {
     /// Runtime only: it says what is running now, which is the one thing a saved handle cannot say.
     var liveAgentTabs: [TabID: String] = [:]
     var foregroundAgentTabs: [TabID: AgentIdentity] = [:]
+    var nativeAgentReportFilters: [TabID: AgentReportFilter] = [:]
+    var nativeAgentLastActivityReports: [TabID: AgentActivityReport] = [:]
     var pendingAgentToolRequests: [TabID: [String: Int]] = [:]
     /// The conversations each tab has left this run, by session id: ended by their own SessionEnd,
     /// replaced by another conversation, or taken away with a killed agent. Hooks report late, and
@@ -2523,7 +2525,8 @@ final class AppModel {
             } else {
                 forgetAgent(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID, sessionID: sessionID)
             }
-        case .agentActivity(let report), .restoredAgentActivity(let report):
+        case .agentActivity(let incomingReport), .restoredAgentActivity(let incomingReport):
+            var report = incomingReport
             let isRestoration: Bool
             if case .restoredAgentActivity = event { isRestoration = true }
             else { isRestoration = false }
@@ -2533,6 +2536,8 @@ final class AppModel {
                isReportOfALeftConversation(report, tabID: tabID, in: terminal) {
                 return
             }
+            guard let accepted = nativeAgentReportFilters[tabID, default: AgentReportFilter()].process(report) else { return }
+            report = accepted
             recordAgentActivity(
                 report,
                 workspaceID: workspaceID,
@@ -2553,6 +2558,10 @@ final class AppModel {
                 tabGroupID: tabGroupID,
                 tabID: tabID
             )
+            if let title = report.sessionTitle {
+                recordAgentTitle(title, workspaceID: workspaceID, tabGroupID: tabGroupID,
+                                 tabID: tabID, sessionID: sessionID)
+            }
         case .titleChanged(let title):
             recordAgentTitle(
                 title,

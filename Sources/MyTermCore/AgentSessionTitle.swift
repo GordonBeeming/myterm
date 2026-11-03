@@ -21,8 +21,17 @@ public enum AgentSessionTitle {
     /// Agents put a status glyph in front of the name. The name is the part a tab wants.
     private static let decoration = CharacterSet.symbols.union(.whitespacesAndNewlines)
 
-    public static func sanitized(_ raw: String?) -> String? {
+    public static func sanitized(_ raw: String?, agentName: String? = nil) -> String? {
         guard let raw else { return nil }
+        if agentName == "grok" {
+            // Grok's busy OSC title includes transient tool/status text. Its idle
+            // title carries just the conversation name followed by the product.
+            guard raw.hasSuffix(" - grok") else { return nil }
+            let title = String(raw.dropLast(" - grok".count))
+            let prefix = title.components(separatedBy: " - ").first ?? ""
+            guard prefix.unicodeScalars.contains(where: { !decoration.contains($0) }) else { return nil }
+            return sanitized(title)
+        }
         // `controlCharacters` is Unicode categories Cc and Cf, so this drops the C0 and C1 controls
         // and the format characters with them: bidi overrides and isolates, zero-width joiners and
         // spaces, and the byte order mark.

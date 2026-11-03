@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import MyTermCore
 import XCTest
@@ -29,16 +30,16 @@ final class AgentHookCommandTests: XCTestCase {
         try? FileManager.default.removeItem(at: directory)
     }
 
-    private func configureProcessAncestors(_ ancestors: [(tty: String, command: String)], ownerCommand: String = "/usr/local/bin/claude") throws {
+    private func configureProcessAncestors(_ ancestors: [(tty: String, command: String)], ownerCommand: String = "/usr/local/bin/claude", ownerTTY: String = "ttys999", reportedTTY: String? = nil) throws {
         let relative = "../" + output.path.drop(while: { $0 == "/" })
         var cases = ancestors.enumerated().map { index, ancestor in
             let parent = index + 1 < ancestors.count ? 4201 + index : 1
             return "\(4200 + index)) echo '\(parent) \(ancestor.tty) \(ancestor.command)' ;;"
         }
-        cases.append("*) echo '\(ancestors.isEmpty ? 1 : 4200) ttys999 \(ownerCommand)' ;;")
+        cases.append("*) echo '\(ancestors.isEmpty ? 1 : 4200) \(ownerTTY) \(ownerCommand)' ;;")
         let script = """
         #!/bin/sh
-        if [ "$2" = 'tty=' ]; then echo '\(relative)'; exit 0; fi
+        if [ "$2" = 'tty=' ]; then echo '\(reportedTTY ?? relative)'; exit 0; fi
         case "$8" in
         \(cases.joined(separator: "\n"))
         esac
@@ -52,14 +53,19 @@ final class AgentHookCommandTests: XCTestCase {
         _ activity: AgentActivity = .finished,
         agent: String = "claude",
         stdin: String,
-        environment: [String: String] = ["MYTERM_PANE_ID": "pane"]
+        environment: [String: String] = ["MYTERM_PANE_ID": "pane"],
+        rawMode: String? = nil
     ) throws -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = ["-c", AgentHooksController.command(agent: agent, activity: activity)]
         var env = environment
         let resources = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().appending(path: "Resources")
+        if let rawMode {
+            process.arguments = [resources.appending(path: "myterm-agent-hook").path, agent, rawMode]
+        } else {
+            process.arguments = ["-c", AgentHooksController.command(agent: agent, activity: activity)]
+        }
         env["MYTERM_RESOURCE_DIR"] = resources.path
         env["PATH"] = directory.appending(path: "bin").path + ":/usr/bin:/bin"
         process.environment = env
@@ -74,7 +80,11 @@ final class AgentHookCommandTests: XCTestCase {
         let reply = stdout.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         XCTAssertEqual(process.terminationStatus, 0, "the hook must never fail the agent")
-        XCTAssertEqual(reply, Data(), "A hook must never write to stdout, which the agent reads as its reply")
+        if agent == "antigravity" && rawMode != "status" {
+            XCTAssertNotNil(try JSONSerialization.jsonObject(with: reply) as? [String: Any])
+        } else {
+            XCTAssertEqual(reply, Data(), "A hook must never write to stdout, which the agent reads as its reply")
+        }
         return (try? String(contentsOf: output, encoding: .utf8)) ?? ""
     }
 
@@ -242,5 +252,115 @@ final class AgentHookCommandTests: XCTestCase {
         XCTAssertEqual(report.activity, .exited, "the payload cannot choose the event")
         XCTAssertNil(report.sessionID)
         XCTAssertFalse(written.contains("evil"))
+    }
+
+    func testGrokReportsCamelCaseIdentityAndOnlyActionableNotifications() throws {
+        let written = try run(.awaitingInput, agent: "grok", stdin:
+            #"{"sessionId":"grok-session","cwd":"/tmp/a project","notificationType":"permission_prompt","promptId":"prompt-1"}"#)
+        let permission = try XCTUnwrap(report(in: written))
+        XCTAssertEqual(permission.agent, "grok")
+        XCTAssertEqual(permission.sessionID, "grok-session")
+        XCTAssertEqual(permission.turnID?.count, 64)
+        XCTAssertEqual(permission.workingDirectory?.path, "/tmp/a project")
+        try FileManager.default.removeItem(at: output)
+        let idle = try XCTUnwrap(report(in: run(.awaitingInput, agent: "grok", stdin:
+            #"{"sessionId":"grok-session","notificationType":"idle_prompt"}"#)))
+        XCTAssertEqual(idle.activity, .finished)
+        XCTAssertTrue(idle.isStatusSnapshot)
+        try FileManager.default.removeItem(at: output)
+        XCTAssertEqual(try run(.finished, agent: "grok", stdin:
+            #"{"sessionId":"child","subagentType":"explorer"}"#), "")
+        XCTAssertEqual(try run(.finished, stdin: #"{"sessionId":"grok-session"}"#,
+            environment: ["MYTERM_PANE_ID": "pane", "GROK_HOOK_EVENT": "Stop"]), "")
+    }
+
+    func testGrokNativeEventNamesStartTurnsAndQuestionCompletionMatchesItsNotification() throws {
+        let working = try XCTUnwrap(report(in: run(.working, agent: "grok", stdin:
+            #"{"sessionId":"session","hookEventName":"user_prompt_submit","promptId":"prompt-1"}"#)))
+        XCTAssertTrue(working.beginsTurn)
+        let continuation = try XCTUnwrap(report(in: run(.working, agent: "grok", stdin:
+            #"{"sessionId":"session","hookEventName":"pre_tool_use"}"#)))
+        XCTAssertTrue(continuation.isWorkStart)
+        let waiting = try XCTUnwrap(report(in: run(.awaitingInput, agent: "grok", stdin:
+            #"{"sessionId":"session","hookEventName":"notification","notificationType":"elicitation_dialog"}"#)))
+        let complete = try XCTUnwrap(report(in: run(.working, agent: "grok", stdin:
+            #"{"sessionId":"session","hookEventName":"post_tool_use","toolName":"ask_user_question"}"#)))
+        XCTAssertEqual(waiting.toolRequestID, complete.toolRequestID)
+        let permission = try XCTUnwrap(report(in: run(.awaitingInput, agent: "grok", stdin:
+            #"{"sessionId":"session","hookEventName":"notification","notificationType":"permission_prompt"}"#)))
+        let tool = try XCTUnwrap(report(in: run(.working, agent: "grok", stdin:
+            #"{"sessionId":"session","hookEventName":"post_tool_use","toolName":"run_terminal_command"}"#)))
+        XCTAssertEqual(permission.toolRequestID, tool.toolRequestID)
+        let denied = try XCTUnwrap(report(in: run(.working, agent: "grok", stdin:
+            #"{"sessionId":"session","hookEventName":"permission_denied","toolName":"run_terminal_command"}"#)))
+        XCTAssertEqual(permission.toolRequestID, denied.toolRequestID)
+        XCTAssertNotEqual(waiting.toolRequestID, tool.toolRequestID)
+        try FileManager.default.removeItem(at: output)
+        XCTAssertEqual(try run(.finished, agent: "grok", stdin:
+            #"{"sessionId":"session","hookEventName":"stop","reason":"shutdown"}"#), "")
+    }
+
+    func testOpaqueGrokTurnsAreCorrelatedWithoutEnteringTheEscapeSequence() throws {
+        let opaque = "client/session:🫖;event=exited\n\0" + String(repeating: "x", count: 5000)
+        func payload(_ event: String, _ turn: String) throws -> String {
+            String(decoding: try JSONSerialization.data(withJSONObject: ["sessionId": "session", "hookEventName": event, "promptId": turn]), as: UTF8.self)
+        }
+        let started = try XCTUnwrap(report(in: run(.working, agent: "grok", stdin: payload("user_prompt_submit", opaque))))
+        let finished = try XCTUnwrap(report(in: run(.finished, agent: "grok", stdin: payload("stop", opaque))))
+        let other = try XCTUnwrap(report(in: run(.working, agent: "grok", stdin: payload("user_prompt_submit", opaque + "other"))))
+        let withoutNull = try XCTUnwrap(report(in: run(.working, agent: "grok", stdin: payload("user_prompt_submit", opaque.replacingOccurrences(of: "\0", with: "")))))
+        XCTAssertEqual(started.turnID?.count, 64)
+        XCTAssertEqual(started.turnID, finished.turnID)
+        XCTAssertNotEqual(started.turnID, other.turnID)
+        XCTAssertNotEqual(started.turnID, withoutNull.turnID)
+        XCTAssertEqual(started.sessionID, "session")
+    }
+
+    func testInvalidEntryClockGetsANativeMonotonicFallbackBeforeEmission() throws {
+        let input = #"{"conversationId":"session","invocationNum":0}"#
+        let working = try XCTUnwrap(report(in: run(.working, agent: "antigravity", stdin: input)))
+        let finished = try XCTUnwrap(report(in: run(.finished, agent: "antigravity", stdin: #"{"conversationId":"session"}"#,
+            environment: ["MYTERM_PANE_ID": "pane", "MYTERM_AGENT_CAPTURE_TIME": "invalid"])))
+        XCTAssertGreaterThan(try XCTUnwrap(finished.capturedAt), try XCTUnwrap(working.capturedAt))
+        var filter = AgentReportFilter()
+        _ = filter.process(working)
+        _ = filter.process(finished)
+        XCTAssertNil(filter.process(.init(agent: "antigravity", activity: .awaitingInput, sessionID: "session",
+                                         isStatusSnapshot: true, capturedAt: working.capturedAt)))
+    }
+
+    func testQueuedSnapshotWithoutItsOriginalCaptureTimeIsDropped() throws {
+        let payload = #"{"conversation_id":"session","agent_state":"tool_use","tool_confirmation_pending":true}"#
+        XCTAssertEqual(try run(agent: "antigravity", stdin: payload, rawMode: "status"), "")
+        XCTAssertEqual(try run(agent: "antigravity", stdin: payload,
+            environment: ["MYTERM_PANE_ID": "pane", "MYTERM_AGENT_CAPTURE_TIME": ""], rawMode: "status"), "")
+    }
+
+    func testDetachedHookWrappersFindTheAgentTTYWithoutCrossingAnotherTerminal() throws {
+        let relative = "../" + output.path.drop(while: { $0 == "/" })
+        try configureProcessAncestors([(String(relative), "/bin/grok-macos-aarch")],
+            ownerCommand: "/bin/sh", ownerTTY: "??", reportedTTY: "??")
+        let written = try run(.ready, agent: "grok", stdin: #"{"sessionId":"session"}"#)
+        XCTAssertEqual(report(in: written)?.sessionID, "session")
+    }
+
+    func testAntigravityNativeHooksAndStatusUseDistinctQuestionAndPermissionTokens() throws {
+        try configureProcessAncestors([("ttys999", "/usr/local/bin/agy")], ownerCommand: "/bin/sh")
+        let question = try XCTUnwrap(report(in: run(.awaitingInput, agent: "antigravity", stdin:
+            #"{"conversationId":"conversation","workspacePaths":["/tmp/a project"],"toolCall":{"name":"ask_question"}}"#)))
+        XCTAssertEqual(question.sessionID, "conversation")
+        XCTAssertEqual(question.workingDirectory?.path, "/tmp/a project")
+        var instant = timespec()
+        XCTAssertEqual(clock_gettime(CLOCK_MONOTONIC, &instant), 0)
+        let captured = Double(instant.tv_sec) + Double(instant.tv_nsec) / 1e9
+        let written = try run(agent: "antigravity", stdin:
+            #"{"conversation_id":"conversation","cwd":"/tmp/a project","agent_state":"tool_use","tool_confirmation_pending":true,"conversation_title":"Rename me"}"#,
+            environment: ["MYTERM_PANE_ID": "pane", "MYTERM_AGENT_CAPTURE_TIME": String(captured)], rawMode: "status")
+        let permission = try XCTUnwrap(report(in: written))
+        XCTAssertEqual(permission.activity, .awaitingInput)
+        XCTAssertEqual(permission.sessionTitle, "Rename me")
+        XCTAssertNotEqual(question.toolRequestID, permission.toolRequestID)
+        XCTAssertGreaterThan(try XCTUnwrap(permission.capturedAt), try XCTUnwrap(question.capturedAt))
+        XCTAssertFalse(written.contains("\u{1B}]0;"), "Structured titles must pass the same ordering filter as activity")
     }
 }
