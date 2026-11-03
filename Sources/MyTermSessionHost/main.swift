@@ -151,7 +151,7 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
                                               columns: emulator.cols, rows: emulator.rows,
                                               generation: generation, sequence: sequence, text: readyToken,
                                               activity: latestActivity,
-                                              pendingActivities: pendingActivities.values.flatMap { $0 },
+                                              pendingActivities: pendingActivities.values.flatMap { $0 } + nativeAgentReportFilter.pendingReports,
                                               omittedScrollbackLines: checkpoint.omittedScrollbackLines, imageGeometry: imageGeometry), to: descriptor)
             let flags = fcntl(descriptor, F_GETFL)
             guard flags >= 0, fcntl(descriptor, F_SETFL, flags | O_NONBLOCK) == 0 else {
@@ -420,6 +420,7 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
             if processName(process.shellPid) == shellName {
                 latestActivity = nil
                 pendingActivities.removeAll()
+                nativeAgentReportFilter = AgentReportFilter()
             } else {
                 // `exec agent` retains the shell's PID and process group. Its validated hook
                 // remains authoritative until that process exits, even with no separate group.
@@ -438,7 +439,10 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
         return String(decoding: bytes.prefix(Int(length)).map { UInt8(bitPattern: $0) }, as: UTF8.self)
     }
 
-    private func recordActivity(_ report: AgentActivityReport) {
+    private var nativeAgentReportFilter = AgentReportFilter()
+
+    private func recordActivity(_ incomingReport: AgentActivityReport) {
+        guard let report = nativeAgentReportFilter.process(incomingReport) else { return }
         if report.agent == "codex", let tool = report.toolRequestID {
             switch report.activity {
             case .awaitingInput:
@@ -457,7 +461,7 @@ final class SessionHost: @preconcurrency LocalProcessDelegate, @preconcurrency T
         } else if report.activity != .awaitingInput {
             pendingActivities.removeAll()
         }
-        latestActivity = report.activity == .exited ? nil : report
+        latestActivity = report.activity == .exited ? nil : report.replacingActivity(report.activity, isStatusSnapshot: false)
     }
 
     private func disconnect() {

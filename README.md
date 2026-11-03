@@ -89,20 +89,30 @@ A prompt you have not typed into for a while is not a question. Claude Code repo
 same event, so MyTerm reads the report's own payload and passes on only the one that asks for
 something. Without that, every finished turn would turn purple a minute later and stay there.
 
-The indicator is off until you press **Set Up Claude Code Hooks** or **Set Up Codex Hooks** in
-General Settings. Each writes its hooks to that agent's own file, and the same button removes them
-again:
+Choose **Set Up Hooks** beside an agent in Settings to enable its indicator. Each agent has its
+own configuration, and **Remove** removes MyTerm's integration:
 
 | Agent | File | Ready | Working | Finished | Question | Stopped |
 | --- | --- | --- | --- | --- | --- | --- |
 | Claude Code | `~/.claude/settings.json` | `SessionStart` | `UserPromptSubmit` | `Stop` | `Notification` | `SessionEnd` |
 | Codex | `~/.codex/hooks.json` | `SessionStart` | `UserPromptSubmit` | `Stop` | `PermissionRequest` | `SessionEnd` |
+| Antigravity | `~/.gemini/config/hooks.json` | `SessionStart` | `PreInvocation` and status callback | `Stop` | `ask_question` hooks and status callback | Foreground process exits |
+| Grok | `~/.grok/hooks/myterm.json` | `SessionStart` | `UserPromptSubmit`, tool completion | `Stop`, `StopFailure`, `StopCancelled` | Actionable `Notification` | `SessionEnd` |
+
+Antigravity also uses a status callback in `~/.gemini/antigravity-cli/settings.json` for permission
+dialogs and conversation titles. MyTerm preserves the existing status command and feeds it the
+same input. Removing the integration restores the previous status configuration. Its native
+hooks live in a named group, alongside other tools' groups.
+
+Grok reads Claude settings as well as its own hook files. MyTerm suppresses its inherited Claude
+reporters inside Grok so sessions report under the correct identity. Delayed Grok turn-end events
+that carry a prompt identifier are matched before changing the indicator.
 
 Ready and Stopped put no cook on the tab. They are what tell MyTerm which conversation a pane is
 in, for the section below.
 
 These files are shared with other tools. MyTerm marks its own commands with a trailing
-`# myterm-managed-hook` comment, adds nothing else, and removes only what carries that mark.
+`# myterm-managed-hook` comment and removes only what carries that mark.
 
 What a hook reports can change between MyTerm versions. At startup, MyTerm refreshes hooks an older
 version wrote. It rewrites MyTerm's own commands to the current ones and leaves the rest of the file alone.
@@ -125,9 +135,10 @@ Terminal processes live in a separate local host and continue across an app quit
 crash. Reopening MyTerm reattaches to the same process. Closing a terminal tab or workspace
 explicitly stops it. A machine reboot still ends the process.
 
-If the host is gone, supported Claude Code and Codex conversations can be recovered from the
-saved working directory, output and conversation identifier, using `claude --resume <id>` or
-`codex resume <id>`. This fallback does not recover a running shell command.
+If the host is gone, Claude Code, Codex, Antigravity and Grok conversations can be recovered from
+the saved working directory, output and conversation identifier. Recovery uses `claude --resume <id>`,
+`codex resume <id>`, `agy --conversation <id>` or `grok --resume <id>`. This fallback does not recover
+a running shell command.
 
 The conversation identifier comes from the hooks above, so agent recovery needs them installed.
 MyTerm keeps the identifier, conversation directory, and Codex launcher reported by the hooks.
@@ -196,9 +207,9 @@ MyTerm never sends a link to itself. If the chosen browser is missing, or if MyT
 
 ### Name a tab after the conversation in it
 
-A tab takes the name Claude Code gives the conversation running in it, so `/rename` in the pane
-names the tab as well. Until you rename it, the name is the topic Claude Code writes for itself as
-the conversation goes.
+A tab takes the conversation title reported by its agent. Claude Code writes this to the terminal
+title; Antigravity also supplies it through the structured status callback. Renaming a conversation
+updates the tab when the agent reports its new title.
 
 The name comes from the terminal title, which is where Claude Code already writes it. MyTerm takes a
 title only while an agent has reported itself in that pane, so a shell's own title never becomes a

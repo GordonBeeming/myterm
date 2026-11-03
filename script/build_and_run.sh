@@ -110,6 +110,8 @@ cp "$ROOT_DIR/Resources/myterm-browser" "$APP_RESOURCES/myterm-browser"
 cp "$ROOT_DIR/Resources/open" "$APP_RESOURCES/open"
 cp "$ROOT_DIR/Resources/myterm-bash-env" "$APP_RESOURCES/myterm-bash-env"
 cp "$ROOT_DIR/Resources/myterm-agent-hook" "$APP_RESOURCES/myterm-agent-hook"
+cp "$ROOT_DIR/Resources/myterm-agent-normalize.js" "$APP_RESOURCES/myterm-agent-normalize.js"
+cp "$ROOT_DIR/Resources/myterm-antigravity-status" "$APP_RESOURCES/myterm-antigravity-status"
 cp "$ROOT_DIR/Resources/myterm-bash-startup" "$APP_RESOURCES/myterm-bash-startup"
 cp "$ROOT_DIR/Resources/myterm-fish-startup.fish" "$APP_RESOURCES/myterm-fish-startup.fish"
 for launcher in codex codex-statusline myterm-codex; do

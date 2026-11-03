@@ -20,7 +20,7 @@ public enum AgentActivity: String, Codable, Equatable, Hashable, Sendable {
 
 public struct AgentActivityReport: Codable, Equatable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
-        case agent, activity, sessionID, workingDirectory, codexLauncher, toolRequestID
+        case agent, activity, sessionID, workingDirectory, codexLauncher, toolRequestID, sessionTitle, turnID, beginsTurn, isStatusSnapshot
     }
 
     // Socket reports must obey the same resume-identifier limits as terminal hook reports.
@@ -32,11 +32,15 @@ public struct AgentActivityReport: Codable, Equatable, Hashable, Sendable {
             sessionID: try values.decodeIfPresent(String.self, forKey: .sessionID),
             workingDirectory: try values.decodeIfPresent(URL.self, forKey: .workingDirectory),
             codexLauncher: try values.decodeIfPresent(CodexLauncher.self, forKey: .codexLauncher),
-            toolRequestID: try values.decodeIfPresent(String.self, forKey: .toolRequestID)
+            toolRequestID: try values.decodeIfPresent(String.self, forKey: .toolRequestID),
+            sessionTitle: try values.decodeIfPresent(String.self, forKey: .sessionTitle),
+            turnID: try values.decodeIfPresent(String.self, forKey: .turnID),
+            beginsTurn: try values.decodeIfPresent(Bool.self, forKey: .beginsTurn) ?? false,
+            isStatusSnapshot: try values.decodeIfPresent(Bool.self, forKey: .isStatusSnapshot) ?? false
         )
     }
 
-    /// The agent that reported, lowercased. "claude" and "codex" are the ones MyTerm installs hooks for.
+    /// The agent that reported, lowercased.
     public let agent: String
     public let activity: AgentActivity
     /// The agent's own identifier for the conversation, when the hook reported one.
@@ -48,16 +52,30 @@ public struct AgentActivityReport: Codable, Equatable, Hashable, Sendable {
     public let codexLauncher: CodexLauncher?
     /// Fingerprint of a tool's name and input, shared by its permission and completion reports.
     public let toolRequestID: String?
+    public let sessionTitle: String?
+    public let turnID: String?
+    public let beginsTurn: Bool
+    public let isStatusSnapshot: Bool
 
-    public init(agent: String, activity: AgentActivity, sessionID: String? = nil, workingDirectory: URL? = nil, codexLauncher: CodexLauncher? = nil, toolRequestID: String? = nil) {
+    public init(agent: String, activity: AgentActivity, sessionID: String? = nil, workingDirectory: URL? = nil, codexLauncher: CodexLauncher? = nil, toolRequestID: String? = nil, sessionTitle: String? = nil, turnID: String? = nil, beginsTurn: Bool = false, isStatusSnapshot: Bool = false) {
         self.agent = agent
         self.activity = activity
         self.sessionID = AgentSessionHandle.validatedSessionID(sessionID)
         self.workingDirectory = workingDirectory
         self.codexLauncher = codexLauncher
+        self.sessionTitle = AgentSessionTitle.sanitized(sessionTitle)
+        self.turnID = AgentSessionHandle.validatedSessionID(turnID)
+        self.beginsTurn = beginsTurn
+        self.isStatusSnapshot = isStatusSnapshot
         self.toolRequestID = toolRequestID.flatMap {
             $0.utf8.count == 64 && $0.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) } ? $0 : nil
         }
+    }
+
+    public func replacingActivity(_ activity: AgentActivity, isStatusSnapshot: Bool? = nil) -> Self {
+        Self(agent: agent, activity: activity, sessionID: sessionID, workingDirectory: workingDirectory,
+             codexLauncher: codexLauncher, toolRequestID: toolRequestID, sessionTitle: sessionTitle,
+             turnID: turnID, beginsTurn: beginsTurn, isStatusSnapshot: isStatusSnapshot ?? self.isStatusSnapshot)
     }
 }
 
@@ -80,6 +98,10 @@ public enum AgentActivityMarker {
         var directory: URL?
         var launcher: CodexLauncher?
         var toolRequestID: String?
+        var sessionTitle: String?
+        var turnID: String?
+        var beginsTurn = false
+        var isStatusSnapshot = false
         var validRecoveryMetadata = true
 
         for field in payload.split(separator: ";", omittingEmptySubsequences: true) {
@@ -106,13 +128,23 @@ public enum AgentActivityMarker {
                 if launcher == nil { validRecoveryMetadata = false }
             case "tool":
                 toolRequestID = String(value)
+            case "title64":
+                if let data = Data(base64Encoded: value), let title = String(data: data, encoding: .utf8) {
+                    sessionTitle = title
+                }
+            case "turn":
+                turnID = String(value)
+            case "turn_start":
+                beginsTurn = value == "1"
+            case "snapshot":
+                isStatusSnapshot = value == "1"
             default:
                 continue
             }
         }
 
         guard let agent, let activity else { return nil }
-        return AgentActivityReport(agent: agent, activity: activity, sessionID: validRecoveryMetadata ? sessionID : nil, workingDirectory: directory, codexLauncher: launcher, toolRequestID: toolRequestID)
+        return AgentActivityReport(agent: agent, activity: activity, sessionID: validRecoveryMetadata ? sessionID : nil, workingDirectory: directory, codexLauncher: launcher, toolRequestID: toolRequestID, sessionTitle: sessionTitle, turnID: turnID, beginsTurn: beginsTurn, isStatusSnapshot: isStatusSnapshot)
     }
 
     /// Accepts the names other terminals already use for these states, so one hook can serve several apps.

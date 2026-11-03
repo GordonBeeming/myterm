@@ -29,16 +29,16 @@ final class AgentHookCommandTests: XCTestCase {
         try? FileManager.default.removeItem(at: directory)
     }
 
-    private func configureProcessAncestors(_ ancestors: [(tty: String, command: String)], ownerCommand: String = "/usr/local/bin/claude") throws {
+    private func configureProcessAncestors(_ ancestors: [(tty: String, command: String)], ownerCommand: String = "/usr/local/bin/claude", ownerTTY: String = "ttys999", reportedTTY: String? = nil) throws {
         let relative = "../" + output.path.drop(while: { $0 == "/" })
         var cases = ancestors.enumerated().map { index, ancestor in
             let parent = index + 1 < ancestors.count ? 4201 + index : 1
             return "\(4200 + index)) echo '\(parent) \(ancestor.tty) \(ancestor.command)' ;;"
         }
-        cases.append("*) echo '\(ancestors.isEmpty ? 1 : 4200) ttys999 \(ownerCommand)' ;;")
+        cases.append("*) echo '\(ancestors.isEmpty ? 1 : 4200) \(ownerTTY) \(ownerCommand)' ;;")
         let script = """
         #!/bin/sh
-        if [ "$2" = 'tty=' ]; then echo '\(relative)'; exit 0; fi
+        if [ "$2" = 'tty=' ]; then echo '\(reportedTTY ?? relative)'; exit 0; fi
         case "$8" in
         \(cases.joined(separator: "\n"))
         esac
@@ -74,7 +74,11 @@ final class AgentHookCommandTests: XCTestCase {
         let reply = stdout.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         XCTAssertEqual(process.terminationStatus, 0, "the hook must never fail the agent")
-        XCTAssertEqual(reply, Data(), "A hook must never write to stdout, which the agent reads as its reply")
+        if agent == "antigravity" {
+            XCTAssertNotNil(try JSONSerialization.jsonObject(with: reply) as? [String: Any])
+        } else {
+            XCTAssertEqual(reply, Data(), "A hook must never write to stdout, which the agent reads as its reply")
+        }
         return (try? String(contentsOf: output, encoding: .utf8)) ?? ""
     }
 
@@ -242,5 +246,78 @@ final class AgentHookCommandTests: XCTestCase {
         XCTAssertEqual(report.activity, .exited, "the payload cannot choose the event")
         XCTAssertNil(report.sessionID)
         XCTAssertFalse(written.contains("evil"))
+    }
+
+    func testGrokReportsCamelCaseIdentityAndOnlyActionableNotifications() throws {
+        let written = try run(.awaitingInput, agent: "grok", stdin:
+            #"{"sessionId":"grok-session","cwd":"/tmp/a project","notificationType":"permission_prompt","promptId":"prompt-1"}"#)
+        let permission = try XCTUnwrap(report(in: written))
+        XCTAssertEqual(permission.agent, "grok")
+        XCTAssertEqual(permission.sessionID, "grok-session")
+        XCTAssertEqual(permission.turnID, "prompt-1")
+        XCTAssertEqual(permission.workingDirectory?.path, "/tmp/a project")
+        try FileManager.default.removeItem(at: output)
+        XCTAssertEqual(try run(.awaitingInput, agent: "grok", stdin:
+            #"{"sessionId":"grok-session","notificationType":"idle_prompt"}"#), "")
+        XCTAssertEqual(try run(.finished, agent: "grok", stdin:
+            #"{"sessionId":"child","subagentType":"explorer"}"#), "")
+        XCTAssertEqual(try run(.finished, stdin: #"{"sessionId":"grok-session"}"#,
+            environment: ["MYTERM_PANE_ID": "pane", "GROK_HOOK_EVENT": "Stop"]), "")
+    }
+
+    func testGrokNativeEventNamesStartTurnsAndQuestionCompletionMatchesItsNotification() throws {
+        let working = try XCTUnwrap(report(in: run(.working, agent: "grok", stdin:
+            #"{"sessionId":"session","hookEventName":"user_prompt_submit","promptId":"prompt-1"}"#)))
+        XCTAssertTrue(working.beginsTurn)
+        let waiting = try XCTUnwrap(report(in: run(.awaitingInput, agent: "grok", stdin:
+            #"{"sessionId":"session","hookEventName":"notification","notificationType":"elicitation_dialog"}"#)))
+        let complete = try XCTUnwrap(report(in: run(.working, agent: "grok", stdin:
+            #"{"sessionId":"session","hookEventName":"post_tool_use","toolName":"ask_user_question"}"#)))
+        XCTAssertEqual(waiting.toolRequestID, complete.toolRequestID)
+        let permission = try XCTUnwrap(report(in: run(.awaitingInput, agent: "grok", stdin:
+            #"{"sessionId":"session","hookEventName":"notification","notificationType":"permission_prompt"}"#)))
+        let tool = try XCTUnwrap(report(in: run(.working, agent: "grok", stdin:
+            #"{"sessionId":"session","hookEventName":"post_tool_use","toolName":"run_terminal_command"}"#)))
+        XCTAssertEqual(permission.toolRequestID, tool.toolRequestID)
+        XCTAssertNotEqual(waiting.toolRequestID, tool.toolRequestID)
+        try FileManager.default.removeItem(at: output)
+        XCTAssertEqual(try run(.finished, agent: "grok", stdin:
+            #"{"sessionId":"session","hookEventName":"stop","reason":"shutdown"}"#), "")
+    }
+
+    func testDetachedHookWrappersFindTheAgentTTYWithoutCrossingAnotherTerminal() throws {
+        let relative = "../" + output.path.drop(while: { $0 == "/" })
+        try configureProcessAncestors([(String(relative), "/bin/grok-macos-aarch")],
+            ownerCommand: "/bin/sh", ownerTTY: "??", reportedTTY: "??")
+        let written = try run(.ready, agent: "grok", stdin: #"{"sessionId":"session"}"#)
+        XCTAssertEqual(report(in: written)?.sessionID, "session")
+    }
+
+    func testAntigravityNativeHooksAndStatusUseDistinctQuestionAndPermissionTokens() throws {
+        try configureProcessAncestors([("ttys999", "/usr/local/bin/agy")], ownerCommand: "/bin/sh")
+        let question = try XCTUnwrap(report(in: run(.awaitingInput, agent: "antigravity", stdin:
+            #"{"conversationId":"conversation","workspacePaths":["/tmp/a project"],"toolCall":{"name":"ask_question"}}"#)))
+        XCTAssertEqual(question.sessionID, "conversation")
+        XCTAssertEqual(question.workingDirectory?.path, "/tmp/a project")
+        let resource = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().appending(path: "Resources")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = [resource.appending(path: "myterm-agent-hook").path, "antigravity", "status"]
+        process.environment = ["MYTERM_PANE_ID": "pane", "MYTERM_RESOURCE_DIR": resource.path,
+                               "PATH": directory.appending(path: "bin").path + ":/usr/bin:/bin"]
+        let input = Pipe()
+        process.standardInput = input
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+        try process.run()
+        input.fileHandleForWriting.write(Data(#"{"conversation_id":"conversation","cwd":"/tmp/a project","agent_state":"tool_use","tool_confirmation_pending":true,"conversation_title":"Rename me"}"#.utf8))
+        try input.fileHandleForWriting.close()
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0)
+        let permission = try XCTUnwrap(report(in: String(contentsOf: output, encoding: .utf8)))
+        XCTAssertEqual(permission.activity, .awaitingInput)
+        XCTAssertEqual(permission.sessionTitle, "Rename me")
+        XCTAssertNotEqual(question.toolRequestID, permission.toolRequestID)
     }
 }

@@ -5,9 +5,30 @@ report_agent() {
   agent=${1:-}
   activity=${2:-}
   [ "$activity" != awaitingInput ] || activity=awaiting_input
-  case "$agent" in claude|codex) ;; *) return 0;; esac
-  case "$activity" in ready|working|finished|awaiting_input|exited) ;; *) return 0;; esac
+  case "$agent" in claude|codex|antigravity|grok) ;; *) return 0;; esac
+  case "$activity" in ready|working|finished|awaiting_input|exited|status) ;; *) return 0;; esac
+  # Grok also loads Claude's settings; only its dedicated MyTerm hooks report it.
+  if [ -n "${GROK_HOOK_EVENT:-}" ] && [ "$agent" != grok ]; then return 0; fi
   input=$(cat | tr -d '\n')
+  title=''
+  turn=''
+  turn_start=''
+  native_tool=''
+  snapshot=''
+  if [ "$agent" = grok ] || [ "$agent" = antigravity ]; then
+    input=$(printf '%s' "$input" | /usr/bin/osascript -l JavaScript "$MYTERM_RESOURCE_DIR/myterm-agent-normalize.js" "$agent" "$activity") || return 0
+    activity=$(printf '%s' "$input" | /usr/bin/plutil -extract activity raw -o - - 2>/dev/null) || return 0
+    case "$activity" in ready|working|finished|awaiting_input|exited|title) ;; *) return 0;; esac
+    if raw_title=$(printf '%s' "$input" | /usr/bin/plutil -extract session_title raw -expect string -n -o - - 2>/dev/null); then
+      title=$(printf '%s' "$raw_title" | /usr/bin/base64 | tr -d '\n')
+    fi
+    turn=$(printf '%s' "$input" | /usr/bin/plutil -extract turn raw -expect string -n -o - - 2>/dev/null) || turn=''
+    case "$turn" in *[!A-Za-z0-9._-]*) turn='';; esac
+    [ "${#turn}" -le 64 ] || turn=''
+    if [ "$(printf '%s' "$input" | /usr/bin/plutil -extract turn_start raw -o - - 2>/dev/null)" = true ]; then turn_start=1; fi
+    native_tool=$(printf '%s' "$input" | /usr/bin/plutil -extract tool_key raw -expect string -o - - 2>/dev/null) || native_tool=''
+    if [ "$(printf '%s' "$input" | /usr/bin/plutil -extract snapshot raw -o - - 2>/dev/null)" = true ]; then snapshot=1; fi
+  fi
   # An idle Claude prompt is not a question. Keep filtering in the shipped script
   # so changes don't alter the hook definitions users have already trusted.
   if [ "$agent" = claude ] && [ "$activity" = awaiting_input ]; then
@@ -22,6 +43,7 @@ report_agent() {
   depth=0
   owner_tty=''
   owner_command=''
+  found_agent=false
   while [ "$depth" -lt 16 ]; do
     info=$(ps -o ppid= -o tty= -o comm= -p "$pid" 2>/dev/null)
     read -r parent process_tty command <<EOF
@@ -29,11 +51,20 @@ $info
 EOF
     [ -n "$process_tty" ] || break
     [ "$depth" -ne 0 ] || owner_command=$command
-    [ -n "$owner_tty" ] || owner_tty=$process_tty
-    [ "$process_tty" = "$owner_tty" ] || break
-    if [ "$depth" -gt 0 ]; then
-      case "${command##*/}" in claude|codex|codex-statusline) return 0;; esac
-    fi
+    case "$process_tty" in
+      '??'|'?'|'-') [ -z "$owner_tty" ] || break;;
+      *)
+        [ -n "$owner_tty" ] || owner_tty=$process_tty
+        [ "$process_tty" = "$owner_tty" ] || break
+        ;;
+    esac
+    case "${command##*/}" in
+      claude|codex|codex-statusline|agy|antigravity|grok|grok-macos-aarch|grok-macos-aarch64|grok-macos-x86_64)
+        [ "$found_agent" = false ] || return 0
+        found_agent=true
+        owner_command=$command
+        ;;
+    esac
     case "$parent" in ''|*[!0-9]*|0|1) break;; esac
     pid=$parent
     depth=$((depth + 1))
@@ -50,6 +81,10 @@ EOF
   fi
   launcher=''
   tool=''
+  if [ -n "$native_tool" ]; then
+    tool=$(printf '%s' "$native_tool" | /usr/bin/shasum -a 256)
+    tool=${tool%% *}
+  fi
   if [ "$agent" = codex ]; then
     # Canonical JSON also supports null arguments, which property-list XML cannot
     # represent. Read through stdin rather than exposing tool arguments in argv.
@@ -84,8 +119,19 @@ EOF
     fi
   fi
   tty=$(ps -o tty= -p "$PPID" 2>/dev/null | tr -d '[:space:]')
+  case "$tty" in ''|'??'|'?'|'-') tty=$owner_tty;; esac
   case "$tty" in *[0-9]*) tty="/dev/${tty#/dev/}";; *) tty=/dev/tty;; esac
-  printf '\033]7337;agent=%s;event=%s;session=%s;cwd64=%s;launcher=%s;tool=%s\033\134' \
-    "$agent" "$activity" "$session" "$cwd" "$launcher" "$tool" > "$tty"
+  if [ -n "$title" ]; then
+    printf '\033]0;%s\033\134' "$(printf '%s' "$title" | /usr/bin/base64 -D)" > "$tty"
+  fi
+  [ "$activity" != title ] || return 0
+  printf '\033]7337;agent=%s;event=%s;session=%s;cwd64=%s;launcher=%s;tool=%s;title64=%s;turn=%s;turn_start=%s;snapshot=%s\033\134' \
+    "$agent" "$activity" "$session" "$cwd" "$launcher" "$tool" "$title" "$turn" "$turn_start" "$snapshot" > "$tty"
 }
 report_agent "$@" >/dev/null 2>&1 || true
+if [ "${1:-}" = antigravity ] && [ "${2:-}" != status ]; then
+  case "${2:-}" in
+    awaitingInput|awaiting_input) printf '{"decision":"allow"}\n';;
+    *) printf '{}\n';;
+  esac
+fi

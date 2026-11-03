@@ -1,0 +1,10 @@
+#!/bin/sh
+# Preserve the user's status command and stdin, while reporting out of band to MyTerm.
+input=$(cat; printf '.')
+input=${input%.}
+if [ -n "${MYTERM_PANE_ID:-}" ] && [ -r "${MYTERM_RESOURCE_DIR:-}/myterm-agent-hook" ]; then
+  printf '%s' "$input" | /bin/sh "$MYTERM_RESOURCE_DIR/myterm-agent-hook" antigravity status
+fi
+if [ -n "${1:-}" ]; then
+  printf '%s' "$input" | /bin/sh -c "$1"
+fi

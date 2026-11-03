@@ -8,17 +8,19 @@ struct AgentHookEvent: Sendable {
     let name: String
     let activity: AgentActivity
     let timeout: Int
-    init(_ name: String, _ activity: AgentActivity, timeout: Int = 5) {
+    let matcher: String?
+    init(_ name: String, _ activity: AgentActivity, timeout: Int = 5, matcher: String? = nil) {
         self.name = name
         self.activity = activity
         self.timeout = timeout
+        self.matcher = matcher
     }
 }
 
 /// One agent MyTerm installs hooks for, and where that agent keeps them.
 ///
-/// Codex reads the same hook format Claude Code does, from its own file, so one controller serves
-/// both while preserving each agent's event names and timeout limits.
+/// Claude Code, Codex and Grok share a hook format. Antigravity uses named groups
+/// and direct handlers for invocation events, with a separate status callback.
 struct AgentHookTarget: Equatable, Sendable {
     /// Lowercased, because it travels in the report and the parser lowercases what it reads.
     let agent: String
@@ -28,6 +30,9 @@ struct AgentHookTarget: Equatable, Sendable {
     let settingsURL: URL
     /// Each event MyTerm listens to, and the activity it reports.
     let events: [AgentHookEvent]
+    var callbackSettingsURL: URL? = nil
+
+    static let all: [AgentHookTarget] = [.claude, .codex, .antigravity, .grok]
 
     static func == (lhs: AgentHookTarget, rhs: AgentHookTarget) -> Bool {
         lhs.agent == rhs.agent && lhs.settingsURL == rhs.settingsURL
@@ -68,13 +73,45 @@ struct AgentHookTarget: Equatable, Sendable {
         ]
     )
 
+    static let grok = AgentHookTarget(
+        agent: "grok", displayName: "Grok", fileDescription: "~/.grok/hooks/myterm.json",
+        settingsURL: FileManager.default.homeDirectoryForCurrentUser.appending(path: ".grok/hooks/myterm.json"),
+        events: [
+            AgentHookEvent("SessionStart", .ready),
+            AgentHookEvent("UserPromptSubmit", .working),
+            AgentHookEvent("Notification", .awaitingInput, matcher: "permission_prompt|elicitation_dialog"),
+            AgentHookEvent("PostToolUse", .working),
+            AgentHookEvent("PostToolUseFailure", .working),
+            AgentHookEvent("Stop", .finished),
+            AgentHookEvent("StopFailure", .finished),
+            AgentHookEvent("StopCancelled", .finished),
+            AgentHookEvent("SessionEnd", .exited),
+        ]
+    )
+
+    static let antigravity = AgentHookTarget(
+        agent: "antigravity", displayName: "Antigravity",
+        fileDescription: "~/.gemini/config/hooks.json + ~/.gemini/antigravity-cli/settings.json",
+        settingsURL: FileManager.default.homeDirectoryForCurrentUser.appending(path: ".gemini/config/hooks.json"),
+        events: [
+            AgentHookEvent("SessionStart", .ready),
+            AgentHookEvent("PreInvocation", .working),
+            AgentHookEvent("PreToolUse", .awaitingInput, matcher: "^ask_question$"),
+            AgentHookEvent("PostToolUse", .working, matcher: "^ask_question$"),
+            AgentHookEvent("Stop", .finished),
+        ],
+        callbackSettingsURL: FileManager.default.homeDirectoryForCurrentUser
+            .appending(path: ".gemini/antigravity-cli/settings.json")
+    )
+
     func writing(to url: URL) -> AgentHookTarget {
         AgentHookTarget(
             agent: agent,
             displayName: displayName,
             fileDescription: fileDescription,
             settingsURL: url,
-            events: events
+            events: events,
+            callbackSettingsURL: callbackSettingsURL.map { _ in url.deletingLastPathComponent().appending(path: "settings.json") }
         )
     }
 }
@@ -124,7 +161,9 @@ final class AgentHooksController {
                 install()
                 return
             }
-            state = currentEvents(in: settings).count == target.events.count ? .installed : .notInstalled
+            let hooksInstalled = currentEvents(in: settings).count == target.events.count
+            let callbackInstalled = try target.callbackSettingsURL.map { try AgentStatusCallback.isInstalled(at: $0) } ?? true
+            state = hooksInstalled && callbackInstalled ? .installed : .notInstalled
         } catch {
             state = .failed(error.localizedDescription)
         }
@@ -132,24 +171,29 @@ final class AgentHooksController {
 
     func install() {
         do {
-            var settings = try readSettings()
-            var hooks = settings["hooks"] as? [String: Any] ?? [:]
-            for event in target.events {
-                var entries = Self.entriesWithoutMyTerm(hooks[event.name])
-                entries.append([
-                    "hooks": [[
-                        "type": "command",
-                        "command": Self.command(
-                            agent: target.agent,
-                            activity: event.activity
-                        ),
-                        "timeout": event.timeout,
-                    ]],
-                ])
-                hooks[event.name] = entries
+            try withConfigurationRollback {
+                var settings = try readSettings()
+                var hooks = settings["hooks"] as? [String: Any] ?? [:]
+                for event in target.events {
+                    var entries = Self.entriesWithoutMyTerm(hooks[event.name])
+                    var entry: [String: Any] = [
+                        "hooks": [[
+                            "type": "command",
+                            "command": Self.command(
+                                agent: target.agent,
+                                activity: event.activity
+                            ),
+                            "timeout": event.timeout,
+                        ]],
+                    ]
+                    if let matcher = event.matcher { entry["matcher"] = matcher }
+                    entries.append(entry)
+                    hooks[event.name] = entries
+                }
+                settings["hooks"] = hooks
+                try writeSettings(settings)
+                if let url = target.callbackSettingsURL { try AgentStatusCallback.install(at: url) }
             }
-            settings["hooks"] = hooks
-            try writeSettings(settings)
             state = .installed
         } catch {
             state = .failed(error.localizedDescription)
@@ -158,29 +202,56 @@ final class AgentHooksController {
 
     func remove() {
         do {
-            var settings = try readSettings()
-            guard var hooks = settings["hooks"] as? [String: Any] else {
-                state = .notInstalled
-                return
-            }
-            for event in target.events {
-                let entries = Self.entriesWithoutMyTerm(hooks[event.name])
-                // Dropping the key entirely keeps the file as it was before MyTerm touched it.
-                if entries.isEmpty {
-                    hooks.removeValue(forKey: event.name)
-                } else {
-                    hooks[event.name] = entries
+            try withConfigurationRollback {
+                var settings = try readSettings()
+                guard var hooks = settings["hooks"] as? [String: Any] else {
+                    if let url = target.callbackSettingsURL { try AgentStatusCallback.remove(at: url) }
+                    state = .notInstalled
+                    return
                 }
+                for event in target.events {
+                    let entries = Self.entriesWithoutMyTerm(hooks[event.name])
+                    // Dropping the key entirely keeps the file as it was before MyTerm touched it.
+                    if entries.isEmpty {
+                        hooks.removeValue(forKey: event.name)
+                    } else {
+                        hooks[event.name] = entries
+                    }
+                }
+                if hooks.isEmpty {
+                    settings.removeValue(forKey: "hooks")
+                } else {
+                    settings["hooks"] = hooks
+                }
+                try writeSettings(settings)
+                if let url = target.callbackSettingsURL { try AgentStatusCallback.remove(at: url) }
             }
-            if hooks.isEmpty {
-                settings.removeValue(forKey: "hooks")
-            } else {
-                settings["hooks"] = hooks
-            }
-            try writeSettings(settings)
             state = .notInstalled
         } catch {
             state = .failed(error.localizedDescription)
+        }
+    }
+
+    private func withConfigurationRollback(_ operation: () throws -> Void) throws {
+        guard let callback = target.callbackSettingsURL else { try operation(); return }
+        let files = [settingsURL, callback].map { $0.resolvingSymlinksInPath() }
+        let originals = try files.map { url -> Data? in
+            FileManager.default.fileExists(atPath: url.path) ? try Data(contentsOf: url) : nil
+        }
+        do {
+            try operation()
+        } catch {
+            var failures: [String] = []
+            for (url, original) in zip(files, originals) {
+                do {
+                    if let original { try original.write(to: url, options: .atomic) }
+                    else if FileManager.default.fileExists(atPath: url.path) { try FileManager.default.removeItem(at: url) }
+                } catch { failures.append("\(url.lastPathComponent): \(error.localizedDescription)") }
+            }
+            guard failures.isEmpty else {
+                throw AgentHooksFailure(message: "\(error.localizedDescription) Could not restore configuration: \(failures.joined(separator: "; "))")
+            }
+            throw error
         }
     }
 
@@ -218,6 +289,7 @@ final class AgentHooksController {
             )
             let entries = (hooks[event.name] as? [[String: Any]]) ?? []
             let isCurrent = entries.contains { entry in
+                guard entry["matcher"] as? String == event.matcher else { return false }
                 let handlers = (entry["hooks"] as? [[String: Any]]) ?? []
                 return handlers.contains { handler in
                     handler["command"] as? String == expected && handler["timeout"] as? Int == event.timeout
@@ -271,7 +343,14 @@ final class AgentHooksController {
         guard let settings = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw AgentHooksFailure(message: "\(settingsURL.lastPathComponent) is not a JSON object.")
         }
-        return settings
+        guard target.agent == "antigravity" else { return settings }
+        var hooks = settings["myterm-managed-activity"] as? [String: Any] ?? [:]
+        for event in target.events where event.matcher == nil {
+            if let handlers = hooks[event.name] as? [[String: Any]] {
+                hooks[event.name] = handlers.map { ["hooks": [$0]] }
+            }
+        }
+        return ["hooks": hooks, "antigravityRoot": settings]
     }
 
     private func writeSettings(_ settings: [String: Any]) throws {
@@ -279,8 +358,19 @@ final class AgentHooksController {
             at: settingsURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
+        var serialized = settings
+        if target.agent == "antigravity" {
+            var hooks = serialized.removeValue(forKey: "hooks") as? [String: Any] ?? [:]
+            serialized = settings["antigravityRoot"] as? [String: Any] ?? [:]
+            for event in target.events where event.matcher == nil {
+                if let entries = hooks[event.name] as? [[String: Any]] {
+                    hooks[event.name] = entries.flatMap { $0["hooks"] as? [[String: Any]] ?? [] }
+                }
+            }
+            serialized["myterm-managed-activity"] = hooks.isEmpty ? nil : hooks
+        }
         let data = try JSONSerialization.data(
-            withJSONObject: settings,
+            withJSONObject: serialized,
             options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         )
         // The file is the user's, and a dotfiles repo often owns it through a symlink. An atomic

@@ -10,7 +10,7 @@ public enum CodexLauncher: String, Codable, Hashable, Sendable {
 }
 
 public struct AgentSessionHandle: Codable, Equatable, Hashable, Sendable {
-    /// Lowercased agent name, as reported by the hook. "claude" and "codex" are the ones MyTerm resumes.
+    /// Lowercased agent name, as reported by the hook.
     public let agent: String
     /// The agent's own conversation identifier.
     public let sessionID: String
@@ -88,6 +88,10 @@ public enum AgentSessionResume {
             }
         case "codex":
             "\((handle.codexLauncher ?? .standard).rawValue) resume \(shellQuoted(handle.sessionID))"
+        case "antigravity", "agy":
+            "agy --conversation \(shellQuoted(handle.sessionID))"
+        case "grok":
+            "grok --resume \(shellQuoted(handle.sessionID))"
         default:
             nil
         }
