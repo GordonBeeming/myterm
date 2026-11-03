@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import XCTest
 @testable import MyTerm
@@ -95,6 +96,106 @@ final class NativeAgentHooksTests: XCTestCase {
         process.waitUntilExit()
         XCTAssertEqual(process.terminationStatus, 0)
         XCTAssertEqual(received, payload)
+    }
+
+    func testSlowReporterCannotHoldTheExistingStatusCommandOrItsOutputPipe() async throws {
+        let dir = try directory()
+        let started = dir.appending(path: "reporter-started")
+        let release = dir.appending(path: "release-reporter")
+        let finished = dir.appending(path: "reporter-finished")
+        let fakeHook = """
+        #!/bin/sh
+        printf 'reporter-output'
+        : > "$MYTERM_TEST_STARTED"
+        while [ ! -e "$MYTERM_TEST_RELEASE" ]; do sleep 0.01; done
+        : > "$MYTERM_TEST_FINISHED"
+        """
+        try fakeHook.write(to: dir.appending(path: "myterm-agent-hook"), atomically: true, encoding: .utf8)
+        let resources = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().appending(path: "Resources")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = [resources.appending(path: "myterm-antigravity-status").path, "cat"]
+        process.environment = ["PATH": "/usr/bin:/bin", "MYTERM_PANE_ID": "test", "MYTERM_RESOURCE_DIR": dir.path,
+                               "MYTERM_TEST_STARTED": started.path, "MYTERM_TEST_RELEASE": release.path,
+                               "MYTERM_TEST_FINISHED": finished.path]
+        let input = Pipe(), output = Pipe()
+        process.standardInput = input
+        process.standardOutput = output
+        let exited = expectation(description: "Existing status command exits while the reporter is blocked")
+        let outputClosed = expectation(description: "The reporter does not inherit the status output pipe")
+        process.terminationHandler = { _ in exited.fulfill() }
+        try process.run()
+        defer {
+            _ = FileManager.default.createFile(atPath: release.path, contents: Data())
+            if process.isRunning { process.terminate(); process.waitUntilExit() }
+        }
+        let stdout = output.fileHandleForReading
+        let received = Task.detached {
+            let data = stdout.readDataToEndOfFile()
+            outputClosed.fulfill()
+            return data
+        }
+        let payload = Data("{\"agent_state\":\"idle\"}\n".utf8)
+        input.fileHandleForWriting.write(payload)
+        try input.fileHandleForWriting.close()
+        await fulfillment(of: [exited, outputClosed], timeout: 1)
+        let returnedBeforeRelease = !process.isRunning
+        let startedDeadline = Date().addingTimeInterval(1)
+        while !FileManager.default.fileExists(atPath: started.path), Date() < startedDeadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: started.path))
+        XCTAssertTrue(returnedBeforeRelease)
+        XCTAssertTrue(FileManager.default.createFile(atPath: release.path, contents: Data()))
+        let data = await received.value
+        XCTAssertEqual(data, payload)
+        let finishedDeadline = Date().addingTimeInterval(1)
+        while !FileManager.default.fileExists(atPath: finished.path), Date() < finishedDeadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: finished.path))
+    }
+
+    func testUnresponsiveStatusReporterAndItsChildAreTerminated() async throws {
+        let dir = try directory()
+        let pidFile = dir.appending(path: "reporter.pid")
+        let childFile = dir.appending(path: "reporter-child.pid")
+        try """
+        #!/bin/sh
+        printf '%s' "$$" > "$MYTERM_TEST_PID"
+        sleep 30 &
+        printf '%s' "$!" > "$MYTERM_TEST_CHILD"
+        wait
+        """.write(to: dir.appending(path: "myterm-agent-hook"), atomically: true, encoding: .utf8)
+        let resources = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().appending(path: "Resources")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = [resources.appending(path: "myterm-antigravity-status").path, "cat"]
+        process.environment = ["PATH": "/usr/bin:/bin", "MYTERM_PANE_ID": "test", "MYTERM_RESOURCE_DIR": dir.path,
+                               "MYTERM_TEST_PID": pidFile.path, "MYTERM_TEST_CHILD": childFile.path]
+        let input = Pipe(), output = Pipe()
+        process.standardInput = input
+        process.standardOutput = output
+        try process.run()
+        try input.fileHandleForWriting.close()
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0)
+        let startupDeadline = Date().addingTimeInterval(1)
+        while (!FileManager.default.fileExists(atPath: pidFile.path) || !FileManager.default.fileExists(atPath: childFile.path)), Date() < startupDeadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let pid = try XCTUnwrap(Int32(String(contentsOf: pidFile, encoding: .utf8)))
+        let child = try XCTUnwrap(Int32(String(contentsOf: childFile, encoding: .utf8)))
+        guard pid > 1, child > 1 else { XCTFail("Expected owned reporter PIDs"); return }
+        defer { if kill(pid, 0) == 0 { kill(-pid, SIGKILL) } }
+        let deadline = Date().addingTimeInterval(5)
+        while (kill(pid, 0) == 0 || kill(child, 0) == 0), Date() < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertEqual(kill(pid, 0), -1)
+        XCTAssertEqual(kill(child, 0), -1)
     }
 
     func testGrokUsesItsOwnFileWithNotificationMatchersAndCancellationEvents() throws {

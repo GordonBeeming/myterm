@@ -66,15 +66,15 @@ public struct AgentReportFilter: Sendable {
                 if let latestWorkStartAt, captured < latestWorkStartAt { return nil }
             }
         }
+        let freshStatus = report.agent == "antigravity" && report.isStatusSnapshot
+            && report.capturedAt.map { $0 > (settledAt ?? -1) } == true
         switch report.activity {
         case .awaitingInput:
-            if report.isStatusSnapshot && settled { return nil }
+            if report.isStatusSnapshot && settled && !freshStatus { return nil }
             settled = false
             hasWorked = true
             if let request = report.toolRequestID, pending.count < 4096 { pending[request] = report }
         case .working:
-            let freshStatus = report.agent == "antigravity" && report.isStatusSnapshot
-                && report.capturedAt.map { $0 > (settledAt ?? -1) } == true
             if settled && !report.beginsTurn && !report.isWorkStart && !freshStatus { return nil }
             if !report.isStatusSnapshot || freshStatus { settled = false }
             if report.isWorkStart, let captured = report.capturedAt {

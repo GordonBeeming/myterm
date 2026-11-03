@@ -1,13 +1,52 @@
 #!/bin/sh
 # Preserve the user's status command and stdin, while reporting out of band to MyTerm.
 captured=''
+myterm_owner_pid=''
 if [ -n "${MYTERM_PANE_ID:-}" ]; then
   captured=$(/usr/bin/perl -MTime::HiRes=clock_gettime,CLOCK_MONOTONIC -e 'printf "%.9f", clock_gettime(CLOCK_MONOTONIC)')
+  # Detached reporting cannot rely on the short-lived status shell's ancestry.
+  myterm_parent_pid=$PPID
+  myterm_depth=0
+  while [ "$myterm_depth" -lt 16 ]; do
+    myterm_parent_info=$(ps -o ppid= -o comm= -p "$myterm_parent_pid" 2>/dev/null)
+    read -r myterm_next_pid myterm_owner_command <<EOF
+$myterm_parent_info
+EOF
+    case "${myterm_owner_command##*/}" in agy|antigravity) myterm_owner_pid=$myterm_parent_pid; break;; esac
+    case "$myterm_next_pid" in ''|*[!0-9]*|0|1) break;; esac
+    myterm_parent_pid=$myterm_next_pid
+    myterm_depth=$((myterm_depth + 1))
+  done
 fi
 input=$(cat; printf '.')
 input=${input%.}
 if [ -n "${MYTERM_PANE_ID:-}" ] && [ -r "${MYTERM_RESOURCE_DIR:-}/myterm-agent-hook" ]; then
-  printf '%s' "$input" | MYTERM_AGENT_CAPTURE_TIME="$captured" /bin/sh "$MYTERM_RESOURCE_DIR/myterm-agent-hook" antigravity status
+  (
+    printf '%s' "$input" | MYTERM_AGENT_CAPTURE_TIME="$captured" MYTERM_AGENT_OWNER_PID="$myterm_owner_pid" \
+      /usr/bin/perl -MPOSIX=setsid -e '
+        # Keep the watchdog alive if the CLI cancels its status-command group.
+        my $session = setsid();
+        (defined $session && $session >= 0) || getpgrp(0) == $$ or exit 0;
+        my $pid = fork();
+        defined $pid or exit 0;
+        if ($pid == 0) {
+          my $child_session = setsid();
+          defined $child_session && $child_session >= 0 or exit 1;
+          exec "/bin/sh", $ARGV[0], "antigravity", "status";
+          exit 127;
+        }
+        $SIG{ALRM} = sub {
+          kill "TERM", -$pid; kill "TERM", $pid;
+          select undef, undef, undef, 0.05;
+          kill "KILL", -$pid; kill "KILL", $pid;
+          waitpid($pid, 0);
+          exit 0;
+        };
+        alarm 2;
+        waitpid($pid, 0);
+        alarm 0;
+      ' "$MYTERM_RESOURCE_DIR/myterm-agent-hook"
+  ) </dev/null >/dev/null 2>&1 &
 fi
 if [ -n "${1:-}" ]; then
   printf '%s' "$input" | /bin/sh -c "$1"

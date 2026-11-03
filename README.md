@@ -130,7 +130,9 @@ Codex, use `/hooks` to review and trust the updated hooks before they can run.
 Any agent can drive the cook by writing that sequence itself, with its own name in `agent=`. The
 name is what the notification says, so a Codex report reads "Codex finished its turn."
 
-The state is not saved. After a relaunch, no tab carries a cook until its agent reports again.
+Live activity survives a MyTerm relaunch through the running terminal host. A tab that reattaches
+can show the cook its agent last reported. After a machine reboot, the next agent report establishes
+the pane's live activity again.
 
 ### Come back to a live agent
 

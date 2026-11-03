@@ -174,6 +174,10 @@ final class AgentReportFilterTests: XCTestCase {
         XCTAssertEqual(filter.process(snapshot(.working, at: 5))?.activity, .working)
         XCTAssertNil(filter.process(.init(agent: "antigravity", activity: .finished, sessionID: "session", capturedAt: 4.5)))
         XCTAssertEqual(filter.process(snapshot(.finished, at: 6))?.activity, .finished)
+        let permission = String(repeating: "e", count: 64)
+        XCTAssertEqual(filter.process(.init(agent: "antigravity", activity: .awaitingInput, sessionID: "session", toolRequestID: permission, isStatusSnapshot: true, capturedAt: 7))?.activity, .awaitingInput)
+        XCTAssertNil(filter.process(.init(agent: "antigravity", activity: .awaitingInput, sessionID: "session", isStatusSnapshot: true, capturedAt: 6.5)))
+        XCTAssertEqual(filter.process(.init(agent: "antigravity", activity: .working, sessionID: "session", toolRequestID: permission, isStatusSnapshot: true, capturedAt: 8))?.activity, .working)
     }
 
     func testCompletionCanResolveAWaitWhenTheToolStartWasNotRecorded() {

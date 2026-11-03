@@ -52,7 +52,11 @@ report_agent() {
   fi
   # Only ancestors on this TTY identify a nested agent. MyTerm itself may have
   # been launched from another agent's terminal.
-  pid=$PPID
+  agent_owner_pid=''
+  if [ "$agent" = antigravity ]; then
+    case "${MYTERM_AGENT_OWNER_PID:-}" in ''|*[!0-9]*|0|1) ;; *) agent_owner_pid=$MYTERM_AGENT_OWNER_PID;; esac
+  fi
+  pid=${agent_owner_pid:-$PPID}
   depth=0
   owner_tty=''
   owner_command=''
@@ -82,6 +86,7 @@ EOF
     pid=$parent
     depth=$((depth + 1))
   done
+  if [ -n "$agent_owner_pid" ] && [ "$found_agent" = false ]; then return 0; fi
   # The sentinel preserves trailing newlines so validation rejects them.
   session=$(printf '%s' "$input" | /usr/bin/plutil -extract session_id raw -expect string -n -o - - 2>/dev/null; printf '.')
   session=${session%.}
@@ -131,7 +136,7 @@ EOF
       esac
     fi
   fi
-  tty=$(ps -o tty= -p "$PPID" 2>/dev/null | tr -d '[:space:]')
+  tty=$(ps -o tty= -p "${agent_owner_pid:-$PPID}" 2>/dev/null | tr -d '[:space:]')
   case "$tty" in ''|'??'|'?'|'-') tty=$owner_tty;; esac
   case "$tty" in *[0-9]*) tty="/dev/${tty#/dev/}";; *) tty=/dev/tty;; esac
   [ "$activity" != title ] || return 0
