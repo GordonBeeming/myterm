@@ -242,7 +242,7 @@ final class CompanionBrowserRendererTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         let child = root.appendingPathComponent("child.html")
         try Data("""
-        <html><body style="margin:0;background:white"><button style="width:200px;height:100px;background:black;color:white" onclick="parent.postMessage(event.isTrusted?'Trusted iframe click':'Untrusted click','*')">Click</button><input style="position:absolute;left:0;top:120px;width:200px;height:60px" oninput="parent.postMessage((event.isTrusted?'Trusted input:':'Untrusted input:')+this.value,'*')"></body></html>
+        <html><body style="margin:0;background:white"><button style="width:200px;height:100px;background:black;color:white" onclick="parent.postMessage(event.isTrusted?'Trusted iframe click':'Untrusted click','*')">Click</button><input style="position:absolute;left:0;top:120px;width:200px;height:60px" oninput="const message=(event.isTrusted?'Trusted input:':'Untrusted input:')+this.value;setTimeout(()=>parent.postMessage(message,'*'),500)"></body></html>
         """.utf8).write(to: child)
         let childServer = CompanionBrowserArtifactServer(artifact: try CompanionBrowserArtifact(selectedFile: child, allowsJavaScript: true), allowsVirtualOrigin: false)
         let childURL = try await childServer.authorizedURL(path: "child.html")
@@ -253,17 +253,30 @@ final class CompanionBrowserRendererTests: XCTestCase {
         let parentServer = CompanionBrowserArtifactServer(artifact: try CompanionBrowserArtifact(selectedFile: parent, allowsJavaScript: true), allowsVirtualOrigin: false)
         let parentURL = try await parentServer.authorizedURL(path: "parent.html")
         let renderer = RemoteBrowserRenderer(url: parentURL)
+        func waitForTitle(_ expected: String, after initial: RemoteBrowserFrame) async throws -> RemoteBrowserFrame {
+            var frame = initial
+            let deadline = Date().addingTimeInterval(5)
+            // postMessage updates the title asynchronously. The deliberate fixture
+            // delay covers a snapshot finishing before the acknowledgment arrives.
+            while frame.title != expected, Date() < deadline {
+                frame = try await renderer.interact(RemoteBrowserRequest(action: .snapshot, width: 640, height: 480))
+            }
+            return frame
+        }
         do {
             var frame = try await renderer.interact(RemoteBrowserRequest(action: .open, width: 640, height: 480))
             for _ in 0..<20 where frame.isLoading || frame.title != "Iframe fixture" {
                 frame = try await renderer.interact(RemoteBrowserRequest(action: .snapshot, width: 640, height: 480))
             }
-            let clicked = try await renderer.interact(RemoteBrowserRequest(action: .tap, width: 640, height: 480, x: 0.1, y: 0.1))
+            var clicked = try await renderer.interact(RemoteBrowserRequest(action: .tap, width: 640, height: 480, x: 0.1, y: 0.1))
+            clicked = try await waitForTitle("Trusted iframe click", after: clicked)
             XCTAssertEqual(clicked.title, "Trusted iframe click")
             _ = try await renderer.interact(RemoteBrowserRequest(action: .tap, width: 640, height: 480, x: 0.1, y: 0.3))
-            let typed = try await renderer.interact(RemoteBrowserRequest(action: .text, width: 640, height: 480, text: "native"))
+            var typed = try await renderer.interact(RemoteBrowserRequest(action: .text, width: 640, height: 480, text: "native"))
+            typed = try await waitForTitle("Trusted input:native", after: typed)
             XCTAssertEqual(typed.title, "Trusted input:native")
-            let erased = try await renderer.interact(RemoteBrowserRequest(action: .key, width: 640, height: 480, key: .backspace))
+            var erased = try await renderer.interact(RemoteBrowserRequest(action: .key, width: 640, height: 480, key: .backspace))
+            erased = try await waitForTitle("Trusted input:nativ", after: erased)
             XCTAssertEqual(erased.title, "Trusted input:nativ")
             renderer.close()
             await parentServer.close(); await childServer.close()
