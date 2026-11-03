@@ -158,12 +158,16 @@ final class AgentReportFilterTests: XCTestCase {
         XCTAssertEqual(large.turnID, largeID)
     }
 
-    func testAntigravityStatusStartsWorkWithoutHooksAndRejectsOlderCallbacks() {
+    func testAntigravityStatusStartsWorkWithoutHooksAndRejectsOlderCallbacks() throws {
         func snapshot(_ activity: AgentActivity, at time: Double) -> AgentActivityReport {
             .init(agent: "antigravity", activity: activity, sessionID: "session", isStatusSnapshot: true, capturedAt: time)
         }
         var filter = AgentReportFilter()
-        XCTAssertEqual(filter.process(snapshot(.finished, at: 1))?.activity, .ready)
+        let ready = try XCTUnwrap(filter.process(snapshot(.finished, at: 1)))
+        XCTAssertEqual(ready.activity, .ready)
+        var restored = AgentReportFilter()
+        _ = restored.process(ready.replacingActivity(.ready, isStatusSnapshot: false))
+        XCTAssertNil(restored.process(snapshot(.working, at: 0.5)), "A restored ready snapshot must retain its capture barrier")
         XCTAssertEqual(filter.process(snapshot(.working, at: 2))?.activity, .working)
         XCTAssertEqual(filter.process(snapshot(.finished, at: 4))?.activity, .finished)
         XCTAssertNil(filter.process(snapshot(.working, at: 3)))

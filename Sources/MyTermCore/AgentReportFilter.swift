@@ -99,7 +99,7 @@ public struct AgentReportFilter: Sendable {
             hasWorked = false
             settled = false
             turn = nil
-            settledAt = nil
+            settledAt = report.capturedAt
             latestSnapshotAt = nil
             latestWorkStartAt = nil
         case .finished, .exited:
