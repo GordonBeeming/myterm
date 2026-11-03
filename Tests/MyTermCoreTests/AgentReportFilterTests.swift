@@ -116,7 +116,7 @@ final class AgentReportFilterTests: XCTestCase {
         XCTAssertEqual(filter.process(.init(agent: "antigravity", activity: .finished, sessionID: "session"))?.activity, .finished)
         XCTAssertEqual(filter.process(.init(agent: "antigravity", activity: .finished, sessionID: "session", isStatusSnapshot: true))?.activity, .finished)
         var grok = AgentReportFilter()
-        XCTAssertEqual(grok.process(.init(agent: "grok", activity: .finished, sessionID: "session", isStatusSnapshot: true))?.activity, .ready)
+        XCTAssertEqual(grok.process(.init(agent: "grok", activity: .finished, sessionID: "session", isStatusSnapshot: true))?.activity, .finished)
         _ = grok.process(.init(agent: "grok", activity: .working, sessionID: "session", turnID: "two", beginsTurn: true))
         XCTAssertNil(grok.process(.init(agent: "grok", activity: .finished, sessionID: "session", turnID: "one", isStatusSnapshot: true)))
         let idle = grok.process(.init(agent: "grok", activity: .finished, sessionID: "session", isStatusSnapshot: true))

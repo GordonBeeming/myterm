@@ -109,7 +109,10 @@ public struct AgentReportFilter: Sendable {
                 settled = true
                 settledAt = report.capturedAt
                 if !report.isStatusSnapshot { hasWorked = true }
-                if report.isStatusSnapshot && !hasWorked { report = report.replacingActivity(.ready) }
+                // Antigravity emits startup idle snapshots; Grok's idle ping requires an ended turn.
+                if report.agent == "antigravity", report.isStatusSnapshot && !hasWorked {
+                    report = report.replacingActivity(.ready)
+                }
             }
         }
         guard last != report else { return nil }
