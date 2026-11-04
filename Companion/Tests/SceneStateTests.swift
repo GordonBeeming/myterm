@@ -76,13 +76,40 @@ final class SceneStateTests: XCTestCase {
         var oversized = png
         oversized.append(Data(repeating: 0, count: RemoteImageChunkPayload.maximumTotalBytes))
         let resized = try CompanionImagePreparation.prepare(oversized)
-        XCTAssertEqual(resized.contentType, .jpeg)
+        XCTAssertEqual(resized.contentType, .png, "Resizing must retain PNG transparency")
         XCTAssertLessThanOrEqual(resized.data.count, RemoteImageChunkPayload.maximumTotalBytes)
         XCTAssertThrowsError(try CompanionImagePreparation.prepare(Data(repeating: 0, count: 32 * 1_024 * 1_024 + 1)))
     }
 
+    func testDetailedLargeJPEGIsCompressedUntilItFitsTheUploadLimit() throws {
+        let size = 3500
+        var pixels = Data(count: size * size * 4)
+        pixels.withUnsafeMutableBytes { buffer in
+            let words = buffer.bindMemory(to: UInt64.self)
+            var seed: UInt64 = 0x123456789abcdef
+            for index in words.indices {
+                seed = seed &* 6364136223846793005 &+ 1442695040888963407
+                words[index] = seed | 0xff000000ff000000
+            }
+        }
+        let provider = try XCTUnwrap(CGDataProvider(data: pixels as CFData))
+        let image = try XCTUnwrap(CGImage(width: size, height: size, bitsPerComponent: 8, bitsPerPixel: 32,
+            bytesPerRow: size * 4, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue),
+            provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent))
+        let jpeg = try XCTUnwrap(UIImage(cgImage: image).jpegData(compressionQuality: 0.95))
+        XCTAssertLessThanOrEqual(jpeg.count, 32 * 1_024 * 1_024)
+        XCTAssertGreaterThan(jpeg.count, RemoteImageChunkPayload.maximumTotalBytes)
+        let prepared = try CompanionImagePreparation.prepare(jpeg)
+        XCTAssertEqual(prepared.contentType, .jpeg)
+        XCTAssertLessThanOrEqual(prepared.data.count, RemoteImageChunkPayload.maximumTotalBytes)
+        XCTAssertNotNil(UIImage(data: prepared.data))
+    }
+
     func testPhotoPickerHEICIsConvertedToAcceptedJPEG() throws {
-        let photo = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { context in
+        let format = UIGraphicsImageRendererFormat.default()
+        format.opaque = true
+        let photo = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8), format: format).image { context in
             UIColor.red.setFill()
             context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
         }

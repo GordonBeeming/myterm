@@ -319,6 +319,19 @@ final class TerminalDraftStoreTests: XCTestCase {
         XCTAssertEqual(TerminalDraftStore(defaults: defaults).draft(for: edited).insertionOutcome, .transportSent)
     }
 
+    func testRefusedExplicitRepeatPreservesTheEarlierSentProtection() {
+        let draft = TerminalComposerDraft(text: "already sent")
+        XCTAssertTrue(draft.beginInsertion())
+        draft.finishInsertion(error: nil)
+        draft.onChange = { [weak draft] _, _, _ in draft?.persistenceErrorMessage = "Cannot save" }
+        XCTAssertFalse(draft.beginInsertion(allowRepeat: true))
+        XCTAssertEqual(draft.insertionOutcome, .transportSent)
+        XCTAssertTrue(draft.requiresRepeatConfirmation)
+        draft.onChange = nil
+        draft.persistenceErrorMessage = nil
+        XCTAssertFalse(draft.beginInsertion())
+    }
+
     func testFullDraftCatalogBlocksSendingUntilTheProtectionCanBeSaved() {
         let defaults = defaults()
         let store = TerminalDraftStore(defaults: defaults)

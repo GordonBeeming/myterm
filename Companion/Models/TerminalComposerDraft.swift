@@ -49,13 +49,16 @@ final class TerminalComposerDraft {
         // A completed connection write can already have delivered the input. The same
         // protection applies when a disconnect leaves delivery uncertain.
         guard !isSending, !text.isEmpty, allowRepeat || !requiresRepeatConfirmation else { return false }
+        let previousOutcome = insertionOutcome
+        let previousDigest = insertionTextDigest
         isSending = true
         errorMessage = nil
         insertionTextDigest = Self.digest(text)
         insertionOutcome = .sending
         guard persistenceErrorMessage == nil else {
             isSending = false
-            insertionOutcome = .notInserted
+            insertionTextDigest = previousDigest
+            insertionOutcome = previousOutcome
             errorMessage = "This draft could not be saved safely. Clear a saved draft or shorten this one before sending. Nothing was sent."
             return false
         }

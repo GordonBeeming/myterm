@@ -1682,17 +1682,37 @@ enum CompanionImagePreparation {
                   data.starts(with: [0xff, 0xd8, 0xff]) {
             return (data, .jpeg)
         }
-        guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
-              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+        guard let source = CGImageSourceCreateWithData(data as CFData,
+                [kCGImageSourceShouldCache: false] as CFDictionary) else {
+            throw unreadableImage()
+        }
+        for maximumPixels in [4096, 3072, 2048, 1024] {
+            guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
                 kCGImageSourceCreateThumbnailWithTransform: true,
-                kCGImageSourceThumbnailMaxPixelSize: 4096
-              ] as CFDictionary),
-              let jpeg = UIImage(cgImage: image).jpegData(compressionQuality: 0.9),
-              jpeg.count <= RemoteImageChunkPayload.maximumTotalBytes else {
-            throw NSError(domain: "MyTermImagePaste", code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: "Choose a readable image up to 8 MiB."])
+                kCGImageSourceThumbnailMaxPixelSize: maximumPixels
+            ] as CFDictionary) else { throw unreadableImage() }
+            let photo = UIImage(cgImage: image)
+            switch image.alphaInfo {
+            case .first, .last, .premultipliedFirst, .premultipliedLast, .alphaOnly:
+                // PNG retains transparency instead of letting JPEG turn clear pixels black.
+                if let png = photo.pngData(), png.count <= RemoteImageChunkPayload.maximumTotalBytes {
+                    return (png, .png)
+                }
+            default:
+                for quality in [0.9, 0.7, 0.5] {
+                    if let jpeg = photo.jpegData(compressionQuality: quality),
+                       jpeg.count <= RemoteImageChunkPayload.maximumTotalBytes {
+                        return (jpeg, .jpeg)
+                    }
+                }
+            }
         }
-        return (jpeg, .jpeg)
+        throw unreadableImage()
+    }
+
+    private static func unreadableImage() -> NSError {
+        NSError(domain: "MyTermImagePaste", code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "This image could not be prepared for upload. Choose another photo."])
     }
 }
