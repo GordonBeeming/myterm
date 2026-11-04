@@ -324,6 +324,22 @@ final class TerminalDraftStoreTests: XCTestCase {
         XCTAssertEqual(TerminalDraftStore(defaults: defaults).draft(for: edited).insertionOutcome, .transportSent)
     }
 
+    func testEquivalentLineEndingsCannotBypassRepeatProtection() {
+        let draft = TerminalComposerDraft(text: "first\r\nsecond\rthird")
+        XCTAssertTrue(draft.beginInsertion())
+        draft.finishInsertion(error: nil)
+        draft.text = "first\nsecond\nthird"
+        XCTAssertFalse(draft.beginInsertion(), "These drafts insert identical bytes")
+    }
+
+    func testRepeatConfirmationCannotSendTextEditedInAnotherScene() {
+        let draft = TerminalComposerDraft(text: "confirmed text")
+        let confirmed = draft.text
+        draft.text = "changed in another scene"
+        XCTAssertFalse(draft.beginInsertion(allowRepeat: true, expectedText: confirmed))
+        XCTAssertFalse(draft.isSending)
+    }
+
     func testFailedEditedDraftPreservesSentProtectionAfterUndoAndRelaunch() throws {
         let defaults = defaults()
         let route = route()

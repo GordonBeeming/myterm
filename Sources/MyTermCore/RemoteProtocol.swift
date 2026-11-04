@@ -320,6 +320,13 @@ public struct RemoteTerminalImagePayload: Codable, Equatable, Sendable {
     }
 }
 
+public struct RemoteImageAbortPayload: Codable, Equatable, Sendable {
+    public static let capability = "terminal-image-abort-v1"
+    public let transferID: UUID
+
+    public init(transferID: UUID) { self.transferID = transferID }
+}
+
 public struct RemoteImageChunkPayload: Codable, Equatable, Sendable {
     public static let maximumChunkBytes = 64 * 1_024
     public static let maximumTotalBytes = 8 * 1_024 * 1_024

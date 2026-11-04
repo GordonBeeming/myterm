@@ -10,7 +10,7 @@ struct TerminalComposerView: View {
     @FocusState private var isEditing: Bool
     @State private var snippetPicker: SnippetPickerPresentation?
     @State private var detent: PresentationDetent = .large
-    @State private var pendingRepeat: ComposerInsertionAction?
+    @State private var pendingRepeat: ComposerInsertionRequest?
 
     private var surface: TerminalSurfaceState? { scene.terminalStates[route.id] }
     private var canInsert: Bool {
@@ -96,8 +96,8 @@ struct TerminalComposerView: View {
                 .disabled(!canInsert)
                 if draft.requiresRepeatConfirmation {
                     Menu("Insert again…") {
-                        Button("Insert into terminal again") { pendingRepeat = .insert }
-                        Button("Insert + Enter again") { pendingRepeat = .submit }
+                        Button("Insert into terminal again") { pendingRepeat = ComposerInsertionRequest(action: .insert, text: draft.text) }
+                        Button("Insert + Enter again") { pendingRepeat = ComposerInsertionRequest(action: .submit, text: draft.text) }
                     }
                     .disabled(!canSend)
                     .accessibilityIdentifier("repeat-terminal-draft")
@@ -126,12 +126,13 @@ struct TerminalComposerView: View {
             TerminalSnippetPicker(draft: draft, scene: scene, route: route)
         }
         .task { isEditing = true }
+        .onChange(of: draft.text) { _, _ in pendingRepeat = nil }
         .alert("Insert this draft again?", isPresented: Binding(
             get: { pendingRepeat != nil },
             set: { if !$0 { pendingRepeat = nil } }
-        ), presenting: pendingRepeat) { action in
-            Button(action == .submit ? "Insert + Enter again" : "Insert again") {
-                insert(appendReturn: action == .submit, allowRepeat: true)
+        ), presenting: pendingRepeat) { request in
+            Button(request.action == .submit ? "Insert + Enter again" : "Insert again") {
+                insert(appendReturn: request.action == .submit, allowRepeat: true, expectedText: request.text)
             }
             Button("Cancel", role: .cancel) { pendingRepeat = nil }
         } message: { _ in
@@ -139,8 +140,8 @@ struct TerminalComposerView: View {
         }
     }
 
-    private func insert(appendReturn: Bool, allowRepeat: Bool = false) {
-        guard canSend, draft.beginInsertion(allowRepeat: allowRepeat) else { return }
+    private func insert(appendReturn: Bool, allowRepeat: Bool = false, expectedText: String? = nil) {
+        guard canSend, draft.beginInsertion(allowRepeat: allowRepeat, expectedText: expectedText) else { return }
         let text = draft.text
         Task { @MainActor in
             do {
@@ -152,6 +153,11 @@ struct TerminalComposerView: View {
             }
         }
     }
+}
+
+private struct ComposerInsertionRequest {
+    let action: ComposerInsertionAction
+    let text: String
 }
 
 private enum ComposerInsertionAction {

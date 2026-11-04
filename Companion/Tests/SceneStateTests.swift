@@ -65,6 +65,19 @@ final class SceneStateTests: XCTestCase {
         XCTAssertEqual(scene.terminalScreenRoutes(primary, includesSecondary: true), [primary])
     }
 
+    func testCancelledUploadCancelsDetachedImagePreparation() async throws {
+        let photo = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).image { _ in }
+        let data = try XCTUnwrap(photo.pngData())
+        let work = Task { try await CompanionImagePreparation.prepareForUpload(data) }
+        work.cancel()
+        do {
+            _ = try await work.value
+            XCTFail("Cancelled preparation must not return an image")
+        } catch is CancellationError {
+            // Cancellation reaches the worker before even a small photo is prepared.
+        }
+    }
+
     func testImagePreparationPreservesPNGAndJPEGAndRejectsInvalidOrOversizedData() throws {
         let photo = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).image { _ in }
         let png = try XCTUnwrap(photo.pngData())

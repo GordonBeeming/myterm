@@ -110,6 +110,7 @@ public enum CommandOperation: String, Codable, CaseIterable, Sendable {
     case markRead = "mark_read"
     case terminalPasteImage = "terminal_paste_image"
     case terminalPasteImageChunk = "terminal_paste_image_chunk"
+    case terminalAbortImage = "terminal_abort_image"
     case notificationRegister = "notification_register"
     case notificationRevoke = "notification_revoke"
     case browserInteract = "browser_interact"
@@ -590,7 +591,7 @@ extension InnerMessage: Codable {
                       metadata.tabID != nil, value.payload.count <= 192 * 1_024 else {
                     throw RemoteError.invalidMessage
                 }
-            case .terminalPasteImageChunk:
+            case .terminalPasteImageChunk, .terminalAbortImage:
                 guard metadata.runtimeID != nil, metadata.sessionID != nil,
                       metadata.workspaceID != nil, metadata.groupID != nil,
                       metadata.tabID != nil, value.payload.count <= 96 * 1_024 else {

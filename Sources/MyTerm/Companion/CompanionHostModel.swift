@@ -1071,7 +1071,7 @@ final class CompanionHostModel {
             notificationSigningKey: identity.notificationSigningKey.publicKey,
             capabilities: ["workspace-v1", "terminal-checkpoint-v1", "control-lease-v1", "browser-proxy-v1",
                            RemoteBrowserRequest.capability, RemoteBrowserCookiePullRequest.capability,
-                           CompanionBrowserMode.settingsCapability]
+                           CompanionBrowserMode.settingsCapability, RemoteImageAbortPayload.capability]
         )
         let peer = PeerConnection(
             connectionID: connectionID,
@@ -1420,6 +1420,12 @@ final class CompanionHostModel {
             }
             let result: Data?
             switch command.operation {
+            case .terminalAbortImage:
+                let payload = try JSONDecoder().decode(RemoteImageAbortPayload.self, from: command.payload)
+                let target = try terminalTarget(metadata, allowingAttachedPeer: peer)
+                imageAssembler.cancel(connectionID: peer.connectionID, sessionID: target.sessionID,
+                                      transferID: payload.transferID)
+                result = nil
             case .terminalPasteImageChunk:
                 let payload = try JSONDecoder().decode(
                     RemoteImageChunkPayload.self,
@@ -1516,6 +1522,7 @@ final class CompanionHostModel {
                command.operation != .notificationRevoke,
                command.operation != .terminalPasteImage,
                command.operation != .terminalPasteImageChunk,
+               command.operation != .terminalAbortImage,
                command.operation != .diagnosticsUpload,
                command.operation != .browserInteract,
                command.operation != .browserCookiePull,

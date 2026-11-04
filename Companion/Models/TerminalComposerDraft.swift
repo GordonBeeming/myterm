@@ -34,7 +34,7 @@ final class TerminalComposerDraft {
     private func persist() { onChange?(text, insertionOutcome, insertionTextDigest) }
 
     private static func digest(_ text: String) -> String {
-        SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
+        SHA256.hash(data: Data(normalized(text).utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
     var currentInsertionOutcome: TerminalInsertionOutcome? {
@@ -46,10 +46,11 @@ final class TerminalComposerDraft {
     }
 
     @discardableResult
-    func beginInsertion(allowRepeat: Bool = false) -> Bool {
+    func beginInsertion(allowRepeat: Bool = false, expectedText: String? = nil) -> Bool {
         // A completed connection write can already have delivered the input. The same
         // protection applies when a disconnect leaves delivery uncertain.
-        guard !isSending, !text.isEmpty, allowRepeat || !requiresRepeatConfirmation else { return false }
+        guard expectedText == nil || expectedText == text,
+              !isSending, !text.isEmpty, allowRepeat || !requiresRepeatConfirmation else { return false }
         let previousOutcome = insertionOutcome
         let previousDigest = insertionTextDigest
         previousAttempt = (previousOutcome, previousDigest)
@@ -88,14 +89,17 @@ final class TerminalComposerDraft {
         }
     }
 
+    private static func normalized(_ text: String) -> String {
+        text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+    }
+
     static func pasteBytes(_ text: String, bracketed: Bool, appendReturn: Bool) throws -> Data {
         guard !text.isEmpty else { throw TerminalComposerError.empty }
         guard text.utf8.count <= maximumUTF8Bytes else { throw TerminalComposerError.tooLong }
         guard text.unicodeScalars.allSatisfy({
             (32...126).contains($0.value) || $0.value >= 160 || [9, 10, 13].contains($0.value)
         }) else { throw TerminalComposerError.controlCharacters }
-        let normalized = text.replacingOccurrences(of: "\r\n", with: "\n")
-            .replacingOccurrences(of: "\r", with: "\n")
+        let normalized = normalized(text)
         guard bracketed || !normalized.contains("\n") else { throw TerminalComposerError.multilineRequiresBracketedPaste }
         var paste = bracketed ? "\u{1b}[200~" + normalized + "\u{1b}[201~" : normalized
         if appendReturn { paste += "\r" }

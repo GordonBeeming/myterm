@@ -349,7 +349,7 @@ extension AppModel {
 
         // Handled by CompanionHostModel, which is where the paired peer's identity is known.
         case .folderPin, .tabPin, .tabColor, .notificationRegister, .notificationRevoke,
-             .terminalPasteImage, .terminalPasteImageChunk, .diagnosticsUpload:
+             .terminalPasteImage, .terminalPasteImageChunk, .terminalAbortImage, .diagnosticsUpload:
             throw CompanionCommandError.unsupportedOperation
         }
     }

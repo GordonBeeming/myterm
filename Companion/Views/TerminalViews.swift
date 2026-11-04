@@ -914,6 +914,7 @@ private struct TerminalImageUploadControls: View {
     @Binding var isUploading: Bool
     @State private var imageItem: PhotosPickerItem?
     @State private var imageProgress = 0.0
+    @State private var isCancelling = false
     @State private var imageTask: Task<Void, Never>?
     @State private var errorMessage: String?
     @State private var status: String?
@@ -945,8 +946,12 @@ private struct TerminalImageUploadControls: View {
                 Text("Terminal control is required to paste the image.").font(.footnote)
             }
             if isUploading {
-                ProgressView("Uploading image…", value: imageProgress)
-                Button("Cancel upload", role: .destructive) { imageTask?.cancel() }
+                ProgressView(isCancelling ? "Cancelling upload…" : "Uploading image…", value: imageProgress)
+                Button("Cancel upload", role: .destructive) {
+                    isCancelling = true
+                    imageTask?.cancel()
+                }
+                .disabled(isCancelling)
             }
             if let errorMessage { Text(errorMessage).foregroundStyle(.red).accessibilityIdentifier("image-upload-error") }
             if let controlError = scene.errorMessage, controlError != errorMessage {
@@ -965,18 +970,22 @@ private struct TerminalImageUploadControls: View {
             status = nil
             imageProgress = 0
             imageTask = Task { @MainActor in
-                defer { isUploading = false; imageItem = nil; imageTask = nil }
+                defer { isUploading = false; isCancelling = false; imageItem = nil; imageTask = nil }
                 do {
-                    guard let data = try await item.loadTransferable(type: Data.self) else {
+                    let loadedData = try await item.loadTransferable(type: Data.self)
+                    try Task.checkCancellation()
+                    guard let data = loadedData else {
                         throw NSError(domain: "MyTermImagePaste", code: 2,
                                       userInfo: [NSLocalizedDescriptionKey: "The selected photo could not be loaded. Choose another image."])
                     }
                     try Task.checkCancellation()
                     try await scene.pasteImage(data, route: route) { imageProgress = $0 }
                     status = "Image pasted on Mac. Check the terminal to confirm the agent accepted it."
-                } catch is CancellationError {
-                    status = "Upload cancelled. Check the terminal before trying again; a completed paste cannot be undone."
-                } catch { errorMessage = error.localizedDescription }
+                } catch {
+                    if error is CancellationError || Task.isCancelled {
+                        status = "Upload cancelled. Check the terminal before trying again; a completed paste cannot be undone."
+                    } else { errorMessage = error.localizedDescription }
+                }
             }
         }
         .onDisappear { imageTask?.cancel() }

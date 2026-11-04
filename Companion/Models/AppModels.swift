@@ -869,34 +869,54 @@ final class SceneModel {
               let leaseID = surface.leaseID, let generation = surface.generation,
               !surface.isAwaitingCheckpoint, route.connectionID == selectedConnectionID,
               connectionPhase == .online,
-              let uploadConnectionID = connectionID else { throw RemoteError.disconnected }
-        let prepared = try await Task.detached { try CompanionImagePreparation.prepare(data) }.value
+              let uploadConnectionID = connectionID, let uploadConnection = connection else { throw RemoteError.disconnected }
+        let prepared = try await CompanionImagePreparation.prepareForUpload(data)
         let data = prepared.data
         let contentType = prepared.contentType
         let transferID = UUID()
         let chunkSize = RemoteImageChunkPayload.maximumChunkBytes
         let chunkCount = (data.count + chunkSize - 1) / chunkSize
-        for index in 0..<chunkCount {
-            try Task.checkCancellation()
-            guard connectionID == uploadConnectionID, selectedConnectionID == route.connectionID,
-                  connectionPhase == .online, !surface.isAwaitingCheckpoint, surface.ownsControl,
-                  surface.leaseID == leaseID, surface.generation == generation else {
-                throw RemoteError.disconnected
+        var didStartTransfer = false
+        do {
+            for index in 0..<chunkCount {
+                try Task.checkCancellation()
+                guard connectionID == uploadConnectionID, selectedConnectionID == route.connectionID,
+                      connectionPhase == .online, !surface.isAwaitingCheckpoint, surface.ownsControl,
+                      surface.leaseID == leaseID, surface.generation == generation else {
+                    throw RemoteError.disconnected
+                }
+                let start = index * chunkSize
+                let chunk = try RemoteImageChunkPayload(
+                    transferID: transferID, leaseID: leaseID, generation: generation,
+                    contentType: contentType, chunkIndex: index, chunkCount: chunkCount,
+                    totalBytes: data.count,
+                    bytes: data.subdata(in: start..<min(start + chunkSize, data.count))
+                )
+                let currentRoute = surface.route
+                didStartTransfer = true
+                _ = try await uploadConnection.command(.terminalPasteImageChunk, metadata: MessageMetadata(
+                    hostID: currentRoute.hostID, sessionID: currentRoute.sessionID,
+                    workspaceID: currentRoute.workspaceID,
+                    groupID: currentRoute.groupID, tabID: currentRoute.tabID
+                ), payload: try JSONEncoder().encode(chunk))
+                progress(Double(index + 1) / Double(chunkCount))
             }
-            let start = index * chunkSize
-            let chunk = try RemoteImageChunkPayload(
-                transferID: transferID, leaseID: leaseID, generation: generation,
-                contentType: contentType, chunkIndex: index, chunkCount: chunkCount,
-                totalBytes: data.count,
-                bytes: data.subdata(in: start..<min(start + chunkSize, data.count))
-            )
-            let currentRoute = surface.route
-            _ = try await command(.terminalPasteImageChunk, metadata: MessageMetadata(
-                hostID: currentRoute.hostID, sessionID: currentRoute.sessionID,
-                workspaceID: currentRoute.workspaceID,
-                groupID: currentRoute.groupID, tabID: currentRoute.tabID
-            ), payload: try JSONEncoder().encode(chunk))
-            progress(Double(index + 1) / Double(chunkCount))
+        } catch {
+            let uploadError = error
+            if didStartTransfer {
+                let currentRoute = surface.route
+                let cleanup = Task.detached {
+                    guard await uploadConnection.supports(RemoteImageAbortPayload.capability) else { return }
+                    _ = try await uploadConnection.command(.terminalAbortImage, metadata: MessageMetadata(
+                        hostID: currentRoute.hostID, sessionID: currentRoute.sessionID,
+                        workspaceID: currentRoute.workspaceID, groupID: currentRoute.groupID, tabID: currentRoute.tabID
+                    ), payload: JSONEncoder().encode(RemoteImageAbortPayload(transferID: transferID)))
+                }
+                // The upload task is cancelled; a separate task lets authenticated cleanup finish.
+                do { try await cleanup.value }
+                catch { await DiagnosticsLog.shared.record(category: "image", "Partial upload cleanup failed: \(error.localizedDescription)") }
+            }
+            throw uploadError
         }
     }
 
@@ -1671,7 +1691,20 @@ final class TerminalSurfaceState {
 
 /// Converts a selected photo into a format the Mac's image-paste protocol accepts.
 enum CompanionImagePreparation {
+    static func prepareForUpload(_ data: Data) async throws -> (data: Data, contentType: RemoteTerminalImageType) {
+        try Task.checkCancellation()
+        let worker = Task.detached { try prepare(data) }
+        return try await withTaskCancellationHandler {
+            let result = try await worker.value
+            try Task.checkCancellation()
+            return result
+        } onCancel: {
+            worker.cancel()
+        }
+    }
+
     static func prepare(_ data: Data) throws -> (data: Data, contentType: RemoteTerminalImageType) {
+        try Task.checkCancellation()
         guard !data.isEmpty, data.count <= 32 * 1_024 * 1_024 else {
             throw RemoteError.messageTooLarge
         }
@@ -1687,6 +1720,7 @@ enum CompanionImagePreparation {
             throw unreadableImage()
         }
         for maximumPixels in [4096, 3072, 2048, 1024] {
+            try Task.checkCancellation()
             guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
                 kCGImageSourceCreateThumbnailWithTransform: true,
@@ -1701,6 +1735,7 @@ enum CompanionImagePreparation {
                 }
             default:
                 for quality in [0.9, 0.7, 0.5] {
+                    try Task.checkCancellation()
                     if let jpeg = photo.jpegData(compressionQuality: quality),
                        jpeg.count <= RemoteImageChunkPayload.maximumTotalBytes {
                         return (jpeg, .jpeg)

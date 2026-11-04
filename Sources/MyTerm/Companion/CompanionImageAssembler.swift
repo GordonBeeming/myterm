@@ -107,6 +107,21 @@ final class CompanionImageAssembler {
         )
     }
 
+    func cancel(connectionID: UUID, sessionID: TerminalSessionID, transferID: UUID, now: Date = .now) {
+        let key = CompanionImageTransferKey(connectionID: connectionID, sessionID: sessionID, transferID: transferID)
+        remove(key)
+        rememberRetired(key, now: now)
+    }
+
+    private func rememberRetired(_ key: CompanionImageTransferKey, now: Date) {
+        expiredKeys = expiredKeys.filter { $0.value > now }
+        expiredKeys[key] = now.addingTimeInterval(Self.timeout)
+        // Late chunks must not recreate a cancelled transfer, but a peer cannot grow this history forever.
+        if expiredKeys.count > 128, let oldest = expiredKeys.min(by: { $0.value < $1.value })?.key {
+            expiredKeys.removeValue(forKey: oldest)
+        }
+    }
+
     func cancel(connectionID: UUID) {
         for key in transfers.keys where key.connectionID == connectionID {
             remove(key)
@@ -130,7 +145,7 @@ final class CompanionImageAssembler {
         let expired = transfers.values.filter { $0.expiresAt <= now }.map(\.key)
         for key in expired {
             remove(key)
-            expiredKeys[key] = now.addingTimeInterval(Self.timeout)
+            rememberRetired(key, now: now)
         }
         return expired
     }
