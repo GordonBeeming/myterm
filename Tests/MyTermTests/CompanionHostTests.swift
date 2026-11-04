@@ -121,6 +121,22 @@ final class CompanionHostTests: XCTestCase {
         )
     }
 
+    func testRemoteWorkspaceRenameIsPersistedAndPublishedAndRejectsInvalidTitles() throws {
+        let model = try model()
+        let workspaceID = try XCTUnwrap(model.store.workspaces.first?.id)
+        let target = metadata(workspaceID: workspaceID)
+        _ = try model.performCompanionCommand(metadata: target, command: CommandParameters(
+            operation: .workspaceRename, payload: try data(RemoteRenamePayload(title: "  Renamed from phone  "))))
+        XCTAssertEqual(model.store.workspaces.first(where: { $0.id == workspaceID })?.title, "Renamed from phone")
+        XCTAssertEqual(model.companionWorkspaceProjection().workspaces.first(where: { $0.id == workspaceID })?.title,
+                       "Renamed from phone")
+        for title in [" ", String(repeating: "x", count: 257)] {
+            XCTAssertThrowsError(try model.performCompanionCommand(metadata: target, command: CommandParameters(
+                operation: .workspaceRename, payload: try data(RemoteRenamePayload(title: title)))))
+        }
+        XCTAssertEqual(model.store.workspaces.first(where: { $0.id == workspaceID })?.title, "Renamed from phone")
+    }
+
     func testAutomaticWorkspaceCreationUsesViewedContextAndUnusedNames() throws {
         let model = try model()
         let desktopID = model.store.selectedWorkspaceID

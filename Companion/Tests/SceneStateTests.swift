@@ -1,4 +1,6 @@
 import Foundation
+import ImageIO
+import UniformTypeIdentifiers
 import MyTermCore
 import MyTermRemote
 import XCTest
@@ -61,6 +63,37 @@ final class SceneStateTests: XCTestCase {
         XCTAssertEqual(scene.terminalScreenRoutes(primary, includesSecondary: false), [primary])
         scene.secondaryTerminal = primary
         XCTAssertEqual(scene.terminalScreenRoutes(primary, includesSecondary: true), [primary])
+    }
+
+    func testImagePreparationPreservesPNGAndJPEGAndRejectsInvalidOrOversizedData() throws {
+        let photo = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).image { _ in }
+        let png = try XCTUnwrap(photo.pngData())
+        let jpeg = try XCTUnwrap(photo.jpegData(compressionQuality: 0.8))
+        XCTAssertEqual(try CompanionImagePreparation.prepare(png).data, png)
+        XCTAssertEqual(try CompanionImagePreparation.prepare(jpeg).data, jpeg)
+        XCTAssertThrowsError(try CompanionImagePreparation.prepare(Data("not an image".utf8)))
+        XCTAssertThrowsError(try CompanionImagePreparation.prepare(Data()))
+        var oversized = png
+        oversized.append(Data(repeating: 0, count: RemoteImageChunkPayload.maximumTotalBytes))
+        let resized = try CompanionImagePreparation.prepare(oversized)
+        XCTAssertEqual(resized.contentType, .jpeg)
+        XCTAssertLessThanOrEqual(resized.data.count, RemoteImageChunkPayload.maximumTotalBytes)
+        XCTAssertThrowsError(try CompanionImagePreparation.prepare(Data(repeating: 0, count: 32 * 1_024 * 1_024 + 1)))
+    }
+
+    func testPhotoPickerHEICIsConvertedToAcceptedJPEG() throws {
+        let photo = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { context in
+            UIColor.red.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        }
+        let data = NSMutableData()
+        let destination = try XCTUnwrap(CGImageDestinationCreateWithData(data, UTType.heic.identifier as CFString, 1, nil))
+        CGImageDestinationAddImage(destination, try XCTUnwrap(photo.cgImage), nil)
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
+        let prepared = try CompanionImagePreparation.prepare(data as Data)
+        XCTAssertEqual(prepared.contentType, .jpeg)
+        XCTAssertTrue(prepared.data.starts(with: [0xff, 0xd8, 0xff]))
+        XCTAssertNotNil(UIImage(data: prepared.data))
     }
 
     func testClipboardImagePasteRequiresControlAndUsesPNG() throws {

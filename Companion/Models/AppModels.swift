@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 import MyTermCore
 import MyTermRemote
 import Observation
@@ -230,6 +231,7 @@ enum CompanionSheet: Identifiable {
     case folderActions(UUID)
     case terminalActions(TerminalRoute)
     case terminalComposer(TerminalRoute)
+    case terminalImageUpload(TerminalRoute)
 
     var id: String {
         switch self {
@@ -240,6 +242,7 @@ enum CompanionSheet: Identifiable {
         case .folderActions(let id): "folder-\(id)"
         case .terminalActions(let route): "terminal-\(route.id)"
         case .terminalComposer(let route): "composer-\(route.id)"
+        case .terminalImageUpload(let route): "image-\(route.id)"
         }
     }
 }
@@ -864,25 +867,19 @@ final class SceneModel {
                     progress: (Double) -> Void = { _ in }) async throws {
         guard let surface = terminalStates[route.id], surface.ownsControl,
               let leaseID = surface.leaseID, let generation = surface.generation,
+              !surface.isAwaitingCheckpoint, route.connectionID == selectedConnectionID,
+              connectionPhase == .online,
               let uploadConnectionID = connectionID else { throw RemoteError.disconnected }
-        guard !data.isEmpty, data.count <= RemoteImageChunkPayload.maximumTotalBytes else {
-            throw RemoteError.messageTooLarge
-        }
-        let contentType: RemoteTerminalImageType
-        if data.starts(with: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) {
-            contentType = .png
-        } else if data.starts(with: [0xff, 0xd8, 0xff]) {
-            contentType = .jpeg
-        } else {
-            throw NSError(domain: "MyTermImagePaste", code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: "Choose a PNG or JPEG image."])
-        }
+        let prepared = try await Task.detached { try CompanionImagePreparation.prepare(data) }.value
+        let data = prepared.data
+        let contentType = prepared.contentType
         let transferID = UUID()
         let chunkSize = RemoteImageChunkPayload.maximumChunkBytes
         let chunkCount = (data.count + chunkSize - 1) / chunkSize
         for index in 0..<chunkCount {
             try Task.checkCancellation()
-            guard connectionID == uploadConnectionID, surface.ownsControl,
+            guard connectionID == uploadConnectionID, selectedConnectionID == route.connectionID,
+                  connectionPhase == .online, !surface.isAwaitingCheckpoint, surface.ownsControl,
                   surface.leaseID == leaseID, surface.generation == generation else {
                 throw RemoteError.disconnected
             }
@@ -995,7 +992,8 @@ final class SceneModel {
         guard let state = terminalStates[route.id], state.ownsControl,
               !state.isAwaitingCheckpoint, let lease = state.leaseID,
               let generation = state.generation else { throw TerminalComposerError.requiresControl }
-        guard route.connectionID == selectedConnectionID, let connection else { throw RemoteError.disconnected }
+        guard route.connectionID == selectedConnectionID, connectionPhase == .online,
+              let connection else { throw TerminalComposerError.connectionUnavailable }
         let bytes = try TerminalComposerDraft.pasteBytes(text,
             bracketed: state.bracketedPasteMode, appendReturn: appendReturn)
         // One input message keeps paste delimiters, text and optional Return together.
@@ -1668,5 +1666,33 @@ final class TerminalSurfaceState {
         holdsLease = false
         ownsControl = false
         isControlRequestPending = false
+    }
+}
+
+/// Converts a selected photo into a format the Mac's image-paste protocol accepts.
+enum CompanionImagePreparation {
+    static func prepare(_ data: Data) throws -> (data: Data, contentType: RemoteTerminalImageType) {
+        guard !data.isEmpty, data.count <= 32 * 1_024 * 1_024 else {
+            throw RemoteError.messageTooLarge
+        }
+        if data.count <= RemoteImageChunkPayload.maximumTotalBytes,
+           data.starts(with: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) {
+            return (data, .png)
+        } else if data.count <= RemoteImageChunkPayload.maximumTotalBytes,
+                  data.starts(with: [0xff, 0xd8, 0xff]) {
+            return (data, .jpeg)
+        }
+        guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
+              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: 4096
+              ] as CFDictionary),
+              let jpeg = UIImage(cgImage: image).jpegData(compressionQuality: 0.9),
+              jpeg.count <= RemoteImageChunkPayload.maximumTotalBytes else {
+            throw NSError(domain: "MyTermImagePaste", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "Choose a readable image up to 8 MiB."])
+        }
+        return (jpeg, .jpeg)
     }
 }

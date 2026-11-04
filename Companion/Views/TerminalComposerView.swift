@@ -10,10 +10,15 @@ struct TerminalComposerView: View {
     @FocusState private var isEditing: Bool
     @State private var snippetPicker: SnippetPickerPresentation?
     @State private var detent: PresentationDetent = .large
+    @State private var pendingRepeat: ComposerInsertionAction?
 
     private var surface: TerminalSurfaceState? { scene.terminalStates[route.id] }
     private var canInsert: Bool {
-        surface?.ownsControl == true && surface?.isAwaitingCheckpoint == false
+        canSend && !draft.requiresRepeatConfirmation
+    }
+    private var canSend: Bool {
+        scene.connectionPhase == .online && scene.selectedConnectionID == route.connectionID
+            && surface?.ownsControl == true && surface?.isAwaitingCheckpoint == false
             && !draft.isSending && !draft.text.isEmpty
     }
 
@@ -43,7 +48,12 @@ struct TerminalComposerView: View {
                                 .allowsHitTesting(false)
                         }
                     }
-                if let outcome = draft.insertionOutcome {
+                if let outcome = draft.currentInsertionOutcome {
+                    if draft.requiresRepeatConfirmation {
+                        Label(outcome == .transportSent ? "Sent over connection" : "Check the terminal before retrying",
+                              systemImage: outcome == .transportSent ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                            .font(.headline)
+                    }
                     Text(outcome.message).font(.footnote).foregroundStyle(.secondary)
                         .accessibilityIdentifier("terminal-insertion-outcome")
                 }
@@ -84,7 +94,15 @@ struct TerminalComposerView: View {
                     if draft.isSending { ProgressView().controlSize(.small) }
                 }
                 .disabled(!canInsert)
-                Text("Your draft stays available after inserting. Clear it when you’re finished.")
+                if draft.requiresRepeatConfirmation {
+                    Menu("Insert again…") {
+                        Button("Insert into terminal again") { pendingRepeat = .insert }
+                        Button("Insert + Enter again") { pendingRepeat = .submit }
+                    }
+                    .disabled(!canSend)
+                    .accessibilityIdentifier("repeat-terminal-draft")
+                }
+                Text("After a successful send, Compose closes so you can check the terminal. Your draft stays saved. Edit it for a new message, or choose Insert again to resend.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             .padding()
@@ -108,21 +126,36 @@ struct TerminalComposerView: View {
             TerminalSnippetPicker(draft: draft, scene: scene, route: route)
         }
         .task { isEditing = true }
+        .alert("Insert this draft again?", isPresented: Binding(
+            get: { pendingRepeat != nil },
+            set: { if !$0 { pendingRepeat = nil } }
+        ), presenting: pendingRepeat) { action in
+            Button(action == .submit ? "Insert + Enter again" : "Insert again") {
+                insert(appendReturn: action == .submit, allowRepeat: true)
+            }
+            Button("Cancel", role: .cancel) { pendingRepeat = nil }
+        } message: { _ in
+            Text("This text may already be in the terminal. Inserting it again can duplicate your message or command. Check the terminal first.")
+        }
     }
 
-    private func insert(appendReturn: Bool) {
-        guard !draft.isSending else { return }
+    private func insert(appendReturn: Bool, allowRepeat: Bool = false) {
+        guard canSend, draft.beginInsertion(allowRepeat: allowRepeat) else { return }
         let text = draft.text
-        draft.beginInsertion()
         Task { @MainActor in
             do {
                 try await scene.insertComposedText(text, appendReturn: appendReturn, route: route)
                 draft.finishInsertion(error: nil)
+                dismiss()
             } catch {
                 draft.finishInsertion(error: error)
             }
         }
     }
+}
+
+private enum ComposerInsertionAction {
+    case insert, submit
 }
 
 private struct SnippetPickerPresentation: Identifiable {
@@ -242,7 +275,6 @@ private struct TerminalSnippetPicker: View {
     private func use(_ snippet: TerminalSnippet) {
         draft.text = snippet.text
         draft.errorMessage = nil
-        draft.insertionOutcome = nil
         dismiss()
     }
 }
