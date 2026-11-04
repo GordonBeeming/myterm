@@ -83,7 +83,7 @@ final class TerminalDraftStoreTests: XCTestCase {
         XCTAssertEqual(draft.text, "echo hello")
         XCTAssertTrue(draft.beginInsertion(allowRepeat: true))
         draft.finishInsertion(error: TerminalComposerError.requiresControl)
-        XCTAssertEqual(draft.insertionOutcome, .notInserted)
+        XCTAssertEqual(draft.insertionOutcome, .unconfirmed, "A local refusal cannot erase the earlier uncertain send")
     }
 
     func testCompletedInsertionCannotBeStartedAgainByRepeatedTaps() {
@@ -154,8 +154,13 @@ final class TerminalDraftStoreTests: XCTestCase {
         XCTAssertFalse(interrupted.beginInsertion())
         XCTAssertTrue(interrupted.beginInsertion(allowRepeat: true))
         interrupted.finishInsertion(error: TerminalComposerError.requiresControl)
-        XCTAssertEqual(interrupted.insertionOutcome, .notInserted)
-        XCTAssertTrue(interrupted.beginInsertion())
+        XCTAssertEqual(interrupted.insertionOutcome, .unconfirmed)
+        XCTAssertFalse(interrupted.beginInsertion())
+        let unsent = TerminalComposerDraft(text: "not sent yet")
+        XCTAssertTrue(unsent.beginInsertion())
+        unsent.finishInsertion(error: TerminalComposerError.requiresControl)
+        XCTAssertEqual(unsent.insertionOutcome, .notInserted)
+        XCTAssertTrue(unsent.beginInsertion())
     }
 
     func testSharedSnippetCatalogRoundTripsAndOlderHostIsRecognised() throws {
@@ -317,6 +322,26 @@ final class TerminalDraftStoreTests: XCTestCase {
         XCTAssertEqual(TerminalDraftStore(defaults: defaults).draft(for: edited).insertionOutcome, .unconfirmed)
         draft.finishInsertion(error: nil)
         XCTAssertEqual(TerminalDraftStore(defaults: defaults).draft(for: edited).insertionOutcome, .transportSent)
+    }
+
+    func testFailedEditedDraftPreservesSentProtectionAfterUndoAndRelaunch() throws {
+        let defaults = defaults()
+        let route = route()
+        let store = TerminalDraftStore(defaults: defaults)
+        let draft = store.draft(for: route)
+        draft.text = "already sent"
+        XCTAssertTrue(draft.beginInsertion())
+        draft.finishInsertion(error: nil)
+        draft.text = "invalid\nmultiline"
+        XCTAssertTrue(draft.beginInsertion())
+        do {
+            _ = try TerminalComposerDraft.pasteBytes(draft.text, bracketed: false, appendReturn: true)
+            XCTFail("Multiline insertion must fail without writing")
+        } catch { draft.finishInsertion(error: error) }
+        let reopenedStore = TerminalDraftStore(defaults: defaults)
+        let reopened = reopenedStore.draft(for: route)
+        reopened.text = "already sent"
+        XCTAssertFalse(reopened.beginInsertion(), "Undo must not duplicate the earlier delivered message")
     }
 
     func testRefusedExplicitRepeatPreservesTheEarlierSentProtection() {

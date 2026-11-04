@@ -22,6 +22,7 @@ final class TerminalComposerDraft {
     var insertionOutcome: TerminalInsertionOutcome? { didSet { persist() } }
     private(set) var insertionTextDigest: String? { didSet { persist() } }
     @ObservationIgnored var onChange: ((String, TerminalInsertionOutcome?, String?) -> Void)?
+    @ObservationIgnored private var previousAttempt: (outcome: TerminalInsertionOutcome?, digest: String?)?
 
     init(text: String = "", insertionOutcome: TerminalInsertionOutcome? = nil,
          insertionTextDigest: String? = nil) {
@@ -51,6 +52,7 @@ final class TerminalComposerDraft {
         guard !isSending, !text.isEmpty, allowRepeat || !requiresRepeatConfirmation else { return false }
         let previousOutcome = insertionOutcome
         let previousDigest = insertionTextDigest
+        previousAttempt = (previousOutcome, previousDigest)
         isSending = true
         errorMessage = nil
         insertionTextDigest = Self.digest(text)
@@ -59,6 +61,7 @@ final class TerminalComposerDraft {
             isSending = false
             insertionTextDigest = previousDigest
             insertionOutcome = previousOutcome
+            previousAttempt = nil
             errorMessage = "This draft could not be saved safely. Clear a saved draft or shorten this one before sending. Nothing was sent."
             return false
         }
@@ -67,10 +70,19 @@ final class TerminalComposerDraft {
 
     func finishInsertion(error: Error?) {
         guard isSending else { return }
+        defer { previousAttempt = nil }
         isSending = false
         if let error {
             errorMessage = error.localizedDescription
-            insertionOutcome = error is TerminalComposerError ? .notInserted : .unconfirmed
+            if error is TerminalComposerError, let previousAttempt,
+               previousAttempt.outcome == .transportSent || previousAttempt.outcome == .unconfirmed {
+                // A rejected edit wrote no bytes, so it cannot replace the delivery evidence
+                // protecting the earlier draft when the user undoes that edit.
+                insertionTextDigest = previousAttempt.digest
+                insertionOutcome = previousAttempt.outcome
+            } else {
+                insertionOutcome = error is TerminalComposerError ? .notInserted : .unconfirmed
+            }
         } else {
             insertionOutcome = .transportSent
         }
