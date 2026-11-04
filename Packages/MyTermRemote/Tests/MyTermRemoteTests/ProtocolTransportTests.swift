@@ -116,6 +116,7 @@ import Testing
                                                    model: Data("model".utf8))),
         .command(metadata, CommandParameters(operation: .tabSplit, payload: Data("split".utf8))),
         .command(metadata, CommandParameters(operation: .workspaceMove, payload: Data("move".utf8))),
+        .command(metadata, CommandParameters(operation: .terminalAbortImage, payload: Data("abort".utf8))),
         .commandResult(metadata, CommandResultParameters(succeeded: true, result: Data("ok".utf8))),
         .attach(metadata, AttachParameters(afterSequence: 4)),
         .detach(metadata, DetachParameters()),

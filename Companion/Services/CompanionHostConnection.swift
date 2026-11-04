@@ -253,6 +253,10 @@ actor CompanionHostConnection {
     func command(_ operation: CommandOperation, metadata source: MessageMetadata,
                  payload: Data) async throws -> Data? {
         if operation == .browserInteract { try requireBrowserCapability(RemoteBrowserRequest.capability) }
+        if operation == .terminalAbortImage, !supports(RemoteImageAbortPayload.capability) {
+            throw RemoteCommandFailure(code: "host_update_required",
+                message: "Update MyTerm on the connected Mac to clear partial image uploads immediately.", result: nil)
+        }
         // An operation an older Mac cannot decode drops the whole connection, so the gate is the only
         // thing keeping a cookie sync from disconnecting a peer that predates it.
         if operation == .browserCookiePull || operation == .browserCookiePush {

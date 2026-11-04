@@ -266,6 +266,8 @@ struct CompanionTerminalPane: View {
                     Task { await scene.requestControl(action, route: currentRoute) }
                 } compose: {
                     scene.sheet = .terminalComposer(currentRoute)
+                } uploadImage: {
+                    scene.sheet = .terminalImageUpload(currentRoute)
                 } retry: {
                     Task { await scene.retryTerminal(currentRoute) }
                 }
@@ -315,6 +317,7 @@ private struct TerminalControlBar: View {
     let connectionPhase: ConnectionPhase
     let request: (ControlAction) -> Void
     let compose: () -> Void
+    let uploadImage: () -> Void
     let retry: () -> Void
 
     var body: some View {
@@ -327,6 +330,9 @@ private struct TerminalControlBar: View {
             Button("Compose", systemImage: "square.and.pencil", action: compose)
                 .labelStyle(.iconOnly)
                 .accessibilityIdentifier("compose-terminal-text")
+            Button("Upload image", systemImage: "photo.badge.plus", action: uploadImage)
+                .labelStyle(.iconOnly)
+                .accessibilityIdentifier("upload-terminal-image")
             if isStalled {
                 // A spinner here claimed something was happening when nothing was.
                 Button("Retry", systemImage: "arrow.clockwise", action: retry)
@@ -687,10 +693,7 @@ struct TerminalActionsView: View {
     let route: TerminalRoute
     @Environment(\.dismiss) private var dismiss
     @State private var title: String
-    @State private var imageItem: PhotosPickerItem?
     @State private var isSendingImage = false
-    @State private var imageProgress = 0.0
-    @State private var imageTask: Task<Void, Never>?
     @State private var closeConfirmation: CloseConfirmationPrompt?
     @State private var tabIndex = 0
 
@@ -748,28 +751,12 @@ struct TerminalActionsView: View {
                     Button("Close tab", role: .destructive) { Task { await close() } }
                 }
                 Section("Paste image") {
-                    PhotosPicker(selection: $imageItem, matching: .images,
-                                 preferredItemEncoding: .current) {
-                        Label("Choose image", systemImage: "photo")
-                    }
-                    .disabled(!canPasteImage || isSendingImage)
-                    if isSendingImage {
-                        ProgressView(value: imageProgress)
-                        Button("Cancel upload", role: .destructive) { imageTask?.cancel() }
-                    }
-                    if !canPasteImage {
-                        Text("Take control before pasting an image.")
-                            .font(.footnote).foregroundStyle(.secondary)
-                    }
+                    TerminalImageUploadControls(scene: scene, route: route, isUploading: $isSendingImage)
                 }
             }
             .navigationTitle("Terminal actions")
-            .toolbar { Button("Done") { dismiss() } }
-            .onChange(of: imageItem) { _, item in
-                guard let item else { return }
-                imageTask?.cancel()
-                imageTask = Task { await pasteImage(item) }
-            }
+            .toolbar { Button("Done") { dismiss() }.disabled(isSendingImage) }
+            .interactiveDismissDisabled(isSendingImage)
             .alert("Close active terminal?", isPresented: Binding(
                 get: { closeConfirmation != nil }, set: { if !$0 { closeConfirmation = nil } }
             ), presenting: closeConfirmation) { prompt in
@@ -784,7 +771,6 @@ struct TerminalActionsView: View {
     }
 
     private var surface: TerminalSurfaceState? { scene.terminalStates[route.id] }
-    private var canPasteImage: Bool { surface?.ownsControl == true && surface?.leaseID != nil && surface?.generation != nil }
 
     private func metadata() -> MessageMetadata {
         MessageMetadata(hostID: route.hostID, sessionID: route.sessionID,
@@ -846,19 +832,6 @@ struct TerminalActionsView: View {
         } catch { scene.errorMessage = error.localizedDescription }
     }
 
-    private func pasteImage(_ item: PhotosPickerItem) async {
-        isSendingImage = true
-        imageProgress = 0
-        defer { isSendingImage = false; imageItem = nil; imageTask = nil }
-        do {
-            guard let data = try await item.loadTransferable(type: Data.self) else {
-                throw RemoteError.messageTooLarge
-            }
-            try await scene.pasteImage(data, route: route) { imageProgress = $0 }
-        } catch is CancellationError {
-            return
-        } catch { scene.errorMessage = error.localizedDescription }
-    }
 }
 
 @MainActor
@@ -912,5 +885,109 @@ final class ClipboardTerminalView: TerminalView {
         } else {
             super.paste(sender)
         }
+    }
+}
+
+struct TerminalImageUploadSheet: View {
+    let scene: SceneModel
+    let route: TerminalRoute
+    @Environment(\.dismiss) private var dismiss
+    @State private var isUploading = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section(route.title) {
+                    TerminalImageUploadControls(scene: scene, route: route, isUploading: $isUploading)
+                }
+            }
+            .navigationTitle("Upload image")
+            .toolbar { Button("Done") { dismiss() }.disabled(isUploading) }
+            .interactiveDismissDisabled(isUploading)
+        }
+    }
+}
+
+private struct TerminalImageUploadControls: View {
+    let scene: SceneModel
+    let route: TerminalRoute
+    @Binding var isUploading: Bool
+    @State private var imageItem: PhotosPickerItem?
+    @State private var imageProgress = 0.0
+    @State private var isCancelling = false
+    @State private var imageTask: Task<Void, Never>?
+    @State private var errorMessage: String?
+    @State private var status: String?
+
+    private var surface: TerminalSurfaceState? { scene.terminalStates[route.id] }
+    private var isOnline: Bool {
+        scene.selectedConnectionID == route.connectionID && scene.connectionPhase == .online
+            && surface?.isAwaitingCheckpoint == false
+    }
+    private var canPaste: Bool {
+        isOnline && surface?.ownsControl == true && surface?.leaseID != nil && surface?.generation != nil
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            PhotosPicker(selection: $imageItem, matching: .images, preferredItemEncoding: .compatible) {
+                Label("Choose image", systemImage: "photo.badge.plus")
+            }
+            .disabled(!canPaste || isUploading)
+            .accessibilityIdentifier("choose-terminal-image")
+            if !isOnline {
+                Text("Reconnect to this terminal before uploading an image.").foregroundStyle(.secondary)
+            } else if surface?.ownsControl != true, let surface {
+                Button(surface.controllerConnectionID == nil ? "Request control" : "Take control") {
+                    Task { await scene.requestControl(surface.controllerConnectionID == nil ? .acquire : .takeover,
+                                                      route: surface.route) }
+                }
+                .disabled(surface.isControlRequestPending)
+                Text("Terminal control is required to paste the image.").font(.footnote)
+            }
+            if isUploading {
+                ProgressView(isCancelling ? "Cancelling upload…" : "Uploading image…", value: imageProgress)
+                Button("Cancel upload", role: .destructive) {
+                    isCancelling = true
+                    imageTask?.cancel()
+                }
+                .disabled(isCancelling)
+            }
+            if let errorMessage { Text(errorMessage).foregroundStyle(.red).accessibilityIdentifier("image-upload-error") }
+            if let controlError = scene.errorMessage, controlError != errorMessage {
+                Text(controlError).foregroundStyle(.red)
+            }
+            if let status { Text(status).foregroundStyle(.secondary) }
+            Text("Images are pasted into the terminal on your Mac. Large photos are resized and HEIC photos are converted automatically. No Return is sent.")
+                .font(.footnote).foregroundStyle(.secondary)
+        }
+        .onChange(of: imageItem) { _, item in
+            guard let item else { return }
+            guard !isUploading else { imageItem = nil; return }
+            // Take the gate before starting the task so repeated selection callbacks cannot upload twice.
+            isUploading = true
+            errorMessage = nil
+            status = nil
+            imageProgress = 0
+            imageTask = Task { @MainActor in
+                defer { isUploading = false; isCancelling = false; imageItem = nil; imageTask = nil }
+                do {
+                    let loadedData = try await item.loadTransferable(type: Data.self)
+                    try Task.checkCancellation()
+                    guard let data = loadedData else {
+                        throw NSError(domain: "MyTermImagePaste", code: 2,
+                                      userInfo: [NSLocalizedDescriptionKey: "The selected photo could not be loaded. Choose another image."])
+                    }
+                    try Task.checkCancellation()
+                    try await scene.pasteImage(data, route: route) { imageProgress = $0 }
+                    status = "Image pasted on Mac. Check the terminal to confirm the agent accepted it."
+                } catch {
+                    if error is CancellationError || Task.isCancelled {
+                        status = "Upload cancelled. Check the terminal before trying again; a completed paste cannot be undone."
+                    } else { errorMessage = error.localizedDescription }
+                }
+            }
+        }
+        .onDisappear { imageTask?.cancel() }
     }
 }

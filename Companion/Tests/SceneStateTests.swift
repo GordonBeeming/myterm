@@ -1,4 +1,6 @@
 import Foundation
+import ImageIO
+import UniformTypeIdentifiers
 import MyTermCore
 import MyTermRemote
 import XCTest
@@ -61,6 +63,77 @@ final class SceneStateTests: XCTestCase {
         XCTAssertEqual(scene.terminalScreenRoutes(primary, includesSecondary: false), [primary])
         scene.secondaryTerminal = primary
         XCTAssertEqual(scene.terminalScreenRoutes(primary, includesSecondary: true), [primary])
+    }
+
+    func testCancelledUploadCancelsDetachedImagePreparation() async throws {
+        let photo = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).image { _ in }
+        let data = try XCTUnwrap(photo.pngData())
+        let work = Task { try await CompanionImagePreparation.prepareForUpload(data) }
+        work.cancel()
+        do {
+            _ = try await work.value
+            XCTFail("Cancelled preparation must not return an image")
+        } catch is CancellationError {
+            // Cancellation reaches the worker before even a small photo is prepared.
+        }
+    }
+
+    func testImagePreparationPreservesPNGAndJPEGAndRejectsInvalidOrOversizedData() throws {
+        let photo = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).image { _ in }
+        let png = try XCTUnwrap(photo.pngData())
+        let jpeg = try XCTUnwrap(photo.jpegData(compressionQuality: 0.8))
+        XCTAssertEqual(try CompanionImagePreparation.prepare(png).data, png)
+        XCTAssertEqual(try CompanionImagePreparation.prepare(jpeg).data, jpeg)
+        XCTAssertThrowsError(try CompanionImagePreparation.prepare(Data("not an image".utf8)))
+        XCTAssertThrowsError(try CompanionImagePreparation.prepare(Data()))
+        var oversized = png
+        oversized.append(Data(repeating: 0, count: RemoteImageChunkPayload.maximumTotalBytes))
+        let resized = try CompanionImagePreparation.prepare(oversized)
+        XCTAssertEqual(resized.contentType, .png, "Resizing must retain PNG transparency")
+        XCTAssertLessThanOrEqual(resized.data.count, RemoteImageChunkPayload.maximumTotalBytes)
+        XCTAssertThrowsError(try CompanionImagePreparation.prepare(Data(repeating: 0, count: 32 * 1_024 * 1_024 + 1)))
+    }
+
+    func testDetailedLargeJPEGIsCompressedUntilItFitsTheUploadLimit() throws {
+        let size = 3500
+        var pixels = Data(count: size * size * 4)
+        pixels.withUnsafeMutableBytes { buffer in
+            let words = buffer.bindMemory(to: UInt64.self)
+            var seed: UInt64 = 0x123456789abcdef
+            for index in words.indices {
+                seed = seed &* 6364136223846793005 &+ 1442695040888963407
+                words[index] = seed | 0xff000000ff000000
+            }
+        }
+        let provider = try XCTUnwrap(CGDataProvider(data: pixels as CFData))
+        let image = try XCTUnwrap(CGImage(width: size, height: size, bitsPerComponent: 8, bitsPerPixel: 32,
+            bytesPerRow: size * 4, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue),
+            provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent))
+        let jpeg = try XCTUnwrap(UIImage(cgImage: image).jpegData(compressionQuality: 0.95))
+        XCTAssertLessThanOrEqual(jpeg.count, 32 * 1_024 * 1_024)
+        XCTAssertGreaterThan(jpeg.count, RemoteImageChunkPayload.maximumTotalBytes)
+        let prepared = try CompanionImagePreparation.prepare(jpeg)
+        XCTAssertEqual(prepared.contentType, .jpeg)
+        XCTAssertLessThanOrEqual(prepared.data.count, RemoteImageChunkPayload.maximumTotalBytes)
+        XCTAssertNotNil(UIImage(data: prepared.data))
+    }
+
+    func testPhotoPickerHEICIsConvertedToAcceptedJPEG() throws {
+        let format = UIGraphicsImageRendererFormat.default()
+        format.opaque = true
+        let photo = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8), format: format).image { context in
+            UIColor.red.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        }
+        let data = NSMutableData()
+        let destination = try XCTUnwrap(CGImageDestinationCreateWithData(data, UTType.heic.identifier as CFString, 1, nil))
+        CGImageDestinationAddImage(destination, try XCTUnwrap(photo.cgImage), nil)
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
+        let prepared = try CompanionImagePreparation.prepare(data as Data)
+        XCTAssertEqual(prepared.contentType, .jpeg)
+        XCTAssertTrue(prepared.data.starts(with: [0xff, 0xd8, 0xff]))
+        XCTAssertNotNil(UIImage(data: prepared.data))
     }
 
     func testClipboardImagePasteRequiresControlAndUsesPNG() throws {

@@ -121,6 +121,26 @@ final class CompanionHostTests: XCTestCase {
         )
     }
 
+    func testRemoteWorkspaceRenameIsPersistedAndPublishedAndRejectsInvalidTitles() throws {
+        let model = try model()
+        let workspaceID = try XCTUnwrap(model.store.workspaces.first?.id)
+        let target = metadata(workspaceID: workspaceID)
+        _ = try model.performCompanionCommand(metadata: target, command: CommandParameters(
+            operation: .workspaceRename, payload: try data(RemoteRenamePayload(title: "  Renamed from phone  "))))
+        XCTAssertEqual(model.store.workspaces.first(where: { $0.id == workspaceID })?.title, "Renamed from phone")
+        XCTAssertEqual(model.companionWorkspaceProjection().workspaces.first(where: { $0.id == workspaceID })?.title,
+                       "Renamed from phone")
+        for title in [" ", String(repeating: "x", count: 257), String(repeating: "é", count: 129)] {
+            XCTAssertThrowsError(try model.performCompanionCommand(metadata: target, command: CommandParameters(
+                operation: .workspaceRename, payload: try data(RemoteRenamePayload(title: title)))))
+        }
+        XCTAssertEqual(model.store.workspaces.first(where: { $0.id == workspaceID })?.title, "Renamed from phone")
+        let boundary = String(repeating: "é", count: 128)
+        _ = try model.performCompanionCommand(metadata: target, command: CommandParameters(
+            operation: .workspaceRename, payload: try data(RemoteRenamePayload(title: boundary))))
+        XCTAssertEqual(model.store.workspaces.first(where: { $0.id == workspaceID })?.title, boundary)
+    }
+
     func testAutomaticWorkspaceCreationUsesViewedContextAndUnusedNames() throws {
         let model = try model()
         let desktopID = model.store.selectedWorkspaceID
@@ -502,6 +522,31 @@ final class CompanionHostTests: XCTestCase {
         }
         let boundedEntries = try await store.entries()
         XCTAssertEqual(boundedEntries.count, 64)
+    }
+
+    func testImageAbortFreesOnlyItsTransferAndRejectsLateChunks() throws {
+        let assembler = CompanionImageAssembler()
+        let connection = UUID()
+        let session = TerminalSessionID()
+        let lease = UUID()
+        let generation = UUID()
+        var partials: [RemoteImageChunkPayload] = []
+        for _ in 0..<CompanionImageAssembler.maximumTransfers {
+            let partial = try RemoteImageChunkPayload(transferID: UUID(), leaseID: lease, generation: generation,
+                contentType: .png, chunkIndex: 0, chunkCount: 2, totalBytes: 4, bytes: Data([1, 2]))
+            partials.append(partial)
+            XCTAssertNil(try assembler.ingest(partial, connectionID: connection, sessionID: session))
+        }
+        let extra = try RemoteImageChunkPayload(transferID: UUID(), leaseID: lease, generation: generation,
+            contentType: .png, chunkIndex: 0, chunkCount: 2, totalBytes: 4, bytes: Data([1, 2]))
+        let first = try XCTUnwrap(partials.first)
+        assembler.cancel(connectionID: UUID(), sessionID: session, transferID: first.transferID)
+        XCTAssertThrowsError(try assembler.ingest(extra, connectionID: connection, sessionID: session))
+        assembler.cancel(connectionID: connection, sessionID: session, transferID: first.transferID)
+        XCTAssertNil(try assembler.ingest(extra, connectionID: connection, sessionID: session))
+        XCTAssertThrowsError(try assembler.ingest(first, connectionID: connection, sessionID: session),
+                             "A late chunk must not recreate the cancelled upload")
+        assembler.cancel(connectionID: connection, sessionID: session, transferID: first.transferID)
     }
 
     func testImageAssemblerRejectsDuplicateMismatchedOversizedAndExpiredTransfers() throws {

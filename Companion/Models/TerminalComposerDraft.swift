@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import Observation
 import MyTermCore
 import MyTermRemote
@@ -7,34 +8,89 @@ import MyTermRemote
 @Observable
 final class TerminalComposerDraft {
     nonisolated static let maximumUTF8Bytes = 64 * 1_024
-    var text: String { didSet { persist() } }
+    var text: String {
+        didSet {
+            if text != oldValue && !isSending {
+                errorMessage = nil
+            }
+            persist()
+        }
+    }
     var isSending = false
     var errorMessage: String?
     var persistenceErrorMessage: String?
     var insertionOutcome: TerminalInsertionOutcome? { didSet { persist() } }
-    @ObservationIgnored var onChange: ((String, TerminalInsertionOutcome?) -> Void)?
+    private(set) var insertionTextDigest: String? { didSet { persist() } }
+    @ObservationIgnored var onChange: ((String, TerminalInsertionOutcome?, String?) -> Void)?
+    @ObservationIgnored private var previousAttempt: (outcome: TerminalInsertionOutcome?, digest: String?)?
 
-    init(text: String = "", insertionOutcome: TerminalInsertionOutcome? = nil) {
+    init(text: String = "", insertionOutcome: TerminalInsertionOutcome? = nil,
+         insertionTextDigest: String? = nil) {
         self.text = text
         self.insertionOutcome = insertionOutcome == .sending ? .unconfirmed : insertionOutcome
+        self.insertionTextDigest = insertionTextDigest ?? (insertionOutcome == nil ? nil : Self.digest(text))
     }
 
-    private func persist() { onChange?(text, insertionOutcome) }
+    private func persist() { onChange?(text, insertionOutcome, insertionTextDigest) }
 
-    func beginInsertion() {
+    private static func digest(_ text: String) -> String {
+        SHA256.hash(data: Data(normalized(text).utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    var currentInsertionOutcome: TerminalInsertionOutcome? {
+        insertionTextDigest == Self.digest(text) ? insertionOutcome : nil
+    }
+
+    var requiresRepeatConfirmation: Bool {
+        currentInsertionOutcome == .transportSent || currentInsertionOutcome == .unconfirmed
+    }
+
+    @discardableResult
+    func beginInsertion(allowRepeat: Bool = false, expectedText: String? = nil) -> Bool {
+        // A completed connection write can already have delivered the input. The same
+        // protection applies when a disconnect leaves delivery uncertain.
+        guard expectedText == nil || expectedText == text,
+              !isSending, !text.isEmpty, allowRepeat || !requiresRepeatConfirmation else { return false }
+        let previousOutcome = insertionOutcome
+        let previousDigest = insertionTextDigest
+        previousAttempt = (previousOutcome, previousDigest)
         isSending = true
         errorMessage = nil
+        insertionTextDigest = Self.digest(text)
         insertionOutcome = .sending
+        guard persistenceErrorMessage == nil else {
+            isSending = false
+            insertionTextDigest = previousDigest
+            insertionOutcome = previousOutcome
+            previousAttempt = nil
+            errorMessage = "This draft could not be saved safely. Clear a saved draft or shorten this one before sending. Nothing was sent."
+            return false
+        }
+        return true
     }
 
     func finishInsertion(error: Error?) {
+        guard isSending else { return }
+        defer { previousAttempt = nil }
         isSending = false
         if let error {
             errorMessage = error.localizedDescription
-            insertionOutcome = error is TerminalComposerError ? .notInserted : .unconfirmed
+            if error is TerminalComposerError, let previousAttempt,
+               previousAttempt.outcome == .transportSent || previousAttempt.outcome == .unconfirmed {
+                // A rejected edit wrote no bytes, so it cannot replace the delivery evidence
+                // protecting the earlier draft when the user undoes that edit.
+                insertionTextDigest = previousAttempt.digest
+                insertionOutcome = previousAttempt.outcome
+            } else {
+                insertionOutcome = error is TerminalComposerError ? .notInserted : .unconfirmed
+            }
         } else {
             insertionOutcome = .transportSent
         }
+    }
+
+    private static func normalized(_ text: String) -> String {
+        text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
     }
 
     static func pasteBytes(_ text: String, bracketed: Bool, appendReturn: Bool) throws -> Data {
@@ -43,8 +99,7 @@ final class TerminalComposerDraft {
         guard text.unicodeScalars.allSatisfy({
             (32...126).contains($0.value) || $0.value >= 160 || [9, 10, 13].contains($0.value)
         }) else { throw TerminalComposerError.controlCharacters }
-        let normalized = text.replacingOccurrences(of: "\r\n", with: "\n")
-            .replacingOccurrences(of: "\r", with: "\n")
+        let normalized = normalized(text)
         guard bracketed || !normalized.contains("\n") else { throw TerminalComposerError.multilineRequiresBracketedPaste }
         var paste = bracketed ? "\u{1b}[200~" + normalized + "\u{1b}[201~" : normalized
         if appendReturn { paste += "\r" }
@@ -53,7 +108,7 @@ final class TerminalComposerDraft {
 }
 
 enum TerminalComposerError: LocalizedError {
-    case empty, tooLong, controlCharacters, requiresControl, multilineRequiresBracketedPaste
+    case empty, tooLong, controlCharacters, requiresControl, connectionUnavailable, multilineRequiresBracketedPaste
 
     var errorDescription: String? {
         switch self {
@@ -61,6 +116,7 @@ enum TerminalComposerError: LocalizedError {
         case .tooLong: "This draft is too long. Split it into smaller messages."
         case .controlCharacters: "The draft contains terminal control characters. Remove them before inserting it."
         case .requiresControl: "Take control of this terminal before inserting your draft."
+        case .connectionUnavailable: "Reconnect to this Mac before inserting your draft. Nothing was sent."
         case .multilineRequiresBracketedPaste:
             "This terminal does not support safe multiline paste. Insert one line at a time, or enable bracketed paste in the terminal application."
         }
@@ -75,8 +131,8 @@ enum TerminalInsertionOutcome: String, Codable {
     var message: String {
         switch self {
         case .sending: "Sending to the terminal…"
-        case .transportSent: "Sent over the connection. Check the terminal to confirm it arrived; execution is not acknowledged."
-        case .unconfirmed: "Insertion is unconfirmed. Check the terminal before inserting again to avoid duplicates. Your draft was kept."
+        case .transportSent: "Sent over the connection. Check the terminal before sending again. Your draft was kept; execution is not acknowledged."
+        case .unconfirmed: "Delivery is uncertain. The text may already be in the terminal. Check there before choosing Insert again. Your draft was kept."
         case .notInserted: "Draft was not inserted. Your draft was kept."
         }
     }
@@ -95,6 +151,7 @@ final class TerminalDraftStore {
     private struct Entry: Codable, Equatable {
         var text: String
         var outcome: TerminalInsertionOutcome?
+        var insertionTextDigest: String?
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -115,8 +172,9 @@ final class TerminalDraftStore {
         let key = key(for: route)
         if let draft = drafts[key] { return draft }
         let entry = stored[key]
-        let draft = TerminalComposerDraft(text: entry?.text ?? "", insertionOutcome: entry?.outcome)
-        draft.onChange = { [weak self, weak draft] text, outcome in
+        let draft = TerminalComposerDraft(text: entry?.text ?? "", insertionOutcome: entry?.outcome,
+                                          insertionTextDigest: entry?.insertionTextDigest)
+        draft.onChange = { [weak self, weak draft] text, outcome, digest in
             guard let self, let draft else { return }
             if text.isEmpty && outcome == nil { self.removeStoredEntry(key) }
             else {
@@ -128,7 +186,7 @@ final class TerminalDraftStore {
                     draft.persistenceErrorMessage = "This draft is only in memory: 128 drafts are already saved. Clear a saved draft, then edit this one to save it across app restarts."
                     return
                 }
-                let entry = Entry(text: text, outcome: outcome)
+                let entry = Entry(text: text, outcome: outcome, insertionTextDigest: digest)
                 guard self.stored[key] != entry else { draft.persistenceErrorMessage = nil; return }
                 guard let encoded = try? JSONEncoder().encode(entry) else {
                     draft.persistenceErrorMessage = "Latest changes could not be saved and are only in memory."

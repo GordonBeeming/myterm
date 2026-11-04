@@ -475,6 +475,27 @@ final class CompanionHostIntegrationTests: XCTestCase {
         )
         let targetMetadata = metadata(target: target, hostID: identity.hostID, runtimeID: first.runtimeID)
 
+        networkDiagnostics.setStage("rename workspace and confirm updated projection")
+        let rename = MessageMetadata(requestID: UUID(), hostID: identity.hostID, runtimeID: first.runtimeID,
+                                     workspaceID: target.workspaceID)
+        try await first.channel.send(.command(rename, CommandParameters(operation: .workspaceRename,
+            payload: JSONEncoder().encode(RemoteRenamePayload(title: "Renamed over relay")))),
+            destinationConnectionID: RelayFrame.broadcastDestination, over: first.socket)
+        var renameAcknowledged = false
+        for _ in 0..<100 {
+            let packet = try await requireApplication(first.reader)
+            if case .commandResult(let response, let result) = try await first.channel.open(packet),
+               response.requestID == rename.requestID {
+                XCTAssertTrue(result.succeeded, result.errorMessage ?? "Workspace rename rejected")
+                renameAcknowledged = true
+                break
+            }
+        }
+        XCTAssertTrue(renameAcknowledged)
+        let renamed = try await requireWorkspaceProjection(first)
+        XCTAssertEqual(renamed.workspaces.first(where: { $0.id.rawValue == target.workspaceID })?.title,
+                       "Renamed over relay")
+
         let browserPhone = try await makeAuthenticatedConnection(
             endpoint: endpoint, fixture: fixture,
             session: try fixtureSession(fixture: fixture, endpoint: endpoint, diagnostics: networkDiagnostics),
@@ -510,6 +531,34 @@ final class CompanionHostIntegrationTests: XCTestCase {
         let acquired = try await requireControlState(first) { $0.leaseID != nil }
         var leaseID = try XCTUnwrap(acquired.leaseID)
         XCTAssertEqual(acquired.generation, checkpoint.identity.generation)
+
+        networkDiagnostics.setStage("abort repeated partial image uploads without exhausting quota")
+        for _ in 0..<10 {
+            let transferID = UUID()
+            let partial = try RemoteImageChunkPayload(transferID: transferID, leaseID: leaseID,
+                generation: acquired.generation, contentType: .png, chunkIndex: 0, chunkCount: 2,
+                totalBytes: 4, bytes: Data([1, 2]))
+            let commands: [(CommandOperation, Data)] = [
+                (.terminalPasteImageChunk, try JSONEncoder().encode(partial)),
+                (.terminalAbortImage, try JSONEncoder().encode(RemoteImageAbortPayload(transferID: transferID)))
+            ]
+            for (operation, payload) in commands {
+                let request = metadata(target: target, hostID: identity.hostID, runtimeID: first.runtimeID)
+                try await first.channel.send(.command(request, CommandParameters(operation: operation, payload: payload)),
+                    destinationConnectionID: RelayFrame.broadcastDestination, over: first.socket)
+                var acknowledged = false
+                for _ in 0..<100 {
+                    let packet = try await requireApplication(first.reader)
+                    if case .commandResult(let response, let result) = try await first.channel.open(packet),
+                       response.requestID == request.requestID {
+                        XCTAssertTrue(result.succeeded, result.errorMessage ?? "Image transfer command rejected")
+                        acknowledged = true
+                        break
+                    }
+                }
+                XCTAssertTrue(acknowledged)
+            }
+        }
 
         let firstMarker = "MYTERM-HOST-INTEGRATION-ONE"
         try await sendInput(

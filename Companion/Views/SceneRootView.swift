@@ -39,6 +39,8 @@ struct SceneRootView: View {
                     FolderActionsView(scene: scene, folderID: folderID)
                 case .terminalActions(let route):
                     TerminalActionsView(scene: scene, route: route)
+                case .terminalImageUpload(let route):
+                    TerminalImageUploadSheet(scene: scene, route: route)
                 case .terminalComposer(let route):
                     TerminalComposerView(scene: scene, route: route, draft: scene.composerDraft(for: route))
                 }

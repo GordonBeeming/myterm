@@ -280,6 +280,9 @@ struct WorkspaceActionsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var title = ""
     @State private var isSubmitting = false
+    @State private var actionError: String?
+    @State private var actionStatus: String?
+    @State private var actionConnectionID: SavedConnectionID?
     @State private var closeConfirmation: CloseConfirmationPrompt?
     @State private var color = ""
     @State private var destinationFolderID = ""
@@ -287,12 +290,22 @@ struct WorkspaceActionsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                if !isAvailable {
+                    Text("Reconnect to the original Mac and wait for its workspace list before making changes.")
+                        .foregroundStyle(.secondary)
+                }
+                if isSubmitting { ProgressView("Saving on Mac…") }
+                if let actionError { Text(actionError).foregroundStyle(.red).accessibilityIdentifier("workspace-action-error") }
+                if let actionStatus { Text(actionStatus).foregroundStyle(.secondary) }
                 Section("Workspace") {
                     TextField("Name", text: $title)
                     Button("Rename workspace") {
                         Task { await saveWorkspace() }
                     }
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmitting)
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || title.trimmingCharacters(in: .whitespacesAndNewlines).utf8.count > 256 || isSubmitting)
+                    if title.trimmingCharacters(in: .whitespacesAndNewlines).utf8.count > 256 {
+                        Text("This name is too long. Shorten it before renaming.").font(.footnote).foregroundStyle(.red)
+                    }
                     if workspace != nil {
                         Button("Pin or unpin") { Task { await togglePin() } }
                         Picker("Color", selection: $color) {
@@ -319,9 +332,12 @@ struct WorkspaceActionsView: View {
                     }
                 }
             }
+            .disabled(!isAvailable || isSubmitting)
             .navigationTitle("Workspace actions")
-            .toolbar { Button("Done") { dismiss() } }
+            .toolbar { Button("Done") { dismiss() }.disabled(isSubmitting) }
+            .interactiveDismissDisabled(isSubmitting)
             .onAppear {
+                if actionConnectionID == nil { actionConnectionID = scene.selectedConnectionID }
                 title = workspace?.title ?? ""
                 color = workspace?.color?.rawValue ?? ""
                 destinationFolderID = workspace?.folderID?.rawValue.uuidString ?? ""
@@ -339,6 +355,28 @@ struct WorkspaceActionsView: View {
         }
     }
 
+    private var isAvailable: Bool {
+        actionConnectionID != nil && actionConnectionID == scene.selectedConnectionID
+            && scene.connectionPhase == .online && scene.hasFreshProjection && workspace != nil
+    }
+
+    private func beginAction() -> Bool {
+        guard !isSubmitting else { return false }
+        actionStatus = nil
+        guard isAvailable else {
+            actionError = "Reconnect to the original Mac before making this change."
+            return false
+        }
+        actionError = nil
+        isSubmitting = true
+        return true
+    }
+
+    private func finishAction() {
+        isSubmitting = false
+        if actionError == nil && closeConfirmation == nil { actionStatus = "Saved on Mac." }
+    }
+
     private var workspace: RemoteWorkspaceItem? {
         scene.projection?.workspaces.first { $0.id.rawValue == workspaceID }
     }
@@ -348,46 +386,54 @@ struct WorkspaceActionsView: View {
     }
 
     private func saveWorkspace() async {
-        guard let hostID = scene.selectedHostID, let workspace else { return }
-        isSubmitting = true
-        defer { isSubmitting = false }
+        guard beginAction() else { return }
+        defer { finishAction() }
+        guard let hostID = scene.selectedHostID, let workspace else { actionError = "This workspace is no longer available."; return }
         do {
             _ = try await scene.command(.workspaceRename, metadata: MessageMetadata(
                 hostID: hostID, workspaceID: workspace.id.rawValue
             ), payload: try JSONEncoder().encode(RemoteRenamePayload(title: title)))
             dismiss()
-        } catch { scene.errorMessage = error.localizedDescription }
+        } catch { actionError = error.localizedDescription }
     }
 
     private func togglePin() async {
-        guard let workspace, let hostID = scene.selectedHostID else { return }
+        guard beginAction() else { return }
+        defer { finishAction() }
+        guard let workspace, let hostID = scene.selectedHostID else { actionError = "This workspace is no longer available."; return }
         do {
             _ = try await scene.command(.workspacePin, metadata: MessageMetadata(
                 hostID: hostID, workspaceID: workspace.id.rawValue
             ), payload: try JSONEncoder().encode(RemoteBooleanPayload(value: !workspace.isPinned)))
-        } catch { scene.errorMessage = error.localizedDescription }
+        } catch { actionError = error.localizedDescription }
     }
 
     private func applyWorkspaceColor() async {
-        guard let workspace, let hostID = scene.selectedHostID else { return }
+        guard beginAction() else { return }
+        defer { finishAction() }
+        guard let workspace, let hostID = scene.selectedHostID else { actionError = "This workspace is no longer available."; return }
         do {
             _ = try await scene.command(.workspaceColor, metadata: MessageMetadata(
                 hostID: hostID, workspaceID: workspace.id.rawValue
             ), payload: try JSONEncoder().encode(RemoteColorPayload(value: color.isEmpty ? nil : color)))
-        } catch { scene.errorMessage = error.localizedDescription }
+        } catch { actionError = error.localizedDescription }
     }
 
     private func reorder(before target: RemoteWorkspaceItem?) async {
-        guard let workspace, let hostID = scene.selectedHostID else { return }
+        guard beginAction() else { return }
+        defer { finishAction() }
+        guard let workspace, let hostID = scene.selectedHostID else { actionError = "This workspace is no longer available."; return }
         do {
             _ = try await scene.command(.workspaceReorder, metadata: MessageMetadata(
                 hostID: hostID, workspaceID: workspace.id.rawValue
             ), payload: try JSONEncoder().encode(RemoteReorderPayload(beforeID: target?.id.rawValue)))
-        } catch { scene.errorMessage = error.localizedDescription }
+        } catch { actionError = error.localizedDescription }
     }
 
     private func moveWorkspace() async {
-        guard let workspace, let hostID = scene.selectedHostID else { return }
+        guard beginAction() else { return }
+        defer { finishAction() }
+        guard let workspace, let hostID = scene.selectedHostID else { actionError = "This workspace is no longer available."; return }
         let destination = destinationFolderID.isEmpty
             ? nil : UUID(uuidString: destinationFolderID).map(WorkspaceFolderID.init(rawValue:))
         do {
@@ -396,11 +442,13 @@ struct WorkspaceActionsView: View {
             ), payload: try JSONEncoder().encode(RemoteWorkspaceMovePayload(
                 destinationFolderID: destination
             )))
-        } catch { scene.errorMessage = error.localizedDescription }
+        } catch { actionError = error.localizedDescription }
     }
 
     private func closeWorkspace(confirmationToken: String? = nil) async {
-        guard let workspace, let hostID = scene.selectedHostID else { return }
+        guard beginAction() else { return }
+        defer { finishAction() }
+        guard let workspace, let hostID = scene.selectedHostID else { actionError = "This workspace is no longer available."; return }
         do {
             _ = try await scene.command(.workspaceClose, metadata: MessageMetadata(
                 hostID: hostID, workspaceID: workspace.id.rawValue
@@ -416,8 +464,8 @@ struct WorkspaceActionsView: View {
                                                      from: failure.result ?? Data())
                 closeConfirmation = CloseConfirmationPrompt(processNames: value.processNames,
                                                             token: value.confirmationToken)
-            } catch { scene.errorMessage = error.localizedDescription }
-        } catch { scene.errorMessage = error.localizedDescription }
+            } catch { actionError = error.localizedDescription }
+        } catch { actionError = error.localizedDescription }
     }
 
 
@@ -428,15 +476,27 @@ struct FolderActionsView: View {
     let folderID: UUID
     @Environment(\.dismiss) private var dismiss
     @State private var title = ""
+    @State private var isSubmitting = false
+    @State private var actionError: String?
+    @State private var actionStatus: String?
+    @State private var actionConnectionID: SavedConnectionID?
     @State private var closeConfirmation: CloseConfirmationPrompt?
     @State private var color = WorkspaceColor.blue.rawValue
 
     var body: some View {
         NavigationStack {
             Form {
+                if !isAvailable { Text("Reconnect to the original Mac and wait for its folder list before making changes.") }
+                if isSubmitting { ProgressView("Saving on Mac…") }
+                if let actionError { Text(actionError).foregroundStyle(.red).accessibilityIdentifier("folder-action-error") }
+                if let actionStatus { Text(actionStatus).foregroundStyle(.secondary) }
                 TextField("Folder name", text: $title)
                 Button("Rename folder") { Task { await rename() } }
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                              || title.trimmingCharacters(in: .whitespacesAndNewlines).utf8.count > 256)
+                if title.trimmingCharacters(in: .whitespacesAndNewlines).utf8.count > 256 {
+                    Text("This name is too long. Shorten it before renaming.").font(.footnote).foregroundStyle(.red)
+                }
                 Picker("Color", selection: $color) {
                     ForEach(WorkspaceColor.allCases, id: \.rawValue) { value in
                         Text(value.rawValue.capitalized).tag(value.rawValue)
@@ -451,9 +511,12 @@ struct FolderActionsView: View {
                 }
                 Button("Delete folder", role: .destructive) { Task { await close() } }
             }
+            .disabled(!isAvailable || isSubmitting)
             .navigationTitle("Folder actions")
-            .toolbar { Button("Done") { dismiss() } }
+            .toolbar { Button("Done") { dismiss() }.disabled(isSubmitting) }
+            .interactiveDismissDisabled(isSubmitting)
             .onAppear {
+                if actionConnectionID == nil { actionConnectionID = scene.selectedConnectionID }
                 title = scene.projection?.folders.first(where: { $0.id.rawValue == folderID })?.title ?? ""
                 color = scene.projection?.folders.first(where: { $0.id.rawValue == folderID })?.color.rawValue ?? WorkspaceColor.blue.rawValue
             }
@@ -470,6 +533,29 @@ struct FolderActionsView: View {
         }
     }
 
+    private var isAvailable: Bool {
+        actionConnectionID != nil && actionConnectionID == scene.selectedConnectionID
+            && scene.connectionPhase == .online && scene.hasFreshProjection
+            && scene.projection?.folders.contains(where: { $0.id.rawValue == folderID }) == true
+    }
+
+    private func beginAction() -> Bool {
+        guard !isSubmitting else { return false }
+        actionStatus = nil
+        guard isAvailable else {
+            actionError = "Reconnect to the original Mac before making this change."
+            return false
+        }
+        actionError = nil
+        isSubmitting = true
+        return true
+    }
+
+    private func finishAction() {
+        isSubmitting = false
+        if actionError == nil && closeConfirmation == nil { actionStatus = "Saved on Mac." }
+    }
+
     private func metadata() -> MessageMetadata? {
         guard let hostID = scene.selectedHostID else { return nil }
         return MessageMetadata(hostID: hostID, folderID: folderID)
@@ -480,33 +566,41 @@ struct FolderActionsView: View {
     }
 
     private func rename() async {
-        guard let metadata = metadata() else { return }
+        guard beginAction() else { return }
+        defer { finishAction() }
+        guard let metadata = metadata() else { actionError = "This folder is no longer available."; return }
         do {
             _ = try await scene.command(.folderRename, metadata: metadata,
                                         payload: try JSONEncoder().encode(RemoteRenamePayload(title: title)))
-        } catch { scene.errorMessage = error.localizedDescription }
+        } catch { actionError = error.localizedDescription }
     }
 
     private func applyColor() async {
-        guard let metadata = metadata() else { return }
+        guard beginAction() else { return }
+        defer { finishAction() }
+        guard let metadata = metadata() else { actionError = "This folder is no longer available."; return }
         do {
             _ = try await scene.command(.folderColor, metadata: metadata,
                                         payload: try JSONEncoder().encode(RemoteColorPayload(value: color)))
-        } catch { scene.errorMessage = error.localizedDescription }
+        } catch { actionError = error.localizedDescription }
     }
 
     private func reorder(before target: RemoteFolderProjection?) async {
-        guard let metadata = metadata() else { return }
+        guard beginAction() else { return }
+        defer { finishAction() }
+        guard let metadata = metadata() else { actionError = "This folder is no longer available."; return }
         do {
             _ = try await scene.command(.folderReorder, metadata: metadata,
                                         payload: try JSONEncoder().encode(RemoteReorderPayload(
                                             beforeID: target?.id.rawValue
                                         )))
-        } catch { scene.errorMessage = error.localizedDescription }
+        } catch { actionError = error.localizedDescription }
     }
 
     private func close(confirmationToken: String? = nil) async {
-        guard let metadata = metadata() else { return }
+        guard beginAction() else { return }
+        defer { finishAction() }
+        guard let metadata = metadata() else { actionError = "This folder is no longer available."; return }
         do {
             _ = try await scene.command(.folderClose, metadata: metadata,
                                         payload: try JSONEncoder().encode(RemoteClosePayload(
@@ -521,7 +615,7 @@ struct FolderActionsView: View {
                                                      from: failure.result ?? Data())
                 closeConfirmation = CloseConfirmationPrompt(processNames: value.processNames,
                                                             token: value.confirmationToken)
-            } catch { scene.errorMessage = error.localizedDescription }
-        } catch { scene.errorMessage = error.localizedDescription }
+            } catch { actionError = error.localizedDescription }
+        } catch { actionError = error.localizedDescription }
     }
 }

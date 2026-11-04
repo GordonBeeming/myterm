@@ -76,14 +76,91 @@ final class TerminalDraftStoreTests: XCTestCase {
         draft.finishInsertion(error: nil)
         XCTAssertEqual(draft.insertionOutcome, .transportSent)
         XCTAssertEqual(draft.text, "echo hello")
-        draft.beginInsertion()
+        XCTAssertTrue(draft.beginInsertion(allowRepeat: true))
         draft.finishInsertion(error: RemoteError.disconnected)
         XCTAssertEqual(draft.insertionOutcome, .unconfirmed)
         XCTAssertFalse(draft.isSending)
         XCTAssertEqual(draft.text, "echo hello")
-        draft.beginInsertion()
+        XCTAssertTrue(draft.beginInsertion(allowRepeat: true))
         draft.finishInsertion(error: TerminalComposerError.requiresControl)
-        XCTAssertEqual(draft.insertionOutcome, .notInserted)
+        XCTAssertEqual(draft.insertionOutcome, .unconfirmed, "A local refusal cannot erase the earlier uncertain send")
+    }
+
+    func testCompletedInsertionCannotBeStartedAgainByRepeatedTaps() {
+        let draft = TerminalComposerDraft(text: "Please inspect this")
+        draft.beginInsertion()
+        draft.finishInsertion(error: nil)
+        for _ in 0..<24 { draft.beginInsertion() }
+        XCTAssertFalse(draft.isSending, "An unchanged sent draft must require an explicit repeat action")
+        XCTAssertEqual(draft.insertionOutcome, .transportSent)
+    }
+
+    func testUnconfirmedInsertionCannotBeStartedAgainByRepeatedTaps() {
+        let draft = TerminalComposerDraft(text: "Please inspect this")
+        draft.beginInsertion()
+        draft.finishInsertion(error: RemoteError.disconnected)
+        for _ in 0..<24 { draft.beginInsertion() }
+        XCTAssertFalse(draft.isSending, "An uncertain send may already have reached the terminal")
+        XCTAssertEqual(draft.insertionOutcome, .unconfirmed)
+    }
+
+    func testBothInsertionButtonsShareOneSynchronousGateEvenAfterTransportFinishes() throws {
+        let draft = TerminalComposerDraft(text: "Please inspect this")
+        var writes: [Data] = []
+        for index in 0..<24 {
+            guard draft.beginInsertion() else { continue }
+            writes.append(try TerminalComposerDraft.pasteBytes(draft.text, bracketed: true,
+                                                               appendReturn: index.isMultiple(of: 2)))
+            // Even an immediate successful write must not rearm the buttons.
+            draft.finishInsertion(error: nil)
+        }
+        XCTAssertEqual(writes.count, 1)
+        XCTAssertTrue(draft.requiresRepeatConfirmation)
+        XCTAssertTrue(draft.beginInsertion(allowRepeat: true))
+        XCTAssertFalse(draft.beginInsertion(allowRepeat: true), "Confirmation cannot bypass an in-flight write")
+        draft.finishInsertion(error: nil)
+        XCTAssertFalse(draft.beginInsertion())
+    }
+
+    func testProtectedDraftRemainsProtectedAcrossRelaunchUntilEdited() {
+        let defaults = defaults()
+        let route = route()
+        let store = TerminalDraftStore(defaults: defaults)
+        let draft = store.draft(for: route)
+        XCTAssertFalse(draft.beginInsertion(), "Empty drafts cannot send")
+        draft.text = "first message"
+        XCTAssertTrue(draft.beginInsertion())
+        draft.finishInsertion(error: nil)
+        let reopenedStore = TerminalDraftStore(defaults: defaults)
+        let reopened = reopenedStore.draft(for: route)
+        XCTAssertFalse(reopened.beginInsertion())
+        reopened.text = "first message"
+        XCTAssertFalse(reopened.beginInsertion(), "Selecting the same saved prompt must keep the protection")
+        reopened.text = "next message"
+        XCTAssertNil(reopened.currentInsertionOutcome)
+        let thirdStore = TerminalDraftStore(defaults: defaults)
+        let restoredEdit = thirdStore.draft(for: route)
+        XCTAssertNil(restoredEdit.currentInsertionOutcome)
+        restoredEdit.text = "first message"
+        XCTAssertFalse(restoredEdit.beginInsertion(), "The sent text fingerprint must survive edits and relaunch")
+        reopened.text = "first message"
+        XCTAssertFalse(reopened.beginInsertion(), "Undoing an edit must not rearm the same message")
+        reopened.text = "next message"
+        XCTAssertTrue(reopened.beginInsertion())
+    }
+
+    func testInterruptedInsertionRequiresConfirmationButKnownLocalFailureCanRetry() {
+        let interrupted = TerminalComposerDraft(text: "message", insertionOutcome: .sending)
+        XCTAssertFalse(interrupted.beginInsertion())
+        XCTAssertTrue(interrupted.beginInsertion(allowRepeat: true))
+        interrupted.finishInsertion(error: TerminalComposerError.requiresControl)
+        XCTAssertEqual(interrupted.insertionOutcome, .unconfirmed)
+        XCTAssertFalse(interrupted.beginInsertion())
+        let unsent = TerminalComposerDraft(text: "not sent yet")
+        XCTAssertTrue(unsent.beginInsertion())
+        unsent.finishInsertion(error: TerminalComposerError.requiresControl)
+        XCTAssertEqual(unsent.insertionOutcome, .notInserted)
+        XCTAssertTrue(unsent.beginInsertion())
     }
 
     func testSharedSnippetCatalogRoundTripsAndOlderHostIsRecognised() throws {
@@ -247,30 +324,76 @@ final class TerminalDraftStoreTests: XCTestCase {
         XCTAssertEqual(TerminalDraftStore(defaults: defaults).draft(for: edited).insertionOutcome, .transportSent)
     }
 
-    func testPruningRetainsMemoryOnlyUnconfirmedDraftWhenCatalogIsFull() {
+    func testEquivalentLineEndingsCannotBypassRepeatProtection() {
+        let draft = TerminalComposerDraft(text: "first\r\nsecond\rthird")
+        XCTAssertTrue(draft.beginInsertion())
+        draft.finishInsertion(error: nil)
+        draft.text = "first\nsecond\nthird"
+        XCTAssertFalse(draft.beginInsertion(), "These drafts insert identical bytes")
+    }
+
+    func testRepeatConfirmationCannotSendTextEditedInAnotherScene() {
+        let draft = TerminalComposerDraft(text: "confirmed text")
+        let confirmed = draft.text
+        draft.text = "changed in another scene"
+        XCTAssertFalse(draft.beginInsertion(allowRepeat: true, expectedText: confirmed))
+        XCTAssertFalse(draft.isSending)
+    }
+
+    func testFailedEditedDraftPreservesSentProtectionAfterUndoAndRelaunch() throws {
+        let defaults = defaults()
+        let route = route()
+        let store = TerminalDraftStore(defaults: defaults)
+        let draft = store.draft(for: route)
+        draft.text = "already sent"
+        XCTAssertTrue(draft.beginInsertion())
+        draft.finishInsertion(error: nil)
+        draft.text = "invalid\nmultiline"
+        XCTAssertTrue(draft.beginInsertion())
+        do {
+            _ = try TerminalComposerDraft.pasteBytes(draft.text, bracketed: false, appendReturn: true)
+            XCTFail("Multiline insertion must fail without writing")
+        } catch { draft.finishInsertion(error: error) }
+        let reopenedStore = TerminalDraftStore(defaults: defaults)
+        let reopened = reopenedStore.draft(for: route)
+        reopened.text = "already sent"
+        XCTAssertFalse(reopened.beginInsertion(), "Undo must not duplicate the earlier delivered message")
+    }
+
+    func testRefusedExplicitRepeatPreservesTheEarlierSentProtection() {
+        let draft = TerminalComposerDraft(text: "already sent")
+        XCTAssertTrue(draft.beginInsertion())
+        draft.finishInsertion(error: nil)
+        draft.onChange = { [weak draft] _, _, _ in draft?.persistenceErrorMessage = "Cannot save" }
+        XCTAssertFalse(draft.beginInsertion(allowRepeat: true))
+        XCTAssertEqual(draft.insertionOutcome, .transportSent)
+        XCTAssertTrue(draft.requiresRepeatConfirmation)
+        draft.onChange = nil
+        draft.persistenceErrorMessage = nil
+        XCTAssertFalse(draft.beginInsertion())
+    }
+
+    func testFullDraftCatalogBlocksSendingUntilTheProtectionCanBeSaved() {
         let defaults = defaults()
         let store = TerminalDraftStore(defaults: defaults)
-        let overflowRoute = route()
-        for _ in 0..<TerminalDraftStore.maximumEntries {
-            store.draft(for: route(connection: overflowRoute.connectionID)).text = "Saved"
+        let firstRoute = route()
+        store.draft(for: firstRoute).text = "Saved"
+        for _ in 1..<TerminalDraftStore.maximumEntries {
+            store.draft(for: route()).text = "Saved"
         }
+        let overflowRoute = route()
         let overflow = store.draft(for: overflowRoute)
-        overflow.text = "Potentially delivered input"
-        overflow.beginInsertion()
-        overflow.finishInsertion(error: RemoteError.disconnected)
+        overflow.text = "Do not send without a durable marker"
+        XCTAssertFalse(overflow.beginInsertion())
+        XCTAssertFalse(overflow.isSending)
         XCTAssertNotNil(overflow.persistenceErrorMessage)
-        XCTAssertEqual(overflow.insertionOutcome, .unconfirmed)
-        store.pruneClosedTerminals(for: overflowRoute.connectionID,
-                                   projection: RemoteWorkspaceProjection(folders: [], workspaces: []))
-        XCTAssertTrue(store.draft(for: overflowRoute) === overflow)
-        XCTAssertEqual(overflow.text, "Potentially delivered input")
-        XCTAssertEqual(overflow.insertionOutcome, .unconfirmed)
-        // Pruning freed saved slots; an explicit subsequent edit can persist the retained draft.
+        XCTAssertNotNil(overflow.errorMessage)
+        store.draft(for: firstRoute).text = ""
         overflow.text += " reviewed"
-        XCTAssertNil(overflow.persistenceErrorMessage)
+        XCTAssertTrue(overflow.beginInsertion())
+        overflow.finishInsertion(error: nil)
         let restored = TerminalDraftStore(defaults: defaults).draft(for: overflowRoute)
-        XCTAssertEqual(restored.text, overflow.text)
-        XCTAssertEqual(restored.insertionOutcome, .unconfirmed)
+        XCTAssertTrue(restored.requiresRepeatConfirmation)
     }
 
     func testInterruptedMigrationKeepsNewerIndexedEntriesAndRecoversOtherLegacyDestinations() throws {
