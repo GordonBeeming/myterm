@@ -56,7 +56,9 @@ def prepare():
                                  or existing["draft"] or not existing["assets"]):
         raise RuntimeError("Existing beta tag belongs to a different source or channel")
     # This workflow starts after the previous TestFlight workflow's build sequence.
-    build_number = str(10000 + int(os.environ["GITHUB_RUN_NUMBER"]))
+    build_number = str(1000 + int(os.environ["GITHUB_RUN_NUMBER"]))
+    if int(build_number) > 9999:
+        raise RuntimeError("TestFlight build sequence requires a new versioning range before exceeding four digits")
     values = dict(sha=sha, version=version, tag=tag,
                   publish=str(existing is None).lower(), build_number=build_number)
     with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:

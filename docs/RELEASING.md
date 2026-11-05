@@ -8,7 +8,7 @@ Every push to `main` enters the **Beta** workflow. It finishes the running batch
 
 The macOS prerelease is published after both platforms succeed. Its immutable tag is `v0.0.N-beta`, where `N` is the number of commits reachable from the source snapshot. The numeric app version is `0.0.N`; the bundle carries `MyTermReleaseChannel=beta`, so its updater checks beta prereleases and opens their download page. Downloading a beta replaces the installed app if you drag it over that copy. Stable installations continue checking stable releases, and the stable Homebrew cask is untouched.
 
-TestFlight uses the Beta workflow run number plus 10000, keeping it above the earlier Companion build sequence. The release notes identify the source SHA and TestFlight build. Apple may still be processing an uploaded build when the GitHub prerelease appears. A failed platform prevents the macOS prerelease publication; a successful TestFlight upload cannot be rolled back if a later job fails.
+TestFlight uses the Beta workflow run number plus 1000, keeping it above the earlier Companion build sequence. The release notes identify the source SHA and TestFlight build. Apple may still be processing an uploaded build when the GitHub prerelease appears. A failed platform prevents the macOS prerelease publication; a successful TestFlight upload cannot be rolled back if a later job fails.
 
 Use **Beta → Run workflow** on `main` to retry a failed batch. An already published snapshot is skipped. Rerunning a job after a successful TestFlight upload can encounter Apple's duplicate build rejection; a new main commit starts a new batch and build number. Signed DMGs are retained as workflow artifacts for 14 days, and IPAs for 90 days.
 

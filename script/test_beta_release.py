@@ -25,7 +25,7 @@ class BetaReleaseTests(unittest.TestCase):
     def test_new_source_pins_one_version_and_increases_testflight_sequence(self):
         values = self.prepare()
         self.assertEqual(values, {"sha": "a" * 40, "version": "0.0.123",
-                                 "tag": "v0.0.123-beta", "publish": "true", "build_number": "10007"})
+                                 "tag": "v0.0.123-beta", "publish": "true", "build_number": "1007"})
 
     def test_existing_snapshot_does_not_upload_another_testflight_build(self):
         self.assertEqual(self.prepare({"target_commitish": "a" * 40, "prerelease": True, "draft": False, "assets": [{"name": "beta.dmg"}]})["publish"], "false")
@@ -56,7 +56,7 @@ class BetaReleaseTests(unittest.TestCase):
             try:
                 os.chdir(root)
                 with patch.dict(os.environ, {"BETA_SOURCE_SHA": "a" * 40, "BETA_VERSION": "0.0.123",
-                                             "BETA_TAG": "v0.0.123-beta", "BETA_BUILD_NUMBER": "10007",
+                                             "BETA_TAG": "v0.0.123-beta", "BETA_BUILD_NUMBER": "1007",
                                              "RUNNER_TEMP": directory}), \
                         patch.object(beta_release.subprocess, "run") as run, \
                         patch.object(beta_release, "find_release", return_value=None):
@@ -69,7 +69,7 @@ class BetaReleaseTests(unittest.TestCase):
                 self.assertEqual(args[args.index("--target") + 1], "a" * 40)
                 self.assertNotIn("--clobber", args)
                 with patch.dict(os.environ, {"BETA_SOURCE_SHA": "a" * 40, "BETA_VERSION": "0.0.123",
-                                             "BETA_TAG": "v0.0.123-beta", "BETA_BUILD_NUMBER": "10007"}), \
+                                             "BETA_TAG": "v0.0.123-beta", "BETA_BUILD_NUMBER": "1007"}), \
                         patch.object(beta_release, "find_release", return_value={"draft": True}), \
                         patch.object(beta_release.subprocess, "run") as forbidden:
                     with self.assertRaises(RuntimeError):
