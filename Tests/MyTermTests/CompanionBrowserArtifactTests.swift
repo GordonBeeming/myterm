@@ -209,26 +209,42 @@ final class CompanionBrowserRendererTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         let file = root.appendingPathComponent("index.html")
         try Data("<html><title>Recovered navigation</title><body>Working page</body></html>".utf8).write(to: file)
+        try Data("<html><title>Second navigation</title><body>Second page</body></html>".utf8)
+            .write(to: root.appendingPathComponent("second.html"))
         let server = CompanionBrowserArtifactServer(artifact: try CompanionBrowserArtifact(selectedFile: file), allowsVirtualOrigin: false)
         let url = try await server.authorizedURL(path: "index.html")
+        let secondURL = try await server.authorizedURL(path: "second.html")
         let renderer = RemoteBrowserRenderer(url: url)
-        do {
-            var frame = try await renderer.interact(RemoteBrowserRequest(action: .open, width: 640, height: 480))
-            for _ in 0..<20 where frame.isLoading || frame.title != "Recovered navigation" {
+        func waitForPage(_ title: String, after initial: RemoteBrowserFrame) async throws -> RemoteBrowserFrame {
+            var frame = initial
+            let deadline = ContinuousClock.now.advanced(by: .seconds(10))
+            while frame.isLoading || frame.title != title || frame.error != nil {
+                guard ContinuousClock.now < deadline else { break }
                 frame = try await renderer.interact(RemoteBrowserRequest(action: .snapshot, width: 640, height: 480))
             }
-            _ = try await renderer.interact(RemoteBrowserRequest(action: .navigate, width: 640, height: 480,
-                url: url.absoluteString + "?second=1"))
+            XCTAssertFalse(frame.isLoading, "Navigation to \(title) did not finish.")
+            XCTAssertEqual(frame.title, title)
+            XCTAssertNil(frame.error)
+            return frame
+        }
+        do {
+            let frame = try await renderer.interact(RemoteBrowserRequest(action: .open, width: 640, height: 480))
+            _ = try await waitForPage("Recovered navigation", after: frame)
+            let second = try await renderer.interact(RemoteBrowserRequest(action: .navigate, width: 640, height: 480,
+                url: secondURL.absoluteString))
+            let committed = try await waitForPage("Second navigation", after: second)
+            XCTAssertTrue(committed.canGoBack, "The second document must enter history before the failing navigation.")
             var failed = try await renderer.interact(RemoteBrowserRequest(action: .navigate, width: 640, height: 480,
                 url: "http://127.0.0.1:1/unavailable"))
-            for _ in 0..<20 where failed.isLoading || failed.error == nil {
+            let failureDeadline = ContinuousClock.now.advanced(by: .seconds(10))
+            while failed.isLoading || failed.error == nil {
+                guard ContinuousClock.now < failureDeadline else { break }
                 failed = try await renderer.interact(RemoteBrowserRequest(action: .snapshot, width: 640, height: 480))
             }
+            XCTAssertFalse(failed.isLoading)
             XCTAssertNotNil(failed.error)
             var recovered = try await renderer.interact(RemoteBrowserRequest(action: .back, width: 640, height: 480))
-            for _ in 0..<20 where recovered.isLoading || recovered.title != "Recovered navigation" {
-                recovered = try await renderer.interact(RemoteBrowserRequest(action: .snapshot, width: 640, height: 480))
-            }
+            recovered = try await waitForPage("Recovered navigation", after: recovered)
             XCTAssertEqual(recovered.title, "Recovered navigation")
             XCTAssertNil(recovered.error)
             renderer.close()
@@ -255,9 +271,10 @@ final class CompanionBrowserRendererTests: XCTestCase {
         let renderer = RemoteBrowserRenderer(url: parentURL)
         func waitForTitle(_ expected: String, after initial: RemoteBrowserFrame) async throws -> RemoteBrowserFrame {
             var frame = initial
-            let deadline = Date().addingTimeInterval(5)
+            let deadline = Date().addingTimeInterval(10)
             // postMessage updates the title asynchronously. The deliberate fixture
             // delay covers a snapshot finishing before the acknowledgment arrives.
+            // Allow a slow snapshot as well as that acknowledgment on hosted runners.
             while frame.title != expected, Date() < deadline {
                 frame = try await renderer.interact(RemoteBrowserRequest(action: .snapshot, width: 640, height: 480))
             }

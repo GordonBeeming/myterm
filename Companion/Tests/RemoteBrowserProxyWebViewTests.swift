@@ -346,7 +346,7 @@ final class RemoteBrowserProxyWebViewTests: XCTestCase {
         while browser.webView?.title != "Remote fixture", Date() < deadline {
             try await Task.sleep(for: .milliseconds(50))
         }
-        XCTAssertEqual(browser.webView?.title, "Remote fixture", "Bootstrap must finish before this deadline starts")
+        XCTAssertEqual(browser.webView?.title, "Remote fixture", "Bootstrap must finish before this deadline starts; path=\(browser.webView?.url?.lastPathComponent ?? "nil"), loading=\(browser.webView?.isLoading ?? false), error=\(browser.error ?? "none")")
         await bridge.stop()
     }
 
@@ -477,7 +477,7 @@ final class RemoteBrowserProxyWebViewTests: XCTestCase {
         while browser.webView?.title != "Remote fixture", browser.error == nil, Date() < deadline {
             try await Task.sleep(for: .milliseconds(100))
         }
-        XCTAssertEqual(browser.webView?.title, "Remote fixture", browser.error ?? "Remote page did not load")
+        XCTAssertEqual(browser.webView?.title, "Remote fixture", "Remote page did not load; path=\(browser.webView?.url?.lastPathComponent ?? "nil"), loading=\(browser.webView?.isLoading ?? false), error=\(browser.error ?? "none")")
         let destinations = await bridge.destinations()
         XCTAssertTrue(destinations.contains("myterm-test.invalid"))
         browser.stop()

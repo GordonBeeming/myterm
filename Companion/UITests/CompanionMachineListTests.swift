@@ -94,19 +94,28 @@ final class CompanionMachineListTests: XCTestCase {
                                    holdingFor hold: TimeInterval = 0.5,
                                    timeout: TimeInterval = 10) {
         let query = app.buttons.matching(identifier: identifier)
-        let deadline = Date().addingTimeInterval(timeout)
-        var matchingSince: Date?
-        while Date() < deadline {
-            if query.count == count {
-                let since = matchingSince ?? Date()
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(timeout))
+        var matchingSince: ContinuousClock.Instant?
+        var observedCount: Int?
+        var observations = 0
+        // An accessibility query can itself consume the deadline. A matching sample
+        // still needs its confirmation interval; stop after timeout if that match is lost.
+        while clock.now < deadline || matchingSince != nil {
+            observedCount = query.count
+            observations += 1
+            let now = clock.now
+            if observedCount == count {
+                let since = matchingSince ?? now
                 matchingSince = since
-                if Date().timeIntervalSince(since) >= hold { return }
+                if since.duration(to: now) >= .seconds(hold) { return }
             } else {
                 matchingSince = nil
             }
             Thread.sleep(forTimeInterval: 0.1)
         }
-        XCTFail("\(identifier) never held a count of \(count) for \(hold)s")
+        let lastCount = observedCount.map(String.init) ?? "none"
+        XCTFail("\(identifier) never held a count of \(count) for \(hold)s; last count \(lastCount) across \(observations) observations")
     }
 
     /// The identifier is the same whether a row is starred or not, so the label is what says which.
