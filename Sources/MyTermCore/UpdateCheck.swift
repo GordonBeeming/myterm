@@ -88,6 +88,7 @@ public enum UpdateCheck {
         case stable
         case beta
 
+        /// Stable uses GitHub's latest release; beta considers completed prerelease artifacts.
         public var endpoint: URL {
             switch self {
             case .stable: UpdateCheck.latestReleaseEndpoint
@@ -114,7 +115,18 @@ public enum UpdateCheck {
         case .stable:
             release = try parseRelease(data)
         case .beta:
-            guard let releases = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            let response: Any
+            do {
+                response = try JSONSerialization.jsonObject(with: data)
+            } catch {
+                throw UpdateCheckError.unreadableResponse(reason: error.localizedDescription)
+            }
+            if let payload = response as? [String: Any], let message = payload["message"] as? String {
+                throw message.localizedCaseInsensitiveContains("not found")
+                    ? UpdateCheckError.noPublishedRelease
+                    : UpdateCheckError.unreadableResponse(reason: message)
+            }
+            guard let releases = response as? [[String: Any]] else {
                 throw UpdateCheckError.unreadableResponse(reason: "expected a list of beta releases")
             }
             // A draft or an empty prerelease must never invite an update to an unfinished build.
@@ -138,6 +150,7 @@ public enum UpdateCheck {
         return release.version > current ? .available(release) : .upToDate(current: current)
     }
 
+    /// Read a single release while preserving GitHub API errors for the settings UI.
     static func parseRelease(_ data: Data, channel: Channel = .stable) throws -> AppRelease {
         let payload: [String: Any]
         do {

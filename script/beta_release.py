@@ -12,15 +12,18 @@ import urllib.error
 import urllib.request
 
 
-def github(path):
+def github(path, payload=None):
     """Return API JSON; only a missing release is an expected absence."""
     request = urllib.request.Request(
         f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/{path}",
+        data=None if payload is None else json.dumps(payload).encode("utf-8"),
         headers={"Authorization": f"Bearer {os.environ['GH_TOKEN']}",
-                 "Accept": "application/vnd.github+json"},
+                 "Accept": "application/vnd.github+json", "Content-Type": "application/json"},
     )
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
+            if response.status == 204:
+                return None
             return json.load(response)
     except urllib.error.HTTPError as error:
         if error.code == 404 and path.startswith("git/ref/tags/"):
@@ -29,6 +32,7 @@ def github(path):
 
 
 def git(*args):
+    """Fail rather than retaining incomplete Git output for source identity checks."""
     return subprocess.check_output(["git", *args], text=True).strip()
 
 
@@ -51,17 +55,40 @@ def verify_tag(tag, sha, required=False):
     if reference is None:
         if required:
             raise RuntimeError("Published beta tag is missing")
-        return
+        return False
     target = reference["object"]
     for _ in range(10):
         if target["type"] == "commit":
             if target["sha"] != sha:
                 raise RuntimeError(f"Existing tag {tag} points to a different source")
-            return
+            return True
         if target["type"] != "tag":
             break
         target = github(f"git/tags/{target['sha']}")["object"]
     raise RuntimeError("Beta tag does not resolve to a commit")
+
+
+def reserve_source():
+    """Reserve the event snapshot while it is main; a newer pending event supersedes it."""
+    sha = git("rev-parse", "HEAD")
+    if github("git/ref/heads/main")["object"]["sha"] != sha:
+        return None
+    commit = github(f"commits/{sha}")
+    if not commit["commit"]["verification"]["verified"]:
+        raise RuntimeError("Beta source must have a verified signature")
+    version = f"0.0.{git('rev-list', '--count', 'HEAD')}"
+    tag = f"v{version}-beta"
+    if not verify_tag(tag, sha):
+        try:
+            github("git/refs", {"ref": f"refs/tags/{tag}", "sha": sha})
+        except urllib.error.HTTPError as error:
+            # A workflow edit can race ref creation and exceed the Actions token's
+            # scope. Skip before building; the pending main event carries that edit.
+            if error.code in (403, 404, 422) and github("git/ref/heads/main")["object"]["sha"] != sha:
+                return None
+            raise
+    verify_tag(tag, sha, required=True)
+    return sha, version, tag
 
 
 def metadata(release, sha, version, tag):
@@ -90,18 +117,35 @@ def verify_asset(release, name, digest):
 
 def prepare():
     """Pin all jobs to one verified commit, skipping an already published snapshot."""
-    sha = git("rev-parse", "HEAD")
-    commit = github(f"commits/{sha}")
-    if not commit["commit"]["verification"]["verified"]:
-        raise RuntimeError("Beta source must have a verified signature")
-    version = f"0.0.{git('rev-list', '--count', 'HEAD')}"
-    tag = f"v{version}-beta"
-    verify_tag(tag, sha)
+    rebuild = os.environ.get("REBUILD_COMPANION") == "true"
+    requested = os.environ.get("REQUESTED_SOURCE_SHA", "")
+    if requested and not rebuild:
+        raise RuntimeError("An explicit source SHA requires companion resubmission")
+    if rebuild:
+        if os.environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch":
+            raise RuntimeError("Companion resubmission must be explicitly dispatched")
+        sha = requested or git("rev-parse", "HEAD")
+        if not re.fullmatch(r"[0-9a-f]{40}", sha):
+            raise RuntimeError("Companion source must be a full commit SHA")
+        git("merge-base", "--is-ancestor", sha, "HEAD")
+        if not github(f"commits/{sha}")["commit"]["verification"]["verified"]:
+            raise RuntimeError("Companion source must have a verified signature")
+        version = f"0.0.{git('rev-list', '--count', sha)}"
+        source = sha, version, f"v{version}-beta"
+    else:
+        source = reserve_source()
+    if source is None:
+        # Dispatch runs use main's matching workflow definitions too. This also
+        # recovers from out-of-order push delivery replacing the newest pending event.
+        github("actions/workflows/beta.yml/dispatches", {"ref": "main"})
+        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+            output.write("publish=false\nresume=false\n")
+        print("A newer main event supersedes this snapshot; skipping before building")
+        return
+    sha, version, tag = source
     existing = find_release(tag)
-    # This workflow starts after the previous TestFlight workflow's build sequence.
-    build_number = str(1000 + int(os.environ["GITHUB_RUN_NUMBER"]))
-    if int(build_number) > 9999:
-        raise RuntimeError("TestFlight build sequence requires a new versioning range before exceeding four digits")
+    if rebuild and (existing is None or existing["draft"]):
+        raise RuntimeError("Companion resubmission requires a completed beta release")
     run_id = os.environ["GITHUB_RUN_ID"]
     if existing is not None:
         original = metadata(existing, sha, version, tag)
@@ -109,9 +153,15 @@ def prepare():
         if not existing["draft"]:
             verify_tag(tag, sha, required=True)
             verify_asset(existing, f"myterm-{version}-aarch64.dmg", original["sha256"])
+    if existing is None or rebuild:
+        # This workflow starts after the previous TestFlight workflow's build sequence.
+        build_number = str(1000 + int(os.environ["GITHUB_RUN_NUMBER"]))
+        if int(build_number) > 9999:
+            raise RuntimeError("TestFlight build sequence requires a new versioning range before exceeding four digits")
     values = dict(sha=sha, version=version, tag=tag,
-                  publish=str(existing is None or existing["draft"]).lower(), build_number=build_number,
-                  resume=str(existing is not None and existing["draft"]).lower(), artifact_run_id=run_id)
+                  publish=str(not rebuild and (existing is None or existing["draft"])).lower(), build_number=build_number,
+                  resume=str(not rebuild and existing is not None and existing["draft"]).lower(), artifact_run_id=run_id,
+                  rebuild_companion=str(rebuild).lower())
     with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
         for key, value in values.items():
             output.write(f"{key}={value}\n")
@@ -130,7 +180,7 @@ def publish():
         raise RuntimeError(f"Signed beta DMG is missing: {dmg}")
     digest = hashlib.sha256(dmg.read_bytes()).hexdigest()
     batch = dict(sha=sha, version=version, tag=tag, build=build, run_id=run_id, sha256=digest)
-    verify_tag(tag, sha)
+    verify_tag(tag, sha, required=True)
     existing = find_release(tag)
     if existing is not None:
         if metadata(existing, sha, version, tag) != batch:
@@ -150,7 +200,7 @@ def publish():
     with notes.open("a", encoding="utf-8") as output:
         output.write(f"\n<!-- myterm-beta: {json.dumps(batch, sort_keys=True)} -->\n")
     if existing is None:
-        subprocess.run(["gh", "release", "create", tag, "--target", sha,
+        subprocess.run(["gh", "release", "create", tag, "--verify-tag",
                         "--draft", "--prerelease", "--latest=false", "--title", f"MyTerm {version} Beta",
                         "--notes-file", str(notes)], check=True)
     elif len(existing["assets"]) == 1:
@@ -167,7 +217,7 @@ def publish():
     if uploaded is None or metadata(uploaded, sha, version, tag) != batch:
         raise RuntimeError("Uploaded draft no longer matches the beta batch")
     verify_asset(uploaded, dmg.name, digest)
-    verify_tag(tag, sha)
+    verify_tag(tag, sha, required=True)
     subprocess.run(["gh", "release", "edit", tag, "--draft=false", "--latest=false"], check=True)
     verify_tag(tag, sha, required=True)
 

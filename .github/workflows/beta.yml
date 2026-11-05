@@ -4,12 +4,21 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      rebuild_companion:
+        description: Resubmit only the companion for a published beta
+        type: boolean
+        default: false
+      source_sha:
+        description: Published beta source SHA for companion resubmission (blank uses this main commit)
+        type: string
+        default: ''
 
 permissions:
   contents: read
 
 # Keep the running batch intact. GitHub replaces the single pending batch with the
-# newest one; resolving main only after acquiring this slot includes all queued merges.
+# newest one. The retained event includes all earlier merges; stale events skip before building.
 concurrency:
   group: main-beta
   cancel-in-progress: false
@@ -22,6 +31,7 @@ jobs:
     # publication before spending another macOS build and TestFlight upload.
     permissions:
       contents: write
+      actions: write
     outputs:
       sha: ${{ steps.source.outputs.sha }}
       version: ${{ steps.source.outputs.version }}
@@ -30,15 +40,18 @@ jobs:
       build_number: ${{ steps.source.outputs.build_number }}
       resume: ${{ steps.source.outputs.resume }}
       artifact_run_id: ${{ steps.source.outputs.artifact_run_id }}
+      rebuild_companion: ${{ steps.source.outputs.rebuild_companion }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          ref: main
+          ref: ${{ github.sha }}
           fetch-depth: 0
-      - name: Freeze the newest main snapshot
+      - name: Reserve the queued main snapshot
         id: source
         env:
           GH_TOKEN: ${{ github.token }}
+          REBUILD_COMPANION: ${{ inputs.rebuild_companion }}
+          REQUESTED_SOURCE_SHA: ${{ inputs.source_sha }}
         run: python3 script/beta_release.py prepare
 
   macos:
@@ -55,7 +68,9 @@ jobs:
 
   companion:
     needs: source
-    if: needs.source.outputs.publish == 'true' && needs.source.outputs.resume != 'true'
+    if: >-
+      (needs.source.outputs.publish == 'true' && needs.source.outputs.resume != 'true') ||
+      needs.source.outputs.rebuild_companion == 'true'
     uses: ./.github/workflows/companion.yml
     with:
       source_sha: ${{ needs.source.outputs.sha }}
