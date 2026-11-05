@@ -53,8 +53,10 @@ public enum WebLinkDestination: Codable, Equatable, Hashable, Sendable {
         case application
     }
 
+    /// Decode the persisted schema and record recognized keys so channel recovery can reject newer fields.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        decoder.recordKnownKeys(container.allKeys)
         switch (try? container.decode(Kind.self, forKey: .type)) ?? .myterm {
         case .myterm:
             self = .myterm
@@ -100,8 +102,10 @@ public enum TerminalShell: Codable, Equatable, Hashable, Sendable {
         case custom
     }
 
+    /// Decode the persisted schema and record recognized keys so channel recovery can reject newer fields.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        decoder.recordKnownKeys(container.allKeys)
         switch (try? container.decode(Kind.self, forKey: .type)) ?? .loginShell {
         case .loginShell:
             self = .loginShell
@@ -143,8 +147,10 @@ public enum NewSessionWorkingDirectoryPolicy: Codable, Equatable, Hashable, Send
         case activePane
     }
 
+    /// Decode the persisted schema and record recognized keys so channel recovery can reject newer fields.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        decoder.recordKnownKeys(container.allKeys)
         switch (try? container.decode(Kind.self, forKey: .type)) ?? .home {
         case .home:
             self = .home
@@ -407,9 +413,12 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         case markdownOpenCommand
     }
 
+    /// Decode the persisted schema and record recognized keys so channel recovery can reject newer fields.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        decoder.recordKnownKeys(container.allKeys)
         let legacyContainer = try decoder.container(keyedBy: LegacyCodingKeys.self)
+        decoder.recordKnownKeys(legacyContainer.allKeys)
         self.init(
             browserDataScope: (try? container.decode(BrowserDataScope.self, forKey: .browserDataScope)) ?? Self.legacy.browserDataScope,
             webLinkDestination: (try? container.decode(WebLinkDestination.self, forKey: .webLinkDestination)) ?? .myterm,
@@ -541,6 +550,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
         case markdownOpenCommand
     }
 
+    /// Decode the persisted schema and record recognized keys so channel recovery can reject newer fields.
     public init(from decoder: Decoder) throws {
         self.init()
         let container = try decoder.container(keyedBy: CodingKeys.self)

@@ -235,12 +235,13 @@ public struct WorkspaceStoreSnapshot: Codable, Equatable, Sendable {
         case selectedWorkspaceID
     }
 
+    /// Decode the persisted schema and record recognized keys so channel recovery can reject newer fields.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        decoder.recordKnownKeys(container.allKeys)
         let decodedVersion = try container.decode(Int.self, forKey: .version)
         switch decodedVersion {
         case Self.currentVersion:
-            decoder.recordKnownKeys(container.allKeys)
             version = decodedVersion
             folders = try container.decodeIfPresent(LossyArray<WorkspaceFolder>.self, forKey: .folders)?.elements ?? []
             globalSettings = (try? container.decode(TerminalPreferences.self, forKey: .globalSettings)) ?? .default
@@ -332,7 +333,9 @@ public final class WorkspaceStore {
         let object = try JSONSerialization.jsonObject(with: data)
         func count(_ object: Any, at path: [String]) -> Int {
             if let dictionary = object as? [String: Any] {
-                let unknown = tracker.knownKeysByPath[path].map { known in dictionary.keys.filter { !known.contains($0) }.count } ?? 0
+                // Persisted workspace objects have fixed schemas. An unrecorded object must fail
+                // closed rather than silently accept fields that stable would discard on save.
+                let unknown = tracker.knownKeysByPath[path].map { known in dictionary.keys.filter { !known.contains($0) }.count } ?? dictionary.count
                 return unknown + dictionary.reduce(0) { $0 + count($1.value, at: path + [$1.key]) }
             }
             if let array = object as? [Any] {
@@ -1706,8 +1709,10 @@ private struct LegacySnapshot: Decodable {
         case selectedWorkspaceID
     }
 
+    /// Decode the persisted schema and record recognized keys so channel recovery can reject newer fields.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        decoder.recordKnownKeys(container.allKeys)
         folders = try container.decodeIfPresent(LossyArray<WorkspaceFolder>.self, forKey: .folders)?.elements ?? []
         globalSettings = (try? container.decode(TerminalPreferences.self, forKey: .globalSettings)) ?? .default
         workspaces = try container.decodeIfPresent(LossyArray<LegacyWorkspace>.self, forKey: .workspaces)?.elements ?? []
@@ -1748,8 +1753,10 @@ private struct LegacyWorkspace: Decodable {
         case settingsOverrides
     }
 
+    /// Decode the persisted schema and record recognized keys so channel recovery can reject newer fields.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        decoder.recordKnownKeys(container.allKeys)
         id = try container.decode(WorkspaceID.self, forKey: .id)
         title = (try? container.decode(String.self, forKey: .title)) ?? "Workspace"
         emoji = try? container.decodeIfPresent(String.self, forKey: .emoji)
@@ -1877,8 +1884,10 @@ private struct LegacyTab: Decodable {
         case customTitle
     }
 
+    /// Decode the persisted schema and record recognized keys so channel recovery can reject newer fields.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        decoder.recordKnownKeys(container.allKeys)
         id = try container.decode(TabID.self, forKey: .id)
         content = try container.decode(LegacyTabContent.self, forKey: .content)
         focusedTerminalSessionID = try? container.decodeIfPresent(TerminalSessionID.self, forKey: .focusedTerminalSessionID)
@@ -1942,8 +1951,10 @@ private enum LegacyTabContent: Decodable {
         case browser
     }
 
+    /// Decode the persisted schema and record recognized keys so channel recovery can reject newer fields.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        decoder.recordKnownKeys(container.allKeys)
         switch try container.decode(ContentType.self, forKey: .type) {
         case .terminal: self = .terminal(try container.decode(LegacySplitNode.self, forKey: .splitTree))
         case .browser: self = .browser(try container.decode(LegacyBrowserSession.self, forKey: .session))
@@ -2012,8 +2023,10 @@ private indirect enum LegacySplitNode: Decodable {
         case vertical
     }
 
+    /// Decode the persisted schema and record recognized keys so channel recovery can reject newer fields.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        decoder.recordKnownKeys(container.allKeys)
         switch try container.decode(NodeType.self, forKey: .type) {
         case .terminal: self = .terminal(try container.decode(LegacyTerminalSession.self, forKey: .session))
         case .browser: self = .browser(try container.decode(LegacyBrowserSession.self, forKey: .session))
@@ -2133,8 +2146,10 @@ private struct LegacyTerminalSession: Decodable {
         case recentText
     }
 
+    /// Decode the persisted schema and record recognized keys so channel recovery can reject newer fields.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        decoder.recordKnownKeys(container.allKeys)
         id = try container.decode(TerminalSessionID.self, forKey: .id)
         paneID = try? container.decodeIfPresent(PaneID.self, forKey: .paneID)
         workingDirectory = try? container.decodeIfPresent(URL.self, forKey: .workingDirectory)
@@ -2164,8 +2179,10 @@ private struct LegacyBrowserSession: Decodable {
         case profile
     }
 
+    /// Decode the persisted schema and record recognized keys so channel recovery can reject newer fields.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        decoder.recordKnownKeys(container.allKeys)
         id = try container.decode(BrowserSessionID.self, forKey: .id)
         paneID = try? container.decodeIfPresent(PaneID.self, forKey: .paneID)
         url = try container.decode(URL.self, forKey: .url)

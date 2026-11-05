@@ -223,7 +223,12 @@ public enum ApplicationUpdate {
             let completed = files.fileExists(atPath: directory.appendingPathComponent("applied").path)
                 || files.fileExists(atPath: directory.appendingPathComponent("superseded").path)
             if let owner {
-                guard owner.target == app, isCreatorGone(owner), isPrivateStage(directory, beside: app) else { continue }
+                let hasHandoff = files.fileExists(atPath: directory.appendingPathComponent("update.json").path)
+                // The trial checkpoint is written before any bundle exchange. Without it, this
+                // dead owner's unreferenced handoff never held an installed app's rollback image.
+                let hasTrial = files.fileExists(atPath: directory.appendingPathComponent("configuration-before-update.json").path)
+                guard owner.target == app, isCreatorGone(owner), isPrivateStage(directory, beside: app),
+                      completed || !hasHandoff || !hasTrial else { continue }
             } else {
                 guard completed, let data = try? Data(contentsOf: directory.appendingPathComponent("update.json")),
                       let plan = try? JSONDecoder().decode(ApplicationUpdatePlan.self, from: data), plan.target == app,

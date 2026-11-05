@@ -5,18 +5,100 @@ import XCTest
 @MainActor
 final class ChannelConfigurationStoreTests: XCTestCase {
     /// New beta fields can appear without a version bump; stable must not silently strip them.
-    func testUnknownBetaFieldTriggersStableFallback() throws {
+    func testUnknownNestedBetaFieldTriggersStableFallback() throws {
         let (directory, _, config) = try fixture()
         let stable = try workspace("Stable", at: directory)
         try config.captureStable()
         let beta = try workspace("Beta", at: directory)
         var object = try XCTUnwrap(JSONSerialization.jsonObject(with: beta) as? [String: Any])
-        object["betaOnlyWorkspaceOption"] = ["enabled": true]
+        var settings = try XCTUnwrap(object["globalSettings"] as? [String: Any])
+        var shell = try XCTUnwrap(settings["shell"] as? [String: Any])
+        shell["betaOnlyShellOption"] = true
+        settings["shell"] = shell
+        object["globalSettings"] = settings
         try JSONSerialization.data(withJSONObject: object).write(to: directory.appendingPathComponent("workspace-state.json"))
         try config.beginStableReturn(.tryBeta)
         let (_, notice) = try config.loadStable { true }
         XCTAssertNotNil(notice)
         XCTAssertEqual(try Data(contentsOf: directory.appendingPathComponent("workspace-state.json")), stable)
+    }
+
+    /// Every persisted object must identify additive fields, including nested sessions and settings.
+    func testEveryNestedWorkspaceObjectRejectsUnknownFields() throws {
+        let (directory, _, config) = try fixture()
+        var settings = TerminalPreferences.default
+        settings.shell = .custom(path: "/bin/zsh")
+        settings.webLinkDestination = .application(bundleIdentifier: "com.example.browser")
+        settings.newSessionWorkingDirectory = .custom(URL(fileURLWithPath: "/tmp"))
+        var overrides = TerminalPreferencesOverrides()
+        overrides.shell = settings.shell
+        overrides.webLinkDestination = settings.webLinkDestination
+        overrides.newSessionWorkingDirectory = settings.newSessionWorkingDirectory
+        let folder = WorkspaceFolder(title: "Folder", settingsOverrides: overrides)
+        let terminal = Tab(content: .terminal(TerminalSession(agentSession:
+            try XCTUnwrap(AgentSessionHandle(agent: "codex", sessionID: "test-session")))))
+        let browser = Tab(content: .browser(BrowserSession(url: URL(string: "https://example.com")!,
+            profile: BrowserDataProfile(scope: .workspace, persistentStoreID: UUID()))))
+        let first = TabGroup(tabs: [terminal, browser])
+        let workspace = Workspace(title: "Nested", layout: .split(id: SplitNodeID(), orientation: .horizontal,
+            children: [.group(first), .group(TabGroup())], weights: [0.5, 0.5]), folderID: folder.id,
+            settingsOverrides: overrides)
+        let data = try JSONEncoder().encode(WorkspaceStoreSnapshot(folders: [folder], globalSettings: settings,
+            workspaces: [workspace], selectedWorkspaceID: workspace.id))
+        XCTAssertEqual(try WorkspaceStore.unrecognizedKeyCount(in: data), 0)
+        let object = try JSONSerialization.jsonObject(with: data)
+        func mutations(_ value: Any, path: String) -> [(String, Any)] {
+            if let dictionary = value as? [String: Any] {
+                var added = dictionary
+                added["betaOnlyField"] = true
+                var result: [(String, Any)] = [(path, added)]
+                for (key, child) in dictionary {
+                    for (childPath, mutated) in mutations(child, path: path + "." + key) {
+                        var copy = dictionary
+                        copy[key] = mutated
+                        result.append((childPath, copy))
+                    }
+                }
+                return result
+            }
+            if let array = value as? [Any] {
+                return array.enumerated().flatMap { index, child in
+                    mutations(child, path: path + "[\(index)]").map { childPath, mutated in
+                        var copy = array
+                        copy[index] = mutated
+                        return (childPath, copy)
+                    }
+                }
+            }
+            return []
+        }
+        let variants = mutations(object, path: "root")
+        XCTAssertGreaterThan(variants.count, 20)
+        for (path, mutated) in variants {
+            let changed = try JSONSerialization.data(withJSONObject: mutated)
+            XCTAssertGreaterThan(try WorkspaceStore.unrecognizedKeyCount(in: changed), 0, path)
+            try changed.write(to: directory.appendingPathComponent("workspace-state.json"))
+            XCTAssertThrowsError(try config.checkIncomingConfiguration(mode: "current"), path)
+        }
+    }
+
+    /// Legacy metadata must recognize its version and nested sessions without accepting newer fields.
+    func testLegacySchemaVersionAndNestedKeysRemainRecognized() throws {
+        let (directory, _, config) = try fixture()
+        let workspaceID = WorkspaceID(), tabID = TabID(), paneID = PaneID(), sessionID = TerminalSessionID()
+        let source = Data("""
+        {"version":1,"workspaces":[{"id":"\(workspaceID)","title":"Legacy","tabs":[{
+          "id":"\(tabID)","focusedPaneID":"\(paneID)","focusedTerminalSessionID":"\(sessionID)",
+          "content":{"type":"terminal","splitTree":{"type":"terminal","session":{
+            "id":"\(sessionID)","paneID":"\(paneID)"}}}}],"selectedTabID":"\(tabID)"}],
+          "selectedWorkspaceID":"\(workspaceID)"}
+        """.utf8)
+        XCTAssertEqual(try WorkspaceStore.unrecognizedKeyCount(in: source), 0)
+        try source.write(to: directory.appendingPathComponent("workspace-state.json"))
+        XCTAssertNoThrow(try config.checkIncomingConfiguration(mode: "current"))
+        let changed = Data(String(decoding: source, as: UTF8.self)
+            .replacingOccurrences(of: "\"paneID\":\"\(paneID)\"", with: "\"paneID\":\"\(paneID)\",\"betaOnlySessionField\":true").utf8)
+        XCTAssertGreaterThan(try WorkspaceStore.unrecognizedKeyCount(in: changed), 0)
     }
 
     /// A failed workspace replacement after a preference write must restore the previous preferences.

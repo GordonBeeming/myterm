@@ -107,6 +107,32 @@ final class ApplicationUpdateTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: plan.directory.path))
     }
 
+    /// A missing monitor pointer must not let cleanup delete an unfinished handoff's rollback app.
+    func testUnfinishedOwnedHandoffRetainsItsRollbackImageUntilCompleted() throws {
+        let plan = try fixture()
+        try UpdateStartupTrial.begin(plan)
+        try UpdateStartupTrial.quarantineRecord(in: plan.configurationDirectory)
+        let owner: [String: Any] = ["target": plan.target.absoluteString, "pid": Int32.max,
+                                   "startSeconds": 0, "startMicroseconds": 0]
+        try JSONSerialization.data(withJSONObject: owner).write(to: plan.directory.appendingPathComponent("stage-owner.json"))
+        ApplicationUpdate.pruneCompletedUpdates(for: plan.target, preferencesDomain: plan.preferencesDomain)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: plan.staged.path))
+        try Data("superseded".utf8).write(to: plan.directory.appendingPathComponent("superseded"))
+        ApplicationUpdate.pruneCompletedUpdates(for: plan.target, preferencesDomain: plan.preferencesDomain)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: plan.directory.path))
+    }
+
+    /// A handoff abandoned before the mandatory pre-swap checkpoint holds no previous app to recover.
+    func testAbandonedUnappliedHandoffCanBePrunedWithoutGrowingDiskUse() throws {
+        let plan = try fixture()
+        let owner: [String: Any] = ["target": plan.target.absoluteString, "pid": Int32.max,
+                                   "startSeconds": 0, "startMicroseconds": 0]
+        try JSONSerialization.data(withJSONObject: owner).write(to: plan.directory.appendingPathComponent("stage-owner.json"))
+        ApplicationUpdate.pruneCompletedUpdates(for: plan.target, preferencesDomain: plan.preferencesDomain)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: plan.directory.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: plan.target.path))
+    }
+
     /// A competing launch that already mapped the old executable must recognize the atomic replacement.
     func testRunningCodeIdentityTracksOriginalInodeAfterReplacement() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
