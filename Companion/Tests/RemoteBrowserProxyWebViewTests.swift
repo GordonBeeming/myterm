@@ -49,15 +49,21 @@ private final class BrowserHTTPFixture: @unchecked Sendable {
     private let lock = NSLock()
     private var requestCount = 0
     private var headerByteCount = 0
+    private var connectionCount = 0
     private var failsRequests = false
-    private let initialResponseDelay: TimeInterval
+    private var bootstrapResponseSubmitted = false
+    private var pageRequestedBeforeBootstrapResponse = false
+    private let bootstrapResponseDelay: TimeInterval
     func setRequestFailure(_ enabled: Bool) { lock.withLock { failsRequests = enabled } }
     var requests: Int { lock.withLock { requestCount } }
     var receivedHeaderBytes: Int { lock.withLock { headerByteCount } }
+    var connections: Int { lock.withLock { connectionCount } }
+    var didSubmitBootstrapResponse: Bool { lock.withLock { bootstrapResponseSubmitted } }
+    var didRequestPageBeforeBootstrapResponse: Bool { lock.withLock { pageRequestedBeforeBootstrapResponse } }
     init(body: String = "<html><title>Remote fixture</title><a href='/next'>Next</a><p>Host page</p></html>",
-         initialResponseDelay: TimeInterval = 0) throws {
+         bootstrapResponseDelay: TimeInterval = 0) throws {
         self.body = body
-        self.initialResponseDelay = initialResponseDelay
+        self.bootstrapResponseDelay = bootstrapResponseDelay
         listener = try NWListener(using: .tcp, on: .any)
     }
     static let bootstrapPath = "/__myterm_bootstrap"
@@ -66,6 +72,7 @@ private final class BrowserHTTPFixture: @unchecked Sendable {
     /// Reads complete requests so TCP fragmentation cannot select the wrong fixture response.
     func start() async throws -> UInt16 {
         listener.newConnectionHandler = { [self, queue] connection in
+            lock.withLock { connectionCount += 1 }
             connection.start(queue: queue)
             receiveHeaders(connection, buffered: Data())
         }
@@ -82,6 +89,10 @@ private final class BrowserHTTPFixture: @unchecked Sendable {
             }
             listener.start(queue: queue)
         }
+    }
+    /// A queue barrier closes the gap between observing received bytes and processing their header.
+    func finishPendingHeaderReads() async {
+        await withCheckedContinuation { continuation in queue.async { continuation.resume() } }
     }
     /// HTTP headers can arrive in several tunnel frames even for a small GET request.
     private func receiveHeaders(_ connection: NWConnection, buffered: Data) {
@@ -103,11 +114,11 @@ private final class BrowserHTTPFixture: @unchecked Sendable {
 
     /// Bootstrap has no scripts or subresources; all functional pages keep their original body.
     private func respond(to request: String, on connection: NWConnection) {
-        let state = lock.withLock {
+        let shouldFail = lock.withLock {
             requestCount += 1
-            return (requestCount, failsRequests)
+            return failsRequests
         }
-        if state.1 { connection.cancel(); return }
+        if shouldFail { connection.cancel(); return }
         if request.lowercased().contains("upgrade: websocket"),
            let keyLine = request.components(separatedBy: "\r\n").first(where: { $0.lowercased().hasPrefix("sec-websocket-key:") }),
            let key = keyLine.split(separator: ":", maxSplits: 1).last?.trimmingCharacters(in: .whitespaces) {
@@ -121,10 +132,16 @@ private final class BrowserHTTPFixture: @unchecked Sendable {
         }
         let target = request.components(separatedBy: "\r\n").first?.split(separator: " ").dropFirst().first
         let isBootstrap = target.map(String.init) == Self.bootstrapPath
+        if target == "/page" {
+            lock.withLock {
+                if !bootstrapResponseSubmitted { pageRequestedBeforeBootstrapResponse = true }
+            }
+        }
         let responseBody = isBootstrap ? "<html><title>\(Self.bootstrapTitle)</title></html>" : body
         let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nCache-Control: no-store\r\nContent-Length: \(responseBody.utf8.count)\r\nConnection: close\r\n\r\n" + responseBody
-        let delay = state.0 == 1 ? initialResponseDelay : 0
+        let delay = isBootstrap ? bootstrapResponseDelay : 0
         queue.asyncAfter(deadline: .now() + delay) {
+            if isBootstrap { self.lock.withLock { self.bootstrapResponseSubmitted = true } }
             connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in connection.cancel() })
         }
     }
@@ -281,15 +298,16 @@ final class RemoteBrowserProxyWebViewTests: XCTestCase {
         let connection = NWConnection(host: "127.0.0.1", port: try XCTUnwrap(NWEndpoint.Port(rawValue: port)), using: .tcp)
         connection.start(queue: .global())
         defer { connection.cancel() }
-        let prefix = "GET /__myterm_bootstrap HTTP/1.1\r\nHost: myterm-test.invalid\r\n"
+        let prefix = "GET /__myterm_boot"
         try await sendHeaderPart(Data(prefix.utf8), on: connection)
         let partialDeadline = Date().addingTimeInterval(5)
         while fixture.receivedHeaderBytes < prefix.utf8.count, Date() < partialDeadline {
             try await Task.sleep(for: .milliseconds(5))
         }
         XCTAssertEqual(fixture.receivedHeaderBytes, prefix.utf8.count)
+        await fixture.finishPendingHeaderReads()
         XCTAssertEqual(fixture.requests, 0, "Receiving bytes is not yet a complete HTTP request")
-        try await sendHeaderPart(Data("\r\n".utf8), on: connection)
+        try await sendHeaderPart(Data("strap HTTP/1.1\r\nHost: myterm-test.invalid\r\n\r\n".utf8), on: connection)
         let completeDeadline = Date().addingTimeInterval(5)
         while fixture.requests == 0, Date() < completeDeadline { try await Task.sleep(for: .milliseconds(5)) }
         XCTAssertEqual(fixture.requests, 1)
@@ -299,6 +317,25 @@ final class RemoteBrowserProxyWebViewTests: XCTestCase {
         }
         XCTAssertTrue(String(decoding: response, as: UTF8.self).contains(BrowserHTTPFixture.bootstrapTitle),
                       "The response must be routed using the complete buffered request")
+        XCTAssertTrue(fixture.didSubmitBootstrapResponse)
+    }
+
+    /// The ordering guard must detect a functional request before any bootstrap response is sent.
+    func testHTTPFixtureDetectsNavigationBeforeBootstrapResponse() async throws {
+        let fixture = try BrowserHTTPFixture()
+        let port = try await fixture.start()
+        defer { fixture.stop() }
+        let connection = NWConnection(host: "127.0.0.1", port: try XCTUnwrap(NWEndpoint.Port(rawValue: port)), using: .tcp)
+        connection.start(queue: .global())
+        defer { connection.cancel() }
+        try await sendHeaderPart(Data("GET /page HTTP/1.1\r\nHost: myterm-test.invalid\r\n\r\n".utf8), on: connection)
+        var response = Data()
+        try await BrowserFixtureStartup().run(limit: .seconds(5)) {
+            response = try await self.receiveFixtureResponse(on: connection)
+        }
+        XCTAssertTrue(String(decoding: response, as: UTF8.self).contains("Remote fixture"))
+        XCTAssertFalse(fixture.didSubmitBootstrapResponse)
+        XCTAssertTrue(fixture.didRequestPageBeforeBootstrapResponse)
     }
 
     /// The sender queues fragments independently, matching the encrypted tunnel's byte stream.
@@ -329,9 +366,9 @@ final class RemoteBrowserProxyWebViewTests: XCTestCase {
         }
     }
 
-    /// A delayed initial response must not consume the functional navigation budget.
-    func testFixtureBootstrapDoesNotConsumeTheRemoteNavigationDeadline() async throws {
-        let fixture = try BrowserHTTPFixture(initialResponseDelay: 6)
+    /// Observe bootstrap ordering directly so its deliberate delay cannot race a short page deadline.
+    func testFixtureWaitsForBootstrapBeforeNavigation() async throws {
+        let fixture = try BrowserHTTPFixture(bootstrapResponseDelay: 6)
         let port = try await fixture.start()
         defer { fixture.stop() }
         let bridge = EncryptedBrowserBridge()
@@ -342,11 +379,32 @@ final class RemoteBrowserProxyWebViewTests: XCTestCase {
         let endpoint = try await bridge.endpoint()
         try await startRemoteFixture(browser, endpoint: endpoint,
             url: XCTUnwrap(URL(string: "http://myterm-test.invalid/page")))
-        let deadline = Date().addingTimeInterval(5)
+        XCTAssertTrue(fixture.didSubmitBootstrapResponse)
+        let deadline = Date().addingTimeInterval(15)
         while browser.webView?.title != "Remote fixture", Date() < deadline {
             try await Task.sleep(for: .milliseconds(50))
         }
-        XCTAssertEqual(browser.webView?.title, "Remote fixture", "Bootstrap must finish before this deadline starts; path=\(browser.webView?.url?.lastPathComponent ?? "nil"), loading=\(browser.webView?.isLoading ?? false), error=\(browser.error ?? "none")")
+        XCTAssertEqual(browser.webView?.title, "Remote fixture", "Functional page must finish loading; path=\(browser.webView?.url?.lastPathComponent ?? "nil"), loading=\(browser.webView?.isLoading ?? false), error=\(browser.error ?? "none")")
+        XCTAssertFalse(fixture.didRequestPageBeforeBootstrapResponse, "Functional navigation must wait for the delayed bootstrap response.")
+        await bridge.stop()
+    }
+
+    /// The real native startup path must honor cancellation before it can create a web view.
+    func testCancelledNativeStartupDoesNotCreateViewAfterCleanup() async throws {
+        let bridge = EncryptedBrowserBridge()
+        await bridge.configure()
+        let endpoint = try await bridge.endpoint()
+        let browser = NativeRemoteBrowser()
+        registerCleanup(browser, bridge: bridge)
+        let startup = Task { try await browser.start(endpoint, url: nil, dataStore: .nonPersistent()) }
+        startup.cancel()
+        browser.stop()
+        do {
+            try await startup.value
+            XCTFail("Cancelled native startup must not finish successfully")
+        } catch is CancellationError { }
+        XCTAssertNil(browser.webView)
+        browser.stop()
         await bridge.stop()
     }
 
@@ -508,6 +566,7 @@ final class RemoteBrowserProxyWebViewTests: XCTestCase {
         try await Task.sleep(for: .seconds(1))
         XCTAssertEqual(deviceLocal.requests, 0, "Subresources must never contact the companion device's loopback")
         XCTAssertEqual(deviceLocal.receivedHeaderBytes, 0, "Even a partial loopback request must be blocked")
+        XCTAssertEqual(deviceLocal.connections, 0, "A blocked subresource must not open a bare TCP connection")
         browser.stop()
         await bridge.stop()
     }
@@ -533,6 +592,7 @@ final class RemoteBrowserProxyWebViewTests: XCTestCase {
         XCTAssertTrue(destinations.isEmpty)
         XCTAssertEqual(fixture.requests, 0, "A denied address must not bypass the proxy")
         XCTAssertEqual(fixture.receivedHeaderBytes, 0, "Even partial direct loopback traffic must be blocked")
+        XCTAssertEqual(fixture.connections, 0, "A denied address must not open a bare TCP connection")
         await bridge.stop()
         browser.stop()
     }
