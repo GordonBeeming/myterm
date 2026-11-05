@@ -102,8 +102,13 @@ public enum UpdateStartupTrial {
     public static func waitForStartup(_ plan: ApplicationUpdatePlan, seconds: TimeInterval = 120) throws {
         let deadline = ContinuousClock.now.advanced(by: .seconds(seconds))
         while ContinuousClock.now < deadline {
+            if readReceipt(plan)?.phase == .loaded { return }
+            guard activeManifest(in: plan.configurationDirectory) == plan.manifestURL else {
+                // The app writes readiness before clearing its pointer; observe that ordering.
+                if readReceipt(plan)?.phase == .loaded { return }
+                throw ApplicationUpdateError.rollbackDeferred("Startup monitoring was unavailable. Kept the installed app and its preserved rollback image.")
+            }
             if let receipt = readReceipt(plan) {
-                if receipt.phase == .loaded { return }
                 if receipt.phase == .failed {
                     throw ApplicationUpdateError.startupFailed(receipt.message ?? "The new app could not finish startup.")
                 }
@@ -119,10 +124,12 @@ public enum UpdateStartupTrial {
     /// Stop only the bound unconfirmed UI; persistent terminal helpers are never signalled.
     public static func stopUnconfirmedApp(_ plan: ApplicationUpdatePlan) throws {
         guard let receipt = readReceipt(plan), receipt.phase != .loaded, matches(receipt, plan: plan) else { return }
+        guard readReceipt(plan)?.phase != .loaded else { return }
         _ = kill(receipt.pid, SIGTERM)
         do { try ApplicationUpdate.waitForExit(receipt.pid, seconds: 5) }
         catch {
             guard matches(receipt, plan: plan) else { return }
+            guard readReceipt(plan)?.phase != .loaded else { return }
             _ = kill(receipt.pid, SIGKILL)
             try ApplicationUpdate.waitForExit(receipt.pid, seconds: 5)
         }
@@ -137,6 +144,14 @@ public enum UpdateStartupTrial {
         }
     }
 
+    /// A stale monitoring pointer must never prevent the installed app from opening.
+    public static func quarantineRecord(in directory: URL) throws {
+        let marker = recordURL(directory)
+        guard FileManager.default.fileExists(atPath: marker.path) else { return }
+        try FileManager.default.moveItem(at: marker,
+            to: directory.appendingPathComponent("unavailable-update-trial-\(UUID().uuidString).json"))
+    }
+
     /// Rollback files become pruneable only after the new app has confirmed startup.
     public static func commit(_ plan: ApplicationUpdatePlan) throws {
         try Data("applied".utf8).write(to: plan.directory.appendingPathComponent("applied"), options: .atomic)
@@ -145,11 +160,33 @@ public enum UpdateStartupTrial {
 
     /// Used by the detached monitor when a quiet install's first later launch fails.
     @MainActor public static func rollback(_ plan: ApplicationUpdatePlan) throws {
-        try ApplicationUpdate.verifyInstalledIdentity(plan.staged)
+        try ApplicationUpdate.verifyInstalledIdentity(plan.target)
+        let current = try Data(contentsOf: plan.target.appendingPathComponent("Contents/Info.plist"))
+        guard let info = try PropertyListSerialization.propertyList(from: current, format: nil) as? [String: Any],
+              let version = AppVersion(info["CFBundleShortVersionString"] as? String ?? "") else {
+            throw ApplicationUpdateError.rollbackDeferred("Could not identify the app being rolled back.")
+        }
+        let isSource = version == AppVersion(plan.sourceVersion)
+            && (info["MyTermReleaseChannel"] as? String ?? "stable") == plan.sourceChannel.rawValue
+        guard isSource || (version == AppVersion(plan.version)
+            && (info["MyTermReleaseChannel"] as? String ?? "stable") == plan.channel.rawValue) else {
+            throw ApplicationUpdateError.rollbackDeferred("Another update changed the app; kept it and the preserved rollback image.")
+        }
         let config = ChannelConfigurationStore(directory: plan.configurationDirectory, preferencesDomain: plan.preferencesDomain)
-        try config.captureUpdateTrial(to: plan.directory.appendingPathComponent("failed-configuration.json"))
-        try ApplicationUpdate.exchange(plan.target, plan.staged)
-        try config.restoreUpdateTrial(from: plan.directory.appendingPathComponent("configuration-before-update.json"), selectedChannel: plan.sourceChannel)
+        do { try config.captureUpdateTrial(to: plan.directory.appendingPathComponent("failed-configuration.json")) }
+        catch { FileHandle.standardError.write(Data(("Could not preserve failed startup state: \(error.localizedDescription)\n").utf8)) }
+        if !isSource {
+            try ApplicationUpdate.verifyInstalledIdentity(plan.staged)
+            try ApplicationUpdate.exchange(plan.target, plan.staged)
+        }
+        do {
+            try config.restoreUpdateTrial(from: plan.directory.appendingPathComponent("configuration-before-update.json"), selectedChannel: plan.sourceChannel)
+        } catch {
+            let recovery = plan.directory.appendingPathComponent("configuration-before-update.json")
+            let message = "The previous app is restored at \(plan.target.path), but configuration recovery needs attention. Choose Restore Configuration Backup and select \(recovery.path). \(error.localizedDescription)"
+            try Data(message.utf8).write(to: plan.configurationDirectory.appendingPathComponent("update-install-error.txt"), options: .atomic)
+            throw ApplicationUpdateError.rollbackDeferred(message)
+        }
         try clear(plan)
         try Data("rolled back".utf8).write(to: plan.directory.appendingPathComponent("superseded"), options: .atomic)
     }

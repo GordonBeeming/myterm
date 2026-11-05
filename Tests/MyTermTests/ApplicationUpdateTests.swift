@@ -22,7 +22,21 @@ final class ApplicationUpdateTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: plan.directory.appendingPathComponent("failed-configuration.json").path))
     }
 
-    /// Readiness is bound to this trial nonce, and commit consumes the deferred trial marker.
+    /// Preserving failed state is best effort; the original checkpoint must still be restored.
+    func testFailedStateArchiveErrorDoesNotPreventStartupRollback() throws {
+        let plan = try fixture()
+        let workspace = plan.configurationDirectory.appendingPathComponent("workspace-state.json")
+        let original = try Data(contentsOf: workspace)
+        XCTAssertThrowsError(try ApplicationUpdate.apply(plan, validateBundle: { _, _, _ in }, preflight: { _ in }, launch: { _ in
+            try FileManager.default.createDirectory(at: plan.directory.appendingPathComponent("failed-configuration.json"), withIntermediateDirectories: false)
+            try Data("failed beta state".utf8).write(to: workspace)
+            throw ApplicationUpdateError.startupFailed("Injected failed startup")
+        }))
+        XCTAssertEqual(try Data(contentsOf: workspace), original)
+        XCTAssertEqual(try String(contentsOf: plan.target.appendingPathComponent("version.txt"), encoding: .utf8), plan.sourceVersion)
+    }
+
+    /// Readiness remains valid when the app commits before its monitor sees the receipt.
     func testLoadedStartupAcknowledgementCommitsDeferredTrial() throws {
         let plan = try fixture()
         try UpdateStartupTrial.begin(plan)
@@ -30,8 +44,26 @@ final class ApplicationUpdateTests: XCTestCase {
         try UpdateStartupTrial.report(.loaded, plan: plan)
         XCTAssertNoThrow(try UpdateStartupTrial.waitForStartup(plan, seconds: 0.1))
         try UpdateStartupTrial.commit(plan)
+        XCTAssertNoThrow(try UpdateStartupTrial.waitForStartup(plan, seconds: 0.1))
         XCTAssertNil(UpdateStartupTrial.activeManifest(in: plan.configurationDirectory))
         XCTAssertTrue(FileManager.default.fileExists(atPath: plan.directory.appendingPathComponent("applied").path))
+    }
+
+    /// Corrupt monitoring metadata can be archived without altering the user's configuration.
+    func testUnreadableTrialCanBeQuarantinedAndUnacknowledgedWaitDefersRollback() throws {
+        let plan = try fixture()
+        let marker = plan.configurationDirectory.appendingPathComponent("update-trial.json")
+        let workspace = plan.configurationDirectory.appendingPathComponent("workspace-state.json")
+        let original = try Data(contentsOf: workspace)
+        try Data("invalid trial metadata".utf8).write(to: marker)
+        try UpdateStartupTrial.quarantineRecord(in: plan.configurationDirectory)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path))
+        XCTAssertEqual(try Data(contentsOf: workspace), original)
+        XCTAssertThrowsError(try UpdateStartupTrial.waitForStartup(plan, seconds: 0.1)) { error in
+            guard case ApplicationUpdateError.rollbackDeferred = error else {
+                return XCTFail("An unavailable monitor must defer rollback: \(error)")
+            }
+        }
     }
 
     /// Configuration can change after staging; the final preflight must run before any exchange.

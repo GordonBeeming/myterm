@@ -451,6 +451,7 @@ final class UpdateController {
         return result
     }
 
+    /// Ignore late responses from a previous channel and persist only releases belonging to the current selection.
     private func performCheck() async -> Status {
         let generation = checkGeneration
         let channel = selectedChannel
@@ -488,6 +489,7 @@ final class UpdateController {
         await check()
     }
 
+    /// Cache the release and its verified archive metadata for this channel across restarts.
     private func remember(_ release: AppRelease) {
         defaults.set(release.tag, forKey: Self.knownReleaseTagKey)
         defaults.set(release.releaseURL.absoluteString, forKey: Self.knownReleaseURLKey)
@@ -495,6 +497,7 @@ final class UpdateController {
         defaults.set(release.asset?.sha256, forKey: Self.knownAssetSHAKey)
     }
 
+    /// Clear the current channel’s cached release without changing another channel’s selection.
     private func forgetKnownRelease() {
         defaults.removeObject(forKey: Self.knownReleaseTagKey)
         defaults.removeObject(forKey: Self.knownReleaseURLKey)
@@ -502,6 +505,7 @@ final class UpdateController {
         defaults.removeObject(forKey: Self.knownAssetSHAKey)
     }
 
+    /// Rehydrate a remembered release only when its version and archive metadata are valid.
     private static func restoredStatus(
         currentVersion: String, defaults: UserDefaults, channel: UpdateCheck.Channel, installedChannel: UpdateCheck.Channel
     ) -> Status {

@@ -676,6 +676,7 @@ final class AppModel {
         }
     }
 
+    /// Select the release feed and surface any failure to retire the previously staged update.
     func changeUpdateChannel(_ channel: UpdateCheck.Channel) {
         guard !updates.isPreparingRestart else { return }
         cancelUpdateRestart()
@@ -689,6 +690,7 @@ final class AppModel {
         checkForUpdates()
     }
 
+    /// Stage the selected release after checking the requested stable-configuration recovery choice.
     func prepareUpdate(_ release: AppRelease) async {
         updateRestartError = nil
         do {

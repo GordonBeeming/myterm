@@ -5,6 +5,7 @@ import MyTermUpdating
 
 @main
 struct MyTermUpdateAgent {
+    /// Verify explicit handoffs, wait for the prior app to exit and install or roll back under the profile lease.
     @MainActor static func main() async {
         var recoveryPlan: ApplicationUpdatePlan?
         var parentExited = false
@@ -57,6 +58,7 @@ struct MyTermUpdateAgent {
                     try UpdateStartupTrial.waitForStartup(plan)
                     try UpdateStartupTrial.commit(plan)
                 } catch {
+                    if case ApplicationUpdateError.rollbackDeferred = error { throw error }
                     try UpdateStartupTrial.stopUnconfirmedApp(plan)
                     let lock = try ApplicationUpdate.acquireInstallationLock(directory: plan.configurationDirectory)
                     defer { flock(lock, LOCK_UN); close(lock) }
@@ -97,9 +99,13 @@ struct MyTermUpdateAgent {
                     try ApplicationUpdate.run("/usr/bin/open", ["-n", app.path])
                     try UpdateStartupTrial.waitForStartup(plan)
                 } catch {
-                    try UpdateStartupTrial.stopUnconfirmedApp(plan)
+                    if case ApplicationUpdateError.rollbackDeferred = error { throw error }
+                    do { try UpdateStartupTrial.stopUnconfirmedApp(plan) }
+                    catch { throw ApplicationUpdateError.rollbackDeferred("Could not safely stop the unconfirmed app; kept its rollback image. \(error.localizedDescription)") }
+                    if UpdateStartupTrial.readReceipt(plan)?.phase == .loaded { return }
                     if flock(installationLock, LOCK_EX | LOCK_NB) == 0 {
                         locked = true
+                        if UpdateStartupTrial.readReceipt(plan)?.phase == .loaded { return }
                         throw error
                     }
                     if UpdateStartupTrial.readReceipt(plan)?.phase == .loaded { return }
@@ -112,10 +118,15 @@ struct MyTermUpdateAgent {
             FileHandle.standardError.write(Data((error.localizedDescription + "\n").utf8))
             if parentExited, let plan = recoveryPlan {
                 do {
-                    try Data(("The update could not be installed. " + error.localizedDescription).utf8)
+                    let deferred: Bool
+                    if case ApplicationUpdateError.rollbackDeferred = error { deferred = true } else { deferred = false }
+                    let message = deferred ? error.localizedDescription : "The update could not be installed. " + error.localizedDescription
+                    try Data(message.utf8)
                         .write(to: plan.configurationDirectory.appendingPathComponent("update-install-error.txt"), options: .atomic)
-                    try ApplicationUpdate.verifyInstalledIdentity(plan.target)
-                    if plan.relaunch { try ApplicationUpdate.run("/usr/bin/open", ["-n", plan.target.path]) }
+                    if plan.relaunch, !deferred {
+                        try ApplicationUpdate.verifyInstalledIdentity(plan.target)
+                        try ApplicationUpdate.run("/usr/bin/open", ["-n", plan.target.path])
+                    }
                 } catch {
                     FileHandle.standardError.write(Data(("Could not reopen the preserved app: \(error.localizedDescription)\n").utf8))
                 }

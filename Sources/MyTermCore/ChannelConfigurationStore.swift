@@ -71,6 +71,7 @@ public final class ChannelConfigurationStore {
         try cancelStableReturn()
     }
 
+    /// Validate the final stable state, using a fresh in-memory workspace for a new installation.
     private func stableCapture() throws -> Snapshot {
         var snapshot = try capture()
         if snapshot.workspace == nil {
@@ -219,6 +220,7 @@ public final class ChannelConfigurationStore {
         try scheduleStableReturn(choice)
     }
 
+    /// Preserve exact workspace and inbox bytes together with the current preferences domain.
     private func capture() throws -> Snapshot {
         let domain = UserDefaults.standard.persistentDomain(forName: preferencesDomain) ?? [:]
         let preferences = try PropertyListSerialization.data(fromPropertyList: domain, format: .binary, options: 0)
@@ -231,6 +233,7 @@ public final class ChannelConfigurationStore {
         )
     }
 
+    /// Use a scratch store to reject repairs, unknown beta fields and unreadable preferences without changing live data.
     private func validate(_ snapshot: Snapshot) throws {
         guard let workspace = snapshot.workspace else { throw failure("The workspace configuration file is missing.") }
         let scratch = directory.appendingPathComponent(".configuration-validation-\(UUID().uuidString)", isDirectory: true)
@@ -253,6 +256,7 @@ public final class ChannelConfigurationStore {
         }
     }
 
+    /// Restore a checkpoint and its selected channel; callers retain the original checkpoint if any write fails.
     private func restoreSnapshot(_ snapshot: Snapshot, selectedChannel: UpdateCheck.Channel = .stable, allowMissingWorkspace: Bool = false) throws {
         guard snapshot.workspace != nil || allowMissingWorkspace else { throw failure("The stable workspace snapshot is missing.") }
         guard var preferences = try PropertyListSerialization.propertyList(from: snapshot.preferences, format: nil) as? [String: Any] else {

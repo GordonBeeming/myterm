@@ -230,6 +230,7 @@ final class MyTermApplicationDelegate: NSObject, NSApplicationDelegate {
         confirmedInstanceReplacement = true
     }
 
+    /// Prepare a pending update asynchronously, then allow AppKit to terminate after the final save.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if confirmedInstanceReplacement { return .terminateNow }
         if quitPreparationTask != nil { return .terminateLater }
@@ -363,6 +364,8 @@ final class MyTermStartup {
         if let startupTrial {
             do { try UpdateStartupTrial.report(.loaded, plan: startupTrial) }
             catch { model?.errorDescription = "Could not confirm update startup: \(error.localizedDescription)"; return }
+            do { try UpdateStartupTrial.commit(startupTrial) }
+            catch { model?.errorDescription = "The update started, but cleanup metadata could not be saved: \(error.localizedDescription)" }
         }
         didConfirmStartup = true
         if let notice = pendingUpdateNoticeURL {
@@ -495,7 +498,8 @@ final class MyTermStartup {
             directory: supportDirectory.appendingPathComponent(channel.displayName, isDirectory: true)
         ))
         do {
-            try startTrialMonitor()
+            do { try startTrialMonitor() }
+            catch { errorDescription = "Update startup monitoring was unavailable: \(error.localizedDescription)" }
             if let acquired = try coordinator.acquire() {
                 try becomeOwner(lease: acquired)
             } else {
@@ -507,6 +511,7 @@ final class MyTermStartup {
         }
     }
 
+    /// Start the detached monitor before loading configuration, so a failed first launch can recover its prior app.
     private func startTrialMonitor() throws {
         guard Bundle.main.bundleIdentifier == ApplicationUpdate.bundleIdentifier,
               try ApplicationUpdate.runningCodeMatchesFile(Bundle.main.bundleURL) else { return }
@@ -525,6 +530,7 @@ final class MyTermStartup {
         try monitor.run()
     }
 
+    /// Load configuration only while owning the profile lease, applying stable recovery before constructing the model.
     func becomeOwner(lease: SingleInstanceLease) throws {
         do {
             if Bundle.main.bundleIdentifier == ApplicationUpdate.bundleIdentifier,
@@ -536,10 +542,17 @@ final class MyTermStartup {
             }
             let directory = MyTermChannel.active.persistenceURL(applicationSupportDirectory: supportDirectory).deletingLastPathComponent()
             let releaseChannel = UpdateCheck.Channel(rawValue: Bundle.main.object(forInfoDictionaryKey: "MyTermReleaseChannel") as? String ?? "stable") ?? .stable
-            startupTrial = try UpdateStartupTrial.pending(in: directory, app: Bundle.main.bundleURL,
-                version: Bundle.main.shortVersionString, channel: releaseChannel)
-            if let startupTrial { try UpdateStartupTrial.report(.starting, plan: startupTrial) }
             var updateNotices: [String] = []
+            do {
+                startupTrial = try UpdateStartupTrial.pending(in: directory, app: Bundle.main.bundleURL,
+                    version: Bundle.main.shortVersionString, channel: releaseChannel)
+                if let startupTrial { try UpdateStartupTrial.report(.starting, plan: startupTrial) }
+            } catch {
+                startupTrial = nil
+                updateNotices.append("Update startup monitoring was unavailable; kept the installed app. \(error.localizedDescription)")
+                do { try UpdateStartupTrial.quarantineRecord(in: directory) }
+                catch { updateNotices.append("Could not archive the stale update marker: \(error.localizedDescription)") }
+            }
             let updateError = directory.appendingPathComponent("update-install-error.txt")
             if FileManager.default.fileExists(atPath: updateError.path) {
                 let handle = try FileHandle(forReadingFrom: updateError)

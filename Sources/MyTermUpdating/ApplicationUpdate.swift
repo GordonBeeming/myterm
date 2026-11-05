@@ -22,6 +22,7 @@ public struct ApplicationUpdatePlan: Codable, Sendable {
     public var manifestURL: URL { directory.appendingPathComponent("update.json") }
     public var agentURL: URL { directory.appendingPathComponent("MyTermUpdateAgent") }
 
+    /// Write the private handoff manifest atomically for the detached installer.
     public func save() throws {
         try JSONEncoder().encode(self).write(to: manifestURL, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: manifestURL.path)
@@ -150,7 +151,8 @@ public enum ApplicationUpdate {
             do {
                 try exchange(plan.target, plan.staged)
                 bundleRestored = true
-                try config.captureUpdateTrial(to: plan.directory.appendingPathComponent("failed-configuration.json"))
+                do { try config.captureUpdateTrial(to: plan.directory.appendingPathComponent("failed-configuration.json")) }
+                catch { FileHandle.standardError.write(Data(("Could not preserve failed startup state: \(error.localizedDescription)\n").utf8)) }
                 try config.restoreUpdateTrial(from: plan.directory.appendingPathComponent("configuration-before-update.json"), selectedChannel: plan.sourceChannel)
                 if let originalPreferences {
                     UserDefaults.standard.setPersistentDomain(originalPreferences, forName: plan.preferencesDomain)
@@ -184,6 +186,7 @@ public enum ApplicationUpdate {
                 ["--verify-configuration", plan.configurationDirectory.path, plan.preferencesDomain, mode])
     }
 
+    /// Exchange two bundles on the same filesystem atomically, preserving the previous app for rollback.
     public static func exchange(_ a: URL, _ b: URL) throws {
         guard renameatx_np(AT_FDCWD, a.path, AT_FDCWD, b.path, UInt32(RENAME_SWAP)) == 0 else {
             throw invalid("Could not atomically replace the app: \(String(cString: strerror(errno)))")
@@ -241,6 +244,7 @@ public enum ApplicationUpdate {
         }
     }
 
+    /// Accept only this user’s private UUID staging directories beside the intended application.
     private static func isPrivateStage(_ directory: URL, beside app: URL) -> Bool {
         let prefix = ".myterm-update-", suffix = ".noindex", name = directory.lastPathComponent
         guard name.hasPrefix(prefix), name.hasSuffix(suffix),
@@ -254,6 +258,7 @@ public enum ApplicationUpdate {
         return true
     }
 
+    /// Require the original creator generation to have exited before pruning an orphaned download.
     private static func isCreatorGone(_ owner: StageOwner) -> Bool {
         var info = proc_bsdinfo()
         let expected = Int32(MemoryLayout<proc_bsdinfo>.size)
@@ -284,6 +289,7 @@ public enum ApplicationUpdate {
         try FileManager.default.removeItem(at: plan.directory)
     }
 
+    /// Download and verify a release into a private directory beside the app, leaving its running bundle untouched.
     public static func prepare(
         release: AppRelease, target: URL, sourceChannel: UpdateCheck.Channel, sourceVersion: String,
         configurationDirectory: URL, preferencesDomain: String, stableChoice: ChannelConfigurationStore.StableChoice? = nil,
@@ -421,6 +427,7 @@ public enum ApplicationUpdate {
                                      requirement(identifier: bundleIdentifier), app.path])
     }
 
+    /// Pin distribution trust to the app identity, Developer ID certificate chain and publisher team.
     private static func requirement(identifier: String) -> String {
         "=anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and certificate leaf[subject.OU] = \"\(teamIdentifier)\" and identifier \"\(identifier)\""
     }
@@ -438,6 +445,7 @@ public enum ApplicationUpdate {
         }
     }
 
+    /// Hash the archive incrementally without loading the complete DMG into memory.
     public static func digest(_ file: URL) throws -> String {
         let handle = try FileHandle(forReadingFrom: file)
         defer { try? handle.close() }
@@ -451,6 +459,7 @@ public enum ApplicationUpdate {
         _ = try runOutput(executable, arguments, timeout: timeout)
     }
 
+    /// Run fixed executable arguments with a bounded deadline and bounded captured output.
     public static func runOutput(_ executable: String, _ arguments: [String], timeout: TimeInterval = 120) throws -> Data {
         let files = FileManager.default
         let logURL = files.temporaryDirectory.appendingPathComponent("myterm-update-log-\(UUID().uuidString)")
