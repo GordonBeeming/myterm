@@ -4,6 +4,52 @@ import XCTest
 
 @MainActor
 final class ChannelConfigurationStoreTests: XCTestCase {
+    /// New beta fields can appear without a version bump; stable must not silently strip them.
+    func testUnknownBetaFieldTriggersStableFallback() throws {
+        let (directory, _, config) = try fixture()
+        let stable = try workspace("Stable", at: directory)
+        try config.captureStable()
+        let beta = try workspace("Beta", at: directory)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: beta) as? [String: Any])
+        object["betaOnlyWorkspaceOption"] = ["enabled": true]
+        try JSONSerialization.data(withJSONObject: object).write(to: directory.appendingPathComponent("workspace-state.json"))
+        try config.beginStableReturn(.tryBeta)
+        let (_, notice) = try config.loadStable { true }
+        XCTAssertNotNil(notice)
+        XCTAssertEqual(try Data(contentsOf: directory.appendingPathComponent("workspace-state.json")), stable)
+    }
+
+    /// A failed workspace replacement after a preference write must restore the previous preferences.
+    func testManualRestoreWriteFailureRollsBackPreferences() throws {
+        let (directory, domain, config) = try fixture()
+        _ = try workspace("Stable", at: directory)
+        UserDefaults.standard.setPersistentDomain(["theme": "stable"], forName: domain)
+        try config.captureStable()
+        let beta = try workspace("Beta", at: directory)
+        UserDefaults.standard.setPersistentDomain(["theme": "beta"], forName: domain)
+        let file = directory.appendingPathComponent("workspace-state.json")
+        try FileManager.default.setAttributes([.immutable: true], ofItemAtPath: file.path)
+        defer { try? FileManager.default.setAttributes([.immutable: false], ofItemAtPath: file.path) }
+        XCTAssertThrowsError(try config.restoreBackup(from: directory.appendingPathComponent("last-stable-configuration.json")))
+        XCTAssertEqual(UserDefaults.standard.persistentDomain(forName: domain)?["theme"] as? String, "beta")
+        XCTAssertEqual(try Data(contentsOf: file), beta)
+    }
+
+    /// A corrupt fallback must not block an explicitly requested, compatible beta configuration.
+    func testTryBetaPreflightAcceptsCurrentWhenStableSnapshotIsCorrupt() throws {
+        let (directory, _, config) = try fixture()
+        _ = try workspace("Compatible current", at: directory)
+        try Data("bad fallback".utf8).write(to: directory.appendingPathComponent("last-stable-configuration.json"))
+        XCTAssertNoThrow(try config.checkIncomingConfiguration(mode: "try-beta"))
+        XCTAssertThrowsError(try config.checkIncomingConfiguration(mode: "stable"))
+    }
+
+    /// Read-only preflight for a never-saved profile must not invent a live workspace file.
+    func testPreflightDoesNotCreateLiveWorkspaceFile() throws {
+        let (directory, _, config) = try fixture()
+        try config.checkStableCapture()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("workspace-state.json").path))
+    }
     /// Restoring settings in beta repairs configuration without silently opting the app out of beta.
     func testManualRecoveryPreservesRequestedInstalledChannel() throws {
         let (directory, domain, config) = try fixture()

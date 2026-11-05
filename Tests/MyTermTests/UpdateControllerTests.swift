@@ -5,6 +5,20 @@ import XCTest
 
 @MainActor
 final class UpdateControllerTests: XCTestCase {
+    /// A digest-less beta stays visible as release information but cannot enter the installer.
+    func testNativeInstallRejectsBetaWithoutVerifiedDigest() async throws {
+        let data = Data("""
+        [{"tag_name":"v0.0.119-beta","draft":false,"prerelease":true,
+        "html_url":"https://github.com/GordonBeeming/myterm/releases/tag/v0.0.119-beta",
+        "assets":[{"name":"myterm-0.0.119-aarch64.dmg"}]}]
+        """.utf8)
+        let updater = UpdateController(currentVersion: "0.0.118", releaseChannel: .beta,
+            upgradeRoute: .native, defaults: try defaults(), fetch: { _ in data })
+        _ = await updater.check()
+        await updater.install()
+        XCTAssertEqual(updater.installation, .failed("The release changed or its verified download is not ready. Check for updates again."))
+    }
+
     /// An old, uncancellable response must not replace the newly selected channel's result.
     func testChannelSwitchDiscardsLateResponseAndPersistsSelection() async throws {
         let store = try defaults()

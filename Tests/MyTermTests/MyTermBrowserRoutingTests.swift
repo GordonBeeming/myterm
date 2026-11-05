@@ -36,6 +36,14 @@ final class MyTermBrowserRoutingTests: XCTestCase {
         XCTAssertEqual(process.terminationStatus, 0)
         XCTAssertTrue(FileManager.default.fileExists(atPath: zdotdir + "/.zcompdump"))
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: bundled.path).sorted(), originalNames)
+        let common = bundled.appendingPathComponent("_myterm_common")
+        let text = try String(contentsOf: common, encoding: .utf8)
+        try text.replacingOccurrences(of: "# MyTerm zsh shim\n", with: "# Legacy startup shim\n")
+            .write(to: common, atomically: true, encoding: .utf8)
+        let legacy = try MyTermBrowserLauncher.preparedEnvironment(
+            executableURL: resources.appendingPathComponent("myterm-browser"), baseEnvironment: base,
+            runtimeDirectory: root.appendingPathComponent("runtime"))
+        XCTAssertFalse(try XCTUnwrap(legacy["ZDOTDIR"]).hasPrefix(resources.path))
     }
 
     func testBrowserLauncherResolutionAndEnvironment() throws {

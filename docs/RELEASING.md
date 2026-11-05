@@ -24,7 +24,7 @@ Entering beta saves the last stable workspace, app preferences and agent inbox a
 
 Snapshots do not rewind shell commands or Keychain credentials. A beta installed directly without prior stable history has no historical snapshot to restore. It can try its current configuration only if the incoming stable decoder accepts it before installation; the UI explains that historical fallback is unavailable.
 
-The signed `MyTermUpdateAgent` checks the prepared app again before an atomic same-volume exchange. A failed exchange, preference update or relaunch restores the previous bundle and preferences, and clears any pending configuration switch. Successful startup prunes completed staging folders after their helper exits. Interrupted configuration restores retain their original beta backup and marker for recovery.
+The signed `MyTermUpdateAgent` checks the prepared app again before an atomic same-volume exchange. A failed exchange, preference update or relaunch restores the previous bundle and configuration, and clears any pending configuration switch. A relaunch is committed only after the new app acknowledges a loaded model and visible main window. Missing or failed startup acknowledgement rolls back the trial. Quiet installs retain a trial marker and the previous app until their first later launch confirms startup. Successful startup prunes completed staging folders after their helper exits. Interrupted configuration restores retain their original beta backup and marker for recovery.
 
 Keep the version-1 update-agent commands, manifests and snapshot envelopes readable by the last stable release. The snapshot's workspace payload remains in the stable schema that created it. Do not change terminal attachment/checkpoint formats merely to add an update channel.
 
@@ -35,7 +35,7 @@ myterm.app/Contents/MacOS/MyTermUpdateAgent --verify-app /path/to/myterm.app VER
 myterm.app/Contents/MacOS/MyTermUpdateAgent --verify-configuration /path/to/config com.gordonbeeming.myterm current
 ```
 
-The first checks the real app and both signed helpers. The second uses that build's configuration decoder without applying a configuration or installing an app. Use `stable-fallback` to check a saved stable snapshot. Live GUI switch testing still requires explicit GUI authorization; isolated filesystem tests cover swap rollback, preference rollback, schema incompatibility and failed-model recovery.
+The first checks the real app and both signed helpers. The second uses that build's configuration decoder without applying a configuration or installing an app. Use `stable` to check a saved stable snapshot, or `try-beta` to accept either compatible current settings or the saved fallback. Live GUI switch testing still requires explicit GUI authorization; isolated filesystem tests cover swap rollback, preference rollback, schema incompatibility and failed-model recovery.
 
 ## Release security chain
 

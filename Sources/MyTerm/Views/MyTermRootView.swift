@@ -36,6 +36,7 @@ struct MyTermRootView: View {
         if let model = startup.model {
             WorkspaceContentView(model: model)
                 .environment(\.agentIndicatorAppearance, model.agentIndicatorAppearance)
+                .onAppear { startup.markStartupSucceeded() }
         } else {
             VStack {
                 ContentUnavailableView(

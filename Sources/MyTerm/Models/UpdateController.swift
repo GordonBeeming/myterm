@@ -106,6 +106,7 @@ final class UpdateController {
     private let poll = PollTimer()
     private var inFlightCheck: Task<Status, Never>?
 
+    /// Selection belongs to the shared profile, while feed results belong to their own channel.
     init(
         channel: MyTermChannel = .active,
         currentVersion: String = Bundle.main.shortVersionString,
@@ -160,7 +161,11 @@ final class UpdateController {
             request.timeoutInterval = 15
             return try await URLSession.shared.data(for: request).0
         }
-        if releaseChannel == .beta, let upgradeRoute, case .homebrew = upgradeRoute {
+        let isolatedProfile = environment["MYTERM_USER_DEFAULTS_SUITE"].map { !$0.isEmpty } == true
+            || environment["MYTERM_APPLICATION_SUPPORT_DIRECTORY"].map { !$0.isEmpty } == true
+        if upgradeRoute == nil, isolatedProfile {
+            self.upgradeRoute = .releasePage
+        } else if releaseChannel == .beta, let upgradeRoute, case .homebrew = upgradeRoute {
             self.upgradeRoute = .releasePage
         } else {
             self.upgradeRoute = upgradeRoute ?? Self.detectUpgradeRoute(bundleURL: bundleURL)
@@ -248,6 +253,14 @@ final class UpdateController {
         helper.executableURL = plan.agentURL
         helper.arguments = [plan.manifestURL.path, String(ProcessInfo.processInfo.processIdentifier)]
         return helper
+    }
+
+    /// A deleted or tampered handoff must not trap ordinary Quit or channel selection.
+    func disarmPreparedUpdate(_ reason: String) {
+        stagedUpdate = nil
+        verifiedInstalledVersion = nil
+        preferenceRoot.removeObject(forKey: "updates.stagedManifest")
+        installation = .failed(reason)
     }
 
     /// The release the sidebar badge advertises. A skipped version stays in `status`, so "Check for
@@ -350,7 +363,8 @@ final class UpdateController {
                 }
                 let prepared = try await ApplicationUpdate.prepare(release: release, target: bundleURL,
                     sourceChannel: installedChannel, sourceVersion: currentVersion, configurationDirectory: configurationDirectory,
-                    preferencesDomain: preferencesDomain) { [weak self] message in
+                    preferencesDomain: preferencesDomain,
+                    stableChoice: needsStableConfigurationChoice ? stableConfigurationChoice : nil) { [weak self] message in
                         await self?.appendOutput(Data((message + "\n").utf8))
                     }
                 do {

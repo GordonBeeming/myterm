@@ -122,11 +122,12 @@ enum MyTermBrowserLauncher {
     ) throws -> [String: String] {
         guard let executableURL else { return [:] }
         let source = executableURL.deletingLastPathComponent().appendingPathComponent("zsh")
-        guard isZshShimDirectory(atPath: source.path) else {
+        guard FileManager.default.fileExists(atPath: source.appendingPathComponent(".zshenv").path) else {
             return environment(executableURL: executableURL, workspaceID: workspaceID, tabID: tabID,
                                paneID: paneID, baseEnvironment: baseEnvironment)
         }
         let names = [".zshenv", ".zprofile", ".zshrc", ".zlogin", ".zlogout", "_myterm_common", "_myterm_startup"]
+            .filter { FileManager.default.fileExists(atPath: source.appendingPathComponent($0).path) }
         let contents = try names.map { try Data(contentsOf: source.appendingPathComponent($0)) }
         var hash = SHA256()
         for (name, data) in zip(names, contents) { hash.update(data: Data(name.utf8)); hash.update(data: data) }

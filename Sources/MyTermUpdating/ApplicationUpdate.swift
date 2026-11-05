@@ -3,9 +3,11 @@ import Darwin
 import Foundation
 import MyTermCore
 import Security
+import OSLog
 
 /// A private, durable handoff to a signed helper that only installs after the UI has exited.
 public struct ApplicationUpdatePlan: Codable, Sendable {
+    public var id = UUID()
     public let target: URL
     public let staged: URL
     public let directory: URL
@@ -28,13 +30,21 @@ public struct ApplicationUpdatePlan: Codable, Sendable {
 
 public enum ApplicationUpdateError: Error, LocalizedError {
     case invalid(String)
+    case startupFailed(String)
+    case rollbackDeferred(String)
     public var errorDescription: String? {
-        switch self { case .invalid(let message): message }
+        switch self { case .invalid(let message), .startupFailed(let message), .rollbackDeferred(let message): message }
     }
 }
 
 /// Downloads immutable release bytes, verifies their identity, and stages on the app's filesystem.
 public enum ApplicationUpdate {
+    private struct StageOwner: Codable {
+        let target: URL
+        let pid: Int32
+        let startSeconds: UInt64
+        let startMicroseconds: UInt64
+    }
     public static let bundleIdentifier = "com.gordonbeeming.myterm"
     public static let teamIdentifier = "89DBN36T4T"
 
@@ -108,15 +118,19 @@ public enum ApplicationUpdate {
     @MainActor public static func apply(
         _ plan: ApplicationUpdatePlan,
         validateBundle: (URL, String, UpdateCheck.Channel) throws -> Void = validate,
+        preflight: (ApplicationUpdatePlan) throws -> Void = preflightConfiguration,
         exchange: (URL, URL) throws -> Void = exchange,
         launch: (URL) throws -> Void = { try run("/usr/bin/open", ["-n", $0.path]) }
     ) throws {
         try validateSource(plan)
         try validateBundle(plan.staged, plan.version, plan.channel)
+        try preflight(plan)
         let config = ChannelConfigurationStore(directory: plan.configurationDirectory, preferencesDomain: plan.preferencesDomain)
         if plan.sourceChannel == .stable, plan.channel == .beta { try config.captureStable() }
         let originalPreferences = UserDefaults.standard.persistentDomain(forName: plan.preferencesDomain)
-        try exchange(plan.target, plan.staged)
+        try UpdateStartupTrial.begin(plan)
+        do { try exchange(plan.target, plan.staged) }
+        catch { try UpdateStartupTrial.clear(plan); throw error }
         do {
             try validateBundle(plan.target, plan.version, plan.channel)
             if plan.sourceChannel == .beta, plan.channel == .stable {
@@ -131,18 +145,43 @@ public enum ApplicationUpdate {
             if plan.relaunch { try launch(plan.target) }
         } catch {
             let installationError = error
+            if case ApplicationUpdateError.rollbackDeferred = error { throw error }
+            var bundleRestored = false
             do {
                 try exchange(plan.target, plan.staged)
+                bundleRestored = true
+                try config.captureUpdateTrial(to: plan.directory.appendingPathComponent("failed-configuration.json"))
+                try config.restoreUpdateTrial(from: plan.directory.appendingPathComponent("configuration-before-update.json"), selectedChannel: plan.sourceChannel)
                 if let originalPreferences {
                     UserDefaults.standard.setPersistentDomain(originalPreferences, forName: plan.preferencesDomain)
                 } else { UserDefaults.standard.removePersistentDomain(forName: plan.preferencesDomain) }
                 guard UserDefaults.standard.synchronize() else { throw invalid("Could not restore the previous preferences.") }
                 try config.cancelStableReturn()
+                try UpdateStartupTrial.clear(plan)
+                if case ApplicationUpdateError.startupFailed = installationError {
+                    var restored = UserDefaults.standard.persistentDomain(forName: plan.preferencesDomain) ?? [:]
+                    restored["updates.selectedChannel"] = plan.sourceChannel.rawValue
+                    restored.removeValue(forKey: "updates.stagedManifest")
+                    UserDefaults.standard.setPersistentDomain(restored, forName: plan.preferencesDomain)
+                    guard UserDefaults.standard.synchronize() else { throw invalid("Could not save startup rollback preferences.") }
+                }
             } catch {
-                throw invalid("Update rollback could not finish. The previous app is preserved at \(plan.staged.path). \(error.localizedDescription)")
+                let location = bundleRestored ? plan.target : plan.staged
+                throw invalid("Update rollback could not finish. The previous app is preserved at \(location.path). \(error.localizedDescription)")
             }
             throw installationError
         }
+    }
+
+    /// Repeat this under the installation lease after the parent exits, not just at download time.
+    public static func preflightConfiguration(_ plan: ApplicationUpdatePlan) throws {
+        let mode: String
+        if plan.sourceChannel == .beta, plan.channel == .stable {
+            guard let choice = plan.stableChoice else { throw invalid("Choose a configuration before returning to stable.") }
+            mode = choice == .restoreStable ? "stable" : "try-beta"
+        } else { mode = "current" }
+        try run(plan.staged.appendingPathComponent("Contents/MacOS/MyTermUpdateAgent").path,
+                ["--verify-configuration", plan.configurationDirectory.path, plan.preferencesDomain, mode])
     }
 
     public static func exchange(_ a: URL, _ b: URL) throws {
@@ -152,8 +191,11 @@ public enum ApplicationUpdate {
     }
 
     /// Prune only this app's private handoffs, after a successful startup and after their helper exits.
-    public static func pruneCompletedUpdates(for app: URL) {
+    public static func pruneCompletedUpdates(for app: URL, preferencesDomain: String = bundleIdentifier) {
         let files = FileManager.default
+        let pending = UserDefaults.standard.persistentDomain(forName: preferencesDomain)?["updates.stagedManifest"] as? String
+        let config = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/myterm")
+        let trial = UpdateStartupTrial.activeManifest(in: config)?.path
         let size = proc_listpids(UInt32(PROC_UID_ONLY), UInt32(getuid()), nil, 0)
         guard size > 0 else { return }
         var pids = [pid_t](repeating: 0, count: Int(size) / MemoryLayout<pid_t>.size + 64)
@@ -170,16 +212,56 @@ public enum ApplicationUpdate {
         }
         guard let directories = try? files.contentsOfDirectory(at: app.deletingLastPathComponent(), includingPropertiesForKeys: nil) else { return }
         for directory in directories where directory.lastPathComponent.hasPrefix(".myterm-update-") {
-            guard (files.fileExists(atPath: directory.appendingPathComponent("applied").path)
-                   || files.fileExists(atPath: directory.appendingPathComponent("superseded").path)),
-                  !running.contains(where: { $0.hasPrefix(directory.path + "/") }),
-                  let data = try? Data(contentsOf: directory.appendingPathComponent("update.json")),
-                  let plan = try? JSONDecoder().decode(ApplicationUpdatePlan.self, from: data),
-                  plan.target == app,
-                  (try? validatePlan(plan, manifest: directory.appendingPathComponent("update.json"))) != nil else { continue }
-            do { try files.removeItem(at: directory) }
-            catch { continue } // A failed cleanup must not affect the running app or its configuration.
+            guard directory.appendingPathComponent("update.json").path != pending,
+                  directory.appendingPathComponent("update.json").path != trial,
+                  !running.contains(where: { $0.hasPrefix(directory.path + "/") }) else { continue }
+            let ownerData = try? Data(contentsOf: directory.appendingPathComponent("stage-owner.json"))
+            let owner = ownerData.flatMap { try? JSONDecoder().decode(StageOwner.self, from: $0) }
+            let completed = files.fileExists(atPath: directory.appendingPathComponent("applied").path)
+                || files.fileExists(atPath: directory.appendingPathComponent("superseded").path)
+            if let owner {
+                guard owner.target == app, isCreatorGone(owner), isPrivateStage(directory, beside: app) else { continue }
+            } else {
+                guard completed, let data = try? Data(contentsOf: directory.appendingPathComponent("update.json")),
+                      let plan = try? JSONDecoder().decode(ApplicationUpdatePlan.self, from: data), plan.target == app,
+                      (try? validatePlan(plan, manifest: directory.appendingPathComponent("update.json"))) != nil else { continue }
+            }
+            do {
+                let volume = directory.appendingPathComponent("volume")
+                if files.fileExists(atPath: volume.path),
+                   let root = try volume.resourceValues(forKeys: [.volumeURLKey]).volume,
+                   root.resolvingSymlinksInPath().path == volume.resolvingSymlinksInPath().path {
+                    try run("/usr/bin/hdiutil", ["detach", volume.path])
+                }
+                try files.removeItem(at: directory)
+            } catch {
+                Logger(subsystem: bundleIdentifier, category: "updates")
+                    .error("Kept update staging folder after cleanup failed: \(error.localizedDescription, privacy: .private)")
+            }
         }
+    }
+
+    private static func isPrivateStage(_ directory: URL, beside app: URL) -> Bool {
+        let prefix = ".myterm-update-", suffix = ".noindex", name = directory.lastPathComponent
+        guard name.hasPrefix(prefix), name.hasSuffix(suffix),
+              UUID(uuidString: String(name.dropFirst(prefix.count).dropLast(suffix.count))) != nil,
+              directory.deletingLastPathComponent().standardizedFileURL.path == app.deletingLastPathComponent().standardizedFileURL.path,
+              directory.standardizedFileURL == directory.resolvingSymlinksInPath(),
+              let attrs = try? FileManager.default.attributesOfItem(atPath: directory.path),
+              attrs[.type] as? FileAttributeType == .typeDirectory,
+              (attrs[.ownerAccountID] as? NSNumber)?.uint32Value == geteuid(),
+              let mode = attrs[.posixPermissions] as? NSNumber, mode.intValue & 0o077 == 0 else { return false }
+        return true
+    }
+
+    private static func isCreatorGone(_ owner: StageOwner) -> Bool {
+        var info = proc_bsdinfo()
+        let expected = Int32(MemoryLayout<proc_bsdinfo>.size)
+        if proc_pidinfo(owner.pid, PROC_PIDTBSDINFO, 0, &info, expected) != expected {
+            return kill(owner.pid, 0) == -1 && errno == ESRCH
+        }
+        return info.pbi_uid != geteuid() || info.pbi_start_tvsec != owner.startSeconds
+            || info.pbi_start_tvusec != owner.startMicroseconds
     }
 
     /// A superseded helper must never install an earlier prepared build after its parent exits.
@@ -204,7 +286,7 @@ public enum ApplicationUpdate {
 
     public static func prepare(
         release: AppRelease, target: URL, sourceChannel: UpdateCheck.Channel, sourceVersion: String,
-        configurationDirectory: URL, preferencesDomain: String,
+        configurationDirectory: URL, preferencesDomain: String, stableChoice: ChannelConfigurationStore.StableChoice? = nil,
         progress: @escaping @Sendable (String) async -> Void
     ) async throws -> ApplicationUpdatePlan {
         guard let asset = release.asset else { throw invalid("This release has no verified update download yet.") }
@@ -226,6 +308,13 @@ public enum ApplicationUpdate {
         try files.createDirectory(at: directory, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
         var complete = false
         defer { if !complete { try? files.removeItem(at: directory) } }
+        var creator = proc_bsdinfo()
+        guard proc_pidinfo(getpid(), PROC_PIDTBSDINFO, 0, &creator, Int32(MemoryLayout<proc_bsdinfo>.size)) == MemoryLayout<proc_bsdinfo>.size else {
+            throw invalid("Could not identify the update staging owner.")
+        }
+        let owner = StageOwner(target: target, pid: getpid(), startSeconds: creator.pbi_start_tvsec,
+                               startMicroseconds: creator.pbi_start_tvusec)
+        try JSONEncoder().encode(owner).write(to: directory.appendingPathComponent("stage-owner.json"), options: .atomic)
         try probeAtomicSwap(in: directory)
         await progress("Downloading \(release.channel.title) \(release.version)…")
         let dmg = directory.appendingPathComponent("update.dmg")
@@ -236,8 +325,7 @@ public enum ApplicationUpdate {
             let files = FileManager.default
             guard try digest(dmg) == asset.sha256 else { throw invalid("The update download failed its SHA-256 check.") }
             try run("/usr/bin/codesign", ["--verify", "--strict", dmg.path])
-            try run("/usr/bin/xcrun", ["stapler", "validate", dmg.path])
-            try run("/usr/sbin/spctl", ["--assess", "--type", "open", "--context", "context:primary-signature", dmg.path])
+            try assessNotarized(dmg, diskImage: true)
             let mount = directory.appendingPathComponent("volume", isDirectory: true)
             try files.createDirectory(at: mount, withIntermediateDirectories: false)
             try run("/usr/bin/hdiutil", ["attach", "-readonly", "-nobrowse", "-noautoopen", "-mountpoint", mount.path, dmg.path])
@@ -247,8 +335,8 @@ public enum ApplicationUpdate {
             try validate(mountedApp, version: release.version.description, channel: release.channel)
             try run("/usr/bin/ditto", [mountedApp.path, staged.path])
             try validate(staged, version: release.version.description, channel: release.channel)
-            let fallbackExists = files.fileExists(atPath: configurationDirectory.appendingPathComponent("last-stable-configuration.json").path)
-            let mode = sourceChannel == .beta && release.channel == .stable && fallbackExists ? "stable-fallback" : "current"
+            let mode = sourceChannel == .beta && release.channel == .stable
+                ? (stableChoice == .restoreStable ? "stable" : "try-beta") : "current"
             try run(staged.appendingPathComponent("Contents/MacOS/MyTermUpdateAgent").path,
                     ["--verify-configuration", configurationDirectory.path, preferencesDomain, mode])
             let helper = target.appendingPathComponent("Contents/MacOS/MyTermUpdateAgent")
@@ -274,8 +362,7 @@ public enum ApplicationUpdate {
             throw invalid("The update app must be a real directory, not a link.")
         }
         try verifySignature(app, identifier: bundleIdentifier)
-        try run("/usr/sbin/spctl", ["--assess", "--type", "execute", app.path])
-        try run("/usr/bin/xcrun", ["stapler", "validate", app.path])
+        try assessNotarized(app, diskImage: false)
         let data = try Data(contentsOf: app.appendingPathComponent("Contents/Info.plist"))
         guard let expected = AppVersion(version),
               let info = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
@@ -289,7 +376,9 @@ public enum ApplicationUpdate {
                             identifier: bundleIdentifier + ".session-host")
         try verifySignature(app.appendingPathComponent("Contents/MacOS/MyTermUpdateAgent"),
                             identifier: bundleIdentifier + ".update-agent")
-        try run("/usr/bin/lipo", ["-verify_arch", "arm64", app.appendingPathComponent("Contents/MacOS/myterm").path])
+        guard try containsArm64(app.appendingPathComponent("Contents/MacOS/myterm")) else {
+            throw invalid("The update does not contain the required Apple silicon executable.")
+        }
     }
 
     /// Only an owner-private staging folder beside this app may supply an installation handoff.
@@ -299,7 +388,7 @@ public enum ApplicationUpdate {
         guard name.hasPrefix(prefix), name.hasSuffix(suffix),
               UUID(uuidString: String(name.dropFirst(prefix.count).dropLast(suffix.count))) != nil,
               manifest.standardizedFileURL == plan.manifestURL,
-              plan.directory.deletingLastPathComponent() == plan.target.deletingLastPathComponent(),
+              plan.directory.deletingLastPathComponent().standardizedFileURL.path == plan.target.deletingLastPathComponent().standardizedFileURL.path,
               plan.target.pathExtension == "app", plan.staged.path == plan.directory.appendingPathComponent("myterm.app").path,
               plan.target.standardizedFileURL == plan.target.resolvingSymlinksInPath(),
               plan.directory.standardizedFileURL == plan.directory.resolvingSymlinksInPath(),
@@ -359,6 +448,10 @@ public enum ApplicationUpdate {
 
     /// Positional process arguments keep paths and remote release metadata out of shell source.
     public static func run(_ executable: String, _ arguments: [String], timeout: TimeInterval = 120) throws {
+        _ = try runOutput(executable, arguments, timeout: timeout)
+    }
+
+    public static func runOutput(_ executable: String, _ arguments: [String], timeout: TimeInterval = 120) throws -> Data {
         let files = FileManager.default
         let logURL = files.temporaryDirectory.appendingPathComponent("myterm-update-log-\(UUID().uuidString)")
         guard files.createFile(atPath: logURL.path, contents: nil, attributes: [.posixPermissions: 0o600]) else {
@@ -384,14 +477,50 @@ public enum ApplicationUpdate {
             }
             throw invalid("\(URL(fileURLWithPath: executable).lastPathComponent) timed out. The update was not applied.")
         }
+        let input = try FileHandle(forReadingFrom: logURL)
+        defer { try? input.close() }
+        let size = try input.seekToEnd()
+        try input.seek(toOffset: size > 65_536 ? size - 65_536 : 0)
+        let log = try input.read(upToCount: 65_536) ?? Data()
         guard process.terminationStatus == 0 else {
-            let input = try FileHandle(forReadingFrom: logURL)
-            defer { try? input.close() }
-            let size = try input.seekToEnd()
-            try input.seek(toOffset: size > 65_536 ? size - 65_536 : 0)
-            let log = try input.read(upToCount: 65_536) ?? Data()
             throw invalid("\(URL(fileURLWithPath: executable).lastPathComponent) failed: \(String(decoding: log, as: UTF8.self))")
         }
+        return log
+    }
+
+    /// Gatekeeper's structured authority must be notarization, not a user-created allow rule.
+    /// These are base-system APIs; the client never invokes Xcode command-line tools.
+    public static func assessNotarized(_ url: URL, diskImage: Bool) throws {
+        var arguments = ["--assess", "--raw", "--type", diskImage ? "open" : "execute"]
+        if diskImage { arguments += ["--context", "context:primary-signature"] }
+        arguments.append(url.path)
+        let data = try runOutput("/usr/sbin/spctl", arguments)
+        guard let info = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+              info["assessment:verdict"] as? Bool == true,
+              let authority = info["assessment:authority"] as? [String: Any],
+              authority["assessment:authority:source"] as? String == "Notarized Developer ID" else {
+            throw invalid("Gatekeeper did not confirm Apple notarization for this update.")
+        }
+    }
+
+    /// Inspect the signed Mach-O header without depending on developer tools such as lipo.
+    public static func containsArm64(_ executable: URL) throws -> Bool {
+        let input = try FileHandle(forReadingFrom: executable)
+        defer { try? input.close() }
+        let data = try input.read(upToCount: 4096) ?? Data()
+        func word(_ offset: Int, little: Bool) -> UInt32? {
+            guard offset >= 0, offset + 4 <= data.count else { return nil }
+            let bytes = data[offset..<(offset + 4)]
+            return (little ? Array(bytes.reversed()) : Array(bytes)).reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
+        }
+        guard let magic = word(0, little: false) else { return false }
+        if magic == 0xcffaedfe { return word(4, little: true) == 0x0100000c }
+        if magic == 0xfeedfacf { return word(4, little: false) == 0x0100000c }
+        let little = magic == 0xbebafeca || magic == 0xbfbafeca
+        let fat64 = magic == 0xcafebabf || magic == 0xbfbafeca
+        guard [UInt32(0xcafebabe), 0xbebafeca, 0xcafebabf, 0xbfbafeca].contains(magic),
+              let count = word(4, little: little), count > 0, count <= 32 else { return false }
+        return (0..<Int(count)).contains { word(8 + $0 * (fat64 ? 32 : 20), little: little) == 0x0100000c }
     }
 
     private static func invalid(_ message: String) -> ApplicationUpdateError { .invalid(message) }

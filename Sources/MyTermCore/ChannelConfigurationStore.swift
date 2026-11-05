@@ -46,6 +46,31 @@ public final class ChannelConfigurationStore {
         try validate(JSONDecoder().decode(Snapshot.self, from: Data(contentsOf: stableURL)))
     }
 
+    /// A trial of beta settings needs a fallback only when the incoming decoder rejects current data.
+    public func checkIncomingConfiguration(mode: String) throws {
+        switch mode {
+        case "stable": try checkStableSnapshot()
+        case "current": try validate(capture())
+        case "try-beta":
+            do { try validate(capture()) }
+            catch { try checkStableSnapshot() }
+        default: throw failure("Unknown configuration check mode.")
+        }
+    }
+
+    /// The installer preserves the final saved state before every binary update, including beta-to-beta.
+    public func captureUpdateTrial(to url: URL) throws {
+        try JSONEncoder().encode(capture()).write(to: url, options: .atomic)
+        try protect(url)
+    }
+
+    /// Undo a failed update using the exact bytes belonging to its previous executable.
+    public func restoreUpdateTrial(from url: URL, selectedChannel: UpdateCheck.Channel) throws {
+        let snapshot = try JSONDecoder().decode(Snapshot.self, from: Data(contentsOf: url))
+        try restoreSnapshot(snapshot, selectedChannel: selectedChannel, allowMissingWorkspace: true)
+        try cancelStableReturn()
+    }
+
     private func stableCapture() throws -> Snapshot {
         var snapshot = try capture()
         if snapshot.workspace == nil {
@@ -167,8 +192,16 @@ public final class ChannelConfigurationStore {
         let preserved = directory.appendingPathComponent("configuration-before-manual-recovery-\(UUID().uuidString).json")
         try JSONEncoder().encode(capture()).write(to: preserved, options: .atomic)
         try protect(preserved)
-        try restoreSnapshot(restored, selectedChannel: selectedChannel)
-        if files.fileExists(atPath: pendingURL.path) { try files.removeItem(at: pendingURL) }
+        let original = try capture()
+        do {
+            try restoreSnapshot(restored, selectedChannel: selectedChannel)
+            if files.fileExists(atPath: pendingURL.path) { try files.removeItem(at: pendingURL) }
+        } catch {
+            let restoreError = error
+            do { try restoreSnapshot(original, selectedChannel: selectedChannel, allowMissingWorkspace: true) }
+            catch { throw failure("Manual restore and rollback could not finish. The original bytes remain at \(preserved.path). \(error.localizedDescription)") }
+            throw restoreError
+        }
     }
 
     /// A failed application swap must not leave a configuration switch armed for a later launch.
@@ -206,6 +239,9 @@ public final class ChannelConfigurationStore {
         let url = scratch.appendingPathComponent("workspace-state.json")
         try workspace.write(to: url)
         let report = try WorkspaceStore(persistenceURL: url).loadReport
+        guard try WorkspaceStore.unrecognizedKeyCount(in: workspace) == 0 else {
+            throw failure("This configuration contains beta fields that this app cannot preserve.")
+        }
         guard report.droppedElementCount == 0, report.identifierRepairCount == 0, report.structuralRepairCount == 0 else {
             throw failure("This configuration requires repairs that could discard beta settings or workspaces.")
         }
@@ -217,8 +253,8 @@ public final class ChannelConfigurationStore {
         }
     }
 
-    private func restoreSnapshot(_ snapshot: Snapshot, selectedChannel: UpdateCheck.Channel = .stable) throws {
-        guard let workspace = snapshot.workspace else { throw failure("The stable workspace snapshot is missing.") }
+    private func restoreSnapshot(_ snapshot: Snapshot, selectedChannel: UpdateCheck.Channel = .stable, allowMissingWorkspace: Bool = false) throws {
+        guard snapshot.workspace != nil || allowMissingWorkspace else { throw failure("The stable workspace snapshot is missing.") }
         guard var preferences = try PropertyListSerialization.propertyList(from: snapshot.preferences, format: nil) as? [String: Any] else {
             throw failure("The saved application preferences are invalid.")
         }
@@ -229,7 +265,9 @@ public final class ChannelConfigurationStore {
         let notifications = directory.appendingPathComponent("agent-notifications.json")
         if let data = snapshot.notifications { try data.write(to: notifications, options: .atomic) }
         else if files.fileExists(atPath: notifications.path) { try files.removeItem(at: notifications) }
-        try workspace.write(to: directory.appendingPathComponent("workspace-state.json"), options: .atomic)
+        let workspace = directory.appendingPathComponent("workspace-state.json")
+        if let data = snapshot.workspace { try data.write(to: workspace, options: .atomic) }
+        else if files.fileExists(atPath: workspace.path) { try files.removeItem(at: workspace) }
     }
 
     private func protect(_ url: URL) throws { try files.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path) }

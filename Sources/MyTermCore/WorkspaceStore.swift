@@ -323,6 +323,26 @@ public final class WorkspaceStore {
         onPersistenceFailure = nil
     }
 
+    /// A rollback must not drop fields from a newer build that kept the same schema version.
+    public static func unrecognizedKeyCount(in data: Data) throws -> Int {
+        let tracker = RecoveryDecodingTracker()
+        let decoder = JSONDecoder()
+        decoder.userInfo[.recoveryDecodingTracker] = tracker
+        _ = try decoder.decode(WorkspaceStoreSnapshot.self, from: data)
+        let object = try JSONSerialization.jsonObject(with: data)
+        func count(_ object: Any, at path: [String]) -> Int {
+            if let dictionary = object as? [String: Any] {
+                let unknown = tracker.knownKeysByPath[path].map { known in dictionary.keys.filter { !known.contains($0) }.count } ?? 0
+                return unknown + dictionary.reduce(0) { $0 + count($1.value, at: path + [$1.key]) }
+            }
+            if let array = object as? [Any] {
+                return array.enumerated().reduce(0) { $0 + count($1.element, at: path + [String($1.offset)]) }
+            }
+            return 0
+        }
+        return count(object, at: [])
+    }
+
     public var migrationBackupURL: URL { persistenceURL.appendingPathExtension("v1-backup") }
     public var recoveryBackupURL: URL { persistenceURL.appendingPathExtension("recovery-backup") }
 

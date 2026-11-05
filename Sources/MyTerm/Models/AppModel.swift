@@ -682,6 +682,10 @@ final class AppModel {
         updateWindow?.close()
         updateWindow = nil
         updates.selectChannel(channel)
+        guard updates.selectedChannel == channel else {
+            if case .failed(let message) = updates.installation { errorDescription = message }
+            return
+        }
         checkForUpdates()
     }
 

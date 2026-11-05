@@ -35,9 +35,7 @@ struct MyTermUpdateAgent {
                     throw ApplicationUpdateError.invalid("Only the myterm configuration domain can be checked.")
                 }
                 let config = ChannelConfigurationStore(directory: directory, preferencesDomain: CommandLine.arguments[3])
-                if CommandLine.arguments[4] == "stable-fallback" { try config.checkStableSnapshot() }
-                else if CommandLine.arguments[4] == "current" { try config.checkStableCapture() }
-                else { throw ApplicationUpdateError.invalid("Unknown configuration validation mode.") }
+                try config.checkIncomingConfiguration(mode: CommandLine.arguments[4])
                 print("Configuration is compatible with this app's decoder.")
                 return
             }
@@ -46,6 +44,32 @@ struct MyTermUpdateAgent {
                 try ApplicationUpdate.validate(URL(fileURLWithPath: CommandLine.arguments[2]),
                     version: CommandLine.arguments[3], channel: channel)
                 print("Verified application signature, notarization, version, channel, and update helpers.")
+                return
+            }
+            if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--watch-trial" {
+                let manifest = URL(fileURLWithPath: CommandLine.arguments[2]).standardizedFileURL
+                let plan = try JSONDecoder().decode(ApplicationUpdatePlan.self, from: Data(contentsOf: manifest))
+                try ApplicationUpdate.validatePlan(plan, manifest: manifest)
+                guard UpdateStartupTrial.activeManifest(in: plan.configurationDirectory) == manifest,
+                      let monitor = try UpdateStartupTrial.monitorLock(plan) else { return }
+                defer { flock(monitor, LOCK_UN); close(monitor) }
+                do {
+                    try UpdateStartupTrial.waitForStartup(plan)
+                    try UpdateStartupTrial.commit(plan)
+                } catch {
+                    try UpdateStartupTrial.stopUnconfirmedApp(plan)
+                    let lock = try ApplicationUpdate.acquireInstallationLock(directory: plan.configurationDirectory)
+                    defer { flock(lock, LOCK_UN); close(lock) }
+                    if UpdateStartupTrial.readReceipt(plan)?.phase == .loaded {
+                        try UpdateStartupTrial.commit(plan)
+                        return
+                    }
+                    let failure = error.localizedDescription
+                    try UpdateStartupTrial.rollback(plan)
+                    try Data(("The new app could not finish startup. Restored the previous app and configuration. " + failure).utf8)
+                        .write(to: plan.configurationDirectory.appendingPathComponent("update-install-error.txt"), options: .atomic)
+                    try ApplicationUpdate.run("/usr/bin/open", ["-n", plan.target.path])
+                }
                 return
             }
             guard CommandLine.arguments.count == 3, let parent = Int32(CommandLine.arguments[2]), parent > 0 else {
@@ -61,10 +85,29 @@ struct MyTermUpdateAgent {
             if FileManager.default.fileExists(atPath: plan.directory.appendingPathComponent("superseded").path) { return }
             parentExited = true
             let installationLock = try ApplicationUpdate.acquireInstallationLock(directory: plan.configurationDirectory)
-            defer { flock(installationLock, LOCK_UN); close(installationLock) }
-            try ApplicationUpdate.apply(plan)
-            do { try Data("applied".utf8).write(to: plan.directory.appendingPathComponent("applied"), options: .atomic) }
-            catch { FileHandle.standardError.write(Data(("Installed, but could not mark cleanup: \(error.localizedDescription)\n").utf8)) }
+            var locked = true
+            defer { if locked { flock(installationLock, LOCK_UN) }; close(installationLock) }
+            let monitor = plan.relaunch ? try UpdateStartupTrial.monitorLock(plan) : nil
+            if plan.relaunch, monitor == nil { throw ApplicationUpdateError.invalid("Another update startup monitor is active.") }
+            defer { if let monitor { flock(monitor, LOCK_UN); close(monitor) } }
+            try ApplicationUpdate.apply(plan, launch: { app in
+                flock(installationLock, LOCK_UN)
+                locked = false
+                do {
+                    try ApplicationUpdate.run("/usr/bin/open", ["-n", app.path])
+                    try UpdateStartupTrial.waitForStartup(plan)
+                } catch {
+                    try UpdateStartupTrial.stopUnconfirmedApp(plan)
+                    if flock(installationLock, LOCK_EX | LOCK_NB) == 0 {
+                        locked = true
+                        throw error
+                    }
+                    if UpdateStartupTrial.readReceipt(plan)?.phase == .loaded { return }
+                    throw ApplicationUpdateError.rollbackDeferred("Could not safely roll back while another instance owns the profile. The previous app remains at \(plan.staged.path).")
+                }
+            })
+            if plan.relaunch { try UpdateStartupTrial.commit(plan) }
+
         } catch {
             FileHandle.standardError.write(Data((error.localizedDescription + "\n").utf8))
             if parentExited, let plan = recoveryPlan {

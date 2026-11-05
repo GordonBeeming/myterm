@@ -253,9 +253,12 @@ final class MyTermApplicationDelegate: NSObject, NSApplicationDelegate {
                     model.isRestartingAfterUpdate = true
                     sender.reply(toApplicationShouldTerminate: true)
                 } catch {
-                    model.updateRestartError = error.localizedDescription
-                    sender.reply(toApplicationShouldTerminate: false)
-                    self?.restoreWindowAfterCancelledTermination(sender)
+                    let reason = "The prepared update could not be applied. Kept the installed app. " + error.localizedDescription
+                    model.updates.disarmPreparedUpdate(reason)
+                    let errorFile = model.store.persistenceURL.deletingLastPathComponent().appendingPathComponent("update-install-error.txt")
+                    do { try Data(reason.utf8).write(to: errorFile, options: .atomic) }
+                    catch { model.updateRestartError = error.localizedDescription }
+                    sender.reply(toApplicationShouldTerminate: true)
                 }
             }
             return .terminateLater
@@ -350,6 +353,26 @@ final class MyTermStartup {
     let coordinator: SingleInstanceCoordinator
     private(set) var lease: SingleInstanceLease?
     private let supportDirectory: URL
+    private var startupTrial: ApplicationUpdatePlan?
+    private var didConfirmStartup = false
+    private var pendingUpdateNoticeURL: URL?
+
+    /// A receipt is emitted only after a real app model and its main window have appeared.
+    func markStartupSucceeded() {
+        guard model != nil, !isSecondary, !didConfirmStartup else { return }
+        if let startupTrial {
+            do { try UpdateStartupTrial.report(.loaded, plan: startupTrial) }
+            catch { model?.errorDescription = "Could not confirm update startup: \(error.localizedDescription)"; return }
+        }
+        didConfirmStartup = true
+        if let notice = pendingUpdateNoticeURL {
+            do { try FileManager.default.removeItem(at: notice); pendingUpdateNoticeURL = nil }
+            catch { model?.errorDescription = (model?.errorDescription ?? "") + "\nCould not clear the update notice: \(error.localizedDescription)" }
+        }
+    }
+    private var preferencesDomain: String {
+        ProcessInfo.processInfo.environment["MYTERM_USER_DEFAULTS_SUITE"] ?? MyTermChannel.active.bundleIdentifier
+    }
     private(set) var needsInstalledRelaunch = false
     private var isRelaunchScheduled = false
     func recordStartupFailure(_ message: String) { errorDescription = message }
@@ -436,7 +459,8 @@ final class MyTermStartup {
     /// Recovery is available even when configuration failure prevented construction of AppModel.
     func restoreConfigurationBackup() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.json]
+        // Migration/recovery backups keep their .v1-backup and .recovery-backup suffixes.
+        // The decoder, rather than the filename extension, validates the chosen file.
         panel.directoryURL = MyTermChannel.active.persistenceURL(applicationSupportDirectory: supportDirectory).deletingLastPathComponent()
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
@@ -450,7 +474,7 @@ final class MyTermStartup {
             do {
                 let directory = MyTermChannel.active.persistenceURL(applicationSupportDirectory: supportDirectory).deletingLastPathComponent()
                 let installed = UpdateCheck.Channel(rawValue: Bundle.main.object(forInfoDictionaryKey: "MyTermReleaseChannel") as? String ?? "stable") ?? .stable
-                try ChannelConfigurationStore(directory: directory, preferencesDomain: MyTermChannel.active.bundleIdentifier)
+                try ChannelConfigurationStore(directory: directory, preferencesDomain: preferencesDomain)
                     .restoreBackup(from: url, selectedChannel: installed)
                 try becomeOwner(lease: acquired)
                 model?.errorDescription = "Restored the selected configuration backup. The previous configuration was preserved."
@@ -471,6 +495,7 @@ final class MyTermStartup {
             directory: supportDirectory.appendingPathComponent(channel.displayName, isDirectory: true)
         ))
         do {
+            try startTrialMonitor()
             if let acquired = try coordinator.acquire() {
                 try becomeOwner(lease: acquired)
             } else {
@@ -480,6 +505,24 @@ final class MyTermStartup {
         } catch {
             errorDescription = error.localizedDescription
         }
+    }
+
+    private func startTrialMonitor() throws {
+        guard Bundle.main.bundleIdentifier == ApplicationUpdate.bundleIdentifier,
+              try ApplicationUpdate.runningCodeMatchesFile(Bundle.main.bundleURL) else { return }
+        let directory = MyTermChannel.active.persistenceURL(applicationSupportDirectory: supportDirectory).deletingLastPathComponent()
+        let channel = UpdateCheck.Channel(rawValue: Bundle.main.object(forInfoDictionaryKey: "MyTermReleaseChannel") as? String ?? "stable") ?? .stable
+        guard let plan = try UpdateStartupTrial.pending(in: directory, app: Bundle.main.bundleURL,
+            version: Bundle.main.shortVersionString, channel: channel) else { return }
+        let agent = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/MyTermUpdateAgent")
+        try ApplicationUpdate.verifySignature(agent, identifier: ApplicationUpdate.bundleIdentifier + ".update-agent")
+        let monitor = Process()
+        monitor.executableURL = agent
+        monitor.arguments = ["--watch-trial", plan.manifestURL.path]
+        monitor.standardInput = FileHandle.nullDevice
+        monitor.standardOutput = FileHandle.nullDevice
+        monitor.standardError = FileHandle.nullDevice
+        try monitor.run()
     }
 
     func becomeOwner(lease: SingleInstanceLease) throws {
@@ -493,13 +536,16 @@ final class MyTermStartup {
             }
             let directory = MyTermChannel.active.persistenceURL(applicationSupportDirectory: supportDirectory).deletingLastPathComponent()
             let releaseChannel = UpdateCheck.Channel(rawValue: Bundle.main.object(forInfoDictionaryKey: "MyTermReleaseChannel") as? String ?? "stable") ?? .stable
+            startupTrial = try UpdateStartupTrial.pending(in: directory, app: Bundle.main.bundleURL,
+                version: Bundle.main.shortVersionString, channel: releaseChannel)
+            if let startupTrial { try UpdateStartupTrial.report(.starting, plan: startupTrial) }
             var updateNotices: [String] = []
             let updateError = directory.appendingPathComponent("update-install-error.txt")
             if FileManager.default.fileExists(atPath: updateError.path) {
                 let handle = try FileHandle(forReadingFrom: updateError)
                 defer { try? handle.close() }
                 updateNotices.append(String(decoding: try handle.read(upToCount: 65_536) ?? Data(), as: UTF8.self))
-                try FileManager.default.removeItem(at: updateError)
+                pendingUpdateNoticeURL = updateError
             }
             // Refresh before restored terminals can start an agent and load its hooks.
             var hookFailures: [String] = []
@@ -512,7 +558,7 @@ final class MyTermStartup {
             BrowserContextArtifacts.pruneExpired()
             let instance: AppModel
             if releaseChannel == .stable {
-                let config = ChannelConfigurationStore(directory: directory, preferencesDomain: MyTermChannel.active.bundleIdentifier)
+                let config = ChannelConfigurationStore(directory: directory, preferencesDomain: preferencesDomain)
                 let (loaded, notice) = try config.loadStable {
                     try AppModel(channel: MyTermChannel.active, applicationSupportDirectory: supportDirectory)
                 }
@@ -527,7 +573,9 @@ final class MyTermStartup {
             model = instance
             isSecondary = false
             errorDescription = nil
-            if Bundle.main.bundleIdentifier == ApplicationUpdate.bundleIdentifier {
+            if Bundle.main.bundleIdentifier == ApplicationUpdate.bundleIdentifier,
+               ProcessInfo.processInfo.environment["MYTERM_USER_DEFAULTS_SUITE"] == nil,
+               ProcessInfo.processInfo.environment["MYTERM_APPLICATION_SUPPORT_DIRECTORY"] == nil {
                 let app = Bundle.main.bundleURL
                 Task.detached {
                     do { try await Task.sleep(for: .seconds(5)) } catch { return }
@@ -535,6 +583,10 @@ final class MyTermStartup {
                 }
             }
         } catch {
+            if let startupTrial {
+                do { try UpdateStartupTrial.report(.failed, plan: startupTrial, message: error.localizedDescription) }
+                catch { errorDescription = "Could not record failed startup: \(error.localizedDescription)" }
+            }
             lease.stop()
             errorDescription = error.localizedDescription
             throw error

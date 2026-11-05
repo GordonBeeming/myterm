@@ -1,10 +1,80 @@
 import Foundation
+import Darwin
 import XCTest
 import MyTermCore
 @testable import MyTermUpdating
 
 @MainActor
 final class ApplicationUpdateTests: XCTestCase {
+    /// LaunchServices success alone cannot commit a build that never acknowledges startup.
+    func testMissingStartupAcknowledgementRollsBackAppAndConfiguration() throws {
+        let plan = try fixture()
+        let workspace = plan.configurationDirectory.appendingPathComponent("workspace-state.json")
+        let original = try Data(contentsOf: workspace)
+        XCTAssertThrowsError(try ApplicationUpdate.apply(plan, validateBundle: { _, _, _ in }, preflight: { _ in }, launch: { _ in
+            try Data("failed beta startup changed state".utf8).write(to: workspace)
+            throw ApplicationUpdateError.startupFailed("Injected missing startup acknowledgement")
+        }))
+        XCTAssertEqual(try String(contentsOf: plan.target.appendingPathComponent("version.txt"), encoding: .utf8), plan.sourceVersion)
+        XCTAssertEqual(try Data(contentsOf: workspace), original)
+        XCTAssertEqual(UserDefaults.standard.persistentDomain(forName: plan.preferencesDomain)?["updates.selectedChannel"] as? String, "stable")
+        XCTAssertNil(UpdateStartupTrial.activeManifest(in: plan.configurationDirectory))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: plan.directory.appendingPathComponent("failed-configuration.json").path))
+    }
+
+    /// Readiness is bound to this trial nonce, and commit consumes the deferred trial marker.
+    func testLoadedStartupAcknowledgementCommitsDeferredTrial() throws {
+        let plan = try fixture()
+        try UpdateStartupTrial.begin(plan)
+        XCTAssertEqual(UpdateStartupTrial.activeManifest(in: plan.configurationDirectory), plan.manifestURL)
+        try UpdateStartupTrial.report(.loaded, plan: plan)
+        XCTAssertNoThrow(try UpdateStartupTrial.waitForStartup(plan, seconds: 0.1))
+        try UpdateStartupTrial.commit(plan)
+        XCTAssertNil(UpdateStartupTrial.activeManifest(in: plan.configurationDirectory))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: plan.directory.appendingPathComponent("applied").path))
+    }
+
+    /// Configuration can change after staging; the final preflight must run before any exchange.
+    func testFinalConfigurationPreflightFailureLeavesInstalledAppInPlace() throws {
+        let plan = try fixture()
+        XCTAssertThrowsError(try ApplicationUpdate.apply(plan, validateBundle: { _, _, _ in }, preflight: { _ in
+            throw ApplicationUpdateError.invalid("Configuration changed after preparation")
+        }, exchange: { _, _ in XCTFail("Must not exchange an incompatible final configuration") }))
+        XCTAssertEqual(try String(contentsOf: plan.target.appendingPathComponent("version.txt"), encoding: .utf8), plan.sourceVersion)
+    }
+
+    /// Mach-O architecture checks work on ordinary Macs without lipo or Xcode tools.
+    func testArm64HeaderInspectionHandlesThinAndRejectsInvalidData() throws {
+        let plan = try fixture()
+        let file = plan.directory.appendingPathComponent("macho")
+        try Data([0xcf, 0xfa, 0xed, 0xfe, 0x0c, 0x00, 0x00, 0x01] + [UInt8](repeating: 0, count: 24)).write(to: file)
+        XCTAssertTrue(try ApplicationUpdate.containsArm64(file))
+        try Data("invalid".utf8).write(to: file)
+        XCTAssertFalse(try ApplicationUpdate.containsArm64(file))
+    }
+    /// Interrupted downloads are safe to prune only after their creator has exited.
+    func testOrphanStagingCleanupKeepsLiveOwnersAndRemovesDeadOwners() throws {
+        let plan = try fixture()
+        var info = proc_bsdinfo()
+        XCTAssertEqual(proc_pidinfo(getpid(), PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout<proc_bsdinfo>.size)), Int32(MemoryLayout<proc_bsdinfo>.size))
+        let marker = plan.directory.appendingPathComponent("stage-owner.json")
+        let live: [String: Any] = ["target": plan.target.absoluteString, "pid": getpid(),
+                                   "startSeconds": info.pbi_start_tvsec, "startMicroseconds": info.pbi_start_tvusec]
+        try JSONSerialization.data(withJSONObject: live).write(to: marker)
+        try FileManager.default.removeItem(at: plan.manifestURL)
+        ApplicationUpdate.pruneCompletedUpdates(for: plan.target, preferencesDomain: plan.preferencesDomain)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: plan.directory.path))
+        let child = Process()
+        child.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+        try child.run()
+        child.waitUntilExit()
+        let gone: [String: Any] = ["target": plan.target.absoluteString, "pid": child.processIdentifier,
+                                   "startSeconds": 0, "startMicroseconds": 0]
+        try JSONSerialization.data(withJSONObject: gone).write(to: marker)
+        ApplicationUpdate.pruneCompletedUpdates(for: plan.target, preferencesDomain: plan.preferencesDomain)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: plan.directory.path))
+    }
+
     /// A competing launch that already mapped the old executable must recognize the atomic replacement.
     func testRunningCodeIdentityTracksOriginalInodeAfterReplacement() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
@@ -103,7 +173,7 @@ final class ApplicationUpdateTests: XCTestCase {
         let config = ChannelConfigurationStore(directory: plan.configurationDirectory, preferencesDomain: plan.preferencesDomain)
         try config.captureStable()
         UserDefaults.standard.setPersistentDomain(["kept": "beta", "updates.stagedManifest": plan.manifestURL.path], forName: plan.preferencesDomain)
-        XCTAssertThrowsError(try ApplicationUpdate.apply(plan, validateBundle: { _, _, _ in }, launch: { _ in
+        XCTAssertThrowsError(try ApplicationUpdate.apply(plan, validateBundle: { _, _, _ in }, preflight: { _ in }, launch: { _ in
             throw ApplicationUpdateError.invalid("Injected launch failure")
         }))
         XCTAssertEqual(try String(contentsOf: plan.target.appendingPathComponent("version.txt"), encoding: .utf8), plan.sourceVersion)
@@ -116,7 +186,7 @@ final class ApplicationUpdateTests: XCTestCase {
     func testFailedSwapDoesNotScheduleStableRestore() throws {
         var plan = try fixture(source: .beta, target: .stable)
         plan.stableChoice = .restoreStable
-        XCTAssertThrowsError(try ApplicationUpdate.apply(plan, validateBundle: { _, _, _ in }, exchange: { _, _ in
+        XCTAssertThrowsError(try ApplicationUpdate.apply(plan, validateBundle: { _, _, _ in }, preflight: { _ in }, exchange: { _, _ in
             throw ApplicationUpdateError.invalid("Injected unsupported volume")
         }, launch: { _ in XCTFail("Must not launch after a failed swap") }))
         XCTAssertEqual(try String(contentsOf: plan.target.appendingPathComponent("version.txt"), encoding: .utf8), plan.sourceVersion)
@@ -127,7 +197,7 @@ final class ApplicationUpdateTests: XCTestCase {
     func testSuccessfulQuietInstallKeepsStableSnapshotAndAppliesTarget() throws {
         var plan = try fixture()
         plan.relaunch = false
-        try ApplicationUpdate.apply(plan, validateBundle: { _, _, _ in }, launch: { _ in XCTFail("Normal quit must stay closed") })
+        try ApplicationUpdate.apply(plan, validateBundle: { _, _, _ in }, preflight: { _ in }, launch: { _ in XCTFail("Normal quit must stay closed") })
         XCTAssertEqual(try String(contentsOf: plan.target.appendingPathComponent("version.txt"), encoding: .utf8), plan.version)
         XCTAssertTrue(ChannelConfigurationStore(directory: plan.configurationDirectory, preferencesDomain: plan.preferencesDomain).hasStableSnapshot)
         XCTAssertEqual(UserDefaults.standard.persistentDomain(forName: plan.preferencesDomain)?["updates.selectedChannel"] as? String, "beta")
@@ -138,7 +208,7 @@ final class ApplicationUpdateTests: XCTestCase {
         let plan = try fixture()
         try PropertyListSerialization.data(fromPropertyList: ["CFBundleShortVersionString": "0.69", "MyTermReleaseChannel": "stable"], format: .xml, options: 0)
             .write(to: plan.target.appendingPathComponent("Contents/Info.plist"))
-        XCTAssertThrowsError(try ApplicationUpdate.apply(plan, validateBundle: { _, _, _ in }, exchange: { _, _ in
+        XCTAssertThrowsError(try ApplicationUpdate.apply(plan, validateBundle: { _, _, _ in }, preflight: { _ in }, exchange: { _, _ in
             XCTFail("Source mismatch must be detected before swapping")
         }))
     }
