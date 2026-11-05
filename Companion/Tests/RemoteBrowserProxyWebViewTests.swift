@@ -307,7 +307,17 @@ final class RemoteBrowserProxyWebViewTests: XCTestCase {
         XCTAssertEqual(fixture.receivedHeaderBytes, prefix.utf8.count)
         await fixture.finishPendingHeaderReads()
         XCTAssertEqual(fixture.requests, 0, "Receiving bytes is not yet a complete HTTP request")
-        try await sendHeaderPart(Data("strap HTTP/1.1\r\nHost: myterm-test.invalid\r\n\r\n".utf8), on: connection)
+        let headerPart = "strap HTTP/1.1\r\nHost: myterm-test.invalid\r\n"
+        try await sendHeaderPart(Data(headerPart.utf8), on: connection)
+        let headerDeadline = Date().addingTimeInterval(5)
+        let receivedHeaders = prefix.utf8.count + headerPart.utf8.count
+        while fixture.receivedHeaderBytes < receivedHeaders, Date() < headerDeadline {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertEqual(fixture.receivedHeaderBytes, receivedHeaders)
+        await fixture.finishPendingHeaderReads()
+        XCTAssertEqual(fixture.requests, 0, "A complete request line still needs the final blank header line")
+        try await sendHeaderPart(Data("\r\n".utf8), on: connection)
         let completeDeadline = Date().addingTimeInterval(5)
         while fixture.requests == 0, Date() < completeDeadline { try await Task.sleep(for: .milliseconds(5)) }
         XCTAssertEqual(fixture.requests, 1)

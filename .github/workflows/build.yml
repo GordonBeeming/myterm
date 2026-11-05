@@ -66,9 +66,10 @@ jobs:
           echo "MYTERM_TEST_FISH_BINARY=$(command -v fish)" >> "$GITHUB_ENV"
 
       - name: Run tests
-        # Real PTY/helper fixtures need scheduling time as well as CPU; unbounded workers
-        # can starve their socket and image-checkpoint handshakes on hosted runners.
-        run: swift test --parallel --num-workers 4
+        # Keep a fresh XCTest process per case, with one running at a time. WebKit and
+        # hidden AppKit windows share the runner's WindowServer and are sensitive to
+        # contention; hosted runs reported navigation timeouts and Network teardown errors.
+        run: swift test --parallel --num-workers 1
 
       - name: Run zsh shim test
         run: |
