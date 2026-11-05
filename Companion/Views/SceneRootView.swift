@@ -388,13 +388,20 @@ private struct WorkspaceColumn: View {
                         }
                     }
                     ForEach(projection.folders, id: \.id) { folder in
+                        let folderWorkspaces = projection.workspaces.filter { $0.folderID == folder.id }
                         Section {
-                            ForEach(projection.workspaces.filter { $0.folderID == folder.id }, id: \.id) {
+                            ForEach(folderWorkspaces, id: \.id) {
                                 workspaceRow($0)
                             }
                         } header: {
                             HStack {
                                 Text(folder.title)
+                                Text("\(folderWorkspaces.count)")
+                                    .font(.caption)
+                                    .monospacedDigit()
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize()
+                                    .accessibilityLabel("Workspaces: \(folderWorkspaces.count)")
                                 Spacer()
                                 Button("Add workspace in \(folder.title)", systemImage: "plus") {
                                     Task { await create(workspace: true, folderID: folder.id) }

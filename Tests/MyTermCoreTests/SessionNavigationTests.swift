@@ -80,4 +80,29 @@ final class SessionNavigationTests: XCTestCase {
         XCTAssertNil(decoded.agentActivityDate)
         XCTAssertEqual(decoded.agentActivity, .awaitingInput)
     }
+
+    func testFolderCountIncludesEmptyWorkspacesAndIsIndependentOfSearchAndFolderNames() throws {
+        let wanted = tab("Wanted")
+        let base = projection([wanted, tab("Other"), tab("Third")])
+        let otherFolder = WorkspaceFolderID()
+        let emptyID = WorkspaceID()
+        func emptyWorkspace(_ id: WorkspaceID, folder: WorkspaceFolderID?) -> RemoteWorkspaceItem {
+            RemoteWorkspaceItem(id: id, title: "Empty", folderID: folder, isPinned: false,
+                                color: nil, emoji: nil, groups: [])
+        }
+        let folders = base.folders + [RemoteFolderProjection(id: otherFolder, title: "Client", color: .red)]
+        let unrelated = [emptyWorkspace(WorkspaceID(), folder: otherFolder), emptyWorkspace(WorkspaceID(), folder: nil)]
+        let source = RemoteWorkspaceProjection(folders: folders,
+            workspaces: base.workspaces + [emptyWorkspace(emptyID, folder: folderID)] + unrelated)
+        let match = try XCTUnwrap(SessionNavigationItem.items(in: source, query: "Wanted").first)
+        XCTAssertEqual(match.folderWorkspaceCount, 2, "Count workspaces, including empty ones, rather than matching tabs")
+        XCTAssertTrue(match.subtitleWithFolderCount.hasPrefix("Client (2) · API work"))
+        XCTAssertTrue(match.accessibleSubtitle.hasPrefix("Client, workspaces: 2 · API work"))
+        XCTAssertTrue(match.subtitle.hasPrefix("Client · API work"))
+        XCTAssertTrue(SessionNavigationItem.items(in: source, query: "2").isEmpty,
+                      "The displayed count does not change the text searched")
+        let moved = RemoteWorkspaceProjection(folders: folders,
+            workspaces: base.workspaces + [emptyWorkspace(emptyID, folder: otherFolder)] + unrelated)
+        XCTAssertEqual(SessionNavigationItem.items(in: moved, query: "Wanted").first?.folderWorkspaceCount, 1)
+    }
 }

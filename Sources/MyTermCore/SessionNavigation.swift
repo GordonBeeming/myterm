@@ -8,10 +8,25 @@ public struct SessionNavigationItem: Identifiable, Equatable, Sendable {
     public let groupID: TabGroupID
     public let workspaceTitle: String
     public let folderTitle: String
+    public let folderWorkspaceCount: Int
     public let tab: RemoteTabProjection
 
     public var subtitle: String {
-        [folderTitle, workspaceTitle, tab.workingDirectory?.path ?? tab.browserURL?.absoluteString ?? ""]
+        subtitle(folder: folderTitle)
+    }
+
+    public var subtitleWithFolderCount: String {
+        let folder = folderTitle.isEmpty ? "" : "\(folderTitle) (\(folderWorkspaceCount))"
+        return subtitle(folder: folder)
+    }
+
+    public var accessibleSubtitle: String {
+        let folder = folderTitle.isEmpty ? "" : "\(folderTitle), workspaces: \(folderWorkspaceCount)"
+        return subtitle(folder: folder)
+    }
+
+    private func subtitle(folder: String) -> String {
+        [folder, workspaceTitle, tab.workingDirectory?.path ?? tab.browserURL?.absoluteString ?? ""]
             .filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
@@ -19,12 +34,14 @@ public struct SessionNavigationItem: Identifiable, Equatable, Sendable {
                              attentionOnly: Bool = false, prioritizeAttention: Bool = true,
                              recentTabIDs: [TabID] = []) -> [Self] {
         let words = query.split(whereSeparator: \.isWhitespace).map(String.init)
+        let folderCounts = Dictionary(grouping: projection.workspaces, by: \.folderID).mapValues(\.count)
         return projection.workspaces.flatMap { workspace in
             let folder = projection.folders.first { $0.id == workspace.folderID }?.title ?? ""
             return workspace.groups.flatMap { group in
                 group.tabs.map { tab in
                     Self(workspaceID: workspace.id, groupID: group.id,
-                         workspaceTitle: workspace.title, folderTitle: folder, tab: tab)
+                         workspaceTitle: workspace.title, folderTitle: folder,
+                         folderWorkspaceCount: folderCounts[workspace.folderID] ?? 0, tab: tab)
                 }
             }
         }.filter { item in

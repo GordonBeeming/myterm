@@ -39,7 +39,8 @@ struct SessionNavigationView: View {
                                     item.tab.kind == .browser ? "globe" : "terminal")
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(item.tab.title)
-                                Text(item.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                Text(item.subtitleWithFolderCount).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                    .accessibilityLabel(item.accessibleSubtitle)
                             }
                             Spacer()
                             if let activity = item.tab.agentActivity, activity.needsAttention {
