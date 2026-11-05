@@ -986,6 +986,11 @@ private struct WorkspaceFolderRow: View {
     @State private var dropFeedback: SidebarDropFeedback = .none
     @State private var renderedRowHeight: CGFloat = 0
 
+    /// Matches the drag preview's rows and reverts with that preview when a drag is cancelled.
+    private var workspaceCount: Int {
+        dropSession.workspaces.lazy.filter { $0.folderID == folder.id }.count
+    }
+
     var body: some View {
         HStack(spacing: SidebarRowMetrics.disclosureSpacing) {
             Button(action: toggleExpansion) {
@@ -1005,6 +1010,12 @@ private struct WorkspaceFolderRow: View {
                 .font(Theme.Font.ui(13, weight: .semibold))
                 .foregroundStyle(Theme.textPrimary)
                 .lineLimit(1)
+            Text("\(workspaceCount)")
+                .font(Theme.Font.ui(11, weight: .medium))
+                .monospacedDigit()
+                .foregroundStyle(Theme.textTertiary)
+                .fixedSize()
+                .accessibilityLabel("Workspaces: \(workspaceCount)")
         }
         .frame(maxWidth: .infinity, minHeight: rowHeight, alignment: .leading)
         .onTapGesture(count: 2) {
