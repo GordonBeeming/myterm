@@ -40,7 +40,9 @@ for runtime in runtimes:
         continue
     if int(runtime["version"].split(".")[0]) != sdk_major:
         continue
-    if family == "iPhoneDuo" and runtime["version"] != sdk_version:
+    # Hosted images may include newer runtimes. Keep every device on the SDK we
+    # verified above; mixing 27.1 builds with 27.2 produced WebKit/UITest shutdown failures.
+    if runtime["version"] != sdk_version:
         continue
     candidates = [item for item in runtime.get("supportedDeviceTypes", [])
                   if item.get("productFamily") == product_family and item.get("identifier")]
