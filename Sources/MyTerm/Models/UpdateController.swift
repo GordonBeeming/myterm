@@ -73,6 +73,7 @@ final class UpdateController {
     }
 
     let currentVersion: String
+    private let releaseChannel: UpdateCheck.Channel
     private let upgradeRoute: UpgradeRoute
     private let fetch: @Sendable (URL) async throws -> Data
     private let defaults: UserDefaults
@@ -83,6 +84,9 @@ final class UpdateController {
     init(
         channel: MyTermChannel = .active,
         currentVersion: String = Bundle.main.shortVersionString,
+        releaseChannel: UpdateCheck.Channel = UpdateCheck.Channel(
+            rawValue: Bundle.main.object(forInfoDictionaryKey: "MyTermReleaseChannel") as? String ?? "stable"
+        ) ?? .stable,
         upgradeRoute: UpgradeRoute? = nil,
         defaults: UserDefaults? = nil,
         environment: [String: String] = ProcessInfo.processInfo.environment,
@@ -91,10 +95,12 @@ final class UpdateController {
         runUpgrade: UpgradeRunner? = nil,
         installedVersion: (@MainActor () throws -> String)? = nil
     ) {
-        let suiteName = environment["MYTERM_USER_DEFAULTS_SUITE"] ?? channel.bundleIdentifier
+        let suiteName = (environment["MYTERM_USER_DEFAULTS_SUITE"] ?? channel.bundleIdentifier)
+            + (releaseChannel == .beta ? ".beta-updates" : "")
         let defaults = defaults ?? UserDefaults(suiteName: suiteName) ?? .standard
         self.defaults = defaults
         self.currentVersion = currentVersion
+        self.releaseChannel = releaseChannel
         self.now = now
         self.runUpgrade = runUpgrade ?? Self.runHeadlessUpgrade
         self.readInstalledVersion = installedVersion ?? {
@@ -114,13 +120,13 @@ final class UpdateController {
             request.timeoutInterval = 15
             return try await URLSession.shared.data(for: request).0
         }
-        self.upgradeRoute = upgradeRoute ?? Self.detectUpgradeRoute()
+        self.upgradeRoute = releaseChannel == .beta ? .releasePage : (upgradeRoute ?? Self.detectUpgradeRoute())
         automaticallyChecks = defaults.object(forKey: Self.automaticChecksKey) as? Bool ?? true
         lastCheckedAt = defaults.object(forKey: Self.lastCheckedAtKey) as? Date
         skippedVersion = defaults.string(forKey: Self.skippedVersionKey).flatMap(AppVersion.init)
         // Only the check timestamp used to survive a relaunch, so a known update went quiet until
         // the next one fell due — up to a day of the app knowing and not saying.
-        status = Self.restoredStatus(currentVersion: currentVersion, defaults: defaults)
+        status = Self.restoredStatus(currentVersion: currentVersion, defaults: defaults, channel: releaseChannel)
         if automaticallyChecks { startPolling() }
     }
 
@@ -257,10 +263,11 @@ final class UpdateController {
     private func performCheck() async -> Status {
         status = .checking
         do {
-            let data = try await fetch(UpdateCheck.latestReleaseEndpoint)
+            let data = try await fetch(releaseChannel.endpoint)
             let availability = try UpdateCheck.availability(
                 currentVersion: currentVersion,
-                latestReleaseJSON: data
+                latestReleaseJSON: data,
+                channel: releaseChannel
             )
             switch availability {
             case .upToDate(let version):
@@ -295,9 +302,12 @@ final class UpdateController {
         defaults.removeObject(forKey: Self.knownReleaseURLKey)
     }
 
-    private static func restoredStatus(currentVersion: String, defaults: UserDefaults) -> Status {
+    private static func restoredStatus(
+        currentVersion: String, defaults: UserDefaults, channel: UpdateCheck.Channel
+    ) -> Status {
         guard let tag = defaults.string(forKey: knownReleaseTagKey),
-              let version = AppVersion(tag),
+              tag.hasSuffix("-beta") == (channel == .beta),
+              let version = AppVersion(channel == .beta ? String(tag.dropLast(5)) : tag),
               let address = defaults.string(forKey: knownReleaseURLKey),
               let url = URL(string: address),
               let current = AppVersion(currentVersion),

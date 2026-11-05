@@ -5,6 +5,30 @@ import XCTest
 
 @MainActor
 final class UpdateControllerTests: XCTestCase {
+    func testBetaUsesItsOwnEndpointAndNeverRunsTheStableHomebrewUpgrade() async throws {
+        let store = try defaults()
+        let data = Data("""
+        [{"tag_name":"v0.0.12-beta","prerelease":true,"draft":false,
+          "html_url":"https://github.com/GordonBeeming/myterm/releases/tag/v0.0.12-beta",
+          "assets":[{"name":"myterm-0.0.12-aarch64.dmg"}]}]
+        """.utf8)
+        let controller = UpdateController(
+            currentVersion: "0.0.11", releaseChannel: .beta,
+            upgradeRoute: .homebrew(command: "must never execute"), defaults: store,
+            fetch: { url in
+                XCTAssertEqual(url, UpdateCheck.Channel.beta.endpoint)
+                return data
+            }
+        )
+        XCTAssertEqual(controller.upgradeActionTitle, "Open the Release")
+        let result = await controller.check()
+        XCTAssertEqual(result.release?.tag, "v0.0.12-beta")
+        let restored = UpdateController(currentVersion: "0.0.11", releaseChannel: .beta, defaults: store)
+        XCTAssertEqual(restored.status.release?.tag, "v0.0.12-beta")
+        let stable = UpdateController(currentVersion: "0.0.11", releaseChannel: .stable, defaults: store)
+        XCTAssertNil(stable.status.release)
+    }
+
     private func defaults() throws -> UserDefaults {
         let suite = "UpdateControllerTests.\(UUID().uuidString)"
         return try XCTUnwrap(UserDefaults(suiteName: suite))

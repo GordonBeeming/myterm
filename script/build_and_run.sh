@@ -38,6 +38,7 @@ MIN_SYSTEM_VERSION="14.0"
 VERSION="${MYTERM_VERSION:-0.1.0}"
 BUILD_NUMBER="${MYTERM_BUILD:-1}"
 DISTRIBUTION="${MYTERM_DISTRIBUTION:-0}"
+RELEASE_CHANNEL="${MYTERM_RELEASE_CHANNEL:-stable}"
 ENTITLEMENTS_PATH="${MYTERM_ENTITLEMENTS_PATH:-$ROOT_DIR/Packaging/MyTerm.entitlements}"
 
 if [[ "$CHANNEL" == "production" ]]; then
@@ -68,6 +69,11 @@ fi
 
 if [[ ! "$BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
   echo "MYTERM_BUILD must be a positive integer" >&2
+  exit 2
+fi
+
+if [[ "$RELEASE_CHANNEL" != "stable" && "$RELEASE_CHANNEL" != "beta" ]]; then
+  echo "MYTERM_RELEASE_CHANNEL must be stable or beta" >&2
   exit 2
 fi
 
@@ -131,6 +137,7 @@ cp "$ROOT_DIR/Packaging/Info.plist" "$INFO_PLIST"
 /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" "$INFO_PLIST"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$INFO_PLIST"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$INFO_PLIST"
+/usr/libexec/PlistBuddy -c "Add :MyTermReleaseChannel string $RELEASE_CHANNEL" "$INFO_PLIST"
 bash "$ROOT_DIR/script/configure_url_handlers.sh" "$CHANNEL" "$BUNDLE_ID" "$INFO_PLIST"
 /usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion $MIN_SYSTEM_VERSION" "$INFO_PLIST"
 

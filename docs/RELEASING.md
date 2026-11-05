@@ -2,6 +2,18 @@
 
 Publishing a GitHub release builds an Apple silicon app, gives the app and DMG their own distribution signatures and notarization tickets, uploads the DMG, and updates `GordonBeeming/homebrew-tap` with its SHA-256.
 
+## Automatic beta channel
+
+Every push to `main` enters the **Beta** workflow. It finishes the running batch and keeps one pending batch, replacing that pending batch when another push arrives. Once the slot opens, it freezes the newest `main` commit and uses that exact SHA for macOS tests, signing and notarization, iPhone/iPad tests, and TestFlight upload. PR checks still run independently.
+
+The macOS prerelease is published after both platforms succeed. Its immutable tag is `v0.0.N-beta`, where `N` is the number of commits reachable from the source snapshot. The numeric app version is `0.0.N`; the bundle carries `MyTermReleaseChannel=beta`, so its updater checks beta prereleases and opens their download page. Downloading a beta replaces the installed app if you drag it over that copy. Stable installations continue checking stable releases, and the stable Homebrew cask is untouched.
+
+TestFlight uses the Beta workflow run number plus 10000, keeping it above the earlier Companion build sequence. The release notes identify the source SHA and TestFlight build. Apple may still be processing an uploaded build when the GitHub prerelease appears. A failed platform prevents the macOS prerelease publication; a successful TestFlight upload cannot be rolled back if a later job fails.
+
+Use **Beta → Run workflow** on `main` to retry a failed batch. An already published snapshot is skipped. Rerunning a job after a successful TestFlight upload can encounter Apple's duplicate build rejection; a new main commit starts a new batch and build number. Signed DMGs are retained as workflow artifacts for 14 days, and IPAs for 90 days.
+
+Publishing a stable `vMAJOR.MINOR[.PATCH]` release runs only the macOS release pipeline and updates the stable Homebrew cask. It does not trigger another iPhone build. Beta releases do not become GitHub's latest stable release, and publishing them does not recursively start the release workflow.
+
 ## Release security chain
 
 - Release source commits are SSH-signed. Confirm the release head is shown as verified on GitHub and with `git log -1 --show-signature` before publishing.

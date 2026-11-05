@@ -1,12 +1,21 @@
 name: Build and Test
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
   release:
     types: [published]
+  workflow_call:
+    inputs:
+      source_sha:
+        type: string
+        required: true
+      beta_version:
+        type: string
+        required: true
+      build_number:
+        type: string
+        required: true
 
 # Every job selects the same Xcode explicitly. The image default moves on GitHub's schedule,
 # so without a pin the compiler that builds and signs a release could change without a commit.
@@ -23,6 +32,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
 
       - name: Install Go for the relay integration test
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -60,6 +71,9 @@ jobs:
           bash script/test_callback_routing.sh
           bash script/channel_isolation_test.sh
 
+      - name: Test beta release source and publication rules
+        run: python3 script/test_beta_release.py
+
   verify-bundle:
     runs-on: xcode-27
     name: Verify App Bundle
@@ -67,6 +81,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
 
       # `swift test` never assembles the app, so a packaging break stays invisible until the
       # release job runs, and that job only starts once the release is already published. This
@@ -105,7 +121,7 @@ jobs:
 
   release:
     needs: [build-and-test, verify-bundle]
-    if: github.event_name == 'release'
+    if: inputs.beta_version != '' || (github.event_name == 'release' && !github.event.release.prerelease)
     runs-on: xcode-27
     name: Sign, Notarize & Release
     environment: prod
@@ -115,14 +131,23 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
 
       # The xcode-27 image ships without the Metal toolchain, and SwiftTerm's shaders need it.
       - name: Install the matching Metal toolchain
         run: xcodebuild -downloadComponent MetalToolchain
 
       - name: Set release version
+        env:
+          BETA_VERSION: ${{ inputs.beta_version }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          if [[ -n "$BETA_VERSION" ]]; then
+            VERSION="$BETA_VERSION"
+            echo "MYTERM_RELEASE_CHANNEL=beta" >> "$GITHUB_ENV"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
           if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
             echo "Release tag must use vMAJOR.MINOR or vMAJOR.MINOR.PATCH, like v0.1.0; got ${GITHUB_REF_NAME}" >&2
             exit 1
@@ -170,7 +195,7 @@ jobs:
         run: |
           make bundle \
             VERSION="${VERSION}" \
-            BUILD="${{ github.run_number }}" \
+            BUILD="${{ inputs.build_number || github.run_number }}" \
             DISTRIBUTION=1 \
             CODESIGN_IDENTITY="${CODESIGN_IDENTITY}"
 
@@ -240,7 +265,17 @@ jobs:
           hdiutil verify "${DMG_PATH}"
           spctl --assess --type open --context context:primary-signature --verbose=2 "${DMG_PATH}"
 
+      - name: Preserve signed beta DMG
+        if: inputs.beta_version != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: signed-beta-dmg
+          path: dist/*.dmg
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Upload release asset
+        if: inputs.beta_version == ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -249,6 +284,7 @@ jobs:
             --clobber
 
       - name: Update Homebrew tap
+        if: inputs.beta_version == ''
         env:
           HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
         run: |
