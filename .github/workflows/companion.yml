@@ -17,6 +17,8 @@ on:
       - 'Vendor/SwiftTerm/**'
       - 'script/deploy_companion_testflight.sh'
       - 'script/test_companion.sh'
+      - 'script/select_companion_simulator.py'
+      - 'script/test_companion_simulator_selection.py'
       - 'script/test_companion_testflight_helper.sh'
       - 'script/verify_companion_toolchain.sh'
   workflow_call:
@@ -104,6 +106,7 @@ jobs:
 
   ios:
     runs-on: xcode-27
+    timeout-minutes: 60
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
     strategy:
@@ -115,7 +118,10 @@ jobs:
         with:
           ref: ${{ inputs.source_sha || github.sha }}
       - name: Verify actual SDK
-        run: bash script/verify_companion_toolchain.sh 27.1
+        run: |
+          bash script/verify_companion_toolchain.sh 27.1
+          xcrun simctl list --json runtimes
+          python3 script/test_companion_simulator_selection.py
       - name: Install the matching Metal toolchain
         run: xcodebuild -downloadComponent MetalToolchain
       - name: Test companion on iOS 27

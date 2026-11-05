@@ -182,6 +182,7 @@ final class AppModel {
         companionStorageNamespace
     )
 
+    /// Load workspace state and restore runtime objects; abandon queued persistence if initialization fails.
     init(
         channel: MyTermChannel = .active,
         applicationSupportDirectory: URL? = nil,
@@ -217,7 +218,10 @@ final class AppModel {
         DispatchQueue.global(qos: .utility).async {
             PersistentTerminalRuntime.pruneUnusedHelperCopies(directory: continuityDirectory)
         }
-        store = try WorkspaceStore(persistenceURL: persistenceURL)
+        let loadedStore = try WorkspaceStore(persistenceURL: persistenceURL)
+        store = loadedStore
+        var completedInitialization = false
+        defer { if !completedInitialization { loadedStore.abandonPersistence() } }
         agentInboxURL = persistenceURL.deletingLastPathComponent()
             .appending(path: "agent-notifications.json", directoryHint: .notDirectory)
         var savedInbox = Self.loadAgentInbox(from: agentInboxURL)
@@ -241,7 +245,7 @@ final class AppModel {
         self.isApplicationActive = isApplicationActive
         self.makeCompanionHost = makeCompanionHost
         browserDataProfileResolver = BrowserDataProfileResolver(channel: channel)
-        self.updates = updates ?? UpdateController(channel: channel)
+        self.updates = updates ?? UpdateController(channel: channel, configurationDirectory: terminalContinuityDirectory)
         if browserLauncherURL == nil {
             // Without the launcher every pane starts with an empty MyTerm environment, so BROWSER,
             // the open shim and the zsh chain are all absent and web links leave for the system
@@ -279,6 +283,7 @@ final class AppModel {
         store.onPersistenceFailure = { [weak self] error in
             self?.present(error)
         }
+        completedInitialization = true
     }
 
     var workspaces: [Workspace] {
@@ -672,18 +677,47 @@ final class AppModel {
         }
     }
 
+    /// Select the release feed and surface any failure to retire the previously staged update.
+    func changeUpdateChannel(_ channel: UpdateCheck.Channel) {
+        guard !updates.isPreparingRestart else { return }
+        cancelUpdateRestart()
+        updateWindow?.close()
+        updateWindow = nil
+        updates.selectChannel(channel)
+        guard updates.selectedChannel == channel else {
+            if case .failed(let message) = updates.installation { errorDescription = message }
+            return
+        }
+        checkForUpdates()
+    }
+
+    /// Stage the selected release after checking the requested stable-configuration recovery choice.
+    func prepareUpdate(_ release: AppRelease) async {
+        updateRestartError = nil
+        do {
+            guard !store.isPersistenceSuspended else {
+                throw NSError(domain: "MyTermUpdate", code: 2, userInfo: [NSLocalizedDescriptionKey: "Resolve the workspace recovery error before updating."])
+            }
+            persistBrowserURLs()
+            persistTerminalSnapshots()
+            try store.save()
+            await updates.install(release: release)
+        } catch { updateRestartError = error.localizedDescription }
+    }
+
     /// The sidebar badge and the menu item land in the same place once an update is known.
     func presentAvailableUpdate() {
         guard let release = updates.status.release else { return checkForUpdates() }
         presentUpdateAvailable(release)
     }
 
+    /// Present the available release with the appropriate native, Homebrew or manual installation action.
     private func presentUpdateAvailable(_ release: AppRelease) {
         if let updateWindow {
             updateWindow.makeKeyAndOrderFront(nil)
             return
         }
-        guard updates.upgradeCommand != nil else {
+        guard updates.supportsInAppInstallation else {
             let alert = NSAlert()
             alert.messageText = "Update available — \(release.version)"
             alert.informativeText = "This copy was not installed with Homebrew, so the release page has the download."
@@ -965,6 +999,7 @@ final class AppModel {
         }
     }
 
+    /// Open a text file using the configured editor and prepared shell environment, reporting launch failures.
     private func openTextFile(
         _ url: URL,
         in workspaceID: WorkspaceID,
@@ -992,12 +1027,13 @@ final class AppModel {
                 : "\(template) \(quotedPath)"
             var environment = ProcessInfo.processInfo.environment
             environment.merge(
-                MyTermBrowserLauncher.environment(
+                try MyTermBrowserLauncher.preparedEnvironment(
                     executableURL: browserLauncherURL,
                     workspaceID: workspaceID,
                     tabID: tabID,
                     paneID: paneID,
-                    baseEnvironment: environment
+                    baseEnvironment: environment,
+                    runtimeDirectory: terminalContinuityDirectory.appendingPathComponent("zsh-startup", isDirectory: true)
                 )
             ) { _, override in override }
 
@@ -2165,6 +2201,7 @@ final class AppModel {
         return number
     }
 
+    /// Reattach a compatible persistent terminal or restore its saved shell and agent state.
     private func restoreTerminalSession(
         _ session: TerminalSession,
         workspaceID: WorkspaceID,
@@ -2232,11 +2269,12 @@ final class AppModel {
                 shell: shellURL(for: settings.shell),
                 workingDirectory: workingDirectory,
                 initialCommand: initialCommand ?? resumeCommand,
-                environment: MyTermBrowserLauncher.environment(
+                environment: MyTermBrowserLauncher.preparedEnvironment(
                     executableURL: browserLauncherURL,
                     workspaceID: workspaceID,
                     tabID: tabID,
-                    paneID: session.paneID
+                    paneID: session.paneID,
+                    runtimeDirectory: terminalContinuityDirectory.appendingPathComponent("zsh-startup", isDirectory: true)
                 ),
                 runtimeConfiguration: runtimeConfiguration(for: settings),
                 restoredOutput: session.recentText,
@@ -2919,14 +2957,19 @@ final class AppModel {
         return "ssh " + arguments.map(shellQuote).joined(separator: " ")
     }
 
+    /// Decide whether quitting may proceed, confirming when an update is running or active processes would be terminated.
     func shouldTerminateApplication() -> Bool {
+        if updates.isPreparingRestart {
+            updateRestartError = "Verifying the prepared update before restart. Please wait for verification to finish."
+            return false
+        }
         if isRestartingAfterUpdate { return true }
         if updates.installation == .running {
             return confirmClose(
-                processNames: ["Homebrew update"],
+                processNames: ["Update"],
                 title: "Quit While Updating?",
                 confirmButtonTitle: "Quit Anyway",
-                informativeText: "Homebrew is still installing. Quitting closes the update dialog. Persistent terminal sessions and Homebrew can continue in the background; check the installed version after reopening myterm."
+                informativeText: "An update is in progress. Quitting closes the update dialog; an external installer may continue in the background. Reopen myterm to check the installed version."
             )
         }
         return confirmClose(

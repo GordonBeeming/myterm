@@ -38,6 +38,7 @@ public struct TerminalSession: Codable, Equatable, Hashable, Sendable, Identifia
         case agentTitle
     }
 
+    /// Decode the persisted schema and record recognized keys so channel recovery can reject newer fields.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         // A handle this build refuses is one a newer build wrote, not a broken file. Leaving its key
@@ -117,8 +118,10 @@ public struct BrowserDataProfile: Codable, Equatable, Hashable, Sendable {
         case projectDirectory
     }
 
+    /// Decode the persisted schema and record recognized keys so channel recovery can reject newer fields.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        decoder.recordKnownKeys(container.allKeys)
         scope = try container.decode(BrowserDataScope.self, forKey: .scope)
         persistentStoreID = try container.decode(UUID.self, forKey: .persistentStoreID)
         projectDirectory = try container.decodeIfPresent(URL.self, forKey: .projectDirectory)?.standardizedFileURL
@@ -150,8 +153,10 @@ public struct BrowserSession: Codable, Equatable, Hashable, Sendable, Identifiab
         case profile
     }
 
+    /// Decode the persisted schema and record recognized keys so channel recovery can reject newer fields.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        decoder.recordKnownKeys(container.allKeys)
         id = try container.decode(BrowserSessionID.self, forKey: .id)
         paneID = try container.decodeIfPresent(PaneID.self, forKey: .paneID)
             ?? PaneID(rawValue: repairedUUID(seed: "browser:\(id):missing-pane"))
@@ -204,8 +209,10 @@ public enum TabContent: Codable, Equatable, Hashable, Sendable {
         case browser
     }
 
+    /// Decode the persisted schema and record recognized keys so channel recovery can reject newer fields.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        decoder.recordKnownKeys(container.allKeys)
         switch try container.decode(ContentType.self, forKey: .type) {
         case .terminal:
             self = .terminal(try container.decode(TerminalSession.self, forKey: .session))
@@ -231,6 +238,19 @@ public struct Tab: Codable, Equatable, Hashable, Sendable, Identifiable {
     public let id: TabID
     public var content: TabContent
     public var customTitle: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case id, content, customTitle
+    }
+
+    /// Keep the synthesized tab schema while recording recognized keys for channel compatibility checks.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        decoder.recordKnownKeys(container.allKeys)
+        id = try container.decode(TabID.self, forKey: .id)
+        content = try container.decode(TabContent.self, forKey: .content)
+        customTitle = try container.decodeIfPresent(String.self, forKey: .customTitle)
+    }
 
     public init(id: TabID = TabID(), content: TabContent, customTitle: String? = nil) {
         self.id = id
@@ -318,6 +338,7 @@ public struct TabGroup: Codable, Equatable, Hashable, Sendable, Identifiable {
         case selectedTabID
     }
 
+    /// Decode the persisted schema and record recognized keys so channel recovery can reject newer fields.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         decoder.recordKnownKeys(container.allKeys)
@@ -346,8 +367,10 @@ public indirect enum WorkspaceLayout: Codable, Equatable, Hashable, Sendable {
         case split
     }
 
+    /// Decode the persisted schema and record recognized keys so channel recovery can reject newer fields.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        decoder.recordKnownKeys(container.allKeys)
         switch try container.decode(NodeType.self, forKey: .type) {
         case .group:
             self = .group(try container.decode(TabGroup.self, forKey: .group))
@@ -758,6 +781,21 @@ public struct WorkspaceFolder: Codable, Equatable, Hashable, Sendable, Identifia
     public var isExpanded: Bool
     public var settingsOverrides: TerminalPreferencesOverrides?
 
+    private enum CodingKeys: String, CodingKey {
+        case id, title, color, isExpanded, settingsOverrides
+    }
+
+    /// Match the synthesized schema while recording every recognized folder key for safe channel rollback.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        decoder.recordKnownKeys(container.allKeys)
+        id = try container.decode(WorkspaceFolderID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        color = try container.decode(WorkspaceFolderColor.self, forKey: .color)
+        isExpanded = try container.decode(Bool.self, forKey: .isExpanded)
+        settingsOverrides = try container.decodeIfPresent(TerminalPreferencesOverrides.self, forKey: .settingsOverrides)
+    }
+
     public init(
         id: WorkspaceFolderID = WorkspaceFolderID(),
         title: String,
@@ -998,6 +1036,7 @@ public struct Workspace: Codable, Equatable, Hashable, Sendable, Identifiable {
         case settingsOverrides
     }
 
+    /// Decode the persisted schema and record recognized keys so channel recovery can reject newer fields.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         decoder.recordKnownKeys(container.allKeys)

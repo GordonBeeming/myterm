@@ -5,6 +5,47 @@ import MyTermCore
 
 @MainActor
 final class MyTermBrowserRoutingTests: XCTestCase {
+    /// Real compinit must write its cache outside the app, including when invoked after startup.
+    func testPreparedZshEnvironmentKeepsCompletionCachesOutsideBundle() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let resources = root.appendingPathComponent("Signed.app/Contents/Resources")
+        let home = root.appendingPathComponent("home")
+        try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        let source = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("Resources/zsh")
+        let bundled = resources.appendingPathComponent("zsh")
+        try FileManager.default.copyItem(at: source, to: bundled)
+        let originalNames = try FileManager.default.contentsOfDirectory(atPath: bundled.path).sorted()
+        let base = ["HOME": home.path, "PATH": "/usr/bin:/bin", "TERM": "xterm"]
+        let overrides = try MyTermBrowserLauncher.preparedEnvironment(
+            executableURL: resources.appendingPathComponent("myterm-browser"), baseEnvironment: base,
+            runtimeDirectory: root.appendingPathComponent("runtime"))
+        let zdotdir = try XCTUnwrap(overrides["ZDOTDIR"])
+        XCTAssertFalse(zdotdir.hasPrefix(resources.path))
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = ["-ic", "autoload -Uz compinit; compinit -i"]
+        process.environment = base.merging(overrides) { _, new in new }
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: zdotdir + "/.zcompdump"))
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: bundled.path).sorted(), originalNames)
+        let common = bundled.appendingPathComponent("_myterm_common")
+        let text = try String(contentsOf: common, encoding: .utf8)
+        try text.replacingOccurrences(of: "# MyTerm zsh shim\n", with: "# Legacy startup shim\n")
+            .write(to: common, atomically: true, encoding: .utf8)
+        let legacy = try MyTermBrowserLauncher.preparedEnvironment(
+            executableURL: resources.appendingPathComponent("myterm-browser"), baseEnvironment: base,
+            runtimeDirectory: root.appendingPathComponent("runtime"))
+        XCTAssertFalse(try XCTUnwrap(legacy["ZDOTDIR"]).hasPrefix(resources.path))
+    }
+
     func testBrowserLauncherResolutionAndEnvironment() throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

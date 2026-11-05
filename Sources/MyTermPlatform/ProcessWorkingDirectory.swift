@@ -94,7 +94,10 @@ final class ProcessWorkingDirectoryPoller: @unchecked Sendable {
     }
 
     deinit {
-        stop()
+        // stop() submits a closure retaining self. Retaining an object already being
+        // destroyed can abort the Swift runtime; no caller can mutate us at this point.
+        timer?.setEventHandler {}
+        timer?.cancel()
     }
 
     private func poll() {

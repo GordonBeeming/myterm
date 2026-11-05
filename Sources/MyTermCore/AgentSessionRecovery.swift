@@ -34,8 +34,10 @@ public struct AgentSessionHandle: Codable, Equatable, Hashable, Sendable {
         case codexLauncher
     }
 
+    /// Decode the persisted schema and record recognized keys so channel recovery can reject newer fields.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        decoder.recordKnownKeys(container.allKeys)
         let agent = try container.decode(String.self, forKey: .agent)
         let sessionID = try container.decode(String.self, forKey: .sessionID)
         guard let handle = AgentSessionHandle(

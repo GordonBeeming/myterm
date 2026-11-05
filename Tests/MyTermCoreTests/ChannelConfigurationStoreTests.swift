@@ -1,0 +1,287 @@
+import Foundation
+import XCTest
+@testable import MyTermCore
+
+@MainActor
+final class ChannelConfigurationStoreTests: XCTestCase {
+    /// New beta fields can appear without a version bump; stable must not silently strip them.
+    func testUnknownNestedBetaFieldTriggersStableFallback() throws {
+        let (directory, _, config) = try fixture()
+        let stable = try workspace("Stable", at: directory)
+        try config.captureStable()
+        let beta = try workspace("Beta", at: directory)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: beta) as? [String: Any])
+        var settings = try XCTUnwrap(object["globalSettings"] as? [String: Any])
+        var shell = try XCTUnwrap(settings["shell"] as? [String: Any])
+        shell["betaOnlyShellOption"] = true
+        settings["shell"] = shell
+        object["globalSettings"] = settings
+        try JSONSerialization.data(withJSONObject: object).write(to: directory.appendingPathComponent("workspace-state.json"))
+        try config.beginStableReturn(.tryBeta)
+        let (_, notice) = try config.loadStable { true }
+        XCTAssertNotNil(notice)
+        XCTAssertEqual(try Data(contentsOf: directory.appendingPathComponent("workspace-state.json")), stable)
+    }
+
+    /// Every persisted object must identify additive fields, including nested sessions and settings.
+    func testEveryNestedWorkspaceObjectRejectsUnknownFields() throws {
+        let (directory, _, config) = try fixture()
+        var settings = TerminalPreferences.default
+        settings.shell = .custom(path: "/bin/zsh")
+        settings.webLinkDestination = .application(bundleIdentifier: "com.example.browser")
+        settings.newSessionWorkingDirectory = .custom(URL(fileURLWithPath: "/tmp"))
+        var overrides = TerminalPreferencesOverrides()
+        overrides.shell = settings.shell
+        overrides.webLinkDestination = settings.webLinkDestination
+        overrides.newSessionWorkingDirectory = settings.newSessionWorkingDirectory
+        let folder = WorkspaceFolder(title: "Folder", settingsOverrides: overrides)
+        let terminal = Tab(content: .terminal(TerminalSession(agentSession:
+            try XCTUnwrap(AgentSessionHandle(agent: "codex", sessionID: "test-session")))))
+        let browser = Tab(content: .browser(BrowserSession(url: URL(string: "https://example.com")!,
+            profile: BrowserDataProfile(scope: .workspace, persistentStoreID: UUID()))))
+        let first = TabGroup(tabs: [terminal, browser])
+        let workspace = Workspace(title: "Nested", layout: .split(id: SplitNodeID(), orientation: .horizontal,
+            children: [.group(first), .group(TabGroup())], weights: [0.5, 0.5]), folderID: folder.id,
+            settingsOverrides: overrides)
+        let data = try JSONEncoder().encode(WorkspaceStoreSnapshot(folders: [folder], globalSettings: settings,
+            workspaces: [workspace], selectedWorkspaceID: workspace.id))
+        XCTAssertEqual(try WorkspaceStore.unrecognizedKeyCount(in: data), 0)
+        let object = try JSONSerialization.jsonObject(with: data)
+        func mutations(_ value: Any, path: String) -> [(String, Any)] {
+            if let dictionary = value as? [String: Any] {
+                var added = dictionary
+                added["betaOnlyField"] = true
+                var result: [(String, Any)] = [(path, added)]
+                for (key, child) in dictionary {
+                    for (childPath, mutated) in mutations(child, path: path + "." + key) {
+                        var copy = dictionary
+                        copy[key] = mutated
+                        result.append((childPath, copy))
+                    }
+                }
+                return result
+            }
+            if let array = value as? [Any] {
+                return array.enumerated().flatMap { index, child in
+                    mutations(child, path: path + "[\(index)]").map { childPath, mutated in
+                        var copy = array
+                        copy[index] = mutated
+                        return (childPath, copy)
+                    }
+                }
+            }
+            return []
+        }
+        let variants = mutations(object, path: "root")
+        XCTAssertGreaterThan(variants.count, 20)
+        for (path, mutated) in variants {
+            let changed = try JSONSerialization.data(withJSONObject: mutated)
+            XCTAssertGreaterThan(try WorkspaceStore.unrecognizedKeyCount(in: changed), 0, path)
+            try changed.write(to: directory.appendingPathComponent("workspace-state.json"))
+            XCTAssertThrowsError(try config.checkIncomingConfiguration(mode: "current"), path)
+        }
+    }
+
+    /// Legacy metadata must recognize its version and nested sessions without accepting newer fields.
+    func testLegacySchemaVersionAndNestedKeysRemainRecognized() throws {
+        let (directory, _, config) = try fixture()
+        let workspaceID = WorkspaceID(), tabID = TabID(), paneID = PaneID(), sessionID = TerminalSessionID()
+        let source = Data("""
+        {"version":1,"workspaces":[{"id":"\(workspaceID)","title":"Legacy","tabs":[{
+          "id":"\(tabID)","focusedPaneID":"\(paneID)","focusedTerminalSessionID":"\(sessionID)",
+          "content":{"type":"terminal","splitTree":{"type":"terminal","session":{
+            "id":"\(sessionID)","paneID":"\(paneID)"}}}}],"selectedTabID":"\(tabID)"}],
+          "selectedWorkspaceID":"\(workspaceID)"}
+        """.utf8)
+        XCTAssertEqual(try WorkspaceStore.unrecognizedKeyCount(in: source), 0)
+        try source.write(to: directory.appendingPathComponent("workspace-state.json"))
+        XCTAssertNoThrow(try config.checkIncomingConfiguration(mode: "current"))
+        let changed = Data(String(decoding: source, as: UTF8.self)
+            .replacingOccurrences(of: "\"paneID\":\"\(paneID)\"", with: "\"paneID\":\"\(paneID)\",\"betaOnlySessionField\":true").utf8)
+        XCTAssertGreaterThan(try WorkspaceStore.unrecognizedKeyCount(in: changed), 0)
+    }
+
+    /// A failed workspace replacement after a preference write must restore the previous preferences.
+    func testManualRestoreWriteFailureRollsBackPreferences() throws {
+        let (directory, domain, config) = try fixture()
+        _ = try workspace("Stable", at: directory)
+        UserDefaults.standard.setPersistentDomain(["theme": "stable"], forName: domain)
+        try config.captureStable()
+        let beta = try workspace("Beta", at: directory)
+        UserDefaults.standard.setPersistentDomain(["theme": "beta"], forName: domain)
+        let file = directory.appendingPathComponent("workspace-state.json")
+        try FileManager.default.setAttributes([.immutable: true], ofItemAtPath: file.path)
+        defer { try? FileManager.default.setAttributes([.immutable: false], ofItemAtPath: file.path) }
+        XCTAssertThrowsError(try config.restoreBackup(from: directory.appendingPathComponent("last-stable-configuration.json")))
+        XCTAssertEqual(UserDefaults.standard.persistentDomain(forName: domain)?["theme"] as? String, "beta")
+        XCTAssertEqual(try Data(contentsOf: file), beta)
+    }
+
+    /// A corrupt fallback must not block an explicitly requested, compatible beta configuration.
+    func testTryBetaPreflightAcceptsCurrentWhenStableSnapshotIsCorrupt() throws {
+        let (directory, _, config) = try fixture()
+        _ = try workspace("Compatible current", at: directory)
+        try Data("bad fallback".utf8).write(to: directory.appendingPathComponent("last-stable-configuration.json"))
+        XCTAssertNoThrow(try config.checkIncomingConfiguration(mode: "try-beta"))
+        XCTAssertThrowsError(try config.checkIncomingConfiguration(mode: "stable"))
+    }
+
+    /// Read-only preflight for a never-saved profile must not invent a live workspace file.
+    func testPreflightDoesNotCreateLiveWorkspaceFile() throws {
+        let (directory, _, config) = try fixture()
+        try config.checkStableCapture()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("workspace-state.json").path))
+    }
+    /// Restoring settings in beta repairs configuration without silently opting the app out of beta.
+    func testManualRecoveryPreservesRequestedInstalledChannel() throws {
+        let (directory, domain, config) = try fixture()
+        _ = try workspace("Stable", at: directory)
+        try config.captureStable()
+        _ = try workspace("Beta", at: directory)
+        try config.restoreBackup(from: directory.appendingPathComponent("last-stable-configuration.json"), selectedChannel: .beta)
+        XCTAssertEqual(UserDefaults.standard.persistentDomain(forName: domain)?["updates.selectedChannel"] as? String, "beta")
+    }
+
+    /// A failed beta-model load must not flush stale state over the stable snapshot on the next turn.
+    func testAbandonedStoreCannotOverwriteRestoredConfiguration() async throws {
+        let (directory, _, _) = try fixture()
+        let stable = try workspace("Stable", at: directory)
+        let url = directory.appendingPathComponent("workspace-state.json")
+        let abandoned = try WorkspaceStore(persistenceURL: url)
+        try abandoned.renameWorkspace(abandoned.selectedWorkspaceID, title: "Failed beta initialization")
+        abandoned.abandonPersistence()
+        try stable.write(to: url, options: .atomic)
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+        XCTAssertEqual(try Data(contentsOf: url), stable)
+    }
+
+    /// Model-level failures after valid JSON still trigger the promised stable fallback once.
+    func testBetaModelLoadFailureRetriesWithStableConfiguration() throws {
+        let (directory, _, config) = try fixture()
+        _ = try workspace("Stable", at: directory)
+        try config.captureStable()
+        _ = try workspace("Beta", at: directory)
+        try config.beginStableReturn(.tryBeta)
+        var attempts = 0
+        let (name, notice) = try config.loadStable {
+            attempts += 1
+            let store = try WorkspaceStore(persistenceURL: directory.appendingPathComponent("workspace-state.json"))
+            if store.selectedWorkspace.title == "Beta" {
+                throw NSError(domain: "InjectedModelLoad", code: 1)
+            }
+            return store.selectedWorkspace.title
+        }
+        XCTAssertEqual(attempts, 2)
+        XCTAssertEqual(name, "Stable")
+        XCTAssertTrue(try XCTUnwrap(notice).contains("failed during stable startup"))
+        XCTAssertNil(try config.prepareStableLaunch())
+    }
+
+    private func fixture() throws -> (URL, String, ChannelConfigurationStore) {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let domain = "ChannelConfigurationTests.\(UUID().uuidString)"
+        addTeardownBlock {
+            UserDefaults.standard.removePersistentDomain(forName: domain)
+            try FileManager.default.removeItem(at: directory)
+        }
+        return (directory, domain, ChannelConfigurationStore(directory: directory, preferencesDomain: domain))
+    }
+
+    private func workspace(_ title: String, at directory: URL) throws -> Data {
+        let workspace = Workspace(title: title)
+        let data = try JSONEncoder().encode(WorkspaceStoreSnapshot(workspaces: [workspace], selectedWorkspaceID: workspace.id))
+        try data.write(to: directory.appendingPathComponent("workspace-state.json"), options: .atomic)
+        return data
+    }
+
+    /// Restoring stable must preserve the rejected beta bytes and restore preferences as well.
+    func testRestoreStableReplacesBetaWorkspaceAndPreferences() throws {
+        let (directory, domain, config) = try fixture()
+        let stable = try workspace("Stable", at: directory)
+        UserDefaults.standard.setPersistentDomain(["theme": "stable"], forName: domain)
+        try config.captureStable()
+        _ = try workspace("Beta", at: directory)
+        UserDefaults.standard.setPersistentDomain(["theme": "beta", "betaOnly": true], forName: domain)
+        try config.beginStableReturn(.restoreStable)
+        XCTAssertNotNil(try config.prepareStableLaunch())
+        XCTAssertEqual(try Data(contentsOf: directory.appendingPathComponent("workspace-state.json")), stable)
+        let preferences = UserDefaults.standard.persistentDomain(forName: domain)
+        XCTAssertEqual(preferences?["theme"] as? String, "stable")
+        XCTAssertNil(preferences?["betaOnly"])
+        XCTAssertEqual(preferences?["updates.selectedChannel"] as? String, "stable")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: directory.appendingPathComponent("beta-configuration-before-stable.json").path))
+        try config.completeStableLaunch()
+        XCTAssertNil(try config.prepareStableLaunch(), "The pending switch is consumed only after success")
+    }
+
+    /// A compatible beta configuration is retained byte-for-byte when the user chooses it.
+    func testTryCompatibleBetaDoesNotRestoreStable() throws {
+        let (directory, _, config) = try fixture()
+        _ = try workspace("Stable", at: directory)
+        try config.captureStable()
+        let beta = try workspace("Beta", at: directory)
+        try config.beginStableReturn(.tryBeta)
+        XCTAssertNil(try config.prepareStableLaunch())
+        XCTAssertEqual(try Data(contentsOf: directory.appendingPathComponent("workspace-state.json")), beta)
+    }
+
+    /// Unsupported future schemas must fall back before WorkspaceStore can repair or overwrite them.
+    func testTryUnsupportedBetaRestoresStableAndExplainsFallback() throws {
+        let (directory, _, config) = try fixture()
+        let stable = try workspace("Stable", at: directory)
+        try config.captureStable()
+        let incompatible = Data(#"{"version":9999,"workspaces":[]}"#.utf8)
+        try incompatible.write(to: directory.appendingPathComponent("workspace-state.json"))
+        try config.beginStableReturn(.tryBeta)
+        let message = try XCTUnwrap(config.prepareStableLaunch())
+        XCTAssertTrue(message.contains("beta configuration could not be loaded"))
+        XCTAssertTrue(message.contains("last stable configuration"))
+        XCTAssertEqual(try Data(contentsOf: directory.appendingPathComponent("workspace-state.json")), stable)
+        let preserved = try JSONSerialization.jsonObject(with: Data(contentsOf: directory.appendingPathComponent("beta-configuration-before-stable.json"))) as? [String: Any]
+        XCTAssertEqual((preserved?["workspace"] as? String).flatMap { Data(base64Encoded: $0) }, incompatible)
+    }
+
+    /// A damaged fallback must never replace the only remaining beta configuration.
+    func testCorruptStableSnapshotKeepsCompatibleBetaAndQuarantinesMarker() throws {
+        let (directory, _, config) = try fixture()
+        _ = try workspace("Stable", at: directory)
+        try config.captureStable()
+        let beta = try workspace("Beta", at: directory)
+        try Data("broken".utf8).write(to: directory.appendingPathComponent("last-stable-configuration.json"))
+        try config.beginStableReturn(.restoreStable)
+        XCTAssertTrue(try XCTUnwrap(config.prepareStableLaunch()).contains("Kept your compatible current configuration"))
+        XCTAssertEqual(try Data(contentsOf: directory.appendingPathComponent("workspace-state.json")), beta)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("pending-stable-configuration.json").path))
+    }
+
+    /// If neither configuration can be decoded, manual recovery remains available without data loss.
+    func testManualRecoveryCanEscapeAnInvalidBetaAndInvalidStableSnapshot() throws {
+        let (directory, _, config) = try fixture()
+        let stable = try workspace("Stable", at: directory)
+        try config.captureStable()
+        let saved = directory.appendingPathComponent("known-good-backup.json")
+        try FileManager.default.copyItem(at: directory.appendingPathComponent("last-stable-configuration.json"), to: saved)
+        try Data("bad snapshot".utf8).write(to: directory.appendingPathComponent("last-stable-configuration.json"))
+        try Data("bad beta".utf8).write(to: directory.appendingPathComponent("workspace-state.json"))
+        try config.beginStableReturn(.tryBeta)
+        XCTAssertThrowsError(try config.prepareStableLaunch())
+        XCTAssertTrue(FileManager.default.fileExists(atPath: directory.appendingPathComponent("pending-stable-configuration.json").path))
+        try config.restoreBackup(from: saved)
+        XCTAssertEqual(try Data(contentsOf: directory.appendingPathComponent("workspace-state.json")), stable)
+        XCTAssertNil(try config.prepareStableLaunch())
+    }
+
+    /// A missing beta state is an incompatible configuration, not permission to start empty.
+    func testMissingBetaWorkspaceFallsBackToStable() throws {
+        let (directory, _, config) = try fixture()
+        let stable = try workspace("Stable", at: directory)
+        try config.captureStable()
+        try FileManager.default.removeItem(at: directory.appendingPathComponent("workspace-state.json"))
+        try config.beginStableReturn(.tryBeta)
+        XCTAssertNotNil(try config.prepareStableLaunch())
+        XCTAssertEqual(try Data(contentsOf: directory.appendingPathComponent("workspace-state.json")), stable)
+    }
+}

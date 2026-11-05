@@ -2,6 +2,17 @@ import AppKit
 import MyTermCore
 
 extension AppModel {
+    /// Saving is synchronous; slow trust checks run off the main actor before termination is approved.
+    func prepareUpdateQuitProcess(relaunch: Bool) async throws -> Process? {
+        persistBrowserURLs()
+        persistTerminalSnapshots()
+        guard !store.isPersistenceSuspended else {
+            throw NSError(domain: "MyTermUpdate", code: 2, userInfo: [NSLocalizedDescriptionKey: "Resolve the workspace recovery error before updating."])
+        }
+        try store.save()
+        return try await updates.preparedRestartProcess(relaunch: relaunch)
+    }
+
     /// Reading a tab clears finished indicators, but working and unanswered questions survive.
     /// Count all workspaces, including tabs and panes that are not currently visible.
     var updateRestartBlockingAgentCount: Int {
@@ -75,35 +86,42 @@ extension AppModel {
         updateRestartTask = nil
     }
 
+    /// Save the current workspace and launch a verified handoff that waits for this process to quit before reopening.
     func restartAfterUpdate() {
         guard updates.canRestartAfterUpdate else { return }
         cancelUpdateRestart()
         updateRestartError = nil
-        do {
-            try updates.validateRestart()
-            // LaunchServices must see the old process exit first, otherwise it can activate the
-            // running copy. Positional arguments keep bundle paths out of shell source.
-            let helper = Process()
-            helper.executableURL = URL(fileURLWithPath: "/bin/sh")
-            helper.arguments = [
-                "-c",
-                "while /bin/kill -0 \"$1\" 2>/dev/null; do /bin/sleep 0.2; done; exec /usr/bin/open -n \"$2\"",
-                "myterm-restart", String(ProcessInfo.processInfo.processIdentifier), Bundle.main.bundleURL.path
-            ]
-            helper.standardInput = FileHandle.nullDevice
-            helper.standardOutput = FileHandle.nullDevice
-            helper.standardError = FileHandle.nullDevice
-            try helper.run()
-            isRestartingAfterUpdate = true
-            // The normal app delegate path captures scrollback, saves conversations and flushes
-            // the workspace before tearing down terminal processes.
-            NSApp.terminate(nil)
-            // A cancelled termination returns. Do not leave a helper that relaunches on a later quit.
-            isRestartingAfterUpdate = false
-            if helper.isRunning { helper.terminate() }
-            updateRestartError = "The restart was cancelled."
-        } catch {
-            updateRestartError = "Could not schedule the restart: \(error.localizedDescription)"
+        Task { @MainActor in
+            do {
+                let staged = try await prepareUpdateQuitProcess(relaunch: true)
+                // LaunchServices must see the old process exit first, otherwise it can activate the
+                // running copy. Positional arguments keep bundle paths out of shell source.
+                let helper: Process
+                if let staged { helper = staged }
+                else {
+                    helper = Process()
+                    helper.executableURL = URL(fileURLWithPath: "/bin/sh")
+                    helper.arguments = [
+                        "-c",
+                        "while /bin/kill -0 \"$1\" 2>/dev/null; do /bin/sleep 0.2; done; exec /usr/bin/open -n \"$2\"",
+                        "myterm-restart", String(ProcessInfo.processInfo.processIdentifier), Bundle.main.bundleURL.path
+                    ]
+                }
+                helper.standardInput = FileHandle.nullDevice
+                helper.standardOutput = FileHandle.nullDevice
+                helper.standardError = FileHandle.nullDevice
+                try helper.run()
+                isRestartingAfterUpdate = true
+                // The normal app delegate path captures scrollback, saves conversations and flushes
+                // the workspace before detaching persistent terminal sessions.
+                NSApp.terminate(nil)
+                // A cancelled termination returns. Do not leave a helper that relaunches on a later quit.
+                isRestartingAfterUpdate = false
+                if helper.isRunning { helper.terminate() }
+                updateRestartError = "The restart was cancelled."
+            } catch {
+                updateRestartError = "Could not schedule the restart: \(error.localizedDescription)"
+            }
         }
     }
 }

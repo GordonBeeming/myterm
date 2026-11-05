@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import MyTermCore
 
 enum MyTermBrowserLauncher {
@@ -46,17 +47,19 @@ enum MyTermBrowserLauncher {
         return candidate
     }
 
+    /// Compose shim variables while preserving the user’s original ZDOTDIR and BASH_ENV for their startup files.
     static func environment(
         executableURL: URL?,
         workspaceID: WorkspaceID? = nil,
         tabID: TabID? = nil,
         paneID: PaneID? = nil,
-        baseEnvironment: [String: String] = ProcessInfo.processInfo.environment
+        baseEnvironment: [String: String] = ProcessInfo.processInfo.environment,
+        zshDirectory: URL? = nil
     ) -> [String: String] {
         guard let executableURL else { return [:] }
         let resourceDirectory = executableURL.deletingLastPathComponent().path
         let basePath = baseEnvironment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
-        let zdotdir = "\(resourceDirectory)/zsh"
+        let zdotdir = zshDirectory?.path ?? "\(resourceDirectory)/zsh"
         var environment = [
             "BASH_ENV": "\(resourceDirectory)/\(bashEnvironmentFileName)",
             "BROWSER": executableURL.path,
@@ -109,6 +112,40 @@ enum MyTermBrowserLauncher {
             environment[paneIDEnvironmentKey] = paneID.description
         }
         return environment
+    }
+
+    /// Shells may write .zcompdump or other caches into ZDOTDIR long after startup.
+    /// A content-addressed private copy preserves the shim chain without mutating signed resources.
+    static func preparedEnvironment(
+        executableURL: URL?, workspaceID: WorkspaceID? = nil, tabID: TabID? = nil, paneID: PaneID? = nil,
+        baseEnvironment: [String: String] = ProcessInfo.processInfo.environment,
+        runtimeDirectory: URL
+    ) throws -> [String: String] {
+        guard let executableURL else { return [:] }
+        let source = executableURL.deletingLastPathComponent().appendingPathComponent("zsh")
+        guard FileManager.default.fileExists(atPath: source.appendingPathComponent(".zshenv").path) else {
+            return environment(executableURL: executableURL, workspaceID: workspaceID, tabID: tabID,
+                               paneID: paneID, baseEnvironment: baseEnvironment)
+        }
+        let names = [".zshenv", ".zprofile", ".zshrc", ".zlogin", ".zlogout", "_myterm_common", "_myterm_startup"]
+            .filter { FileManager.default.fileExists(atPath: source.appendingPathComponent($0).path) }
+        let contents = try names.map { try Data(contentsOf: source.appendingPathComponent($0)) }
+        var hash = SHA256()
+        for (name, data) in zip(names, contents) { hash.update(data: Data(name.utf8)); hash.update(data: data) }
+        let identity = hash.finalize().map { String(format: "%02x", $0) }.joined()
+        let destination = runtimeDirectory.appendingPathComponent(identity, isDirectory: true)
+        let files = FileManager.default
+        try files.createDirectory(at: destination, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        try files.setAttributes([.posixPermissions: 0o700], ofItemAtPath: destination.path)
+        for (name, data) in zip(names, contents) {
+            let url = destination.appendingPathComponent(name)
+            if (try? Data(contentsOf: url)) != data {
+                try data.write(to: url, options: .atomic)
+                try files.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+            }
+        }
+        return environment(executableURL: executableURL, workspaceID: workspaceID, tabID: tabID,
+                           paneID: paneID, baseEnvironment: baseEnvironment, zshDirectory: destination)
     }
 
     /// Whether the directory at `path` is a copy of MyTerm's zsh shim directory, wherever it

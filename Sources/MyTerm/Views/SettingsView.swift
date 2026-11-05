@@ -180,7 +180,9 @@ struct SettingsView: View {
         if let command = model.updates.upgradeCommand {
             lines.append("Updating runs `\(command)` in the update dialog. Restart immediately or wait for hook-connected agents to finish.")
         } else {
-            lines.append("This copy was not installed with Homebrew, so updating opens the release page.")
+            lines.append(model.updates.supportsInAppInstallation
+                ? "Downloads are verified and staged before restart. Switching channels keeps your configuration; entering beta saves a stable rollback snapshot."
+                : "This copy cannot install updates directly, so updating opens the release page.")
         }
         if let checked = model.updates.lastCheckedAt {
             lines.append("Last checked \(checked.formatted(date: .abbreviated, time: .shortened)).")
@@ -213,13 +215,23 @@ struct SettingsView: View {
             }
 
             SettingsCard("Updates") {
+                Picker("Release channel", selection: Binding(
+                    get: { model.updates.selectedChannel },
+                    set: { model.changeUpdateChannel($0) }
+                )) {
+                    ForEach(UpdateCheck.Channel.allCases, id: \.self) { channel in
+                        Text(channel.title).tag(channel)
+                    }
+                }
+                .disabled(model.updates.installation == .running || model.updates.isPreparingRestart)
+
                 Toggle("Check for updates automatically", isOn: Binding(
                     get: { model.updates.automaticallyChecks },
                     set: { model.updates.automaticallyChecks = $0 }
                 ))
 
                 LabeledContent("Installed") {
-                    Text(model.updates.currentVersion.isEmpty ? "unknown" : model.updates.currentVersion)
+                    Text("\(model.updates.currentVersion.isEmpty ? "unknown" : model.updates.currentVersion) (\(model.updates.installedChannel.title))")
                         .foregroundStyle(Theme.textSecondary)
                 }
 

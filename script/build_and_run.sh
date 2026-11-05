@@ -99,6 +99,7 @@ SIGNING_IDENTITY="$(myterm_select_signing_identity "$DISTRIBUTION")"
 cd "$ROOT_DIR"
 swift build --product MyTerm "${BUILD_ARGS[@]}"
 swift build --product MyTermSessionHost "${BUILD_ARGS[@]}"
+swift build --product MyTermUpdateAgent "${BUILD_ARGS[@]}"
 BUILD_BINARY="$(swift build --show-bin-path "${BUILD_ARGS[@]}")/MyTerm"
 RESOURCE_BUNDLE="$(dirname "$BUILD_BINARY")/SwiftTerm_SwiftTerm.bundle"
 if [[ ! -d "$RESOURCE_BUNDLE" ]]; then
@@ -110,6 +111,7 @@ rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_MACOS" "$APP_RESOURCES"
 cp "$BUILD_BINARY" "$APP_BINARY"
 cp "$(dirname "$BUILD_BINARY")/MyTermSessionHost" "$APP_MACOS/MyTermSessionHost"
+cp "$(dirname "$BUILD_BINARY")/MyTermUpdateAgent" "$APP_MACOS/MyTermUpdateAgent"
 cp -R "$RESOURCE_BUNDLE" "$APP_RESOURCES/"
 cp "$ROOT_DIR/Resources/MyTerm.icns" "$APP_RESOURCES/MyTerm.icns"
 cp "$ROOT_DIR/Resources/myterm-browser" "$APP_RESOURCES/myterm-browser"
@@ -138,6 +140,7 @@ cp "$ROOT_DIR/Packaging/Info.plist" "$INFO_PLIST"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$INFO_PLIST"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$INFO_PLIST"
 /usr/libexec/PlistBuddy -c "Add :MyTermReleaseChannel string $RELEASE_CHANNEL" "$INFO_PLIST"
+/usr/libexec/PlistBuddy -c 'Add :MyTermChannelConfigurationVersion integer 1' "$INFO_PLIST"
 bash "$ROOT_DIR/script/configure_url_handlers.sh" "$CHANNEL" "$BUNDLE_ID" "$INFO_PLIST"
 /usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion $MIN_SYSTEM_VERSION" "$INFO_PLIST"
 
@@ -154,6 +157,9 @@ if [[ "$DISTRIBUTION" == "1" ]]; then
   HOST_CODESIGN_ARGS+=(--options runtime --timestamp)
 fi
 codesign "${HOST_CODESIGN_ARGS[@]}" "$APP_MACOS/MyTermSessionHost"
+UPDATE_CODESIGN_ARGS=(--force --sign "$SIGNING_IDENTITY" --identifier "$BUNDLE_ID.update-agent")
+if [[ "$DISTRIBUTION" == "1" ]]; then UPDATE_CODESIGN_ARGS+=(--options runtime --timestamp); fi
+codesign "${UPDATE_CODESIGN_ARGS[@]}" "$APP_MACOS/MyTermUpdateAgent"
 codesign "${CODESIGN_ARGS[@]}" "$APP_BUNDLE"
 
 open_app() {

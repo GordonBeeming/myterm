@@ -5,6 +5,74 @@ import XCTest
 
 @MainActor
 final class UpdateControllerTests: XCTestCase {
+    /// A digest-less beta stays visible as release information but cannot enter the installer.
+    func testNativeInstallRejectsBetaWithoutVerifiedDigest() async throws {
+        let data = Data("""
+        [{"tag_name":"v0.0.119-beta","draft":false,"prerelease":true,
+        "html_url":"https://github.com/GordonBeeming/myterm/releases/tag/v0.0.119-beta",
+        "assets":[{"name":"myterm-0.0.119-aarch64.dmg"}]}]
+        """.utf8)
+        let updater = UpdateController(currentVersion: "0.0.118", releaseChannel: .beta,
+            upgradeRoute: .native, defaults: try defaults(), fetch: { _ in data })
+        _ = await updater.check()
+        await updater.install()
+        XCTAssertEqual(updater.installation, .failed("The release changed or its verified download is not ready. Check for updates again."))
+    }
+
+    /// An old, uncancellable response must not replace the newly selected channel's result.
+    func testChannelSwitchDiscardsLateResponseAndPersistsSelection() async throws {
+        let store = try defaults()
+        let gate = Gate()
+        let entered = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        let stable = releaseJSON(tag: "v0.99")
+        let beta = Data("""
+        [{"tag_name":"v0.0.123-beta","draft":false,"prerelease":true,
+        "html_url":"https://github.com/GordonBeeming/myterm/releases/tag/v0.0.123-beta",
+        "assets":[{"name":"myterm-0.0.123-aarch64.dmg"}]}]
+        """.utf8)
+        let controller = UpdateController(currentVersion: "0.68", releaseChannel: .stable,
+            upgradeRoute: .releasePage, defaults: store, fetch: { url in
+                if url == UpdateCheck.Channel.stable.endpoint {
+                    entered.continuation.yield(())
+                    await gate.wait()
+                    return stable
+                }
+                return beta
+            })
+        let old = Task { await controller.check() }
+        var events = entered.stream.makeAsyncIterator()
+        _ = await events.next()
+        controller.selectChannel(.beta)
+        let selected = await controller.check()
+        XCTAssertEqual(selected.release?.tag, "v0.0.123-beta")
+        await gate.open()
+        _ = await old.value
+        XCTAssertEqual(controller.status.release?.tag, "v0.0.123-beta")
+        XCTAssertEqual(store.string(forKey: "updates.selectedChannel"), "beta")
+        let restored = UpdateController(currentVersion: "0.68", releaseChannel: .stable,
+                                        upgradeRoute: .releasePage, defaults: store)
+        XCTAssertEqual(restored.selectedChannel, .beta)
+        XCTAssertEqual(restored.status.release?.tag, "v0.0.123-beta")
+    }
+
+    /// Cached release state must retain the verified download descriptor used by Update Now.
+    func testVerifiedAssetSurvivesRelaunch() async throws {
+        let store = try defaults()
+        let url = "https://github.com/GordonBeeming/myterm/releases/download/v0.69/myterm-0.69-aarch64.dmg"
+        let hash = String(repeating: "a", count: 64)
+        let json = Data("""
+        {"tag_name":"v0.69","html_url":"https://github.com/GordonBeeming/myterm/releases/tag/v0.69",
+        "assets":[{"name":"myterm-0.69-aarch64.dmg","browser_download_url":"\(url)","digest":"sha256:\(hash)"}]}
+        """.utf8)
+        let controller = UpdateController(currentVersion: "0.68", releaseChannel: .stable,
+            upgradeRoute: .releasePage, defaults: store, fetch: { _ in json })
+        _ = await controller.check()
+        let restored = UpdateController(currentVersion: "0.68", releaseChannel: .stable,
+                                        upgradeRoute: .releasePage, defaults: store)
+        XCTAssertEqual(restored.status.release?.asset?.url.absoluteString, url)
+        XCTAssertEqual(restored.status.release?.asset?.sha256, hash)
+    }
+
     func testBetaUsesItsOwnEndpointAndNeverRunsTheStableHomebrewUpgrade() async throws {
         let store = try defaults()
         let data = Data("""
