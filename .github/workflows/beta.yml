@@ -1,0 +1,106 @@
+name: Beta
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      rebuild_companion:
+        description: Resubmit only the companion for a published beta
+        type: boolean
+        default: false
+      source_sha:
+        description: Published beta source SHA for companion resubmission (blank uses this main commit)
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+# Keep the running batch intact. GitHub replaces the single pending batch with the
+# newest one. The retained event includes all earlier merges; stale events skip before building.
+concurrency:
+  group: main-beta
+  cancel-in-progress: false
+
+jobs:
+  source:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Draft releases require a write token to be visible; detect interrupted
+    # publication before spending another macOS build and TestFlight upload.
+    permissions:
+      contents: write
+      actions: write
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+      version: ${{ steps.source.outputs.version }}
+      tag: ${{ steps.source.outputs.tag }}
+      publish: ${{ steps.source.outputs.publish }}
+      build_number: ${{ steps.source.outputs.build_number }}
+      resume: ${{ steps.source.outputs.resume }}
+      artifact_run_id: ${{ steps.source.outputs.artifact_run_id }}
+      rebuild_companion: ${{ steps.source.outputs.rebuild_companion }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Reserve the queued main snapshot
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REBUILD_COMPANION: ${{ inputs.rebuild_companion }}
+          REQUESTED_SOURCE_SHA: ${{ inputs.source_sha }}
+        run: python3 script/beta_release.py prepare
+
+  macos:
+    needs: source
+    if: needs.source.outputs.publish == 'true' && needs.source.outputs.resume != 'true'
+    uses: ./.github/workflows/build.yml
+    with:
+      source_sha: ${{ needs.source.outputs.sha }}
+      beta_version: ${{ needs.source.outputs.version }}
+      build_number: ${{ needs.source.outputs.build_number }}
+    secrets: inherit
+    permissions:
+      contents: write
+
+  companion:
+    needs: source
+    if: >-
+      (needs.source.outputs.publish == 'true' && needs.source.outputs.resume != 'true') ||
+      needs.source.outputs.rebuild_companion == 'true'
+    uses: ./.github/workflows/companion.yml
+    with:
+      source_sha: ${{ needs.source.outputs.sha }}
+      build_number: ${{ needs.source.outputs.build_number }}
+    secrets: inherit
+
+  publish:
+    needs: [source, macos, companion]
+    if: >-
+      always() && !cancelled() && needs.source.result == 'success' && needs.source.outputs.publish == 'true' &&
+      (needs.source.outputs.resume == 'true' || (needs.macos.result == 'success' && needs.companion.result == 'success'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+      - name: Download the signed and notarized DMG
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_RUN_ID: ${{ needs.source.outputs.artifact_run_id }}
+        run: gh run download "$ARTIFACT_RUN_ID" --name signed-beta-dmg --dir dist
+      - name: Publish the completed beta batch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BETA_SOURCE_SHA: ${{ needs.source.outputs.sha }}
+          BETA_VERSION: ${{ needs.source.outputs.version }}
+          BETA_TAG: ${{ needs.source.outputs.tag }}
+          BETA_BUILD_NUMBER: ${{ needs.source.outputs.build_number }}
+          BETA_ARTIFACT_RUN_ID: ${{ needs.source.outputs.artifact_run_id }}
+        run: python3 script/beta_release.py publish

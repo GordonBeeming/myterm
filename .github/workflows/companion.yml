@@ -19,38 +19,30 @@ on:
       - 'script/test_companion.sh'
       - 'script/test_companion_testflight_helper.sh'
       - 'script/verify_companion_toolchain.sh'
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/companion.yml'
-      - 'Companion/**'
-      - 'Package.swift'
-      - 'Package.resolved'
-      - 'Packages/MyTermRemote/**'
-      - 'Services/push-gateway/**'
-      - 'Services/relay/**'
-      - 'Sources/MyTerm/Companion/**'
-      - 'Sources/MyTermCore/**'
-      - 'Sources/MyTermPlatform/**'
-      - 'Vendor/SwiftTerm/**'
-      - 'script/deploy_companion_testflight.sh'
-      - 'script/test_companion.sh'
-      - 'script/test_companion_testflight_helper.sh'
-      - 'script/verify_companion_toolchain.sh'
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      source_sha:
+        type: string
+        required: true
+      build_number:
+        type: string
+        required: true
 
 permissions:
   contents: read
 
+# Main builds are serialized by the shared Beta workflow, including all called jobs.
 concurrency:
-  group: companion-${{ github.ref }}
-  cancel-in-progress: true
+  group: companion-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   remote-core:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: Services/relay/go.mod
@@ -64,6 +56,8 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: Services/relay/go.mod
@@ -95,6 +89,8 @@ jobs:
         working-directory: Services/${{ matrix.service }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: Services/${{ matrix.service }}/go.mod
@@ -116,6 +112,8 @@ jobs:
         device: [iPhone, iPad, iPhoneDuo]
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
       - name: Verify actual SDK
         run: bash script/verify_companion_toolchain.sh 27.1
       - name: Install the matching Metal toolchain
@@ -134,7 +132,7 @@ jobs:
 
   deploy-beta:
     name: Deploy to TestFlight
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    if: inputs.source_sha != '' && github.ref == 'refs/heads/main'
     needs: [remote-core, relay-browser, services, ios]
     runs-on: xcode-27
     env:
@@ -143,6 +141,8 @@ jobs:
     environment: beta
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
       - name: Verify actual SDK
         run: bash script/verify_companion_toolchain.sh 27.1
       - name: Install the matching Metal toolchain
@@ -163,13 +163,13 @@ jobs:
           PROVISIONING_PROFILE: ${{ secrets.PROVISIONING_PROFILE }}
           NOTIFICATION_PROVISIONING_PROFILE: ${{ secrets.NOTIFICATION_PROVISIONING_PROFILE }}
           APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
-          BUILD_NUMBER: ${{ github.run_number }}
+          BUILD_NUMBER: ${{ inputs.build_number }}
         run: bash script/deploy_companion_testflight.sh
       - name: Preserve exported IPA
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: MyTermCompanion-${{ github.run_number }}.ipa
+          name: MyTermCompanion-${{ inputs.build_number }}.ipa
           path: ${{ runner.temp }}/myterm-testflight/export/*.ipa
           if-no-files-found: warn
           retention-days: 90

@@ -327,15 +327,28 @@ private final class BrowserSlowSocket: BrowserTunnelSocket, Sendable {
 private actor BrowserResolverGate {
     var waiter: CheckedContinuation<Void, Never>?
     var entered = false
+    private var released = false
+    private let entry = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
     func wait() async {
-        entered = true
-        await withCheckedContinuation { waiter = $0 }
+        guard !released else { return }
+        await withCheckedContinuation {
+            waiter = $0
+            entered = true
+            entry.continuation.yield(())
+            entry.continuation.finish()
+        }
+    }
+    func waitUntilEntered() async -> Bool {
+        if entered { return true }
+        var iterator = entry.stream.makeAsyncIterator()
+        return await iterator.next() != nil
     }
     func release() {
+        released = true
         waiter?.resume()
         waiter = nil
+        entry.continuation.finish()
     }
-    func isWaiting() -> Bool { entered }
 }
 
 @Test(.timeLimit(.minutes(1))) func hostBrowserActivityIncludesPendingDestinationResolution()
@@ -352,11 +365,15 @@ private actor BrowserResolverGate {
     let opening = Task {
         try await host.receive(.init(streamID: UUID(), action: .open, host: "localhost", port: 1))
     }
-    for _ in 0..<100 {
-        if await gate.isWaiting() { break }
-        await Task.yield()
+    defer {
+        opening.cancel()
+        Task {
+            await host.closeAll()
+            await gate.release()
+        }
     }
-    #expect(await gate.isWaiting())
+    // A yield count measures scheduler luck under parallel CI, not resolver progress.
+    try #require(await gate.waitUntilEntered())
     #expect(await host.hasOpenStreams())
     await host.closeAll()
     await gate.release()

@@ -32,6 +32,67 @@ final class AppVersionTests: XCTestCase {
 }
 
 final class UpdateCheckTests: XCTestCase {
+    func testBetaSelectsNewestCompletedBetaAndIgnoresStableDraftAndEmptyReleases() throws {
+        let releases: [[String: Any]] = [
+            ["tag_name": "v9.0", "prerelease": false, "draft": false],
+            ["tag_name": "v0.0.100-beta", "prerelease": true, "draft": false,
+             "html_url": "not a usable release URL", "assets": [["name": "beta-aarch64.dmg"]]],
+            ["tag_name": "v0.0.99-beta", "prerelease": true, "draft": true],
+            ["tag_name": "v0.0.98-beta", "prerelease": true, "draft": false],
+            ["tag_name": "v0.0.9-beta", "prerelease": true, "draft": false,
+             "html_url": "https://github.com/GordonBeeming/myterm/releases/tag/v0.0.9-beta",
+             "assets": [["name": "myterm-0.0.9-aarch64.dmg"]]],
+            ["tag_name": "v0.0.10-beta", "prerelease": true, "draft": false,
+             "html_url": "https://github.com/GordonBeeming/myterm/releases/tag/v0.0.10-beta",
+             "assets": [["name": "myterm-0.0.10-aarch64.dmg"]]],
+            ["tag_name": "v0.0.101-beta", "prerelease": true, "draft": true,
+             "html_url": "https://github.com/GordonBeeming/myterm/releases/tag/v0.0.101-beta",
+             "assets": [["name": "myterm-0.0.101-aarch64.dmg"]]],
+            ["tag_name": "v0.0.102-beta", "prerelease": false, "draft": false,
+             "html_url": "https://github.com/GordonBeeming/myterm/releases/tag/v0.0.102-beta",
+             "assets": [["name": "myterm-0.0.102-aarch64.dmg"]]],
+            ["tag_name": "v0.0.103-beta", "prerelease": true, "draft": false,
+             "html_url": "https://github.com/GordonBeeming/myterm/releases/tag/v0.0.103-beta"]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: releases)
+        let result = try UpdateCheck.availability(currentVersion: "0.0.9", latestReleaseJSON: data, channel: .beta)
+        XCTAssertEqual(result.release?.tag, "v0.0.10-beta")
+        XCTAssertEqual(result.release?.version, AppVersion("0.0.10"))
+        XCTAssertEqual(try UpdateCheck.availability(currentVersion: "0.0.10", latestReleaseJSON: data, channel: .beta),
+                       .upToDate(current: AppVersion("0.0.10")!))
+    }
+
+    func testBetaWithoutAnAvailableArtifactIsNotOffered() throws {
+        XCTAssertThrowsError(try UpdateCheck.availability(
+            currentVersion: "0.0.1", latestReleaseJSON: Data("[]".utf8), channel: .beta
+        )) { XCTAssertEqual($0 as? UpdateCheckError, .noPublishedRelease) }
+    }
+
+    func testStableCannotInterpretABetaTagAsAStableUpdate() {
+        XCTAssertThrowsError(try UpdateCheck.availability(
+            currentVersion: "0.23", latestReleaseJSON: releaseJSON(tag: "v0.0.999-beta")
+        ))
+    }
+
+    /// Channel selection must not hide a useful API rate-limit or missing-release error.
+    func testBetaErrorsPreserveGitHubMessagesAndWrapMalformedJSON() {
+        for (body, expected) in [
+            (#"{"message":"Not Found"}"#, UpdateCheckError.noPublishedRelease),
+            (#"{"message":"API rate limit exceeded"}"#, .unreadableResponse(reason: "API rate limit exceeded"))
+        ] {
+            XCTAssertThrowsError(try UpdateCheck.availability(
+                currentVersion: "0.0.1", latestReleaseJSON: Data(body.utf8), channel: .beta
+            )) { XCTAssertEqual($0 as? UpdateCheckError, expected) }
+        }
+        XCTAssertThrowsError(try UpdateCheck.availability(
+            currentVersion: "0.0.1", latestReleaseJSON: Data("invalid JSON".utf8), channel: .beta
+        )) {
+            guard case .unreadableResponse = $0 as? UpdateCheckError else {
+                return XCTFail("Expected a typed unreadable response")
+            }
+        }
+    }
+
     private func releaseJSON(tag: String, name: String = "MyTerm") -> Data {
         Data(
             """

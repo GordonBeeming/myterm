@@ -84,6 +84,18 @@ public enum UpdateCheckError: Error, Equatable, LocalizedError, Sendable {
 }
 
 public enum UpdateCheck {
+    public enum Channel: String, Sendable {
+        case stable
+        case beta
+
+        /// Stable uses GitHub's latest release; beta considers completed prerelease artifacts.
+        public var endpoint: URL {
+            switch self {
+            case .stable: UpdateCheck.latestReleaseEndpoint
+            case .beta: URL(string: "https://api.github.com/repos/GordonBeeming/myterm/releases?per_page=100")!
+            }
+        }
+    }
     /// GitHub's `releases/latest` already excludes drafts and prereleases.
     public static let latestReleaseEndpoint = URL(
         string: "https://api.github.com/repos/GordonBeeming/myterm/releases/latest"
@@ -92,16 +104,54 @@ public enum UpdateCheck {
     /// The whole comparison, with the network left to the caller so this stays testable.
     public static func availability(
         currentVersion: String,
-        latestReleaseJSON data: Data
+        latestReleaseJSON data: Data,
+        channel: Channel = .stable
     ) throws -> UpdateAvailability {
         guard let current = AppVersion(currentVersion) else {
             throw UpdateCheckError.unreadableCurrentVersion(currentVersion)
         }
-        let release = try parseRelease(data)
+        let release: AppRelease
+        switch channel {
+        case .stable:
+            release = try parseRelease(data)
+        case .beta:
+            let response: Any
+            do {
+                response = try JSONSerialization.jsonObject(with: data)
+            } catch {
+                throw UpdateCheckError.unreadableResponse(reason: error.localizedDescription)
+            }
+            if let payload = response as? [String: Any], let message = payload["message"] as? String {
+                throw message.localizedCaseInsensitiveContains("not found")
+                    ? UpdateCheckError.noPublishedRelease
+                    : UpdateCheckError.unreadableResponse(reason: message)
+            }
+            guard let releases = response as? [[String: Any]] else {
+                throw UpdateCheckError.unreadableResponse(reason: "expected a list of beta releases")
+            }
+            // A draft or an empty prerelease must never invite an update to an unfinished build.
+            let candidates = try releases.filter {
+                guard let tag = $0["tag_name"] as? String, tag.hasSuffix("-beta"),
+                      AppVersion(String(tag.dropLast(5))) != nil,
+                      let address = $0["html_url"] as? String,
+                      let url = URL(string: address), url.scheme == "https", url.host == "github.com" else {
+                    return false
+                }
+                return ($0["draft"] as? Bool) == false && ($0["prerelease"] as? Bool) == true
+                    && ($0["assets"] as? [[String: Any]])?.contains {
+                        ($0["name"] as? String)?.hasSuffix("-aarch64.dmg") == true
+                    } == true
+            }.map { try parseRelease(JSONSerialization.data(withJSONObject: $0), channel: .beta) }
+            guard let newest = candidates.max(by: { $0.version < $1.version }) else {
+                throw UpdateCheckError.noPublishedRelease
+            }
+            release = newest
+        }
         return release.version > current ? .available(release) : .upToDate(current: current)
     }
 
-    static func parseRelease(_ data: Data) throws -> AppRelease {
+    /// Read a single release while preserving GitHub API errors for the settings UI.
+    static func parseRelease(_ data: Data, channel: Channel = .stable) throws -> AppRelease {
         let payload: [String: Any]
         do {
             guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -123,7 +173,8 @@ public enum UpdateCheck {
         guard let tag = payload["tag_name"] as? String else {
             throw UpdateCheckError.unreadableResponse(reason: "the response had no tag_name")
         }
-        guard let version = AppVersion(tag) else {
+        let versionTag = channel == .beta && tag.hasSuffix("-beta") ? String(tag.dropLast(5)) : tag
+        guard let version = AppVersion(versionTag) else {
             throw UpdateCheckError.unreadableResponse(reason: "could not read a version from tag \(tag)")
         }
         guard let address = payload["html_url"] as? String, let url = URL(string: address) else {

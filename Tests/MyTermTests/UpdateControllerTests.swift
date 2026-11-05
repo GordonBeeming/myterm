@@ -5,6 +5,62 @@ import XCTest
 
 @MainActor
 final class UpdateControllerTests: XCTestCase {
+    func testBetaUsesItsOwnEndpointAndNeverRunsTheStableHomebrewUpgrade() async throws {
+        let store = try defaults()
+        let data = Data("""
+        [{"tag_name":"v0.0.12-beta","prerelease":true,"draft":false,
+          "html_url":"https://github.com/GordonBeeming/myterm/releases/tag/v0.0.12-beta",
+          "assets":[{"name":"myterm-0.0.12-aarch64.dmg"}]}]
+        """.utf8)
+        let controller = UpdateController(
+            currentVersion: "0.0.11", releaseChannel: .beta,
+            upgradeRoute: .homebrew(command: "must never execute"), defaults: store,
+            fetch: { url in
+                XCTAssertEqual(url, UpdateCheck.Channel.beta.endpoint)
+                return data
+            },
+            runUpgrade: { _, _ in
+                XCTFail("Beta must never invoke the stable Homebrew runner")
+                return 1
+            }
+        )
+        XCTAssertEqual(controller.upgradeActionTitle, "Open the Release")
+        XCTAssertNil(controller.upgradeCommand)
+        let result = await controller.check()
+        XCTAssertEqual(result.release?.tag, "v0.0.12-beta")
+        await controller.install()
+        let restored = UpdateController(currentVersion: "0.0.11", releaseChannel: .beta, defaults: store)
+        XCTAssertEqual(restored.status.release?.tag, "v0.0.12-beta")
+        let stable = UpdateController(currentVersion: "0.0.11", releaseChannel: .stable, defaults: store)
+        XCTAssertNil(stable.status.release)
+    }
+
+    /// Tag filtering alone cannot protect the poll timestamp or skipped-version preference.
+    func testBetaDefaultsDoNotLeakIntoStableChecks() async throws {
+        let suite = "UpdateChannelTests.\(UUID().uuidString)"
+        defer {
+            UserDefaults.standard.removePersistentDomain(forName: suite)
+            UserDefaults.standard.removePersistentDomain(forName: suite + ".beta-updates")
+        }
+        let data = Data("""
+        [{"tag_name":"v0.0.12-beta","prerelease":true,"draft":false,
+          "html_url":"https://github.com/GordonBeeming/myterm/releases/tag/v0.0.12-beta",
+          "assets":[{"name":"myterm-0.0.12-aarch64.dmg"}]}]
+        """.utf8)
+        let beta = UpdateController(currentVersion: "0.0.11", releaseChannel: .beta,
+                                    environment: ["MYTERM_USER_DEFAULTS_SUITE": suite], fetch: { _ in data })
+        let result = await beta.check()
+        beta.skip(try XCTUnwrap(result.release))
+        let stable = UpdateController(currentVersion: "0.0.11", releaseChannel: .stable,
+                                      environment: ["MYTERM_USER_DEFAULTS_SUITE": suite])
+        XCTAssertNil(stable.lastCheckedAt)
+        XCTAssertNil(stable.skippedVersion)
+        let restored = UpdateController(currentVersion: "0.0.11", releaseChannel: .beta,
+                                        environment: ["MYTERM_USER_DEFAULTS_SUITE": suite])
+        XCTAssertEqual(restored.lastCheckedAt, beta.lastCheckedAt)
+        XCTAssertEqual(restored.skippedVersion, AppVersion("0.0.12"))
+    }
+
     private func defaults() throws -> UserDefaults {
         let suite = "UpdateControllerTests.\(UUID().uuidString)"
         return try XCTUnwrap(UserDefaults(suiteName: suite))
