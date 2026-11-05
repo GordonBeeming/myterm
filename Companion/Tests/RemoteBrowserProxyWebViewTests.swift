@@ -163,6 +163,57 @@ private final class BrowserUDPProbe: @unchecked Sendable {
     func stop() { listener.cancel() }
 }
 
+private enum BrowserFixtureStartupError: Error {
+    case timedOut
+    case alreadyRunning
+}
+
+@MainActor
+private final class BrowserFixtureStartup {
+    private var continuation: CheckedContinuation<Void, Error>?
+    private var worker: Task<Void, Never>?
+    private var timer: Task<Void, Never>?
+
+    /// Callback APIs may ignore cancellation, so a structured task-group race could wait forever.
+    func run(limit: Duration, operation: @escaping @MainActor () async throws -> Void) async throws {
+        try Task.checkCancellation()
+        guard continuation == nil else { throw BrowserFixtureStartupError.alreadyRunning }
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                self.continuation = continuation
+                worker = Task { @MainActor [weak self] in
+                    do {
+                        try Task.checkCancellation()
+                        try await operation()
+                        self?.finish(.success(()))
+                    } catch { self?.finish(.failure(error)) }
+                }
+                timer = Task { @MainActor [weak self] in
+                    do {
+                        try await Task.sleep(for: limit)
+                        self?.finish(.failure(BrowserFixtureStartupError.timedOut))
+                    } catch is CancellationError {
+                        return
+                    } catch { self?.finish(.failure(error)) }
+                }
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.finish(.failure(CancellationError())) }
+        }
+    }
+
+    /// Resume once, and cancel the worker so a late native callback cannot initialize the view.
+    private func finish(_ result: Result<Void, Error>) {
+        guard let continuation else { return }
+        self.continuation = nil
+        worker?.cancel()
+        timer?.cancel()
+        worker = nil
+        timer = nil
+        continuation.resume(with: result)
+    }
+}
+
 @MainActor
 final class RemoteBrowserProxyWebViewTests: XCTestCase {
     /// Startup errors must release both tunnel endpoints even when the test throws early.
@@ -181,20 +232,45 @@ final class RemoteBrowserProxyWebViewTests: XCTestCase {
         components.query = nil
         components.fragment = nil
         let bootstrap = try XCTUnwrap(components.url)
-        try await browser.start(endpoint, url: bootstrap, dataStore: .nonPersistent())
-        let deadline = Date().addingTimeInterval(45)
-        while (browser.webView?.title != BrowserHTTPFixture.bootstrapTitle || browser.webView?.isLoading == true),
-              browser.error == nil, Date() < deadline {
-            try await Task.sleep(for: .milliseconds(50))
-        }
-        guard browser.webView?.title == BrowserHTTPFixture.bootstrapTitle,
-              browser.webView?.isLoading == false else {
-            browser.stop()
-            throw NSError(domain: "WebKitFixtureStartup", code: 1,
-                userInfo: [NSLocalizedDescriptionKey: browser.error ?? "WebKit bootstrap did not finish within 45 seconds."])
+        try await BrowserFixtureStartup().run(limit: .seconds(45)) {
+            try await browser.start(endpoint, url: bootstrap, dataStore: .nonPersistent())
+            while (browser.webView?.title != BrowserHTTPFixture.bootstrapTitle || browser.webView?.isLoading == true),
+                  browser.error == nil {
+                try Task.checkCancellation()
+                try await Task.sleep(for: .milliseconds(50))
+            }
+            guard browser.webView?.title == BrowserHTTPFixture.bootstrapTitle,
+                  browser.webView?.isLoading == false else {
+                throw NSError(domain: "WebKitFixtureStartup", code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: browser.error ?? "WebKit bootstrap did not finish."])
+            }
         }
         browser.address = url.absoluteString
         browser.submit()
+    }
+
+    /// Native callbacks can ignore cancellation; timing out must still stop late initialization.
+    func testBootstrapDeadlineIncludesUncooperativeCallbackStartup() async throws {
+        var initialized = false
+        let startup = BrowserFixtureStartup()
+        do {
+            try await startup.run(limit: .milliseconds(100)) {
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    Task { @MainActor in
+                        do { try await Task.sleep(for: .milliseconds(500)) }
+                        catch { XCTFail("The simulated native callback must still return: \(error)") }
+                        continuation.resume()
+                    }
+                }
+                try Task.checkCancellation()
+                initialized = true
+            }
+            XCTFail("Startup should time out before its native callback returns")
+        } catch BrowserFixtureStartupError.timedOut {
+            // The callback still returns later, just like content-rule compilation.
+        }
+        try await Task.sleep(for: .milliseconds(600))
+        XCTAssertFalse(initialized, "A cancelled startup must not initialize the view after its deadline")
     }
 
     /// Tunnel fragmentation cannot make the fixture respond before the request headers finish.
@@ -217,6 +293,12 @@ final class RemoteBrowserProxyWebViewTests: XCTestCase {
         let completeDeadline = Date().addingTimeInterval(5)
         while fixture.requests == 0, Date() < completeDeadline { try await Task.sleep(for: .milliseconds(5)) }
         XCTAssertEqual(fixture.requests, 1)
+        var response = Data()
+        try await BrowserFixtureStartup().run(limit: .seconds(5)) {
+            response = try await self.receiveFixtureResponse(on: connection)
+        }
+        XCTAssertTrue(String(decoding: response, as: UTF8.self).contains(BrowserHTTPFixture.bootstrapTitle),
+                      "The response must be routed using the complete buffered request")
     }
 
     /// The sender queues fragments independently, matching the encrypted tunnel's byte stream.
@@ -226,6 +308,24 @@ final class RemoteBrowserProxyWebViewTests: XCTestCase {
                 if let error { continuation.resume(throwing: error) }
                 else { continuation.resume() }
             })
+        }
+    }
+
+    /// Read through EOF so a fragmented response cannot hide which fixture route was selected.
+    private func receiveFixtureResponse(on connection: NWConnection) async throws -> Data {
+        var response = Data()
+        while true {
+            let chunk = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<(Data?, Bool), Error>) in
+                connection.receive(minimumIncompleteLength: 1, maximumLength: 8192) { data, _, complete, error in
+                    if let error { continuation.resume(throwing: error) }
+                    else { continuation.resume(returning: (data, complete)) }
+                }
+            }
+            if let bytes = chunk.0 { response.append(bytes) }
+            guard response.count <= 8192 else { throw RemoteError.messageTooLarge }
+            if chunk.1 { return response }
+            guard chunk.0?.isEmpty == false else { throw RemoteError.invalidMessage }
+            try Task.checkCancellation()
         }
     }
 
@@ -250,6 +350,7 @@ final class RemoteBrowserProxyWebViewTests: XCTestCase {
         await bridge.stop()
     }
 
+    /// A successful navigation must clear old failures without losing back/forward state.
     func testNativeNavigationClearsFailedReloadWhenGoingBackAndReloading() async throws {
         let fixture = try BrowserHTTPFixture()
         let port = try await fixture.start()
@@ -290,8 +391,10 @@ final class RemoteBrowserProxyWebViewTests: XCTestCase {
         XCTAssertTrue(condition(), "Browser navigation did not reach its expected state")
     }
 
+    /// Bootstrap traffic cannot substitute for the WebSocket's own destination and frame.
     func testNativeWebSocketFlowsThroughEncryptedRemoteProxy() async throws {
-        let fixture = try BrowserHTTPFixture(body: "<html><title>Remote fixture</title><script>let s=new WebSocket('ws://myterm-test.invalid/socket');s.onmessage=e=>document.title=e.data;</script></html>")
+        let socketHost = "myterm-websocket.invalid"
+        let fixture = try BrowserHTTPFixture(body: "<html><title>Remote fixture</title><script>let s=new WebSocket('ws://\(socketHost)/socket');s.onmessage=e=>document.title=e.data;</script></html>")
         let port = try await fixture.start()
         defer { fixture.stop() }
         let bridge = EncryptedBrowserBridge()
@@ -307,10 +410,12 @@ final class RemoteBrowserProxyWebViewTests: XCTestCase {
         XCTAssertEqual(browser.webView?.title, "Remote websocket", browser.error ?? "WebSocket did not deliver its text frame")
         let destinations = await bridge.destinations()
         XCTAssertGreaterThanOrEqual(destinations.filter { $0 == "myterm-test.invalid" }.count, 2)
+        XCTAssertTrue(destinations.contains(socketHost), "The WebSocket must open its own encrypted-proxy destination")
         browser.stop()
         await bridge.stop()
     }
 
+    /// Media permission prompts must not change the proxy-boundary diagnostic.
     func testWebRTCProxyBoundaryDiagnosticWithoutMediaPermissions() async throws {
         let fixture = try BrowserHTTPFixture()
         let port = try await fixture.start()
@@ -357,6 +462,7 @@ final class RemoteBrowserProxyWebViewTests: XCTestCase {
         await bridge.stop()
     }
 
+    /// A remote-only hostname must resolve through the host tunnel, never on the device.
     func testOffscreenWKWebViewLoadsRemoteHostnameThroughEncryptedProxy() async throws {
         let fixture = try BrowserHTTPFixture()
         let port = try await fixture.start()
@@ -378,6 +484,7 @@ final class RemoteBrowserProxyWebViewTests: XCTestCase {
         await bridge.stop()
     }
 
+    /// Loopback protection must include obfuscated addresses as well as localhost.
     func testNativeContentRulesBlockDeviceLoopbackSubresources() async throws {
         let deviceLocal = try BrowserHTTPFixture()
         let localPort = try await deviceLocal.start()
@@ -405,6 +512,7 @@ final class RemoteBrowserProxyWebViewTests: XCTestCase {
         await bridge.stop()
     }
 
+    /// A late navigation callback cannot undo a policy denial or enable direct traffic.
     func testOffscreenWKWebViewRejectsLocalhostInsteadOfBypassingProxy() async throws {
         let fixture = try BrowserHTTPFixture()
         let port = try await fixture.start()
