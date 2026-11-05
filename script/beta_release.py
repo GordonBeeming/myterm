@@ -30,6 +30,19 @@ def git(*args):
     return subprocess.check_output(["git", *args], text=True).strip()
 
 
+def find_release(tag):
+    """Include drafts visible to the token so retries cannot create duplicate drafts."""
+    page = 1
+    while True:
+        releases = github(f"releases?per_page=100&page={page}")
+        for release in releases:
+            if release["tag_name"] == tag:
+                return release
+        if len(releases) < 100:
+            return None
+        page += 1
+
+
 def prepare():
     """Pin all jobs to one verified commit, skipping an already published snapshot."""
     sha = git("rev-parse", "HEAD")
@@ -38,7 +51,7 @@ def prepare():
         raise RuntimeError("Beta source must have a verified signature")
     version = f"0.0.{git('rev-list', '--count', 'HEAD')}"
     tag = f"v{version}-beta"
-    existing = github(f"releases/tags/{tag}")
+    existing = find_release(tag)
     if existing is not None and (existing["target_commitish"] != sha or not existing["prerelease"]
                                  or existing["draft"] or not existing["assets"]):
         raise RuntimeError("Existing beta tag belongs to a different source or channel")
@@ -61,6 +74,10 @@ def publish():
     dmg = Path(f"dist/myterm-{version}-aarch64.dmg")
     if not dmg.is_file():
         raise RuntimeError(f"Signed beta DMG is missing: {dmg}")
+    # The publisher has a write token and can see drafts hidden from the source job.
+    # Never overwrite a tag or silently publish artifacts from an interrupted run.
+    if find_release(tag) is not None:
+        raise RuntimeError(f"Release {tag} already exists; inspect the interrupted publication before retrying")
     notes = Path(os.environ["RUNNER_TEMP"]) / "beta-notes.md"
     notes.write_text(
         f"Automatic beta from `main` at `{sha}`.\n\n"

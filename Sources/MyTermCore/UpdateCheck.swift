@@ -119,8 +119,13 @@ public enum UpdateCheck {
             }
             // A draft or an empty prerelease must never invite an update to an unfinished build.
             let candidates = try releases.filter {
-                ($0["draft"] as? Bool) == false && ($0["prerelease"] as? Bool) == true
-                    && ($0["tag_name"] as? String)?.hasSuffix("-beta") == true
+                guard let tag = $0["tag_name"] as? String, tag.hasSuffix("-beta"),
+                      AppVersion(String(tag.dropLast(5))) != nil,
+                      let address = $0["html_url"] as? String,
+                      let url = URL(string: address), url.scheme == "https", url.host == "github.com" else {
+                    return false
+                }
+                return ($0["draft"] as? Bool) == false && ($0["prerelease"] as? Bool) == true
                     && ($0["assets"] as? [[String: Any]])?.contains {
                         ($0["name"] as? String)?.hasSuffix("-aarch64.dmg") == true
                     } == true

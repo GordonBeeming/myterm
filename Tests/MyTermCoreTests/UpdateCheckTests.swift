@@ -35,6 +35,8 @@ final class UpdateCheckTests: XCTestCase {
     func testBetaSelectsNewestCompletedBetaAndIgnoresStableDraftAndEmptyReleases() throws {
         let releases: [[String: Any]] = [
             ["tag_name": "v9.0", "prerelease": false, "draft": false],
+            ["tag_name": "v0.0.100-beta", "prerelease": true, "draft": false,
+             "html_url": "not a usable release URL", "assets": [["name": "beta-aarch64.dmg"]]],
             ["tag_name": "v0.0.99-beta", "prerelease": true, "draft": true],
             ["tag_name": "v0.0.98-beta", "prerelease": true, "draft": false],
             ["tag_name": "v0.0.9-beta", "prerelease": true, "draft": false,

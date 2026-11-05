@@ -17,7 +17,8 @@ class BetaReleaseTests(unittest.TestCase):
             with patch.dict(os.environ, {"GITHUB_OUTPUT": str(output), "GITHUB_RUN_NUMBER": "7"}), \
                     patch.object(beta_release, "git", side_effect=["a" * 40, "123"]), \
                     patch.object(beta_release, "github", side_effect=[
-                        {"commit": {"verification": {"verified": verified}}}, existing]):
+                        {"commit": {"verification": {"verified": verified}}},
+                        [] if existing is None else [dict(existing, tag_name="v0.0.123-beta")]]):
                 beta_release.prepare()
             return dict(line.split("=", 1) for line in output.read_text().splitlines())
 
@@ -36,6 +37,15 @@ class BetaReleaseTests(unittest.TestCase):
             self.prepare({"target_commitish": "b" * 40, "prerelease": True, "draft": False, "assets": [{"name": "beta.dmg"}]})
         with self.assertRaises(RuntimeError):
             self.prepare({"target_commitish": "a" * 40, "prerelease": False, "draft": False, "assets": [{"name": "beta.dmg"}]})
+        with self.assertRaises(RuntimeError):
+            self.prepare({"target_commitish": "a" * 40, "prerelease": True, "draft": True, "assets": []})
+
+    def test_release_lookup_includes_drafts_and_paginates(self):
+        draft = {"tag_name": "v0.0.123-beta", "draft": True}
+        with patch.object(beta_release, "github", side_effect=[
+                [{"tag_name": f"other-{n}"} for n in range(100)], [draft]]) as api:
+            self.assertEqual(beta_release.find_release("v0.0.123-beta"), draft)
+            self.assertEqual(api.call_args.args[0], "releases?per_page=100&page=2")
 
     def test_publication_is_a_prerelease_at_the_pinned_sha_with_no_overwrite(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -48,7 +58,8 @@ class BetaReleaseTests(unittest.TestCase):
                 with patch.dict(os.environ, {"BETA_SOURCE_SHA": "a" * 40, "BETA_VERSION": "0.0.123",
                                              "BETA_TAG": "v0.0.123-beta", "BETA_BUILD_NUMBER": "10007",
                                              "RUNNER_TEMP": directory}), \
-                        patch.object(beta_release.subprocess, "run") as run:
+                        patch.object(beta_release.subprocess, "run") as run, \
+                        patch.object(beta_release, "find_release", return_value=None):
                     beta_release.publish()
                 args = run.call_args_list[0].args[0]
                 self.assertIn("--prerelease", args)
@@ -57,6 +68,13 @@ class BetaReleaseTests(unittest.TestCase):
                 self.assertIn("--latest=false", args)
                 self.assertEqual(args[args.index("--target") + 1], "a" * 40)
                 self.assertNotIn("--clobber", args)
+                with patch.dict(os.environ, {"BETA_SOURCE_SHA": "a" * 40, "BETA_VERSION": "0.0.123",
+                                             "BETA_TAG": "v0.0.123-beta", "BETA_BUILD_NUMBER": "10007"}), \
+                        patch.object(beta_release, "find_release", return_value={"draft": True}), \
+                        patch.object(beta_release.subprocess, "run") as forbidden:
+                    with self.assertRaises(RuntimeError):
+                        beta_release.publish()
+                    forbidden.assert_not_called()
             finally:
                 os.chdir(previous)
 
