@@ -8,9 +8,7 @@ bash script/verify_companion_toolchain.sh 27.1
 
 device_family="${COMPANION_DEVICE_FAMILY:-iPhone}"
 case "$device_family" in
-  iPhone) product_family="iPhone"; required_device_type="" ;;
-  iPad) product_family="iPad"; required_device_type="" ;;
-  iPhoneDuo) product_family="iPhone"; required_device_type="com.apple.CoreSimulator.SimDeviceType.iPhone-Duo" ;;
+  iPhone|iPad|iPhoneDuo) ;;
   *) echo "COMPANION_DEVICE_FAMILY must be iPhone, iPad, or iPhoneDuo" >&2; exit 2 ;;
 esac
 
@@ -26,34 +24,7 @@ trap cleanup EXIT
 
 if [[ -z "$device_id" ]]; then
   simulator_sdk=$(xcrun --sdk iphonesimulator --show-sdk-version)
-  device_description=$(xcrun simctl list --json | python3 -c '
-import json, sys
-family = sys.argv[1]
-product_family = sys.argv[2]
-sdk_version = sys.argv[3]
-required_device_type = sys.argv[4]
-inventory = json.load(sys.stdin)
-for runtime in inventory["runtimes"]:
-    if not runtime.get("isAvailable") or runtime.get("platform") != "iOS":
-        continue
-    # Hosted images may include newer runtimes. Keep every device on the SDK we
-    # verified above so the matrix uses one consistent toolchain.
-    if runtime["version"] != sdk_version:
-        continue
-    candidates = [item for item in runtime.get("supportedDeviceTypes", [])
-                  if item.get("productFamily") == product_family and item.get("identifier")]
-    if family == "iPhone":
-        candidates = [item for item in candidates if item["name"] != "iPhone Duo"]
-    if required_device_type:
-        candidates = [item for item in candidates
-                      if item["identifier"] == required_device_type]
-    if candidates:
-        chosen = sorted(candidates, key=lambda item: item["name"])[0]
-        print(runtime["identifier"] + "\t" + chosen["identifier"])
-        sys.exit(0)
-print(f"No available iOS {sdk_version} {family} runtime/device type matching the selected SDK.", file=sys.stderr)
-sys.exit(1)
-' "$device_family" "$product_family" "$simulator_sdk" "$required_device_type")
+  device_description=$(xcrun simctl list --json | python3 script/select_companion_simulator.py "$device_family" "$simulator_sdk")
   IFS=$'\t' read -r runtime_id device_type <<< "$device_description"
   owned_device=$(xcrun simctl create "myterm-companion-test-${device_family}-$$" "$device_type" "$runtime_id")
   device_id="$owned_device"
