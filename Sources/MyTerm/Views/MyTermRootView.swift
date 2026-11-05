@@ -986,6 +986,7 @@ private struct WorkspaceFolderRow: View {
     @State private var dropFeedback: SidebarDropFeedback = .none
     @State private var renderedRowHeight: CGFloat = 0
 
+    /// Matches the drag preview's rows and reverts with that preview when a drag is cancelled.
     private var workspaceCount: Int {
         dropSession.workspaces.lazy.filter { $0.folderID == folder.id }.count
     }

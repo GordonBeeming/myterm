@@ -8,28 +8,34 @@ public struct SessionNavigationItem: Identifiable, Equatable, Sendable {
     public let groupID: TabGroupID
     public let workspaceTitle: String
     public let folderTitle: String
+    /// Membership before tab or query filtering, including workspaces with no tabs.
     public let folderWorkspaceCount: Int
     public let tab: RemoteTabProjection
 
+    /// Undecorated search context, so a changing badge cannot change which destinations match.
     public var subtitle: String {
         subtitle(folder: folderTitle)
     }
 
+    /// Count decoration belongs only to rendered labels, separate from the searchable context.
     public var subtitleWithFolderCount: String {
         let folder = folderTitle.isEmpty ? "" : "\(folderTitle) (\(folderWorkspaceCount))"
         return subtitle(folder: folder)
     }
 
+    /// Names the unit rather than leaving VoiceOver to announce an unexplained number.
     public var accessibleSubtitle: String {
         let folder = folderTitle.isEmpty ? "" : "\(folderTitle), workspaces: \(folderWorkspaceCount)"
         return subtitle(folder: folder)
     }
 
+    /// Keeps workspace and path context identical across search, visual and spoken labels.
     private func subtitle(folder: String) -> String {
         [folder, workspaceTitle, tab.workingDirectory?.path ?? tab.browserURL?.absoluteString ?? ""]
             .filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
+    /// Derives totals from the complete projection before selecting and ordering destinations.
     public static func items(in projection: RemoteWorkspaceProjection, query: String = "",
                              attentionOnly: Bool = false, prioritizeAttention: Bool = true,
                              recentTabIDs: [TabID] = []) -> [Self] {

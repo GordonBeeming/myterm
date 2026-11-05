@@ -81,11 +81,13 @@ final class SessionNavigationTests: XCTestCase {
         XCTAssertEqual(decoded.agentActivity, .awaitingInput)
     }
 
+    /// Filtering destinations must not turn folder membership into a tab or search-result count.
     func testFolderCountIncludesEmptyWorkspacesAndIsIndependentOfSearchAndFolderNames() throws {
         let wanted = tab("Wanted")
         let base = projection([wanted, tab("Other"), tab("Third")])
         let otherFolder = WorkspaceFolderID()
         let emptyID = WorkspaceID()
+        /// An empty group list contributes membership without creating a navigation row.
         func emptyWorkspace(_ id: WorkspaceID, folder: WorkspaceFolderID?) -> RemoteWorkspaceItem {
             RemoteWorkspaceItem(id: id, title: "Empty", folderID: folder, isPinned: false,
                                 color: nil, emoji: nil, groups: [])
