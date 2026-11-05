@@ -65,7 +65,7 @@ jobs:
   publish:
     needs: [source, macos, companion]
     if: >-
-      always() && needs.source.result == 'success' && needs.source.outputs.publish == 'true' &&
+      always() && !cancelled() && needs.source.result == 'success' && needs.source.outputs.publish == 'true' &&
       (needs.source.outputs.resume == 'true' || (needs.macos.result == 'success' && needs.companion.result == 'success'))
     runs-on: ubuntu-latest
     permissions:
