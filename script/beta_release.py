@@ -13,7 +13,7 @@ import urllib.request
 
 
 def github(path, payload=None):
-    """Return API JSON; only a missing release is an expected absence."""
+    """Return API JSON; only a missing Git tag is an expected absence."""
     request = urllib.request.Request(
         f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/{path}",
         data=None if payload is None else json.dumps(payload).encode("utf-8"),
