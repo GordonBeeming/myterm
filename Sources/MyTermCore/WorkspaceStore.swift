@@ -283,6 +283,7 @@ public final class WorkspaceStore {
     public var onPersistenceFailure: ((Error) -> Void)?
 
     private var isFlushScheduled = false
+    private var isPersistenceAbandoned = false
 
     /// How long a `.deferred` mutation may sit in memory before the file catches up.
     ///
@@ -312,7 +313,15 @@ public final class WorkspaceStore {
     /// A repair rewrites the state file, and the backup beside it is the only copy of what the file
     /// held before. When a needed backup preserved nothing, every later write would destroy state the
     /// user cannot get back, so the store stops writing for the rest of the session.
-    public var isPersistenceSuspended: Bool { loadReport.preservedNothing }
+    public var isPersistenceSuspended: Bool { loadReport.preservedNothing || isPersistenceAbandoned }
+
+    /// A failed app initialization can leave queued flushes retaining this store. They must not
+    /// overwrite a recovered configuration after the next initialization has started.
+    public func abandonPersistence() {
+        isPersistenceAbandoned = true
+        hasUnsavedChanges = false
+        onPersistenceFailure = nil
+    }
 
     public var migrationBackupURL: URL { persistenceURL.appendingPathExtension("v1-backup") }
     public var recoveryBackupURL: URL { persistenceURL.appendingPathExtension("recovery-backup") }

@@ -46,16 +46,24 @@ public struct AppVersion: Comparable, Hashable, Sendable, CustomStringConvertibl
 }
 
 public struct AppRelease: Equatable, Sendable {
+    public struct Asset: Equatable, Sendable {
+        public let url: URL
+        public let sha256: String
+        public init(url: URL, sha256: String) { self.url = url; self.sha256 = sha256 }
+    }
     public let version: AppVersion
     public let tag: String
     public let releaseURL: URL
     public let name: String?
+    public let asset: Asset?
+    public var channel: UpdateCheck.Channel { tag.hasSuffix("-beta") ? .beta : .stable }
 
-    public init(version: AppVersion, tag: String, releaseURL: URL, name: String? = nil) {
+    public init(version: AppVersion, tag: String, releaseURL: URL, name: String? = nil, asset: Asset? = nil) {
         self.version = version
         self.tag = tag
         self.releaseURL = releaseURL
         self.name = name
+        self.asset = asset
     }
 }
 
@@ -84,9 +92,10 @@ public enum UpdateCheckError: Error, Equatable, LocalizedError, Sendable {
 }
 
 public enum UpdateCheck {
-    public enum Channel: String, Sendable {
+    public enum Channel: String, CaseIterable, Codable, Sendable {
         case stable
         case beta
+        public var title: String { self == .stable ? "Stable" : "Beta" }
 
         /// Stable uses GitHub's latest release; beta considers completed prerelease artifacts.
         public var endpoint: URL {
@@ -105,7 +114,8 @@ public enum UpdateCheck {
     public static func availability(
         currentVersion: String,
         latestReleaseJSON data: Data,
-        channel: Channel = .stable
+        channel: Channel = .stable,
+        installedChannel: Channel? = nil
     ) throws -> UpdateAvailability {
         guard let current = AppVersion(currentVersion) else {
             throw UpdateCheckError.unreadableCurrentVersion(currentVersion)
@@ -147,7 +157,8 @@ public enum UpdateCheck {
             }
             release = newest
         }
-        return release.version > current ? .available(release) : .upToDate(current: current)
+        return (installedChannel.map { $0 != channel } ?? false) || release.version > current
+            ? .available(release) : .upToDate(current: current)
     }
 
     /// Read a single release while preserving GitHub API errors for the settings UI.
@@ -181,6 +192,17 @@ public enum UpdateCheck {
             throw UpdateCheckError.unreadableResponse(reason: "the response had no usable html_url")
         }
         let name = (payload["name"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-        return AppRelease(version: version, tag: tag, releaseURL: url, name: name)
+        let fileName = "myterm-\(version)-aarch64.dmg"
+        let expectedURL = "https://github.com/GordonBeeming/myterm/releases/download/\(tag)/\(fileName)"
+        let asset = (payload["assets"] as? [[String: Any]])?.compactMap { value -> AppRelease.Asset? in
+            guard value["name"] as? String == fileName,
+                  let address = value["browser_download_url"] as? String, address == expectedURL,
+                  let downloadURL = URL(string: address),
+                  let digest = value["digest"] as? String, digest.hasPrefix("sha256:") else { return nil }
+            let hash = String(digest.dropFirst(7))
+            guard hash.count == 64, hash.allSatisfy({ "0123456789abcdef".contains($0) }) else { return nil }
+            return AppRelease.Asset(url: downloadURL, sha256: hash)
+        }.first
+        return AppRelease(version: version, tag: tag, releaseURL: url, name: name, asset: asset)
     }
 }

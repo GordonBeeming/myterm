@@ -1,8 +1,11 @@
 import AppKit
+import MyTermCore
+import MyTermUpdating
 import MyTermPlatform
 import Observation
 import OSLog
 import SwiftUI
+import UniformTypeIdentifiers
 
 @main
 struct MyTermApp: App {
@@ -21,6 +24,9 @@ struct MyTermApp: App {
                 .frame(minWidth: 760, minHeight: 480)
                 .onAppear {
                     applicationDelegate.connect(startup: startup)
+                }
+                .onChange(of: startup.model != nil) { _, ready in
+                    if ready { applicationDelegate.connect(startup: startup) }
                 }
         }
         .defaultSize(width: 1180, height: 760)
@@ -51,6 +57,7 @@ final class MyTermApplicationDelegate: NSObject, NSApplicationDelegate {
     private weak var model: AppModel?
     private var startup: MyTermStartup?
     private var secondaryTask: Task<Void, Never>?
+    private var quitPreparationTask: Task<Void, Never>?
     private var secondaryURLs: [URL] = []
     private var confirmedInstanceReplacement = false
     private var hasVerifiedCallbackRouting = false
@@ -67,6 +74,12 @@ final class MyTermApplicationDelegate: NSObject, NSApplicationDelegate {
 
     func connect(startup: MyTermStartup) {
         self.startup = startup
+        if startup.needsInstalledRelaunch {
+            let pending = urlDispatcher.takePendingURLs() + secondaryURLs
+            secondaryURLs.removeAll()
+            Task { @MainActor in startup.restartInstalledCopy(urls: pending) }
+            return
+        }
         guard !startup.isSecondary else {
             secondaryURLs.append(contentsOf: urlDispatcher.takePendingURLs())
             presentSecondaryDecision()
@@ -129,6 +142,29 @@ final class MyTermApplicationDelegate: NSObject, NSApplicationDelegate {
                     NSApp.terminate(nil)
                     return
                 } catch {
+                    do {
+                        if Bundle.main.bundleIdentifier == ApplicationUpdate.bundleIdentifier,
+                           try !ApplicationUpdate.runningCodeMatchesFile(Bundle.main.bundleURL) {
+                            startup.restartInstalledCopy(urls: self.secondaryURLs)
+                            return
+                        }
+                        if let lease = try startup.coordinator.acquire() {
+                            try startup.becomeOwner(lease: lease)
+                            if startup.needsInstalledRelaunch {
+                                let pending = self.secondaryURLs + self.urlDispatcher.takePendingURLs()
+                                self.secondaryURLs.removeAll()
+                                startup.restartInstalledCopy(urls: pending)
+                                return
+                            }
+                            self.connect(startup: startup)
+                            self.urlDispatcher.dispatch(self.secondaryURLs)
+                            self.secondaryURLs.removeAll()
+                            return
+                        }
+                    } catch {
+                        startup.recordStartupFailure(error.localizedDescription)
+                        return
+                    }
                     let instanceError = error as? SingleInstanceError
                     if [.ownerStarting, .ownerUnresponsive, .ownerUnknown].contains(instanceError),
                        ProcessInfo.processInfo.systemUptime < startupGraceDeadline {
@@ -196,9 +232,33 @@ final class MyTermApplicationDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if confirmedInstanceReplacement { return .terminateNow }
+        if quitPreparationTask != nil { return .terminateLater }
         guard model?.shouldTerminateApplication() != false else {
             restoreWindowAfterCancelledTermination(sender)
             return .terminateCancel
+        }
+        if let model, model.updates.stagedUpdate != nil, model.updates.installation != .running,
+           !model.isRestartingAfterUpdate, !model.isSystemPoweringOff {
+            quitPreparationTask = Task { @MainActor [weak self] in
+                defer { self?.quitPreparationTask = nil }
+                do {
+                    guard let helper = try await model.prepareUpdateQuitProcess(relaunch: false) else {
+                        sender.reply(toApplicationShouldTerminate: false)
+                        return
+                    }
+                    helper.standardInput = FileHandle.nullDevice
+                    helper.standardOutput = FileHandle.nullDevice
+                    helper.standardError = FileHandle.nullDevice
+                    try helper.run()
+                    model.isRestartingAfterUpdate = true
+                    sender.reply(toApplicationShouldTerminate: true)
+                } catch {
+                    model.updateRestartError = error.localizedDescription
+                    sender.reply(toApplicationShouldTerminate: false)
+                    self?.restoreWindowAfterCancelledTermination(sender)
+                }
+            }
+            return .terminateLater
         }
         return .terminateNow
     }
@@ -290,6 +350,113 @@ final class MyTermStartup {
     let coordinator: SingleInstanceCoordinator
     private(set) var lease: SingleInstanceLease?
     private let supportDirectory: URL
+    private(set) var needsInstalledRelaunch = false
+    private var isRelaunchScheduled = false
+    func recordStartupFailure(_ message: String) { errorDescription = message }
+
+    /// An executable already starting during a swap must never load data using the new bundle's metadata.
+    func restartInstalledCopy(urls: [URL] = []) {
+        guard !isRelaunchScheduled else { return }
+        isRelaunchScheduled = true
+        do {
+            let app = Bundle.main.bundleURL
+            try ApplicationUpdate.verifyInstalledIdentity(app)
+            let agent = app.appendingPathComponent("Contents/MacOS/MyTermUpdateAgent")
+            try ApplicationUpdate.verifySignature(agent, identifier: ApplicationUpdate.bundleIdentifier + ".update-agent")
+            let helper = Process()
+            helper.executableURL = agent
+            helper.arguments = ["--open-after-exit", String(ProcessInfo.processInfo.processIdentifier), app.path]
+                + urls.filter { $0.scheme != nil }.map(\.absoluteString)
+            helper.standardInput = FileHandle.nullDevice
+            helper.standardOutput = FileHandle.nullDevice
+            helper.standardError = FileHandle.nullDevice
+            try helper.run()
+            NSApp.terminate(nil)
+            if helper.isRunning { helper.terminate() }
+        } catch {
+            isRelaunchScheduled = false
+            errorDescription = "The installed app changed. Close and reopen it to finish the update. \(error.localizedDescription)"
+        }
+    }
+    var isRecoveringToStable = false
+    var recoveryUpdate: UpdateController?
+    var canRecoverToStable: Bool {
+        Bundle.main.object(forInfoDictionaryKey: "MyTermReleaseChannel") as? String == "beta"
+    }
+
+    /// The channel escape hatch does not require a working beta AppModel.
+    func recoverToStable() {
+        guard !isRecoveringToStable else { return }
+        let alert = NSAlert()
+        alert.messageText = "Return to stable"
+        alert.informativeText = "Choose the configuration for stable. If the beta configuration cannot load, your last stable snapshot is restored."
+        alert.addButton(withTitle: "Restore Stable Configuration")
+        alert.addButton(withTitle: "Try Beta Configuration")
+        alert.addButton(withTitle: "Cancel")
+        let response = alert.runModal()
+        guard response == .alertFirstButtonReturn || response == .alertSecondButtonReturn else { return }
+        isRecoveringToStable = true
+        Task { @MainActor in
+            defer { isRecoveringToStable = false }
+            do {
+                guard let acquired = try coordinator.acquire() else {
+                    throw ApplicationUpdateError.invalid("Another myterm instance is using this configuration. Close it before recovery.")
+                }
+                defer { acquired.stop() }
+                let directory = MyTermChannel.active.persistenceURL(applicationSupportDirectory: supportDirectory).deletingLastPathComponent()
+                let updater = UpdateController(configurationDirectory: directory)
+                recoveryUpdate = updater
+                updater.selectChannel(.stable)
+                updater.stableConfigurationChoice = response == .alertFirstButtonReturn ? .restoreStable : .tryBeta
+                guard let release = (await updater.check()).release else {
+                    throw ApplicationUpdateError.invalid("Could not find a stable recovery update. Check your connection and retry.")
+                }
+                await updater.install(release: release)
+                guard updater.canRestartAfterUpdate else {
+                    throw ApplicationUpdateError.invalid("Stable recovery could not be prepared: \(updater.installation)")
+                }
+                guard let helper = try await updater.preparedRestartProcess() else {
+                    throw ApplicationUpdateError.invalid("The stable recovery installer was not prepared.")
+                }
+                helper.standardInput = FileHandle.nullDevice
+                helper.standardOutput = FileHandle.nullDevice
+                helper.standardError = FileHandle.nullDevice
+                try helper.run()
+                NSApp.terminate(nil)
+                if helper.isRunning { helper.terminate() }
+            } catch { errorDescription = error.localizedDescription }
+        }
+    }
+
+    func showConfigurationFolder() {
+        let directory = MyTermChannel.active.persistenceURL(applicationSupportDirectory: supportDirectory).deletingLastPathComponent()
+        NSWorkspace.shared.open(directory)
+    }
+
+    /// Recovery is available even when configuration failure prevented construction of AppModel.
+    func restoreConfigurationBackup() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.directoryURL = MyTermChannel.active.persistenceURL(applicationSupportDirectory: supportDirectory).deletingLastPathComponent()
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose a saved stable configuration snapshot or workspace JSON backup. The current bytes will be preserved first."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            guard let acquired = try coordinator.acquire() else {
+                errorDescription = "Another myterm instance is using this configuration. Close it before restoring a backup."
+                return
+            }
+            do {
+                let directory = MyTermChannel.active.persistenceURL(applicationSupportDirectory: supportDirectory).deletingLastPathComponent()
+                let installed = UpdateCheck.Channel(rawValue: Bundle.main.object(forInfoDictionaryKey: "MyTermReleaseChannel") as? String ?? "stable") ?? .stable
+                try ChannelConfigurationStore(directory: directory, preferencesDomain: MyTermChannel.active.bundleIdentifier)
+                    .restoreBackup(from: url, selectedChannel: installed)
+                try becomeOwner(lease: acquired)
+                model?.errorDescription = "Restored the selected configuration backup. The previous configuration was preserved."
+            } catch { acquired.stop(); throw error }
+        } catch { errorDescription = error.localizedDescription }
+    }
 
     init() {
         let channel = MyTermChannel.active
@@ -317,6 +484,23 @@ final class MyTermStartup {
 
     func becomeOwner(lease: SingleInstanceLease) throws {
         do {
+            if Bundle.main.bundleIdentifier == ApplicationUpdate.bundleIdentifier,
+               try !ApplicationUpdate.runningCodeMatchesFile(Bundle.main.bundleURL) {
+                lease.stop()
+                needsInstalledRelaunch = true
+                errorDescription = "Opening the newly installed app…"
+                return
+            }
+            let directory = MyTermChannel.active.persistenceURL(applicationSupportDirectory: supportDirectory).deletingLastPathComponent()
+            let releaseChannel = UpdateCheck.Channel(rawValue: Bundle.main.object(forInfoDictionaryKey: "MyTermReleaseChannel") as? String ?? "stable") ?? .stable
+            var updateNotices: [String] = []
+            let updateError = directory.appendingPathComponent("update-install-error.txt")
+            if FileManager.default.fileExists(atPath: updateError.path) {
+                let handle = try FileHandle(forReadingFrom: updateError)
+                defer { try? handle.close() }
+                updateNotices.append(String(decoding: try handle.read(upToCount: 65_536) ?? Data(), as: UTF8.self))
+                try FileManager.default.removeItem(at: updateError)
+            }
             // Refresh before restored terminals can start an agent and load its hooks.
             var hookFailures: [String] = []
             for target in AgentHookTarget.all {
@@ -326,12 +510,30 @@ final class MyTermStartup {
                 }
             }
             BrowserContextArtifacts.pruneExpired()
-            let instance = try AppModel(channel: MyTermChannel.active, applicationSupportDirectory: supportDirectory)
-            if !hookFailures.isEmpty { instance.errorDescription = hookFailures.joined(separator: "\n") }
+            let instance: AppModel
+            if releaseChannel == .stable {
+                let config = ChannelConfigurationStore(directory: directory, preferencesDomain: MyTermChannel.active.bundleIdentifier)
+                let (loaded, notice) = try config.loadStable {
+                    try AppModel(channel: MyTermChannel.active, applicationSupportDirectory: supportDirectory)
+                }
+                instance = loaded
+                if let notice { updateNotices.append(notice) }
+            } else {
+                instance = try AppModel(channel: MyTermChannel.active, applicationSupportDirectory: supportDirectory)
+            }
+            let notices = updateNotices + hookFailures
+            if !notices.isEmpty { instance.errorDescription = notices.joined(separator: "\n") }
             self.lease = lease
             model = instance
             isSecondary = false
             errorDescription = nil
+            if Bundle.main.bundleIdentifier == ApplicationUpdate.bundleIdentifier {
+                let app = Bundle.main.bundleURL
+                Task.detached {
+                    do { try await Task.sleep(for: .seconds(5)) } catch { return }
+                    ApplicationUpdate.pruneCompletedUpdates(for: app)
+                }
+            }
         } catch {
             lease.stop()
             errorDescription = error.localizedDescription

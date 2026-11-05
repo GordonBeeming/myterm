@@ -37,12 +37,26 @@ struct MyTermRootView: View {
             WorkspaceContentView(model: model)
                 .environment(\.agentIndicatorAppearance, model.agentIndicatorAppearance)
         } else {
-            ContentUnavailableView(
-                "MyTerm could not start",
-                systemImage: "exclamationmark.triangle",
-                description: Text(startup.errorDescription ?? "An unknown startup error occurred.")
-            )
-            .padding()
+            VStack {
+                ContentUnavailableView(
+                    "MyTerm could not start",
+                    systemImage: "exclamationmark.triangle",
+                    description: Text(startup.errorDescription ?? "An unknown startup error occurred.")
+                )
+                HStack {
+                    Button("Restore Configuration Backup…") { startup.restoreConfigurationBackup() }
+                    Button("Show Configuration Folder") { startup.showConfigurationFolder() }
+                    if startup.canRecoverToStable {
+                        Button("Return to Stable…") { startup.recoverToStable() }
+                    }
+                }
+                .disabled(startup.isRecoveringToStable)
+                if startup.isRecoveringToStable {
+                    ProgressView("Preparing stable recovery…")
+                    Text(startup.recoveryUpdate?.installationOutput ?? "Checking for a stable release…")
+                        .font(.caption).lineLimit(3)
+                }
+            }.padding()
         }
     }
 }

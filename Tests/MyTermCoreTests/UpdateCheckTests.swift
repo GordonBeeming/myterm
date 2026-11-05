@@ -32,6 +32,20 @@ final class AppVersionTests: XCTestCase {
 }
 
 final class UpdateCheckTests: XCTestCase {
+    /// A channel switch is intentional even when beta's numeric namespace sorts below stable.
+    func testChannelSwitchOffersTargetDespiteLowerVersion() throws {
+        let beta = Data("""
+        [{"tag_name":"v0.0.119-beta","prerelease":true,"draft":false,
+        "html_url":"https://github.com/GordonBeeming/myterm/releases/tag/v0.0.119-beta",
+        "assets":[{"name":"myterm-0.0.119-aarch64.dmg"}]}]
+        """.utf8)
+        XCTAssertNotNil(try UpdateCheck.availability(currentVersion: "0.68", latestReleaseJSON: beta,
+                                                      channel: .beta, installedChannel: .stable).release)
+        XCTAssertNil(try UpdateCheck.availability(currentVersion: "0.0.120", latestReleaseJSON: beta,
+                                                   channel: .beta, installedChannel: .beta).release)
+        XCTAssertNotNil(try UpdateCheck.availability(currentVersion: "9.0", latestReleaseJSON: releaseJSON(tag: "v0.68"),
+                                                      channel: .stable, installedChannel: .beta).release)
+    }
     func testBetaSelectsNewestCompletedBetaAndIgnoresStableDraftAndEmptyReleases() throws {
         let releases: [[String: Any]] = [
             ["tag_name": "v9.0", "prerelease": false, "draft": false],

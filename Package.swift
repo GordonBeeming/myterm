@@ -14,6 +14,7 @@ let package = Package(
         .library(name: "MyTermUI", targets: ["MyTermUI"]),
         .executable(name: "MyTerm", targets: ["MyTerm"]),
         .executable(name: "MyTermSessionHost", targets: ["MyTermSessionHost"]),
+        .executable(name: "MyTermUpdateAgent", targets: ["MyTermUpdateAgent"]),
     ],
     dependencies: [
         .package(path: "Vendor/SwiftTerm"),
@@ -21,6 +22,8 @@ let package = Package(
     ],
     targets: [
         .target(name: "MyTermCore"),
+        .target(name: "MyTermUpdating", dependencies: ["MyTermCore"]),
+        .executableTarget(name: "MyTermUpdateAgent", dependencies: ["MyTermCore", "MyTermUpdating"]),
         .target(name: "MyTermContinuity", dependencies: ["MyTermCore"]),
         .executableTarget(name: "MyTermSessionHost", dependencies: [
             "MyTermContinuity", .product(name: "SwiftTerm", package: "SwiftTerm"),
@@ -38,7 +41,7 @@ let package = Package(
         .executableTarget(
             name: "MyTerm",
             dependencies: [
-                "MyTermCore", "MyTermPlatform", "MyTermUI",
+                "MyTermCore", "MyTermPlatform", "MyTermUI", "MyTermUpdating",
                 .product(name: "MyTermRemote", package: "MyTermRemote"),
             ]
         ),
@@ -57,7 +60,7 @@ let package = Package(
         ),
         .testTarget(
             name: "MyTermTests",
-            dependencies: ["MyTerm"]
+            dependencies: ["MyTerm", "MyTermUpdating", "MyTermUpdateAgent"]
         ),
     ]
 )

@@ -1,5 +1,6 @@
 import Foundation
 import MyTermCore
+import MyTermUpdating
 import Observation
 
 /// Checks GitHub for a newer release and works out how this copy should be upgraded.
@@ -28,6 +29,7 @@ final class UpdateController {
         case homebrew(command: String)
         /// Anything else — a DMG drag, or a build from source. Send them to the release.
         case releasePage
+        case native
     }
 
     enum Installation: Equatable {
@@ -56,6 +58,8 @@ final class UpdateController {
     private static let lastCheckedAtKey = "updates.lastCheckedAt"
     private static let knownReleaseTagKey = "updates.knownRelease.tag"
     private static let knownReleaseURLKey = "updates.knownRelease.url"
+    private static let knownAssetURLKey = "updates.knownRelease.assetURL"
+    private static let knownAssetSHAKey = "updates.knownRelease.assetSHA256"
     private static let skippedVersionKey = "updates.skippedVersion"
 
     private(set) var status: Status = .idle
@@ -67,16 +71,37 @@ final class UpdateController {
     var automaticallyChecks: Bool {
         didSet {
             guard automaticallyChecks != oldValue else { return }
-            defaults.set(automaticallyChecks, forKey: Self.automaticChecksKey)
+            preferenceRoot.set(automaticallyChecks, forKey: Self.automaticChecksKey)
             if automaticallyChecks { startPolling() } else { stopPolling() }
         }
     }
 
     let currentVersion: String
-    private let releaseChannel: UpdateCheck.Channel
+    let installedChannel: UpdateCheck.Channel
+    private(set) var selectedChannel: UpdateCheck.Channel
+    var stableConfigurationChoice: ChannelConfigurationStore.StableChoice = .restoreStable {
+        didSet { preferenceRoot.set(stableConfigurationChoice.rawValue, forKey: "updates.stableConfigurationChoice") }
+    }
+    private(set) var stagedUpdate: ApplicationUpdatePlan?
+    private(set) var isPreparingRestart = false
+    private let bundleURL: URL
+    private let configurationDirectory: URL
+    private let preferencesDomain: String
+    private let preferenceRoot: UserDefaults
+    private let suiteName: String
+    private let usesInjectedDefaults: Bool
+    private var checkGeneration = 0
+    var needsStableConfigurationChoice: Bool { installedChannel == .beta && selectedChannel == .stable }
+    var hasStableConfiguration: Bool {
+        ChannelConfigurationStore(directory: configurationDirectory, preferencesDomain: preferencesDomain).hasStableSnapshot
+    }
+    var supportsInAppInstallation: Bool {
+        if case .native = upgradeRoute { return true }
+        return selectedChannel == .stable && upgradeCommand != nil
+    }
     private let upgradeRoute: UpgradeRoute
     private let fetch: @Sendable (URL) async throws -> Data
-    private let defaults: UserDefaults
+    private var defaults: UserDefaults
     private let now: () -> Date
     private let poll = PollTimer()
     private var inFlightCheck: Task<Status, Never>?
@@ -93,14 +118,29 @@ final class UpdateController {
         now: @escaping () -> Date = Date.init,
         fetch: (@Sendable (URL) async throws -> Data)? = nil,
         runUpgrade: UpgradeRunner? = nil,
-        installedVersion: (@MainActor () throws -> String)? = nil
+        installedVersion: (@MainActor () throws -> String)? = nil,
+        bundleURL: URL = Bundle.main.bundleURL,
+        configurationDirectory: URL? = nil
     ) {
-        let suiteName = (environment["MYTERM_USER_DEFAULTS_SUITE"] ?? channel.bundleIdentifier)
-            + (releaseChannel == .beta ? ".beta-updates" : "")
+        let injectedDefaults = defaults != nil
+        let baseSuite = environment["MYTERM_USER_DEFAULTS_SUITE"] ?? channel.bundleIdentifier
+        let root = defaults ?? UserDefaults(suiteName: baseSuite) ?? .standard
+        let selected = root.string(forKey: "updates.selectedChannel").flatMap(UpdateCheck.Channel.init) ?? releaseChannel
+        let suiteName = baseSuite + (selected == .beta ? ".beta-updates" : "")
         let defaults = defaults ?? UserDefaults(suiteName: suiteName) ?? .standard
+        self.preferenceRoot = root
+        self.stableConfigurationChoice = root.string(forKey: "updates.stableConfigurationChoice")
+            .flatMap(ChannelConfigurationStore.StableChoice.init) ?? .restoreStable
+        self.suiteName = baseSuite
+        self.usesInjectedDefaults = injectedDefaults
         self.defaults = defaults
         self.currentVersion = currentVersion
-        self.releaseChannel = releaseChannel
+        self.installedChannel = releaseChannel
+        self.selectedChannel = selected
+        self.bundleURL = bundleURL
+        self.configurationDirectory = configurationDirectory ?? FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/myterm", isDirectory: true)
+        self.preferencesDomain = channel.bundleIdentifier
         self.now = now
         self.runUpgrade = runUpgrade ?? Self.runHeadlessUpgrade
         self.readInstalledVersion = installedVersion ?? {
@@ -120,14 +160,94 @@ final class UpdateController {
             request.timeoutInterval = 15
             return try await URLSession.shared.data(for: request).0
         }
-        self.upgradeRoute = releaseChannel == .beta ? .releasePage : (upgradeRoute ?? Self.detectUpgradeRoute())
-        automaticallyChecks = defaults.object(forKey: Self.automaticChecksKey) as? Bool ?? true
+        if releaseChannel == .beta, let upgradeRoute, case .homebrew = upgradeRoute {
+            self.upgradeRoute = .releasePage
+        } else {
+            self.upgradeRoute = upgradeRoute ?? Self.detectUpgradeRoute(bundleURL: bundleURL)
+        }
+        automaticallyChecks = root.object(forKey: Self.automaticChecksKey) as? Bool ?? true
         lastCheckedAt = defaults.object(forKey: Self.lastCheckedAtKey) as? Date
         skippedVersion = defaults.string(forKey: Self.skippedVersionKey).flatMap(AppVersion.init)
         // Only the check timestamp used to survive a relaunch, so a known update went quiet until
         // the next one fell due — up to a day of the app knowing and not saying.
-        status = Self.restoredStatus(currentVersion: currentVersion, defaults: defaults, channel: releaseChannel)
+        status = Self.restoredStatus(currentVersion: currentVersion, defaults: defaults, channel: selected, installedChannel: releaseChannel)
+        if let path = root.string(forKey: "updates.stagedManifest") {
+            do {
+                let plan = try JSONDecoder().decode(ApplicationUpdatePlan.self, from: Data(contentsOf: URL(fileURLWithPath: path)))
+                if plan.channel == releaseChannel, AppVersion(plan.version) == AppVersion(currentVersion) {
+                    root.removeObject(forKey: "updates.stagedManifest")
+                } else {
+                try ApplicationUpdate.validatePlan(plan, manifest: URL(fileURLWithPath: path))
+                guard !FileManager.default.fileExists(atPath: plan.directory.appendingPathComponent("superseded").path) else {
+                    throw ApplicationUpdateError.invalid("The previously prepared update was superseded. Check for updates again.")
+                }
+                guard plan.target == bundleURL, plan.sourceChannel == releaseChannel,
+                      plan.channel == selected, plan.manifestURL.path == path else {
+                    throw ApplicationUpdateError.invalid("The prepared update belongs to a different app or channel.")
+                }
+                stagedUpdate = plan
+                verifiedInstalledVersion = AppVersion(plan.version)
+                installation = .installed
+                }
+            } catch {
+                root.removeObject(forKey: "updates.stagedManifest")
+                installation = .failed("Could not restore the prepared update: \(error.localizedDescription)")
+            }
+        }
         if automaticallyChecks { startPolling() }
+    }
+
+    /// Channel changes discard in-flight responses and caches from the previous feed.
+    func selectChannel(_ channel: UpdateCheck.Channel) {
+        guard installation != .running, !isPreparingRestart, channel != selectedChannel else { return }
+        checkGeneration += 1
+        inFlightCheck?.cancel()
+        inFlightCheck = nil
+        if let stagedUpdate {
+            do {
+                try ApplicationUpdate.validatePlan(stagedUpdate, manifest: stagedUpdate.manifestURL)
+                try ApplicationUpdate.retirePreparedUpdate(stagedUpdate)
+            }
+            catch { installation = .failed("Could not discard the staged update: \(error.localizedDescription)"); return }
+        }
+        stagedUpdate = nil
+        preferenceRoot.removeObject(forKey: "updates.stagedManifest")
+        verifiedInstalledVersion = nil
+        installation = .ready
+        selectedChannel = channel
+        if needsStableConfigurationChoice && !hasStableConfiguration { stableConfigurationChoice = .tryBeta }
+        preferenceRoot.set(channel.rawValue, forKey: "updates.selectedChannel")
+        if !usesInjectedDefaults {
+            defaults = UserDefaults(suiteName: suiteName + (channel == .beta ? ".beta-updates" : "")) ?? .standard
+        }
+        lastCheckedAt = nil
+        skippedVersion = nil
+        status = .idle
+        defaults.removeObject(forKey: Self.lastCheckedAtKey)
+        defaults.removeObject(forKey: Self.skippedVersionKey)
+        forgetKnownRelease()
+    }
+
+    func preparedRestartProcess(relaunch: Bool = true) async throws -> Process? {
+        guard !isPreparingRestart else { throw ApplicationUpdateError.invalid("Restart verification is already in progress.") }
+        isPreparingRestart = true
+        defer { isPreparingRestart = false }
+        try validateRestart()
+        guard var plan = stagedUpdate else { return nil }
+        let verificationPlan = plan
+        try await Task.detached {
+            try ApplicationUpdate.validate(verificationPlan.staged, version: verificationPlan.version, channel: verificationPlan.channel)
+            try ApplicationUpdate.verifySignature(verificationPlan.agentURL, identifier: ApplicationUpdate.bundleIdentifier + ".update-agent")
+        }.value
+        try Task.checkCancellation()
+        plan.stableChoice = needsStableConfigurationChoice ? stableConfigurationChoice : nil
+        plan.relaunch = relaunch
+        try ApplicationUpdate.validatePlan(plan, manifest: plan.manifestURL)
+        try plan.save()
+        let helper = Process()
+        helper.executableURL = plan.agentURL
+        helper.arguments = [plan.manifestURL.path, String(ProcessInfo.processInfo.processIdentifier)]
+        return helper
     }
 
     /// The release the sidebar badge advertises. A skipped version stays in `status`, so "Check for
@@ -152,19 +272,31 @@ final class UpdateController {
         switch upgradeRoute {
         case .homebrew: "Update Now"
         case .releasePage: "Open the Release"
+        case .native: "Update Now"
         }
     }
 
     var upgradeCommand: String? {
-        guard case .homebrew(let command) = upgradeRoute else { return nil }
+        guard selectedChannel == .stable, case .homebrew(let command) = upgradeRoute else { return nil }
         return command
     }
 
     var canRestartAfterUpdate: Bool {
-        installation != .running && verifiedInstalledVersion != nil
+        installation != .running && !isPreparingRestart && verifiedInstalledVersion != nil
     }
 
     func validateRestart() throws {
+        if let stagedUpdate {
+            guard !FileManager.default.fileExists(atPath: stagedUpdate.directory.appendingPathComponent("superseded").path) else {
+                throw ApplicationUpdateError.invalid("The prepared update was superseded. Check for updates again.")
+            }
+            try ApplicationUpdate.validatePlan(stagedUpdate, manifest: stagedUpdate.manifestURL)
+            try ApplicationUpdate.validateSource(stagedUpdate)
+            guard !needsStableConfigurationChoice || stableConfigurationChoice == .tryBeta || hasStableConfiguration else {
+                throw ApplicationUpdateError.invalid("A stable configuration snapshot is required before returning to stable.")
+            }
+            return
+        }
         guard let verifiedInstalledVersion,
               let diskVersion = AppVersion(try readInstalledVersion()), diskVersion >= verifiedInstalledVersion else {
             throw NSError(domain: "MyTermUpdate", code: 1, userInfo: [
@@ -175,22 +307,66 @@ final class UpdateController {
 
     func installation(for release: AppRelease) -> Installation {
         if installation == .running { return .running }
-        if let verifiedInstalledVersion, verifiedInstalledVersion >= release.version { return .installed }
+        if let stagedUpdate, stagedUpdate.version == release.version.description, stagedUpdate.channel == release.channel {
+            return .installed
+        }
+        if stagedUpdate == nil, let verifiedInstalledVersion, verifiedInstalledVersion >= release.version { return .installed }
         return installation == .installed ? .ready : installation
     }
 
     /// Installation is independent of checking: a timer cannot erase progress or enable a second brew.
     func install(release requestedRelease: AppRelease? = nil) async {
-        guard installation != .running, let command = upgradeCommand else { return }
-        guard let release = requestedRelease ?? status.release else {
+        guard installation != .running, supportsInAppInstallation else { return }
+        guard var release = requestedRelease ?? status.release else {
             installation = .failed("Check for an available update before installing.")
             return
         }
+        guard release.channel == selectedChannel else {
+            installation = .failed("That update belongs to a different release channel. Check for updates again.")
+            return
+        }
         guard installation(for: release) != .installed else { return }
+        if needsStableConfigurationChoice && stableConfigurationChoice == .restoreStable && !hasStableConfiguration {
+            installation = .failed("No stable configuration snapshot is available. Keep this app installed and restore a stable backup before switching.")
+            return
+        }
         installation = .running
         outputData = Data()
         installationOutput = ""
         do {
+            if case .native = upgradeRoute {
+                if release.asset == nil {
+                    let data = try await fetch(release.channel.endpoint)
+                    guard let refreshed = try UpdateCheck.availability(currentVersion: currentVersion,
+                        latestReleaseJSON: data, channel: release.channel, installedChannel: installedChannel).release,
+                          refreshed.tag == release.tag, refreshed.asset != nil else {
+                        throw ApplicationUpdateError.invalid("The release changed or its verified download is not ready. Check for updates again.")
+                    }
+                    release = refreshed
+                    remember(refreshed)
+                }
+                if installedChannel == .stable, release.channel == .beta {
+                    try ChannelConfigurationStore(directory: configurationDirectory, preferencesDomain: preferencesDomain).checkStableCapture()
+                }
+                let prepared = try await ApplicationUpdate.prepare(release: release, target: bundleURL,
+                    sourceChannel: installedChannel, sourceVersion: currentVersion, configurationDirectory: configurationDirectory,
+                    preferencesDomain: preferencesDomain) { [weak self] message in
+                        await self?.appendOutput(Data((message + "\n").utf8))
+                    }
+                do {
+                    if let previous = stagedUpdate { try ApplicationUpdate.retirePreparedUpdate(previous) }
+                } catch {
+                    do { try ApplicationUpdate.retirePreparedUpdate(prepared) }
+                    catch { installationOutput += "\nCould not discard unused prepared update: \(error.localizedDescription)" }
+                    throw error
+                }
+                stagedUpdate = prepared
+                verifiedInstalledVersion = release.version
+                preferenceRoot.set(stagedUpdate?.manifestURL.path, forKey: "updates.stagedManifest")
+                installation = .installed
+                return
+            }
+            guard let command = upgradeCommand else { throw ApplicationUpdateError.invalid("No installer is available.") }
             let code = try await runUpgrade(command) { [weak self] data in
                 await self?.appendOutput(data)
             }
@@ -252,22 +428,27 @@ final class UpdateController {
     /// whichever response landed last would win — which is not necessarily the one asked for last.
     @discardableResult
     func check() async -> Status {
+        let generation = checkGeneration
         if let inFlightCheck { return await inFlightCheck.value }
         let task = Task { @MainActor in await performCheck() }
         inFlightCheck = task
         let result = await task.value
-        inFlightCheck = nil
+        if checkGeneration == generation { inFlightCheck = nil }
         return result
     }
 
     private func performCheck() async -> Status {
+        let generation = checkGeneration
+        let channel = selectedChannel
         status = .checking
         do {
-            let data = try await fetch(releaseChannel.endpoint)
+            let data = try await fetch(channel.endpoint)
+            guard generation == checkGeneration, channel == selectedChannel else { return status }
             let availability = try UpdateCheck.availability(
                 currentVersion: currentVersion,
                 latestReleaseJSON: data,
-                channel: releaseChannel
+                channel: channel,
+                installedChannel: installedChannel
             )
             switch availability {
             case .upToDate(let version):
@@ -278,6 +459,7 @@ final class UpdateController {
                 remember(release)
             }
         } catch {
+            guard generation == checkGeneration else { return status }
             status = .failed((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
         }
         // Record the attempt either way. A failed check that immediately retried on every poll
@@ -295,15 +477,19 @@ final class UpdateController {
     private func remember(_ release: AppRelease) {
         defaults.set(release.tag, forKey: Self.knownReleaseTagKey)
         defaults.set(release.releaseURL.absoluteString, forKey: Self.knownReleaseURLKey)
+        defaults.set(release.asset?.url.absoluteString, forKey: Self.knownAssetURLKey)
+        defaults.set(release.asset?.sha256, forKey: Self.knownAssetSHAKey)
     }
 
     private func forgetKnownRelease() {
         defaults.removeObject(forKey: Self.knownReleaseTagKey)
         defaults.removeObject(forKey: Self.knownReleaseURLKey)
+        defaults.removeObject(forKey: Self.knownAssetURLKey)
+        defaults.removeObject(forKey: Self.knownAssetSHAKey)
     }
 
     private static func restoredStatus(
-        currentVersion: String, defaults: UserDefaults, channel: UpdateCheck.Channel
+        currentVersion: String, defaults: UserDefaults, channel: UpdateCheck.Channel, installedChannel: UpdateCheck.Channel
     ) -> Status {
         guard let tag = defaults.string(forKey: knownReleaseTagKey),
               tag.hasSuffix("-beta") == (channel == .beta),
@@ -311,8 +497,15 @@ final class UpdateController {
               let address = defaults.string(forKey: knownReleaseURLKey),
               let url = URL(string: address),
               let current = AppVersion(currentVersion),
-              version > current else { return .idle }
-        return .available(AppRelease(version: version, tag: tag, releaseURL: url))
+              version > current || channel != installedChannel else { return .idle }
+        let asset: AppRelease.Asset?
+        let expected = "https://github.com/GordonBeeming/myterm/releases/download/\(tag)/myterm-\(version)-aarch64.dmg"
+        if let address = defaults.string(forKey: knownAssetURLKey), address == expected,
+           let download = URL(string: address), let digest = defaults.string(forKey: knownAssetSHAKey),
+           digest.count == 64, digest.allSatisfy({ "0123456789abcdef".contains($0) }) {
+            asset = .init(url: download, sha256: digest)
+        } else { asset = nil }
+        return .available(AppRelease(version: version, tag: tag, releaseURL: url, asset: asset))
     }
 
     private func startPolling() {
@@ -329,6 +522,10 @@ final class UpdateController {
         bundleURL: URL = Bundle.main.bundleURL,
         fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
     ) -> UpgradeRoute {
+        if Bundle(url: bundleURL)?.bundleIdentifier == ApplicationUpdate.bundleIdentifier,
+           fileExists(bundleURL.appendingPathComponent("Contents/MacOS/MyTermUpdateAgent").path) {
+            return .native
+        }
         // Homebrew moves the app into /Applications and keeps its bookkeeping in the Caskroom.
         // Both have to be true: a Caskroom entry alone could belong to a copy that was since
         // replaced by a manual download.
