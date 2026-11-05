@@ -3,6 +3,10 @@ name: Build and Test
 permissions:
   contents: read
 
+concurrency:
+  group: build-and-test-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 on:
   pull_request:
     branches: [main]

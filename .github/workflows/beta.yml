@@ -18,6 +18,10 @@ jobs:
   source:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    # Draft releases require a write token to be visible; detect interrupted
+    # publication before spending another macOS build and TestFlight upload.
+    permissions:
+      contents: write
     outputs:
       sha: ${{ steps.source.outputs.sha }}
       version: ${{ steps.source.outputs.version }}
