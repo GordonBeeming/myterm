@@ -12,6 +12,7 @@ struct MyTermApp: App {
     @NSApplicationDelegateAdaptor(MyTermApplicationDelegate.self) private var applicationDelegate
     @State private var startup: MyTermStartup
 
+    /// Create the startup coordinator and hand it to the application delegate.
     init() {
         let startup = MyTermStartup()
         _startup = State(initialValue: startup)
@@ -72,6 +73,7 @@ final class MyTermApplicationDelegate: NSObject, NSApplicationDelegate {
         super.init()
     }
 
+    /// Route stale or secondary launches, or connect the owning model and its lease handlers.
     func connect(startup: MyTermStartup) {
         self.startup = startup
         if startup.needsInstalledRelaunch {
@@ -126,6 +128,7 @@ final class MyTermApplicationDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Resolve a competing app launch without letting two instances load and save the same profile.
     private func presentSecondaryDecision() {
         guard secondaryTask == nil, let startup, startup.isSecondary else { return }
         secondaryTask = Task { @MainActor [weak self] in
@@ -485,6 +488,7 @@ final class MyTermStartup {
         } catch { errorDescription = error.localizedDescription }
     }
 
+    /// Resolve this installation’s profile and acquire ownership before constructing its application model.
     init() {
         let channel = MyTermChannel.active
         if let override = ProcessInfo.processInfo.environment["MYTERM_APPLICATION_SUPPORT_DIRECTORY"], !override.isEmpty {

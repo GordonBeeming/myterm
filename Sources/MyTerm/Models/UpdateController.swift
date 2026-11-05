@@ -233,6 +233,7 @@ final class UpdateController {
         forgetKnownRelease()
     }
 
+    /// Verify the staged bundle off the UI thread and prepare its private detached installation process.
     func preparedRestartProcess(relaunch: Bool = true) async throws -> Process? {
         guard !isPreparingRestart else { throw ApplicationUpdateError.invalid("Restart verification is already in progress.") }
         isPreparingRestart = true
@@ -298,6 +299,7 @@ final class UpdateController {
         installation != .running && !isPreparingRestart && verifiedInstalledVersion != nil
     }
 
+    /// Check the current source, staged handoff and recovery choice before allowing an update restart.
     func validateRestart() throws {
         if let stagedUpdate {
             guard !FileManager.default.fileExists(atPath: stagedUpdate.directory.appendingPathComponent("superseded").path) else {
@@ -318,6 +320,7 @@ final class UpdateController {
         }
     }
 
+    /// Derive the displayed state for this release without confusing it with a different staged update.
     func installation(for release: AppRelease) -> Installation {
         if installation == .running { return .running }
         if let stagedUpdate, stagedUpdate.version == release.version.description, stagedUpdate.channel == release.channel {
@@ -536,6 +539,7 @@ final class UpdateController {
         poll.stop()
     }
 
+    /// Prefer the embedded native helper for production bundles, then the owning Homebrew cask or release page.
     static func detectUpgradeRoute(
         bundleURL: URL = Bundle.main.bundleURL,
         fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }

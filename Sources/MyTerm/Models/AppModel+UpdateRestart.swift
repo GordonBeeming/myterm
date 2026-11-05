@@ -86,6 +86,7 @@ extension AppModel {
         updateRestartTask = nil
     }
 
+    /// Save the current workspace and launch a verified handoff that waits for this process to quit before reopening.
     func restartAfterUpdate() {
         guard updates.canRestartAfterUpdate else { return }
         cancelUpdateRestart()

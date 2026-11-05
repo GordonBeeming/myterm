@@ -182,6 +182,7 @@ final class AppModel {
         companionStorageNamespace
     )
 
+    /// Load workspace state and restore runtime objects; abandon queued persistence if initialization fails.
     init(
         channel: MyTermChannel = .active,
         applicationSupportDirectory: URL? = nil,
@@ -710,6 +711,7 @@ final class AppModel {
         presentUpdateAvailable(release)
     }
 
+    /// Present the available release with the appropriate native, Homebrew or manual installation action.
     private func presentUpdateAvailable(_ release: AppRelease) {
         if let updateWindow {
             updateWindow.makeKeyAndOrderFront(nil)
@@ -997,6 +999,7 @@ final class AppModel {
         }
     }
 
+    /// Open a text file using the configured editor and prepared shell environment, reporting launch failures.
     private func openTextFile(
         _ url: URL,
         in workspaceID: WorkspaceID,
@@ -2198,6 +2201,7 @@ final class AppModel {
         return number
     }
 
+    /// Reattach a compatible persistent terminal or restore its saved shell and agent state.
     private func restoreTerminalSession(
         _ session: TerminalSession,
         workspaceID: WorkspaceID,
@@ -2953,6 +2957,7 @@ final class AppModel {
         return "ssh " + arguments.map(shellQuote).joined(separator: " ")
     }
 
+    /// Decide whether quitting may proceed, confirming when an update is running or active processes would be terminated.
     func shouldTerminateApplication() -> Bool {
         if updates.isPreparingRestart {
             updateRestartError = "Verifying the prepared update before restart. Please wait for verification to finish."

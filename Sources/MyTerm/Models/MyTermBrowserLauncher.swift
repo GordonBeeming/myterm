@@ -47,6 +47,7 @@ enum MyTermBrowserLauncher {
         return candidate
     }
 
+    /// Compose shim variables while preserving the user’s original ZDOTDIR and BASH_ENV for their startup files.
     static func environment(
         executableURL: URL?,
         workspaceID: WorkspaceID? = nil,
