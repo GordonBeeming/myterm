@@ -32,16 +32,12 @@ family = sys.argv[1]
 product_family = sys.argv[2]
 sdk_version = sys.argv[3]
 required_device_type = sys.argv[4]
-sdk_major = int(sdk_version.split(".")[0])
 inventory = json.load(sys.stdin)
-runtimes = sorted(inventory["runtimes"], key=lambda item: item["version"], reverse=True)
-for runtime in runtimes:
+for runtime in inventory["runtimes"]:
     if not runtime.get("isAvailable") or runtime.get("platform") != "iOS":
         continue
-    if int(runtime["version"].split(".")[0]) != sdk_major:
-        continue
     # Hosted images may include newer runtimes. Keep every device on the SDK we
-    # verified above; mixing 27.1 builds with 27.2 produced WebKit/UITest shutdown failures.
+    # verified above so the matrix uses one consistent toolchain.
     if runtime["version"] != sdk_version:
         continue
     candidates = [item for item in runtime.get("supportedDeviceTypes", [])
@@ -55,7 +51,7 @@ for runtime in runtimes:
         chosen = sorted(candidates, key=lambda item: item["name"])[0]
         print(runtime["identifier"] + "\t" + chosen["identifier"])
         sys.exit(0)
-print(f"No available iOS {sdk_major} {family} runtime/device type.", file=sys.stderr)
+print(f"No available iOS {sdk_version} {family} runtime/device type matching the selected SDK.", file=sys.stderr)
 sys.exit(1)
 ' "$device_family" "$product_family" "$simulator_sdk" "$required_device_type")
   IFS=$'\t' read -r runtime_id device_type <<< "$device_description"
