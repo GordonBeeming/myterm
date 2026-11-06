@@ -14,9 +14,9 @@ struct UpdateDialog: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Label("Update available — \(release.version.description)", systemImage: "arrow.down.circle")
+                Label("Update available — \(AppBuildDisplay.version(release.version.description, channel: release.channel))", systemImage: "arrow.down.circle")
                     .font(.title2)
-                Text("You’re running \(updates.currentVersion) (\(updates.installedChannel.title)). The \(release.channel.title) update is verified before installation.")
+                Text("You’re running \(AppBuildDisplay.installed(updates.currentVersion, channel: updates.installedChannel, build: Bundle.main.buildVersionString)). The \(release.channel.title) update is verified before installation.")
                     .foregroundStyle(.secondary)
 
                 installationStatus
@@ -80,7 +80,7 @@ struct UpdateDialog: View {
                 if installation != .installed, updates.canRestartAfterUpdate,
                    let installed = updates.verifiedInstalledVersion {
                     HStack {
-                        Text("Version \(installed.description) is ready to restart.").font(.callout)
+                        Text("Version \(AppBuildDisplay.version(installed.description, channel: updates.stagedUpdate?.channel ?? updates.installedChannel)) is ready to restart.").font(.callout)
                         Button("Restart Installed Update") { model.restartAfterUpdate() }
                     }
                 }

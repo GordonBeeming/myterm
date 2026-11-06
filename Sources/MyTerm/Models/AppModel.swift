@@ -719,7 +719,7 @@ final class AppModel {
         }
         guard updates.supportsInAppInstallation else {
             let alert = NSAlert()
-            alert.messageText = "Update available — \(release.version)"
+            alert.messageText = "Update available — \(AppBuildDisplay.version(release.version.description, channel: release.channel))"
             alert.informativeText = "This copy was not installed with Homebrew, so the release page has the download."
             alert.addButton(withTitle: "Open the Release")
             alert.addButton(withTitle: "Later")
@@ -751,7 +751,7 @@ final class AppModel {
         let alert = NSAlert()
         alert.alertStyle = .informational
         alert.messageText = "myterm is up to date"
-        alert.informativeText = "You are running \(version), the newest published release."
+        alert.informativeText = "You are running \(AppBuildDisplay.version(version.description, channel: updates.installedChannel)), the newest published release."
         alert.addButton(withTitle: "OK")
         alert.runModal()
     }

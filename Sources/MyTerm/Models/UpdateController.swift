@@ -110,9 +110,7 @@ final class UpdateController {
     init(
         channel: MyTermChannel = .active,
         currentVersion: String = Bundle.main.shortVersionString,
-        releaseChannel: UpdateCheck.Channel = UpdateCheck.Channel(
-            rawValue: Bundle.main.object(forInfoDictionaryKey: "MyTermReleaseChannel") as? String ?? "stable"
-        ) ?? .stable,
+        releaseChannel: UpdateCheck.Channel = Bundle.main.releaseChannel,
         upgradeRoute: UpgradeRoute? = nil,
         defaults: UserDefaults? = nil,
         environment: [String: String] = ProcessInfo.processInfo.environment,
@@ -587,5 +585,14 @@ private final class PollTimer: @unchecked Sendable {
 extension Bundle {
     var shortVersionString: String {
         object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+    }
+
+    /// The installed channel is stamped into the bundle independently of the selected update feed.
+    var releaseChannel: UpdateCheck.Channel {
+        UpdateCheck.Channel(rawValue: object(forInfoDictionaryKey: "MyTermReleaseChannel") as? String ?? "stable") ?? .stable
+    }
+
+    var buildVersionString: String {
+        object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
     }
 }

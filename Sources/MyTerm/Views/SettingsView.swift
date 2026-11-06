@@ -231,7 +231,9 @@ struct SettingsView: View {
                 ))
 
                 LabeledContent("Installed") {
-                    Text("\(model.updates.currentVersion.isEmpty ? "unknown" : model.updates.currentVersion) (\(model.updates.installedChannel.title))")
+                    Text(AppBuildDisplay.installed(model.updates.currentVersion,
+                        channel: model.updates.installedChannel,
+                        build: Bundle.main.buildVersionString))
                         .foregroundStyle(Theme.textSecondary)
                 }
 
