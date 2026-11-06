@@ -1,3 +1,4 @@
+import AppKit
 import MyTermCore
 import SwiftUI
 
@@ -103,7 +104,23 @@ struct MyTermCommands: Commands {
     @Environment(\.openWindow) private var openWindow
     let startup: MyTermStartup
 
+    private var applicationName: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+            ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "myterm"
+    }
+
     var body: some Commands {
+        CommandGroup(replacing: .appInfo) {
+            Button("About \(applicationName)") {
+                let channel = Bundle.main.releaseChannel
+                let build = Bundle.main.buildVersionString
+                var options: [NSApplication.AboutPanelOptionKey: Any] = [
+                    .applicationVersion: AppBuildDisplay.version(Bundle.main.shortVersionString, channel: channel)
+                ]
+                if !build.isEmpty { options[.version] = channel == .beta ? "build \(build)" : build }
+                NSApplication.shared.orderFrontStandardAboutPanel(options: options)
+            }
+        }
         CommandGroup(after: .appInfo) {
             Button("Check for Updates…") { startup.model?.checkForUpdates() }
         }

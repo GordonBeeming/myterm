@@ -410,7 +410,7 @@ final class MyTermStartup {
     var isRecoveringToStable = false
     var recoveryUpdate: UpdateController?
     var canRecoverToStable: Bool {
-        Bundle.main.object(forInfoDictionaryKey: "MyTermReleaseChannel") as? String == "beta"
+        Bundle.main.releaseChannel == .beta
     }
 
     /// The channel escape hatch does not require a working beta AppModel.
@@ -479,7 +479,7 @@ final class MyTermStartup {
             }
             do {
                 let directory = MyTermChannel.active.persistenceURL(applicationSupportDirectory: supportDirectory).deletingLastPathComponent()
-                let installed = UpdateCheck.Channel(rawValue: Bundle.main.object(forInfoDictionaryKey: "MyTermReleaseChannel") as? String ?? "stable") ?? .stable
+                let installed = Bundle.main.releaseChannel
                 try ChannelConfigurationStore(directory: directory, preferencesDomain: preferencesDomain)
                     .restoreBackup(from: url, selectedChannel: installed)
                 try becomeOwner(lease: acquired)
@@ -520,7 +520,7 @@ final class MyTermStartup {
         guard Bundle.main.bundleIdentifier == ApplicationUpdate.bundleIdentifier,
               try ApplicationUpdate.runningCodeMatchesFile(Bundle.main.bundleURL) else { return }
         let directory = MyTermChannel.active.persistenceURL(applicationSupportDirectory: supportDirectory).deletingLastPathComponent()
-        let channel = UpdateCheck.Channel(rawValue: Bundle.main.object(forInfoDictionaryKey: "MyTermReleaseChannel") as? String ?? "stable") ?? .stable
+        let channel = Bundle.main.releaseChannel
         guard let plan = try UpdateStartupTrial.pending(in: directory, app: Bundle.main.bundleURL,
             version: Bundle.main.shortVersionString, channel: channel) else { return }
         let agent = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/MyTermUpdateAgent")
@@ -545,7 +545,7 @@ final class MyTermStartup {
                 return
             }
             let directory = MyTermChannel.active.persistenceURL(applicationSupportDirectory: supportDirectory).deletingLastPathComponent()
-            let releaseChannel = UpdateCheck.Channel(rawValue: Bundle.main.object(forInfoDictionaryKey: "MyTermReleaseChannel") as? String ?? "stable") ?? .stable
+            let releaseChannel = Bundle.main.releaseChannel
             var updateNotices: [String] = []
             do {
                 startupTrial = try UpdateStartupTrial.pending(in: directory, app: Bundle.main.bundleURL,
