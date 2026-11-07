@@ -66,7 +66,7 @@ static int child(void) {
 }
 
 #ifdef _WIN32
-struct output { HANDLE pipe; HANDLE ready; char bytes[8192]; size_t used; DWORD error; int overflow; };
+struct output { HANDLE pipe; HANDLE ready; char bytes[8192]; size_t used; DWORD error; DWORD signalError; int overflow; };
 static DWORD WINAPI drain(LPVOID context) {
     struct output *out = context;
     char chunk[1024];
@@ -77,7 +77,7 @@ static DWORD WINAPI drain(LPVOID context) {
             memcpy(out->bytes + out->used, chunk, count); out->used += count;
             out->bytes[out->used] = '\0';
             if (strstr(out->bytes, "MYTERM_CHILD_READY")) {
-                if (!SetEvent(out->ready)) { out->error = GetLastError(); return 1; }
+                if (!SetEvent(out->ready)) out->signalError = GetLastError();
             }
         }
     }
@@ -118,8 +118,10 @@ static int probe(const char *executable) {
     if (!CreateProcessW(path, command, NULL, NULL, FALSE, EXTENDED_STARTUPINFO_PRESENT, NULL, NULL, &startup.StartupInfo, &process)) goto cleanup;
     CloseHandle(inputRead); inputRead = NULL;
     CloseHandle(outputWrite); outputWrite = NULL;
-    if (WaitForSingleObject(output.ready, 5000) != WAIT_OBJECT_0) {
-        fprintf(stderr, "Child readiness timeout\n");
+    HANDLE readiness[] = {output.ready, process.hProcess};
+    DWORD ready = WaitForMultipleObjects(2, readiness, FALSE, 5000);
+    if (ready != WAIT_OBJECT_0) {
+        fprintf(stderr, "Child readiness wait failed: %lu\n", ready);
         goto cleanup;
     }
     if (FAILED(ResizePseudoConsole(console, resized))) goto cleanup;
@@ -128,7 +130,11 @@ static int probe(const char *executable) {
     if (!GetExitCodeProcess(process.hProcess, &code) || code != 0) goto cleanup;
     result = 0;
 cleanup:
-    if (result) fprintf(stderr, "ConPTY failure, Win32 error=%lu, child exit=%lu\n", GetLastError(), code);
+    if (result) {
+        DWORD error = GetLastError();
+        if (process.hProcess && !GetExitCodeProcess(process.hProcess, &code)) fprintf(stderr, "GetExitCodeProcess failed: %lu\n", GetLastError());
+        fprintf(stderr, "ConPTY failure, Win32 error=%lu, child exit=%lu\n", error, code);
+    }
     if (process.hProcess && WaitForSingleObject(process.hProcess, 0) == WAIT_TIMEOUT) {
         if (!TerminateProcess(process.hProcess, 1)) fprintf(stderr, "TerminateProcess failed: %lu\n", GetLastError());
         if (WaitForSingleObject(process.hProcess, 5000) != WAIT_OBJECT_0) result = 1;
@@ -145,7 +151,7 @@ cleanup:
             ExitProcess(1);
         }
         printf("%s\n", output.bytes);
-        if (output.overflow || (output.error != ERROR_BROKEN_PIPE && output.error != ERROR_SUCCESS) || !strstr(output.bytes, "MYTERM_NATIVE_OK 101 31")) result = 1;
+        if (output.overflow || output.signalError || (output.error != ERROR_BROKEN_PIPE && output.error != ERROR_SUCCESS) || !strstr(output.bytes, "MYTERM_NATIVE_OK 101 31")) result = 1;
         CloseHandle(reader);
     } else result = 1;
     if (output.ready) CloseHandle(output.ready);
