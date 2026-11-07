@@ -4,7 +4,11 @@ The canonical tracker is [MyTerm next architecture and implementation](https://g
 
 ## Continue from a fresh worktree
 
-Read `AGENTS.md`, then `docs/agents/issue-tracker.md`, then open the linked map. Query its sub-issues for the first open, unassigned ticket with no open blockers. Claim it before working. At migration, the next ticket is [Choose hosted and self-hosted relay account operations](https://github.com/GordonBeeming/myterm/issues/134); query live state rather than assuming it remains available.
+Read `AGENTS.md`, then `docs/agents/issue-tracker.md`, then open the linked map. Query its sub-issues for the first open, unassigned ticket with no open blockers. Claim it before working; query live state rather than relying on the archive's ordering or status.
+
+## Current domain decisions
+
+[Choose shared workspace synchronization and migration](https://github.com/GordonBeeming/myterm/issues/131) supersedes the archived server-owned workspace model and the workspace-ownership portion of the earlier runtime decision. Use the root [glossary](../../../GLOSSARY.md) for current terminology and the ticket's resolution for ownership, synchronization, session closure and migration policy. Detailed decisions remain in GitHub; the retained snapshots below are historical evidence.
 
 ## Retained evidence
 

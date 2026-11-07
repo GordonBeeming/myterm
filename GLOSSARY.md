@@ -1,23 +1,29 @@
 # MyTerm
 
-MyTerm connects a person's clients to workspaces on their servers.
+MyTerm connects a person's clients to a shared account layout and sessions on their servers.
 
 ## Language
 
 **Personal account**:
-One person's directory of their MyTerm servers. Workspaces and sessions belong to the servers.
+One person's MyTerm server directory and shared layout. Each terminal or browser session belongs to its assigned server.
 _Avoid_: Team, organization
 
 **MyTerm server**:
-An independently running instance of MyTerm that belongs to one personal account and owns workspaces and their sessions. One machine can run multiple MyTerm servers.
+An independently running instance of MyTerm that belongs to one personal account and owns the terminal and browser sessions assigned to it. One machine can run multiple MyTerm servers.
 _Avoid_: Mac host
 
 **MyTerm client**:
-The Mac, iPhone or iPad interface a person uses to access a MyTerm server.
+The Mac, iPhone or iPad interface a person uses to access their account layout and sessions across MyTerm servers.
 _Avoid_: Server, host
 
 **Workspace**:
-A named collection of work belonging to one MyTerm server, available to the person's connected clients.
+A named collection of work within a personal account's shared layout. Its terminal and browser sessions may belong to different MyTerm servers.
+
+**Account layout**:
+A personal account's shared folder, workspace, pane and tab structure. Each client keeps its own navigation, focus and display preferences while shared structural changes appear across clients.
+
+**Pane content**:
+An individually identified terminal or browser item displayed in a workspace pane and assigned to one MyTerm server.
 
 **Approved client**:
 A MyTerm client authorized to access a personal account's servers. Signing in alone does not grant approval; an additional client needs approval from an already trusted client or enrolled server belonging to that account.
