@@ -1,0 +1,56 @@
+name: Native session adapter comparison prototype
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/native-comparison.yml'
+      - 'script/native-comparison/**'
+      - 'script/native-validation/pty_probe.c'
+      - 'Vendor/SwiftTerm/**'
+
+permissions:
+  contents: read
+
+jobs:
+  comparison:
+    name: Candidate adapters (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [xcode-27, ubuntu-24.04, ubuntu-24.04-arm, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: Services/relay/go.mod
+          cache: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: '1.89.0'
+      - name: Select the repository Xcode toolchain
+        if: runner.os == 'macOS'
+        run: echo 'DEVELOPER_DIR=/Applications/Xcode_27.1.app/Contents/Developer' >> "$GITHUB_ENV"
+      - name: Run native adapters and terminal traces
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p comparison-results
+          args=()
+          if [[ "$RUNNER_OS" != macOS ]]; then args+=(--skip-swift); fi
+          python3 script/native-comparison/run.py --output comparison-results "${args[@]}" 2>&1 | tee comparison-results/probe.log
+      - name: Retain measured results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-comparison-${{ matrix.os }}
+          path: |
+            comparison-results/*.json
+            comparison-results/*.log
+          if-no-files-found: error
+          retention-days: 14
