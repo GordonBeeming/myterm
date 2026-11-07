@@ -22,6 +22,8 @@ Go uses `creack/pty` on Unix and `UserExistsError/conpty` on Windows. Rust uses 
 
 The shell experiments run `/bin/sh`, Bash and Zsh where installed, or `cmd.exe` and PowerShell on Windows. A loopback observer connects for each command and disconnects after its response. The adapter keeps owning and draining the PTY while no observer is connected. Delayed shell output is recovered over a new connection with the same child PID. The delayed marker must be absent from the write response and present in bytes retained before accepting a later observer request. Each shell also emits exactly 65,536 payload bytes between fresh output-only markers before exiting.
 
+On native Windows, `portable-pty` requests an inherited cursor. The Rust adapter answers its one startup cursor query asynchronously at the known fresh viewport origin and records the response count. This is separate from the unimplemented application-query policy.
+
 The endpoint binds an OS-assigned IPv4 loopback port and requires a random per-run capability. It retains at most 1 MiB of raw output. This is an isolated probe protocol, not the application's authentication or transport. Normal completion waits for the child and tears down the adapter. Each operation, child-exit wait and whole probe is bounded. Failure cleanup terminates the owned child where the adapter can do so; descendants, service restart and upgrade survival still need separate experiments.
 
 These checks establish raw output retention across actual observer reconnects. They do not establish terminal checkpoints, server-side query handling while detached, encrypted transport, writer leases, multi-client behavior, slow-reader policy or service lifecycle.
@@ -36,7 +38,7 @@ A cell match cannot prove images, history, hyperlinks, mode state or keyboard ev
 
 ## Results and CI
 
-`run.json` records native OS/CPU, toolchain versions, fixture hash, UTC timestamps and adapter status. `sessions.json` records each native experiment. `*-traces.json` retains the engine state; `comparison.json` is produced only when SwiftTerm runs. Adapter failures fail the run. Fidelity differences remain findings for Gordon to judge, so a green CI job does not mean engine parity.
+`run.json` records native OS/CPU, toolchain versions, LF-normalized fixture hash, UTC timestamps and adapter status. `sessions.json` records each native experiment. `*-traces.json` retains the engine state; `comparison.json` is produced only when SwiftTerm runs. Adapter failures fail the run. Fidelity differences remain findings for Gordon to judge, so a green CI job does not mean engine parity.
 
 The dedicated `native-comparison.yml` workflow prepares macOS ARM64 on `xcode-27` with Xcode 27.1 selected, Linux x86-64/ARM64 and native Windows x86-64 runs. It needs publication before it can produce evidence. Non-Mac jobs run the same traces and retain their states but do not independently assert SwiftTerm parity. The workflow uploads JSON and logs for fourteen days; durable summaries belong in the research note and ticket. Cross-compilation is a build check only.
 
@@ -47,3 +49,11 @@ python3 script/native-comparison/report.py --results /tmp/myterm-native-comparis
 ```
 
 The page embeds the measured data and offers captured cells, basic style differences and Rust's actual reconstructed state. It reports the Rust responder as unimplemented and Go full-checkpoint reconstruction as unmeasured.
+
+After downloading all four native artifacts, include their actual results in the page:
+
+```sh
+python3 script/native-comparison/report.py --results /tmp/myterm-native-comparison --ci-results /tmp/myterm-native-ci --ci-run-url https://github.com/GordonBeeming/myterm/actions/runs/ACTUAL_RUN_ID --output /tmp/myterm-native-comparison.html
+```
+
+The platform summary requires all four artifacts and matching normalized fixture hashes. It distinguishes native adapter results from the same engine's trace projection across platforms and from fidelity against SwiftTerm.

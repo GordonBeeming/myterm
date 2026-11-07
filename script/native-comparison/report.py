@@ -14,15 +14,20 @@ TEMPLATE = r'''<!doctype html>
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 var(--font-body)}main{max-width:1600px;margin:auto;padding:32px}h1{font-size:36px;letter-spacing:-.035em;margin:0 0 8px}h2{font-size:23px;margin:0 0 14px}h3{font-size:18px;margin:0}p{margin:8px 0 16px}a{color:var(--link)}.muted{color:var(--text-muted)}.tag{display:inline-block;padding:5px 12px;border-radius:20px;background:var(--accent-soft);color:var(--accent-soft-text);font-size:14px;font-weight:650}.summary,.engines{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin:20px 0}.card,section{min-width:0;border:1px solid var(--border);border-radius:14px;background:var(--surface);padding:20px}.card strong{display:block;font-size:27px;color:var(--accent)}section{margin-top:20px}table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top}th{background:var(--surface-2)}.controls{display:flex;align-items:center;flex-wrap:wrap;gap:12px}select,button{font:inherit;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text)}button[aria-pressed=true]{background:var(--accent);color:white}.engine{background:var(--surface-2);border-radius:10px;padding:16px;min-width:0}.screen{font:15px/1.55 var(--font-mono);white-space:pre-wrap;overflow-wrap:anywhere;margin:12px 0;border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--surface)}code,pre{font-family:var(--font-mono);overflow-wrap:anywhere}pre{white-space:pre-wrap;font-size:13px}.facts{font-size:14px}.finding{border-left:4px solid var(--accent);padding-left:16px;margin:16px 0}.engine p{font-size:14px}.file-link{border-bottom:1px dotted var(--link);text-decoration:none}footer{font-size:13px;color:var(--text-muted);padding-top:20px}#trace-note{font-size:14px}details{margin-top:12px}summary{cursor:pointer} @media(max-width:700px){main{padding:16px}h1{font-size:28px}th,td{padding:8px 5px;font-size:12px}}
 </style>
 <main>
-<span class="tag">Local macOS evidence · cross-platform runs pending</span>
-<h1>Both adapters work locally; terminal fidelity needs work</h1>
+<span class="tag" id="evidence-label">Local macOS evidence · cross-platform runs pending</span>
+<h1 id="headline">Both adapters work locally; terminal fidelity needs work</h1>
 <p class="muted" id="environment"></p>
 <p>Go and Rust are server candidates, including the macOS server. The Mac, iPhone and iPad clients remain native.</p>
-<div class="summary"><div class="card"><strong id="adapter-count"></strong>Native adapter cases passed on this Mac</div><div class="card"><strong id="trace-count"></strong>Same bytes and resizes across three engines</div><div class="card"><strong id="checkpoint-count"></strong>SwiftTerm checkpoint equality checks passed</div><div class="card"><strong>Still open</strong>Linux, Windows and Gordon's fidelity judgment</div></div>
+<div class="summary"><div class="card"><strong id="adapter-count"></strong>Native adapter cases passed in the selected evidence</div><div class="card"><strong id="trace-count"></strong>Same bytes and resizes across three engines</div><div class="card"><strong id="checkpoint-count"></strong>SwiftTerm checkpoint equality checks passed</div><div class="card"><strong>Still open</strong>Linux, Windows and Gordon's fidelity judgment</div></div>
+<section id="native-evidence" hidden>
+<h2>Native runner evidence</h2><div id="native-matrix"></div>
+<p class="muted facts">The trace column compares the same Go or Rust engine's measured cells, basic styles, cursor, active buffer and final replies across platforms. It does not assert parity with SwiftTerm. The Rust Windows adapter answers the required one-time inherited-cursor startup query; application-query policy remains unimplemented.</p>
+<p><a id="native-run">Open the native comparison run</a></p>
+</section>
 <section>
 <h2>What the evidence supports</h2>
 <table><thead><tr><th>Behavior</th><th>Go candidate</th><th>Rust candidate</th></tr></thead><tbody>
-<tr><td>Local process adapters</td><td id="go-adapters"></td><td id="rust-adapters"></td></tr>
+<tr><td>Mac reference adapter cases</td><td id="go-adapters"></td><td id="rust-adapters"></td></tr>
 <tr><td>Observer reconnect</td><td colspan="2">Actual loopback disconnect, same child PID, detached output retained, 64 KiB final payload plus exit marker. This measures raw-byte retention.</td></tr>
 <tr><td>Parsing continuously</td><td>Unicode trace matches measured fields; resize cases differ</td><td>Unicode and alternate resize cases differ</td></tr>
 <tr><td>Query responses</td><td>Status reply differs; Kitty keyboard/image replies absent</td><td>No responder added to the parser in this probe</td></tr>
@@ -47,7 +52,7 @@ TEMPLATE = r'''<!doctype html>
 <p><a class="file-link" href="__REPORT_URL__" title="__REPORT_PATH__">__REPORT_PATH__</a></p>
 </details>
 </section>
-<footer>Recorded <span id="recorded"></span>. Local file links open in Gordon's IDE and need it running. The prepared native-runner workflow has not been published.</footer>
+<footer>Recorded <span id="recorded"></span>. Local file links open in Gordon's IDE and need it running. <span id="publication">The prepared native-runner workflow has not been published.</span></footer>
 </main>
 <script type="application/json" id="data">__DATA__</script>
 <script>
@@ -56,9 +61,22 @@ const DISPLAY_STRIP_PREFIX='/Users/gordonbeeming/Developer/';
 document.querySelectorAll('.file-link').forEach(a=>{a.textContent=a.title.startsWith(DISPLAY_STRIP_PREFIX)?a.title.slice(DISPLAY_STRIP_PREFIX.length):a.title});
 $('environment').textContent=D.run.os+' · '+D.run.go+' · '+D.run.rustc;
 $('recorded').textContent=new Intl.DateTimeFormat('en-AU',{timeZone:'Australia/Brisbane',dateStyle:'medium',timeStyle:'short'}).format(new Date(D.run.finishedAt))+' AEST';
-const adapterCases=Object.values(D.sessions).flatMap(Object.values);$('adapter-count').textContent=adapterCases.filter(s=>s.status==='pass').length+' / '+adapterCases.length;
+const adapterCases=D.ci?D.ci.flatMap(e=>Object.values(e.sessions).flatMap(Object.values)):Object.values(D.sessions).flatMap(Object.values);$('adapter-count').textContent=adapterCases.filter(s=>s.status==='pass').length+' / '+adapterCases.length;
 $('trace-count').textContent=D.fixtures.length+' traces';const checks=Object.values(D.traces.swiftterm).flatMap(t=>t.checkpointChecks);$('checkpoint-count').textContent=checks.filter(Boolean).length+' / '+checks.length;
 for(const n of ['go','rust'])$(n+'-adapters').textContent=Object.entries(D.sessions[n]).map(([label,s])=>label+' '+s.status).join(' · ');
+if(D.ci){
+ $('native-evidence').hidden=false;
+ const allPass=D.ci.every(e=>e.run.status==='pass');
+ $('headline').textContent=allPass?'Native adapters pass across four runners; terminal fidelity needs work':'Native validation results include failures';
+ $('evidence-label').textContent=allPass?'Four native runners · Mac runner trace baseline':'Native runner failures · Mac runner trace baseline';
+ $('publication').textContent='The prototype remains outside main; the decision ticket awaits the fidelity judgment.';
+ $('native-run').href=D.ciRunURL;
+ const table=document.createElement('table'),head=document.createElement('tr');
+ for(const label of ['Runner','Observed OS / CPU','Go adapter cases','Rust adapter cases','Same engine trace projection']){const th=document.createElement('th');th.textContent=label;head.append(th)}table.append(head);
+ for(const entry of D.ci){const row=document.createElement('tr');const count=name=>{const cases=Object.values(entry.sessions[name]);return cases.filter(s=>s.status==='pass').length+' / '+cases.length};
+  for(const text of [entry.runner,entry.run.os+' · '+entry.run.cpu,count('go'),count('rust')+'; startup replies: '+Object.values(entry.sessions.rust).reduce((sum,s)=>sum+(s.startupCursorReplies||0),0),Object.entries(entry.sameEngineMatchesMacRunner).map(([n,match])=>n+': '+(match?'matches Mac runner':'differs')).join(' · ')]){const cell=document.createElement('td');cell.textContent=text;row.append(cell)}table.append(row);
+ }$('native-matrix').append(table);
+}
 const names=['swiftterm','go','rust'],labels={swiftterm:'SwiftTerm baseline',go:'Go · x/vt 0.1.0',rust:'Rust · vt100 0.18.1'};
 let mode='cells';
 D.fixtures.forEach(f=>{const option=new Option(f.name,f.name);$('trace').add(option)});
@@ -99,6 +117,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--results', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--ci-results', type=Path, help='directory containing all four downloaded native-comparison artifacts')
+    parser.add_argument('--ci-run-url', help='GitHub Actions URL for the supplied native results')
     options = parser.parse_args()
     root = options.results
     run = json.loads((root / 'run.json').read_text())
@@ -110,6 +130,39 @@ def main():
     import hashlib
     if run['fixturesSHA256'] != hashlib.sha256((Path(__file__).parent / 'fixtures.json').read_text(encoding='utf-8').encode('utf-8')).hexdigest():
         raise SystemExit('Results do not match the current fixture hash.')
+    if options.ci_results:
+        import re
+        if not options.ci_run_url or not re.fullmatch(r'https://github\.com/GordonBeeming/myterm/actions/runs/[0-9]+', options.ci_run_url):
+            raise SystemExit('Supply the actual native comparison run URL with --ci-run-url.')
+        reference = options.ci_results / 'native-comparison-xcode-27'
+        reference_run = json.loads((reference / 'run.json').read_text(encoding='utf-8'))
+        if reference_run['status'] != 'pass':
+            raise SystemExit('A successful Mac runner baseline is required for the native inspector.')
+        data['run'] = reference_run
+        data['sessions'] = json.loads((reference / 'sessions.json').read_text(encoding='utf-8'))
+        data['traces'] = {name: json.loads((reference / f'{name}-traces.json').read_text(encoding='utf-8'))
+                          for name in ['swiftterm', 'go', 'rust']}
+        entries = []
+        def projection(trace):
+            return {'snapshots': [{key: snap[key] for key in ['cells', 'styles', 'cursor', 'alt']} for snap in trace['snapshots']],
+                    'finalReplies': trace['finalReplies']}
+        for directory in sorted(options.ci_results.glob('native-comparison-*')):
+            native_run = json.loads((directory / 'run.json').read_text(encoding='utf-8'))
+            if native_run['fixturesSHA256'] != run['fixturesSHA256']:
+                raise SystemExit(f'Native result fixture hash mismatch: {directory.name}')
+            matches = {}
+            for engine in ['go', 'rust']:
+                measured = json.loads((directory / f'{engine}-traces.json').read_text(encoding='utf-8'))
+                matches[engine] = ({name: projection(trace) for name, trace in measured.items()} ==
+                                   {name: projection(trace) for name, trace in data['traces'][engine].items()})
+            entries.append({'runner': directory.name.removeprefix('native-comparison-'), 'run': native_run,
+                            'sessions': json.loads((directory / 'sessions.json').read_text(encoding='utf-8')),
+                            'sameEngineMatchesMacRunner': matches})
+        expected = {'xcode-27', 'ubuntu-24.04', 'ubuntu-24.04-arm', 'windows-2025'}
+        if {entry['runner'] for entry in entries} != expected:
+            raise SystemExit('All four native runner artifacts are required for the platform summary.')
+        data['ci'] = entries
+        data['ciRunURL'] = options.ci_run_url
     report = Path(__file__).resolve().parents[2] / 'docs/research/myterm-native-adapter-comparison.md'
     from urllib.parse import quote
     html = TEMPLATE.replace('__DATA__', json.dumps(data, ensure_ascii=False).replace('<', '\\u003c'))

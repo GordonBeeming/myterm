@@ -158,6 +158,60 @@ impl Drop for ChildGuard {
         }
     }
 }
+// portable-pty requests the inherited cursor even for this fresh headless terminal.
+// Answer only its one startup request; application-query policy remains unimplemented.
+#[cfg(any(windows, test))]
+#[derive(Default)]
+struct StartupCursorQuery {
+    matched: usize,
+    answered: bool,
+}
+#[cfg(any(windows, test))]
+impl StartupCursorQuery {
+    fn observe(&mut self, bytes: &[u8]) -> bool {
+        const QUERY: &[u8] = b"\x1b[6n";
+        if self.answered {
+            return false;
+        }
+        for byte in bytes {
+            if *byte == QUERY[self.matched] {
+                self.matched += 1;
+            } else {
+                self.matched = usize::from(*byte == QUERY[0]);
+            }
+            if self.matched == QUERY.len() {
+                self.answered = true;
+                return true;
+            }
+        }
+        false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::StartupCursorQuery;
+    #[test]
+    fn startup_cursor_response_handles_every_fragment_boundary_and_only_answers_once() {
+        let query = b"\x1b[6n";
+        for split in 0..=query.len() {
+            let mut handler = StartupCursorQuery::default();
+            let first = handler.observe(&query[..split]);
+            let second = handler.observe(&query[split..]);
+            assert_ne!(first, second);
+            assert!(!handler.observe(query));
+        }
+        let mut handler = StartupCursorQuery::default();
+        for byte in query {
+            let answered = handler.observe(&[*byte]);
+            assert_eq!(answered, *byte == b'n');
+        }
+        let mut handler = StartupCursorQuery::default();
+        assert!(!handler.observe(b"\x1b[5n\x1b[?6n"));
+        assert!(handler.observe(query));
+    }
+}
+
 fn session(args: &[String]) -> Result<()> {
     let token = std::env::var("MYTERM_PROBE_TOKEN")?;
     if token.len() < 32 {
@@ -176,11 +230,15 @@ fn session(args: &[String]) -> Result<()> {
     drop(pair.slave);
     let pid = child.0.process_id().context("missing child PID")?;
     let mut reader = pair.master.try_clone_reader()?;
-    let mut writer = pair.master.take_writer()?;
-    let output = Arc::new(Mutex::new((Vec::<u8>::new(), String::new())));
+    let writer = Arc::new(Mutex::new(pair.master.take_writer()?));
+    #[cfg(windows)]
+    let startup_writer = writer.clone();
+    let output = Arc::new(Mutex::new((Vec::<u8>::new(), String::new(), 0usize)));
     let captured = output.clone();
     thread::spawn(move || {
         let mut buffer = [0u8; 8192];
+        #[cfg(windows)]
+        let mut startup_query = StartupCursorQuery::default();
         loop {
             match reader.read(&mut buffer) {
                 Ok(0) => break,
@@ -191,6 +249,24 @@ fn session(args: &[String]) -> Result<()> {
                         break;
                     }
                     out.0.extend_from_slice(&buffer[..n]);
+                    drop(out);
+                    #[cfg(windows)]
+                    if startup_query.observe(&buffer[..n]) {
+                        let result = (|| -> Result<()> {
+                            let mut input = startup_writer
+                                .lock()
+                                .map_err(|_| anyhow::anyhow!("input mutex poisoned"))?;
+                            input.write_all(b"\x1b[1;1R")?;
+                            input.flush()?;
+                            Ok(())
+                        })();
+                        let mut out = captured.lock().expect("reader mutex poisoned");
+                        if let Err(error) = result {
+                            out.1 = format!("startup cursor response: {error}");
+                            break;
+                        }
+                        out.2 += 1;
+                    }
                 }
                 Err(e) => {
                     captured.lock().expect("reader mutex poisoned").1 = e.to_string();
@@ -240,8 +316,11 @@ fn session(args: &[String]) -> Result<()> {
         let result: Result<()> = (|| {
             match request.op.as_str() {
                 "write" => {
-                    writer.write_all(&request.data)?;
-                    writer.flush()?;
+                    let mut input = writer
+                        .lock()
+                        .map_err(|_| anyhow::anyhow!("input mutex poisoned"))?;
+                    input.write_all(&request.data)?;
+                    input.flush()?;
                 }
                 "resize" => {
                     if request.cols == 0
@@ -287,7 +366,7 @@ fn session(args: &[String]) -> Result<()> {
             .map_err(|_| anyhow::anyhow!("output mutex poisoned"))?;
         serde_json::to_writer(
             &mut stream,
-            &json!({"data":out.0,"pid":pid,"readerStatus":out.1,"outputLengthAtAccept":output_length_at_accept,"error":result.as_ref().err().map(ToString::to_string).unwrap_or_default()}),
+            &json!({"data":out.0,"pid":pid,"readerStatus":out.1,"startupCursorReplies":out.2,"outputLengthAtAccept":output_length_at_accept,"error":result.as_ref().err().map(ToString::to_string).unwrap_or_default()}),
         )?;
         stream.write_all(b"\n")?;
         if stopping {

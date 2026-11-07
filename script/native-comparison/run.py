@@ -77,6 +77,7 @@ class Session:
             raise RuntimeError(response['error'])
         if response['pid'] != self.pid:
             raise RuntimeError('child PID changed across reconnect')
+        self.startup_cursor_replies = response.get('startupCursorReplies', 0)
         response['data'] = (base64.b64decode(response['data']) if isinstance(response['data'], str)
                             else bytes(response['data']))
         return response
@@ -134,7 +135,7 @@ def native_geometry(binary, fixture, directory):
         code = session.process.wait(timeout=8)
         if code:
             raise RuntimeError(f'geometry adapter exited {code}')
-        return {'status': 'pass', 'pid': session.pid, 'bytes': len(captured),
+        return {'status': 'pass', 'pid': session.pid, 'bytes': len(captured), 'startupCursorReplies': session.startup_cursor_replies,
                 'checks': ['native terminal stdin/stdout', '101x31 child-observed geometry',
                            'input/output', 'invalid token and invalid geometry rejected', 'successful child exit and adapter teardown']}
     finally:
@@ -193,7 +194,7 @@ def shell_session(binary, command, kind, directory):
         if payload != b'x' * 65536:
             raise RuntimeError(f'final payload mismatch: {len(payload)} bytes between fresh output-only markers')
         return {'status': 'pass', 'shell': command, 'pid': session.pid,
-                'capturedBytes': len(captured), 'checks': ['shell startup and input/output', 'resize API',
+                'capturedBytes': len(captured), 'startupCursorReplies': session.startup_cursor_replies, 'checks': ['shell startup and input/output', 'resize API',
                 'real loopback disconnect and reconnect, same child PID', 'retained detached output',
                 'exact 65536-byte payload between output-only markers', 'successful child exit and adapter teardown'],
                 'limits': ['retained raw bytes, not engine checkpoints',
