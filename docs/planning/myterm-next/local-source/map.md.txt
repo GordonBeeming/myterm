@@ -1,0 +1,63 @@
+# MyTerm next architecture and implementation
+
+Labels: wayfinder:map
+Status: open
+
+## Destination
+
+Implement and verify MyTerm's redesigned server/client architecture in full before the next release: native macOS, Linux and Windows servers; Mac, iPhone and iPad clients; a hosted multi-tenant relay with self-hosting; and the workflows agreed below.
+
+## Notes
+
+- This effort explicitly includes execution. Decisions lead to implementation and verification; a specification or backlog alone does not reach the destination.
+- Use the wayfinder, grilling and domain-modeling skills. Use research or prototype for the corresponding ticket types. Use test-myterm for validation and core:git-usage before source-control writes.
+- Balance high security with practical user experience. Ordinary workflows must not become difficult to use; choose secure defaults and make deployment-specific enrollment controls configurable.
+- Tests and integration tests are essential to preserving supported behavior. Each implementation workstream must include meaningful regression coverage and its relevant integration checks, with repeatable commands and evidence before completion. Preserve the agreed workflows and migration behavior while changing the architecture.
+- Provide locally runnable performance tests where useful for optimization and regression detection. Use reproducible workloads and record the environment, baseline and results. Choose concrete workloads, metrics and acceptable variation in the verification decision; candidate areas include terminal streaming, multi-client viewing, workspace switching, reconnects and encryption/rekeying.
+- The tracker is local Markdown, following the wayfinder skill's fallback. This file is the canonical map. Child tickets live in issues/. Type and Labels record their wayfinder type; Status, Assignee and Blocked by record the frontier.
+- Charting does not resolve human decision tickets. Work one decision ticket per later session, except research tickets. Claim a ticket before working it. Create implementation tickets as the decisions make the work concrete.
+- Research is retained in this checkout with links from its tickets. No commits or pushes have been requested. Do not create or push research branches against the session's Git rules.
+- Agreed with Gordon: every account is personal. Teams are out of scope, with no current plans for them.
+- A MyTerm server owns its workspaces and sessions. The Mac installs and runs a local server by default. Clients can use another machine's server, and phone access must work without the Mac UI running.
+- Each server instance belongs to exactly one personal account. Multiple separate server instances on the same machine are supported; see [Choose account trust and key ownership](issues/04-account-trust-and-key-ownership.md). Multi-account server instances are outside this effort; the hosted relay remains multi-tenant.
+- Native server support on macOS, Linux and Windows is required for this release. WSL does not satisfy Windows support.
+- Workspace structure, panes and tabs are shared. Each client keeps its own selection and focus, along with its display preferences.
+- Existing workspaces must be recognized and migrated when formats change. Device re-enrollment is acceptable. Old protocols and the current architecture do not constrain the redesign.
+- A new hosted multi-tenant relay is the default. Users may self-host. Approved clients discover securely enrolled servers without pairing to every server separately; unattended server enrollment is required.
+- Support same-machine local, explicit direct hostname/IP, and outbound relay connections. An Azure VM scale-set startup scenario is part of the desired unattended enrollment validation.
+- Preserve one writing client per terminal session, with other attached clients remaining viewers by default. Reliable attachment, control transfer and reconnection are release requirements.
+- Displaced clients remain in view-only mode, showing the controlling client and an action to take control. Mac workspace switches must remain smooth. Phones and tablets separate View session from Take control. Validate reliability and performance before adding a disconnected screen; background subscription and buffering details remain open in [Choose active session attachment and control handoff](issues/14-session-attachment-and-handoff.md).
+- Browsing uses network proxying, including server-local/private sites. Do not continue the Mac-rendered streaming approach.
+- Security objective: protect private personal, account-directory and workspace content from relay compromise. Gordon permits necessary connection IPs and account-linked operational telemetry with responsible collection and retention; see the ongoing [Choose account trust and key ownership](issues/04-account-trust-and-key-ownership.md) discussion for this clarification. Telemetry fields, provider and retention remain undecided.
+- The relay must never receive plaintext private decryption keys. Trusted session servers may decrypt the data they need. Endpoint identity-key ownership, admission and revocation policy are settled in the account-trust decision; concrete directory-key distribution, channel protocols and rotation limits remain engineering decisions. Account-loss policy is settled in the recovery ticket.
+- Preserve end-to-end session encryption between each approved client and each server in its account, with endpoint key exchange. See [Choose account trust and key ownership](issues/04-account-trust-and-key-ownership.md) for the ongoing admission and key-design decisions.
+- Relay authentication stays passkey-only. Gordon has ruled out a separate user-managed recovery key; see [Show what recovery would preserve or lose](issues/03-recovery-scenarios.md). The accepted account-loss policy is recorded in that ticket; do not reopen it as a recovery requirement.
+- Start with visibility of sessions and agents across servers. Deeper agent insights follow later.
+- Do not publish a release or deploy shared infrastructure as a side effect of charting. Follow separate release/deployment rules when those actions are reached.
+
+## Decisions so far
+
+- [Establish what a compromised relay could learn](issues/01-relay-compromise-and-private-metadata.md): current metadata exposure and candidate protections are documented; the acceptable observer/threat model remains undecided; account-loss policy is recorded in the recovery decision.
+- [Establish the native server implementation options](issues/02-native-server-portability.md): portability seams and Go/Swift/Rust candidates are documented; native execution and terminal fidelity need evidence before choosing a runtime.
+
+- [Show what recovery would preserve or lose](issues/03-recovery-scenarios.md): an account is the server directory; losing account access means losing the account, with no separate recovery key or restoration requirement.
+- [Establish a protocol for account trust and encrypted sessions](issues/15-account-trust-protocol.md): channel and admission candidates, enrollment-availability constraints and conflicting-revocation cases are documented for protocol selection.
+- [Choose account trust and key ownership](issues/04-account-trust-and-key-ownership.md): endpoint authority, encrypted directory access, per-device identities, enrollment availability and revocation policy are agreed; concrete protocol validation follows in its own ticket.
+
+## Not yet specified
+
+- Implementation workstreams, interfaces and language/library choices will become concrete after the security and portability investigations.
+- Detailed terminal synchronization, scrollback, resize, flow-control and reconnect behavior will follow the server authority decision.
+- Installer and service lifecycle details, upgrade coordination, crash behavior and supported OS/CPU versions depend on the runtime and deployment decisions.
+- Browser origin, cookie, authentication and local-file behavior need further work once the proxy boundary is selected.
+- Broader attack cases, automation and release evidence will follow the workflow decisions; the concrete trust-protocol cases now belong to their validation ticket.
+- Hosting resources, operations and any live cloud validation need concrete configuration before execution.
+
+## Out of scope
+
+- Teams, shared organizational accounts and collaboration between different people's accounts.
+- Deeper agent insights beyond the foundational inventory and activity visibility.
+- Retaining compatibility with the old wire protocol.
+- Publishing the next release; implementation and verification must finish first.
+- A web client or viewing app is a possible future direction, outside this effort. Current enrollment must not require an online Mac, but no web-client trust or key-storage model has been selected.
+

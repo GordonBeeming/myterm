@@ -3,6 +3,27 @@ name: Beta
 on:
   push:
     branches: [main]
+    # These files do not change shipped binaries. Manual rebuilds remain available.
+    paths-ignore:
+      - 'docs/**'
+      - '.scratch/**'
+      - '**/*.md'
+      - '**/*.mdx'
+      - '**/*.rst'
+      - 'LICENSE'
+      - '.github/FUNDING.yml'
+      - '.github/actionlint.yaml'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/PULL_REQUEST_TEMPLATE/**'
+      - '.github/CODEOWNERS'
+      - '.github/dependabot.yml'
+      - '**/Tests/**'
+      - '**/UITests/**'
+      - '**/tests/**'
+      - '**/*_test.go'
+      - 'script/test_*'
+      - 'script/*_test.sh'
+      - 'script/archive_test_app.sh'
   workflow_dispatch:
     inputs:
       rebuild_companion:

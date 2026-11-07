@@ -1,0 +1,42 @@
+# Set the implementation sequence and release acceptance checks
+
+ID: 11
+Parent: [MyTerm next architecture and implementation](../map.md)
+Labels: wayfinder:grilling
+Type: grilling
+Status: open
+Assignee: unassigned
+Blocked by: 06, 07, 08, 09, 10, 14, 16
+
+## Question
+
+What implementation workstreams, dependencies and evidence are required to deliver the full agreed redesign before the next release? Include native builds/tests on all server platforms; Mac, iPhone and iPad workflow checks; data migration; UI absence; attach/detach/reconnect and control transfer; proxy-local browsing; hosted/self-hosted and direct connections; unattended enrollment; and malicious-client/compromised-relay tests. Make regression tests, integration tests and useful locally runnable performance tests part of the implementation workstreams. Identify genuine runner/device/resource requirements and obtain the relevant authorization when needed. Create executable build tickets and wire their dependencies once this decision is settled. The map remains open until implementation and verification are complete.
+
+## Dependencies
+
+- [Choose shared workspace synchronization and migration](06-workspace-sync-and-migration.md)
+- [Choose the proxy-only browser contract](07-proxy-browser-contract.md)
+- [Choose local, direct and relay connection workflows](08-connection-paths-and-enrollment.md)
+- [Choose hosted and self-hosted relay account operations](09-hosted-and-self-hosted-relay.md)
+- [Choose the first cross-server session and agent view](10-cross-server-agent-visibility.md)
+- [Choose active session attachment and control handoff](14-session-attachment-and-handoff.md)
+- [Validate the account trust protocol and approval ceremony](16-trust-protocol-and-approval-validation.md)
+
+## Comments
+
+### Trust and session acceptance coverage
+
+Carry the decisions from [Choose account trust and key ownership](04-account-trust-and-key-ownership.md) into implementation acceptance checks: one account per server instance with multiple instances on one machine; distinct endpoint identity keys; offline client approval and later authenticated key exchange; automatic session rekey without interrupting server-owned processes; independent enrollment credentials per deployment; offline revocation enforced when received; and continued approved local/direct access without an automatic offline trust expiry. Validate the view-only takeover default and smooth Mac workspace switching from [Choose active session attachment and control handoff](14-session-attachment-and-handoff.md), including whether background streaming contributes to connection instability.
+
+### Regression and integration coverage
+
+Gordon considers tests and integration tests essential for preventing changes from breaking supported behavior. Inventory supported workflows and existing coverage, then identify gaps before dividing implementation work. Each build ticket must include regression checks for the behavior it changes and the relevant integration coverage. Tests must assert externally observable behavior and meaningful failure cases, rather than mirror implementation details.
+
+Define repeatable commands and fixtures for client–server–relay integration, local/direct access, migrations, concurrent viewers and one controller, reconnects, server-owned process survival, proxy browsing, enrollment and revocation. Include failures such as interrupted connections, delayed updates, service restarts and rekeying during output. Separate deterministic headless coverage from native-platform and device checks so contributors know what runs locally and what needs additional environments. Preserve existing coverage and record expected behavior changes explicitly in the work that changes them.
+
+### Locally runnable performance tests
+
+Provide a repeatable local harness for the areas where measurement can guide optimization or detect regressions. Candidate workloads include terminal throughput and input-to-display latency; initial attachment and reconnect; workspace switching; simultaneous viewers and background streaming; and encryption, key exchange and rekeying under load. Select workloads based on the chosen architecture rather than inventing a benchmark for every component.
+
+Document the commands, fixtures, workload sizes, warmup and measurement procedure, relevant hardware/software configuration and result format. Capture a baseline and comparable before/after results for optimizations, with latency distributions, throughput and CPU/memory measurements where relevant. Choose budgets and acceptable variation from evidence; distinguish local performance comparisons from stable regression gates so noisy timing does not make ordinary tests unreliable. The harness must run locally without depending on production services.
+

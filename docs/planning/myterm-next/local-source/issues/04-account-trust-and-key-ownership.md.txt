@@ -1,0 +1,134 @@
+# Choose account trust and key ownership
+
+ID: 04
+Parent: [MyTerm next architecture and implementation](../map.md)
+Labels: wayfinder:grilling
+Type: grilling
+Status: resolved
+Assignee: Gordon Beeming (Codex session)
+Blocked by: 01, 03, 15
+
+## Question
+
+How do approved clients and enrolled session servers establish account trust without allowing the relay to read private account/workspace data or silently admit a hostile endpoint? Decide which endpoints hold account-wide versus scoped keys, how discovery is encrypted, what metadata may remain observable, how account sign-in differs from decryption authority, how unattended enrollment receives authority, and how revocation and rotation work. Apply the settled account-loss policy from the recovery decision: losing account access means losing the account; no separate recovery key or account-restoration workflow is required. Resolve the explicit privacy objective with Gordon using the investigation and recovery prototype. Never transmit plaintext private decryption keys to the relay.
+
+## Dependencies
+
+- [Establish what a compromised relay could learn](01-relay-compromise-and-private-metadata.md)
+- [Show what recovery would preserve or lose](03-recovery-scenarios.md)
+- [Establish a protocol for account trust and encrypted sessions](15-account-trust-protocol.md)
+
+## Comments
+
+### Privacy boundary: operational metadata
+
+Gordon accepts connection IP addresses and account-linked operational telemetry where useful for running and diagnosing MyTerm. Diagnostics must allow distinguishing one affected account from an incident affecting multiple accounts. Collect data responsibly and keep it only for as long as needed; connection addresses need not become permanent records simply because the relay observes them.
+
+This clarifies the earlier no-discoverable-personal-data objective: it does not require hiding all connection metadata or account correlation from the relay. It does not authorize readable private directory or workspace content, or relay access to plaintext private decryption keys. The telemetry provider, fields, identifiers, access controls and retention periods remain undecided. These are requirements to specify, not an implemented telemetry design.
+
+The ticket remains claimed while endpoint admission, key ownership, enrollment and revocation are discussed.
+
+### New client approval
+
+Gordon confirmed that adding a new client requires passkey sign-in and approval from an already trusted client or enrolled server belonging to the account before it can access the account's servers. Relay authentication alone must not grant that access. Gordon clarified that servers can approve clients too; the earlier client-only wording is superseded.
+
+Initial account setup has no existing endpoint to approve the first one; its trust bootstrap remains to be designed. The server approval workflow, approval verification and the keys issued to an approved client remain open. The proposal to prohibit servers from approving clients was not accepted.
+
+### Approval flow and server ownership
+
+Gordon chose a client-first approval flow. A new client offers approval through an existing trusted client. If none is available, the user can choose approval through an enrolled server, receive a code, and run an approval command with that code on the server to complete admission. Approval requires an explicit user action. Exact command syntax, code lifetime, request binding and verification remain to be specified.
+
+Each MyTerm server instance belongs to exactly one personal account and does not serve multiple accounts. A machine may run multiple separate MyTerm server instances. This is the architecture for this effort; multi-account server instances may be reconsidered in the future. The hosted relay remains multi-tenant.
+
+### First client and encrypted sessions
+
+Gordon confirmed that the client creating a brand-new account becomes its first trusted client automatically. This applies to new account creation; it does not grant automatic approval to additional clients signing in to an existing account.
+
+Preserve end-to-end session encryption through the relay. Each approved client exchanges keys with each server in the account so their session traffic is encrypted between those endpoints. Relay login and transport encryption alone do not satisfy this requirement. Private endpoint keys must remain outside the relay. The authenticated exchange protocol, relationship to account approval, key rotation and behavior when a server is offline remain to be specified.
+
+### Offline servers during client approval
+
+Gordon confirmed that account-level client approval completes even if some account servers are offline. Each server verifies the approval and establishes end-to-end encryption automatically when reachable, without another manual approval for that server. Verification must be independent of the relay's claim that the client is approved. Authorization freshness and revocation handling still need decisions; this does not authorize indefinite use of stale approval records.
+
+### Automatic key rotation requested
+
+Gordon requested automatic periodic key rotation to limit exposure if a key is compromised, suggesting weekly or monthly rotation and asking for a recommendation. The key types, protocol and schedule have not been selected. Rotation must be considered alongside forward secrecy, recovery after a temporary key compromise and explicit device revocation. The preceding question about who may revoke clients or remove servers remains unanswered.
+
+Gordon accepted the recommendation: use fresh session encryption keys for each connection, automatically rekey long-running connections without interrupting terminal processes, and require forward secrecy. Evaluate protocol support for recovering confidentiality after a temporary key compromise; a timer or deterministic update from a stolen secret alone is insufficient. Device identity-key replacement needs authenticated continuity, with revocation and re-enrollment for suspected identity compromise. Rotation does not protect an endpoint while an attacker continues to control it.
+
+Choose time and traffic limits with the protocol rather than fixing a weekly or monthly schedule now. Gordon noted that rotation settings may become configurable later; configuration is not required for the initial design. Protocol references for the distinction are [TLS 1.3](https://www.rfc-editor.org/rfc/rfc8446.html) and [MLS security properties](https://www.rfc-editor.org/rfc/rfc9420.html#section-16.6); neither protocol has been selected by this discussion.
+
+### Revocation management
+
+Gordon confirmed that an explicit action through either a trusted client or an enrolled server's command line can revoke a client or remove a server from the account. Removing a server disconnects it from the account while preserving its local workspaces. Distribution, enforcement timing, stale/offline authorization and rotation of affected keys remain to be specified.
+
+### Unattended server enrollment
+
+Gordon confirmed that unattended installations use a dedicated server-enrollment credential issued through a trusted client or enrolled server. It is account-scoped, revocable and time-limited. Its direct permission is to enroll servers; it cannot directly approve clients or remove devices. Credential reuse, lifetime, instance binding and enforcement against a malicious relay remain to be designed.
+
+Enrolled servers have the approval and revocation powers agreed above. Consequently, an enrollment credential can indirectly establish an endpoint with account-management authority; its restricted direct operations do not make it a low-privilege secret. This consequence must be reflected in provisioning security and validation.
+
+### Enrollment configuration and usability
+
+Gordon requires high security balanced with practical user experience: ordinary workflows must not become difficult to use. He accepted single-use enrollment as the default and configurable reusable credentials for automated fleets. Support multiple independently managed enrollment credentials so different deployments can use different credentials. Each credential retains its own configuration and can expire or be revoked independently. Each enrolled server generates its own identity keys; deployments must not clone a server identity as part of a machine image. Exact configuration fields and defaults beyond single-use remain to be specified.
+
+### Directory access
+
+Gordon confirmed that all trusted clients and enrolled servers may read the personal account's server directory, including server names and connection details. The directory remains encrypted from the relay. Directory encryption and account approval authority are separate from session encryption, which remains specific to each client–server connection. The exact directory-key distribution and rotation protocol remain to be selected.
+
+### Active client revocation and process ownership
+
+Gordon confirmed that a server must immediately disconnect a revoked client and reject its further access once the server learns the revocation. Revocation must preserve the server's terminal processes so another approved client can resume work. The client never owns those processes: it selects which server should launch a terminal, and that server owns the process. Notification delivery, authorization freshness and behavior during loss of connectivity remain to be specified.
+
+### Relay outages
+
+Gordon confirmed that previously approved clients can continue using local and direct server connections while the relay is unavailable, using previously verified trust. A server cannot enforce an unseen remote revocation; it enforces it as soon as it learns it. Whether cached authorization eventually expires, and the freshness policy against deliberate withholding by a compromised relay, remain undecided.
+
+Gordon subsequently confirmed that approved local/direct access continues without an automatic offline trust expiry, accepting that revocation is delayed while updates cannot reach the server, including deliberate withholding by a compromised relay. A client or server may be revoked while it is offline. Its removal remains effective in account membership records; upon reconnecting and receiving the revocation, it must recognize that it no longer belongs to the account and stop account access. Reconnecting must not silently re-enroll a removed endpoint. A removed server retains its local workspaces and terminal processes under the previously agreed ownership rule. Authenticated revocation records, propagation and rollback prevention still require protocol design; this decision does not guarantee delivery through a malicious relay.
+
+### Session attachment direction
+
+Gordon requires one controlling client per terminal session. His latest direction is for displaced clients to remain in view-only mode by default, clearly showing which client has control and providing an explicit action to take control. This supersedes the earlier default-disconnection and opt-in-viewing proposals. Mac workspace switching must remain smooth without connection stutters. On phones and tablets, viewing a session and taking control are separate steps. Validate streaming reliability and performance before adding a disconnected screen; configuration may be considered later. The detailed attachment, handoff, background subscription and buffering contract belongs to [Choose active session attachment and control handoff](14-session-attachment-and-handoff.md).
+
+### Individual endpoint identity keys
+
+Gordon confirmed that each client and server owns its own private identity keys; there is no shared account-wide private device identity key. Keep each endpoint's private identity keys on that endpoint. Session encryption keys remain specific to each client–server connection. The encrypted directory's key-distribution design is a separate question.
+
+[Establish a protocol for account trust and encrypted sessions](15-account-trust-protocol.md) investigates the remaining protocol choices against these decisions. This ticket remains claimed pending that evidence and confirmation of the consolidated decision.
+
+### Enrollment availability
+
+Gordon initially questioned the value of enrolling automated servers when no existing endpoint is connected, since the primary setup starts with the Mac app and adds infrastructure afterward. His final direction accepts offline-capable reusable deployment credentials: requiring another endpoint online adds inconvenience without enough security benefit. Reusable deployments may enroll while every existing trusted client and server is offline. Starting with the Mac app is the primary user journey, not an online-Mac requirement for each deployment.
+
+Keep generic single-use enrollment separate: it requires trusted coordinated redemption, or authorization prepared for a specific instance's keys. This exchange does not establish an offline redemption mechanism for generic single-use credentials. The reusable credential's delegated authority, directory-key delivery and revocation semantics still need protocol design and validation.
+
+Gordon also anticipates a future web app for viewing MyTerm activity, which reinforces avoiding a dependency on an online Mac for deployment enrollment. A web app is not part of the current effort. Its endpoint trust and encryption model have not been selected; this note does not authorize giving a relay-hosted page private endpoint keys.
+
+### Previously approved devices survive ordinary removal
+
+Gordon confirmed that removing a device leaves other already approved devices enrolled, even when the removed device originally approved them. Ordinary removal must not cascade through the admission history. Broader revocation after suspected compromise is a separate explicit action. Deployment credentials created by the removed device and conflicts between partitioned authorities still need policy decisions.
+
+### Account-owned credentials and conflicting removals
+
+Gordon confirmed that deployment credentials belong to the account and remain valid after removal of the endpoint that created them, until independently revoked or expired. Removing that endpoint does not automatically revoke its deployment credentials.
+
+If two disconnected trusted endpoints remove each other, both removals take effect when their authenticated updates meet. Neither removal is silently undone. Gordon accepts that this can leave the account without any trusted endpoint when those were its last two. This does not create a recovery exception or allow relay login alone to restore endpoint authority.
+
+## Answer
+
+Gordon settled the following account-trust policy through live discussion:
+
+- Each server instance belongs to one personal account. A machine may run multiple server instances. The hosted relay remains multi-tenant.
+- The first client creating a new account is trusted automatically. An additional client needs passkey sign-in and explicit approval through a trusted client or an enrolled server. The server fallback gives the new client a code to use in a server approval command. The relay's login verdict alone is not approval authority.
+- All trusted clients and enrolled servers may approve devices, manage revocations and read the account's encrypted server directory. Each endpoint keeps its own private identity keys; there is no shared account-wide private device identity key. Directory encryption has a separate key-distribution design, still to be validated.
+- Each approved client establishes end-to-end encryption with each server, independently of relay transport encryption. Client approval completes when some servers are offline; those servers verify it and perform key exchange when reachable, without another manual approval. Require fresh session keys, forward secrecy and automatic rekeying without interrupting terminal processes. Evaluate recovery after temporary traffic-key exposure; identity compromise requires revocation and re-enrollment. Exact protocols, time/traffic limits and authenticated key replacement remain engineering decisions. Rotation settings may become configurable later.
+- Enrollment credentials are account-owned, independently configurable per deployment, expiring and revocable. Default to single-use with an explicit reusable mode. Reusable deployment enrollment must work without another endpoint online; generic single-use redemption needs a trusted coordinated issuer or pre-bound per-instance authorization. Removing the credential's creator does not invalidate it. Newly enrolled servers generate distinct identity keys and gain normal server authority, so deployment credentials are sensitive account authority.
+- Revocation is an explicit action available through trusted clients and server commands. Servers immediately enforce a valid received revocation, disconnecting the client while preserving server-owned processes. Offline endpoints can be removed; they must not silently rejoin when they receive the removal on reconnect. Honest peers enforce removal even if a compromised removed endpoint ignores it.
+- Previously approved local/direct access has no automatic offline trust expiry. Revocations can be delayed while updates are unavailable, including suppression by a compromised relay. Reconnection must retrieve and verify updates; no guarantee of delivery through a malicious relay is implied.
+- Ordinary device removal preserves other already approved devices and account-owned deployment credentials. Broader compromise cleanup is explicit. Concurrent mutual removals both take effect after reconciliation, even if no trusted endpoint remains.
+- Connection IPs and account-linked operational telemetry are permitted for useful diagnostics, with responsible collection and retention. Private directory and workspace content, and plaintext private decryption keys, remain unavailable to the relay. Telemetry fields, provider and retention belong to the relay-operations decision.
+- A future web app is outside this effort. Keep the architecture independent of an online Mac without assuming a web-client trust design.
+
+The [protocol investigation](../../../docs/research/myterm-next-trust-protocol.md) identifies candidates and constraints; it does not select or validate a complete cryptographic protocol. [Validate the account trust protocol and approval ceremony](16-trust-protocol-and-approval-validation.md) owns the remaining state-machine, key-distribution, ceremony and protocol-validation decisions. The separate [session attachment and control handoff](14-session-attachment-and-handoff.md) ticket retains the agreed default of view-only after takeover, with explicit control acquisition and smooth Mac switching.
+
+Resolution: account-trust policy and endpoint key ownership agreed. This is a planning decision; no authentication, encryption or revocation implementation has been changed or security-tested.

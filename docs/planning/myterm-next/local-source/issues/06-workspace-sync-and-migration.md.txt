@@ -1,0 +1,18 @@
+# Choose shared workspace synchronization and migration
+
+ID: 06
+Parent: [MyTerm next architecture and implementation](../map.md)
+Labels: wayfinder:grilling
+Type: grilling
+Status: open
+Assignee: unassigned
+Blocked by: 05
+
+## Question
+
+How do servers own shared workspace structure, panes and tabs while each client retains independent navigation and display preferences? Decide concurrent structural edits, authoritative persistence, identifiers, offline/stale-client behavior and server switching. Define how existing workspace files are recognized, backed up, migrated and validated without losing workspaces, even though devices may re-enroll and old wire protocols may be retired.
+
+## Dependencies
+
+- [Choose the standalone server boundary and runtime](05-server-authority-and-runtime.md)
+

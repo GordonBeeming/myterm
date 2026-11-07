@@ -1,0 +1,19 @@
+# Choose local, direct and relay connection workflows
+
+ID: 08
+Parent: [MyTerm next architecture and implementation](../map.md)
+Labels: wayfinder:grilling
+Type: grilling
+Status: open
+Assignee: unassigned
+Blocked by: 04, 05
+
+## Question
+
+How should local automatic startup, direct hostname/IP connections and relay connections identify and authenticate the same server? Decide discovery, explicit connection selection or failover, relay selection, first-device trust, unattended server registration, enrollment credential lifetime and cloning/revocation behavior. Include Azure VM scale-set startup and machine replacement. Newly enrolled servers must become available to approved clients without a separate QR scan per server.
+
+## Dependencies
+
+- [Choose account trust and key ownership](04-account-trust-and-key-ownership.md)
+- [Choose the standalone server boundary and runtime](05-server-authority-and-runtime.md)
+

@@ -1,0 +1,24 @@
+# Choose hosted and self-hosted relay account operations
+
+ID: 09
+Parent: [MyTerm next architecture and implementation](../map.md)
+Labels: wayfinder:grilling
+Type: grilling
+Status: open
+Assignee: unassigned
+Blocked by: 04
+
+## Question
+
+How do personal accounts register, sign in, discover their encrypted directory and operate on the new default hosted multi-tenant relay or a self-hosted relay? Decide account creation and abuse controls, account/relay identity boundaries, whether moving between relays is supported in this release, deletion and retention, deployment configuration, and operational logs under the chosen privacy objective. Define release and self-hosting deliverables without provisioning resources prematurely.
+
+## Dependencies
+
+- [Choose account trust and key ownership](04-account-trust-and-key-ownership.md)
+
+## Comments
+
+### Operational telemetry boundary
+
+Gordon accepts necessary connection IPs and account-linked diagnostics to distinguish one affected account from a wider incident, with responsible collection and retention. Choose the telemetry provider, permitted fields, account identifiers, access controls and retention here or in focused child decisions once the operations model is concrete. The private directory and workspace content remain protected from the relay. See [Choose account trust and key ownership](04-account-trust-and-key-ownership.md) for the recorded privacy boundary; do not revert to a requirement to hide all routing or account correlation.
+

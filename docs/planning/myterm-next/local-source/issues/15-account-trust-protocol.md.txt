@@ -1,0 +1,30 @@
+# Establish a protocol for account trust and encrypted sessions
+
+ID: 15
+Parent: [MyTerm next architecture and implementation](../map.md)
+Labels: wayfinder:research
+Type: research
+Status: resolved
+Assignee: Gordon Beeming (research delegated in this session)
+Blocked by: 01, 03
+
+## Question
+
+Which established protocols and available implementations can satisfy the decisions recorded in [Choose account trust and key ownership](04-account-trust-and-key-ownership.md)? Investigate unique endpoint identity keys, a first-client account trust anchor, approval by any trusted client or server, authenticated discovery and directory-key distribution, offline-verifiable approval, revocation and rollback resistance, and delegated unattended enrollment. Distinguish a one-time credential enforced by trusted endpoints from a relay-only usage flag, and explain what issuance availability is needed when no trusted endpoint is online.
+
+Compare a small set of mature options for pairwise end-to-end channels with fresh session keys, forward secrecy and automatic rekeying. Distinguish rekeying from recovery after temporary key compromise and identity compromise. Identify implementation availability for Apple clients and native macOS/Linux/Windows servers without selecting the server runtime. Do not present a custom protocol as proven secure. Respect indefinite approved direct/local use while offline and the accepted possibility of delayed revocation; do not promise a compromised relay cannot withhold new state.
+
+Write primary-source findings and a recommended next design step to docs/research/myterm-next-trust-protocol.md. Separate facts, candidates, unsatisfied requirements and human decisions. Research only; do not implement, commit, push, access secrets or deploy.
+
+## Dependencies
+
+- [Establish what a compromised relay could learn](01-relay-compromise-and-private-metadata.md)
+- [Show what recovery would preserve or lose](03-recovery-scenarios.md)
+
+## Answer
+
+The [trust protocol investigation](../../../docs/research/myterm-next-trust-protocol.md) records primary-source evidence and implementation candidates. Mutually authenticated TLS 1.3 inside an opaque relay tunnel is the leading channel candidate, with separately verified account membership and candidate HPKE directory-key envelopes. This is a recommendation for investigation, not an approved protocol or proof of security.
+
+TLS traffic-key updates do not recover from a stolen current traffic secret; fresh authenticated ephemeral key exchange is needed for that case. Short-code approval requires endpoint authentication independent of relay lookup. Generic single-use bearer enrollment requires trusted coordinated redemption, while authorization pre-bound to an instance's public keys is a separate offline-capable option. Reusable delegation has different exposure and revocation semantics. Partitioned revocation and descendant admissions still require explicit policy.
+
+Resolution: research complete. Findings are retained locally. No code changes, cryptographic implementation, interoperability testing, commits, pushes, secrets access or deployment were performed. Remaining product choices return to [Choose account trust and key ownership](04-account-trust-and-key-ownership.md).

@@ -1,0 +1,20 @@
+# Choose the standalone server boundary and runtime
+
+ID: 05
+Parent: [MyTerm next architecture and implementation](../map.md)
+Labels: wayfinder:grilling
+Type: grilling
+Status: open
+Assignee: unassigned
+Blocked by: 02, 04, 13
+
+## Question
+
+Which native runtime and component boundaries should own workspace persistence, terminal process lifetime, terminal screen/scrollback state, browser proxying and client connections? Decide the server contract, local startup defaults and process lifetime across UI quit, server restart and upgrade, with equivalent behavior on macOS, Linux and native Windows. Evaluate against the portability evidence and chosen trust model. Preserve phone access without any Mac UI process. This decision must make the first implementation workstreams concrete.
+
+## Dependencies
+
+- [Establish the native server implementation options](02-native-server-portability.md)
+- [Choose account trust and key ownership](04-account-trust-and-key-ownership.md)
+- [Compare native session adapters and terminal fidelity](13-native-terminal-feasibility.md)
+

@@ -1,0 +1,18 @@
+# Establish native validation environments
+
+ID: 12
+Parent: [MyTerm next architecture and implementation](../map.md)
+Labels: wayfinder:task
+Type: task
+Mode: AFK where existing access permits; HITL for missing access or paid provisioning
+Status: open
+Assignee: unassigned
+Blocked by: 02
+
+## Question
+
+Establish where the candidate server can actually be built and executed on native macOS, Linux and Windows. Inventory existing local tools, virtual machines and CI runner access before requesting new resources. Record OS, CPU, toolchain, PTY/ConPTY availability and exact commands for bounded experiments. Cross-compilation and WSL do not substitute for native Windows execution. Do not provision paid resources, deploy shared infrastructure or capture GUI focus without the authorization required for that action. Resolve when an actual accessible route to native validation is established, or leave the ticket open with a precise access requirement.
+
+## Dependencies
+
+- [Establish the native server implementation options](02-native-server-portability.md)

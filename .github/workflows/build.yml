@@ -10,6 +10,13 @@ concurrency:
 on:
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '.scratch/**'
+      - '**/*.md'
+      - '**/*.mdx'
+      - '**/*.rst'
+      - 'LICENSE'
   release:
     types: [published]
   workflow_call:
@@ -82,7 +89,9 @@ jobs:
           bash script/channel_isolation_test.sh
 
       - name: Test beta release source and publication rules
-        run: python3 script/test_beta_release.py
+        run: |
+          python3 script/test_beta_release.py
+          ruby script/test_workflow_paths.rb
 
   verify-bundle:
     runs-on: xcode-27

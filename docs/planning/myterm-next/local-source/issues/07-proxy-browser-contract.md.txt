@@ -1,0 +1,19 @@
+# Choose the proxy-only browser contract
+
+ID: 07
+Parent: [MyTerm next architecture and implementation](../map.md)
+Labels: wayfinder:grilling
+Type: grilling
+Status: open
+Assignee: unassigned
+Blocked by: 04, 05
+
+## Question
+
+What browser behavior must the proxy-only architecture support consistently on Mac, iPhone and iPad clients against every native server platform? Decide server-local/private destination routing, origin and TLS behavior, cookies/authentication, WebSockets, browser history and per-client browser state, local-file expectations, and destination authorization. Remove dependence on Mac-rendered streaming. Use concrete local development and login scenarios to settle feature parity and limits.
+
+## Dependencies
+
+- [Choose account trust and key ownership](04-account-trust-and-key-ownership.md)
+- [Choose the standalone server boundary and runtime](05-server-authority-and-runtime.md)
+

@@ -1,0 +1,22 @@
+# Establish the native server implementation options
+
+ID: 02
+Parent: [MyTerm next architecture and implementation](../map.md)
+Labels: wayfinder:research
+Type: research
+Status: resolved
+Assignee: Gordon Beeming (research delegated in this session)
+Blocked by: none
+
+## Question
+
+Which runtime, libraries and process boundaries can deliver native macOS, Linux and Windows servers while retaining the desired terminal and browser workflows? Inspect the existing Swift session host, UI-owned authority, relay, remote package and CI. Compare practical options against primary documentation, including Windows ConPTY, Unix PTYs, terminal screen/scrollback ownership, crypto, private key storage, browser proxying, service lifecycle, native build/test runners and client integration. Identify reusable components, platform blockers and what can actually be verified from this checkout or existing CI. Record findings in docs/research/myterm-next-native-server.md. Recommend options with tradeoffs; do not choose the implementation for Gordon.
+
+## Answer
+
+The [native server investigation](../../../docs/research/myterm-next-native-server.md) compares Go, extracted Swift and Rust using current code and primary sources. Existing per-session persistence is useful, but standalone workspace/remote authority still lives in the Mac UI. Apple-only process, networking, storage, local authentication and image handling need replacement or platform adapters. Current SwiftTerm process helpers exclude Windows; package-level Windows support does not establish a working native session server.
+
+The report identifies native PTY/ConPTY and terminal-state options without selecting a runtime. A replacement emulator must demonstrate terminal behavior and reconnect fidelity; it cannot assume compatibility with SwiftTerm checkpoints. Existing workflow definitions provide no evidence of native Windows session execution, and no candidate was run during research.
+
+Resolution: research complete. Native test access and a feasibility/terminal comparison are new prerequisite tickets for the runtime decision. No production code, platform verification or implementation choice is complete.
+

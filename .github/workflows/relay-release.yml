@@ -3,8 +3,22 @@ name: Relay release packaging
 on:
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '.scratch/**'
+      - '**/*.md'
+      - '**/*.mdx'
+      - '**/*.rst'
+      - 'LICENSE'
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '.scratch/**'
+      - '**/*.md'
+      - '**/*.mdx'
+      - '**/*.rst'
+      - 'LICENSE'
   release:
     types: [published]
 
