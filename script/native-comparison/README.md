@@ -40,7 +40,7 @@ A cell match cannot prove images, history, hyperlinks, mode state or keyboard ev
 
 `run.json` records native OS/CPU, toolchain versions, LF-normalized fixture hash, UTC timestamps and adapter status. `sessions.json` records each native experiment. `*-traces.json` retains the engine state; `comparison.json` is produced only when SwiftTerm runs. Adapter failures fail the run. Fidelity differences remain findings for Gordon to judge, so a green CI job does not mean engine parity.
 
-The dedicated `native-comparison.yml` workflow prepares macOS ARM64 on `xcode-27` with Xcode 27.1 selected, Linux x86-64/ARM64 and native Windows x86-64 runs. It needs publication before it can produce evidence. Non-Mac jobs run the same traces and retain their states but do not independently assert SwiftTerm parity. The workflow uploads JSON and logs for fourteen days; durable summaries belong in the research note and ticket. Cross-compilation is a build check only.
+The dedicated `native-comparison.yml` workflow prepares macOS ARM64 on `xcode-27` with Xcode 27.1 selected, Linux x86-64/ARM64 and native Windows x86-64 runs. The [verified native run](https://github.com/GordonBeeming/myterm/actions/runs/42367281598) passes all four jobs; the prototype is retained on its draft PR branch. Non-Mac jobs run the same traces and retain their states but do not independently assert SwiftTerm parity. The workflow uploads JSON and logs for fourteen days; durable summaries belong in the research note and ticket. Cross-compilation is a build check only.
 
 Render a local comparison page from a completed Mac run:
 
@@ -53,7 +53,7 @@ The page embeds the measured data and offers captured cells, basic style differe
 After downloading all four native artifacts, include their actual results in the page:
 
 ```sh
-python3 script/native-comparison/report.py --results /tmp/myterm-native-comparison --ci-results /tmp/myterm-native-ci --ci-run-url https://github.com/GordonBeeming/myterm/actions/runs/ACTUAL_RUN_ID --output /tmp/myterm-native-comparison.html
+python3 script/native-comparison/report.py --results /tmp/myterm-native-ci/native-comparison-xcode-27 --ci-results /tmp/myterm-native-ci --ci-run-url https://github.com/GordonBeeming/myterm/actions/runs/42367281598 --output /tmp/myterm-native-comparison.html
 ```
 
 The platform summary requires all four artifacts and matching normalized fixture hashes. It distinguishes native adapter results from the same engine's trace projection across platforms and from fidelity against SwiftTerm.

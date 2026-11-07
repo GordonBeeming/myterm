@@ -18,7 +18,7 @@ TEMPLATE = r'''<!doctype html>
 <h1 id="headline">Both adapters work locally; terminal fidelity needs work</h1>
 <p class="muted" id="environment"></p>
 <p>Go and Rust are server candidates, including the macOS server. The Mac, iPhone and iPad clients remain native.</p>
-<div class="summary"><div class="card"><strong id="adapter-count"></strong>Native adapter cases passed in the selected evidence</div><div class="card"><strong id="trace-count"></strong>Same bytes and resizes across three engines</div><div class="card"><strong id="checkpoint-count"></strong>SwiftTerm checkpoint equality checks passed</div><div class="card"><strong>Still open</strong>Linux, Windows and Gordon's fidelity judgment</div></div>
+<div class="summary"><div class="card"><strong id="adapter-count"></strong>Native adapter cases passed in the selected evidence</div><div class="card"><strong id="trace-count"></strong>Same bytes and resizes across three engines</div><div class="card"><strong id="checkpoint-count"></strong>SwiftTerm checkpoint equality checks passed</div><div class="card"><strong>Still open</strong><span id="open-items">Linux, Windows and Gordon's fidelity judgment</span></div></div>
 <section id="native-evidence" hidden>
 <h2>Native runner evidence</h2><div id="native-matrix"></div>
 <p class="muted facts">The trace column compares the same Go or Rust engine's measured cells, basic styles, cursor, active buffer and final replies across platforms. It does not assert parity with SwiftTerm. The Rust Windows adapter answers the required one-time inherited-cursor startup query; application-query policy remains unimplemented.</p>
@@ -67,6 +67,7 @@ for(const n of ['go','rust'])$(n+'-adapters').textContent=Object.entries(D.sessi
 if(D.ci){
  $('native-evidence').hidden=false;
  const allPass=D.ci.every(e=>e.run.status==='pass');
+ $('open-items').textContent=allPass?"Gordon's fidelity judgment":"Native platform failures and Gordon's fidelity judgment";
  $('headline').textContent=allPass?'Native adapters pass across four runners; terminal fidelity needs work':'Native validation results include failures';
  $('evidence-label').textContent=allPass?'Four native runners · Mac runner trace baseline':'Native runner failures · Mac runner trace baseline';
  $('publication').textContent='The prototype remains outside main; the decision ticket awaits the fidelity judgment.';
