@@ -194,6 +194,10 @@ static int probe(const char *executable) {
     if (ioctl(master, TIOCSWINSZ, &size) != 0 || write(master, "PTY_INPUT\n", 10) != 10) { perror("PTY setup"); goto cleanup; }
     while (now() < deadline) {
         fd_set reads;
+        if (master >= FD_SETSIZE) {
+            fprintf(stderr, "PTY descriptor exceeds FD_SETSIZE\n");
+            goto cleanup;
+        }
         FD_ZERO(&reads); FD_SET(master, &reads);
         struct timeval timeout = {.tv_sec = 0, .tv_usec = 100000};
         int ready = select(master + 1, &reads, NULL, NULL, &timeout);
