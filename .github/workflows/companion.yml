@@ -21,6 +21,10 @@ on:
       - 'script/test_companion_simulator_selection.py'
       - 'script/test_companion_testflight_helper.sh'
       - 'script/verify_companion_toolchain.sh'
+      - '!docs/**'
+      - '!**/*.md'
+      - '!**/*.mdx'
+      - '!**/*.rst'
   workflow_call:
     inputs:
       source_sha:

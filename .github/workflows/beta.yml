@@ -3,6 +3,17 @@ name: Beta
 on:
   push:
     branches: [main]
+    # These files do not change shipped binaries. Manual rebuilds remain available.
+    paths-ignore:
+      - 'docs/**'
+      - '.scratch/**'
+      - '**/*.md'
+      - '**/*.mdx'
+      - '**/*.rst'
+      - 'LICENSE'
+      - '.github/**'
+      - 'Tests/**'
+      - 'script/test_*'
   workflow_dispatch:
     inputs:
       rebuild_companion:

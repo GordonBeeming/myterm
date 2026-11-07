@@ -1,0 +1,18 @@
+# Compare native session adapters and terminal fidelity
+
+ID: 13
+Parent: [MyTerm next architecture and implementation](../map.md)
+Labels: wayfinder:prototype
+Type: prototype
+Status: open
+Assignee: unassigned
+Blocked by: 02, 12
+
+## Question
+
+Which leading runtime and terminal-engine candidates can demonstrate the behavior needed for a native standalone server? Use cheap throwaway slices to exercise PTY/ConPTY startup, input/output, resize, disconnect/reattach, detached output, terminal query responses, checkpoints and cleanup on the actual target platforms. Compare representative Unicode, alternate-screen and existing supported graphics/keyboard traces against SwiftTerm. Identify preserved behavior, regressions and adapter effort explicitly. Choose bounded candidates with Gordon using the research before expanding the experiment; this ticket is evidence for the runtime decision, not the full production server. Link reproducible results and an inspectable comparison. Gordon must judge the fidelity and tradeoffs before resolution.
+
+## Dependencies
+
+- [Establish the native server implementation options](02-native-server-portability.md)
+- [Establish native validation environments](12-native-validation-environments.md)

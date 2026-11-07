@@ -1,0 +1,52 @@
+# Show what recovery would preserve or lose
+
+ID: 03
+Parent: [MyTerm next architecture and implementation](../map.md)
+Labels: wayfinder:prototype
+Type: prototype
+Status: resolved
+Assignee: Gordon Beeming (Codex session)
+Blocked by: 01
+
+## Question
+
+Which recovery model is worth shipping when workspace data remains on session servers? Build a clearly marked, throwaway interactive explanation with scenarios for losing one client, losing all clients while a trusted server remains, losing all enrolled endpoints while server disks survive, relay loss/compromise, and losing the server disks themselves. Compare re-enrollment without an account recovery key, recovery through a surviving trusted endpoint, and a user-held recovery key. Show separately workspace files, session processes/scrollback, encrypted directory metadata, account authentication, and ability to establish trust. State where a key cannot restore lost data. Use actual candidate key ownership from the privacy investigation and make assumptions explicit. Gordon must see the scenarios and decide; do not mark resolved after building the demo.
+
+## Dependencies
+
+- [Establish what a compromised relay could learn](01-relay-compromise-and-private-metadata.md)
+
+
+## Comments
+
+### Prototype ready for discussion
+
+The [recovery workbench](../prototypes/recovery-prototype.html) is a self-contained, throwaway HTML explanation. A delivery copy lives at `/Users/gordonbeeming/Developer/artifacts/myterm/recovery-prototype.html`.
+
+Seven guided scenarios compare local administrative re-enrollment, surviving endpoint authority and an offline recovery package. Free play varies server admission powers, disk access, saved secrets, directory copies, recovery material and relay login. It separates workspace files/layout, terminal processes/scrollback, directory decryption, relay authentication and endpoint trust.
+
+The package candidate includes a key, independently anchored root identity and a wrapped authority backup. Its broad admission powers are an explicit assumption, not a selected hierarchy. Freshness, revocation and bootstrap checks remain design work. No cryptography, service failover or account recovery was implemented.
+
+Headless browser review exercised all seven walkthroughs and the server-authority alternative without browser errors. Desktop and phone widths had no page overflow or encoding faults; the desktop render was visually inspected.
+
+Awaiting Gordon's reaction and recovery-policy decision. This ticket remains claimed and unresolved; no decision has been added to the map.
+
+### Gordon's direction: passkeys only
+
+Gordon confirmed that relay authentication stays passkey-only and rejected an additional user-managed recovery key as having no value for this product. No separate recovery key should be designed into the user workflow. Internal encryption keys are still necessary; their ownership and recovery remain part of account trust design.
+
+The prototype now leads with a three-view explanation: current relay login, a passkey/PRF unlock candidate, and loss of every usable passkey and trusted endpoint. The earlier separate-key comparison is retained under a collapsed historical section and is explicitly ruled out as a product direction.
+
+Current relay login verifies WebAuthn assertions in `Services/relay/internal/auth/auth.go`; that operation alone does not recover endpoint encryption authority. The [WebAuthn PRF extension](https://www.w3.org/TR/webauthn-3/#prf-extension) is a possible way to use the same credential for client-side key unlocking. Platform support, credential replacement, envelope availability, independently anchored identity and freshness remain unverified; no passkey-based recovery scheme has been selected.
+
+Pending scenario decision: when all passkeys and trusted clients are unavailable but a server disk survives, is explicit local administrative trust rebuilding into a new passkey account acceptable, even if the old encrypted directory cannot be recovered? Keep the ticket unresolved until Gordon answers.
+
+## Answer
+
+Gordon defines the personal account as the directory of his MyTerm servers: “where are my servers”. Authentication remains passkey-only. If access to that account is lost, the account is lost; the product does not need a separate recovery key or a special account-restoration workflow. This loss is an accepted outcome.
+
+Workspace files and sessions belong to MyTerm servers. Losing the account does not itself delete server data. Losing a server disk is a separate data-loss event; account credentials cannot restore that disk or a terminated process.
+
+Creating a new account and enrolling servers is ordinary setup, not restoration of the old account. This decision does not approve automatic transfer of server trust or specify a local reset mechanism. Endpoint key ownership and secure admission remain with [Choose account trust and key ownership](04-account-trust-and-key-ownership.md), under this accepted account-loss policy. Passkey PRF recovery is not a requirement created by this ticket.
+
+The [prototype](../prototypes/recovery-prototype.html) records the discussion and now leads with the agreed boundary. Resolution: no additional user-managed recovery secret and no requirement to recover a lost account.

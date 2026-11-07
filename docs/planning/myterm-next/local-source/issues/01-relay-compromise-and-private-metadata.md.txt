@@ -1,0 +1,22 @@
+# Establish what a compromised relay could learn
+
+ID: 01
+Parent: [MyTerm next architecture and implementation](../map.md)
+Labels: wayfinder:research
+Type: research
+Status: resolved
+Assignee: Gordon Beeming (research delegated in this session)
+Blocked by: none
+
+## Question
+
+What application data, account metadata, connection metadata and trust material does the current relay expose, and which protections are feasible against database theft versus a malicious running relay? Investigate primary sources and the current code. Identify what Gordon's no-discoverable-personal-data objective requires, what remains observable, and options that need his decision. Include server discovery, enrollment, key substitution, replay, revocation and traffic correlation. Do not treat an account identifier as anonymous merely because it is random. Distinguish established facts from candidate designs. Record findings in docs/research/myterm-next-relay-privacy.md. Do not select a key hierarchy or accept residual leakage for Gordon.
+
+## Answer
+
+The [relay privacy investigation](../../../docs/research/myterm-next-relay-privacy.md) records code evidence and primary sources for database theft and compromise of a running relay. Current records expose readable names and account/device/host relationships. Encrypted application traffic retains visible routing identifiers. The investigation also identifies conditional exposure of usable replacement bearer tokens retained for refresh retries; it does not claim an exploit was run.
+
+Protecting content requires endpoint-held keys and admission authority independent of relay login. Encrypting the directory alone does not hide active communication relationships, source addresses or traffic patterns from the relay forwarding the connections. No decision has been made to accept those observations, choose a key hierarchy or require a recovery key. Those remain human decisions in the dependent tickets.
+
+Resolution: research complete. This was a code/documentation investigation; no security test, production change or implementation was performed.
+

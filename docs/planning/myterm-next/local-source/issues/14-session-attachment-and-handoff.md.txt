@@ -1,0 +1,37 @@
+# Choose active session attachment and control handoff
+
+ID: 14
+Parent: [MyTerm next architecture and implementation](../map.md)
+Labels: wayfinder:grilling
+Type: grilling
+Status: open
+Assignee: unassigned
+Blocked by: 05
+
+## Question
+
+What is the client attachment contract for one controlling client per terminal session, with other attached clients remaining in view-only mode by default? Define control takeover and return, selection versus attachment, and background delivery. When a phone takes control, the Mac should remain a viewer and clearly show which client has control with an action to take control back. Preserve smooth Mac workspace switching without connection stutters. Decide how transport reuse, cached display state and resynchronization support this behavior and which sessions remain subscribed in the background. The server owns terminal processes throughout; changing client attachment must not terminate them. Validate connection reliability and streaming costs before deciding whether a disconnected screen or configuration is needed. Specify behavior and acceptance evidence before implementation and visual design.
+
+## Dependencies
+
+- [Choose the standalone server boundary and runtime](05-server-authority-and-runtime.md)
+
+## Comments
+
+### Direction from Gordon
+
+Workspace switches on Mac must feel continuously connected. Gordon initially proposed disconnecting displaced clients from streaming, then revised that direction to keeping them in view-only mode by default, as recorded below.
+
+### Explicit viewing and mobile control
+
+Gordon confirmed that view-only attachment is opt-in. Displaced clients default to disconnected from the terminal output stream; this does not necessarily close their underlying transport connection. They may explicitly choose View only or take control. On phones and tablets, View session is followed by Take control as a separate second step. The user's explanation ended mid-sentence after "because"; await the continuation before inferring further mobile behavior. This ticket remains open for the complete attachment and handoff contract.
+
+### Revised default: remain a viewer
+
+Gordon clarified that keeping sessions in view mode is preferable if behavior remains smooth. A displaced client should remain a viewer by default, with a clear indication of the controlling client and an explicit action to take control. This supersedes the earlier opt-in-viewing and default-disconnection direction. On phones and tablets, viewing remains separate from taking control.
+
+His concern is that ongoing streaming may contribute to previously experienced connection issues; that cause has not been established. Validate connection stability, switching latency and resource use before changing the default to a reconnect screen. A viewing/streaming configuration may be considered later, but is not currently required. Exact background-session subscriptions and buffering remain design questions.
+
+### Repeatable verification
+
+Carry automated regression and integration scenarios into implementation for takeover, view-only continuity, control acquisition, workspace switching and reconnects while server-owned processes continue. Provide locally runnable performance workloads comparing viewer counts, terminal output rates and background subscriptions, measuring switching/reconnect latency and CPU/memory use. Establish a baseline before using connection instability or performance as the reason to change the viewing default. Coordinate the harness and evidence with [Set the implementation sequence and release acceptance checks](11-verification-and-implementation-plan.md).

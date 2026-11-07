@@ -1,0 +1,307 @@
+{
+  "repository": "GordonBeeming/myterm",
+  "map": {
+    "url": "https://github.com/GordonBeeming/myterm/issues/125",
+    "number": 125,
+    "title": "MyTerm next architecture and implementation"
+  },
+  "source_code_sha": "9bfa0ea4867107e77fa8414d44b1b5331f593aa4",
+  "sources": {
+    ".scratch/myterm-next/issues/01-relay-compromise-and-private-metadata.md": {
+      "archive": "docs/planning/myterm-next/local-source/issues/01-relay-compromise-and-private-metadata.md.txt",
+      "sha256": "022ed346c42f0eb90ce61731f4f7e39e01238d04a70dfd958cb22b7374adb920",
+      "bytes": 2091
+    },
+    ".scratch/myterm-next/issues/02-native-server-portability.md": {
+      "archive": "docs/planning/myterm-next/local-source/issues/02-native-server-portability.md.txt",
+      "sha256": "1f3dc8a2ebbd314a2b486651231ce7dc9128344ce1c70cb6998b9188212a639a",
+      "bytes": 2171
+    },
+    ".scratch/myterm-next/issues/03-recovery-scenarios.md": {
+      "archive": "docs/planning/myterm-next/local-source/issues/03-recovery-scenarios.md.txt",
+      "sha256": "2ccb962ed31bd0c69891690b34f78d11a3cb4430a5e19de8f554c0e3aa71e86c",
+      "bytes": 5279
+    },
+    ".scratch/myterm-next/issues/04-account-trust-and-key-ownership.md": {
+      "archive": "docs/planning/myterm-next/local-source/issues/04-account-trust-and-key-ownership.md.txt",
+      "sha256": "219bd2191307c67f252a2e4a34b9dd2ae3e7871a0b2f71483cb202d1bb91e5ec",
+      "bytes": 18966
+    },
+    ".scratch/myterm-next/issues/05-server-authority-and-runtime.md": {
+      "archive": "docs/planning/myterm-next/local-source/issues/05-server-authority-and-runtime.md.txt",
+      "sha256": "177f9f028ac1e44e2dca11a4e3425213d1d0ca8d7aafe8240e6865798fa49b1d",
+      "bytes": 1066
+    },
+    ".scratch/myterm-next/issues/06-workspace-sync-and-migration.md": {
+      "archive": "docs/planning/myterm-next/local-source/issues/06-workspace-sync-and-migration.md.txt",
+      "sha256": "127b1052cece56376280c66c8382fc7a0467e586811ebf8d113d12b529d35623",
+      "bytes": 793
+    },
+    ".scratch/myterm-next/issues/07-proxy-browser-contract.md": {
+      "archive": "docs/planning/myterm-next/local-source/issues/07-proxy-browser-contract.md.txt",
+      "sha256": "f06fb7ffa921078f1dde2404df0e3a1774d2727b20fa9e98a5a8146d8bde3119",
+      "bytes": 905
+    },
+    ".scratch/myterm-next/issues/08-connection-paths-and-enrollment.md": {
+      "archive": "docs/planning/myterm-next/local-source/issues/08-connection-paths-and-enrollment.md.txt",
+      "sha256": "b0f8a055c1afa578b882f26dbd9aef281ac0b2fe4bc67bfec0a2882ea5008937",
+      "bytes": 917
+    },
+    ".scratch/myterm-next/issues/09-hosted-and-self-hosted-relay.md": {
+      "archive": "docs/planning/myterm-next/local-source/issues/09-hosted-and-self-hosted-relay.md.txt",
+      "sha256": "04124f1f3dd2c9fe2014ebc131d674d6b44081bc6037367a981c27ca4d7fc130",
+      "bytes": 1499
+    },
+    ".scratch/myterm-next/issues/10-cross-server-agent-visibility.md": {
+      "archive": "docs/planning/myterm-next/local-source/issues/10-cross-server-agent-visibility.md.txt",
+      "sha256": "67e13144516d1651d16d018dab53713d7fe86f5242ff54b1747b7ddb57fdb18d",
+      "bytes": 716
+    },
+    ".scratch/myterm-next/issues/11-verification-and-implementation-plan.md": {
+      "archive": "docs/planning/myterm-next/local-source/issues/11-verification-and-implementation-plan.md.txt",
+      "sha256": "de93d0c9d797be4f89a5364a2765aa108dc1d7221e229b5fec6362aaec7788f4",
+      "bytes": 4801
+    },
+    ".scratch/myterm-next/issues/12-native-validation-environments.md": {
+      "archive": "docs/planning/myterm-next/local-source/issues/12-native-validation-environments.md.txt",
+      "sha256": "41631785e3a5866de43344be3a6d95090ff7ec95a2d9dc10823beb576100493c",
+      "bytes": 1057
+    },
+    ".scratch/myterm-next/issues/13-native-terminal-feasibility.md": {
+      "archive": "docs/planning/myterm-next/local-source/issues/13-native-terminal-feasibility.md.txt",
+      "sha256": "f5b70e06ac0b50360f1feca13ac95e107fa19f645886a20903c8c41880fa0025",
+      "bytes": 1232
+    },
+    ".scratch/myterm-next/issues/14-session-attachment-and-handoff.md": {
+      "archive": "docs/planning/myterm-next/local-source/issues/14-session-attachment-and-handoff.md.txt",
+      "sha256": "181033888e1d614dfabdb0044cddfe4016e883b5005f753642faeafce6913f74",
+      "bytes": 3634
+    },
+    ".scratch/myterm-next/issues/15-account-trust-protocol.md": {
+      "archive": "docs/planning/myterm-next/local-source/issues/15-account-trust-protocol.md.txt",
+      "sha256": "e3ce4dbdbec84941010fe82ddd33087b93ec3c0ad8c3f4dea92698537c4b369d",
+      "bytes": 3263
+    },
+    ".scratch/myterm-next/issues/16-trust-protocol-and-approval-validation.md": {
+      "archive": "docs/planning/myterm-next/local-source/issues/16-trust-protocol-and-approval-validation.md.txt",
+      "sha256": "8c097b0499da20476bf6f9f2e3e4fc6dbc912845b0c3d63fd8367dcb8e2bd23b",
+      "bytes": 3638
+    },
+    ".scratch/myterm-next/map.md": {
+      "archive": "docs/planning/myterm-next/local-source/map.md.txt",
+      "sha256": "f62750656aa508e2ddebdc26181b0c88a4c8646ed88a691114877f0f24528881",
+      "bytes": 8831
+    },
+    ".scratch/myterm-next/prototypes/recovery-prototype.html": {
+      "archive": "docs/planning/myterm-next/local-source/prototypes/recovery-prototype.html.txt",
+      "sha256": "3eeb502ebfce8d84639c663c65851385df63a342b3f79ff33b8ad2359949b65e",
+      "bytes": 24335
+    }
+  },
+  "tickets": [
+    {
+      "url": "https://github.com/GordonBeeming/myterm/issues/126",
+      "number": 126,
+      "title": "Establish what a compromised relay could learn",
+      "local_id": "01",
+      "source_path": ".scratch/myterm-next/issues/01-relay-compromise-and-private-metadata.md",
+      "source_status": "resolved",
+      "type": "research",
+      "blocked_by": []
+    },
+    {
+      "url": "https://github.com/GordonBeeming/myterm/issues/127",
+      "number": 127,
+      "title": "Establish the native server implementation options",
+      "local_id": "02",
+      "source_path": ".scratch/myterm-next/issues/02-native-server-portability.md",
+      "source_status": "resolved",
+      "type": "research",
+      "blocked_by": []
+    },
+    {
+      "url": "https://github.com/GordonBeeming/myterm/issues/128",
+      "number": 128,
+      "title": "Show what recovery would preserve or lose",
+      "local_id": "03",
+      "source_path": ".scratch/myterm-next/issues/03-recovery-scenarios.md",
+      "source_status": "resolved",
+      "type": "prototype",
+      "blocked_by": [
+        "01"
+      ]
+    },
+    {
+      "url": "https://github.com/GordonBeeming/myterm/issues/129",
+      "number": 129,
+      "title": "Choose account trust and key ownership",
+      "local_id": "04",
+      "source_path": ".scratch/myterm-next/issues/04-account-trust-and-key-ownership.md",
+      "source_status": "resolved",
+      "type": "grilling",
+      "blocked_by": [
+        "01",
+        "03",
+        "15"
+      ]
+    },
+    {
+      "url": "https://github.com/GordonBeeming/myterm/issues/130",
+      "number": 130,
+      "title": "Choose the standalone server boundary and runtime",
+      "local_id": "05",
+      "source_path": ".scratch/myterm-next/issues/05-server-authority-and-runtime.md",
+      "source_status": "open",
+      "type": "grilling",
+      "blocked_by": [
+        "02",
+        "04",
+        "13"
+      ]
+    },
+    {
+      "url": "https://github.com/GordonBeeming/myterm/issues/131",
+      "number": 131,
+      "title": "Choose shared workspace synchronization and migration",
+      "local_id": "06",
+      "source_path": ".scratch/myterm-next/issues/06-workspace-sync-and-migration.md",
+      "source_status": "open",
+      "type": "grilling",
+      "blocked_by": [
+        "05"
+      ]
+    },
+    {
+      "url": "https://github.com/GordonBeeming/myterm/issues/132",
+      "number": 132,
+      "title": "Choose the proxy-only browser contract",
+      "local_id": "07",
+      "source_path": ".scratch/myterm-next/issues/07-proxy-browser-contract.md",
+      "source_status": "open",
+      "type": "grilling",
+      "blocked_by": [
+        "04",
+        "05"
+      ]
+    },
+    {
+      "url": "https://github.com/GordonBeeming/myterm/issues/133",
+      "number": 133,
+      "title": "Choose local, direct and relay connection workflows",
+      "local_id": "08",
+      "source_path": ".scratch/myterm-next/issues/08-connection-paths-and-enrollment.md",
+      "source_status": "open",
+      "type": "grilling",
+      "blocked_by": [
+        "04",
+        "05"
+      ]
+    },
+    {
+      "url": "https://github.com/GordonBeeming/myterm/issues/134",
+      "number": 134,
+      "title": "Choose hosted and self-hosted relay account operations",
+      "local_id": "09",
+      "source_path": ".scratch/myterm-next/issues/09-hosted-and-self-hosted-relay.md",
+      "source_status": "open",
+      "type": "grilling",
+      "blocked_by": [
+        "04"
+      ]
+    },
+    {
+      "url": "https://github.com/GordonBeeming/myterm/issues/135",
+      "number": 135,
+      "title": "Choose the first cross-server session and agent view",
+      "local_id": "10",
+      "source_path": ".scratch/myterm-next/issues/10-cross-server-agent-visibility.md",
+      "source_status": "open",
+      "type": "grilling",
+      "blocked_by": [
+        "05"
+      ]
+    },
+    {
+      "url": "https://github.com/GordonBeeming/myterm/issues/136",
+      "number": 136,
+      "title": "Set the implementation sequence and release acceptance checks",
+      "local_id": "11",
+      "source_path": ".scratch/myterm-next/issues/11-verification-and-implementation-plan.md",
+      "source_status": "open",
+      "type": "grilling",
+      "blocked_by": [
+        "06",
+        "07",
+        "08",
+        "09",
+        "10",
+        "14",
+        "16"
+      ]
+    },
+    {
+      "url": "https://github.com/GordonBeeming/myterm/issues/137",
+      "number": 137,
+      "title": "Establish native validation environments",
+      "local_id": "12",
+      "source_path": ".scratch/myterm-next/issues/12-native-validation-environments.md",
+      "source_status": "open",
+      "type": "task",
+      "blocked_by": [
+        "02"
+      ]
+    },
+    {
+      "url": "https://github.com/GordonBeeming/myterm/issues/138",
+      "number": 138,
+      "title": "Compare native session adapters and terminal fidelity",
+      "local_id": "13",
+      "source_path": ".scratch/myterm-next/issues/13-native-terminal-feasibility.md",
+      "source_status": "open",
+      "type": "prototype",
+      "blocked_by": [
+        "02",
+        "12"
+      ]
+    },
+    {
+      "url": "https://github.com/GordonBeeming/myterm/issues/139",
+      "number": 139,
+      "title": "Choose active session attachment and control handoff",
+      "local_id": "14",
+      "source_path": ".scratch/myterm-next/issues/14-session-attachment-and-handoff.md",
+      "source_status": "open",
+      "type": "grilling",
+      "blocked_by": [
+        "05"
+      ]
+    },
+    {
+      "url": "https://github.com/GordonBeeming/myterm/issues/140",
+      "number": 140,
+      "title": "Establish a protocol for account trust and encrypted sessions",
+      "local_id": "15",
+      "source_path": ".scratch/myterm-next/issues/15-account-trust-protocol.md",
+      "source_status": "resolved",
+      "type": "research",
+      "blocked_by": [
+        "01",
+        "03"
+      ]
+    },
+    {
+      "url": "https://github.com/GordonBeeming/myterm/issues/141",
+      "number": 141,
+      "title": "Validate the account trust protocol and approval ceremony",
+      "local_id": "16",
+      "source_path": ".scratch/myterm-next/issues/16-trust-protocol-and-approval-validation.md",
+      "source_status": "open",
+      "type": "prototype",
+      "blocked_by": [
+        "04",
+        "05",
+        "15"
+      ]
+    }
+  ]
+}

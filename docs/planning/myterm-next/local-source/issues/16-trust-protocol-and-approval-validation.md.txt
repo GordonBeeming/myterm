@@ -1,0 +1,29 @@
+# Validate the account trust protocol and approval ceremony
+
+ID: 16
+Parent: [MyTerm next architecture and implementation](../map.md)
+Labels: wayfinder:prototype
+Type: prototype
+Status: open
+Assignee: unassigned
+Blocked by: 04, 05, 15
+
+## Question
+
+Which concrete account trust state machine, key-distribution scheme and authenticated channel protocol satisfy the policy in [Choose account trust and key ownership](04-account-trust-and-key-ownership.md)? Use the [protocol investigation](../../../docs/research/myterm-next-trust-protocol.md) and chosen server runtime to build a small, clearly marked prototype that Gordon can inspect, with a maintained-library feasibility check and explicit limitations. Do not invent an unreviewed protocol and call it secure.
+
+Specify first-client account genesis and a stable public account anchor; independent endpoint identity keys and admission authority; an endpoint-authenticated short-code approval ceremony; directory encryption with per-recipient key delivery; approval while servers are offline; and authenticated direct/relay channels. Compare the leading TLS 1.3 candidate with alternatives only where evidence warrants. Distinguish traffic-key refresh from fresh authenticated ephemeral exchange and recovery after temporary compromise. Validate Apple-client/native-server interoperability without treating it as full product validation.
+
+Define membership ordering, concurrent admissions/removals, revocation tombstones, checkpoint persistence, rollback and fork handling, and directory-key rotation after removal. Previously approved devices and account-owned deployment credentials survive ordinary removal of their creator; mutual concurrent removals both take effect. Determine how to reject forged or stale admissions from a removed authority without invalidating legitimate already-approved endpoints. Preserve indefinite verified offline local/direct use and explicitly acknowledge unbounded revocation delay when updates are withheld.
+
+Define trusted single-use issuance and atomic redemption separately from offline-capable reusable deployment delegation. Specify credential scope, independent expiry/revocation, per-instance key generation and directory-key bootstrap. Show what happens when an invitation expires or is revoked after it enrolled servers; do not silently remove those servers or introduce expiry inheritance without a product decision.
+
+Exercise malicious relay substitution, guessed or replayed approval codes, duplicate invitation redemption, concurrent removals, revoked issuers, stale directory envelopes, key rotation and reconnects. Keep server-owned terminal processes alive across channel replacement. Obtain independent protocol review before treating the composed design as secure. Record facts, unverified assumptions and any newly exposed human decisions. This ticket resolves through Gordon's reaction and agreement, not prototype completion alone.
+
+Make the prototype's protocol checks repeatable and carry the agreed scenarios into automated regression and integration coverage during implementation. Measure handshake and rekey costs with representative terminal output in a locally runnable workload, including latency and process/session continuity. A successful interactive demonstration alone does not establish regression protection or protocol security.
+
+## Dependencies
+
+- [Choose account trust and key ownership](04-account-trust-and-key-ownership.md)
+- [Choose the standalone server boundary and runtime](05-server-authority-and-runtime.md)
+- [Establish a protocol for account trust and encrypted sessions](15-account-trust-protocol.md)

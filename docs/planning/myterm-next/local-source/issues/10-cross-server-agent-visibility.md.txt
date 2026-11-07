@@ -1,0 +1,18 @@
+# Choose the first cross-server session and agent view
+
+ID: 10
+Parent: [MyTerm next architecture and implementation](../map.md)
+Labels: wayfinder:grilling
+Type: grilling
+Status: open
+Assignee: unassigned
+Blocked by: 05
+
+## Question
+
+What foundational inventory and agent activity should the clients expose across servers in this release? Decide server/session identity, supported agent signals, stale/offline indications and navigation, using the transcript's session/agent visibility requirement. Keep deeper agent insights out of scope. Define the smallest complete workflow and its acceptance scenarios.
+
+## Dependencies
+
+- [Choose the standalone server boundary and runtime](05-server-authority-and-runtime.md)
+
