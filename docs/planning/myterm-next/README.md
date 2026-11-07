@@ -8,6 +8,7 @@ Read `AGENTS.md`, then `docs/agents/issue-tracker.md`, then open the linked map.
 
 ## Retained evidence
 
+- [Relay deployment contract](relay-deployment-contract.md) records the current Cloudflare release design and required implementation evidence; its linked GitHub decision remains the authority for confirmation and completion.
 - `migration.json` maps the original local identities to GitHub issues and records their source states, dependencies and SHA-256 hashes.
 - `local-source/` holds byte-for-byte copies of every original planning file. The added `.txt` suffix identifies raw historical material; embedded paths refer to the original checkout layout. These files are an archive, not an active tracker.
 - [The recovery prototype](prototypes/recovery-prototype.html) is a portable copy of the self-contained discussion artifact, with GitHub source links and a note distinguishing historical privacy questions from the later agreed boundary. Its behavior is unchanged; the original bytes remain in `local-source/`. It is a throwaway explanation, not an implementation of cryptography or account recovery.
