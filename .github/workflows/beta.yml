@@ -47,7 +47,7 @@ concurrency:
 jobs:
   source:
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Draft releases require a write token to be visible; detect interrupted
     # publication before spending another macOS build and TestFlight upload.
     permissions:
@@ -103,7 +103,7 @@ jobs:
     if: >-
       always() && !cancelled() && needs.source.result == 'success' && needs.source.outputs.publish == 'true' &&
       (needs.source.outputs.resume == 'true' || (needs.macos.result == 'success' && needs.companion.result == 'success'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
       actions: read

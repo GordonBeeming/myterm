@@ -68,7 +68,7 @@ jobs:
   publish:
     needs: package
     if: github.event_name == 'release'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: prod
     permissions:
       contents: write
