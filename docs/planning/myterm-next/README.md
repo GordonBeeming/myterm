@@ -10,6 +10,8 @@ Read `AGENTS.md`, then `docs/agents/issue-tracker.md`, then open the linked map.
 
 [Choose shared workspace synchronization and migration](https://github.com/GordonBeeming/myterm/issues/131) supersedes the archived server-owned workspace model and the workspace-ownership portion of the earlier runtime decision. Use the root [glossary](../../../GLOSSARY.md) for current terminology and the ticket's resolution for ownership, synchronization, session closure and migration policy. Detailed decisions remain in GitHub; the retained snapshots below are historical evidence.
 
+[Choose local, direct and relay connection workflows](https://github.com/GordonBeeming/myterm/issues/133) adds local use before account setup, separate direct/relay opt-ins, remembered connection paths, deployment enrollment and account-closure policy. It supersedes assumptions that a standard installation connects to a relay or already belongs to a personal account. Use its resolution for the agreed behavior and linked follow-ups for validation; these documentation changes do not implement the redesigned workflows.
+
 ## Retained evidence
 
 - [Relay deployment contract](relay-deployment-contract.md) records the current Cloudflare release design and required implementation evidence; its linked GitHub decision remains the authority for confirmation and completion.
