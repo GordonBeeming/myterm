@@ -72,7 +72,7 @@ Gordon permits entity reference IDs in retained service logs after deletion. Sto
 
 ## User-operated diagnostics
 
-A user-operated relay runs in the user's Cloudflare account and exports only to destinations the operator explicitly configures. Do not ship our Grafana destination or credentials as defaults. Standard application console logs remain available with the same data boundary; provider-created system metadata needs separate inspection.
+A user-operated relay runs in the user's Cloudflare account and exports only to destinations the operator explicitly configures. Do not ship our Grafana destination or credentials as defaults. Application console output is retrievable only through an explicitly configured, privacy-verified diagnostic path. Do not promise retrievable logs when export, persistence and tailing are disabled. The implementation must document and verify the operator's chosen path, including provider-created system metadata, before enabling it.
 
 Cloudflare's native destinations can send logs and traces to an operator's OTLP service. Confirm plan availability, emitted fields and metrics behavior during the implementation trial. Independent self-managed Loki/Prometheus/container examples are outside this release. [Workers export](https://developers.cloudflare.com/workers/observability/opentelemetry-export/).
 
