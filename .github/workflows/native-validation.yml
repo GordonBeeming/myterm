@@ -1,0 +1,81 @@
+name: Native server validation environments
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/native-validation.yml'
+      - 'script/native-validation/**'
+
+permissions:
+  contents: read
+
+jobs:
+  native-pty:
+    name: Native PTY (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, ubuntu-24.04, ubuntu-24.04-arm, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: Services/relay/go.mod
+          cache: false
+      - name: Inventory Unix environment and run PTY probe
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p native-validation-results
+          {
+            uname -a
+            if [[ "$RUNNER_OS" == macOS ]]; then
+              sw_vers
+              xcodebuild -version
+              swift --version
+            else
+              cat /etc/os-release
+            fi
+            go version
+            rustc --version
+            cc --version
+            libraries=()
+            if [[ "$RUNNER_OS" == Linux ]]; then libraries=(-lutil); fi
+            set -x
+            cc -std=c11 -Wall -Wextra -Werror script/native-validation/pty_probe.c "${libraries[@]}" -o native-validation-results/pty-probe
+            native-validation-results/pty-probe
+          } 2>&1 | tee native-validation-results/probe.log
+      - name: Inventory Windows environment and run ConPTY probe
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory native-validation-results | Out-Null
+          & {
+            Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, OSArchitecture
+            go version
+            if ($LASTEXITCODE -ne 0) { throw 'Go inventory failed' }
+            rustc --version
+            if ($LASTEXITCODE -ne 0) { throw 'Rust inventory failed' }
+            clang --version
+            if ($LASTEXITCODE -ne 0) { throw 'Clang inventory failed' }
+            clang -std=c11 -Wall -Wextra -Werror script/native-validation/pty_probe.c -o native-validation-results/pty-probe.exe
+            if ($LASTEXITCODE -ne 0) { throw 'ConPTY compilation failed' }
+            & ./native-validation-results/pty-probe.exe
+            if ($LASTEXITCODE -ne 0) { throw 'ConPTY probe failed' }
+          } *>&1 | Tee-Object native-validation-results/probe.log
+      - name: Retain environment and probe evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-validation-${{ matrix.os }}
+          path: native-validation-results/probe.log
+          if-no-files-found: error
+          retention-days: 14
