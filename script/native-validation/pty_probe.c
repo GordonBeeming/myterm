@@ -23,7 +23,20 @@
 
 static int child(void) {
     char input[64];
-    if (!fgets(input, sizeof(input), stdin) || strcmp(input, "PTY_INPUT\n") != 0) return 2;
+#ifdef _WIN32
+    // ConPTY's input consumer must be attached before the parent sends keys.
+    if (printf("MYTERM_CHILD_READY\n") < 0 || fflush(stdout) != 0) return 6;
+#endif
+    if (!fgets(input, sizeof(input), stdin)) {
+        fprintf(stderr, "Child stdin read failed\n");
+        return 2;
+    }
+    if (strcmp(input, "PTY_INPUT\n") != 0) {
+        fprintf(stderr, "Child input mismatch:");
+        for (size_t i = 0; input[i]; ++i) fprintf(stderr, " %02x", (unsigned char)input[i]);
+        fprintf(stderr, "\n");
+        return 2;
+    }
 #ifdef _WIN32
     CONSOLE_SCREEN_BUFFER_INFO info;
     int cols = 0, rows = 0;
@@ -47,14 +60,20 @@ static int child(void) {
 }
 
 #ifdef _WIN32
-struct output { HANDLE pipe; char bytes[8192]; size_t used; DWORD error; int overflow; };
+struct output { HANDLE pipe; HANDLE ready; char bytes[8192]; size_t used; DWORD error; int overflow; };
 static DWORD WINAPI drain(LPVOID context) {
     struct output *out = context;
     char chunk[1024];
     DWORD count;
     while (ReadFile(out->pipe, chunk, sizeof(chunk), &count, NULL) && count) {
         if (out->used + count >= sizeof(out->bytes)) out->overflow = 1;
-        else { memcpy(out->bytes + out->used, chunk, count); out->used += count; }
+        else {
+            memcpy(out->bytes + out->used, chunk, count); out->used += count;
+            out->bytes[out->used] = '\0';
+            if (strstr(out->bytes, "MYTERM_CHILD_READY")) {
+                if (!SetEvent(out->ready)) { out->error = GetLastError(); return 1; }
+            }
+        }
     }
     out->error = GetLastError();
     out->bytes[out->used] = '\0';
@@ -79,6 +98,8 @@ static int probe(const char *executable) {
     HRESULT hr = CreatePseudoConsole(initial, inputRead, outputWrite, 0, &console);
     if (FAILED(hr)) { fprintf(stderr, "CreatePseudoConsole HRESULT: 0x%lx\n", (unsigned long)hr); goto cleanup; }
     output.pipe = outputRead;
+    output.ready = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (!output.ready) goto cleanup;
     reader = CreateThread(NULL, 0, drain, &output, 0, NULL);
     if (!reader) goto cleanup;
     InitializeProcThreadAttributeList(NULL, 1, 0, &bytes);
@@ -91,6 +112,10 @@ static int probe(const char *executable) {
     if (!CreateProcessW(path, command, NULL, NULL, FALSE, EXTENDED_STARTUPINFO_PRESENT, NULL, NULL, &startup.StartupInfo, &process)) goto cleanup;
     CloseHandle(inputRead); inputRead = NULL;
     CloseHandle(outputWrite); outputWrite = NULL;
+    if (WaitForSingleObject(output.ready, 5000) != WAIT_OBJECT_0) {
+        fprintf(stderr, "Child readiness timeout\n");
+        goto cleanup;
+    }
     if (FAILED(ResizePseudoConsole(console, resized))) goto cleanup;
     if (!WriteFile(inputWrite, "PTY_INPUT\r\n", 11, &written, NULL) || written != 11) goto cleanup;
     if (WaitForSingleObject(process.hProcess, 10000) != WAIT_OBJECT_0) { fprintf(stderr, "Child timeout\n"); goto cleanup; }
@@ -117,6 +142,7 @@ cleanup:
         if (output.overflow || (output.error != ERROR_BROKEN_PIPE && output.error != ERROR_SUCCESS) || !strstr(output.bytes, "MYTERM_NATIVE_OK 101 31")) result = 1;
         CloseHandle(reader);
     } else result = 1;
+    if (output.ready) CloseHandle(output.ready);
     if (outputRead) CloseHandle(outputRead);
     if (process.hThread) CloseHandle(process.hThread);
     if (process.hProcess) CloseHandle(process.hProcess);
