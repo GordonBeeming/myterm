@@ -2,6 +2,7 @@
 #define _WIN32_WINNT 0x0A00
 #define NTDDI_VERSION 0x0A000006
 #include <windows.h>
+#include <io.h>
 #else
 #define _DEFAULT_SOURCE
 #include <sys/ioctl.h>
@@ -49,7 +50,7 @@ static int child(void) {
     ULONGLONG deadline = GetTickCount64() + 2000;
     // Resize and input use separate ConPTY channels; observe the applied geometry.
     do {
-        if (!GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &info)) return 3;
+        if (!GetConsoleScreenBufferInfo((HANDLE)_get_osfhandle(_fileno(stdout)), &info)) return 3;
         cols = info.srWindow.Right - info.srWindow.Left + 1;
         rows = info.srWindow.Bottom - info.srWindow.Top + 1;
         if (cols == 101 && rows == 31) break;
