@@ -69,7 +69,23 @@ end
 beta = events('beta.yml')
 raise 'Manual beta rebuild is missing' unless beta.key?('workflow_dispatch')
 raise 'Workflow-only changes publish a beta' if accepts?(beta.fetch('push'), ['.github/workflows/beta.yml'])
-raise 'Test-only changes publish a beta' if accepts?(beta.fetch('push'), ['Tests/CoreTests.swift', 'script/test_workflow_paths.rb'])
+test_paths = ['Tests/CoreTests.swift', 'script/test_workflow_paths.rb',
+              'Companion/Tests/MachineNavigationTests.swift',
+              'Companion/UITests/CompanionTouchTests.swift',
+              'Packages/MyTermRemote/Tests/MyTermRemoteTests/AuthenticatedChannelTests.swift',
+              'Services/relay/internal/auth/auth_test.go',
+              'Services/relay/tests/browser/fixture/main.go',
+              'Services/push-gateway/internal/apns/client_test.go',
+              'script/zsh_shim_test.sh', 'script/channel_isolation_test.sh',
+              'script/codex_shim_test.sh', 'script/archive_test_app.sh']
+test_paths.each do |path|
+  raise "Test-only change publishes a beta: #{path}" if accepts?(beta.fetch('push'), [path])
+  checks += 1
+end
+raise 'Combined test-only changes publish a beta' if accepts?(beta.fetch('push'), test_paths)
+raise 'Tests mixed with product source skip beta' unless accepts?(beta.fetch('push'), test_paths + ['Sources/MyTerm/App.swift'])
+raise 'Relay source no longer publishes a beta' unless accepts?(beta.fetch('push'), ['Services/relay/internal/auth/auth.go'])
+checks += 2
 raise 'Release packaging no longer publishes a beta' unless accepts?(beta.fetch('push'), ['Packaging/Info.plist'])
 raise 'Runtime build scripts no longer publish a beta' unless accepts?(beta.fetch('push'), ['script/build_and_run.sh'])
 %w[build.yml relay-release.yml].each do |name|

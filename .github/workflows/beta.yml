@@ -12,8 +12,13 @@ on:
       - '**/*.rst'
       - 'LICENSE'
       - '.github/**'
-      - 'Tests/**'
+      - '**/Tests/**'
+      - '**/UITests/**'
+      - '**/tests/**'
+      - '**/*_test.go'
       - 'script/test_*'
+      - 'script/*_test.sh'
+      - 'script/archive_test_app.sh'
   workflow_dispatch:
     inputs:
       rebuild_companion:
