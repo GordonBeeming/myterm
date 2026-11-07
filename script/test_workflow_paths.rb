@@ -68,7 +68,14 @@ end
 
 beta = events('beta.yml')
 raise 'Manual beta rebuild is missing' unless beta.key?('workflow_dispatch')
-raise 'Workflow-only changes publish a beta' if accepts?(beta.fetch('push'), ['.github/workflows/beta.yml'])
+%w[beta.yml build.yml companion.yml].each do |name|
+  raise "Publication workflow fix skips beta: #{name}" unless accepts?(beta.fetch('push'), [".github/workflows/#{name}"])
+  checks += 1
+end
+['.github/FUNDING.yml', '.github/actionlint.yaml', '.github/ISSUE_TEMPLATE/bug.yml'].each do |path|
+  raise "Non-release metadata publishes a beta: #{path}" if accepts?(beta.fetch('push'), [path])
+  checks += 1
+end
 test_paths = ['Tests/CoreTests.swift', 'script/test_workflow_paths.rb',
               'Companion/Tests/MachineNavigationTests.swift',
               'Companion/UITests/CompanionTouchTests.swift',
@@ -91,4 +98,4 @@ raise 'Runtime build scripts no longer publish a beta' unless accepts?(beta.fetc
 %w[build.yml relay-release.yml].each do |name|
   raise "#{name} lost its release trigger" unless events(name).key?('release')
 end
-puts "Passed #{checks + 7} workflow path and trigger checks."
+puts "Passed #{checks + 6} workflow path and trigger checks."
