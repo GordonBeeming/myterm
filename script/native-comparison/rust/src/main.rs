@@ -192,6 +192,42 @@ impl StartupCursorQuery {
 mod tests {
     use super::StartupCursorQuery;
     #[test]
+    fn blocked_input_cannot_block_the_session_loop() {
+        use std::{
+            io::{self, Write},
+            sync::{mpsc, Arc, Mutex},
+            time::Duration,
+        };
+        struct BlockedInput {
+            release: mpsc::Receiver<()>,
+            finished: mpsc::Sender<()>,
+        }
+        impl Write for BlockedInput {
+            fn write(&mut self, _: &[u8]) -> io::Result<usize> {
+                self.release.recv().map_err(io::Error::other)?;
+                self.finished.send(()).map_err(io::Error::other)?;
+                Err(io::Error::other("released after timeout"))
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+        let (release, blocked) = mpsc::channel();
+        let (finished, completion) = mpsc::channel();
+        let input: super::PtyInput = Arc::new(Mutex::new(Box::new(BlockedInput {
+            release: blocked,
+            finished,
+        })));
+        assert!(matches!(
+            super::write_with_timeout(input, vec![1], Duration::from_millis(20)),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        ));
+        release.send(()).expect("release blocked writer");
+        completion
+            .recv_timeout(Duration::from_secs(1))
+            .expect("writer exits after release");
+    }
+    #[test]
     fn startup_cursor_response_handles_every_fragment_boundary_and_only_answers_once() {
         let query = b"\x1b[6n";
         for split in 0..=query.len() {
@@ -210,6 +246,29 @@ mod tests {
         assert!(!handler.observe(b"\x1b[5n\x1b[?6n"));
         assert!(handler.observe(query));
     }
+}
+
+type PtyInput = Arc<Mutex<Box<dyn Write + Send>>>;
+fn write_with_timeout(
+    input: PtyInput,
+    data: Vec<u8>,
+    timeout: Duration,
+) -> std::result::Result<Result<()>, std::sync::mpsc::RecvTimeoutError> {
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    thread::spawn(move || {
+        let result = (|| -> Result<()> {
+            let mut writer = input
+                .lock()
+                .map_err(|_| anyhow::anyhow!("input mutex poisoned"))?;
+            writer.write_all(&data)?;
+            writer.flush()?;
+            Ok(())
+        })();
+        if let Err(undelivered) = sender.send(result) {
+            eprintln!("late PTY write result after deadline: {:?}", undelivered.0);
+        }
+    });
+    receiver.recv_timeout(timeout)
 }
 
 fn session(args: &[String]) -> Result<()> {
@@ -283,6 +342,8 @@ fn session(args: &[String]) -> Result<()> {
     io::stdout().flush()?;
     listener.set_nonblocking(true)?;
     let deadline = Instant::now() + Duration::from_secs(60);
+    let mut observer_errors = 0usize;
+    let mut last_observer_error = String::new();
     loop {
         if Instant::now() > deadline {
             bail!("session watchdog expired");
@@ -304,23 +365,44 @@ fn session(args: &[String]) -> Result<()> {
             .len();
         stream.set_read_timeout(Some(Duration::from_secs(5)))?;
         stream.set_write_timeout(Some(Duration::from_secs(5)))?;
-        let mut line = String::new();
-        BufReader::new((&stream).take(65536)).read_line(&mut line)?;
-        let request: Request = serde_json::from_str(&line)?;
+        let request = (|| -> Result<Request> {
+            let mut line = String::new();
+            BufReader::new((&stream).take(65536)).read_line(&mut line)?;
+            Ok(serde_json::from_str(&line)?)
+        })();
+        let request = match request {
+            Ok(r) => r,
+            Err(error) => {
+                observer_errors += 1;
+                last_observer_error = error.to_string();
+                continue;
+            }
+        };
         if request.token != token {
-            serde_json::to_writer(&mut stream, &json!({"error":"invalid token"}))?;
-            stream.write_all(b"\n")?;
+            observer_errors += 1;
+            last_observer_error = "invalid token".into();
+            let sent = (|| -> Result<()> {
+                serde_json::to_writer(&mut stream, &json!({"error":"invalid token"}))?;
+                stream.write_all(b"\n")?;
+                Ok(())
+            })();
+            if let Err(error) = sent {
+                observer_errors += 1;
+                last_observer_error = error.to_string();
+            }
             continue;
         }
         let stopping = request.op == "stop" || request.op == "terminate";
         let result: Result<()> = (|| {
             match request.op.as_str() {
                 "write" => {
-                    let mut input = writer
-                        .lock()
-                        .map_err(|_| anyhow::anyhow!("input mutex poisoned"))?;
-                    input.write_all(&request.data)?;
-                    input.flush()?;
+                    match write_with_timeout(writer.clone(), request.data, Duration::from_secs(5)) {
+                        Ok(result) => result?,
+                        Err(error) => {
+                            child.0.kill()?;
+                            bail!("PTY write wait failed; child terminated: {error}");
+                        }
+                    }
                 }
                 "resize" => {
                     if request.cols == 0
@@ -364,11 +446,18 @@ fn session(args: &[String]) -> Result<()> {
         let out = output
             .lock()
             .map_err(|_| anyhow::anyhow!("output mutex poisoned"))?;
-        serde_json::to_writer(
-            &mut stream,
-            &json!({"data":out.0,"pid":pid,"readerStatus":out.1,"startupCursorReplies":out.2,"outputLengthAtAccept":output_length_at_accept,"error":result.as_ref().err().map(ToString::to_string).unwrap_or_default()}),
-        )?;
-        stream.write_all(b"\n")?;
+        let sent = (|| -> Result<()> {
+            serde_json::to_writer(
+                &mut stream,
+                &json!({"data":out.0,"pid":pid,"readerStatus":out.1,"startupCursorReplies":out.2,"outputLengthAtAccept":output_length_at_accept,"observerErrors":observer_errors,"lastObserverError":last_observer_error,"error":result.as_ref().err().map(ToString::to_string).unwrap_or_default()}),
+            )?;
+            stream.write_all(b"\n")?;
+            Ok(())
+        })();
+        if let Err(error) = sent {
+            observer_errors += 1;
+            last_observer_error = error.to_string();
+        }
         if stopping {
             result?;
             break;

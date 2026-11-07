@@ -6,7 +6,7 @@ This is a native macOS, Linux and Windows experiment for [Compare native session
 
 Go and Rust are candidates for the server side, including the macOS server. The Mac, iPhone and iPad **client** apps stay native. Gordon's clarification permits these server languages; it does not select a final runtime, emulator or mixed-language deployment. The experiment changes no client app or production server code.
 
-The throwaway sources and commands live in [script/native-comparison](../../script/native-comparison/README.md). The [retained local evidence](myterm-native-comparison/20261107-macos-arm64.json) records the initial local toolchains, fixture hash, session results and projected engine differences. The [retained native-runner evidence](myterm-native-comparison/20261107-native-runners.json) records the passing four-platform run and its earlier failed attempts. The prototype is published in [the draft comparison PR](https://github.com/GordonBeeming/myterm/pull/148) and retained outside main.
+The throwaway sources and commands live in [script/native-comparison](../../script/native-comparison/README.md). The [retained local evidence](myterm-native-comparison/20261107-macos-arm64.json) records the initial local toolchains, fixture hash, session results and projected engine differences. The [retained native-runner evidence](myterm-native-comparison/20261107-native-runners.json) records the passing four-platform run and its earlier failed attempts. The prototype is published in [the comparison PR](https://github.com/GordonBeeming/myterm/pull/148) as research reference.
 
 ## Native adapter results
 
@@ -21,7 +21,7 @@ The throwaway sources and commands live in [script/native-comparison](../../scri
 
 Go uses `creack/pty` 1.1.24 on Unix and `UserExistsError/conpty` 0.1.4 on Windows. Rust uses `portable-pty` 0.9.0. All four session stderr logs are empty. The earlier local macOS 27.3 ARM64 run with Go 1.26.6, Rust 1.89.0 and Swift 6.4.2 also passed its eight cases.
 
-The C child verifies terminal stdin/stdout, input/output and actual 101×31 geometry. Unix additionally verifies foreground process-group ownership. Shell experiments recover output after an actual loopback client disconnect/reconnect with the same child PID. The delayed marker must be absent before disconnect and present in output retained before accepting a later observer request. They retain that output, then check exactly 65,536 payload bytes between fresh output-only markers before successful exit. Invalid capability tokens and invalid geometry are rejected.
+The C child verifies terminal stdin/stdout, input/output and actual 101×31 geometry. Unix additionally verifies foreground process-group ownership. Shell experiments recover output after an actual loopback client disconnect/reconnect with the same child PID. The delayed marker must be absent before disconnect and present in output retained before accepting the first reconnect request, without polling retries. They retain that output, then check exactly 65,536 payload bytes between fresh output-only markers before successful exit. Invalid capability tokens and invalid geometry are rejected.
 
 These results establish the tested adapters' raw-output behavior. The retained bytes are not a terminal checkpoint. Beyond the explicit Windows startup handshake, the probe does not combine the emulator and adapter into a general server-owned query responder, and it does not test writer leases, multiple viewers, encrypted transports, server restarts, process-tree cleanup, service identities or upgrades. Shell resize calls pass; child-observed geometry is checked by the C fixture rather than asserted separately inside each shell.
 
@@ -79,6 +79,8 @@ The local command is:
 python3 script/native-comparison/run.py --output /tmp/myterm-native-comparison
 ```
 
+The retained source-commit results below describe the original verifier. Subsequent merge review strengthened the harness with seven regression checks: UTF-8 evidence loading, full-size Rust decimal-array responses, encoded-response bounds and truncation, isolated shell startup, and a strict first-reconnect boundary that rejects output drained after reconnect. The latest strict-verifier native run is recorded on the prototype ticket and PR; earlier evidence remains tied to its explicit source commit.
+
 Additional checks cover graceful termination of a still-running shell for both adapters, `go vet`, Go's race-enabled trace run, Rust Clippy with warnings denied, Go Windows x86-64 cross-build, and workflow validation with `actionlint`. Native adapter experiments are meaningful integration checks; trace equality is limited to its stated projection. No GUI was controlled and no release or infrastructure deployment occurred.
 
 The first native attempt exposed a macOS Bash wrapper failure, inherited nonblocking socket mode on Windows and a PowerShell marker split by ConPTY soft wrapping. The next run passed Mac, Linux and Windows Go, but exposed Rust's inherited-cursor startup requirement. The final verified run passes all 26 cases after those probe corrections. The retained evidence links each attempt and its actual outcome.
@@ -92,7 +94,7 @@ python3 script/native-comparison/report.py --results /tmp/myterm-native-ci/nativ
 
 The workflow retains raw JSON and logs for fourteen days. The committed summary preserves OS/CPU/toolchains, exact case results, fixture identity, checkpoint counts and measured engine differences. The HTML report embeds the captured data and shows cells, basic style differences and Rust's actual formatted-state reconstruction; CI mode uses the Mac runner artifact as its inspector baseline.
 
-Before resolution, review query responses, graphics gaps and checkpoint semantics with Gordon and record his fidelity judgment on the prototype ticket. The server runtime and terminal-state strategy remain decisions for the open runtime ticket. No merge, release or deployment is authorized by this comparison.
+Before resolution, review query responses, graphics gaps and checkpoint semantics with Gordon and record his fidelity judgment on the prototype ticket. The server runtime and terminal-state strategy remain decisions for the open runtime ticket. Merging this reference does not select a production runtime or terminal engine; releases and deployments remain separate work.
 
 ## Primary references
 

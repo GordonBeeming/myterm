@@ -49,7 +49,7 @@ TEMPLATE = r'''<!doctype html>
 <p>The prototype tests one observer and bounds retained output to 1 MiB. It does not test the production transport, multiple viewers, writer leases, process-tree cleanup, service restart or upgrade survival. Terminal traces run separately from the PTY adapter, so server-owned detached query handling remains unverified.</p>
 <pre>python3 script/native-comparison/run.py --output /tmp/myterm-native-comparison</pre>
 <p><a href="https://github.com/GordonBeeming/myterm/issues/138">Compare native session adapters and terminal fidelity</a> · <a href="https://github.com/GordonBeeming/myterm/issues/130">Choose the standalone server boundary and runtime</a></p>
-<p><a class="file-link" href="__REPORT_URL__" title="__REPORT_PATH__">__REPORT_PATH__</a></p>
+<p><a href="https://github.com/GordonBeeming/myterm/blob/main/docs/research/myterm-native-adapter-comparison.md">Read the research note on GitHub</a></p><details><summary>Open the local source in my IDE</summary><p><a class="file-link" href="__REPORT_URL__" title="__REPORT_PATH__">__REPORT_PATH__</a></p></details>
 </details>
 </section>
 <footer>Recorded <span id="recorded"></span>. Local file links open in Gordon's IDE and need it running. <span id="publication">The prepared native-runner workflow has not been published.</span></footer>
@@ -70,7 +70,7 @@ if(D.ci){
  $('open-items').textContent=allPass?"Gordon's fidelity judgment":"Native platform failures and Gordon's fidelity judgment";
  $('headline').textContent=allPass?'Native adapters pass across four runners; terminal fidelity needs work':'Native validation results include failures';
  $('evidence-label').textContent=allPass?'Four native runners · Mac runner trace baseline':'Native runner failures · Mac runner trace baseline';
- $('publication').textContent='The prototype remains outside main; the decision ticket awaits the fidelity judgment.';
+ $('publication').textContent='The prototype is retained as research reference; the decision ticket awaits the fidelity judgment.';
  $('native-run').href=D.ciRunURL;
  const table=document.createElement('table'),head=document.createElement('tr');
  for(const label of ['Runner','Observed OS / CPU','Go adapter cases','Rust adapter cases','Same engine trace projection']){const th=document.createElement('th');th.textContent=label;head.append(th)}table.append(head);
@@ -114,6 +114,10 @@ for(const name of ['go','rust']){const p=document.createElement('p');p.textConte
 '''
 
 
+def read_json(path):
+    return json.loads(path.read_text(encoding='utf-8'))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--results', type=Path, required=True)
@@ -122,12 +126,12 @@ def main():
     parser.add_argument('--ci-run-url', help='GitHub Actions URL for the supplied native results')
     options = parser.parse_args()
     root = options.results
-    run = json.loads((root / 'run.json').read_text())
+    run = read_json(root / 'run.json')
     if run['status'] != 'pass':
         raise SystemExit('A successful local adapter run is required before rendering this report.')
-    data = {'run': run, 'fixtures': json.loads((Path(__file__).parent / 'fixtures.json').read_text()),
-            'sessions': json.loads((root / 'sessions.json').read_text()),
-            'traces': {name: json.loads((root / f'{name}-traces.json').read_text()) for name in ['swiftterm', 'go', 'rust']}}
+    data = {'run': run, 'fixtures': read_json(Path(__file__).parent / 'fixtures.json'),
+            'sessions': read_json(root / 'sessions.json'),
+            'traces': {name: read_json(root / f'{name}-traces.json') for name in ['swiftterm', 'go', 'rust']}}
     import hashlib
     if run['fixturesSHA256'] != hashlib.sha256((Path(__file__).parent / 'fixtures.json').read_text(encoding='utf-8').encode('utf-8')).hexdigest():
         raise SystemExit('Results do not match the current fixture hash.')
@@ -136,28 +140,28 @@ def main():
         if not options.ci_run_url or not re.fullmatch(r'https://github\.com/GordonBeeming/myterm/actions/runs/[0-9]+', options.ci_run_url):
             raise SystemExit('Supply the actual native comparison run URL with --ci-run-url.')
         reference = options.ci_results / 'native-comparison-xcode-27'
-        reference_run = json.loads((reference / 'run.json').read_text(encoding='utf-8'))
+        reference_run = read_json(reference / 'run.json')
         if reference_run['status'] != 'pass':
             raise SystemExit('A successful Mac runner baseline is required for the native inspector.')
         data['run'] = reference_run
-        data['sessions'] = json.loads((reference / 'sessions.json').read_text(encoding='utf-8'))
-        data['traces'] = {name: json.loads((reference / f'{name}-traces.json').read_text(encoding='utf-8'))
+        data['sessions'] = read_json(reference / 'sessions.json')
+        data['traces'] = {name: read_json(reference / f'{name}-traces.json')
                           for name in ['swiftterm', 'go', 'rust']}
         entries = []
         def projection(trace):
             return {'snapshots': [{key: snap[key] for key in ['cells', 'styles', 'cursor', 'alt']} for snap in trace['snapshots']],
                     'finalReplies': trace['finalReplies']}
         for directory in sorted(options.ci_results.glob('native-comparison-*')):
-            native_run = json.loads((directory / 'run.json').read_text(encoding='utf-8'))
+            native_run = read_json(directory / 'run.json')
             if native_run['fixturesSHA256'] != run['fixturesSHA256']:
                 raise SystemExit(f'Native result fixture hash mismatch: {directory.name}')
             matches = {}
             for engine in ['go', 'rust']:
-                measured = json.loads((directory / f'{engine}-traces.json').read_text(encoding='utf-8'))
+                measured = read_json(directory / f'{engine}-traces.json')
                 matches[engine] = ({name: projection(trace) for name, trace in measured.items()} ==
                                    {name: projection(trace) for name, trace in data['traces'][engine].items()})
             entries.append({'runner': directory.name.removeprefix('native-comparison-'), 'run': native_run,
-                            'sessions': json.loads((directory / 'sessions.json').read_text(encoding='utf-8')),
+                            'sessions': read_json(directory / 'sessions.json'),
                             'sameEngineMatchesMacRunner': matches})
         expected = {'xcode-27', 'ubuntu-24.04', 'ubuntu-24.04-arm', 'windows-2025'}
         if {entry['runner'] for entry in entries} != expected:

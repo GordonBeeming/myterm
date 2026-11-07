@@ -20,6 +20,9 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 WINDOWS = os.name == 'nt'
 EXE = '.exe' if WINDOWS else ''
+MAX_RAW_OUTPUT = 1024 * 1024
+# Rust uses up to four JSON bytes per retained byte, plus response metadata.
+MAX_RESPONSE_BYTES = 4 * MAX_RAW_OUTPUT + 64 * 1024
 ANSI = re.compile(rb'\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07]*(?:\x07|\x1b\\)')
 
 
@@ -45,13 +48,29 @@ def normalize(results):
     return results
 
 
+def read_response(reader):
+    line = reader.readline(MAX_RESPONSE_BYTES + 1)
+    if len(line) > MAX_RESPONSE_BYTES:
+        raise RuntimeError('probe response exceeds the encoded output bound')
+    if not line.endswith(b'\n'):
+        raise RuntimeError('incomplete probe response')
+    return json.loads(line)
+
+
+def probe_environment(token):
+    # Shell startup files are outside this controlled experiment.
+    environment = {key: value for key, value in os.environ.items()
+                   if key not in {'ENV', 'BASH_ENV', 'ZDOTDIR'}}
+    return {**environment, 'MYTERM_PROBE_TOKEN': token}
+
+
 class Session:
     def __init__(self, binary, command, directory):
         self.token = secrets.token_hex(32)
         self.log = (directory / 'session-stderr.log').open('ab')
         self.process = subprocess.Popen([str(binary), '--session', *map(str, command)],
                                         stdout=subprocess.PIPE, stderr=self.log,
-                                        env={**os.environ, 'MYTERM_PROBE_TOKEN': self.token})
+                                        env=probe_environment(self.token))
         # Bound startup independently of the candidate watchdog, including a failed native spawn.
         import concurrent.futures
         self.pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
@@ -72,26 +91,30 @@ class Session:
             values['data'] = list(values['data'])
         with socket.create_connection(self.address, timeout=8) as client:
             client.sendall((json.dumps({'token': self.token, 'op': op, **values}) + '\n').encode())
-            response = json.loads(client.makefile('rb').readline(2 * 1024 * 1024))
+            response = read_response(client.makefile('rb'))
         if response.get('error'):
             raise RuntimeError(response['error'])
         if response['pid'] != self.pid:
             raise RuntimeError('child PID changed across reconnect')
         self.startup_cursor_replies = response.get('startupCursorReplies', 0)
+        self.observer_errors = response.get('observerErrors', 0)
         response['data'] = (base64.b64decode(response['data']) if isinstance(response['data'], str)
                             else bytes(response['data']))
         return response
 
     def wait_for(self, marker, timeout=12, require_retained=False):
+        if require_retained:
+            response = self.request('read')
+            retained = response['data'][:response['outputLengthAtAccept']]
+            if marker not in ANSI.sub(b'', retained):
+                raise RuntimeError(f'detached marker {marker!r} was not retained before the first reconnect')
+            return response['data']
         deadline = time.monotonic() + timeout
         last = b''
         while time.monotonic() < deadline:
             response = self.request('read')
             last = response['data']
             if marker in ANSI.sub(b'', last):
-                if require_retained and marker not in ANSI.sub(b'', last[:response['outputLengthAtAccept']]):
-                    time.sleep(.025)
-                    continue
                 return last
             time.sleep(.025)
         raise RuntimeError(f'output marker {marker!r} missing; captured {last[-3000:]!r}')
@@ -122,6 +145,13 @@ def native_geometry(binary, fixture, directory):
     try:
         if WINDOWS:
             session.wait_for(b'MYTERM_CHILD_READY')
+        # A client that disconnects mid-request must not terminate the owned child.
+        with socket.create_connection(session.address, timeout=8) as interrupted:
+            interrupted.sendall(b'{"token":')
+            interrupted.shutdown(socket.SHUT_RDWR)
+        session.request('read')
+        if session.observer_errors < 1:
+            raise RuntimeError('incomplete observer request was not recorded')
         for request in [('read', {'token': 'invalid'}), ('resize', {'cols': 0, 'rows': 31})]:
             try:
                 session.request(request[0], **request[1])
@@ -135,9 +165,9 @@ def native_geometry(binary, fixture, directory):
         code = session.process.wait(timeout=8)
         if code:
             raise RuntimeError(f'geometry adapter exited {code}')
-        return {'status': 'pass', 'pid': session.pid, 'bytes': len(captured), 'startupCursorReplies': session.startup_cursor_replies,
+        return {'status': 'pass', 'pid': session.pid, 'bytes': len(captured), 'rejectedObserverRequests': session.observer_errors, 'startupCursorReplies': session.startup_cursor_replies,
                 'checks': ['native terminal stdin/stdout', '101x31 child-observed geometry',
-                           'input/output', 'invalid token and invalid geometry rejected', 'successful child exit and adapter teardown']}
+                           'input/output', 'incomplete observer disconnect preserves child', 'invalid token and invalid geometry rejected', 'successful child exit and adapter teardown']}
     finally:
         session.close()
 
@@ -178,7 +208,7 @@ def shell_session(binary, command, kind, directory):
         if detached.encode() in ANSI.sub(b'', before_detach['data']):
             raise RuntimeError('detached marker arrived before the observer disconnected')
         # No client socket is connected while the delayed command emits its output.
-        time.sleep(1.5 if kind == 'cmd' else .5)
+        time.sleep(2 if kind == 'cmd' else 1)
         captured = session.wait_for(detached.encode(), require_retained=True)
         session.request('write', data=(shell_commands(kind, final)[2] + newline).encode())
         captured = session.wait_for(final.encode(), timeout=20)

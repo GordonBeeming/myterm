@@ -146,6 +146,38 @@ type sessionPTY interface {
 	Kill() error
 }
 
+func writeBounded(p interface {
+	Write([]byte) (int, error)
+	Kill() error
+}, data []byte, timeout time.Duration) error {
+	done := make(chan error, 1)
+	go func() {
+		n, err := p.Write(data)
+		if err == nil && n != len(data) {
+			err = io.ErrShortWrite
+		}
+		done <- err
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case err := <-done:
+		return err
+	case <-timer.C:
+		if err := p.Kill(); err != nil {
+			return fmt.Errorf("PTY write timeout; child termination: %w", err)
+		}
+		return fmt.Errorf("PTY write timeout; child terminated")
+	}
+}
+
+func sendResponse(c net.Conn, value any) error {
+	if err := c.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		return err
+	}
+	return json.NewEncoder(c).Encode(value)
+}
+
 func session(args []string) error {
 	p, err := startPTY(args)
 	if err != nil {
@@ -199,11 +231,16 @@ func session(args []string) error {
 		if err := listener.Close(); err != nil {
 			fmt.Fprintln(os.Stderr, "watchdog listener close:", err)
 		}
+		if err := p.Kill(); err != nil {
+			fmt.Fprintln(os.Stderr, "watchdog child termination:", err)
+		}
 	})
 	defer watchdog.Stop()
 	if err := json.NewEncoder(os.Stdout).Encode(map[string]any{"address": listener.Addr().String(), "pid": p.PID()}); err != nil {
 		return err
 	}
+	observerErrors := 0
+	lastObserverError := ""
 	for {
 		c, e := listener.Accept()
 		if e != nil {
@@ -222,10 +259,16 @@ func session(args []string) error {
 		}
 		e = json.NewDecoder(io.LimitReader(c, 65536)).Decode(&r)
 		if e != nil || r.Token != token {
-			sendErr := json.NewEncoder(c).Encode(map[string]string{"error": "invalid token"})
+			observerErrors++
+			lastObserverError = "invalid token"
+			if e != nil {
+				lastObserverError = e.Error()
+			}
+			sendErr := sendResponse(c, map[string]string{"error": "invalid request or token"})
 			c.Close()
 			if sendErr != nil {
-				return sendErr
+				observerErrors++
+				lastObserverError = sendErr.Error()
 			}
 			continue
 		}
@@ -233,7 +276,7 @@ func session(args []string) error {
 		if e == nil {
 			switch r.Op {
 			case "write":
-				_, e = p.Write(r.Data)
+				e = writeBounded(p, r.Data, 5*time.Second)
 			case "resize":
 				if r.Cols < 1 || r.Rows < 1 || r.Cols > 500 || r.Rows > 200 {
 					e = fmt.Errorf("invalid geometry")
@@ -267,14 +310,15 @@ func session(args []string) error {
 			readerStatus = readErr.Error()
 		}
 		mu.Unlock()
-		response := map[string]any{"data": data, "pid": p.PID(), "readerStatus": readerStatus, "error": "", "outputLengthAtAccept": outputLengthAtAccept}
+		response := map[string]any{"data": data, "pid": p.PID(), "readerStatus": readerStatus, "error": "", "outputLengthAtAccept": outputLengthAtAccept, "observerErrors": observerErrors, "lastObserverError": lastObserverError}
 		if e != nil {
 			response["error"] = e.Error()
 		}
-		sendErr := json.NewEncoder(c).Encode(response)
+		sendErr := sendResponse(c, response)
 		c.Close()
 		if sendErr != nil {
-			return sendErr
+			observerErrors++
+			lastObserverError = sendErr.Error()
 		}
 		if stopping {
 			return e
