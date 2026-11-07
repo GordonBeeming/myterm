@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/native-validation.yml'
       - 'script/native-validation/**'
+      - 'Services/relay/go.mod'
 
 permissions:
   contents: read
@@ -46,10 +47,12 @@ jobs:
             go version
             rustc --version
             cc --version
-            libraries=()
-            if [[ "$RUNNER_OS" == Linux ]]; then libraries=(-lutil); fi
             set -x
-            cc -std=c11 -Wall -Wextra -Werror script/native-validation/pty_probe.c "${libraries[@]}" -o native-validation-results/pty-probe
+            if [[ "$RUNNER_OS" == Linux ]]; then
+              cc -std=c11 -Wall -Wextra -Werror script/native-validation/pty_probe.c -lutil -o native-validation-results/pty-probe
+            else
+              cc -std=c11 -Wall -Wextra -Werror script/native-validation/pty_probe.c -o native-validation-results/pty-probe
+            fi
             native-validation-results/pty-probe
           } 2>&1 | tee native-validation-results/probe.log
       - name: Inventory Windows environment and run ConPTY probe

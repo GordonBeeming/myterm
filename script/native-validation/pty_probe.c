@@ -1,5 +1,6 @@
 #ifdef _WIN32
 #define _WIN32_WINNT 0x0A00
+#define NTDDI_VERSION 0x0A000006
 #include <windows.h>
 #else
 #define _DEFAULT_SOURCE
@@ -18,15 +19,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wchar.h>
 
 static int child(void) {
     char input[64];
     if (!fgets(input, sizeof(input), stdin) || strcmp(input, "PTY_INPUT\n") != 0) return 2;
 #ifdef _WIN32
     CONSOLE_SCREEN_BUFFER_INFO info;
-    if (!GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &info)) return 3;
-    int cols = info.srWindow.Right - info.srWindow.Left + 1;
-    int rows = info.srWindow.Bottom - info.srWindow.Top + 1;
+    int cols = 0, rows = 0;
+    ULONGLONG deadline = GetTickCount64() + 2000;
+    // Resize and input use separate ConPTY channels; observe the applied geometry.
+    do {
+        if (!GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &info)) return 3;
+        cols = info.srWindow.Right - info.srWindow.Left + 1;
+        rows = info.srWindow.Bottom - info.srWindow.Top + 1;
+        if (cols == 101 && rows == 31) break;
+        Sleep(10);
+    } while (GetTickCount64() < deadline);
 #else
     struct winsize size;
     if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO) || tcgetpgrp(STDIN_FILENO) != getpgrp()) return 3;
@@ -127,7 +136,7 @@ static int probe(const char *executable) {
     struct winsize size = {.ws_row = 24, .ws_col = 80};
     pid_t pid = forkpty(&master, NULL, NULL, &size);
     if (pid < 0) { perror("forkpty"); return 1; }
-    if (pid == 0) { execl(executable, executable, "--child", (char *)NULL); perror("execl"); _exit(127); }
+    if (pid == 0) { execlp(executable, executable, "--child", (char *)NULL); perror("execlp"); _exit(127); }
     size.ws_row = 31; size.ws_col = 101;
     char output[8192] = {0};
     size_t used = 0;
@@ -139,15 +148,22 @@ static int probe(const char *executable) {
         struct timeval timeout = {.tv_sec = 0, .tv_usec = 100000};
         int ready = select(master + 1, &reads, NULL, NULL, &timeout);
         if (ready < 0) { if (errno == EINTR) continue; perror("select"); goto cleanup; }
+        int drained = 0;
         if (ready > 0) {
             ssize_t count = read(master, output + used, sizeof(output) - used - 1);
             if (count < 0 && errno != EIO && errno != EINTR) { perror("read"); goto cleanup; }
+            drained = count == 0 || (count < 0 && errno == EIO);
             if (count > 0) { used += (size_t)count; if (used == sizeof(output) - 1) { fprintf(stderr, "Output overflow\n"); goto cleanup; } }
         }
         if (!exited) {
             pid_t waited = waitpid(pid, &status, WNOHANG);
             if (waited < 0) { perror("waitpid"); goto cleanup; }
             exited = waited == pid;
+        }
+        if (exited && drained && !strstr(output, "MYTERM_NATIVE_OK 101 31")) {
+            if (WIFEXITED(status)) fprintf(stderr, "Child exit=%d; marker missing\n", WEXITSTATUS(status));
+            else if (WIFSIGNALED(status)) fprintf(stderr, "Child signal=%d; marker missing\n", WTERMSIG(status));
+            goto cleanup;
         }
         if (exited && strstr(output, "MYTERM_NATIVE_OK 101 31")) {
             result = WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : 1;
