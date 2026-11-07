@@ -2,7 +2,6 @@
 #define _WIN32_WINNT 0x0A00
 #define NTDDI_VERSION 0x0A000006
 #include <windows.h>
-#include <io.h>
 #else
 #define _DEFAULT_SOURCE
 #include <sys/ioctl.h>
@@ -46,16 +45,28 @@ static int child(void) {
     }
 #ifdef _WIN32
     CONSOLE_SCREEN_BUFFER_INFO info;
+    // Geometry queries need read access; the CRT stdout stream is write-only.
+    HANDLE consoleOutput = CreateFileW(L"CONOUT$", GENERIC_READ | GENERIC_WRITE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    if (consoleOutput == INVALID_HANDLE_VALUE) {
+        fprintf(stderr, "Open console geometry handle failed: %lu\n", GetLastError());
+        return 3;
+    }
     int cols = 0, rows = 0;
     ULONGLONG deadline = GetTickCount64() + 2000;
     // Resize and input use separate ConPTY channels; observe the applied geometry.
     do {
-        if (!GetConsoleScreenBufferInfo((HANDLE)_get_osfhandle(_fileno(stdout)), &info)) return 3;
+        if (!GetConsoleScreenBufferInfo(consoleOutput, &info)) {
+            fprintf(stderr, "Console geometry query failed: %lu\n", GetLastError());
+            CloseHandle(consoleOutput);
+            return 3;
+        }
         cols = info.srWindow.Right - info.srWindow.Left + 1;
         rows = info.srWindow.Bottom - info.srWindow.Top + 1;
         if (cols == 101 && rows == 31) break;
         Sleep(10);
     } while (GetTickCount64() < deadline);
+    if (!CloseHandle(consoleOutput)) return 3;
 #else
     struct winsize size;
     if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO) || tcgetpgrp(STDIN_FILENO) != getpgrp()) return 3;
