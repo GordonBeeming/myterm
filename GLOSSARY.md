@@ -4,6 +4,9 @@ MyTerm connects a person's clients to a shared account layout and sessions on th
 
 ## Language
 
+**Relay operator**:
+The person running a MyTerm relay deployment. We operate the default hosted relays; a person running their own relay operates that deployment. Operator access does not grant approval to a personal account's clients or servers.
+
 **Personal account**:
 One person's MyTerm server directory and shared layout. Each terminal or browser session belongs to its assigned server.
 _Avoid_: Team, organization
