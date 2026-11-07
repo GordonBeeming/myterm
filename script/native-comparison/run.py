@@ -154,7 +154,7 @@ def shell_commands(kind, marker):
             return '[Console]::WriteLine([Text.Encoding]::UTF8.GetString([byte[]](' + ','.join(map(str, value.encode())) + ')))'
         command = emit(marker)
         delayed = 'Start-Sleep -Milliseconds 250; ' + command
-        final = emit(begin) + "; [Console]::Write(([char]120).ToString()*65536); " + command + '; exit 0'
+        final = emit(begin) + "; for ($i=0; $i -lt 1024; $i++) { [Console]::WriteLine(([char]120).ToString()*64) }; " + command + '; exit 0'
     else:
         def emit(value):
             return "printf '" + ''.join('\\%03o' % b for b in value.encode()) + "\\n'"
@@ -234,7 +234,8 @@ def main():
     output = options.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     (output / 'session-stderr.log').write_bytes(b'')
-    fixtures = (HERE / 'fixtures.json').read_bytes()
+    # Git's Windows checkout may use CRLF; hash the same LF-normalized bytes on every runner.
+    fixtures = (HERE / 'fixtures.json').read_text(encoding='utf-8').encode('utf-8')
     meta = {'startedAt': datetime.datetime.now(datetime.timezone.utc).isoformat(),
             'os': platform.platform(), 'cpu': platform.machine(), 'python': sys.version,
             'fixturesSHA256': hashlib.sha256(fixtures).hexdigest(), 'status': 'running',

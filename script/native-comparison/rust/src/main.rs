@@ -219,6 +219,8 @@ fn session(args: &[String]) -> Result<()> {
             }
             Err(e) => return Err(e.into()),
         };
+        // Windows inherits nonblocking mode from the listening socket.
+        stream.set_nonblocking(false)?;
         let output_length_at_accept = output
             .lock()
             .map_err(|_| anyhow::anyhow!("output mutex poisoned"))?

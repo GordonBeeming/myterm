@@ -41,9 +41,13 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p comparison-results
-          args=()
-          if [[ "$RUNNER_OS" != macOS ]]; then args+=(--skip-swift); fi
-          python3 script/native-comparison/run.py --output comparison-results "${args[@]}" 2>&1 | tee comparison-results/probe.log
+          {
+            if [[ "$RUNNER_OS" == macOS ]]; then
+              python3 script/native-comparison/run.py --output comparison-results
+            else
+              python3 script/native-comparison/run.py --output comparison-results --skip-swift
+            fi
+          } 2>&1 | tee comparison-results/probe.log
       - name: Retain measured results
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

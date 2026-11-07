@@ -108,7 +108,7 @@ def main():
             'sessions': json.loads((root / 'sessions.json').read_text()),
             'traces': {name: json.loads((root / f'{name}-traces.json').read_text()) for name in ['swiftterm', 'go', 'rust']}}
     import hashlib
-    if run['fixturesSHA256'] != hashlib.sha256((Path(__file__).parent / 'fixtures.json').read_bytes()).hexdigest():
+    if run['fixturesSHA256'] != hashlib.sha256((Path(__file__).parent / 'fixtures.json').read_text(encoding='utf-8').encode('utf-8')).hexdigest():
         raise SystemExit('Results do not match the current fixture hash.')
     report = Path(__file__).resolve().parents[2] / 'docs/research/myterm-native-adapter-comparison.md'
     from urllib.parse import quote
