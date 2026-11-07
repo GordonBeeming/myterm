@@ -24,6 +24,12 @@
 static int child(void) {
     char input[64];
 #ifdef _WIN32
+    // CI redirects the parent's standard handles. Bind the child CRT to its
+    // attached console instead of those inherited redirected streams.
+    FILE *reopened = NULL;
+    if (freopen_s(&reopened, "CONIN$", "r", stdin) != 0 ||
+        freopen_s(&reopened, "CONOUT$", "w", stdout) != 0 ||
+        freopen_s(&reopened, "CONOUT$", "w", stderr) != 0) return 7;
     // ConPTY's input consumer must be attached before the parent sends keys.
     if (printf("MYTERM_CHILD_READY\n") < 0 || fflush(stdout) != 0) return 6;
 #endif
