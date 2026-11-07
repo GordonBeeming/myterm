@@ -1,0 +1,1258 @@
+{
+  "sourceCommit": "06d72ad61e6004dc18468c7d238dff7587eef0a1",
+  "runURL": "https://github.com/GordonBeeming/myterm/actions/runs/42367281598",
+  "fixtureSHA256": "f17f4173910429490df30b34c9ad6acf2867be7cc67107a87de1fdbc63332dac",
+  "adapterCases": 26,
+  "allAdapterCasesPass": true,
+  "environments": [
+    {
+      "runner": "ubuntu-24.04",
+      "run": {
+        "startedAt": "2026-11-07T11:14:10.628184+00:00",
+        "os": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+        "cpu": "x86_64",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "fixturesSHA256": "f17f4173910429490df30b34c9ad6acf2867be7cc67107a87de1fdbc63332dac",
+        "status": "pass",
+        "scope": "Throwaway Go/Rust server candidates; all client apps stay native. macOS server may use Go/Rust.",
+        "go": "go version go1.26.0 linux/amd64",
+        "rustc": "rustc 1.89.0 (29483883e 2025-08-04)",
+        "cargo": "cargo 1.89.0 (c24e10642 2025-06-23)",
+        "adapterFailures": [],
+        "fidelityVerdict": "inspection required; trace differences are findings, not harness failures",
+        "finishedAt": "2026-11-07T11:14:24.856342+00:00"
+      },
+      "sessions": {
+        "go": {
+          "native-geometry": {
+            "status": "pass",
+            "pid": 4516,
+            "bytes": 36,
+            "startupCursorReplies": 0,
+            "checks": [
+              "native terminal stdin/stdout",
+              "101x31 child-observed geometry",
+              "input/output",
+              "invalid token and invalid geometry rejected",
+              "successful child exit and adapter teardown"
+            ]
+          },
+          "/bin/sh": {
+            "status": "pass",
+            "shell": [
+              "/bin/sh",
+              "-i"
+            ],
+            "pid": 4526,
+            "capturedBytes": 66156,
+            "startupCursorReplies": 0,
+            "checks": [
+              "shell startup and input/output",
+              "resize API",
+              "real loopback disconnect and reconnect, same child PID",
+              "retained detached output",
+              "exact 65536-byte payload between output-only markers",
+              "successful child exit and adapter teardown"
+            ],
+            "limits": [
+              "retained raw bytes, not engine checkpoints",
+              "one probe client; no production transport, writer lease or slow reader policy",
+              "process-tree termination and service lifecycle not verified"
+            ]
+          },
+          "/usr/bin/bash": {
+            "status": "pass",
+            "shell": [
+              "/usr/bin/bash",
+              "--noprofile",
+              "--norc",
+              "-i"
+            ],
+            "pid": 4538,
+            "capturedBytes": 66357,
+            "startupCursorReplies": 0,
+            "checks": [
+              "shell startup and input/output",
+              "resize API",
+              "real loopback disconnect and reconnect, same child PID",
+              "retained detached output",
+              "exact 65536-byte payload between output-only markers",
+              "successful child exit and adapter teardown"
+            ],
+            "limits": [
+              "retained raw bytes, not engine checkpoints",
+              "one probe client; no production transport, writer lease or slow reader policy",
+              "process-tree termination and service lifecycle not verified"
+            ]
+          }
+        },
+        "rust": {
+          "native-geometry": {
+            "status": "pass",
+            "pid": 4544,
+            "bytes": 36,
+            "startupCursorReplies": 0,
+            "checks": [
+              "native terminal stdin/stdout",
+              "101x31 child-observed geometry",
+              "input/output",
+              "invalid token and invalid geometry rejected",
+              "successful child exit and adapter teardown"
+            ]
+          },
+          "/bin/sh": {
+            "status": "pass",
+            "shell": [
+              "/bin/sh",
+              "-i"
+            ],
+            "pid": 4548,
+            "capturedBytes": 66156,
+            "startupCursorReplies": 0,
+            "checks": [
+              "shell startup and input/output",
+              "resize API",
+              "real loopback disconnect and reconnect, same child PID",
+              "retained detached output",
+              "exact 65536-byte payload between output-only markers",
+              "successful child exit and adapter teardown"
+            ],
+            "limits": [
+              "retained raw bytes, not engine checkpoints",
+              "one probe client; no production transport, writer lease or slow reader policy",
+              "process-tree termination and service lifecycle not verified"
+            ]
+          },
+          "/usr/bin/bash": {
+            "status": "pass",
+            "shell": [
+              "/usr/bin/bash",
+              "--noprofile",
+              "--norc",
+              "-i"
+            ],
+            "pid": 4555,
+            "capturedBytes": 66252,
+            "startupCursorReplies": 0,
+            "checks": [
+              "shell startup and input/output",
+              "resize API",
+              "real loopback disconnect and reconnect, same child PID",
+              "retained detached output",
+              "exact 65536-byte payload between output-only markers",
+              "successful child exit and adapter teardown"
+            ],
+            "limits": [
+              "retained raw bytes, not engine checkpoints",
+              "one probe client; no production transport, writer lease or slow reader policy",
+              "process-tree termination and service lifecycle not verified"
+            ]
+          }
+        }
+      },
+      "sameEngineMatchesMacRunner": {
+        "go": true,
+        "rust": true
+      }
+    },
+    {
+      "runner": "ubuntu-24.04-arm",
+      "run": {
+        "startedAt": "2026-11-07T11:14:10.249376+00:00",
+        "os": "Linux-7.0.0-1017-azure-aarch64-with-glibc2.39",
+        "cpu": "aarch64",
+        "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "fixturesSHA256": "f17f4173910429490df30b34c9ad6acf2867be7cc67107a87de1fdbc63332dac",
+        "status": "pass",
+        "scope": "Throwaway Go/Rust server candidates; all client apps stay native. macOS server may use Go/Rust.",
+        "go": "go version go1.26.0 linux/arm64",
+        "rustc": "rustc 1.89.0 (29483883e 2025-08-04)",
+        "cargo": "cargo 1.89.0 (c24e10642 2025-06-23)",
+        "adapterFailures": [],
+        "fidelityVerdict": "inspection required; trace differences are findings, not harness failures",
+        "finishedAt": "2026-11-07T11:14:21.461920+00:00"
+      },
+      "sessions": {
+        "go": {
+          "native-geometry": {
+            "status": "pass",
+            "pid": 4284,
+            "bytes": 36,
+            "startupCursorReplies": 0,
+            "checks": [
+              "native terminal stdin/stdout",
+              "101x31 child-observed geometry",
+              "input/output",
+              "invalid token and invalid geometry rejected",
+              "successful child exit and adapter teardown"
+            ]
+          },
+          "/bin/sh": {
+            "status": "pass",
+            "shell": [
+              "/bin/sh",
+              "-i"
+            ],
+            "pid": 4294,
+            "capturedBytes": 66156,
+            "startupCursorReplies": 0,
+            "checks": [
+              "shell startup and input/output",
+              "resize API",
+              "real loopback disconnect and reconnect, same child PID",
+              "retained detached output",
+              "exact 65536-byte payload between output-only markers",
+              "successful child exit and adapter teardown"
+            ],
+            "limits": [
+              "retained raw bytes, not engine checkpoints",
+              "one probe client; no production transport, writer lease or slow reader policy",
+              "process-tree termination and service lifecycle not verified"
+            ]
+          },
+          "/usr/bin/bash": {
+            "status": "pass",
+            "shell": [
+              "/usr/bin/bash",
+              "--noprofile",
+              "--norc",
+              "-i"
+            ],
+            "pid": 4306,
+            "capturedBytes": 66357,
+            "startupCursorReplies": 0,
+            "checks": [
+              "shell startup and input/output",
+              "resize API",
+              "real loopback disconnect and reconnect, same child PID",
+              "retained detached output",
+              "exact 65536-byte payload between output-only markers",
+              "successful child exit and adapter teardown"
+            ],
+            "limits": [
+              "retained raw bytes, not engine checkpoints",
+              "one probe client; no production transport, writer lease or slow reader policy",
+              "process-tree termination and service lifecycle not verified"
+            ]
+          }
+        },
+        "rust": {
+          "native-geometry": {
+            "status": "pass",
+            "pid": 4312,
+            "bytes": 36,
+            "startupCursorReplies": 0,
+            "checks": [
+              "native terminal stdin/stdout",
+              "101x31 child-observed geometry",
+              "input/output",
+              "invalid token and invalid geometry rejected",
+              "successful child exit and adapter teardown"
+            ]
+          },
+          "/bin/sh": {
+            "status": "pass",
+            "shell": [
+              "/bin/sh",
+              "-i"
+            ],
+            "pid": 4316,
+            "capturedBytes": 66156,
+            "startupCursorReplies": 0,
+            "checks": [
+              "shell startup and input/output",
+              "resize API",
+              "real loopback disconnect and reconnect, same child PID",
+              "retained detached output",
+              "exact 65536-byte payload between output-only markers",
+              "successful child exit and adapter teardown"
+            ],
+            "limits": [
+              "retained raw bytes, not engine checkpoints",
+              "one probe client; no production transport, writer lease or slow reader policy",
+              "process-tree termination and service lifecycle not verified"
+            ]
+          },
+          "/usr/bin/bash": {
+            "status": "pass",
+            "shell": [
+              "/usr/bin/bash",
+              "--noprofile",
+              "--norc",
+              "-i"
+            ],
+            "pid": 4324,
+            "capturedBytes": 66252,
+            "startupCursorReplies": 0,
+            "checks": [
+              "shell startup and input/output",
+              "resize API",
+              "real loopback disconnect and reconnect, same child PID",
+              "retained detached output",
+              "exact 65536-byte payload between output-only markers",
+              "successful child exit and adapter teardown"
+            ],
+            "limits": [
+              "retained raw bytes, not engine checkpoints",
+              "one probe client; no production transport, writer lease or slow reader policy",
+              "process-tree termination and service lifecycle not verified"
+            ]
+          }
+        }
+      },
+      "sameEngineMatchesMacRunner": {
+        "go": true,
+        "rust": true
+      }
+    },
+    {
+      "runner": "windows-2025",
+      "run": {
+        "startedAt": "2026-11-07T11:14:31.527142+00:00",
+        "os": "Windows-2025Server-10.0.26100-SP0",
+        "cpu": "AMD64",
+        "python": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+        "fixturesSHA256": "f17f4173910429490df30b34c9ad6acf2867be7cc67107a87de1fdbc63332dac",
+        "status": "pass",
+        "scope": "Throwaway Go/Rust server candidates; all client apps stay native. macOS server may use Go/Rust.",
+        "go": "go version go1.26.0 windows/amd64",
+        "rustc": "rustc 1.89.0 (29483883e 2025-08-04)",
+        "cargo": "cargo 1.89.0 (c24e10642 2025-06-23)",
+        "adapterFailures": [],
+        "fidelityVerdict": "inspection required; trace differences are findings, not harness failures",
+        "finishedAt": "2026-11-07T11:15:02.836715+00:00"
+      },
+      "sessions": {
+        "go": {
+          "native-geometry": {
+            "status": "pass",
+            "pid": 1884,
+            "bytes": 353,
+            "startupCursorReplies": 0,
+            "checks": [
+              "native terminal stdin/stdout",
+              "101x31 child-observed geometry",
+              "input/output",
+              "invalid token and invalid geometry rejected",
+              "successful child exit and adapter teardown"
+            ]
+          },
+          "cmd.exe": {
+            "status": "pass",
+            "shell": [
+              "cmd.exe",
+              "/Q",
+              "/D"
+            ],
+            "pid": 9256,
+            "capturedBytes": 78589,
+            "startupCursorReplies": 0,
+            "checks": [
+              "shell startup and input/output",
+              "resize API",
+              "real loopback disconnect and reconnect, same child PID",
+              "retained detached output",
+              "exact 65536-byte payload between output-only markers",
+              "successful child exit and adapter teardown"
+            ],
+            "limits": [
+              "retained raw bytes, not engine checkpoints",
+              "one probe client; no production transport, writer lease or slow reader policy",
+              "process-tree termination and service lifecycle not verified"
+            ]
+          },
+          "pwsh.exe": {
+            "status": "pass",
+            "shell": [
+              "pwsh.exe",
+              "-NoLogo",
+              "-NoProfile"
+            ],
+            "pid": 4928,
+            "capturedBytes": 70943,
+            "startupCursorReplies": 0,
+            "checks": [
+              "shell startup and input/output",
+              "resize API",
+              "real loopback disconnect and reconnect, same child PID",
+              "retained detached output",
+              "exact 65536-byte payload between output-only markers",
+              "successful child exit and adapter teardown"
+            ],
+            "limits": [
+              "retained raw bytes, not engine checkpoints",
+              "one probe client; no production transport, writer lease or slow reader policy",
+              "process-tree termination and service lifecycle not verified"
+            ]
+          }
+        },
+        "rust": {
+          "native-geometry": {
+            "status": "pass",
+            "pid": 9316,
+            "bytes": 344,
+            "startupCursorReplies": 1,
+            "checks": [
+              "native terminal stdin/stdout",
+              "101x31 child-observed geometry",
+              "input/output",
+              "invalid token and invalid geometry rejected",
+              "successful child exit and adapter teardown"
+            ]
+          },
+          "cmd.exe": {
+            "status": "pass",
+            "shell": [
+              "cmd.exe",
+              "/Q",
+              "/D"
+            ],
+            "pid": 5720,
+            "capturedBytes": 77281,
+            "startupCursorReplies": 1,
+            "checks": [
+              "shell startup and input/output",
+              "resize API",
+              "real loopback disconnect and reconnect, same child PID",
+              "retained detached output",
+              "exact 65536-byte payload between output-only markers",
+              "successful child exit and adapter teardown"
+            ],
+            "limits": [
+              "retained raw bytes, not engine checkpoints",
+              "one probe client; no production transport, writer lease or slow reader policy",
+              "process-tree termination and service lifecycle not verified"
+            ]
+          },
+          "pwsh.exe": {
+            "status": "pass",
+            "shell": [
+              "pwsh.exe",
+              "-NoLogo",
+              "-NoProfile"
+            ],
+            "pid": 2360,
+            "capturedBytes": 71786,
+            "startupCursorReplies": 1,
+            "checks": [
+              "shell startup and input/output",
+              "resize API",
+              "real loopback disconnect and reconnect, same child PID",
+              "retained detached output",
+              "exact 65536-byte payload between output-only markers",
+              "successful child exit and adapter teardown"
+            ],
+            "limits": [
+              "retained raw bytes, not engine checkpoints",
+              "one probe client; no production transport, writer lease or slow reader policy",
+              "process-tree termination and service lifecycle not verified"
+            ]
+          }
+        }
+      },
+      "sameEngineMatchesMacRunner": {
+        "go": true,
+        "rust": true
+      }
+    },
+    {
+      "runner": "xcode-27",
+      "run": {
+        "startedAt": "2026-11-07T11:14:15.104392+00:00",
+        "os": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+        "cpu": "arm64",
+        "python": "3.15.2 (main, Oct 25 2026, 16:57:51) [Clang 21.0.0 (clang-2100.3.34.2)]",
+        "fixturesSHA256": "f17f4173910429490df30b34c9ad6acf2867be7cc67107a87de1fdbc63332dac",
+        "status": "pass",
+        "scope": "Throwaway Go/Rust server candidates; all client apps stay native. macOS server may use Go/Rust.",
+        "go": "go version go1.26.0 darwin/arm64",
+        "rustc": "rustc 1.89.0 (29483883e 2025-08-04)",
+        "cargo": "cargo 1.89.0 (c24e10642 2025-06-23)",
+        "swift": "Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)\nTarget: arm64-apple-macosx27.0.0",
+        "adapterFailures": [],
+        "fidelityVerdict": "inspection required; trace differences are findings, not harness failures",
+        "finishedAt": "2026-11-07T11:15:37.523894+00:00"
+      },
+      "sessions": {
+        "go": {
+          "native-geometry": {
+            "status": "pass",
+            "pid": 17064,
+            "bytes": 36,
+            "startupCursorReplies": 0,
+            "checks": [
+              "native terminal stdin/stdout",
+              "101x31 child-observed geometry",
+              "input/output",
+              "invalid token and invalid geometry rejected",
+              "successful child exit and adapter teardown"
+            ]
+          },
+          "/bin/sh": {
+            "status": "pass",
+            "shell": [
+              "/bin/sh",
+              "-i"
+            ],
+            "pid": 17066,
+            "capturedBytes": 66313,
+            "startupCursorReplies": 0,
+            "checks": [
+              "shell startup and input/output",
+              "resize API",
+              "real loopback disconnect and reconnect, same child PID",
+              "retained detached output",
+              "exact 65536-byte payload between output-only markers",
+              "successful child exit and adapter teardown"
+            ],
+            "limits": [
+              "retained raw bytes, not engine checkpoints",
+              "one probe client; no production transport, writer lease or slow reader policy",
+              "process-tree termination and service lifecycle not verified"
+            ]
+          },
+          "/bin/bash": {
+            "status": "pass",
+            "shell": [
+              "/bin/bash",
+              "--noprofile",
+              "--norc",
+              "-i"
+            ],
+            "pid": 17073,
+            "capturedBytes": 66504,
+            "startupCursorReplies": 0,
+            "checks": [
+              "shell startup and input/output",
+              "resize API",
+              "real loopback disconnect and reconnect, same child PID",
+              "retained detached output",
+              "exact 65536-byte payload between output-only markers",
+              "successful child exit and adapter teardown"
+            ],
+            "limits": [
+              "retained raw bytes, not engine checkpoints",
+              "one probe client; no production transport, writer lease or slow reader policy",
+              "process-tree termination and service lifecycle not verified"
+            ]
+          },
+          "/bin/zsh": {
+            "status": "pass",
+            "shell": [
+              "/bin/zsh",
+              "-f",
+              "-i"
+            ],
+            "pid": 17080,
+            "capturedBytes": 67021,
+            "startupCursorReplies": 0,
+            "checks": [
+              "shell startup and input/output",
+              "resize API",
+              "real loopback disconnect and reconnect, same child PID",
+              "retained detached output",
+              "exact 65536-byte payload between output-only markers",
+              "successful child exit and adapter teardown"
+            ],
+            "limits": [
+              "retained raw bytes, not engine checkpoints",
+              "one probe client; no production transport, writer lease or slow reader policy",
+              "process-tree termination and service lifecycle not verified"
+            ]
+          }
+        },
+        "rust": {
+          "native-geometry": {
+            "status": "pass",
+            "pid": 17085,
+            "bytes": 36,
+            "startupCursorReplies": 0,
+            "checks": [
+              "native terminal stdin/stdout",
+              "101x31 child-observed geometry",
+              "input/output",
+              "invalid token and invalid geometry rejected",
+              "successful child exit and adapter teardown"
+            ]
+          },
+          "/bin/sh": {
+            "status": "pass",
+            "shell": [
+              "/bin/sh",
+              "-i"
+            ],
+            "pid": 17089,
+            "capturedBytes": 66208,
+            "startupCursorReplies": 0,
+            "checks": [
+              "shell startup and input/output",
+              "resize API",
+              "real loopback disconnect and reconnect, same child PID",
+              "retained detached output",
+              "exact 65536-byte payload between output-only markers",
+              "successful child exit and adapter teardown"
+            ],
+            "limits": [
+              "retained raw bytes, not engine checkpoints",
+              "one probe client; no production transport, writer lease or slow reader policy",
+              "process-tree termination and service lifecycle not verified"
+            ]
+          },
+          "/bin/bash": {
+            "status": "pass",
+            "shell": [
+              "/bin/bash",
+              "--noprofile",
+              "--norc",
+              "-i"
+            ],
+            "pid": 17096,
+            "capturedBytes": 66399,
+            "startupCursorReplies": 0,
+            "checks": [
+              "shell startup and input/output",
+              "resize API",
+              "real loopback disconnect and reconnect, same child PID",
+              "retained detached output",
+              "exact 65536-byte payload between output-only markers",
+              "successful child exit and adapter teardown"
+            ],
+            "limits": [
+              "retained raw bytes, not engine checkpoints",
+              "one probe client; no production transport, writer lease or slow reader policy",
+              "process-tree termination and service lifecycle not verified"
+            ]
+          },
+          "/bin/zsh": {
+            "status": "pass",
+            "shell": [
+              "/bin/zsh",
+              "-f",
+              "-i"
+            ],
+            "pid": 17310,
+            "capturedBytes": 66916,
+            "startupCursorReplies": 0,
+            "checks": [
+              "shell startup and input/output",
+              "resize API",
+              "real loopback disconnect and reconnect, same child PID",
+              "retained detached output",
+              "exact 65536-byte payload between output-only markers",
+              "successful child exit and adapter teardown"
+            ],
+            "limits": [
+              "retained raw bytes, not engine checkpoints",
+              "one probe client; no production transport, writer lease or slow reader policy",
+              "process-tree termination and service lifecycle not verified"
+            ]
+          }
+        }
+      },
+      "sameEngineMatchesMacRunner": {
+        "go": true,
+        "rust": true
+      }
+    }
+  ],
+  "macRunnerBaseline": {
+    "traceCount": 17,
+    "checkpointChecks": 35,
+    "allCheckpointChecksPass": true,
+    "comparison": {
+      "go": {
+        "alternate-return": {
+          "visibleStateMismatches": [],
+          "finalRepliesMatch": true,
+          "replyImplementation": true,
+          "checkpointChecks": null,
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "alternate-shrink-grow": {
+          "visibleStateMismatches": [
+            {
+              "event": 2,
+              "fields": [
+                "cells"
+              ]
+            },
+            {
+              "event": 3,
+              "fields": [
+                "cursor"
+              ]
+            }
+          ],
+          "finalRepliesMatch": true,
+          "replyImplementation": true,
+          "checkpointChecks": null,
+          "baselineCheckpointChecks": [
+            true,
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "ascii-and-cursor": {
+          "visibleStateMismatches": [],
+          "finalRepliesMatch": true,
+          "replyImplementation": true,
+          "checkpointChecks": null,
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "iterm-png": {
+          "visibleStateMismatches": [
+            {
+              "event": 0,
+              "fields": [
+                "cells",
+                "cursor"
+              ]
+            },
+            {
+              "event": 1,
+              "fields": [
+                "cells",
+                "cursor"
+              ]
+            }
+          ],
+          "finalRepliesMatch": true,
+          "replyImplementation": true,
+          "checkpointChecks": null,
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "kitty-keyboard": {
+          "visibleStateMismatches": [],
+          "finalRepliesMatch": false,
+          "replyImplementation": true,
+          "checkpointChecks": null,
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "kitty-rgba-split": {
+          "visibleStateMismatches": [
+            {
+              "event": 1,
+              "fields": [
+                "cells",
+                "cursor"
+              ]
+            }
+          ],
+          "finalRepliesMatch": false,
+          "replyImplementation": true,
+          "checkpointChecks": null,
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "modes-and-hyperlink": {
+          "visibleStateMismatches": [],
+          "finalRepliesMatch": true,
+          "replyImplementation": true,
+          "checkpointChecks": null,
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "query-cursor-status": {
+          "visibleStateMismatches": [],
+          "finalRepliesMatch": false,
+          "replyImplementation": true,
+          "checkpointChecks": null,
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "scrollback-resize": {
+          "visibleStateMismatches": [
+            {
+              "event": 1,
+              "fields": [
+                "cells",
+                "cursor"
+              ]
+            },
+            {
+              "event": 2,
+              "fields": [
+                "cells",
+                "cursor"
+              ]
+            }
+          ],
+          "finalRepliesMatch": true,
+          "replyImplementation": true,
+          "checkpointChecks": null,
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "sixel-full-positive-control": {
+          "visibleStateMismatches": [
+            {
+              "event": 0,
+              "fields": [
+                "cursor"
+              ]
+            },
+            {
+              "event": 1,
+              "fields": [
+                "cells",
+                "cursor"
+              ]
+            }
+          ],
+          "finalRepliesMatch": true,
+          "replyImplementation": true,
+          "checkpointChecks": null,
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "sixel-full-split": {
+          "visibleStateMismatches": [],
+          "finalRepliesMatch": true,
+          "replyImplementation": true,
+          "checkpointChecks": null,
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "sixel-split": {
+          "visibleStateMismatches": [],
+          "finalRepliesMatch": true,
+          "replyImplementation": true,
+          "checkpointChecks": null,
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "split-csi": {
+          "visibleStateMismatches": [],
+          "finalRepliesMatch": true,
+          "replyImplementation": true,
+          "checkpointChecks": null,
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "split-osc": {
+          "visibleStateMismatches": [],
+          "finalRepliesMatch": true,
+          "replyImplementation": true,
+          "checkpointChecks": null,
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "split-utf8": {
+          "visibleStateMismatches": [],
+          "finalRepliesMatch": true,
+          "replyImplementation": true,
+          "checkpointChecks": null,
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "styles-and-colors": {
+          "visibleStateMismatches": [],
+          "finalRepliesMatch": true,
+          "replyImplementation": true,
+          "checkpointChecks": null,
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "unicode": {
+          "visibleStateMismatches": [],
+          "finalRepliesMatch": true,
+          "replyImplementation": true,
+          "checkpointChecks": null,
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        }
+      },
+      "rust": {
+        "alternate-return": {
+          "visibleStateMismatches": [],
+          "finalRepliesMatch": null,
+          "replyImplementation": false,
+          "checkpointChecks": [
+            false,
+            false
+          ],
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "alternate-shrink-grow": {
+          "visibleStateMismatches": [
+            {
+              "event": 2,
+              "fields": [
+                "cells"
+              ]
+            }
+          ],
+          "finalRepliesMatch": null,
+          "replyImplementation": false,
+          "checkpointChecks": [
+            false,
+            false,
+            false
+          ],
+          "baselineCheckpointChecks": [
+            true,
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "ascii-and-cursor": {
+          "visibleStateMismatches": [],
+          "finalRepliesMatch": null,
+          "replyImplementation": false,
+          "checkpointChecks": [
+            true,
+            true
+          ],
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "iterm-png": {
+          "visibleStateMismatches": [
+            {
+              "event": 0,
+              "fields": [
+                "cells",
+                "cursor"
+              ]
+            },
+            {
+              "event": 1,
+              "fields": [
+                "cells",
+                "cursor"
+              ]
+            }
+          ],
+          "finalRepliesMatch": null,
+          "replyImplementation": false,
+          "checkpointChecks": [
+            true,
+            true
+          ],
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "kitty-keyboard": {
+          "visibleStateMismatches": [],
+          "finalRepliesMatch": false,
+          "replyImplementation": false,
+          "checkpointChecks": [
+            true,
+            true
+          ],
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "kitty-rgba-split": {
+          "visibleStateMismatches": [
+            {
+              "event": 1,
+              "fields": [
+                "cells",
+                "cursor"
+              ]
+            }
+          ],
+          "finalRepliesMatch": false,
+          "replyImplementation": false,
+          "checkpointChecks": [
+            true,
+            true
+          ],
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "modes-and-hyperlink": {
+          "visibleStateMismatches": [],
+          "finalRepliesMatch": null,
+          "replyImplementation": false,
+          "checkpointChecks": [
+            true,
+            true
+          ],
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "query-cursor-status": {
+          "visibleStateMismatches": [],
+          "finalRepliesMatch": false,
+          "replyImplementation": false,
+          "checkpointChecks": [
+            true,
+            true
+          ],
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "scrollback-resize": {
+          "visibleStateMismatches": [],
+          "finalRepliesMatch": null,
+          "replyImplementation": false,
+          "checkpointChecks": [
+            true,
+            true
+          ],
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "sixel-full-positive-control": {
+          "visibleStateMismatches": [
+            {
+              "event": 0,
+              "fields": [
+                "cursor"
+              ]
+            },
+            {
+              "event": 1,
+              "fields": [
+                "cells",
+                "cursor"
+              ]
+            }
+          ],
+          "finalRepliesMatch": null,
+          "replyImplementation": false,
+          "checkpointChecks": [
+            true,
+            true
+          ],
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "sixel-full-split": {
+          "visibleStateMismatches": [],
+          "finalRepliesMatch": null,
+          "replyImplementation": false,
+          "checkpointChecks": [
+            true,
+            true
+          ],
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "sixel-split": {
+          "visibleStateMismatches": [],
+          "finalRepliesMatch": null,
+          "replyImplementation": false,
+          "checkpointChecks": [
+            true,
+            true
+          ],
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "split-csi": {
+          "visibleStateMismatches": [],
+          "finalRepliesMatch": null,
+          "replyImplementation": false,
+          "checkpointChecks": [
+            true,
+            false
+          ],
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "split-osc": {
+          "visibleStateMismatches": [],
+          "finalRepliesMatch": null,
+          "replyImplementation": false,
+          "checkpointChecks": [
+            true,
+            false
+          ],
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "split-utf8": {
+          "visibleStateMismatches": [],
+          "finalRepliesMatch": null,
+          "replyImplementation": false,
+          "checkpointChecks": [
+            true,
+            false
+          ],
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "styles-and-colors": {
+          "visibleStateMismatches": [],
+          "finalRepliesMatch": null,
+          "replyImplementation": false,
+          "checkpointChecks": [
+            true,
+            true
+          ],
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        },
+        "unicode": {
+          "visibleStateMismatches": [
+            {
+              "event": 1,
+              "fields": [
+                "cells",
+                "cursor"
+              ]
+            },
+            {
+              "event": 2,
+              "fields": [
+                "cells",
+                "cursor"
+              ]
+            },
+            {
+              "event": 3,
+              "fields": [
+                "cells"
+              ]
+            }
+          ],
+          "finalRepliesMatch": null,
+          "replyImplementation": false,
+          "checkpointChecks": [
+            true,
+            true
+          ],
+          "baselineCheckpointChecks": [
+            true,
+            true
+          ],
+          "scope": "Cells, basic styles/colors, cursor and active buffer only. Matching state does not establish modes, images or keyboard input parity."
+        }
+      }
+    }
+  },
+  "earlierAttempts": [
+    {
+      "runURL": "https://github.com/GordonBeeming/myterm/actions/runs/42366209561",
+      "findings": [
+        "macOS Bash empty-array wrapper failed before probes",
+        "Windows Rust accepted socket inherited nonblocking mode",
+        "PowerShell unbroken output wrapped the final marker"
+      ]
+    },
+    {
+      "runURL": "https://github.com/GordonBeeming/myterm/actions/runs/42366615068",
+      "findings": [
+        "Mac, both Linux jobs and Windows Go cases passed",
+        "Windows Rust exposed required inherited-cursor startup reply"
+      ]
+    }
+  ],
+  "limits": [
+    "raw-output observer reconnects do not establish emulator checkpoints",
+    "Rust Windows startup query reply is explicit adapter behavior, not a general application-query responder",
+    "same-engine cross-platform equality covers cells/basic styles/cursor/active buffer/final replies only",
+    "native client UI, services, upgrades, multiple viewers and process-tree cleanup not validated"
+  ],
+  "workflow": {
+    "conclusion": "success",
+    "event": "pull_request",
+    "headSha": "06d72ad61e6004dc18468c7d238dff7587eef0a1",
+    "name": "Native session adapter comparison prototype",
+    "status": "completed",
+    "url": "https://github.com/GordonBeeming/myterm/actions/runs/42367281598"
+  }
+}
