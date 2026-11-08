@@ -1,0 +1,63 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light">
+<html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MyTerm: an approval arriving after removal</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='13'%3E%3F%3C/text%3E%3C/svg%3E">
+<style>
+:root{color-scheme:light;--bg:#f8fafc;--surface:#ffffff;--surface-2:#f1f5f9;--text:#0f172a;--muted:#64748b;--accent:#0e7490;--link:#164e63;--border:#e2e8f0;--soft:#ecfeff;--soft-text:#155e75;--font:'Space Grotesk',ui-sans-serif,system-ui,-apple-system,sans-serif}
+*{box-sizing:border-box}html{font-size:16px}body{margin:0;background:var(--bg);color:var(--text);font:1rem/1.5 var(--font)}main{max-width:1140px;margin:auto;padding:36px 28px}h1{font-size:2rem;line-height:1.15;letter-spacing:-.03em;margin:8px 0 14px}h2{font-size:1.15rem;margin:0 0 8px}p{max-width:90ch;margin:8px 0 16px}.eyebrow{font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;color:var(--soft-text)}.notice{padding:14px 18px;background:var(--soft);color:var(--soft-text);border:1px solid var(--border);margin:16px 0}.tabs,.controls{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}button{background:var(--surface);color:var(--text);border:1px solid var(--accent);border-radius:6px;padding:10px 14px;cursor:pointer;font:inherit}button[aria-selected=true],button.primary{color:white;background:var(--accent)}button:focus-visible,a:focus-visible{outline:3px solid var(--accent);outline-offset:3px}button:disabled{opacity:.55;cursor:default}.lanes{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}.lane{min-width:0;padding:20px;background:var(--surface);border:1px solid var(--border);border-radius:8px}.state{font-weight:600;color:var(--soft-text);margin:10px 0}.flow{display:grid;gap:8px;list-style:none;padding:0;margin:20px 0}.flow li{display:grid;grid-template-columns:2rem 1fr;gap:10px;border-bottom:1px solid var(--border);padding:8px 0}.flow b{color:var(--soft-text)}.muted{color:var(--muted)}.evidence{padding:18px;background:var(--surface-2);border:1px solid var(--border)}a{color:var(--link)}a.local{text-decoration:underline dotted}code{font-size:.88rem;overflow-wrap:anywhere}footer{font-size:.85rem;border-top:1px solid var(--border);padding-top:16px;margin-top:24px}details{margin-top:20px}summary{cursor:pointer;color:var(--soft-text)}
+</style></head><body><main>
+<div class="eyebrow">MyTerm · open trust-policy decision</div>
+<h1>An approval arriving after removal</h1>
+<p>A surviving device needs to distinguish an earlier offline approval from a new approval forged by a removed server. A valid signature alone does not establish which happened first.</p>
+<div class="notice">Decision walkthrough only. This page models evidence and proposed behavior; it performs no cryptography. The separate native Swift/Rust PAKE probe passed 18 checks on macOS ARM64. Membership, TLS and terminal continuity remain unvalidated.</div>
+<div class="tabs" role="tablist" aria-label="Approval histories">
+<button role="tab" data-case="witnessed" aria-selected="true">Previously witnessed approval</button>
+<button role="tab" data-case="offline" aria-selected="false">Earlier offline approval</button>
+<button role="tab" data-case="forged" aria-selected="false">Later forged approval</button>
+<button role="tab" data-case="late" aria-selected="false">Witness learns removal late</button>
+</div>
+<p id="description"></p>
+<figure style="margin:0" aria-label="Evidence held by the Mac, removed server and new phone">
+<div class="lanes"><section class="lane"><h2>Mac · A</h2><div id="mac" class="state"></div><div id="mac-evidence"></div></section>
+<section class="lane"><h2>Server · B</h2><div id="server" class="state"></div><div>Holds B's signing key. Removal cannot erase a copied key.</div></section>
+<section class="lane"><h2>New phone · C</h2><div id="phone" class="state"></div><div id="phone-evidence"></div></section>
+<section class="lane" id="witness-lane" hidden><h2>Trusted laptop · D</h2><div id="witness" class="state"></div><div id="witness-evidence"></div></section></div>
+<figcaption id="caption" class="muted" style="margin-top:8px"></figcaption></figure>
+<div class="controls"><button class="primary" id="step">Next event</button><button id="reset">Reset scenario</button></div>
+<ol class="flow" id="events"></ol>
+<section class="evidence"><h2>What can A establish?</h2><p id="evidence" aria-live="polite"></p><p id="recommendation"></p><p>Witnessing is relative to each device's verified history. A witness that has not learned of B's removal may still accept B's forged approval. Indefinite offline trust leaves that delay unbounded. Once histories reconcile, the agreed rule requires fresh approval when acceptance cannot be proven to precede removal.</p></section>
+<details><summary>Probe evidence and remaining scope</summary>
+<p>The native probe tests matching secrets, wrong codes, changes to the account/key/role binding, replay, reflected confirmations, malformed messages, request expiry boundaries, five failed attempts and refusal to reuse a verified request. Both callers use a pinned BoringSSL C core, whose SPAKE2 API describes draft-02.</p>
+<p>Confirmation is peer-local. One endpoint can verify a peer while the other rejects or never receives the corresponding confirmation. No membership is granted by this probe. Request state is in memory; expiry boundary tests use an injected fixture clock.</p>
+<p><a class="local" data-file="docs/research/trust-prototype/README.md">Probe instructions</a> · <a class="local" data-file="docs/research/trust-prototype/run.py">Repeatable checks</a> · <a href="https://github.com/GordonBeeming/myterm/issues/141">Validate the account trust protocol and approval ceremony</a></p>
+</details>
+<footer>Local source links open in your IDE and need it running. Fresh approval for unfamiliar, unwitnessed admissions is agreed. Removal wins against causally unordered witness acceptance; this exception is agreed.</footer>
+</main><script>
+const histories={
+witnessed:{description:'B approves C, and A verifies and records that approval before removing B.',events:['B signs C’s approval.','A verifies and records C’s approval.','A removes B.','C connects to A with its existing approval.']},
+offline:{description:'While A is disconnected, B legitimately approves C. A removes B before learning about C.',events:['B signs C’s approval while disconnected from A.','A removes B without knowing about C.','C presents B’s signed approval to A.']},
+forged:{description:'A removes B. An attacker holding B’s key then signs an approval for C and claims it happened earlier.',events:['A removes B.','B’s stolen key signs an approval for C.','C presents B’s signed approval to A.']},
+late:{description:'A removes B. Before learning that removal, trusted D accepts a new approval signed using B’s stolen key. They later reconcile.',events:['A removes B; disconnected D still trusts B.','An attacker with B’s key signs an approval for C.','D accepts and records C’s approval without knowing B was removed.','A and D exchange the removal and D’s acceptance.']}}
+function initial(kind){return{kind,step:0}}
+function reduce(s,action){if(action==='reset')return initial(s.kind);if(action==='next')return{...s,step:Math.min(s.step+1,histories[s.kind].events.length)};return s}
+let state=initial('witnessed');
+function render(){const h=histories[state.kind],n=state.step,w=state.kind==='witnessed',late=state.kind==='late';const signed=w?n>=1:state.kind==='offline'?n>=1:n>=2;const recorded=w&&n>=2;const removed=w?n>=3:state.kind==='offline'?n>=2:n>=1;const delivered=n===h.events.length;
+document.getElementById('description').textContent=h.description;
+document.getElementById('caption').textContent=late?'D’s acceptance proves what D verified, but does not establish a global order relative to A’s removal.':'The offline and forged histories can present the same evidence to A when no surviving endpoint witnessed C’s approval.';
+document.getElementById('mac').textContent=removed?'B is removed': 'B remains trusted';
+document.getElementById('mac-evidence').textContent=recorded?'A holds a verified record of C’s approval.':delivered&&late?'A receives D’s acceptance after having removed B.':delivered?'A sees C’s B-signed approval for the first time.':'A has no verified record of C’s approval.';
+document.getElementById('witness-lane').hidden=!late;
+document.getElementById('witness').textContent=n>=4?'D now knows B is removed':n>=3?'D has recorded C’s approval':'D has no record of C yet';
+document.getElementById('witness-evidence').textContent=n>=4?'D’s acceptance and A’s removal are concurrent in their verified histories. Neither proves which preceded the other.':n>=1?'D has not learned of B’s removal and still trusts B.':'D trusts B.';
+document.getElementById('server').textContent=removed?'Removed from A’s membership view':'Trusted server';
+document.getElementById('phone').textContent=signed?'Holds a B-signed approval':'No approval yet';
+document.getElementById('phone-evidence').textContent=delivered?'Presents the approval to A.':'Has not presented this approval to A.';
+document.getElementById('events').replaceChildren(...h.events.map((t,i)=>{const li=document.createElement('li');const b=document.createElement('b');b.textContent=i<n?'✓':String(i+1);const span=document.createElement('span');span.textContent=t;li.append(b,span);return li}));
+document.getElementById('evidence').textContent=!delivered?'Advance the scenario to compare what A knows.':recorded?'A already verified C before removing B. Preserve C’s approval under the agreed no-cascade policy.':late?'D’s record proves D accepted C, but not that this happened before A removed B. A delayed revocation can create a surviving witness for a forged approval.':'A knows B is removed and can verify the signature, but the presented evidence does not prove whether B signed before or after removal. A timestamp signed by B cannot settle this.';
+document.getElementById('recommendation').textContent=!delivered||recorded?'':late?'Agreed rule: removal wins when acceptance cannot be proven to precede it. Require fresh approval, even if a disconnected witness had already accepted a legitimate device. Evidence of causal ordering, rather than a claimed timestamp, is needed to preserve it automatically.':'Agreed rule: require fresh approval from a surviving trusted endpoint unless the admission has verifiable evidence of prior acceptance by a surviving endpoint. Legitimate approvals made during a partition may require approval again. Previously witnessed approvals survive when their acceptance can be proven to precede removal; unordered acceptance requires fresh approval.';
+document.getElementById('step').disabled=delivered;document.querySelectorAll('[role=tab]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.case===state.kind)))}
+document.getElementById('step').onclick=()=>{state=reduce(state,'next');render()};document.getElementById('reset').onclick=()=>{state=reduce(state,'reset');render()};document.querySelectorAll('[role=tab]').forEach(b=>b.onclick=()=>{state=initial(b.dataset.case);render()});
+const DISPLAY_STRIP_PREFIX='/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-rusty-stitchbird/';document.querySelectorAll('[data-file]').forEach(a=>{const path=DISPLAY_STRIP_PREFIX+a.dataset.file;a.href='http://localhost:17877/browse?path='+encodeURIComponent(path);a.title=path;a.textContent=path.slice(DISPLAY_STRIP_PREFIX.length)});render();
+</script></body></html>

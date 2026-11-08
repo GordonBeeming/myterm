@@ -1,0 +1,148 @@
+{
+  "prototype": "SPAKE2 draft-02 shared BoringSSL core, Swift and Rust callers",
+  "generated_at": "2026-11-08T12:57:01.755148+00:00",
+  "boringssl_commit": "0131ae9d78e42fcc2c1811315e62410ad96d8230",
+  "archive_sha256": "893e755fe720627769d7bd49d15815e86cc0fd4a4ae84b3717caf6fce4255bb4",
+  "toolchains": {
+    "clang": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+    "swiftc": "Apple Swift version 6.4.2 (swiftlang-6.4.2.1.9 clang-2100.4.1.1)",
+    "rustc": "rustc 1.89.0 (29483883e 2025-08-04)",
+    "cmake": "cmake version 4.2.3"
+  },
+  "platform": "macOS-27.3-arm64-arm-64bit-Mach-O",
+  "architecture": "arm64",
+  "ordering": {
+    "passed": 28,
+    "total": 28
+  },
+  "channels": {
+    "passed": 37,
+    "total": 37
+  },
+  "directory": {
+    "passed": 26,
+    "total": 26
+  },
+  "enrollment_reference": {
+    "passed": 53,
+    "total": 53
+  },
+  "signed_history_counterexample": {
+    "passed": 7,
+    "total": 7,
+    "same_signed_bytes": true
+  },
+  "cases": [
+    {
+      "name": "matching secret and transcript",
+      "new_client": "PEER_VERIFIED",
+      "approver": "PEER_VERIFIED",
+      "exchange_ms": 307.437333,
+      "passed": true
+    },
+    {
+      "name": "wrong code",
+      "new_client": "REJECT",
+      "approver": "REJECT",
+      "exchange_ms": 2.987209,
+      "passed": true
+    },
+    {
+      "name": "account substitution",
+      "new_client": "REJECT",
+      "approver": "REJECT",
+      "exchange_ms": 2.606709,
+      "passed": true
+    },
+    {
+      "name": "endpoint key substitution",
+      "new_client": "REJECT",
+      "approver": "REJECT",
+      "exchange_ms": 1.972708,
+      "passed": true
+    },
+    {
+      "name": "approver key substitution",
+      "new_client": "REJECT",
+      "approver": "REJECT",
+      "exchange_ms": 2.25575,
+      "passed": true
+    },
+    {
+      "name": "request substitution",
+      "new_client": "REJECT",
+      "approver": "REJECT",
+      "exchange_ms": 2.140166,
+      "passed": true
+    },
+    {
+      "name": "role substitution",
+      "new_client": "REJECT",
+      "approver": "REJECT",
+      "exchange_ms": 2.026042,
+      "passed": true
+    },
+    {
+      "name": "replayed exchange",
+      "new_client": "REJECT",
+      "approver": "REJECT",
+      "exchange_ms": 1.780292,
+      "passed": true
+    },
+    {
+      "name": "reflected confirmation",
+      "new_client": "REJECT",
+      "approver": "PEER_VERIFIED",
+      "exchange_ms": 1.837584,
+      "passed": true
+    },
+    {
+      "name": "replayed confirmation",
+      "new_client": "PEER_VERIFIED",
+      "approver": "REJECT",
+      "exchange_ms": 1.958542,
+      "passed": true
+    },
+    {
+      "name": "non-hex exchange message to new-client",
+      "passed": true
+    },
+    {
+      "name": "non-hex exchange message to approver",
+      "passed": true
+    },
+    {
+      "name": "request begin at 299 seconds (injected clock)",
+      "passed": true
+    },
+    {
+      "name": "request begin at 300 seconds (injected clock)",
+      "passed": true
+    },
+    {
+      "name": "five wrong attempts exhaust request",
+      "passed": true
+    },
+    {
+      "name": "verified request refuses reuse",
+      "passed": true
+    },
+    {
+      "name": "NUL-containing input rejected by new-client",
+      "passed": true
+    },
+    {
+      "name": "NUL-containing input rejected by approver",
+      "passed": true
+    }
+  ],
+  "passed": 18,
+  "total": 18,
+  "limitations": [
+    "Approval primitive alone grants no membership; separate ordering and TLS probes are not an integrated account protocol",
+    "Request state is per-process and in-memory; no durable admission or request recovery",
+    "Public-key fields are transcript fixtures, not generated endpoint identities",
+    "Shared C core: this is FFI interoperability, not independent implementations",
+    "No independent audit of the composed approval ceremony"
+  ]
+}

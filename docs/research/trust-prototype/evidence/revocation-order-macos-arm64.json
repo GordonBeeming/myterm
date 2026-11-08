@@ -1,0 +1,63 @@
+{
+  "aRemovesBPayload": "{\"account\":\"6d846ba5e498f2f79c385654884db3e7a7fcf9e5a7f6c415210c8af775f812e5\",\"domain\":\"myterm-prototype-removal-v0\",\"issuer\":\"bb63d46a6baeb7076133df79ea4f777ab3a08a7581071015f7cff7ff96bf341c\",\"operation\":\"B53E372E-9978-4F07-8C1E-5B1F10389C89\",\"parents\":[\"14963eb824fd3e1a00326bae584b0782a32416911f589e9169ede545f9470a51\"],\"target\":\"f16626bd843fe8a66176807a70080442d0a4d73f0458cf3338686a0a2a2d79cd\"}",
+  "aSignature": "be8d535b15a19ee927970eab4d1c29cd16d3e14b9fa83b9c27fbb1194a92de7f97829f7adeb54c05f9aac113d5d1803fcae4e93c26e0902aa56463d98859b303",
+  "accountAnchor": "6d846ba5e498f2f79c385654884db3e7a7fcf9e5a7f6c415210c8af775f812e5",
+  "bRemovesAPayload": "{\"account\":\"6d846ba5e498f2f79c385654884db3e7a7fcf9e5a7f6c415210c8af775f812e5\",\"domain\":\"myterm-prototype-removal-v0\",\"issuer\":\"f16626bd843fe8a66176807a70080442d0a4d73f0458cf3338686a0a2a2d79cd\",\"operation\":\"76D57535-DF28-4E9D-81DE-724B9136781A\",\"parents\":[\"14963eb824fd3e1a00326bae584b0782a32416911f589e9169ede545f9470a51\"],\"target\":\"bb63d46a6baeb7076133df79ea4f777ab3a08a7581071015f7cff7ff96bf341c\"}",
+  "bSignature": "e0e5db829ca0df75810959f42114e9478ccb1f3cd4f40906f212ea489a95c820897fba6adb8cd9e0f1c76c15971d02a53b32d7a8511314a520b48c0b41b1030d",
+  "checks": [
+    {
+      "name": "A removal verifies against A's known identity",
+      "passed": true
+    },
+    {
+      "name": "Concurrent B removal verifies",
+      "passed": true
+    },
+    {
+      "name": "Later B removal also verifies",
+      "passed": true
+    },
+    {
+      "name": "B cannot substitute A's signing identity",
+      "passed": true
+    },
+    {
+      "name": "Modified signed removal is rejected",
+      "passed": true
+    },
+    {
+      "name": "Both signing orders produce the same A signature",
+      "passed": true
+    },
+    {
+      "name": "Both signing orders produce the same B signature",
+      "passed": true
+    }
+  ],
+  "commonCheckpoint": "14963eb824fd3e1a00326bae584b0782a32416911f589e9169ede545f9470a51",
+  "forgedAfterRemovalHistory": [
+    "A signs remove B from common checkpoint",
+    "Removed B signs remove A against old common checkpoint",
+    "A receives B's removal"
+  ],
+  "generatedAt": "2026-11-08T12:56:59Z",
+  "genuineConcurrentHistory": [
+    "B signs remove A from common checkpoint",
+    "A signs remove B from common checkpoint",
+    "A receives B's removal"
+  ],
+  "limitations": [
+    "Assumes B retains its private key and can choose old causal parents; local signing hardware with trusted anti-rollback state is not assumed",
+    "No trusted ordering service, quorum, external witness or proof of irreversible key deletion",
+    "The initial verified membership checkpoint is a fixture, not implemented admission",
+    "No receiving membership state machine is executed; acceptance and two-endpoint lockout are consequences reasoned from the agreed policy",
+    "B must reach a receiver that honors concurrent mutual removals instead of rejecting every event from a locally removed issuer",
+    "No per-author sequence/self-parent chain is modeled; such chains can expose some equivocations but do not supply independent issuance-time evidence for an unseen branch",
+    "Shows a limitation of this signed-history candidate, not an impossibility claim about every protocol",
+    "No relay, terminal, TLS connection or directory encryption is exercised"
+  ],
+  "prototype": "BoringSSL Ed25519 signer and native CryptoKit verifier; signed-history counterexample, not a membership implementation",
+  "publicKeyA": "bb63d46a6baeb7076133df79ea4f777ab3a08a7581071015f7cff7ff96bf341c",
+  "publicKeyB": "f16626bd843fe8a66176807a70080442d0a4d73f0458cf3338686a0a2a2d79cd",
+  "sameSignedBytes": true
+}

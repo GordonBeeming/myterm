@@ -1,0 +1,15 @@
+{
+  "tool": "claude",
+  "mode": "review",
+  "model": "sonnet",
+  "permissionMode": "plan",
+  "repo": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-rusty-stitchbird",
+  "sessionId": "737370b2-7917-4e8d-af28-cc60d41e213f",
+  "status": "completed",
+  "response": "No material blocker within scope. The prototype and candidate are suitable for Gordon to review as a limited candidate. I read the files and counted checks but did not run the harness, because it needs the built native binaries.\n\n**What matches**\n- **Check count:** `enrollment_checks.py` has 53 `check(` calls. `evidence/enrollment-reference.json` has 53 passed cases. `candidate.html` reports 53/53. `run.py:256-267` wires the suite into `results.json`.\n- **Late unseen enrollment:** `enrollment_checks.py:533` rejects it after expiry and `:549` after revocation, both with `fresh-approval-required`. `:535` shows a current endpoint can approve it afresh. `:516` and `:551` show already-enrolled servers survive. The code path is `validate_enrollment` (`:287-293`): a known member returns before the credential check, and an unseen one is checked against the verifier's own clock.\n- **Derived-only certificate:** the test at `:481` creates the approval from an offline-enrolled server before the canonical account has registered it. `accept_approval` rejects it with `removed-or-unknown-issuer`, so the server's cached approval is not independent canonical authority without its admission chain. The README (line 71) and `candidate.html` say the same.\n- **Ordering model:** README and HTML state one ordering server, no failover, quorum or replacement requirement, and removals waiting when it is down. This matches the decision.\n- **Deferred items:** key-possession and uniqueness, recursive propagation, integration and specialist review are all listed as gates in the README, HTML and evidence limitations. The HTML labels the native probes and the Python reference model as separate.\n\n**Non-blocking notes**\n- The derived-only test is negative only. No positive test shows the cached approval being accepted once its issuer's admission chain is presented. The existing check at `:529-531` covers a different path.\n- The test name at `:559` says \"claimed earlier time\", but no claimed time is exercised. The scenario is a removed issuer's unrecorded admission, and it matches the policy.\n- `credential()` (`:208`) lets any current member issue credentials, while `candidate.html` says issuance uses the ordering server. The model commits through the authority signature, so the two are consistent. Its signature is applied by the authority's `commit` (`:151-156`). This is only a wording point.",
+  "exitCode": "0",
+  "startedAt": "2026-11-08T12:53:03Z",
+  "endedAt": "2026-11-08T12:53:46Z",
+  "rawFile": "/private/tmp/myterm-resume-review.json.json",
+  "stderrTail": ""
+}
