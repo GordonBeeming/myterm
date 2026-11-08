@@ -14,6 +14,9 @@ Read `AGENTS.md`, then `docs/agents/issue-tracker.md`, then open the linked map.
 
 ## Retained evidence
 
+- [Native connection and close design](connection-close-design.md) records the agreed local feel, on-demand server details, background cleanup and running-process confirmation, with links to the native prototype and canonical resolution.
+- [Account-trust protocol research archive](../../research/trust-prototype/README.md) retains disposable native experiments, reference models and their measured limits; it has no production integration.
+- [Native server supervision research](../../research/myterm-next-native-service-supervision.md) records platform lifecycle and identity constraints, candidate setup choices and unrun acceptance probes.
 - [Relay deployment contract](relay-deployment-contract.md) records the current Cloudflare release design and required implementation evidence; its linked GitHub decision remains the authority for confirmation and completion.
 - `migration.json` maps the original local identities to GitHub issues and records their source states, dependencies and SHA-256 hashes.
 - `local-source/` holds byte-for-byte copies of every original planning file. The added `.txt` suffix identifies raw historical material; embedded paths refer to the original checkout layout. These files are an archive, not an active tracker.

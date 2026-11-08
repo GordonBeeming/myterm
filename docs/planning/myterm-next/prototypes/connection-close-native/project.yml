@@ -1,0 +1,16 @@
+name: ConnectionClosePrototype
+options:
+  deploymentTarget:
+    iOS: "26.0"
+targets:
+  ConnectionClosePrototype:
+    type: application
+    platform: iOS
+    sources: [Sources]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.gordonbeeming.myterm.connection-close-prototype
+        SWIFT_VERSION: "6.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES

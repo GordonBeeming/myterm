@@ -1,0 +1,46 @@
+Building for debugging...
+[Computing dependencies]
+[Pre-planning 1 / 619]
+[Planning deferred tasks]
+[1 / 5]
+warning: missing creator for mutated node: ('/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-rusty-stitchbird/.build/out/Products/Debug/SwiftTerm_SwiftTerm.bundle/Contents/MacOS')
+[5 / 11] SwiftTerm_SwiftTerm
+[6 / 11] SwiftTerm_SwiftTerm
+[8 / 13] MyTermSessionHost-product
+[14 / 15] MyTermContinuityTests-product
+[18 / 19] MyTermCoreTests-product
+[24 / 26] MyTermPlatformTests-product
+[25 / 26] MyTermPlatformTests-product
+[30 / 35] MyTerm-product
+[34 / 39] MyTermUpdateAgent-product
+[40 / 41] MyTermTests-product
+Build complete! (3.57 sec.)
+Test Suite 'Selected tests' started at 2026-11-09 05:21:45.503.
+Test Suite 'MyTermTests.xctest' started at 2026-11-09 05:21:45.504.
+Test Suite 'AppModelTests' started at 2026-11-09 05:21:45.504.
+Test Case '-[MyTermTests.AppModelTests testClosePaneAndQuitRequireConfirmationForForegroundProcesses]' started.
+Test Case '-[MyTermTests.AppModelTests testClosePaneAndQuitRequireConfirmationForForegroundProcesses]' passed (0.008 seconds).
+Test Suite 'AppModelTests' passed at 2026-11-09 05:21:45.512.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.008 (0.008) seconds
+Test Suite 'MyTermTests.xctest' passed at 2026-11-09 05:21:45.513.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.008 (0.008) seconds
+Test Suite 'Selected tests' passed at 2026-11-09 05:21:45.513.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.008 (0.009) seconds
+Test Suite 'Selected tests' started at 2026-11-09 05:21:45.607.
+Test Suite 'MyTermPlatformTests.xctest' started at 2026-11-09 05:21:45.608.
+Test Suite 'MyTermPlatformTests.xctest' passed at 2026-11-09 05:21:45.608.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-11-09 05:21:45.608.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+Test Suite 'Selected tests' started at 2026-11-09 05:21:45.671.
+Test Suite 'MyTermCoreTests.xctest' started at 2026-11-09 05:21:45.672.
+Test Suite 'MyTermCoreTests.xctest' passed at 2026-11-09 05:21:45.672.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-11-09 05:21:45.672.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+Test Suite 'Selected tests' started at 2026-11-09 05:21:45.736.
+Test Suite 'MyTermContinuityTests.xctest' started at 2026-11-09 05:21:45.737.
+Test Suite 'MyTermContinuityTests.xctest' passed at 2026-11-09 05:21:45.737.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-11-09 05:21:45.737.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds

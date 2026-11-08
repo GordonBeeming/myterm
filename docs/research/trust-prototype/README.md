@@ -6,6 +6,10 @@ The approval probe asks whether a native Swift new client and a Rust approver ca
 
 The dependency is BoringSSL commit `0131ae9d78e42fcc2c1811315e62410ad96d8230`. Its archive SHA-256 is `893e755fe720627769d7bd49d15815e86cc0fd4a4ae84b3717caf6fce4255bb4`. The [public API](https://boringssl.googlesource.com/boringssl/+/0131ae9d78e42fcc2c1811315e62410ad96d8230/include/openssl/curve25519.h) describes the draft-02 variant and requires callers to perform key confirmation. This is not RFC 9382 interoperability. The probe's role-specific HMAC confirmation is application composition awaiting review. No cryptographic audit is claimed.
 
+## Evidence walkthroughs
+
+Open the self-contained [candidate overview](candidate.html), [ordering-authority walkthrough](authority.html), [revocation walkthrough](revocation.html), [mutual-removal counterexample](mutual-removal.html) or [late-enrollment walkthrough](late-enrollment.html) from this archive. They visualize recorded fixtures and their limits.
+
 ## Run on macOS
 
 Requires Python 3.12+, curl, CMake, C/C++ build tools, Swift and Rust. Use disposable directories outside the repository for dependencies and output. These commands download a pinned source archive over verified HTTPS. Every harness run verifies its digest, extracts a fresh owned source tree and builds that exact dependency before compiling the callers. A digest mismatch stops the run, including if the host regenerates its archive differently.
