@@ -1,0 +1,123 @@
+{
+  "generated_at": "2026-11-08T12:57:01.497288+00:00",
+  "prototype": "native CryptoKit authenticated HPKE/AES-GCM sender to native Rust/BoringSSL recipients",
+  "passed": 26,
+  "total": 26,
+  "cases": [
+    {
+      "name": "native recipients generate distinct private/public key pairs",
+      "passed": true
+    },
+    {
+      "name": "native recipients pin account/sender/epoch/checkpoint fixture",
+      "passed": true
+    },
+    {
+      "name": "Rust/BoringSSL opens CryptoKit authenticated HPKE and AES-GCM snapshot",
+      "passed": true
+    },
+    {
+      "name": "same directory key delivered independently to second recipient",
+      "passed": true
+    },
+    {
+      "name": "per-recipient envelopes differ",
+      "passed": true
+    },
+    {
+      "name": "recipient cannot open another endpoint's envelope",
+      "passed": true
+    },
+    {
+      "name": "modified wrapped directory key rejected",
+      "passed": true
+    },
+    {
+      "name": "modified encapsulated key rejected",
+      "passed": true
+    },
+    {
+      "name": "modified encrypted snapshot rejected",
+      "passed": true
+    },
+    {
+      "name": "cross-account snapshot context rejected",
+      "passed": true
+    },
+    {
+      "name": "snapshot for another membership checkpoint rejected",
+      "passed": true
+    },
+    {
+      "name": "unapproved sender cannot authenticate a directory key envelope",
+      "passed": true
+    },
+    {
+      "name": "rotation uses a fresh directory key",
+      "passed": true
+    },
+    {
+      "name": "remaining recipient advances its pinned epoch/checkpoint",
+      "passed": true
+    },
+    {
+      "name": "remaining recipient opens rotated directory",
+      "passed": true
+    },
+    {
+      "name": "older directory envelope rejected after epoch advance",
+      "passed": true
+    },
+    {
+      "name": "recipient cannot roll back pinned epoch",
+      "passed": true
+    },
+    {
+      "name": "removed holder can still decrypt retained old ciphertext",
+      "passed": true
+    },
+    {
+      "name": "negative control gives removed holder the new public context",
+      "passed": true
+    },
+    {
+      "name": "removed recipient cannot use remaining recipient's new envelope",
+      "passed": true
+    },
+    {
+      "name": "old snapshot cannot be paired with new epoch/key envelope",
+      "passed": true
+    },
+    {
+      "name": "existing account/sender pin cannot be silently replaced",
+      "passed": true
+    },
+    {
+      "name": "holder cannot relabel an old cached directory key with a newer context",
+      "passed": true
+    },
+    {
+      "name": "deployment capability holder receives a prepared directory key envelope",
+      "passed": true
+    },
+    {
+      "name": "new server pins authorized deployment-holder key from credential fixture",
+      "passed": true
+    },
+    {
+      "name": "offline holder rewraps directory key to new independent server after original sender exits",
+      "passed": true
+    }
+  ],
+  "limitations": [
+    "Independent CryptoKit/BoringSSL interop on macOS only; no other OS/device validation",
+    "Membership, sender key-purpose binding, removal and epoch/checkpoint advancement are trusted fixtures, not integrated signed-account state",
+    "The sender omits a removed recipient's new envelope; this does not prevent a still-authorized compromised sender from leaking keys",
+    "HPKE recipient keys are long-lived for this process; retained ciphertext lacks forward secrecy against later recipient-key compromise",
+    "Old copied keys/ciphertext remain readable; revocation does not erase past access",
+    "No public directory-key plaintext is emitted; only fingerprints, encrypted snapshots and recipient-local fixture plaintext",
+    "No durable keystore, client checkpoint persistence, full directory version/merge protocol or automatic rotation scheduling",
+    "Offline capability-key import, signed delegation validation and production enrollment transport are not exercised by these cryptographic checks",
+    "No specialist audit or secure full-protocol approval"
+  ]
+}

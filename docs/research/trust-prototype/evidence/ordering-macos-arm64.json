@@ -1,0 +1,131 @@
+{
+  "generated_at": "2026-11-08T12:57:00.214562+00:00",
+  "prototype": "single trusted Rust removal authority with native Swift signed requests/receipt signature verification",
+  "passed": 28,
+  "total": 28,
+  "cases": [
+    {
+      "name": "native authority starts from pinned fixture",
+      "passed": true
+    },
+    {
+      "name": "forged request cannot mutate state",
+      "passed": true
+    },
+    {
+      "name": "cross-account request rejected",
+      "passed": true
+    },
+    {
+      "name": "request for another authority epoch rejected",
+      "passed": true
+    },
+    {
+      "name": "unknown signed request purpose rejected",
+      "passed": true
+    },
+    {
+      "name": "signed request cannot remove an unknown identity",
+      "passed": true
+    },
+    {
+      "name": "first signed removal commits",
+      "passed": true
+    },
+    {
+      "name": "native Swift verifies receipt signature against fixture authority pin",
+      "passed": true
+    },
+    {
+      "name": "commit removes B from authoritative membership",
+      "passed": true
+    },
+    {
+      "name": "competing removal from removed key cannot commit",
+      "passed": true
+    },
+    {
+      "name": "freshly signed request from removed identity rejected",
+      "passed": true
+    },
+    {
+      "name": "exact retry returns original receipt without another append",
+      "passed": true
+    },
+    {
+      "name": "retry with randomized client signature keeps original commit",
+      "passed": true
+    },
+    {
+      "name": "request ID cannot be reused for a different operation",
+      "passed": true
+    },
+    {
+      "name": "active issuer must refresh stale checkpoint",
+      "passed": true
+    },
+    {
+      "name": "removing authority is blocked pending explicit transfer",
+      "passed": true
+    },
+    {
+      "name": "OS lock rejects second journal writer",
+      "passed": true
+    },
+    {
+      "name": "native restart replays signed journal",
+      "passed": true
+    },
+    {
+      "name": "retry after restart remains idempotent",
+      "passed": true
+    },
+    {
+      "name": "fixture exits after journal sync before acknowledgement",
+      "passed": true
+    },
+    {
+      "name": "lost acknowledgement recovers the original commit",
+      "passed": true
+    },
+    {
+      "name": "opposite arrival order commits only B's removal of A",
+      "passed": true
+    },
+    {
+      "name": "tampered committed receipt signature prevents startup",
+      "passed": true
+    },
+    {
+      "name": "invalid complete journal record prevents startup",
+      "passed": true
+    },
+    {
+      "name": "incomplete journal fails closed",
+      "passed": true
+    },
+    {
+      "name": "fresh reference verifier rejects actual older offered STATE using saved checkpoint",
+      "passed": true
+    },
+    {
+      "name": "negative control: restored authority can sign a valid fork",
+      "passed": true
+    },
+    {
+      "name": "fresh reference verifier detects actual equal-sequence fork using saved checkpoint",
+      "passed": true
+    }
+  ],
+  "limitations": [
+    "Fixture account bootstrap and coordinator key pinning, not real enrollment",
+    "Coordinator seed retained in driver memory for restart; no product key storage",
+    "Single honest authority; no consensus, authority transfer or automatic failover",
+    "No protection against authority key compromise, old snapshot signing or key cloning; fork negative control demonstrates this",
+    "Checkpoint rejection conditions are exercised by the Python harness, not implemented in the Swift product client",
+    "Outage leaves no authority process to commit a request; no live terminal transport is exercised",
+    "Only native macOS tested; OS journal lock is Unix-only in this probe",
+    "Process-exit recovery is not evidence for physical power-loss/filesystem guarantees",
+    "No offline deployment enrollment or directory-key rotation implemented"
+  ]
+}

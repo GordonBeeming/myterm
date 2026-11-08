@@ -1,0 +1,230 @@
+{
+  "generated_at": "2026-11-08T12:57:01.691371+00:00",
+  "passed": 53,
+  "total": 53,
+  "cases": [
+    {
+      "name": "genesis anchor/checkpoint depend on canonical content rather than randomized signature bytes",
+      "passed": true
+    },
+    {
+      "name": "receiver accepts an externally supplied valid genesis under its existing anchor pin",
+      "passed": true
+    },
+    {
+      "name": "receiver rejects an externally supplied forged genesis signature",
+      "passed": true
+    },
+    {
+      "name": "native signature verifies first-client genesis fixture",
+      "passed": true
+    },
+    {
+      "name": "relay-substituted first-client account anchor rejected",
+      "passed": true
+    },
+    {
+      "name": "independent endpoint signing identities are distinct",
+      "passed": true
+    },
+    {
+      "name": "existing endpoint key-purpose binding cannot be silently replaced by admission replay",
+      "passed": true
+    },
+    {
+      "name": "a reusable credential key cannot be reused as a server instance identity",
+      "passed": true
+    },
+    {
+      "name": "active account-owned credential is an authorized directory bootstrap recipient",
+      "passed": true
+    },
+    {
+      "name": "new server verifies offline delegation without any old-authority crypto call",
+      "passed": true
+    },
+    {
+      "name": "offline-enrolled server can approve a client using cached trust without canonical registration",
+      "passed": true
+    },
+    {
+      "name": "a derived-only endpoint certificate is not independent canonical authority without its admission chain",
+      "passed": true
+    },
+    {
+      "name": "substituting recipient key invalidates native signed endpoint binding",
+      "passed": true
+    },
+    {
+      "name": "offline delegation proofs are created without contacting authority",
+      "passed": true
+    },
+    {
+      "name": "valid reusable deployment proof accepted with bound native identity/envelope keys",
+      "passed": true
+    },
+    {
+      "name": "same reusable credential enrolls a distinct server identity",
+      "passed": true
+    },
+    {
+      "name": "server-enrollment delegation cannot directly approve a client",
+      "passed": true
+    },
+    {
+      "name": "credential key cannot directly remove an account endpoint",
+      "passed": true
+    },
+    {
+      "name": "device removal excludes its key while preserving independent account-owned credential",
+      "passed": true
+    },
+    {
+      "name": "account anchor survives removal of first client",
+      "passed": true
+    },
+    {
+      "name": "ordinary creator removal preserves already enrolled servers",
+      "passed": true
+    },
+    {
+      "name": "account-owned deployment credential survives creator removal",
+      "passed": true
+    },
+    {
+      "name": "recognized server does not inherit enrollment credential expiry",
+      "passed": true
+    },
+    {
+      "name": "expired credential stops receiving fresh content keys while its recognized server still receives them",
+      "passed": true
+    },
+    {
+      "name": "late forwarding reuses the original admission without a new post-expiry signature",
+      "passed": true
+    },
+    {
+      "name": "already-issued independent admission stays valid after credential expiry while issuer remains current",
+      "passed": true
+    },
+    {
+      "name": "unseen offline enrollment first seen after expiry requires fresh approval",
+      "passed": true
+    },
+    {
+      "name": "current trusted endpoint can freshly approve late server",
+      "passed": true
+    },
+    {
+      "name": "another credential's server is recognized before revocation",
+      "passed": true
+    },
+    {
+      "name": "credential revocation filters future envelope recipients without cascading to its recognized server",
+      "passed": true
+    },
+    {
+      "name": "unseen enrollment presented after credential revocation requires fresh approval",
+      "passed": true
+    },
+    {
+      "name": "credential revocation preserves the server it already enrolled",
+      "passed": true
+    },
+    {
+      "name": "removed issuer cannot rescue an unrecorded admission with a claimed earlier time",
+      "passed": true
+    },
+    {
+      "name": "ordered admission survives ordinary removal of its approver",
+      "passed": true
+    },
+    {
+      "name": "unrecorded admission from removed issuer requires reapproval",
+      "passed": true
+    },
+    {
+      "name": "removed server cannot silently rejoin using old enrollment evidence",
+      "passed": true
+    },
+    {
+      "name": "single-use issuer rejects cross-purpose signing-oracle request",
+      "passed": true
+    },
+    {
+      "name": "single-use issuer refuses extra signed administrative fields",
+      "passed": true
+    },
+    {
+      "name": "concurrent generic single-use redemption allocates exactly one subject",
+      "passed": true
+    },
+    {
+      "name": "same single-use subject retry returns original signed allocation",
+      "passed": true
+    },
+    {
+      "name": "relay guessing cannot replace the invitation secret",
+      "passed": true
+    },
+    {
+      "name": "losing subject cannot forge the trusted issuer's allocation signature",
+      "passed": true
+    },
+    {
+      "name": "already verified single-use allocation survives invitation expiry",
+      "passed": true
+    },
+    {
+      "name": "unredeemed generic invitation expires at trusted issuer",
+      "passed": true
+    },
+    {
+      "name": "single-use invitation cannot be presented on reusable-delegation route",
+      "passed": true
+    },
+    {
+      "name": "trusted single-use allocation admits its bound server",
+      "passed": true
+    },
+    {
+      "name": "native signatures verify reference-model membership records",
+      "passed": true
+    },
+    {
+      "name": "unknown credential revocation leaves no committed event",
+      "passed": true
+    },
+    {
+      "name": "unknown credential is rejected explicitly",
+      "passed": true
+    },
+    {
+      "name": "credential-role identity cannot be admitted as an endpoint",
+      "passed": true
+    },
+    {
+      "name": "deployment credentials require a finite bounded expiry",
+      "passed": true
+    },
+    {
+      "name": "reusable delegation uses dedicated role keys rather than cloning an endpoint key",
+      "passed": true
+    },
+    {
+      "name": "a live single-use invitation cannot preserve a removed issuer as a directory recipient",
+      "passed": true
+    }
+  ],
+  "limitations": [
+    "Policy/clock and membership ledger run in Python with native CryptoKit signatures; not the production Rust membership engine",
+    "Genesis, authority designation and endpoint-key association are local fixtures, not a live passkey/enrollment ceremony",
+    "Reusable offline proof creation is exercised; actual offline local/direct authorization/channel integration is not implemented",
+    "Canonical credential issuance requires the reference authority before offline use; issuer discovery/availability workflow is not implemented",
+    "Single-use transaction assumes one honest trusted issuer with its current SQLite state; rollback/cloning/malicious issuer not solved",
+    "Single-use allocation is persisted before return, but no issuer-process/power-loss recovery or real enrollment network protocol is tested",
+    "Credential handoff/storage and distribution of directory keys to deployment capabilities are not implemented",
+    "No full recursive provisional-admission propagation, signed receipt replay/fork client implementation or secure account-state keystore",
+    "No specialist audit or full composed-protocol security approval"
+  ]
+}

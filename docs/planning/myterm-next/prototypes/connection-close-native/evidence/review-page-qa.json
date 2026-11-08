@@ -1,0 +1,162 @@
+{
+  "results": [
+    {
+      "view": "quiet",
+      "overflow": false,
+      "mojibake": false,
+      "images": true,
+      "clip": false,
+      "footerBottom": 1063
+    },
+    {
+      "view": "running",
+      "overflow": false,
+      "mojibake": false,
+      "images": true,
+      "clip": false,
+      "footerBottom": 1063
+    },
+    {
+      "view": "quietmobile",
+      "overflow": false,
+      "mojibake": false,
+      "images": true,
+      "clip": false,
+      "footerBottom": 1063
+    },
+    {
+      "view": "quietbefore",
+      "overflow": false,
+      "mojibake": false,
+      "images": true,
+      "clip": false,
+      "footerBottom": 1042
+    },
+    {
+      "view": "compare",
+      "overflow": false,
+      "mojibake": false,
+      "images": true,
+      "clip": false,
+      "footerBottom": 1063
+    },
+    {
+      "view": "mac",
+      "overflow": false,
+      "mojibake": false,
+      "images": true,
+      "clip": false,
+      "footerBottom": 1063
+    },
+    {
+      "view": "macexpiry",
+      "overflow": false,
+      "mojibake": false,
+      "images": true,
+      "clip": false,
+      "footerBottom": 1063
+    },
+    {
+      "view": "phone",
+      "overflow": false,
+      "mojibake": false,
+      "images": true,
+      "clip": false,
+      "footerBottom": 1042
+    },
+    {
+      "view": "close",
+      "overflow": false,
+      "mojibake": false,
+      "images": true,
+      "clip": false,
+      "footerBottom": 1063
+    },
+    {
+      "view": "removed",
+      "overflow": false,
+      "mojibake": false,
+      "images": true,
+      "clip": false,
+      "footerBottom": 1063
+    },
+    {
+      "view": "expiry",
+      "overflow": false,
+      "mojibake": false,
+      "images": true,
+      "clip": false,
+      "footerBottom": 1061
+    },
+    {
+      "view": "failure",
+      "overflow": false,
+      "mojibake": false,
+      "images": true,
+      "clip": false,
+      "footerBottom": 1063
+    },
+    {
+      "view": "copy",
+      "overflow": false,
+      "mojibake": false,
+      "images": true,
+      "clip": false,
+      "footerBottom": 1042
+    },
+    {
+      "view": "stale",
+      "overflow": false,
+      "mojibake": false,
+      "images": true,
+      "clip": false,
+      "footerBottom": 1063
+    },
+    {
+      "view": "focus",
+      "overflow": false,
+      "mojibake": false,
+      "images": true,
+      "clip": false,
+      "footerBottom": 1061
+    }
+  ],
+  "contrasts": [
+    {
+      "a": "0f172a",
+      "b": "f8fafc",
+      "ratio": 17.062933971317335
+    },
+    {
+      "a": "0f172a",
+      "b": "ffffff",
+      "ratio": 17.85253496299567
+    },
+    {
+      "a": "64748b",
+      "b": "f8fafc",
+      "ratio": 4.548363604249587
+    },
+    {
+      "a": "64748b",
+      "b": "ffffff",
+      "ratio": 4.758842787868666
+    },
+    {
+      "a": "ffffff",
+      "b": "0e7490",
+      "ratio": 5.3577549124490425
+    },
+    {
+      "a": "164e63",
+      "b": "ecfeff",
+      "ratio": 8.761692778498059
+    },
+    {
+      "a": "164e63",
+      "b": "f8fafc",
+      "ratio": 8.711299472735954
+    }
+  ],
+  "errors": []
+}
