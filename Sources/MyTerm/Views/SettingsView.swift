@@ -393,6 +393,12 @@ struct SettingsView: View {
                     title: "Show the agent's icon when it's idle",
                     setting: \.showsIdleAgentIcon
                 )
+                GlobalSettingRow(
+                    model: model,
+                    title: "Show which Claude account is in use",
+                    caption: "A workspace running Claude Code as an account other than the one in ~/.claude, for example through CLAUDE_CONFIG_DIR set by direnv, shows that account in the sidebar. Hovering a Claude tab always names its account. This needs the hooks above.",
+                    setting: \.showsClaudeAccount
+                )
                 HStack(spacing: 8) {
                     AgentIdentityIcon(identity: .claude).frame(width: 16, height: 16)
                     Text("Claude Code")

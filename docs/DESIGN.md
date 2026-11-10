@@ -127,6 +127,10 @@ One icon position on a tab or a sidebar row, shared by three things in this orde
 
 The setting defaults to off and applies to the whole app. An agent appears only where a hook reported a session, so a session started before the hooks were installed shows no icon.
 
+### Claude account badge
+
+Claude Code keeps one sign-in per config folder, `~/.claude` unless `CLAUDE_CONFIG_DIR` names another, so the folder is the account. The hook reports the folder, and MyTerm reads the email and organization from that folder's profile file, the way ClaudeBar does. A sidebar row shows a small capsule with the account's name, left of the agent slot, only when the workspace's focused tab runs Claude Code as an account other than the `~/.claude` one. The usual account gets no badge, so the badge means "not your default". A team account is named by its organization. A personal account is named by its email, because its organization is only "<email>'s Organization". Hovering a Claude tab always names the account and its folder. The setting "Show which Claude account is in use" defaults to on and applies to the whole app.
+
 ### Tab Strip
 
 - **Height:** A 38 pt strip holding 28 pt chips with a 7 pt radius.

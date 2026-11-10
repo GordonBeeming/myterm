@@ -18,11 +18,13 @@ extension AppModel {
         switch report.activity {
         case .ready, .working, .finished, .awaitingInput:
             liveAgentTabs[tabID] = report.agent
+            recordClaudeAccount(report, tabID: tabID)
         case .exited:
             // Only the agent that named the tab gives the name back, so a second agent in the same
             // pane cannot take the first one's name off it.
             guard liveAgentTabs[tabID] == report.agent else { return }
             liveAgentTabs.removeValue(forKey: tabID)
+            claudeAccountTabs.removeValue(forKey: tabID)
             // A shutdown's hang-up keeps the conversation, and its name goes with it.
             guard !isSystemPoweringOff else { return }
             updateAgentTitle(nil, workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)
@@ -61,6 +63,7 @@ extension AppModel {
 
     func forgetAgentPresence(forTab tabID: TabID) {
         liveAgentTabs.removeValue(forKey: tabID)
+        claudeAccountTabs.removeValue(forKey: tabID)
         foregroundAgentTabs.removeValue(forKey: tabID)
         nativeAgentReportFilters.removeValue(forKey: tabID)
         nativeAgentLastActivityReports.removeValue(forKey: tabID)

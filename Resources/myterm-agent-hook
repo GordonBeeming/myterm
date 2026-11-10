@@ -142,12 +142,18 @@ EOF
       esac
     fi
   fi
+  # The config folder is the Claude account: direnv and the like point CLAUDE_CONFIG_DIR at a
+  # second sign-in for some folders.
+  config=''
+  if [ "$agent" = claude ]; then
+    config=$(printf '%s' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" | /usr/bin/base64 | tr -d '\n')
+  fi
   tty=$(ps -o tty= -p "${agent_owner_pid:-$PPID}" 2>/dev/null | tr -d '[:space:]')
   case "$tty" in ''|'??'|'?'|'-') tty=$owner_tty;; esac
   case "$tty" in *[0-9]*) tty="/dev/${tty#/dev/}";; *) tty=/dev/tty;; esac
   [ "$activity" != title ] || return 0
-  printf '\033]7337;agent=%s;event=%s;session=%s;cwd64=%s;launcher=%s;tool=%s;title64=%s;turn=%s;turn_start=%s;snapshot=%s;work_start=%s;call=%s;captured=%s\033\134' \
-    "$agent" "$activity" "$session" "$cwd" "$launcher" "$tool" "$title" "$turn" "$turn_start" "$snapshot" "$work_start" "$tool_call" "$captured" > "$tty"
+  printf '\033]7337;agent=%s;event=%s;session=%s;cwd64=%s;launcher=%s;tool=%s;title64=%s;turn=%s;turn_start=%s;snapshot=%s;work_start=%s;call=%s;captured=%s;config64=%s\033\134' \
+    "$agent" "$activity" "$session" "$cwd" "$launcher" "$tool" "$title" "$turn" "$turn_start" "$snapshot" "$work_start" "$tool_call" "$captured" "$config" > "$tty"
 }
 report_agent "$@" >/dev/null 2>&1 || true
 if [ "${1:-}" = antigravity ] && [ "${2:-}" != status ]; then
