@@ -30,9 +30,11 @@ extension AppModel {
     func recordClaudeAccount(_ report: AgentActivityReport, tabID: TabID) {
         guard report.agent == AgentIdentity.claude.rawValue else { return }
         guard let configuration = report.claudeConfiguration else {
-            // A report that cannot name its account keeps the one on record only while it comes
-            // from the same conversation. A new conversation may run as someone else.
-            if report.activity == .ready || report.sessionID != claudeAccountSessionIDs[tabID] {
+            // A report that cannot name its account keeps the one on record only while it is known
+            // to come from the same conversation. A new conversation may run as someone else, and a
+            // report without a session ID cannot show it is not one.
+            let isSameConversation = report.sessionID != nil && report.sessionID == claudeAccountSessionIDs[tabID]
+            if report.activity == .ready || !isSameConversation {
                 forgetClaudeAccount(forTab: tabID)
             }
             return

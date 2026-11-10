@@ -67,7 +67,7 @@ final class ClaudeAccountTabTests: XCTestCase {
         let workspace = model.selectedWorkspace
         let group = try XCTUnwrap(workspace.focusedTabGroup)
         let tabID = group.selectedTabID
-        func report(_ activity: AgentActivity, session: String, _ configuration: ClaudeConfiguration?) {
+        func report(_ activity: AgentActivity, session: String?, _ configuration: ClaudeConfiguration?) {
             model.recordAgentPresence(
                 AgentActivityReport(agent: "claude", activity: activity, sessionID: session, claudeConfiguration: configuration),
                 workspaceID: workspace.id, tabGroupID: group.id, tabID: tabID
@@ -85,6 +85,10 @@ final class ClaudeAccountTabTests: XCTestCase {
         report(.ready, session: "third", .directory(work))
         report(.ready, session: "third", nil)
         XCTAssertNil(model.claudeAccount(forTab: tabID), "a fresh start that names no account clears it")
+
+        report(.ready, session: nil, .directory(work))
+        report(.working, session: nil, nil)
+        XCTAssertNil(model.claudeAccount(forTab: tabID), "without session IDs nothing shows it is the same conversation")
     }
 
     private func makeModel() throws -> (AppModel, URL) {
