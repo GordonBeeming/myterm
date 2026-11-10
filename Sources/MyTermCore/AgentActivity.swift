@@ -20,7 +20,7 @@ public enum AgentActivity: String, Codable, Equatable, Hashable, Sendable {
 
 public struct AgentActivityReport: Codable, Equatable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
-        case agent, activity, sessionID, workingDirectory, codexLauncher, toolRequestID, sessionTitle, turnID, beginsTurn, isStatusSnapshot, isWorkStart, toolCallID, capturedAt, claudeConfigDirectory
+        case agent, activity, sessionID, workingDirectory, codexLauncher, toolRequestID, sessionTitle, turnID, beginsTurn, isStatusSnapshot, isWorkStart, toolCallID, capturedAt, claudeConfiguration
     }
 
     // Socket reports must obey the same resume-identifier limits as terminal hook reports.
@@ -40,7 +40,7 @@ public struct AgentActivityReport: Codable, Equatable, Hashable, Sendable {
             isWorkStart: try values.decodeIfPresent(Bool.self, forKey: .isWorkStart) ?? false,
             toolCallID: try values.decodeIfPresent(String.self, forKey: .toolCallID),
             capturedAt: try values.decodeIfPresent(Double.self, forKey: .capturedAt),
-            claudeConfigDirectory: try values.decodeIfPresent(URL.self, forKey: .claudeConfigDirectory)
+            claudeConfiguration: try values.decodeIfPresent(ClaudeConfiguration.self, forKey: .claudeConfiguration)
         )
     }
 
@@ -65,11 +65,11 @@ public struct AgentActivityReport: Codable, Equatable, Hashable, Sendable {
     public let toolCallID: String?
     /// Monotonic time captured before hook parsing or status-script execution can reorder reports.
     public let capturedAt: Double?
-    /// The config folder Claude Code runs from, which decides the account it is signed in as.
+    /// Where Claude Code keeps its sign-in, which decides the account it runs as.
     /// Nil for other agents, and for hooks too old to say.
-    public let claudeConfigDirectory: URL?
+    public let claudeConfiguration: ClaudeConfiguration?
 
-    public init(agent: String, activity: AgentActivity, sessionID: String? = nil, workingDirectory: URL? = nil, codexLauncher: CodexLauncher? = nil, toolRequestID: String? = nil, sessionTitle: String? = nil, turnID: String? = nil, beginsTurn: Bool = false, isStatusSnapshot: Bool = false, isWorkStart: Bool = false, toolCallID: String? = nil, capturedAt: Double? = nil, claudeConfigDirectory: URL? = nil) {
+    public init(agent: String, activity: AgentActivity, sessionID: String? = nil, workingDirectory: URL? = nil, codexLauncher: CodexLauncher? = nil, toolRequestID: String? = nil, sessionTitle: String? = nil, turnID: String? = nil, beginsTurn: Bool = false, isStatusSnapshot: Bool = false, isWorkStart: Bool = false, toolCallID: String? = nil, capturedAt: Double? = nil, claudeConfiguration: ClaudeConfiguration? = nil) {
         self.agent = agent
         self.activity = activity
         self.sessionID = AgentSessionHandle.validatedSessionID(sessionID)
@@ -85,7 +85,7 @@ public struct AgentActivityReport: Codable, Equatable, Hashable, Sendable {
         self.toolCallID = Self.validFingerprint(toolCallID)
         self.capturedAt = capturedAt.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
         self.toolRequestID = Self.validFingerprint(toolRequestID)
-        self.claudeConfigDirectory = claudeConfigDirectory
+        self.claudeConfiguration = claudeConfiguration
     }
 
     private static func validFingerprint(_ value: String?) -> String? {
@@ -99,14 +99,14 @@ public struct AgentActivityReport: Codable, Equatable, Hashable, Sendable {
              codexLauncher: codexLauncher, toolRequestID: toolRequestID, sessionTitle: sessionTitle,
              turnID: turnID, beginsTurn: beginsTurn, isStatusSnapshot: isStatusSnapshot ?? self.isStatusSnapshot,
              isWorkStart: isWorkStart, toolCallID: toolCallID, capturedAt: capturedAt,
-             claudeConfigDirectory: claudeConfigDirectory)
+             claudeConfiguration: claudeConfiguration)
     }
 
     public func replacingTurnID(_ turnID: String?) -> Self {
         Self(agent: agent, activity: activity, sessionID: sessionID, workingDirectory: workingDirectory,
              codexLauncher: codexLauncher, toolRequestID: toolRequestID, sessionTitle: sessionTitle,
              turnID: turnID, beginsTurn: beginsTurn, isStatusSnapshot: isStatusSnapshot, isWorkStart: isWorkStart,
-             toolCallID: toolCallID, capturedAt: capturedAt, claudeConfigDirectory: claudeConfigDirectory)
+             toolCallID: toolCallID, capturedAt: capturedAt, claudeConfiguration: claudeConfiguration)
     }
 }
 
@@ -136,7 +136,7 @@ public enum AgentActivityMarker {
         var isWorkStart = false
         var toolCallID: String?
         var capturedAt: Double?
-        var claudeConfigDirectory: URL?
+        var claudeConfiguration: ClaudeConfiguration?
         var validRecoveryMetadata = true
 
         for field in payload.split(separator: ";", omittingEmptySubsequences: true) {
@@ -179,15 +179,17 @@ public enum AgentActivityMarker {
                 toolCallID = String(value)
             case "captured":
                 capturedAt = Double(value)
+            case "config":
+                if value == "default" { claudeConfiguration = .standard }
             case "config64":
-                claudeConfigDirectory = absoluteDirectory(base64: value)
+                claudeConfiguration = absoluteDirectory(base64: value).map(ClaudeConfiguration.directory)
             default:
                 continue
             }
         }
 
         guard let agent, let activity else { return nil }
-        return AgentActivityReport(agent: agent, activity: activity, sessionID: validRecoveryMetadata ? sessionID : nil, workingDirectory: directory, codexLauncher: launcher, toolRequestID: toolRequestID, sessionTitle: sessionTitle, turnID: turnID, beginsTurn: beginsTurn, isStatusSnapshot: isStatusSnapshot, isWorkStart: isWorkStart, toolCallID: toolCallID, capturedAt: capturedAt, claudeConfigDirectory: claudeConfigDirectory)
+        return AgentActivityReport(agent: agent, activity: activity, sessionID: validRecoveryMetadata ? sessionID : nil, workingDirectory: directory, codexLauncher: launcher, toolRequestID: toolRequestID, sessionTitle: sessionTitle, turnID: turnID, beginsTurn: beginsTurn, isStatusSnapshot: isStatusSnapshot, isWorkStart: isWorkStart, toolCallID: toolCallID, capturedAt: capturedAt, claudeConfiguration: claudeConfiguration)
     }
 
     private static func absoluteDirectory(base64 value: String) -> URL? {

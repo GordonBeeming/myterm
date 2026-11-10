@@ -3,7 +3,7 @@ import MyTermCore
 
 /// Which Claude account a tab's Claude Code is signed in as.
 ///
-/// The hook reports the config folder Claude Code runs from, and the folder decides the account.
+/// The hook reports whether `CLAUDE_CONFIG_DIR` is set and to what, which decides the account.
 /// Reports arrive with every tool call, so a profile is read again only when its file changes,
 /// which is also how a `/login` to someone else shows up.
 extension AppModel {
@@ -28,23 +28,35 @@ extension AppModel {
     }
 
     func recordClaudeAccount(_ report: AgentActivityReport, tabID: TabID) {
-        guard report.agent == AgentIdentity.claude.rawValue,
-              let directory = report.claudeConfigDirectory else { return }
-        let account = claudeAccount(configDirectory: directory)
+        guard report.agent == AgentIdentity.claude.rawValue else { return }
+        guard let configuration = report.claudeConfiguration else {
+            // A report that cannot name its account keeps the one on record only while it comes
+            // from the same conversation. A new conversation may run as someone else.
+            if report.activity == .ready || report.sessionID != claudeAccountSessionIDs[tabID] {
+                forgetClaudeAccount(forTab: tabID)
+            }
+            return
+        }
+        claudeAccountSessionIDs[tabID] = report.sessionID
+        let account = claudeAccount(configuration)
         if claudeAccountTabs[tabID] != account {
             claudeAccountTabs[tabID] = account
         }
     }
 
-    private func claudeAccount(configDirectory directory: URL) -> ClaudeAccount {
-        let profile = ClaudeAccount.profileURL(forConfigDirectory: directory, home: claudeAccountHome)
+    func forgetClaudeAccount(forTab tabID: TabID) {
+        claudeAccountTabs.removeValue(forKey: tabID)
+        claudeAccountSessionIDs.removeValue(forKey: tabID)
+    }
+
+    private func claudeAccount(_ configuration: ClaudeConfiguration) -> ClaudeAccount {
+        let profile = ClaudeAccount.profileURL(for: configuration, home: claudeAccountHome)
         let modified = (try? FileManager.default.attributesOfItem(atPath: profile.path))?[.modificationDate] as? Date
-        let key = directory.standardizedFileURL.path
-        if let cached = claudeAccountProfiles[key], cached.modified == modified {
+        if let cached = claudeAccountProfiles[profile.path], cached.modified == modified {
             return cached.account
         }
-        let account = ClaudeAccount.read(configDirectory: directory, home: claudeAccountHome)
-        claudeAccountProfiles[key] = (modified, account)
+        let account = ClaudeAccount.read(configuration, home: claudeAccountHome)
+        claudeAccountProfiles[profile.path] = (modified, account)
         return account
     }
 }

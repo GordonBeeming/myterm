@@ -72,7 +72,10 @@ final class AppModel {
     /// The account each tab's Claude Code is signed in as, while it runs. Runtime only, like
     /// `liveAgentTabs`.
     var claudeAccountTabs: [TabID: ClaudeAccount] = [:]
-    /// Profiles already read, by config folder path, with the file date they were read at.
+    /// The conversation each entry in `claudeAccountTabs` was read for, so another conversation
+    /// in the same tab never inherits it.
+    @ObservationIgnored var claudeAccountSessionIDs: [TabID: String] = [:]
+    /// Profiles already read, by profile file path, with the file date they were read at.
     @ObservationIgnored var claudeAccountProfiles: [String: (modified: Date?, account: ClaudeAccount)] = [:]
     @ObservationIgnored var claudeAccountHome = FileManager.default.homeDirectoryForCurrentUser
     var nativeAgentReportFilters: [TabID: AgentReportFilter] = [:]

@@ -14,19 +14,19 @@ final class ClaudeAccountTabTests: XCTestCase {
         let group = try XCTUnwrap(workspace.focusedTabGroup)
         let tabID = group.selectedTabID
 
-        func report(_ activity: AgentActivity, folder: URL?, agent: String = "claude") {
+        func report(_ activity: AgentActivity, folder: ClaudeConfiguration?, agent: String = "claude") {
             model.recordAgentPresence(
-                AgentActivityReport(agent: agent, activity: activity, claudeConfigDirectory: folder),
+                AgentActivityReport(agent: agent, activity: activity, claudeConfiguration: folder),
                 workspaceID: workspace.id, tabGroupID: group.id, tabID: tabID
             )
         }
 
-        report(.ready, folder: ClaudeAccount.defaultConfigDirectory(home: home))
+        report(.ready, folder: .standard)
         XCTAssertEqual(model.claudeAccount(forTab: tabID)?.isDefault, true)
         XCTAssertNil(model.showsClaudeAccountBadge(forWorkspace: workspace.id), "the usual account needs no badge")
 
         report(.exited, folder: nil)
-        report(.ready, folder: work)
+        report(.ready, folder: .directory(work))
         XCTAssertEqual(model.showsClaudeAccountBadge(forWorkspace: workspace.id)?.shortName, "Company Audits")
 
         model.updateGlobalSettings { $0.showsClaudeAccount = false }
@@ -49,7 +49,7 @@ final class ClaudeAccountTabTests: XCTestCase {
         try writeProfile(#"{"oauthAccount": {"emailAddress": "a@company.example", "organizationName": "First Org"}}"#, to: profile)
         let workspace = model.selectedWorkspace
         let group = try XCTUnwrap(workspace.focusedTabGroup)
-        let report = AgentActivityReport(agent: "claude", activity: .working, claudeConfigDirectory: work)
+        let report = AgentActivityReport(agent: "claude", activity: .working, claudeConfiguration: .directory(work))
 
         model.recordAgentPresence(report, workspaceID: workspace.id, tabGroupID: group.id, tabID: group.selectedTabID)
         XCTAssertEqual(model.claudeAccount(forTab: group.selectedTabID)?.shortName, "First Org")
@@ -58,6 +58,33 @@ final class ClaudeAccountTabTests: XCTestCase {
         try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(60)], ofItemAtPath: profile.path)
         model.recordAgentPresence(report, workspaceID: workspace.id, tabGroupID: group.id, tabID: group.selectedTabID)
         XCTAssertEqual(model.claudeAccount(forTab: group.selectedTabID)?.shortName, "Second Org")
+    }
+
+    func testANewConversationThatCannotNameItsAccountDoesNotInheritTheLastOne() throws {
+        let (model, home) = try makeModel()
+        let work = home.appending(path: ".claude-work", directoryHint: .isDirectory)
+        try writeProfile(#"{"oauthAccount": {"organizationName": "Company Audits"}}"#, to: work.appending(path: ".claude.json"))
+        let workspace = model.selectedWorkspace
+        let group = try XCTUnwrap(workspace.focusedTabGroup)
+        let tabID = group.selectedTabID
+        func report(_ activity: AgentActivity, session: String, _ configuration: ClaudeConfiguration?) {
+            model.recordAgentPresence(
+                AgentActivityReport(agent: "claude", activity: activity, sessionID: session, claudeConfiguration: configuration),
+                workspaceID: workspace.id, tabGroupID: group.id, tabID: tabID
+            )
+        }
+
+        report(.ready, session: "first", .directory(work))
+        report(.working, session: "first", nil)
+        XCTAssertEqual(model.claudeAccount(forTab: tabID)?.shortName, "Company Audits", "the same conversation keeps its account")
+
+        // The first conversation was killed without its SessionEnd, and the next one says nothing.
+        report(.working, session: "second", nil)
+        XCTAssertNil(model.claudeAccount(forTab: tabID))
+
+        report(.ready, session: "third", .directory(work))
+        report(.ready, session: "third", nil)
+        XCTAssertNil(model.claudeAccount(forTab: tabID), "a fresh start that names no account clears it")
     }
 
     private func makeModel() throws -> (AppModel, URL) {

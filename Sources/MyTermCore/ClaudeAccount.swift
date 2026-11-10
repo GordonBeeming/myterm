@@ -1,51 +1,48 @@
 import Foundation
 
+/// Where a Claude Code session keeps its sign-in, as the hook saw it.
+///
+/// Claude Code uses `~/.claude` with its profile at `~/.claude.json` while `CLAUDE_CONFIG_DIR` is
+/// unset. Once the variable is set, the profile lives inside that folder, even when the folder is
+/// `~/.claude` itself, so an explicit `~/.claude` is a different sign-in from the unset default.
+public enum ClaudeConfiguration: Codable, Hashable, Sendable {
+    /// `CLAUDE_CONFIG_DIR` is unset.
+    case standard
+    /// `CLAUDE_CONFIG_DIR` names this folder.
+    case directory(URL)
+}
+
 /// The Claude Code sign-in a session runs as.
 ///
-/// Claude Code keeps one sign-in per config folder: `~/.claude` unless `CLAUDE_CONFIG_DIR` points
-/// somewhere else, which is how a second account is set up for some folders (for example by direnv).
-/// The folder is the account. Its profile file names the person and organization, so this is read
-/// from disk rather than asked of Anthropic.
+/// Claude Code keeps one sign-in per configuration, which is how a second account is set up for some
+/// folders (for example by direnv setting `CLAUDE_CONFIG_DIR`). The profile file names the person and
+/// organization, so this is read from disk rather than asked of Anthropic.
 public struct ClaudeAccount: Equatable, Hashable, Sendable {
-    public let configDirectory: URL
-    /// The `~/.claude` folder, the one Claude Code uses when nothing says otherwise.
-    public let isDefault: Bool
+    public let configuration: ClaudeConfiguration
     public let email: String?
     public let organization: String?
 
-    public init(configDirectory: URL, isDefault: Bool, email: String? = nil, organization: String? = nil) {
-        self.configDirectory = configDirectory
-        self.isDefault = isDefault
+    public init(configuration: ClaudeConfiguration, email: String? = nil, organization: String? = nil) {
+        self.configuration = configuration
         self.email = email
         self.organization = organization
     }
 
-    public static func defaultConfigDirectory(home: URL) -> URL {
-        home.appending(path: ".claude", directoryHint: .isDirectory).standardizedFileURL
-    }
+    /// The sign-in Claude Code uses when nothing says otherwise.
+    public var isDefault: Bool { configuration == .standard }
 
-    /// Where Claude Code keeps the folder's `oauthAccount`. The default folder's profile sits
-    /// beside it at the home root, every other folder's sits inside it.
-    public static func profileURL(forConfigDirectory directory: URL, home: URL) -> URL {
-        isDefault(directory, home: home)
-            ? home.appending(path: ".claude.json")
-            : directory.appending(path: ".claude.json")
-    }
-
-    public static func isDefault(_ directory: URL, home: URL) -> Bool {
-        normalizedPath(directory) == normalizedPath(defaultConfigDirectory(home: home))
+    /// Where Claude Code keeps the configuration's `oauthAccount`.
+    public static func profileURL(for configuration: ClaudeConfiguration, home: URL) -> URL {
+        switch configuration {
+        case .standard: home.appending(path: ".claude.json")
+        case .directory(let directory): directory.appending(path: ".claude.json")
+        }
     }
 
     /// Best effort: a missing or unreadable profile still gives an account, named after its folder.
-    public static func read(configDirectory: URL, home: URL) -> ClaudeAccount {
-        let profile = (try? Data(contentsOf: profileURL(forConfigDirectory: configDirectory, home: home)))
-            .flatMap(decodeProfile)
-        return ClaudeAccount(
-            configDirectory: configDirectory.standardizedFileURL,
-            isDefault: isDefault(configDirectory, home: home),
-            email: profile?.email,
-            organization: profile?.organization
-        )
+    public static func read(_ configuration: ClaudeConfiguration, home: URL) -> ClaudeAccount {
+        let profile = (try? Data(contentsOf: profileURL(for: configuration, home: home))).flatMap(decodeProfile)
+        return ClaudeAccount(configuration: configuration, email: profile?.email, organization: profile?.organization)
     }
 
     static func decodeProfile(_ data: Data) -> (email: String?, organization: String?)? {
@@ -65,9 +62,13 @@ public struct ClaudeAccount: Equatable, Hashable, Sendable {
     public var shortName: String {
         if let organization, !isPersonalOrganization(organization) { return organization }
         if let email { return email }
-        if isDefault { return "Default" }
-        let folder = configDirectory.lastPathComponent
-        return folder.hasPrefix(".") ? String(folder.dropFirst()) : folder
+        switch configuration {
+        case .standard:
+            return "Default"
+        case .directory(let directory):
+            let folder = directory.lastPathComponent
+            return folder.hasPrefix(".") ? String(folder.dropFirst()) : folder
+        }
     }
 
     /// Everything known about the account, for a tooltip.
@@ -76,7 +77,10 @@ public struct ClaudeAccount: Equatable, Hashable, Sendable {
         if let email { parts.append(email) }
         if let organization, !isPersonalOrganization(organization) { parts.append(organization) }
         if parts.isEmpty { parts.append(shortName) }
-        let folder = isDefault ? "~/.claude" : configDirectory.path
+        let folder = switch configuration {
+        case .standard: "~/.claude"
+        case .directory(let directory): directory.path
+        }
         return "\(parts.joined(separator: ", ")) (\(folder))"
     }
 
@@ -87,11 +91,5 @@ public struct ClaudeAccount: Equatable, Hashable, Sendable {
     private static func nonEmpty(_ value: String?) -> String? {
         guard let value, !value.isEmpty else { return nil }
         return value
-    }
-
-    private static func normalizedPath(_ url: URL) -> String {
-        var path = url.standardizedFileURL.path
-        while path.count > 1, path.hasSuffix("/") { path.removeLast() }
-        return path
     }
 }
