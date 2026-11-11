@@ -177,6 +177,7 @@ struct WorkspaceTabStrip: View {
             title: title(for: tab),
             agentAttention: model.agentAttention(forTab: tab.id),
             agentIdentity: model.agentIdentity(forTab: tab.id),
+            claudeAccount: model.claudeAccount(forTab: tab.id),
             showsIdleIdentity: model.showsIdleAgentIcon(forWorkspace: workspaceID),
             tabWidth: tabWidth,
             select: { model.selectTab(tab.id, in: tabGroup.id) },
@@ -352,6 +353,7 @@ private struct WorkspaceTabItem: View {
     let title: String
     let agentAttention: AgentActivity?
     let agentIdentity: AgentIdentity?
+    let claudeAccount: ClaudeAccount?
     let showsIdleIdentity: Bool
     let tabWidth: CGFloat
     let select: () -> Void
@@ -367,9 +369,20 @@ private struct WorkspaceTabItem: View {
 
     private var accessibilityValue: String {
         let state = isSelected ? "Selected tab" : "Tab"
-        if let agentAttention, agentAttention.showsCook { return "\(state), \(agentAttention.attentionDescription)" }
-        if showsIdleIdentity, let agentIdentity { return "\(state), \(agentIdentity.displayName)" }
-        return state
+        let value: String
+        if let agentAttention, agentAttention.showsCook {
+            value = "\(state), \(agentAttention.attentionDescription)"
+        } else if showsIdleIdentity, let agentIdentity {
+            value = "\(state), \(agentIdentity.displayName)"
+        } else {
+            value = state
+        }
+        return claudeAccount.map { "\(value), Claude account \($0.shortName)" } ?? value
+    }
+
+    private var helpText: String {
+        guard let claudeAccount else { return title }
+        return "\(title)\nClaude Code as \(claudeAccount.detail)"
     }
 
     var body: some View {
@@ -419,7 +432,7 @@ private struct WorkspaceTabItem: View {
             .accessibilityValue(accessibilityValue)
             .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
             .accessibilityAction(.default, select)
-            .help(title)
+            .help(helpText)
 
             Button(action: close) {
                 Image(systemName: "xmark")

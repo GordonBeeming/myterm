@@ -229,6 +229,8 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
     public var restoresAgentSessions: Bool
     public var namesTabsFromAgentSessions: Bool
     public var showsIdleAgentIcon: Bool
+    /// Whether a workspace running Claude Code as an account other than `~/.claude`'s says which.
+    public var showsClaudeAccount: Bool
     /// Whether the toolbar carries the bell that lists the tabs whose agent needs the user. The
     /// list is kept either way; this only decides whether the toolbar shows it. Global: the
     /// toolbar is the app's, not a workspace's, so no override carries it.
@@ -263,6 +265,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         restoresAgentSessions: Bool = true,
         namesTabsFromAgentSessions: Bool = true,
         showsIdleAgentIcon: Bool = false,
+        showsClaudeAccount: Bool = true,
         showsAgentNotificationBell: Bool = true,
         workingIndicatorIcon: WorkingIndicatorIcon = .stirringCook,
         workingIndicatorColor: WorkspaceColor = .gray,
@@ -293,6 +296,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         self.restoresAgentSessions = restoresAgentSessions
         self.namesTabsFromAgentSessions = namesTabsFromAgentSessions
         self.showsIdleAgentIcon = showsIdleAgentIcon
+        self.showsClaudeAccount = showsClaudeAccount
         self.showsAgentNotificationBell = showsAgentNotificationBell
         self.workingIndicatorIcon = workingIndicatorIcon
         self.workingIndicatorColor = workingIndicatorColor
@@ -328,6 +332,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
             restoresAgentSessions: restoresAgentSessions,
             namesTabsFromAgentSessions: namesTabsFromAgentSessions,
             showsIdleAgentIcon: showsIdleAgentIcon,
+            showsClaudeAccount: showsClaudeAccount,
             showsAgentNotificationBell: showsAgentNotificationBell,
             workingIndicatorIcon: workingIndicatorIcon,
             workingIndicatorColor: workingIndicatorColor,
@@ -363,6 +368,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         try container.encode(restoresAgentSessions, forKey: .restoresAgentSessions)
         try container.encode(namesTabsFromAgentSessions, forKey: .namesTabsFromAgentSessions)
         try container.encode(showsIdleAgentIcon, forKey: .showsIdleAgentIcon)
+        try container.encode(showsClaudeAccount, forKey: .showsClaudeAccount)
         try container.encode(showsAgentNotificationBell, forKey: .showsAgentNotificationBell)
         try container.encode(workingIndicatorIcon, forKey: .workingIndicatorIcon)
         try container.encode(workingIndicatorColor, forKey: .workingIndicatorColor)
@@ -395,6 +401,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         case restoresAgentSessions
         case namesTabsFromAgentSessions
         case showsIdleAgentIcon
+        case showsClaudeAccount
         case showsAgentNotificationBell
         case workingIndicatorIcon
         case workingIndicatorColor
@@ -439,6 +446,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
             restoresAgentSessions: (try? container.decode(Bool.self, forKey: .restoresAgentSessions)) ?? true,
             namesTabsFromAgentSessions: (try? container.decode(Bool.self, forKey: .namesTabsFromAgentSessions)) ?? true,
             showsIdleAgentIcon: (try? container.decode(Bool.self, forKey: .showsIdleAgentIcon)) ?? false,
+            showsClaudeAccount: (try? container.decode(Bool.self, forKey: .showsClaudeAccount)) ?? true,
             showsAgentNotificationBell: (try? container.decode(Bool.self, forKey: .showsAgentNotificationBell)) ?? true,
             workingIndicatorIcon: (try? container.decode(WorkingIndicatorIcon.self, forKey: .workingIndicatorIcon)) ?? .stirringCook,
             workingIndicatorColor: (try? container.decode(WorkspaceColor.self, forKey: .workingIndicatorColor)) ?? .gray,
@@ -623,6 +631,7 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
             restoresAgentSessions: base.restoresAgentSessions,
             namesTabsFromAgentSessions: base.namesTabsFromAgentSessions,
             showsIdleAgentIcon: base.showsIdleAgentIcon,
+            showsClaudeAccount: base.showsClaudeAccount,
             // Global only: the toolbar is the app's, so an override has nothing to say about it.
             showsAgentNotificationBell: base.showsAgentNotificationBell,
             workingIndicatorIcon: base.workingIndicatorIcon,
