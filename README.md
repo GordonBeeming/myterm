@@ -298,6 +298,25 @@ In Settings, choose **Make MyTerm the Default** to register MyTerm for `.command
 
 Folders open a terminal tab in that folder. Scripts and executables run from their containing folder. SSH URLs are parsed into a normal `ssh` command with user and port support.
 
+### Open a tab from a script
+
+A script can open a terminal tab in a given workspace and run a command in it:
+
+```sh
+open "myterm://new-tab?workspace=API&cwd=~/src/api&command=make%20test"
+```
+
+Every parameter is optional. `workspace` takes a workspace's name or ID and defaults to the selected workspace. `cwd` takes an absolute path or one that starts with `~`. `command` must be URL-encoded and on one line. A development build uses the `myterm-dev://` scheme.
+
+These links are off until you turn on **Allow new-tab links** in Settings › General. Any app or web page can open a link, so MyTerm then shows the workspace, folder and command and asks before it acts. To skip the question from your own scripts, add the token from the file that Settings names:
+
+```sh
+token=$(cat ~/Library/Application\ Support/myterm/new-tab-link-token)
+open "myterm://new-tab?workspace=API&command=make%20test&token=$token"
+```
+
+Only your user can read the token file, and a web page cannot read it. A link with a wrong token still asks.
+
 ## Development channels
 
 Run the development channel from the repository:
