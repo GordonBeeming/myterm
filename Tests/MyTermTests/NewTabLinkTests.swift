@@ -113,6 +113,24 @@ final class NewTabLinkTests: XCTestCase {
         XCTAssertThrowsError(try NewTabLinkToken.load(at: link))
     }
 
+    func testAFIFOAtTheTokenPathIsRefusedWithoutWaitingForAWriter() throws {
+        let url = directory.appending(path: "token", directoryHint: .notDirectory)
+        XCTAssertEqual(mkfifo(url.path, 0o600), 0)
+        // Without O_NONBLOCK this call never returns, and the test run hangs here.
+        XCTAssertThrowsError(try NewTabLinkToken.load(at: url))
+    }
+
+    func testAPartTokenIsRefusedSoAShortGuessCannotMatch() throws {
+        let url = directory.appending(path: "token", directoryHint: .notDirectory)
+        for content in ["ab\n", String(repeating: "A", count: 64), String(repeating: "g", count: 64)] {
+            try? FileManager.default.removeItem(at: url)
+            XCTAssertTrue(FileManager.default.createFile(
+                atPath: url.path, contents: Data(content.utf8), attributes: [.posixPermissions: 0o600]
+            ))
+            XCTAssertThrowsError(try NewTabLinkToken.load(at: url), content)
+        }
+    }
+
     // MARK: Opening
 
     func testLinksAreIgnoredUntilTheSettingIsOn() throws {

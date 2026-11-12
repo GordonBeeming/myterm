@@ -130,6 +130,9 @@ struct NewTabLinkPrompt: Equatable {
 /// the prompt.
 enum NewTabLinkToken {
     static let fileName = "new-tab-link-token"
+    /// 32 random bytes as lowercase hex. A file that holds anything else, for example a write that
+    /// stopped part of the way, is not a token MyTerm made, and a shorter secret is easier to guess.
+    private static let tokenLength = 64
 
     enum TokenError: Error, LocalizedError {
         case insecureFile(URL)
@@ -138,7 +141,7 @@ enum NewTabLinkToken {
         var errorDescription: String? {
             switch self {
             case .insecureFile(let url):
-                "\(url.path) must be a regular file that only you can read. Delete it and MyTerm makes a new one."
+                "\(url.path) must be a regular file that only you can read, holding a token MyTerm made. Delete it and MyTerm makes a new one."
             case .unreadable(let url, let code):
                 "MyTerm could not read or create \(url.path): \(String(cString: strerror(code)))."
             }
@@ -162,7 +165,9 @@ enum NewTabLinkToken {
         defer { close(descriptor) }
         let bytes = Array((token + "\n").utf8)
         guard write(descriptor, bytes, bytes.count) == bytes.count else {
-            throw TokenError.unreadable(url, errno)
+            let code = errno
+            unlink(url.path)
+            throw TokenError.unreadable(url, code)
         }
         return token
     }
@@ -171,7 +176,9 @@ enum NewTabLinkToken {
     /// read, or that is not a plain file of the user's own, is refused, so a token that may have
     /// leaked never skips the prompt.
     static func load(at url: URL) throws -> String? {
-        let descriptor = open(url.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+        // O_NONBLOCK: a FIFO at this path would otherwise block the main actor until a writer
+        // appears, before fstat below could refuse it.
+        let descriptor = open(url.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
         guard descriptor >= 0 else {
             if errno == ENOENT { return nil }
             if errno == ELOOP { throw TokenError.insecureFile(url) }
@@ -190,8 +197,10 @@ enum NewTabLinkToken {
         guard count >= 0 else { throw TokenError.unreadable(url, errno) }
         let token = String(decoding: buffer[0..<count], as: UTF8.self)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        // An empty file has no secret in it, and an empty token must never match.
-        return token.isEmpty ? nil : token
+        // An empty file has no secret in it yet, so MyTerm writes one.
+        if token.isEmpty { return nil }
+        guard isWellFormed(token) else { throw TokenError.insecureFile(url) }
+        return token
     }
 
     /// Compares in constant time, so the time a refusal takes says nothing about the token.
@@ -202,6 +211,11 @@ enum NewTabLinkToken {
         var difference: UInt8 = 0
         for index in left.indices { difference |= left[index] ^ right[index] }
         return difference == 0
+    }
+
+    private static func isWellFormed(_ token: String) -> Bool {
+        token.utf8.count == tokenLength
+            && token.utf8.allSatisfy { (0x30...0x39).contains($0) || (0x61...0x66).contains($0) }
     }
 
     private static func makeToken() -> String {
