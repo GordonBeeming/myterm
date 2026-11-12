@@ -214,6 +214,45 @@ struct SettingsView: View {
                     .foregroundStyle(Theme.textSecondary)
             }
 
+            SettingsCard("Links from other apps") {
+                Toggle("Allow new-tab links", isOn: Binding(
+                    get: { model.store.globalSettings.acceptsNewTabLinks },
+                    set: { isAllowed in
+                        model.updateGlobalSettings { $0.acceptsNewTabLinks = isAllowed }
+                        if isAllowed { model.prepareNewTabLinkToken() }
+                    }
+                ))
+
+                Text("A script can open a terminal tab, and run a command in it, with a link such as myterm://new-tab?workspace=API&cwd=~/src&command=make%20test. MyTerm asks before it opens each link, because a web page can open one too.")
+                    .font(Theme.Font.ui(12))
+                    .foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if model.store.globalSettings.acceptsNewTabLinks {
+                    Text("To skip the question, add &token= with the contents of this file. Only you can read it, and a web page cannot.")
+                        .font(Theme.Font.ui(12))
+                        .foregroundStyle(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    HStack {
+                        Text(model.newTabLinkTokenURL.path)
+                            .font(Theme.Font.ui(12))
+                            .textSelection(.enabled)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer()
+                        Button("Show in Finder") {
+                            model.prepareNewTabLinkToken()
+                            NSWorkspace.shared.activateFileViewerSelecting([model.newTabLinkTokenURL])
+                        }
+                    }
+                }
+
+                Text("This setting applies to the whole app and is not inherited by folders or workspaces.")
+                    .font(Theme.Font.ui(12))
+                    .foregroundStyle(Theme.textSecondary)
+            }
+
             SettingsCard("Updates") {
                 Picker("Release channel", selection: Binding(
                     get: { model.updates.selectedChannel },

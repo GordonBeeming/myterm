@@ -235,6 +235,9 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
     /// list is kept either way; this only decides whether the toolbar shows it. Global: the
     /// toolbar is the app's, not a workspace's, so no override carries it.
     public var showsAgentNotificationBell: Bool
+    /// Whether another program may open a terminal tab, and run a command in it, through a
+    /// `myterm://new-tab` link. Global: the link names its own workspace, so no override applies.
+    public var acceptsNewTabLinks: Bool
     public var workingIndicatorIcon: WorkingIndicatorIcon
     public var workingIndicatorColor: WorkspaceColor
     public var finishedIndicatorIcon: FinishedIndicatorIcon
@@ -267,6 +270,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         showsIdleAgentIcon: Bool = false,
         showsClaudeAccount: Bool = true,
         showsAgentNotificationBell: Bool = true,
+        acceptsNewTabLinks: Bool = false,
         workingIndicatorIcon: WorkingIndicatorIcon = .stirringCook,
         workingIndicatorColor: WorkspaceColor = .gray,
         finishedIndicatorIcon: FinishedIndicatorIcon = .tickDraw,
@@ -298,6 +302,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         self.showsIdleAgentIcon = showsIdleAgentIcon
         self.showsClaudeAccount = showsClaudeAccount
         self.showsAgentNotificationBell = showsAgentNotificationBell
+        self.acceptsNewTabLinks = acceptsNewTabLinks
         self.workingIndicatorIcon = workingIndicatorIcon
         self.workingIndicatorColor = workingIndicatorColor
         self.finishedIndicatorIcon = finishedIndicatorIcon
@@ -334,6 +339,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
             showsIdleAgentIcon: showsIdleAgentIcon,
             showsClaudeAccount: showsClaudeAccount,
             showsAgentNotificationBell: showsAgentNotificationBell,
+            acceptsNewTabLinks: acceptsNewTabLinks,
             workingIndicatorIcon: workingIndicatorIcon,
             workingIndicatorColor: workingIndicatorColor,
             finishedIndicatorIcon: finishedIndicatorIcon,
@@ -370,6 +376,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         try container.encode(showsIdleAgentIcon, forKey: .showsIdleAgentIcon)
         try container.encode(showsClaudeAccount, forKey: .showsClaudeAccount)
         try container.encode(showsAgentNotificationBell, forKey: .showsAgentNotificationBell)
+        try container.encode(acceptsNewTabLinks, forKey: .acceptsNewTabLinks)
         try container.encode(workingIndicatorIcon, forKey: .workingIndicatorIcon)
         try container.encode(workingIndicatorColor, forKey: .workingIndicatorColor)
         try container.encode(finishedIndicatorIcon, forKey: .finishedIndicatorIcon)
@@ -403,6 +410,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
         case showsIdleAgentIcon
         case showsClaudeAccount
         case showsAgentNotificationBell
+        case acceptsNewTabLinks
         case workingIndicatorIcon
         case workingIndicatorColor
         case finishedIndicatorIcon
@@ -448,6 +456,7 @@ public struct TerminalPreferences: Codable, Equatable, Hashable, Sendable {
             showsIdleAgentIcon: (try? container.decode(Bool.self, forKey: .showsIdleAgentIcon)) ?? false,
             showsClaudeAccount: (try? container.decode(Bool.self, forKey: .showsClaudeAccount)) ?? true,
             showsAgentNotificationBell: (try? container.decode(Bool.self, forKey: .showsAgentNotificationBell)) ?? true,
+            acceptsNewTabLinks: (try? container.decode(Bool.self, forKey: .acceptsNewTabLinks)) ?? false,
             workingIndicatorIcon: (try? container.decode(WorkingIndicatorIcon.self, forKey: .workingIndicatorIcon)) ?? .stirringCook,
             workingIndicatorColor: (try? container.decode(WorkspaceColor.self, forKey: .workingIndicatorColor)) ?? .gray,
             finishedIndicatorIcon: (try? container.decode(FinishedIndicatorIcon.self, forKey: .finishedIndicatorIcon)) ?? .tickDraw,
@@ -634,6 +643,8 @@ public struct TerminalPreferencesOverrides: Codable, Equatable, Hashable, Sendab
             showsClaudeAccount: base.showsClaudeAccount,
             // Global only: the toolbar is the app's, so an override has nothing to say about it.
             showsAgentNotificationBell: base.showsAgentNotificationBell,
+            // Global only: a link that names its workspace cannot be governed by that workspace.
+            acceptsNewTabLinks: base.acceptsNewTabLinks,
             workingIndicatorIcon: base.workingIndicatorIcon,
             workingIndicatorColor: base.workingIndicatorColor,
             finishedIndicatorIcon: base.finishedIndicatorIcon,

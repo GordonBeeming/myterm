@@ -53,6 +53,7 @@ final class AppModel {
     private let browserLauncherURL: URL?
     private let terminalSnapshotDelayNanoseconds: UInt64
     private let confirmClosingActiveProcesses: @MainActor (ActiveProcessClosePrompt) -> Bool
+    private let confirmNewTabLink: @MainActor (NewTabLinkPrompt) -> Bool
     private let textFileOpenCommandRunner: TextFileOpenCommandRunner
     private let textFileOpenCommandAvailabilityChecker: TextFileOpenCommandAvailabilityChecker
     private let externalFileOpener: ExternalFileOpener
@@ -204,6 +205,7 @@ final class AppModel {
         browserLauncherURL: URL? = MyTermBrowserLauncher.executableURL(),
         terminalSnapshotDelayNanoseconds: UInt64 = 30_000_000_000,
         confirmClosingActiveProcesses: @escaping @MainActor (ActiveProcessClosePrompt) -> Bool = AppModel.presentActiveProcessClosePrompt,
+        confirmNewTabLink: @escaping @MainActor (NewTabLinkPrompt) -> Bool = AppModel.presentNewTabLinkPrompt,
         textFileOpenCommandRunner: @escaping TextFileOpenCommandRunner = AppModel.runTextFileOpenCommand,
         textFileOpenCommandAvailabilityChecker: @escaping TextFileOpenCommandAvailabilityChecker = AppModel.isExecutableAvailable,
         externalFileOpener: @escaping ExternalFileOpener = AppModel.openExternally,
@@ -245,6 +247,7 @@ final class AppModel {
         self.browserLauncherURL = browserLauncherURL
         self.terminalSnapshotDelayNanoseconds = terminalSnapshotDelayNanoseconds
         self.confirmClosingActiveProcesses = confirmClosingActiveProcesses
+        self.confirmNewTabLink = confirmNewTabLink
         self.textFileOpenCommandRunner = textFileOpenCommandRunner
         self.textFileOpenCommandAvailabilityChecker = textFileOpenCommandAvailabilityChecker
         self.externalFileOpener = externalFileOpener
@@ -904,6 +907,10 @@ final class AppModel {
 
     func open(_ urls: [URL]) {
         for url in urls {
+            if NewTabLinkRequest.isNewTabLink(url, schemes: newTabLinkSchemes) {
+                openNewTabLink(url)
+                continue
+            }
             if url.scheme?.lowercased() == MyTermBrowserLauncher.workspaceRouteScheme {
                 guard let destination = MyTermBrowserLauncher.browserDestination(from: url),
                       store.workspaces.contains(where: { $0.id == destination.workspaceID }) else {
@@ -1006,6 +1013,134 @@ final class AppModel {
         default:
             errorDescription = "MyTerm cannot open \(url.absoluteString)."
         }
+    }
+
+    /// The schemes a new-tab link may use: the shared workspace route, and the scheme this
+    /// channel registers with macOS, which is what `open` from a script reaches.
+    private var newTabLinkSchemes: Set<String> {
+        [MyTermBrowserLauncher.workspaceRouteScheme, channel.authenticationCallbackScheme]
+    }
+
+    /// The file holding the secret that lets a local program skip the new-tab link prompt.
+    var newTabLinkTokenURL: URL {
+        terminalContinuityDirectory.appending(path: NewTabLinkToken.fileName, directoryHint: .notDirectory)
+    }
+
+    /// Makes the token file if it does not exist yet, so the user has a token to give their scripts.
+    func prepareNewTabLinkToken() {
+        do {
+            _ = try NewTabLinkToken.loadOrCreate(at: newTabLinkTokenURL)
+        } catch {
+            present(error)
+        }
+    }
+
+    private func openNewTabLink(_ url: URL) {
+        guard store.globalSettings.acceptsNewTabLinks else {
+            errorDescription = "MyTerm ignored a link that asked to open a terminal tab. To allow these links, turn on “Allow new-tab links” in Settings."
+            return
+        }
+        let request: NewTabLinkRequest
+        do {
+            request = try NewTabLinkRequest.parse(url)
+        } catch {
+            present(error)
+            return
+        }
+
+        let workspace: Workspace
+        if let name = request.workspace {
+            let byID = (try? WorkspaceID(uuidString: name)).flatMap { id in
+                store.workspaces.first(where: { $0.id == id })
+            }
+            let byTitle = store.workspaces.filter {
+                $0.title.compare(name, options: [.caseInsensitive]) == .orderedSame
+            }
+            if let byID {
+                workspace = byID
+            } else if byTitle.count == 1 {
+                workspace = byTitle[0]
+            } else if byTitle.isEmpty {
+                errorDescription = "The new-tab link names a workspace that does not exist: \(name)"
+                return
+            } else {
+                errorDescription = "The new-tab link names “\(name)”, and more than one workspace has that name. Use the workspace ID."
+                return
+            }
+        } else {
+            workspace = selectedWorkspace
+        }
+
+        let workingDirectory: URL
+        if let directory = request.workingDirectory {
+            guard validDirectory(directory) != nil else {
+                errorDescription = "The new-tab link's folder does not exist: \(directory.path)"
+                return
+            }
+            workingDirectory = directory
+        } else {
+            do {
+                workingDirectory = try newSessionWorkingDirectory(for: workspace.id)
+            } catch {
+                present(error)
+                return
+            }
+        }
+
+        if !isTrustedNewTabLink(request) {
+            let prompt = NewTabLinkPrompt(
+                workspaceTitle: workspace.title,
+                workingDirectory: workingDirectory,
+                command: request.command
+            )
+            guard confirmNewTabLink(prompt) else { return }
+        }
+
+        selectWorkspace(workspace.id)
+        perform {
+            try createTerminalTab(
+                workingDirectory: workingDirectory,
+                initialCommand: request.command,
+                workspaceID: workspace.id
+            )
+        }
+    }
+
+    /// A link is trusted only when it carries the token from the user's own token file. A wrong
+    /// token is not an error: the link still reaches the prompt, where the user decides.
+    private func isTrustedNewTabLink(_ request: NewTabLinkRequest) -> Bool {
+        guard let candidate = request.token else { return false }
+        do {
+            guard let token = try NewTabLinkToken.load(at: newTabLinkTokenURL) else { return false }
+            return NewTabLinkToken.matches(candidate, token)
+        } catch {
+            present(error)
+            return false
+        }
+    }
+
+    private static func presentNewTabLinkPrompt(_ prompt: NewTabLinkPrompt) -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = prompt.command == nil
+            ? "Open a terminal tab from a link?"
+            : "Run a command from a link?"
+        var lines = [
+            "Workspace: \(prompt.workspaceTitle)",
+            "Folder: \(prompt.workingDirectory.path)",
+        ]
+        if let command = prompt.command {
+            lines.append("Command: \(command)")
+        }
+        lines.append("")
+        lines.append("Another app or a web page opened this link. Continue only if you started it, because the command runs as you.")
+        alert.informativeText = lines.joined(separator: "\n")
+        let open = alert.addButton(withTitle: prompt.command == nil ? "Open Tab" : "Run Command")
+        let cancel = alert.addButton(withTitle: "Cancel")
+        // Return must not approve a command the user has not read, so Cancel takes the default key.
+        open.keyEquivalent = ""
+        cancel.keyEquivalent = "\r"
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     /// Open a text file using the configured editor and prepared shell environment, reporting launch failures.
