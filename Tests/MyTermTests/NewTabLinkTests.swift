@@ -131,6 +131,16 @@ final class NewTabLinkTests: XCTestCase {
         }
     }
 
+    func testAnEmptyTokenFileAsksTheUserToDeleteIt() throws {
+        let url = directory.appending(path: "token", directoryHint: .notDirectory)
+        XCTAssertTrue(FileManager.default.createFile(atPath: url.path, contents: Data(), attributes: [.posixPermissions: 0o600]))
+        XCTAssertThrowsError(try NewTabLinkToken.loadOrCreate(at: url)) { error in
+            guard case .insecureFile = error as? NewTabLinkToken.TokenError else {
+                return XCTFail("expected insecureFile, got \(error)")
+            }
+        }
+    }
+
     // MARK: Opening
 
     func testLinksAreIgnoredUntilTheSettingIsOn() throws {

@@ -158,9 +158,13 @@ enum NewTabLinkToken {
         let token = makeToken()
         let descriptor = open(url.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
         guard descriptor >= 0 else {
-            // Another launch made the file between the read and the create, so read theirs.
-            if errno == EEXIST, let token = try load(at: url) { return token }
-            throw TokenError.unreadable(url, errno)
+            let code = errno
+            guard code == EEXIST else { throw TokenError.unreadable(url, code) }
+            // Another launch made the file between the read and the create, so read theirs. A file
+            // that is still empty was left by a launch that stopped before it wrote, and nothing
+            // fills it later, so the user must delete it.
+            guard let token = try load(at: url) else { throw TokenError.insecureFile(url) }
+            return token
         }
         defer { close(descriptor) }
         let bytes = Array((token + "\n").utf8)
