@@ -1,0 +1,14 @@
+{
+  "combinedClientSha256": "9a8ad35bdb61bde931faa3bfedb5e5311bac130c0712d41ba0b2ec88b97ae933",
+  "serverSha256": "c274be0137b00397bf3fe62eef35ebd5d1a6863b66df4ec9a7b3a606318066da",
+  "reconstructedClientSha256": "fb8301494aa6c0c0b705a1157b20982a9b5f2b7e03d99dc3cac21031e2c9ad37",
+  "reconstructedGuiSha256": "9ce5aba845c69d6d476271e06dc114683f067562382d9e0dac875b7db11c7bca",
+  "prefixSha256": "36f63423a47492f543bbd881f1680cbc237c2d997afeebffa3b15f43f593e371",
+  "serverMatchesRecordedBuildSource": true,
+  "clientAndGuiMatchRecordedBuildSources": true,
+  "validatedBinaries": {
+    "server": "97b61e3297cd02520266ee8ba9f81117ef584908dac40bb75a9b35b9515e0075",
+    "client": "69d6468e343f4b5236fe8e9301b3ba3933cc2e26fc985683f8ed6f3e435d5e3e"
+  },
+  "scope": "exact generated source archive for the long run; later closed-channel/UI guard and diagnostic-only queue error details are separate changes"
+}

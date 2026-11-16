@@ -1,0 +1,14 @@
+{
+  "appendedBytes": 8388608,
+  "removedPrefix": {
+    "count": 16384,
+    "startIndex": 8372224,
+    "endIndex": 8388608
+  },
+  "freshCopy": {
+    "count": 16384,
+    "startIndex": 0,
+    "endIndex": 16384
+  },
+  "method": "native Swift Foundation API loop; 1024 appends of 8192 bytes, retaining a 16384-byte tail"
+}

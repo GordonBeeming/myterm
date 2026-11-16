@@ -1,0 +1,46 @@
+{
+  "startedUtc": "2026-11-16T15:21:22.399171+00:00",
+  "environment": "macOS-27.3-arm64-arm-64bit-Mach-O",
+  "arguments": {
+    "build": "/private/tmp/myterm-166-final-20261116",
+    "output": "/private/tmp/myterm-166-queue-size-24",
+    "cycles": 100,
+    "seconds": 0,
+    "rate": 10240,
+    "policy": "visible",
+    "queue": 262144,
+    "slow_seconds": 0,
+    "during_load_cycles": 0
+  },
+  "scope": "native Mac PTY + TLS + headless TerminalView; visible UI and production trust unverified",
+  "build": {
+    "foundation": "ab4f866153ff46c03e1e51de72eec8d85d233d51",
+    "root": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125",
+    "profile": "release",
+    "sources": {
+      "matrix.py": "810aa44194d43768104c81484da4fde52f7e601ee3cfff7fc74a9afa9ed02422",
+      "run.py": "441efc7486287931cde20cd7af3c554d9d32a9ff1e5d42d7a409f67386b6af0b",
+      "memory_variant.py": "791a9ef90153a0629311d2015383ed080f8ac11d645c6e7ccb99936511e11b94",
+      "server.rs": "8d3a4543b67d5e50e59053cdc0d9c9e563d60dda0bc273fa3cfead932f23203e",
+      "workload.py": "1e53efca6ede97e49021556a7e62dd5c366e83e0eacdb1048fdcd09ff2b9aec6",
+      "followups.py": "6b27459b289cf1fea6705a5290113700daa6277a1a9edecfd295ed745c309647",
+      "gui_review.py": "25fe9ce0e51531040b3cbaa1aae42c50e380fc69dfc0629c842d1b3233363ad8",
+      "refresh_visual.py": "88faec7a88f1f2240f688c3116595c3239eadcf2af020ddf257679aaa1e14b0c",
+      "gui.swift": "62c8d826773f7d9a79bf1119c3c8a278509c0fc2abb0d81e618ea1636a230d52",
+      "client.swift": "501cef9ec31ad15d3d672391cffb5e4fe670afa0d1cd8372ed6f084b1cb0df4f",
+      "prepare.py": "6328fa1a5090e44fbeb1dd4c271d9d485af97627b4e8b0c4cfdd1c991f4d8138",
+      "analyze.py": "93c1972300721c0c68af2ee0d11301ea8b0e2212b1fd27ba8beadc8550f546a2"
+    },
+    "binaries": {
+      "server": "2f529d943113e4e6474228fa99a6855d22065128ea32d977c33655bb5e551f7e",
+      "client": "403230f93d856e3906db0781f0d80925dcb8aaab07d1c3dc8c5b24677a21ce08"
+    }
+  },
+  "runtimeSources": {
+    "run.py": "441efc7486287931cde20cd7af3c554d9d32a9ff1e5d42d7a409f67386b6af0b",
+    "workload.py": "1e53efca6ede97e49021556a7e62dd5c366e83e0eacdb1048fdcd09ff2b9aec6"
+  },
+  "logicalCpuCount": 18,
+  "hardwareModel": "Mac17,7",
+  "memoryBytes": 137438953472
+}

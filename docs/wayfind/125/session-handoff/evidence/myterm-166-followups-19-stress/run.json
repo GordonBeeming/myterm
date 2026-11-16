@@ -1,0 +1,44 @@
+{
+  "startedUtc": "2026-11-16T13:57:25.699108+00:00",
+  "environment": "macOS-27.3-arm64-arm-64bit-Mach-O",
+  "arguments": {
+    "build": "/private/tmp/myterm-166-final-20261116",
+    "output": "/private/tmp/myterm-166-followups-19/stress",
+    "cycles": 0,
+    "seconds": 1800,
+    "rate": 1048576,
+    "policy": "visible",
+    "queue": 1048576,
+    "slow_seconds": 30,
+    "during_load_cycles": 100
+  },
+  "scope": "native Mac PTY + TLS + headless TerminalView; visible UI and production trust unverified",
+  "build": {
+    "foundation": "ab4f866153ff46c03e1e51de72eec8d85d233d51",
+    "root": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125",
+    "profile": "release",
+    "sources": {
+      "matrix.py": "810aa44194d43768104c81484da4fde52f7e601ee3cfff7fc74a9afa9ed02422",
+      "run.py": "669ece00bf068ba075fab47153b6448139efc045aba35e55d3392db674f4d3a9",
+      "memory_variant.py": "791a9ef90153a0629311d2015383ed080f8ac11d645c6e7ccb99936511e11b94",
+      "server.rs": "c274be0137b00397bf3fe62eef35ebd5d1a6863b66df4ec9a7b3a606318066da",
+      "workload.py": "1e53efca6ede97e49021556a7e62dd5c366e83e0eacdb1048fdcd09ff2b9aec6",
+      "gui_review.py": "2db32027a2c9cec91c61dc2a1ebf12eb76fa7fa2002c3cc968445217e42b10dd",
+      "gui.swift": "9ce5aba845c69d6d476271e06dc114683f067562382d9e0dac875b7db11c7bca",
+      "client.swift": "fb8301494aa6c0c0b705a1157b20982a9b5f2b7e03d99dc3cac21031e2c9ad37",
+      "prepare.py": "6328fa1a5090e44fbeb1dd4c271d9d485af97627b4e8b0c4cfdd1c991f4d8138",
+      "analyze.py": "0554767d31e70474f39a05e73cca88c7e61f1b84103cbabee314a6d72a5355b1"
+    },
+    "binaries": {
+      "server": "97b61e3297cd02520266ee8ba9f81117ef584908dac40bb75a9b35b9515e0075",
+      "client": "69d6468e343f4b5236fe8e9301b3ba3933cc2e26fc985683f8ed6f3e435d5e3e"
+    }
+  },
+  "runtimeSources": {
+    "run.py": "5a2ac447c302085c5b45666253f75c4ad14812ac1ca626ceb0bad0c266978c48",
+    "workload.py": "1e53efca6ede97e49021556a7e62dd5c366e83e0eacdb1048fdcd09ff2b9aec6"
+  },
+  "logicalCpuCount": 18,
+  "hardwareModel": "Mac17,7",
+  "memoryBytes": 137438953472
+}

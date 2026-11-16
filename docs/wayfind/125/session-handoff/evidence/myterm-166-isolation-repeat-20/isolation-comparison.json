@@ -1,0 +1,11 @@
+{
+  "fastP95Ms": 4.665458,
+  "pausedViewerP95Ms": 4.603792,
+  "fastSamples": 89,
+  "pausedViewerSamples": 88,
+  "degradationPercent": -1.3217566206790377,
+  "within20PercentPointEstimate": true,
+  "scope": "one paired observation at 100 KiB/s; matching 5\u201335 second windows; native echo receipt, no visible rendering",
+  "repetitions": 1,
+  "statisticalGuarantee": false
+}

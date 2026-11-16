@@ -1,0 +1,31 @@
+{
+  "regression": {
+    "checks": [
+      "selection/subscription does not acquire control",
+      "stale synchronization acknowledgements cannot reopen input",
+      "accepted controller input reaches the real PTY",
+      "stale takeover and viewer input rejected",
+      "2 competing takeovers have exactly one winner",
+      "2 displaced input and away/back stale revision checks",
+      "2 subscription switches preserve ownership",
+      "2 rejected TLS candidates leave prior channel usable",
+      "2 TLS replacements resume synchronized PTY input",
+      "2 disconnected owners can be displaced without stopping processes",
+      "explicit release leaves everyone viewing",
+      "native client process restart preserves controller revision and the real PTY process"
+    ],
+    "cycles": 2,
+    "takeoverMs": [
+      3.101875016000122,
+      3.109375014901161
+    ],
+    "switchSyncMs": [
+      52.232875023037195,
+      53.87470801360905
+    ],
+    "replacementSyncMs": [
+      28.312375012319535,
+      31.16683301050216
+    ]
+  }
+}

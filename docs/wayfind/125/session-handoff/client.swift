@@ -33,7 +33,11 @@ final class NativePane {
     var pendingTake: Int?
     var echoTail = Data()
     var syncToken = 0
-    init() { view = makeView(recorder); recorder.suppressed = false }
+    init() {
+        view = makeView(recorder)
+        view.automaticallyResizesTerminal = false
+        recorder.suppressed = false
+    }
 }
 
 @MainActor
@@ -274,7 +278,8 @@ final class Channel {
             pane.recorder.suppressed = false
             pane.bytes += UInt64(data.count)
             pane.observed.append(data)
-            if pane.observed.count > 16384 { pane.observed.removeFirst(pane.observed.count - 16384) }
+            // A sliced Data can keep its discarded prefix allocated. Copy the retained tail to bound storage.
+            if pane.observed.count > 16384 { pane.observed = Data(Array(pane.observed.suffix(16384))) }
             pane.echoTail.append(data)
             while let end = pane.echoTail.firstIndex(of: 10) {
                 let line = Data(pane.echoTail[..<end])
@@ -288,7 +293,7 @@ final class Channel {
                     }
                 }
             }
-            if pane.echoTail.count > 16384 { pane.echoTail.removeFirst(pane.echoTail.count - 16384) }
+            if pane.echoTail.count > 16384 { pane.echoTail = Data(Array(pane.echoTail.suffix(16384))) }
         } else if kind == "resize" {
             guard let cols = value["cols"] as? Int, let rows = value["rows"] as? Int else {
                 throw TerminalCheckpointError.corrupt("resize")
@@ -364,6 +369,10 @@ final class ClientDriver {
                 emit(["kind": "ack", "id": id, "ok": true, "result": result])
                 return
             }
+            if channel.closed {
+                emit(["kind": "ack", "id": id, "ok": false, "error": "channel disconnected"])
+                return
+            }
             if let sid = request["session"] as? Int, (0..<2).contains(sid) {
                 let pane = channel.panes[sid]
                 if action == "subscribe" || action == "checkpoint" { pane.inputReady = false }
@@ -388,7 +397,7 @@ let driver = ClientDriver()
 DispatchQueue.global().async {
     var inputFD = STDIN_FILENO
     if let index = CommandLine.arguments.firstIndex(of: "--input-fifo"), index + 1 < CommandLine.arguments.count {
-        inputFD = Darwin.open(CommandLine.arguments[index + 1], O_RDONLY)
+        inputFD = Darwin.open(CommandLine.arguments[index + 1], O_RDONLY | O_NONBLOCK)
         if inputFD < 0 { DispatchQueue.main.async { exit(1) }; return }
     }
     defer { if inputFD != STDIN_FILENO { Darwin.close(inputFD) } }
@@ -397,7 +406,14 @@ DispatchQueue.global().async {
     while true {
         let count = Darwin.read(inputFD, &bytes, bytes.count)
         if count == 0 { DispatchQueue.main.async { exit(0) }; return }
-        if count < 0 { if errno == EINTR { continue }; DispatchQueue.main.async { exit(1) }; return }
+        if count < 0 {
+            if errno == EINTR { continue }
+            if errno == EAGAIN {
+                var descriptor = pollfd(fd: inputFD, events: Int16(POLLIN), revents: 0)
+                if Darwin.poll(&descriptor, 1, 100) >= 0 { continue }
+            }
+            DispatchQueue.main.async { exit(1) }; return
+        }
         pending.append(contentsOf: bytes.prefix(count))
         if pending.count > 131072 { DispatchQueue.main.async { exit(1) }; return }
         while let end = pending.firstIndex(of: 10) {

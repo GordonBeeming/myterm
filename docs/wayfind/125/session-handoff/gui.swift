@@ -55,6 +55,7 @@ final class ReviewWindow: NSObject, NSWindowDelegate {
     }
 
     @objc func selectWorkspace(_ sender: NSButton) {
+        window.makeFirstResponder(nil)
         let old = workspace
         workspace = sender.tag
         if old != workspace {
@@ -92,16 +93,22 @@ final class ReviewWindow: NSObject, NSWindowDelegate {
 
     func refresh() {
         let servers = driver.channels.keys.sorted()
+        if let client = driver.channels.values.first?.clientID { window.title = "MyTerm handoff prototype — \(client)" }
         state.stringValue = servers.compactMap { server in
             guard let channel = driver.channels[server] else { return nil }
             let pane = channel.panes[workspace]
-            pane.recorder.onUserInput = { [weak self, weak channel, weak pane] bytes in
-                guard let self, let channel, let pane else { return }
-                self.command(["action": "input", "server": server, "session": self.workspace,
-                              "revision": pane.revision, "data": Data(bytes).base64EncodedString()])
+            pane.recorder.onUserInput = { [weak self, weak pane] bytes in
+                guard let self, let pane else { return }
+                do {
+                    var record = try JSONSerialization.data(withJSONObject: ["keyboard": Array(bytes)])
+                    record.append(10)
+                    self.command(["action": "input", "server": server, "session": self.workspace,
+                                  "revision": pane.revision, "data": record.base64EncodedString()])
+                } catch { emit(["kind": "fatal", "error": "\(error)"]) }
             }
             let role = pane.pendingTake != nil ? "Taking control…" : pane.owner.map { "Controller: \($0)" } ?? "View only • unowned"
-            return "\(server.uppercased()): \(role) • revision \(pane.revision) • \(pane.inputReady ? "Live" : "Catching up…")"
+            let stream = channel.closed ? "Disconnected" : (pane.inputReady ? "Stream live" : "Catching up…")
+            return "\(server.uppercased()): \(role) • revision \(pane.revision) • \(stream)"
         }.joined(separator: "     ")
         let views = servers.compactMap { driver.channels[$0]?.panes[workspace].view }
         guard views.map(ObjectIdentifier.init) != currentViews.map(ObjectIdentifier.init) else { return }
@@ -124,12 +131,8 @@ final class ReviewWindow: NSObject, NSWindowDelegate {
             let scroll = NSScrollView()
             scroll.hasHorizontalScroller = true
             scroll.hasVerticalScroller = true
-            do {
-                let cached = try pane.view.getTerminal().exportCheckpoint()
-                pane.view.frame = NSRect(x: 0, y: 0, width: 1200, height: 700)
-                // AppKit frame layout must not replace transport-authoritative terminal geometry or modes.
-                try pane.view.getTerminal().importCheckpoint(cached)
-            } catch { emit(["kind": "fatal", "error": "\(error)"]); return }
+            // Automatic terminal resizing is disabled; only server deliveries change rows and columns.
+            pane.view.frame = NSRect(x: 0, y: 0, width: 1200, height: 700)
             scroll.documentView = pane.view
             column.addArrangedSubview(scroll)
             NSLayoutConstraint.activate([scroll.widthAnchor.constraint(equalTo: column.widthAnchor), scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 500)])

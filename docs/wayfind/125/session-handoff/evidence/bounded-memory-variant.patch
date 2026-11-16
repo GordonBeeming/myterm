@@ -1,0 +1,20 @@
+--- baseline/main.swift
++++ pooled/main.swift
+@@ -344,7 +344,7 @@
+             pane.recorder.suppressed = false
+             pane.bytes += UInt64(data.count)
+             pane.observed.append(data)
+-            if pane.observed.count > 16384 { pane.observed.removeFirst(pane.observed.count - 16384) }
++            if pane.observed.count > 16384 { pane.observed = Data(Array(pane.observed.suffix(16384))) }
+             pane.echoTail.append(data)
+             while let end = pane.echoTail.firstIndex(of: 10) {
+                 let line = Data(pane.echoTail[..<end])
+@@ -358,7 +358,7 @@
+                     }
+                 }
+             }
+-            if pane.echoTail.count > 16384 { pane.echoTail.removeFirst(pane.echoTail.count - 16384) }
++            if pane.echoTail.count > 16384 { pane.echoTail = Data(Array(pane.echoTail.suffix(16384))) }
+         } else if kind == "resize" {
+             guard let cols = value["cols"] as? Int, let rows = value["rows"] as? Int else {
+                 throw TerminalCheckpointError.corrupt("resize")

@@ -116,7 +116,9 @@ struct Peer {
 impl Peer {
     fn queue(&mut self, value:Value, limit:usize) -> Result<()> {
         let mut bytes = serde_json::to_vec(&value)?; bytes.push(b'\n');
-        ensure!(self.queued + bytes.len() <= limit, "control/checkpoint exceeds per-viewer queue bound");
+        ensure!(self.queued + bytes.len() <= limit,
+            "per-viewer queue bound: kind={}, encoded_frame_bytes={}, queued_bytes={}, limit_bytes={}",
+            value["kind"],bytes.len(),self.queued,limit);
         self.queued += bytes.len(); self.high_water = self.high_water.max(self.queued);
         self.output.push_back(Frame {bytes, offset:0, control:value["kind"]=="ack"}); Ok(())
     }

@@ -1,0 +1,16 @@
+{
+  "client:two": {
+    "last20MinuteSlopeMiBPerMinute": 0.007991849844130185,
+    "firstMiB": 41.890625,
+    "lastMiB": 42.015625,
+    "observedDeltaMiB": 0.125,
+    "scope": "observed RSS trend; not proof of a permanent memory bound"
+  },
+  "client:one": {
+    "last20MinuteSlopeMiBPerMinute": 0.027218897546042026,
+    "firstMiB": 43.5625,
+    "lastMiB": 44.140625,
+    "observedDeltaMiB": 0.578125,
+    "scope": "observed RSS trend; not proof of a permanent memory bound"
+  }
+}

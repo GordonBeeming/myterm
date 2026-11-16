@@ -1,0 +1,139 @@
+{
+  "completed": true,
+  "run": "/private/tmp/myterm-166-followups-19/stress",
+  "cycles": 0,
+  "regressionChecks": [
+    "selection/subscription does not acquire control",
+    "stale synchronization acknowledgements cannot reopen input",
+    "accepted controller input reaches the real PTY",
+    "stale takeover and viewer input rejected",
+    "0 competing takeovers have exactly one winner",
+    "0 displaced input and away/back stale revision checks",
+    "0 subscription switches preserve ownership",
+    "0 rejected TLS candidates leave prior channel usable",
+    "0 TLS replacements resume synchronized PTY input",
+    "0 disconnected owners can be displaced without stopping processes",
+    "explicit release leaves everyone viewing",
+    "native client process restart preserves controller revision and the real PTY process"
+  ],
+  "controlTimingScope": "idle two-request competition round trip; excludes cached visible rendering",
+  "latency": {
+    "takeoverMs": {
+      "samples": 0,
+      "p95": null
+    },
+    "switchSyncMs": {
+      "samples": 0,
+      "p95": null
+    },
+    "replacementSyncMs": {
+      "samples": 0,
+      "p95": null
+    }
+  },
+  "unmeasured": [
+    "visible cached display latency",
+    "production security integration",
+    "multi-Mac network",
+    "mobile clients"
+  ],
+  "load": {
+    "seconds": 1800,
+    "policy": "visible",
+    "requestedRate": 1048576,
+    "measuredRates": {
+      "a:0": {
+        "bytesPerSecond": 1048593.0130154816,
+        "requestedRatio": 1.0000162248759095
+      },
+      "a:1": {
+        "bytesPerSecond": 1048532.7137580826,
+        "requestedRatio": 0.9999587190228296
+      },
+      "b:0": {
+        "bytesPerSecond": 1048518.1716005997,
+        "requestedRatio": 0.999944850540733
+      },
+      "b:1": {
+        "bytesPerSecond": 1048535.7260819746,
+        "requestedRatio": 0.9999615917987581
+      }
+    },
+    "rateWithinFivePercent": true,
+    "resources": {
+      "69921": {
+        "role": "server:a",
+        "averageCpuPercent": 7.518587095217284,
+        "finalRssMiB": 13.4375,
+        "growthAfterWarmupMiB": 1.1875,
+        "within32MiB": true
+      },
+      "69924": {
+        "role": "server:b",
+        "averageCpuPercent": 7.4513626040829255,
+        "finalRssMiB": 5.984375,
+        "growthAfterWarmupMiB": 0.0,
+        "within32MiB": true
+      },
+      "69935": {
+        "role": "client:two",
+        "averageCpuPercent": 11.077596105190088,
+        "finalRssMiB": 42.015625,
+        "growthAfterWarmupMiB": 3.765625,
+        "within32MiB": true
+      },
+      "69961": {
+        "role": "client:one",
+        "averageCpuPercent": 11.39482903442744,
+        "finalRssMiB": 44.140625,
+        "growthAfterWarmupMiB": 5.921875,
+        "within32MiB": true
+      },
+      "69922": {
+        "role": "pty:a:0",
+        "averageCpuPercent": 0.5427960978369385,
+        "finalRssMiB": 16.734375,
+        "growthAfterWarmupMiB": 0.578125,
+        "within32MiB": true
+      },
+      "69923": {
+        "role": "pty:a:1",
+        "averageCpuPercent": 0.5139062338783705,
+        "finalRssMiB": 16.609375,
+        "growthAfterWarmupMiB": 0.5,
+        "within32MiB": true
+      },
+      "69925": {
+        "role": "pty:b:0",
+        "averageCpuPercent": 0.5294623144714456,
+        "finalRssMiB": 16.671875,
+        "growthAfterWarmupMiB": 0.578125,
+        "within32MiB": true
+      },
+      "69926": {
+        "role": "pty:b:1",
+        "averageCpuPercent": 0.5150173824921617,
+        "finalRssMiB": 16.703125,
+        "growthAfterWarmupMiB": 0.609375,
+        "within32MiB": true
+      }
+    },
+    "queueHighWaterBytes": 1032116,
+    "configuredQueueBytes": 1048576,
+    "resyncs": {
+      "a": 9,
+      "b": 0
+    },
+    "wireBytes": 10957105076,
+    "echoP95Ms": 6.728291,
+    "echoSamples": 5380,
+    "finalNativeParityAsserted": true,
+    "loadedControlTiming": {
+      "cycles": 100,
+      "takeoverRoundTripP95Ms": 3.9342499803751707,
+      "subscriptionSwitchSyncP95Ms": 75.82983298925683,
+      "replacementSyncP95Ms": 61.98391696671024,
+      "scope": "conservative protocol round trips; cached visible rendering and input latency during the control bursts are unmeasured"
+    }
+  }
+}

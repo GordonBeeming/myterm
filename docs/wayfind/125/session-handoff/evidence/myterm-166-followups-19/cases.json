@@ -1,0 +1,588 @@
+[
+  {
+    "name": "normal-fast",
+    "exitCode": 0,
+    "command": [
+      "/Library/Frameworks/Python.framework/Versions/3.14/bin/python3",
+      "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/session-handoff/run.py",
+      "--build",
+      "/private/tmp/myterm-166-final-20261116",
+      "--output",
+      "/private/tmp/myterm-166-followups-19/normal-fast",
+      "--cycles",
+      "0",
+      "--seconds",
+      "60",
+      "--rate",
+      "102400",
+      "--policy",
+      "continuous"
+    ],
+    "summary": {
+      "completed": true,
+      "run": "/private/tmp/myterm-166-followups-19/normal-fast",
+      "cycles": 0,
+      "regressionChecks": [
+        "selection/subscription does not acquire control",
+        "stale synchronization acknowledgements cannot reopen input",
+        "accepted controller input reaches the real PTY",
+        "stale takeover and viewer input rejected",
+        "0 competing takeovers have exactly one winner",
+        "0 displaced input and away/back stale revision checks",
+        "0 subscription switches preserve ownership",
+        "0 rejected TLS candidates leave prior channel usable",
+        "0 TLS replacements resume synchronized PTY input",
+        "0 disconnected owners can be displaced without stopping processes",
+        "explicit release leaves everyone viewing",
+        "native client process restart preserves controller revision and the real PTY process"
+      ],
+      "controlTimingScope": "idle two-request competition round trip; excludes cached visible rendering",
+      "latency": {
+        "takeoverMs": {
+          "samples": 0,
+          "p95": null
+        },
+        "switchSyncMs": {
+          "samples": 0,
+          "p95": null
+        },
+        "replacementSyncMs": {
+          "samples": 0,
+          "p95": null
+        }
+      },
+      "unmeasured": [
+        "visible cached display latency",
+        "production security integration",
+        "multi-Mac network",
+        "mobile clients"
+      ],
+      "load": {
+        "seconds": 60,
+        "policy": "continuous",
+        "requestedRate": 102400,
+        "measuredRates": {
+          "a:0": {
+            "bytesPerSecond": 102467.96668457502,
+            "requestedRatio": 1.000663737154053
+          },
+          "a:1": {
+            "bytesPerSecond": 102399.86911344122,
+            "requestedRatio": 0.9999987218109494
+          },
+          "b:0": {
+            "bytesPerSecond": 102407.53406492299,
+            "requestedRatio": 1.0000735748527636
+          },
+          "b:1": {
+            "bytesPerSecond": 102400.32097739322,
+            "requestedRatio": 1.0000031345448557
+          }
+        },
+        "rateWithinFivePercent": true,
+        "resources": {
+          "29662": {
+            "role": "server:a",
+            "averageCpuPercent": 1.857662913701193,
+            "finalRssMiB": 6.421875
+          },
+          "29665": {
+            "role": "server:b",
+            "averageCpuPercent": 1.824191509850721,
+            "finalRssMiB": 5.828125
+          },
+          "29673": {
+            "role": "client:two",
+            "averageCpuPercent": 4.468432414038005,
+            "finalRssMiB": 37.96875
+          },
+          "29675": {
+            "role": "client:one",
+            "averageCpuPercent": 4.535375221738948,
+            "finalRssMiB": 38.046875
+          },
+          "29663": {
+            "role": "pty:a:0",
+            "averageCpuPercent": 0.25103552887853964,
+            "finalRssMiB": 16.0625
+          },
+          "29664": {
+            "role": "pty:a:1",
+            "averageCpuPercent": 0.23429982695330362,
+            "finalRssMiB": 16.0
+          },
+          "29666": {
+            "role": "pty:b:0",
+            "averageCpuPercent": 0.23429982695330362,
+            "finalRssMiB": 16.0
+          },
+          "29667": {
+            "role": "pty:b:1",
+            "averageCpuPercent": 0.23429982695330362,
+            "finalRssMiB": 16.0
+          }
+        },
+        "queueHighWaterBytes": 30673,
+        "configuredQueueBytes": 1048576,
+        "resyncs": {
+          "a": 0,
+          "b": 0
+        },
+        "wireBytes": 74159484,
+        "echoP95Ms": 4.657584,
+        "echoSamples": 181,
+        "finalNativeParityAsserted": true
+      }
+    }
+  },
+  {
+    "name": "normal-slow",
+    "exitCode": 0,
+    "command": [
+      "/Library/Frameworks/Python.framework/Versions/3.14/bin/python3",
+      "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/session-handoff/run.py",
+      "--build",
+      "/private/tmp/myterm-166-final-20261116",
+      "--output",
+      "/private/tmp/myterm-166-followups-19/normal-slow",
+      "--cycles",
+      "0",
+      "--seconds",
+      "120",
+      "--rate",
+      "102400",
+      "--policy",
+      "continuous",
+      "--slow-seconds",
+      "30"
+    ],
+    "summary": {
+      "completed": true,
+      "run": "/private/tmp/myterm-166-followups-19/normal-slow",
+      "cycles": 0,
+      "regressionChecks": [
+        "selection/subscription does not acquire control",
+        "stale synchronization acknowledgements cannot reopen input",
+        "accepted controller input reaches the real PTY",
+        "stale takeover and viewer input rejected",
+        "0 competing takeovers have exactly one winner",
+        "0 displaced input and away/back stale revision checks",
+        "0 subscription switches preserve ownership",
+        "0 rejected TLS candidates leave prior channel usable",
+        "0 TLS replacements resume synchronized PTY input",
+        "0 disconnected owners can be displaced without stopping processes",
+        "explicit release leaves everyone viewing",
+        "native client process restart preserves controller revision and the real PTY process"
+      ],
+      "controlTimingScope": "idle two-request competition round trip; excludes cached visible rendering",
+      "latency": {
+        "takeoverMs": {
+          "samples": 0,
+          "p95": null
+        },
+        "switchSyncMs": {
+          "samples": 0,
+          "p95": null
+        },
+        "replacementSyncMs": {
+          "samples": 0,
+          "p95": null
+        }
+      },
+      "unmeasured": [
+        "visible cached display latency",
+        "production security integration",
+        "multi-Mac network",
+        "mobile clients"
+      ],
+      "load": {
+        "seconds": 120,
+        "policy": "continuous",
+        "requestedRate": 102400,
+        "measuredRates": {
+          "a:0": {
+            "bytesPerSecond": 102462.10242100367,
+            "requestedRatio": 1.000606468955114
+          },
+          "a:1": {
+            "bytesPerSecond": 102399.74768935466,
+            "requestedRatio": 0.9999975360288541
+          },
+          "b:0": {
+            "bytesPerSecond": 102406.08658663306,
+            "requestedRatio": 1.0000594393225883
+          },
+          "b:1": {
+            "bytesPerSecond": 102406.27008102795,
+            "requestedRatio": 1.0000612312600385
+          }
+        },
+        "rateWithinFivePercent": true,
+        "resources": {
+          "40295": {
+            "role": "server:a",
+            "averageCpuPercent": 1.918350492144744,
+            "finalRssMiB": 12.5625,
+            "growthAfterWarmupMiB": 0.59375,
+            "within32MiB": true
+          },
+          "40298": {
+            "role": "server:b",
+            "averageCpuPercent": 1.8849878748900526,
+            "finalRssMiB": 5.796875,
+            "growthAfterWarmupMiB": 0.0,
+            "within32MiB": true
+          },
+          "40334": {
+            "role": "client:two",
+            "averageCpuPercent": 4.161986502522726,
+            "finalRssMiB": 42.296875,
+            "growthAfterWarmupMiB": 4.4375,
+            "within32MiB": true
+          },
+          "40373": {
+            "role": "client:one",
+            "averageCpuPercent": 4.695788378597785,
+            "finalRssMiB": 37.921875,
+            "growthAfterWarmupMiB": 0.015625,
+            "within32MiB": true
+          },
+          "40296": {
+            "role": "pty:a:0",
+            "averageCpuPercent": 0.26690093803752957,
+            "finalRssMiB": 16.109375,
+            "growthAfterWarmupMiB": 0.046875,
+            "within32MiB": true
+          },
+          "40297": {
+            "role": "pty:a:1",
+            "averageCpuPercent": 0.24187897509651116,
+            "finalRssMiB": 15.984375,
+            "growthAfterWarmupMiB": 0.0,
+            "within32MiB": true
+          },
+          "40299": {
+            "role": "pty:b:0",
+            "averageCpuPercent": 0.25021962941018394,
+            "finalRssMiB": 16.015625,
+            "growthAfterWarmupMiB": 0.0,
+            "within32MiB": true
+          },
+          "40300": {
+            "role": "pty:b:1",
+            "averageCpuPercent": 0.24187897509651116,
+            "finalRssMiB": 16.0,
+            "growthAfterWarmupMiB": 0.0,
+            "within32MiB": true
+          }
+        },
+        "queueHighWaterBytes": 1032159,
+        "configuredQueueBytes": 1048576,
+        "resyncs": {
+          "a": 2,
+          "b": 0
+        },
+        "wireBytes": 140867763,
+        "echoP95Ms": 4.656334,
+        "echoSamples": 361,
+        "finalNativeParityAsserted": true
+      }
+    }
+  },
+  {
+    "name": "queue-4m",
+    "exitCode": 0,
+    "command": [
+      "/Library/Frameworks/Python.framework/Versions/3.14/bin/python3",
+      "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/session-handoff/run.py",
+      "--build",
+      "/private/tmp/myterm-166-final-20261116",
+      "--output",
+      "/private/tmp/myterm-166-followups-19/queue-4m",
+      "--cycles",
+      "0",
+      "--seconds",
+      "45",
+      "--rate",
+      "1048576",
+      "--policy",
+      "continuous",
+      "--slow-seconds",
+      "30",
+      "--queue",
+      "4194304"
+    ],
+    "summary": {
+      "completed": true,
+      "run": "/private/tmp/myterm-166-followups-19/queue-4m",
+      "cycles": 0,
+      "regressionChecks": [
+        "selection/subscription does not acquire control",
+        "stale synchronization acknowledgements cannot reopen input",
+        "accepted controller input reaches the real PTY",
+        "stale takeover and viewer input rejected",
+        "0 competing takeovers have exactly one winner",
+        "0 displaced input and away/back stale revision checks",
+        "0 subscription switches preserve ownership",
+        "0 rejected TLS candidates leave prior channel usable",
+        "0 TLS replacements resume synchronized PTY input",
+        "0 disconnected owners can be displaced without stopping processes",
+        "explicit release leaves everyone viewing",
+        "native client process restart preserves controller revision and the real PTY process"
+      ],
+      "controlTimingScope": "idle two-request competition round trip; excludes cached visible rendering",
+      "latency": {
+        "takeoverMs": {
+          "samples": 0,
+          "p95": null
+        },
+        "switchSyncMs": {
+          "samples": 0,
+          "p95": null
+        },
+        "replacementSyncMs": {
+          "samples": 0,
+          "p95": null
+        }
+      },
+      "unmeasured": [
+        "visible cached display latency",
+        "production security integration",
+        "multi-Mac network",
+        "mobile clients"
+      ],
+      "load": {
+        "seconds": 45,
+        "policy": "continuous",
+        "requestedRate": 1048576,
+        "measuredRates": {
+          "a:0": {
+            "bytesPerSecond": 1048699.8177756234,
+            "requestedRatio": 1.0001180818325266
+          },
+          "a:1": {
+            "bytesPerSecond": 1048373.7091529341,
+            "requestedRatio": 0.9998070804147092
+          },
+          "b:0": {
+            "bytesPerSecond": 1048666.7255309043,
+            "requestedRatio": 1.0000865226086657
+          },
+          "b:1": {
+            "bytesPerSecond": 1048598.5035622579,
+            "requestedRatio": 1.000021461069353
+          }
+        },
+        "rateWithinFivePercent": true,
+        "resources": {
+          "61133": {
+            "role": "server:a",
+            "averageCpuPercent": 8.463375171749776,
+            "finalRssMiB": 19.859375
+          },
+          "61136": {
+            "role": "server:b",
+            "averageCpuPercent": 8.39620552752954,
+            "finalRssMiB": 5.96875
+          },
+          "61163": {
+            "role": "client:two",
+            "averageCpuPercent": 14.486253270164301,
+            "finalRssMiB": 42.34375
+          },
+          "61232": {
+            "role": "client:one",
+            "averageCpuPercent": 20.82258970827326,
+            "finalRssMiB": 38.328125
+          },
+          "61134": {
+            "role": "pty:a:0",
+            "averageCpuPercent": 0.5373571537618906,
+            "finalRssMiB": 16.09375
+          },
+          "61135": {
+            "role": "pty:a:1",
+            "averageCpuPercent": 0.5149672723551452,
+            "finalRssMiB": 16.078125
+          },
+          "61137": {
+            "role": "pty:b:0",
+            "averageCpuPercent": 0.5373571537618906,
+            "finalRssMiB": 16.109375
+          },
+          "61138": {
+            "role": "pty:b:1",
+            "averageCpuPercent": 0.5149672723551452,
+            "finalRssMiB": 16.078125
+          }
+        },
+        "queueHighWaterBytes": 4177913,
+        "configuredQueueBytes": 4194304,
+        "resyncs": {
+          "a": 23,
+          "b": 0
+        },
+        "wireBytes": 452790336,
+        "echoP95Ms": 7.312917,
+        "echoSamples": 135,
+        "finalNativeParityAsserted": true
+      }
+    }
+  },
+  {
+    "name": "stress",
+    "exitCode": 0,
+    "command": [
+      "/Library/Frameworks/Python.framework/Versions/3.14/bin/python3",
+      "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/session-handoff/run.py",
+      "--build",
+      "/private/tmp/myterm-166-final-20261116",
+      "--output",
+      "/private/tmp/myterm-166-followups-19/stress",
+      "--cycles",
+      "0",
+      "--seconds",
+      "1800",
+      "--rate",
+      "1048576",
+      "--policy",
+      "visible",
+      "--slow-seconds",
+      "30",
+      "--during-load-cycles",
+      "100"
+    ],
+    "summary": {
+      "completed": true,
+      "run": "/private/tmp/myterm-166-followups-19/stress",
+      "cycles": 0,
+      "regressionChecks": [
+        "selection/subscription does not acquire control",
+        "stale synchronization acknowledgements cannot reopen input",
+        "accepted controller input reaches the real PTY",
+        "stale takeover and viewer input rejected",
+        "0 competing takeovers have exactly one winner",
+        "0 displaced input and away/back stale revision checks",
+        "0 subscription switches preserve ownership",
+        "0 rejected TLS candidates leave prior channel usable",
+        "0 TLS replacements resume synchronized PTY input",
+        "0 disconnected owners can be displaced without stopping processes",
+        "explicit release leaves everyone viewing",
+        "native client process restart preserves controller revision and the real PTY process"
+      ],
+      "controlTimingScope": "idle two-request competition round trip; excludes cached visible rendering",
+      "latency": {
+        "takeoverMs": {
+          "samples": 0,
+          "p95": null
+        },
+        "switchSyncMs": {
+          "samples": 0,
+          "p95": null
+        },
+        "replacementSyncMs": {
+          "samples": 0,
+          "p95": null
+        }
+      },
+      "unmeasured": [
+        "visible cached display latency",
+        "production security integration",
+        "multi-Mac network",
+        "mobile clients"
+      ],
+      "load": {
+        "seconds": 1800,
+        "policy": "visible",
+        "requestedRate": 1048576,
+        "measuredRates": {
+          "a:0": {
+            "bytesPerSecond": 1048593.0130154816,
+            "requestedRatio": 1.0000162248759095
+          },
+          "a:1": {
+            "bytesPerSecond": 1048532.7137580826,
+            "requestedRatio": 0.9999587190228296
+          },
+          "b:0": {
+            "bytesPerSecond": 1048518.1716005997,
+            "requestedRatio": 0.999944850540733
+          },
+          "b:1": {
+            "bytesPerSecond": 1048535.7260819746,
+            "requestedRatio": 0.9999615917987581
+          }
+        },
+        "rateWithinFivePercent": true,
+        "resources": {
+          "69921": {
+            "role": "server:a",
+            "averageCpuPercent": 7.518587095217284,
+            "finalRssMiB": 13.4375,
+            "growthAfterWarmupMiB": 1.1875,
+            "within32MiB": true
+          },
+          "69924": {
+            "role": "server:b",
+            "averageCpuPercent": 7.4513626040829255,
+            "finalRssMiB": 5.984375,
+            "growthAfterWarmupMiB": 0.0,
+            "within32MiB": true
+          },
+          "69935": {
+            "role": "client:two",
+            "averageCpuPercent": 11.077596105190088,
+            "finalRssMiB": 42.015625,
+            "growthAfterWarmupMiB": 3.765625,
+            "within32MiB": true
+          },
+          "69961": {
+            "role": "client:one",
+            "averageCpuPercent": 11.39482903442744,
+            "finalRssMiB": 44.140625,
+            "growthAfterWarmupMiB": 5.921875,
+            "within32MiB": true
+          },
+          "69922": {
+            "role": "pty:a:0",
+            "averageCpuPercent": 0.5427960978369385,
+            "finalRssMiB": 16.734375,
+            "growthAfterWarmupMiB": 0.578125,
+            "within32MiB": true
+          },
+          "69923": {
+            "role": "pty:a:1",
+            "averageCpuPercent": 0.5139062338783705,
+            "finalRssMiB": 16.609375,
+            "growthAfterWarmupMiB": 0.5,
+            "within32MiB": true
+          },
+          "69925": {
+            "role": "pty:b:0",
+            "averageCpuPercent": 0.5294623144714456,
+            "finalRssMiB": 16.671875,
+            "growthAfterWarmupMiB": 0.578125,
+            "within32MiB": true
+          },
+          "69926": {
+            "role": "pty:b:1",
+            "averageCpuPercent": 0.5150173824921617,
+            "finalRssMiB": 16.703125,
+            "growthAfterWarmupMiB": 0.609375,
+            "within32MiB": true
+          }
+        },
+        "queueHighWaterBytes": 1032116,
+        "configuredQueueBytes": 1048576,
+        "resyncs": {
+          "a": 9,
+          "b": 0
+        },
+        "wireBytes": 10957105076,
+        "echoP95Ms": 6.728291,
+        "echoSamples": 5380,
+        "finalNativeParityAsserted": true
+      }
+    }
+  }
+]

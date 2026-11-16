@@ -39,7 +39,7 @@ def summarize(directory):
     for pid, initial in first.items():
         if pid not in last:
             raise RuntimeError("measured process disappeared")
-        item = {"averageCpuPercent": (last[pid]["cpuTimeSeconds"] - initial["cpuTimeSeconds"]) / span * 100,
+        item = {"role": initial.get("role", "unlabelled"), "averageCpuPercent": (last[pid]["cpuTimeSeconds"] - initial["cpuTimeSeconds"]) / span * 100,
                 "finalRssMiB": last[pid]["rssKiB"] / 1024}
         if warm and span >= 60:
             baseline = next(p["rssKiB"] for p in warm["processes"] if p["pid"] == pid)
@@ -55,13 +55,47 @@ def summarize(directory):
         "wireBytes": sum(samples[-1][s]["wireBytes"] - samples[0][s]["wireBytes"] for s in ("a", "b")),
         "echoP95Ms": p95([value["ms"] for value in load["echoMs"]]), "echoSamples": len(load["echoMs"]),
         "finalNativeParityAsserted": result.get("completed") is True and load.get("finalNativeParityAsserted") is True}
+    controls = load.get("loadedControls", [])
+    if controls:
+        summary["load"]["loadedControlTiming"] = {
+            "cycles": len(controls),
+            "takeoverRoundTripP95Ms": p95([value for case in controls for value in case["takeoverRoundTripMs"]]),
+            "subscriptionSwitchSyncP95Ms": p95([case["subscriptionSwitchSyncMs"] for case in controls]),
+            "replacementSyncP95Ms": p95([case["replacementSyncMs"] for case in controls]),
+            "scope": "conservative protocol round trips; cached visible rendering and input latency during the control bursts are unmeasured"}
     return summary
+
+
+def compare_isolation(directory):
+    root = Path(directory)
+    fast_run = json.loads((root / "normal-fast/run.json").read_text())
+    slow_run = json.loads((root / "normal-slow/run.json").read_text())
+    if fast_run["build"]["binaries"] != slow_run["build"]["binaries"]:
+        raise RuntimeError("isolation comparison requires identical native binaries")
+    for field in ("rate", "policy", "queue"):
+        if fast_run["arguments"][field] != slow_run["arguments"][field]:
+            raise RuntimeError(f"isolation comparison requires matching {field}")
+    fast_all = json.loads((root / "normal-fast/results.json").read_text())["load"]["echoMs"]
+    fast = [sample for sample in fast_all if 5 <= sample["at"] < 35]
+    slow = json.loads((root / "normal-slow/results.json").read_text())["load"]["echoMs"]
+    paused = [sample["ms"] for sample in slow if 5 <= sample["at"] < 35]
+    if len(fast) < 30 or len(paused) < 30:
+        raise RuntimeError("insufficient isolation observations")
+    fast_p95, slow_p95 = p95([sample["ms"] for sample in fast]), p95(paused)
+    return {"fastP95Ms": fast_p95, "pausedViewerP95Ms": slow_p95,
+            "fastSamples": len(fast), "pausedViewerSamples": len(paused),
+            "degradationPercent": (slow_p95 / fast_p95 - 1) * 100,
+            "within20PercentPointEstimate": slow_p95 <= 1.2 * fast_p95,
+            "scope": "one paired observation at 100 KiB/s; matching 5–35 second windows; native echo receipt, no visible rendering",
+            "repetitions": 1, "statisticalGuarantee": False}
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", type=Path)
+    parser.add_argument("--isolation", action="store_true")
     args = parser.parse_args()
-    value = summarize(args.directory)
-    (args.directory / "summary.json").write_text(json.dumps(value, indent=2) + "\n")
+    value = compare_isolation(args.directory) if args.isolation else summarize(args.directory)
+    filename = "isolation-comparison.json" if args.isolation else "summary.json"
+    (args.directory / filename).write_text(json.dumps(value, indent=2) + "\n")
     print(json.dumps(value, indent=2))

@@ -1,0 +1,27 @@
+--- baseline/main.swift
++++ pooled/main.swift
+@@ -217,6 +217,7 @@
+         reading = true
+         connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, done, error in
+             DispatchQueue.main.async {
++                autoreleasepool {
+                 self.reading = false
+                 guard !self.closed else { return }
+                 do {
+@@ -239,6 +240,7 @@
+                     if done { self.closed = true; emit(["kind": "closed", "server": self.server]) }
+                     else { self.receive() }
+                 } catch { self.fatal(error) }
++                }
+             }
+         }
+     }
+@@ -616,7 +618,7 @@
+         if pending.count > 131072 { DispatchQueue.main.async { exit(1) }; return }
+         while let end = pending.firstIndex(of: 10) {
+             let line = Data(pending[..<end]); pending.removeSubrange(...end)
+-            DispatchQueue.main.async { driver.handle(line) }
++            DispatchQueue.main.async { autoreleasepool { driver.handle(line) } }
+         }
+     }
+ }

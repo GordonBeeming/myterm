@@ -45,6 +45,14 @@ while True:
                 rate = request["rate"]
                 deadline = time.monotonic()
                 last_output = deadline
+            if "keyboard" in request:
+                # Keep manual key bytes separate from the workload's JSON control records.
+                data = bytes(request["keyboard"])
+                if len(data) > 4096:
+                    raise RuntimeError("keyboard record bound")
+                offset = 0
+                while offset < len(data):
+                    offset += os.write(1, data[offset:])
             if "echo" in request:
                 os.write(1, f"ECHO:{request['echo']}:{os.getpid()}\r\n".encode())
             if "size" in request:

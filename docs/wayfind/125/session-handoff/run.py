@@ -3,6 +3,7 @@ import argparse
 from collections import deque
 import base64
 import datetime
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -125,11 +126,12 @@ class Client:
 
 
 class Experiment:
-    def __init__(self, build, out, bound):
+    def __init__(self, build, out, bound, client_factory=Client):
         self.build, self.out, self.bound = build, out, bound
         self.servers = {}
         self.logs = []
         self.clients = []
+        self.client_factory = client_factory
         self.keys = {name: secrets.token_hex(32) for name in ["one", "two"]}
         try:
             self.start()
@@ -153,7 +155,7 @@ class Experiment:
             boot = json.loads(ready.get(timeout=15))
             self.servers[name] = (process, boot)
         for name in ["one", "two"]:
-            client = Client(build / "client", name, out)
+            client = self.client_factory(build / "client", name, out)
             self.clients.append(client)
             for server in self.servers:
                 self.connect(client, server, 0)
@@ -206,17 +208,20 @@ class Experiment:
     def metrics(self):
         result = {}
         pids = [c.process.pid for c in self.clients]
+        roles = {c.process.pid: f"client:{c.name}" for c in self.clients}
         for server, (process, boot) in self.servers.items():
             if process.poll() is not None:
                 raise RuntimeError(f"server {server} exited {process.returncode}")
             pids += [process.pid, *boot["pids"]]
+            roles[process.pid] = f"server:{server}"
+            roles.update({pid: f"pty:{server}:{index}" for index, pid in enumerate(boot["pids"])})
             result[server] = self.clients[0].call("status", server)
         listing = subprocess.check_output(["ps", "-o", "pid=,rss=,time=", "-p", ",".join(map(str, pids))], text=True)
         result["processes"] = []
         for line in listing.splitlines():
             pid, rss, cpu_time = line.split()
             seconds = sum(float(part) * 60 ** index for index, part in enumerate(reversed(cpu_time.split(":"))))
-            result["processes"].append({"pid": int(pid), "rssKiB": int(rss), "cpuTimeSeconds": seconds})
+            result["processes"].append({"pid": int(pid), "role": roles[int(pid)], "rssKiB": int(rss), "cpuTimeSeconds": seconds})
         return result
 
     def close(self):
@@ -317,6 +322,8 @@ def regression(exp, cycles):
         # Disconnect does not release ownership; viewers can explicitly take it while absent.
         generation = owner.call("inspect", session=0)["generation"]
         owner.call("disconnect")
+        owner.call("input", session=0, revision=owned["revision"], data=raw, accepted=False,
+                   error="channel disconnected")
         viewer_state = viewer.call("status")["sessions"][0]
         assert viewer_state["owner"] == owner.name
         exp.take(viewer)
@@ -337,6 +344,27 @@ def regression(exp, cycles):
     owner.call("release", session=0, revision=state["revision"])
     assert exp.state()["owner"] is None
     checked("explicit release leaves everyone viewing")
+    # Reusing the run's approved endpoint identity tests ownership independently of the client process.
+    exp.take(one)
+    exp.input(one, echo="before-client-process-restart")
+    exp.wait_echo(one, "before-client-process-restart")
+    generations = {server: one.call("inspect", server, session=0)["generation"] for server in exp.servers}
+    before_restart = exp.state()
+    one.close()
+    assert two.call("status")["sessions"][0]["owner"] == "one"
+    restart_logs = exp.out / "client-restart"; restart_logs.mkdir()
+    one = exp.client_factory(exp.build / "client", "one", restart_logs)
+    exp.clients[0] = one
+    for server, generation in generations.items():
+        exp.connect(one, server, generation)
+        for sid in (0, 1):
+            one.subscribe(server, sid)
+    after_restart = exp.state()
+    assert (after_restart["owner"], after_restart["revision"]) == (before_restart["owner"], before_restart["revision"])
+    exp.input(one, echo="after-client-process-restart")
+    exp.wait_echo(one, "after-client-process-restart")
+    exp.check_pids()
+    checked("native client process restart preserves controller revision and the real PTY process")
     return {"checks": checks, "cycles": cycles,
             "takeoverMs": takeover_times, "switchSyncMs": switch_times,
             "replacementSyncMs": replacement_times}
@@ -370,22 +398,34 @@ def load(exp, seconds, rate, policy, slow_seconds, during_load_cycles=0):
             two.call("pause", paused=False); resumed = True
         if during_load_cycles and elapsed >= 40 + len(controls) * max(1, (seconds - 60) / during_load_cycles) and len(controls) < during_load_cycles:
             begin = time.perf_counter()
-            exp.take(two)
+            take_state = exp.state()
+            take_begin = time.perf_counter()
+            exp.take(two, expected=take_state)
+            takeover_times = [(time.perf_counter() - take_begin) * 1000]
             exp.input(one, accepted=False, echo="stress-displaced-input")
-            exp.take(one)
+            take_state = exp.state()
+            take_begin = time.perf_counter()
+            exp.take(one, expected=take_state)
+            takeover_times.append((time.perf_counter() - take_begin) * 1000)
+            switch_begin = time.perf_counter()
             one.subscribe("a", 0, False)
             one.subscribe("a", 1)
             one.subscribe("a", 1, policy == "continuous")
             one.subscribe("a", 0)
+            switch_ms = (time.perf_counter() - switch_begin) * 1000
             generation = one.call("inspect", session=0)["generation"]
             exp.connect(one, "a", generation, action="candidate", valid=False)
             exp.connect(one, "a", generation, action="candidate", valid=True)
+            replacement_begin = time.perf_counter()
             exp.connect(one, "a", generation)
             one.subscribe("a", 0)
             if policy == "continuous":
                 one.subscribe("a", 1)
             exp.check_pids()
-            controls.append({"at": elapsed, "ms": (time.perf_counter() - begin) * 1000})
+            replacement_ms = (time.perf_counter() - replacement_begin) * 1000
+            controls.append({"at": elapsed, "ms": (time.perf_counter() - begin) * 1000,
+                             "takeoverRoundTripMs": takeover_times, "subscriptionSwitchSyncMs": switch_ms,
+                             "replacementSyncMs": replacement_ms})
             with (exp.out / "loaded-controls.jsonl").open("a") as evidence:
                 evidence.write(json.dumps(controls[-1]) + "\n")
         marker = f"load-{len(echoes)}"
@@ -462,6 +502,11 @@ def main():
                 "environment": platform.platform(), "arguments": {k: str(v) if isinstance(v, Path) else v for k,v in vars(args).items()},
                 "scope": "native Mac PTY + TLS + headless TerminalView; visible UI and production trust unverified"}
     metadata["build"] = json.loads((args.build / "build.json").read_text())
+    metadata["runtimeSources"] = {name: hashlib.sha256((HERE / name).read_bytes()).hexdigest()
+                                  for name in ("run.py", "workload.py")}
+    metadata["logicalCpuCount"] = os.cpu_count()
+    metadata["hardwareModel"] = subprocess.check_output(["sysctl", "-n", "hw.model"], text=True).strip()
+    metadata["memoryBytes"] = int(subprocess.check_output(["sysctl", "-n", "hw.memsize"], text=True))
     (out / "run.json").write_text(json.dumps(metadata, indent=2) + "\n")
     experiment = None
     try:
