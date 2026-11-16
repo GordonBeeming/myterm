@@ -2,12 +2,13 @@
 """Disposable loopback routing experiment; no production MyTerm integration."""
 import argparse
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
 import platform
+import secrets
 import ssl
 import subprocess
 import tempfile
@@ -33,11 +34,14 @@ class Connection:
     writer: asyncio.StreamWriter
     ready: dict
     elapsed_ms: float
+    health_checks: int = 0
+    last_health: float = 0
+    health_id: str = field(default_factory=lambda: secrets.token_hex(16))
 
-    async def request(self, action, **fields):
+    async def request(self, action, *, timeout=1, **fields):
         self.writer.write(json.dumps({"action": action, **fields}).encode() + b"\n")
         await self.writer.drain()
-        line = await asyncio.wait_for(self.reader.readline(), 1)
+        line = await asyncio.wait_for(self.reader.readline(), timeout)
         if not line:
             raise ConnectionError("route closed")
         return json.loads(line)
@@ -48,6 +52,20 @@ class Connection:
             await self.writer.wait_closed()
         except (ConnectionError, ssl.SSLError):
             pass  # A deliberately broken fixture route can fail TLS shutdown.
+
+
+async def watch_active_connection(connection, budget=5, interval=1):
+    """Single-request fixture watchdog; callers serialize their application RPCs."""
+    confirmed = time.monotonic()
+    while True:
+        async with asyncio.timeout_at(confirmed + budget):
+            await asyncio.sleep(interval)
+            reply = await connection.request("health", timeout=budget, probe=connection.health_id)
+            if reply != {"healthy": True}:
+                raise ConnectionError("invalid selected-connection health response")
+        confirmed = time.monotonic()
+        connection.last_health = confirmed
+        connection.health_checks += 1
 
 
 class Fixture:
@@ -63,6 +81,7 @@ class Fixture:
         self.session = "disposable-session"
         self.transport_failures = []
         self.shell = None
+        self.suppress_health = set()
 
     async def start(self):
         certs = {name: certificate(self.root, name) for name in ("server", "client-a", "client-b", "rogue")}
@@ -123,6 +142,12 @@ class Fixture:
                 if request["action"] == "attach":
                     await asyncio.sleep(self.delays.get(route, 0))
                     reply = {"session": self.session, "pid": self.shell.pid, "controller": self.controller}
+                elif request["action"] == "health":
+                    if request.get("probe") in self.suppress_health:
+                        # Suppress only the response, retaining the TCP/TLS connection.
+                        await reader.read()
+                        return
+                    reply = {"healthy": True}
                 elif request["action"] == "write" and client == self.controller:
                     text = request["text"]
                     if "\n" in text or len(text) > 1000:
@@ -223,10 +248,12 @@ class Selector:
         self.fixture = fixture
         self.cache = {}
 
-    async def select(self, network, mode="automatic", direct=True, relay=True, local=True, refresh=False):
+    async def select(self, network, mode="automatic", direct=True, relay=True, local=True, refresh=False, failed_route=None):
         permitted = (["local"] if local and mode != "relay" else [])
         permitted += ["direct"] if direct and mode != "relay" else []
         permitted += ["relay"] if relay and mode != "direct" else []
+        if failed_route in permitted:
+            permitted.remove(failed_route)
         key = (network, mode)
         cached = self.cache.get(key)
         if cached in permitted and not refresh:
@@ -361,6 +388,33 @@ async def run(output):
             reply = await viewer.request("write", text="forbidden")
             check("fixture viewer input rejected through relay", reply == {"error": "viewer", "controller": "client-a"} and viewer.ready["pid"] == original["pid"])
             await viewer.close()
+            monitored = await selector.select("health-checks", local=False)
+            attempts_before = dict(fixture.attempts)
+            watchdog = asyncio.create_task(watch_active_connection(monitored))
+            try:
+                async with asyncio.timeout(4):
+                    while monitored.health_checks < 2:
+                        await asyncio.sleep(0.01)
+                check("fixture watchdog healthy checks do not dial candidate routes", fixture.attempts == attempts_before)
+                confirmed = monitored.last_health
+                fixture.suppress_health.add(monitored.health_id)
+                try:
+                    await asyncio.wait_for(watchdog, 6)
+                    detected = False
+                except TimeoutError:
+                    detected = watchdog.done() and not watchdog.cancelled()
+                elapsed = (time.monotonic() - confirmed)*1000
+                check("suppressed health response detected at five-second target", detected and 4800 <= elapsed < 5500, elapsed_ms=elapsed, configured_ms=5000)
+                check("fixture watchdog does not dial candidate routes during suppressed response", fixture.attempts == attempts_before)
+            finally:
+                watchdog.cancel()
+                await asyncio.gather(watchdog, return_exceptions=True)
+                await monitored.close()
+                fixture.suppress_health.discard(monitored.health_id)
+            recovered = await selector.select("health-checks", failed_route=monitored.route)
+            response = await recovered.request("write", text="after-silent-failure")
+            check("post-detection recovery excludes failed route and preserves shell counter", recovered.route != monitored.route and recovered.ready == original and response["output"] == f"{original['pid']}:3:after-silent-failure")
+            await recovered.close()
             fixture.delays["local"] = 2
             started = time.perf_counter()
             try:
@@ -388,7 +442,7 @@ async def run(output):
                 "completed": completed,
                 "cleanup_error": type(cleanup_error).__name__ if cleanup_error else None,
                 "environment": {"system": platform.system(), "machine": platform.machine(), "python": platform.python_version(), "tls": ssl.OPENSSL_VERSION},
-                "scope": "Loopback Python TLS 1.3 sockets, Unix socket, opaque TCP forwarding fixture and real shell with pipes; no PTY, SwiftTerm, native application, hosted relay, real network change, enrollment or Azure validation.",
+                "scope": "Loopback Python TLS 1.3 sockets, Unix socket, opaque TCP forwarding fixture and real shell with pipes. Health and application RPCs are serialized; no production multiplexing or automatic recovery coordinator is implemented. No PTY, SwiftTerm, native application, hosted relay, real network change, enrollment or Azure validation.",
                 "checks": checks,
             }, indent=2) + "\n")
     if cleanup_error:

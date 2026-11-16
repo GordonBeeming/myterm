@@ -1,5 +1,5 @@
 {
-  "recorded_at": "2026-11-16T05:12:34.378611+00:00",
+  "recorded_at": "2026-11-16T08:13:31.059229+00:00",
   "completed": true,
   "cleanup_error": null,
   "environment": {
@@ -8,12 +8,12 @@
     "python": "3.14.3",
     "tls": "OpenSSL 3.0.18 30 Sep 2025"
   },
-  "scope": "Loopback Python TLS 1.3 sockets, Unix socket, opaque TCP forwarding fixture and real shell with pipes; no PTY, SwiftTerm, native application, hosted relay, real network change, enrollment or Azure validation.",
+  "scope": "Loopback Python TLS 1.3 sockets, Unix socket, opaque TCP forwarding fixture and real shell with pipes. Health and application RPCs are serialized; no production multiplexing or automatic recovery coordinator is implemented. No PTY, SwiftTerm, native application, hosted relay, real network change, enrollment or Azure validation.",
   "checks": [
     {
       "name": "first authenticated attach-ready route wins",
       "passed": true,
-      "elapsed_ms": 16.692500037606806
+      "elapsed_ms": 16.03562501259148
     },
     {
       "name": "fixture shell increments counter before route change",
@@ -26,7 +26,7 @@
     {
       "name": "Settings refresh reraces permitted routes",
       "passed": true,
-      "elapsed_ms": 64.49520797468722
+      "elapsed_ms": 64.65133401798084
     },
     {
       "name": "network context has its own route choice",
@@ -39,8 +39,8 @@
     {
       "name": "fixture shell PID and counter survive socket replacement",
       "passed": true,
-      "elapsed_ms": 13.494250015355647,
-      "pid": 15175
+      "elapsed_ms": 15.31170797534287,
+      "pid": 98682
     },
     {
       "name": "failed Direct only never attempts relay",
@@ -53,7 +53,7 @@
     {
       "name": "Relay only excludes local and direct candidates",
       "passed": true,
-      "elapsed_ms": 185.1123750093393
+      "elapsed_ms": 186.31212500622496
     },
     {
       "name": "relay transport reaches same server identity and shell",
@@ -88,9 +88,27 @@
       "passed": true
     },
     {
+      "name": "fixture watchdog healthy checks do not dial candidate routes",
+      "passed": true
+    },
+    {
+      "name": "suppressed health response detected at five-second target",
+      "passed": true,
+      "elapsed_ms": 5001.102083013393,
+      "configured_ms": 5000
+    },
+    {
+      "name": "fixture watchdog does not dial candidate routes during suppressed response",
+      "passed": true
+    },
+    {
+      "name": "post-detection recovery excludes failed route and preserves shell counter",
+      "passed": true
+    },
+    {
       "name": "route deadline includes application attach readiness",
       "passed": true,
-      "elapsed_ms": 81.18662500055507,
+      "elapsed_ms": 81.11904101679102,
       "configured_ms": 80
     },
     {

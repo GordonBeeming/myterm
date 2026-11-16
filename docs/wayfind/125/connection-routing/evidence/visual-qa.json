@@ -4,7 +4,7 @@
     {
       "viewport": [
         1920,
-        1080
+        842
       ],
       "horizontalOverflow": false,
       "mojibake": false,
@@ -26,12 +26,18 @@
           "passed": true
         },
         {
+          "scenario": "Silent failure",
+          "passed": true
+        },
+        {
           "scenario": "Viewer continuity",
           "passed": true
         }
       ],
-      "evidenceChecks": 21,
-      "evidenceCompleted": true
+      "silentFailureWaitsForDeadline": true,
+      "evidenceChecks": 25,
+      "evidenceCompleted": true,
+      "comparisonImagesLoaded": true
     },
     {
       "viewport": [
@@ -58,13 +64,19 @@
           "passed": true
         },
         {
+          "scenario": "Silent failure",
+          "passed": true
+        },
+        {
           "scenario": "Viewer continuity",
           "passed": true
         }
       ],
-      "evidenceChecks": 21,
-      "evidenceCompleted": true
+      "silentFailureWaitsForDeadline": true,
+      "evidenceChecks": 25,
+      "evidenceCompleted": true,
+      "comparisonImagesLoaded": true
     }
   ],
-  "manualInspection": "Desktop and phone screenshots inspected; no clipping found. Six text/background contrast pairs checked, minimum 5.36:1."
+  "manualInspection": "Before/after desktop and phone screenshots inspected. Six text/background contrast pairs unchanged, minimum 5.36:1. Desktop height was capped by the display; actual viewport recorded above."
 }
