@@ -1,0 +1,78 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MyTerm connection routing experiment</title>
+<style>
+:root{--bg:#f8fafc;--surface:#fff;--surface-2:#f1f5f9;--text:#0f172a;--muted:#475569;--accent:#0e7490;--accent-soft:#ecfeff;--border:#e2e8f0;--font: 'Space Grotesk',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 var(--font)}main{max-width:1300px;margin:auto;padding:36px 28px}h1{font-size:36px;line-height:1.15;margin:8px 0 16px}h2{font-size:22px;margin:0 0 12px}h3{font-size:17px;margin:14px 0 8px}p{max-width:95ch;margin:8px 0 18px}.muted{color:var(--muted)}.tag{color:#155e75;background:var(--accent-soft);display:inline-block;padding:4px 10px;border-radius:5px;font-size:14px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin:24px 0}.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px;min-width:0}.wide{grid-column:1/-1}button,select{font:inherit;background:var(--surface);color:var(--text);border:1px solid var(--accent);border-radius:6px;padding:8px 12px;margin:3px 4px 3px 0;cursor:pointer}button:hover,button[aria-selected=true]{background:var(--accent);color:white}button:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:3px}button:disabled{cursor:default;opacity:.6}.primary{background:var(--accent);color:white}.state{display:grid;grid-template-columns:minmax(120px,1fr) 2fr;gap:10px 16px;margin:18px 0}.state dt{color:var(--muted)}.state dd{margin:0;overflow-wrap:anywhere}pre{background:var(--surface-2);padding:14px;border-radius:6px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}ul{padding-left:22px}.log{max-height:180px;overflow:auto;font-size:14px}table{width:100%;border-collapse:collapse;font-size:14px}td,th{text-align:left;padding:9px;border-bottom:1px solid var(--border);overflow-wrap:anywhere}a{color:var(--accent)}.controls{display:flex;flex-wrap:wrap;align-items:center;gap:7px}.notice{border-left:4px solid var(--accent);padding-left:16px}.pass{color:#155e75}footer{font-size:14px;color:var(--muted);margin-top:24px}@media(max-width:700px){main{padding:22px 14px}h1{font-size:29px}.grid{grid-template-columns:minmax(0,1fr)}.card{padding:16px}.state{grid-template-columns:1fr 1.5fr}}
+</style>
+<main>
+<span class="tag">Throwaway routing prototype · Mac basics</span>
+<h1>Keep the session. Change the path.</h1>
+<p>Explore the proposed rules for selecting an authenticated, attach-ready route and keeping session ownership through a path change. The simulation makes those rules visible; the separate socket results show what was measured locally.</p>
+<p class="notice">The buttons drive an in-memory simulation. The socket probe uses real TLS connections and a real shell on one Mac. Native app integration, SwiftTerm, hosted relay, enrollment and Azure validation remain outstanding.</p>
+<div class="grid">
+<section class="card wide"><h2>Guided scenarios</h2><div id="tabs" role="tablist" aria-label="Routing scenarios"></div><p id="description"></p><div id="steps"></div></section>
+<section class="card"><h2>Simulated session</h2><dl class="state" id="state"></dl><h3>Actions</h3><div class="controls"><button data-action="race">Connect / refresh</button><button data-action="fail">Break selected route</button><button data-action="network">Change network</button><button data-action="relay-off">Disable relay</button><button data-action="rogue">Wrong direct identity</button><button data-action="viewer">Become viewer</button><button data-action="direct-down">Direct unavailable</button><button data-action="reset">Reset</button></div><p><label for="mode">Connection mode </label><select id="mode"><option value="automatic">Automatic</option><option value="direct">Direct only</option><option value="relay">Relay only</option></select></p></section>
+<section class="card"><h2>Route readiness fixtures</h2><p class="muted">These timings are illustrative. Readiness includes identity authentication and the session attach response.</p><table><thead><tr><th>Route</th><th>Ready after</th><th>Identity / availability</th></tr></thead><tbody id="routes"></tbody></table><h3>What happened</h3><ol id="log" class="log" aria-live="polite"></ol><p class="muted">A working route stays selected. Only failure, network changes, mode or permission changes, and refresh rerun selection.</p></section>
+<section class="card wide"><h2>Measured socket evidence</h2><p id="summary"></p><p class="muted">One-Mac loopback measurements include intentional readiness delays. They cannot set Wi-Fi, VPN or hosted relay performance budgets. The shell uses pipes; PTY fidelity and terminal replay are outside this probe.</p><table><thead><tr><th>Executed check</th><th>Result</th><th>Measurement</th></tr></thead><tbody id="evidence"></tbody></table></section>
+</div>
+<footer>Azure VM scale-set startup is deferred. No shared service was deployed. The chosen UI remains the quiet pane-local design from <a href="https://github.com/GordonBeeming/myterm/issues/157">Prototype mixed-server connection and close states</a>.</footer>
+</main>
+<script id="measurements" type="application/json">{"recorded_at": "2026-11-16T05:12:34.378611+00:00", "completed": true, "cleanup_error": null, "environment": {"system": "Darwin", "machine": "arm64", "python": "3.14.3", "tls": "OpenSSL 3.0.18 30 Sep 2025"}, "scope": "Loopback Python TLS 1.3 sockets, Unix socket, opaque TCP forwarding fixture and real shell with pipes; no PTY, SwiftTerm, native application, hosted relay, real network change, enrollment or Azure validation.", "checks": [{"name": "first authenticated attach-ready route wins", "passed": true, "elapsed_ms": 16.692500037606806}, {"name": "fixture shell increments counter before route change", "passed": true}, {"name": "remembered route does not race alternatives", "passed": true}, {"name": "Settings refresh reraces permitted routes", "passed": true, "elapsed_ms": 64.49520797468722}, {"name": "network context has its own route choice", "passed": true}, {"name": "RPC on retained socket starts no route attempts", "passed": true}, {"name": "fixture shell PID and counter survive socket replacement", "passed": true, "elapsed_ms": 13.494250015355647, "pid": 15175}, {"name": "failed Direct only never attempts relay", "passed": true}, {"name": "Direct only permits same-machine local and no relay", "passed": true}, {"name": "Relay only excludes local and direct candidates", "passed": true, "elapsed_ms": 185.1123750093393}, {"name": "relay transport reaches same server identity and shell", "passed": true}, {"name": "disabled relay cannot silently fall back", "passed": true}, {"name": "untrusted server certificate rejected before attach", "passed": true}, {"name": "trusted certificate with wrong identity pin rejected", "passed": true}, {"name": "rogue-client rejected before attach-ready response", "passed": true}, {"name": "missing-client rejected before attach-ready response", "passed": true}, {"name": "fast untrusted candidate attempted but cannot win route race", "passed": true}, {"name": "fixture viewer input rejected through relay", "passed": true}, {"name": "route deadline includes application attach readiness", "passed": true, "elapsed_ms": 81.18662500055507, "configured_ms": 80}, {"name": "fixture owns the original live shell at completion", "passed": true}, {"name": "server-side race losers and timed-out handlers eventually close", "passed": true}]}</script>
+<script>
+// The state model is independent of the page and deliberately uses fixture times.
+const Routing = (() => {
+  const initial = () => ({mode:'automatic',network:1,relay:true,route:null,session:'session-a',process:'original simulated process',controller:'client-a',self:'client-a',attempts:0,routes:{local:{ms:35,up:true,identity:true},direct:{ms:20,up:true,identity:true},relay:{ms:60,up:true,identity:true}},log:[]});
+  const allowed = s => Object.keys(s.routes).filter(r => (s.mode!=='relay'||r==='relay') && (s.mode!=='direct'||r!=='relay') && (r!=='relay'||s.relay));
+  function race(s,why){
+    const candidates=allowed(s);s.attempts+=candidates.length;
+    const ready=candidates.filter(r=>s.routes[r].up&&s.routes[r].identity).sort((a,b)=>s.routes[a].ms-s.routes[b].ms);
+    s.route=ready[0]||null;
+    s.log.push(why+': '+(s.route?'attached through '+s.route+'; model retains session and controller':'no permitted authenticated route is ready'));
+    return s;
+  }
+  function reduce(previous,action){
+    if(action.type==='reset')return initial();
+    const s=JSON.parse(JSON.stringify(previous));
+    if(action.type==='race')return race(s,'Refresh');
+    if(action.type==='fail'){if(s.route)s.routes[s.route].up=false;return race(s,'Selected route failed');}
+    if(action.type==='network'){s.network++;return race(s,'Network changed');}
+    if(action.type==='mode'){s.mode=action.value;return race(s,'Mode changed');}
+    if(action.type==='relay-off'){s.relay=false;if(s.route==='relay')return race(s,'Relay disabled');s.log.push('Relay disabled; no relay candidates permitted');}
+    if(action.type==='rogue'){s.routes.direct.identity=false;return race(s,'Direct identity rejected');}
+    if(action.type==='viewer'){s.controller='client-b';s.log.push('Another client has control; this client remains a viewer through route changes');}
+    if(action.type==='direct-down'){s.routes.direct.up=false;return race(s,'Direct unavailable');}
+    if(action.type==='idle')s.log.push('Working connection retained; no new route attempts');
+    return s;
+  }
+  return {initial,allowed,reduce};
+})();
+const scenarios=[
+ {title:'Automatic recovery',description:'Direct is ready first. Break it and attach through local access. The session and controlling client stay the same.',steps:[['Connect',{type:'race'}],['Break direct',{type:'fail'}],['Keep working',{type:'idle'}]]},
+ {title:'Direct only',description:'Direct only permits local and configured direct access. A failed direct route may use local access, and never uses relay.',steps:[['Choose Direct only',{type:'mode',value:'direct'}],['Break direct',{type:'fail'}],['Break local',{type:'fail'}]]},
+ {title:'Relay only',description:'Relay only excludes local and direct access. Disabling relay leaves this mode disconnected.',steps:[['Choose Relay only',{type:'mode',value:'relay'}],['Disable relay',{type:'relay-off'}]]},
+ {title:'Wrong identity',description:'The configured direct endpoint has the wrong server identity. Its short readiness time cannot make it eligible.',steps:[['Reject direct identity',{type:'rogue'}],['Change network',{type:'network'}]]},
+ {title:'Viewer continuity',description:'Changing route preserves viewer status. Restoring connectivity never grants terminal control.',steps:[['Connect',{type:'race'}],['Another client takes control',{type:'viewer'}],['Break selected route',{type:'fail'}]]}
+];
+let state=Routing.initial(),scenario=0,step=0;
+const $=id=>document.getElementById(id);
+function cell(tag,text){const e=document.createElement(tag);e.textContent=text;return e;}
+function render(){
+  const values=[['Connection mode',state.mode==='direct'?'Direct only':state.mode==='relay'?'Relay only':'Automatic'],['Network context','Fixture network '+state.network],['Selected route',state.route||'Disconnected'],['Server / session','server-a / '+state.session],['Process',state.process],['Controlling client',state.controller],['This client',state.self===state.controller?'Controller':'Viewer'],['Relay access',state.relay?'Enabled':'Disabled'],['Route attempts',state.attempts]];
+  $('state').replaceChildren(...values.flatMap(([k,v])=>[cell('dt',k),cell('dd',String(v))]));
+  $('routes').replaceChildren(...Object.entries(state.routes).map(([name,r])=>{const tr=document.createElement('tr');tr.append(cell('td',name),cell('td',r.ms+' ms'),cell('td',!r.up?'Unavailable':!r.identity?'Wrong identity':Routing.allowed(state).includes(name)?'Permitted':'Excluded by mode / opt-in'));return tr;}));
+  $('log').replaceChildren(...state.log.map(line=>cell('li',line)));
+  $('mode').value=state.mode;
+  $('description').textContent=scenarios[scenario].description;
+  $('tabs').replaceChildren(...scenarios.map((item,index)=>{const button=cell('button',item.title);button.setAttribute('role','tab');button.setAttribute('aria-selected',String(index===scenario));button.onclick=()=>{scenario=index;step=0;state=Routing.initial();render();};return button;}));
+  $('steps').replaceChildren(...scenarios[scenario].steps.map(([label,action],index)=>{const button=cell('button',(index+1)+'. '+label);button.disabled=index!==step;button.onclick=()=>{state=Routing.reduce(state,action);step++;render();};return button;}));
+}
+document.querySelectorAll('[data-action]').forEach(button=>button.onclick=()=>{state=Routing.reduce(state,{type:button.dataset.action});render();});
+$('mode').onchange=event=>{state=Routing.reduce(state,{type:'mode',value:event.target.value});render();};
+const measured=JSON.parse($('measurements').textContent);
+$('summary').textContent=measured.completed?measured.checks.filter(c=>c.passed).length+' / '+measured.checks.length+' checks passed on '+measured.environment.system+' '+measured.environment.machine+'.':'Probe incomplete or not yet run. Run probe.py and embed a completed result before reviewing evidence.';
+$('evidence').replaceChildren(...measured.checks.map(c=>{const tr=document.createElement('tr');tr.append(cell('td',c.name),cell('td',c.passed?'Pass':'Fail'),cell('td',c.elapsed_ms===undefined?'—':c.elapsed_ms.toFixed(2)+' ms'+(c.configured_ms?' (fixture deadline '+c.configured_ms+' ms)':'')));return tr;}));
+render();
+</script>

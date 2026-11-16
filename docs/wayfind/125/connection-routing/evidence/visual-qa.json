@@ -1,0 +1,70 @@
+{
+  "browser": "Browser.app",
+  "pages": [
+    {
+      "viewport": [
+        1920,
+        1080
+      ],
+      "horizontalOverflow": false,
+      "mojibake": false,
+      "scenarios": [
+        {
+          "scenario": "Automatic recovery",
+          "passed": true
+        },
+        {
+          "scenario": "Direct only",
+          "passed": true
+        },
+        {
+          "scenario": "Relay only",
+          "passed": true
+        },
+        {
+          "scenario": "Wrong identity",
+          "passed": true
+        },
+        {
+          "scenario": "Viewer continuity",
+          "passed": true
+        }
+      ],
+      "evidenceChecks": 21,
+      "evidenceCompleted": true
+    },
+    {
+      "viewport": [
+        390,
+        844
+      ],
+      "horizontalOverflow": false,
+      "mojibake": false,
+      "scenarios": [
+        {
+          "scenario": "Automatic recovery",
+          "passed": true
+        },
+        {
+          "scenario": "Direct only",
+          "passed": true
+        },
+        {
+          "scenario": "Relay only",
+          "passed": true
+        },
+        {
+          "scenario": "Wrong identity",
+          "passed": true
+        },
+        {
+          "scenario": "Viewer continuity",
+          "passed": true
+        }
+      ],
+      "evidenceChecks": 21,
+      "evidenceCompleted": true
+    }
+  ],
+  "manualInspection": "Desktop and phone screenshots inspected; no clipping found. Six text/background contrast pairs checked, minimum 5.36:1."
+}

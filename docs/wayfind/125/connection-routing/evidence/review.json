@@ -1,0 +1,9 @@
+{
+  "reviewer": "Claude Sonnet",
+  "mode": "read-only independent review",
+  "verdict": "No remaining substantive findings",
+  "response": "No remaining substantive findings. The four low-severity leftovers are all addressed. I didn't rerun the probe, since this was read-only.\n\n- **Cleanup:** `Fixture.close()` now stops the shell in a `finally` (kill on timeout), even if `wait_closed` times out. `run` catches cleanup errors, sets `completed=False`, records `cleanup_error`, and writes the evidence. It then raises `RuntimeError` from the cleanup error only after the file is written.\n- **Original failure preserved:** if a check failed, it propagates from the inner `try`. The cleanup error is only recorded and raised afterward, so the `RuntimeError` appears as a secondary exception, not a replacement.\n- **Rogue race:** it now asserts `attempts[\"direct\"] == attempts_before + 1`. That rules out the silent-skip case.\n- **Cleanup check:** it is renamed \"server-side race losers and timed-out handlers eventually close\".\n- **README:** it excludes prompt client cancellation.\n- **Walkthrough intro:** it now reads as a visualisation of the proposed rules, with the measured socket results kept separate.\n- **Evidence:** the embedded JSON is identical to `evidence/loopback.json`, with `completed: true`, 21 checks, and `cleanup_error: null`.\n\nOne cosmetic note: the embed instructions' assert doesn't check `cleanup_error`. `completed` is already forced false on a cleanup error, so this is covered.",
+  "started_at": "2026-11-16T05:12:46Z",
+  "ended_at": "2026-11-16T05:13:00Z",
+  "test_execution": "Probe executed by Codex; reviewer inspected code and evidence without rerunning."
+}

@@ -1,0 +1,105 @@
+{
+  "recorded_at": "2026-11-16T05:12:34.378611+00:00",
+  "completed": true,
+  "cleanup_error": null,
+  "environment": {
+    "system": "Darwin",
+    "machine": "arm64",
+    "python": "3.14.3",
+    "tls": "OpenSSL 3.0.18 30 Sep 2025"
+  },
+  "scope": "Loopback Python TLS 1.3 sockets, Unix socket, opaque TCP forwarding fixture and real shell with pipes; no PTY, SwiftTerm, native application, hosted relay, real network change, enrollment or Azure validation.",
+  "checks": [
+    {
+      "name": "first authenticated attach-ready route wins",
+      "passed": true,
+      "elapsed_ms": 16.692500037606806
+    },
+    {
+      "name": "fixture shell increments counter before route change",
+      "passed": true
+    },
+    {
+      "name": "remembered route does not race alternatives",
+      "passed": true
+    },
+    {
+      "name": "Settings refresh reraces permitted routes",
+      "passed": true,
+      "elapsed_ms": 64.49520797468722
+    },
+    {
+      "name": "network context has its own route choice",
+      "passed": true
+    },
+    {
+      "name": "RPC on retained socket starts no route attempts",
+      "passed": true
+    },
+    {
+      "name": "fixture shell PID and counter survive socket replacement",
+      "passed": true,
+      "elapsed_ms": 13.494250015355647,
+      "pid": 15175
+    },
+    {
+      "name": "failed Direct only never attempts relay",
+      "passed": true
+    },
+    {
+      "name": "Direct only permits same-machine local and no relay",
+      "passed": true
+    },
+    {
+      "name": "Relay only excludes local and direct candidates",
+      "passed": true,
+      "elapsed_ms": 185.1123750093393
+    },
+    {
+      "name": "relay transport reaches same server identity and shell",
+      "passed": true
+    },
+    {
+      "name": "disabled relay cannot silently fall back",
+      "passed": true
+    },
+    {
+      "name": "untrusted server certificate rejected before attach",
+      "passed": true
+    },
+    {
+      "name": "trusted certificate with wrong identity pin rejected",
+      "passed": true
+    },
+    {
+      "name": "rogue-client rejected before attach-ready response",
+      "passed": true
+    },
+    {
+      "name": "missing-client rejected before attach-ready response",
+      "passed": true
+    },
+    {
+      "name": "fast untrusted candidate attempted but cannot win route race",
+      "passed": true
+    },
+    {
+      "name": "fixture viewer input rejected through relay",
+      "passed": true
+    },
+    {
+      "name": "route deadline includes application attach readiness",
+      "passed": true,
+      "elapsed_ms": 81.18662500055507,
+      "configured_ms": 80
+    },
+    {
+      "name": "fixture owns the original live shell at completion",
+      "passed": true
+    },
+    {
+      "name": "server-side race losers and timed-out handlers eventually close",
+      "passed": true
+    }
+  ]
+}
