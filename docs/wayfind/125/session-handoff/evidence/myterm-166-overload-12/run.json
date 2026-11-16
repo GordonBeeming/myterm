@@ -1,0 +1,33 @@
+{
+  "startedUtc": "2026-11-16T12:55:05.323072+00:00",
+  "environment": "macOS-27.3-arm64-arm-64bit-Mach-O",
+  "arguments": {
+    "build": "/private/tmp/myterm-166-native-20261116",
+    "output": "/private/tmp/myterm-166-overload-12",
+    "cycles": 0,
+    "seconds": 10,
+    "rate": 1048576,
+    "policy": "continuous",
+    "queue": 1048576,
+    "slow_seconds": 0,
+    "during_load_cycles": 0
+  },
+  "scope": "native Mac PTY + TLS + headless TerminalView; visible UI and production trust unverified",
+  "build": {
+    "foundation": "ab4f866153ff46c03e1e51de72eec8d85d233d51",
+    "root": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125",
+    "sources": {
+      "run.py": "da0edfd05ed75c7ecb3b63515daf31b9746485b1fef4173051ca7af1b7473cc5",
+      "server.rs": "5d623cc47d340dae8a7a10d46fb2cb525a889e5f4bf8abce9b943c2d2c7e6fd7",
+      "workload.py": "c9074f5b5493ad98393abd5ce8f7c6ddca37e682563e9c04efa0183d19131f85",
+      "gui.swift": "10d8d8a8f20e8ecc6fb6b9a03a992fa670c7f32d508296e0f72a4cd7f3ed5f23",
+      "client.swift": "e67269f48f299740253a2f1d25ff67601a912f60a3bbd0b3b2dea752f0276416",
+      "prepare.py": "1c32b89c405f96d6ea5616776ac3590f4c2949ea356b51432fcd2d5bdcceaa04",
+      "analyze.py": "676990fef859c0da681ce271791217b55bedc8f5149545c5c52c23b515a391bd"
+    },
+    "binaries": {
+      "server": "a33425590be5f6364e02084a8a444b36324bd5d55f7e4813d13dbd88f922421b",
+      "client": "6ba9beccda31869ebd47a76b72b3857fba43db16e214f47245ceb575953d3ca3"
+    }
+  }
+}

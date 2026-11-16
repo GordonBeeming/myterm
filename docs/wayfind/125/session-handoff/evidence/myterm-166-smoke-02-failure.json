@@ -1,0 +1,3 @@
+{
+  "error": "one: unexpected response {'error': 'input gated during synchronization', 'id': 254, 'kind': 'ack', 'ok': False, 'server': 'a'}"
+}

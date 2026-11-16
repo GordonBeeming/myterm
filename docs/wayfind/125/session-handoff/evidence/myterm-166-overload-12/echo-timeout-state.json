@@ -1,0 +1,134 @@
+{
+  "a": {
+    "outputBytes": 9175096,
+    "queue": 529069,
+    "queueHighWater": 1032140,
+    "resyncs": 12,
+    "sessions": [
+      {
+        "bytes": 4661292,
+        "hash": "14038340613665814851",
+        "inputCount": 4,
+        "owner": "one",
+        "pid": 72143,
+        "recentWorkloadEchoes": [
+          "ECHO:first-native-input:72143",
+          "ECHO:load-0:72143",
+          "ECHO:load-1:72143"
+        ],
+        "revision": 3,
+        "sequence": 4557
+      },
+      {
+        "bytes": 4513804,
+        "hash": "17228865037759709540",
+        "inputCount": 1,
+        "owner": "one",
+        "pid": 72145,
+        "recentWorkloadEchoes": [],
+        "revision": 1,
+        "sequence": 4410
+      }
+    ],
+    "viewers": [
+      {
+        "client": "one",
+        "highWater": 1032140,
+        "queued": 529069,
+        "resyncs": 6
+      },
+      {
+        "client": "two",
+        "highWater": 1031939,
+        "queued": 540698,
+        "resyncs": 6
+      }
+    ],
+    "wireBytes": 16465479
+  },
+  "b": {
+    "outputBytes": 9699355,
+    "queue": 925816,
+    "queueHighWater": 1031909,
+    "resyncs": 12,
+    "sessions": [
+      {
+        "bytes": 4923405,
+        "hash": "9438645110969260216",
+        "inputCount": 1,
+        "owner": "one",
+        "pid": 72149,
+        "recentWorkloadEchoes": [],
+        "revision": 1,
+        "sequence": 4811
+      },
+      {
+        "bytes": 4775950,
+        "hash": "5487493929965530273",
+        "inputCount": 1,
+        "owner": "one",
+        "pid": 72150,
+        "recentWorkloadEchoes": [],
+        "revision": 1,
+        "sequence": 4667
+      }
+    ],
+    "viewers": [
+      {
+        "client": "one",
+        "highWater": 1031908,
+        "queued": 925816,
+        "resyncs": 6
+      },
+      {
+        "client": "two",
+        "highWater": 1031909,
+        "queued": 937442,
+        "resyncs": 6
+      }
+    ],
+    "wireBytes": 17192758
+  },
+  "processes": [
+    {
+      "pid": 72142,
+      "rssKiB": 18480,
+      "cpuTimeSeconds": 14.72
+    },
+    {
+      "pid": 72147,
+      "rssKiB": 18288,
+      "cpuTimeSeconds": 14.37
+    },
+    {
+      "pid": 72153,
+      "rssKiB": 61472,
+      "cpuTimeSeconds": 2.69
+    },
+    {
+      "pid": 72194,
+      "rssKiB": 65680,
+      "cpuTimeSeconds": 2.66
+    },
+    {
+      "pid": 72143,
+      "rssKiB": 16896,
+      "cpuTimeSeconds": 0.04
+    },
+    {
+      "pid": 72145,
+      "rssKiB": 16592,
+      "cpuTimeSeconds": 0.04
+    },
+    {
+      "pid": 72149,
+      "rssKiB": 16592,
+      "cpuTimeSeconds": 0.04
+    },
+    {
+      "pid": 72150,
+      "rssKiB": 16736,
+      "cpuTimeSeconds": 0.03
+    }
+  ]
+}

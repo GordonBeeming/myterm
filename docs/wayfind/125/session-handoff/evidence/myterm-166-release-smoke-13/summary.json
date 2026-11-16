@@ -1,0 +1,107 @@
+{
+  "completed": true,
+  "run": "/private/tmp/myterm-166-release-smoke-13",
+  "cycles": 2,
+  "regressionChecks": [
+    "selection/subscription does not acquire control",
+    "stale synchronization acknowledgements cannot reopen input",
+    "accepted controller input reaches the real PTY",
+    "stale takeover and viewer input rejected",
+    "2 competing takeovers have exactly one winner",
+    "2 displaced input and away/back stale revision checks",
+    "2 subscription switches preserve ownership",
+    "2 rejected TLS candidates leave prior channel usable",
+    "2 TLS replacements resume synchronized PTY input",
+    "2 disconnected owners can be displaced without stopping processes",
+    "explicit release leaves everyone viewing"
+  ],
+  "controlTimingScope": "idle two-request competition round trip; excludes cached visible rendering",
+  "latency": {
+    "takeoverMs": {
+      "samples": 2,
+      "p95": 3.0849999748170376
+    },
+    "switchSyncMs": {
+      "samples": 2,
+      "p95": 54.22570899827406
+    },
+    "replacementSyncMs": {
+      "samples": 2,
+      "p95": 30.29895800864324
+    }
+  },
+  "unmeasured": [
+    "visible cached display latency",
+    "production security integration",
+    "multi-Mac network",
+    "mobile clients"
+  ],
+  "load": {
+    "seconds": 45,
+    "policy": "continuous",
+    "requestedRate": 1048576,
+    "measuredRates": {
+      "a:0": {
+        "bytesPerSecond": 1048471.1575329786,
+        "requestedRatio": 0.999900014431933
+      },
+      "a:1": {
+        "bytesPerSecond": 1048466.6435103981,
+        "requestedRatio": 0.9998957095245343
+      },
+      "b:0": {
+        "bytesPerSecond": 1048504.6680355831,
+        "requestedRatio": 0.9999319725375968
+      },
+      "b:1": {
+        "bytesPerSecond": 1048514.1630485972,
+        "requestedRatio": 0.9999410276876423
+      }
+    },
+    "rateWithinFivePercent": true,
+    "resources": {
+      "11288": {
+        "averageCpuPercent": 8.227528841197572,
+        "finalRssMiB": 13.28125
+      },
+      "11342": {
+        "averageCpuPercent": 8.316475098940247,
+        "finalRssMiB": 6.265625
+      },
+      "11345": {
+        "averageCpuPercent": 20.613295231865266,
+        "finalRssMiB": 60.921875
+      },
+      "11393": {
+        "averageCpuPercent": 13.875616207857528,
+        "finalRssMiB": 59.859375
+      },
+      "11339": {
+        "averageCpuPercent": 0.5559141108917278,
+        "finalRssMiB": 16.109375
+      },
+      "11340": {
+        "averageCpuPercent": 0.5336775464560587,
+        "finalRssMiB": 15.984375
+      },
+      "11343": {
+        "averageCpuPercent": 0.5336775464560587,
+        "finalRssMiB": 16.015625
+      },
+      "11344": {
+        "averageCpuPercent": 0.5336775464560587,
+        "finalRssMiB": 16.0625
+      }
+    },
+    "queueHighWaterBytes": 1032158,
+    "configuredQueueBytes": 1048576,
+    "resyncs": {
+      "a": 22,
+      "b": 0
+    },
+    "wireBytes": 456050645,
+    "echoP95Ms": 8.404209,
+    "echoSamples": 136,
+    "finalNativeParityAsserted": true
+  }
+}
