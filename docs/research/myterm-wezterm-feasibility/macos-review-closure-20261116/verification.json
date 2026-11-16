@@ -1,0 +1,10 @@
+{
+  "prototypeAndBaselineHashes": 19,
+  "compiledLockHashMatches": true,
+  "exporterBoundaryControls": {
+    "automatic-placement-id": true,
+    "pending-placement-offset": true,
+    "non-sixel-dcs": true
+  },
+  "scope": "Native macOS bounded feasibility; other platforms and production acceptance remain open."
+}

@@ -1,0 +1,22 @@
+{
+  "malformed-json": {
+    "exitCode": 1,
+    "stderr": "decode terminal traces: invalid type: map, expected a sequence at line 1 column 0"
+  },
+  "zero-resize": {
+    "exitCode": 1,
+    "stderr": "invalid resize in invalid"
+  },
+  "oversize-resize": {
+    "exitCode": 1,
+    "stderr": "invalid resize in invalid"
+  },
+  "negative-resize": {
+    "exitCode": 1,
+    "stderr": "decode terminal traces: invalid value: integer `-1`, expected usize at line 1 column 42"
+  },
+  "oversize-input": {
+    "exitCode": 1,
+    "stderr": "trace input exceeds 4 MiB"
+  }
+}

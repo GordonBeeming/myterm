@@ -1,0 +1,115 @@
+--- a/term/src/screen.rs
++++ b/term/src/screen.rs
+@@ -150,7 +150,7 @@
+                 // line and it won't resize with the line correctly.
+                 // Put it back on the prior line. The cursor is now
+                 // technically outside of the viewport width.
+-                if adjusted_cursor.0 == 0 && adjusted_cursor.1 > 0 {
++                if x > 0 && adjusted_cursor.0 == 0 && adjusted_cursor.1 > 0 {
+                     if physical_cols < self.physical_cols {
+                         // getting smaller: preserve its original position
+                         // on the prior line
+@@ -235,13 +235,8 @@
+                 self.rewrap_lines(physical_cols, physical_rows, cursor.x, cursor_phys, seqno)
+             } else {
+                 for line in &mut self.lines {
+-                    if physical_cols < self.physical_cols {
+-                        // Do a simple prune of the lines instead
+-                        line.resize(physical_cols, seqno);
+-                    } else {
+-                        // otherwise: invalidate them
+-                        line.update_last_change_seqno(seqno);
+-                    }
++                    // Keep columns hidden by a narrower viewport for later growth.
++                    line.update_last_change_seqno(seqno);
+                 }
+                 (cursor.x, cursor_phys)
+             }
+@@ -318,7 +313,7 @@
+         self.physical_rows = physical_rows;
+         self.physical_cols = physical_cols;
+         CursorPosition {
+-            x: cursor_x,
++            x: cursor_x.min(physical_cols - 1),
+             y: new_cursor_y,
+             shape: cursor.shape,
+             visibility: cursor.visibility,
+--- a/term/src/terminalstate/image.rs
++++ b/term/src/terminalstate/image.rs
+@@ -259,11 +259,16 @@
+             draw_height as usize + cell_padding_top as usize > cell_pixel_height * height_in_cells,
+         );
+         if !params.do_not_move_cursor {
+-            // Sixel places the cursor under the left corner of the image,
+-            // unless sixel_scrolls_right is enabled.
+-            // iTerm places it after the bottom right corner.
++            // Default Sixel and native iTerm/Kitty advance past the image rows.
++            // DEC mode 8452 instead leaves Sixel's cursor beside its last row.
++            if !matches!(params.style, ImageAttachStyle::Sixel) || !self.sixel_scrolls_right {
++                self.new_line(false);
++            }
++            // Kitty advances horizontally; native inline iTerm keeps its column.
++            // Sixel may explicitly request rightward movement.
+             let bottom_right = match params.style {
+-                ImageAttachStyle::Kitty | ImageAttachStyle::Iterm => true,
++                ImageAttachStyle::Kitty => true,
++                ImageAttachStyle::Iterm => false,
+                 ImageAttachStyle::Sixel => self.sixel_scrolls_right,
+             };
+ 
+--- a/term/src/terminalstate/kitty.rs
++++ b/term/src/terminalstate/kitty.rs
+@@ -76,6 +76,7 @@
+         placement: KittyImagePlacement,
+         verbosity: KittyImageVerbosity,
+     ) -> anyhow::Result<()> {
++        let requested_identity = image_id.is_some() || image_number.is_some();
+         let image_id = match image_id {
+             Some(id) => id,
+             None => *self
+@@ -142,6 +143,18 @@
+             placement.placement_id
+         );
+ 
++        if requested_identity && image_id != 0 && matches!(verbosity, KittyImageVerbosity::Verbose) {
++            let mut response = match image_number {
++                Some(number) => format!("\x1b_GI={number},i={image_id}"),
++                None => format!("\x1b_Gi={image_id}"),
++            };
++            if let Some(placement_id) = placement.placement_id {
++                response.push_str(&format!(",p={placement_id}"));
++            }
++            response.push_str(";OK\x1b\\");
++            self.writer.write_all(response.as_bytes()).context("write Kitty placement acknowledgement")?;
++            self.writer.flush().context("flush Kitty placement acknowledgement")?;
++        }
+         Ok(())
+     }
+ 
+@@ -164,7 +177,8 @@
+             } => {
+                 log::trace!("TransmitDataAndDisplay {:#?} {:#?}", transmit, placement);
+                 let image_number = transmit.image_number;
+-                let image_id = self.kitty_img_transmit(transmit, verbosity)?;
++                // Combined transmit-and-place has one acknowledgement, after placement.
++                let image_id = self.kitty_img_transmit(transmit, KittyImageVerbosity::Quiet)?;
+                 self.kitty_img_place(Some(image_id), image_number, placement, verbosity)
+             }
+             _ => anyhow::bail!("impossible KittImage variant"),
+@@ -827,6 +841,7 @@
+         transmit: KittyImageTransmit,
+         verbosity: KittyImageVerbosity,
+     ) -> anyhow::Result<u32> {
++        let requested_identity = transmit.image_id.is_some() || transmit.image_number.is_some();
+         let (image_id, image_number, img) = self.kitty_img_transmit_inner(transmit)?;
+         self.kitty_img.max_image_id = self.kitty_img.max_image_id.max(image_id);
+ 
+@@ -835,7 +850,7 @@
+             .context("storing image data")?;
+         self.kitty_img.record_id_to_data(image_id, img);
+ 
+-        if image_number.is_some() {
++        if requested_identity {
+             self.kitty_send_response(
+                 verbosity,
+                 true,

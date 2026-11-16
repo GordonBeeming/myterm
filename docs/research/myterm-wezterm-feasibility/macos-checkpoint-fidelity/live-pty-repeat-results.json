@@ -1,0 +1,67 @@
+[
+  {
+    "passed": true,
+    "sameShellAfterImport": true,
+    "pid": 71292,
+    "events": 10,
+    "actualResize": [
+      32,
+      8
+    ],
+    "queryResponses": 2,
+    "childExitedSuccessfully": true,
+    "pidReaped": true
+  },
+  {
+    "passed": true,
+    "sameShellAfterImport": true,
+    "pid": 71421,
+    "events": 10,
+    "actualResize": [
+      32,
+      8
+    ],
+    "queryResponses": 2,
+    "childExitedSuccessfully": true,
+    "pidReaped": true
+  },
+  {
+    "passed": true,
+    "sameShellAfterImport": true,
+    "pid": 71435,
+    "events": 10,
+    "actualResize": [
+      32,
+      8
+    ],
+    "queryResponses": 2,
+    "childExitedSuccessfully": true,
+    "pidReaped": true
+  },
+  {
+    "passed": true,
+    "sameShellAfterImport": true,
+    "pid": 71451,
+    "events": 10,
+    "actualResize": [
+      32,
+      8
+    ],
+    "queryResponses": 2,
+    "childExitedSuccessfully": true,
+    "pidReaped": true
+  },
+  {
+    "passed": true,
+    "sameShellAfterImport": true,
+    "pid": 71493,
+    "events": 10,
+    "actualResize": [
+      32,
+      8
+    ],
+    "queryResponses": 2,
+    "childExitedSuccessfully": true,
+    "pidReaped": true
+  }
+]

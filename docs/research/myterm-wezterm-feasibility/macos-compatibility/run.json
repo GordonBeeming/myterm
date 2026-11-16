@@ -1,0 +1,28 @@
+{
+  "timestampUtc": "2026-11-08T13:58:45.171352+00:00",
+  "os": "macOS-27.3-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "wezterm": "458a100c1bf4134d36cb5c42dd90e4c8266d9e1a",
+  "finl": "a1892f26245529f2ef3877a9ebd610c96cec07a6",
+  "cellPixels": [
+    9,
+    16
+  ],
+  "fixtureSha256": "f17f4173910429490df30b34c9ad6acf2867be7cc67107a87de1fdbc63332dac",
+  "scope": "patched scratch copies; measured projection only; reconnect is unproven",
+  "baselineSourceSha256": "e57c636da9c16e4f44b2db7b582713909baadadc7397f8de9697c12623ee229a",
+  "cargoLockSha256": "dbce14947cd32170fce0c90fe855ceba4a956c774df8c021a75312f05924801a",
+  "rust": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "swift": "Apple Swift version 6.4.2 (swiftlang-6.4.2.1.9 clang-2100.4.1.1)\nTarget: arm64-apple-macosx27.3.0",
+  "replyCapture": "FIFO paste barrier into capture-only writer; marker stripped before snapshots; no PTY",
+  "probeSourceSha256": "6f40bd8f975b4f710c211ac3b0ccc7b7ee131f2db4350bc24024e1ea2f6ad872",
+  "rustPatchSha256": "ba1d0c313a04d735c003391990cf37b49f4ecc62bfb05368e2fa8397df6796fb",
+  "swiftPatchSha256": "dac9c3124237bbbafd0eb873330cd35cec27b9c1684259db66b96d32273016d8",
+  "controlFixtureSha256": "7744fbf767bd4fe24d52bed1c3f4a2394f21141de4f32e5e3b8f5cb623ce1739",
+  "baselineReference": "/private/tmp/myterm-wezterm-drained-baseline",
+  "originalMatches": 15,
+  "correctedMatches": 17,
+  "controlMatches": 9,
+  "reviewControlPasses": 23,
+  "reviewControlSourceSha256": "fe44766b5806575ad62e19bcc581a58ee8c05b7207800006b44ccea3380b0679"
+}

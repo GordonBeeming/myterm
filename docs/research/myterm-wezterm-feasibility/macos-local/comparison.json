@@ -1,0 +1,183 @@
+{
+  "alternate-return": {
+    "differences": [],
+    "projectionMatches": true,
+    "swiftCheckpointChecks": 2,
+    "rustToSwiftReconnect": "not implemented"
+  },
+  "alternate-shrink-grow": {
+    "differences": [
+      {
+        "event": 1,
+        "fields": [
+          "cursor"
+        ]
+      },
+      {
+        "event": 2,
+        "fields": [
+          "cells",
+          "cursor"
+        ]
+      },
+      {
+        "event": 3,
+        "fields": [
+          "cursor"
+        ]
+      }
+    ],
+    "projectionMatches": false,
+    "swiftCheckpointChecks": 3,
+    "rustToSwiftReconnect": "not implemented"
+  },
+  "ascii-and-cursor": {
+    "differences": [],
+    "projectionMatches": true,
+    "swiftCheckpointChecks": 2,
+    "rustToSwiftReconnect": "not implemented"
+  },
+  "iterm-png": {
+    "differences": [
+      {
+        "event": 0,
+        "fields": [
+          "cells",
+          "cursor"
+        ]
+      },
+      {
+        "event": 1,
+        "fields": [
+          "cells",
+          "cursor"
+        ]
+      }
+    ],
+    "projectionMatches": false,
+    "swiftCheckpointChecks": 2,
+    "rustToSwiftReconnect": "not implemented"
+  },
+  "kitty-keyboard": {
+    "differences": [],
+    "projectionMatches": true,
+    "swiftCheckpointChecks": 2,
+    "rustToSwiftReconnect": "not implemented"
+  },
+  "kitty-rgba-split": {
+    "differences": [
+      {
+        "event": 1,
+        "fields": [
+          "cells",
+          "cursor",
+          "replies"
+        ]
+      }
+    ],
+    "projectionMatches": false,
+    "swiftCheckpointChecks": 2,
+    "rustToSwiftReconnect": "not implemented"
+  },
+  "modes-and-hyperlink": {
+    "differences": [],
+    "projectionMatches": true,
+    "swiftCheckpointChecks": 2,
+    "rustToSwiftReconnect": "not implemented"
+  },
+  "query-cursor-status": {
+    "differences": [],
+    "projectionMatches": true,
+    "swiftCheckpointChecks": 2,
+    "rustToSwiftReconnect": "not implemented"
+  },
+  "scrollback-resize": {
+    "differences": [
+      {
+        "event": 1,
+        "fields": [
+          "cursor"
+        ]
+      },
+      {
+        "event": 2,
+        "fields": [
+          "cells",
+          "history"
+        ]
+      }
+    ],
+    "projectionMatches": false,
+    "swiftCheckpointChecks": 2,
+    "rustToSwiftReconnect": "not implemented"
+  },
+  "sixel-full-positive-control": {
+    "differences": [
+      {
+        "event": 0,
+        "fields": [
+          "history"
+        ]
+      },
+      {
+        "event": 1,
+        "fields": [
+          "history"
+        ]
+      }
+    ],
+    "projectionMatches": false,
+    "swiftCheckpointChecks": 2,
+    "rustToSwiftReconnect": "not implemented"
+  },
+  "sixel-full-split": {
+    "differences": [
+      {
+        "event": 1,
+        "fields": [
+          "cursor",
+          "history"
+        ]
+      }
+    ],
+    "projectionMatches": false,
+    "swiftCheckpointChecks": 2,
+    "rustToSwiftReconnect": "not implemented"
+  },
+  "sixel-split": {
+    "differences": [],
+    "projectionMatches": true,
+    "swiftCheckpointChecks": 2,
+    "rustToSwiftReconnect": "not implemented"
+  },
+  "split-csi": {
+    "differences": [],
+    "projectionMatches": true,
+    "swiftCheckpointChecks": 2,
+    "rustToSwiftReconnect": "not implemented"
+  },
+  "split-osc": {
+    "differences": [],
+    "projectionMatches": true,
+    "swiftCheckpointChecks": 2,
+    "rustToSwiftReconnect": "not implemented"
+  },
+  "split-utf8": {
+    "differences": [],
+    "projectionMatches": true,
+    "swiftCheckpointChecks": 2,
+    "rustToSwiftReconnect": "not implemented"
+  },
+  "styles-and-colors": {
+    "differences": [],
+    "projectionMatches": true,
+    "swiftCheckpointChecks": 2,
+    "rustToSwiftReconnect": "not implemented"
+  },
+  "unicode": {
+    "differences": [],
+    "projectionMatches": true,
+    "swiftCheckpointChecks": 2,
+    "rustToSwiftReconnect": "not implemented"
+  }
+}

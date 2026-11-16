@@ -1,0 +1,15 @@
+{
+  "timestampUtc": "2026-11-09T12:25:40.939804+00:00",
+  "os": "macOS-27.3-arm64-arm-64bit-Mach-O",
+  "wezterm": "458a100c1bf4134d36cb5c42dd90e4c8266d9e1a",
+  "finl": "a1892f26245529f2ef3877a9ebd610c96cec07a6",
+  "scope": "scratch checkpoint bridge; tested subset only; not release acceptance",
+  "sources": {
+    "checkpoint.py": "28381be05c4ec504161569dcc09a75f8187289cd8a539c53fcb44b894a206f51",
+    "checkpoint-state.rs": "b9c5a5e936664daf56fde2a394cc8e0391016466ed6c98af5171091be712afd0",
+    "CheckpointBridge.swift": "5831b9073b3e7a0da4777c5e4463d204718272e23e2b9f5b18f3c4f6e5bff320",
+    "checkpoint-driver.swift": "68d98f07e89e22034478afe095c03673c0bb576a56dd98dda85e50c07978580b",
+    "checkpoint_checks.py": "d52375ff99c8603097332c45f73da8db294fd1f37d5af10c7d1c7d042066162f",
+    "checkpoint-stream.rs": "80772d79771907f3ec4659eb3f3f2489339cef437ddd06d4af328e7c244d3962"
+  }
+}
