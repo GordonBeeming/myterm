@@ -1,0 +1,662 @@
+{
+  "codex": {
+    "version": "0.160.0",
+    "records": [
+      {
+        "agent": "codex",
+        "observedUTC": "2026-11-15T23:25:34.252322+00:00",
+        "observedMonotonicNS": 373808116874333,
+        "event": {
+          "hook_event_name": "SessionStart",
+          "source": "startup",
+          "session_id": "2d246c04801064a8a5b5bc7de6b25260"
+        }
+      },
+      {
+        "agent": "codex",
+        "observedUTC": "2026-11-15T23:25:34.314949+00:00",
+        "observedMonotonicNS": 373808179508125,
+        "event": {
+          "hook_event_name": "UserPromptSubmit",
+          "session_id": "2d246c04801064a8a5b5bc7de6b25260",
+          "turn_id": "714526e424863e70964e703b993debd9"
+        }
+      },
+      {
+        "agent": "codex",
+        "observedUTC": "2026-11-15T23:25:37.657516+00:00",
+        "observedMonotonicNS": 373811521961833,
+        "event": {
+          "hook_event_name": "PreToolUse",
+          "tool_name": "request_user_input",
+          "session_id": "2d246c04801064a8a5b5bc7de6b25260",
+          "turn_id": "714526e424863e70964e703b993debd9",
+          "tool_use_id": "1fb43579dff75081fd2a9d21ea6d6917"
+        }
+      },
+      {
+        "agent": "codex",
+        "observedUTC": "2026-11-15T23:27:34.779298+00:00",
+        "observedMonotonicNS": 373928643087625,
+        "event": {
+          "hook_event_name": "PostToolUse",
+          "tool_name": "request_user_input",
+          "session_id": "2d246c04801064a8a5b5bc7de6b25260",
+          "turn_id": "714526e424863e70964e703b993debd9",
+          "tool_use_id": "1fb43579dff75081fd2a9d21ea6d6917"
+        }
+      },
+      {
+        "agent": "codex",
+        "observedUTC": "2026-11-15T23:27:36.693368+00:00",
+        "observedMonotonicNS": 373930557178541,
+        "event": {
+          "hook_event_name": "Stop",
+          "session_id": "2d246c04801064a8a5b5bc7de6b25260",
+          "turn_id": "714526e424863e70964e703b993debd9"
+        }
+      },
+      {
+        "agent": "codex",
+        "observedUTC": "2026-11-15T23:29:50.542704+00:00",
+        "observedMonotonicNS": 374064405752291,
+        "event": {
+          "hook_event_name": "UserPromptSubmit",
+          "session_id": "2d246c04801064a8a5b5bc7de6b25260",
+          "turn_id": "14075fa90dbc10f82fff59a0c55d47ea"
+        }
+      },
+      {
+        "agent": "codex",
+        "observedUTC": "2026-11-15T23:29:53.405921+00:00",
+        "observedMonotonicNS": 374067268883583,
+        "event": {
+          "hook_event_name": "PreToolUse",
+          "tool_name": "request_user_input",
+          "session_id": "2d246c04801064a8a5b5bc7de6b25260",
+          "turn_id": "14075fa90dbc10f82fff59a0c55d47ea",
+          "tool_use_id": "f0e3335e0b38f31d0314ca0b9a670d65"
+        }
+      },
+      {
+        "agent": "codex",
+        "observedUTC": "2026-11-15T23:30:44.650442+00:00",
+        "observedMonotonicNS": 374118509849208,
+        "event": {
+          "hook_event_name": "Interrupt",
+          "session_id": "2d246c04801064a8a5b5bc7de6b25260",
+          "turn_id": "14075fa90dbc10f82fff59a0c55d47ea"
+        }
+      },
+      {
+        "agent": "codex",
+        "observedUTC": "2026-11-15T23:40:12.351869+00:00",
+        "observedMonotonicNS": 374686207169208,
+        "event": {
+          "hook_event_name": "UserPromptSubmit",
+          "session_id": "2d246c04801064a8a5b5bc7de6b25260",
+          "turn_id": "83ebf6ece2f36d89355a58426c40a7d3"
+        }
+      },
+      {
+        "agent": "codex",
+        "observedUTC": "2026-11-15T23:40:15.385538+00:00",
+        "observedMonotonicNS": 374689240839041,
+        "event": {
+          "hook_event_name": "PreToolUse",
+          "tool_name": "request_user_input",
+          "session_id": "2d246c04801064a8a5b5bc7de6b25260",
+          "turn_id": "83ebf6ece2f36d89355a58426c40a7d3",
+          "tool_use_id": "a344b5a49d21672f1e01be35e2763d2c"
+        }
+      },
+      {
+        "agent": "codex",
+        "observedUTC": "2026-11-15T23:43:34.330019+00:00",
+        "observedMonotonicNS": 374888183983125,
+        "event": {
+          "hook_event_name": "PostToolUse",
+          "tool_name": "request_user_input",
+          "session_id": "2d246c04801064a8a5b5bc7de6b25260",
+          "turn_id": "83ebf6ece2f36d89355a58426c40a7d3",
+          "tool_use_id": "a344b5a49d21672f1e01be35e2763d2c"
+        }
+      },
+      {
+        "agent": "codex",
+        "observedUTC": "2026-11-15T23:43:36.013356+00:00",
+        "observedMonotonicNS": 374889867320458,
+        "event": {
+          "hook_event_name": "Stop",
+          "session_id": "2d246c04801064a8a5b5bc7de6b25260",
+          "turn_id": "83ebf6ece2f36d89355a58426c40a7d3"
+        }
+      },
+      {
+        "agent": "codex",
+        "observedUTC": "2026-11-16T00:12:53.562506+00:00",
+        "observedMonotonicNS": 376647400498916,
+        "event": {
+          "hook_event_name": "SessionEnd",
+          "session_id": "2d246c04801064a8a5b5bc7de6b25260",
+          "reason": "other"
+        }
+      },
+      {
+        "agent": "codex",
+        "observedUTC": "2026-11-16T00:14:14.609112+00:00",
+        "observedMonotonicNS": 376728446479875,
+        "event": {
+          "hook_event_name": "SessionEnd",
+          "session_id": "a119b5dc84632d0fbfb5f391f7e3bbdf",
+          "reason": "other"
+        }
+      }
+    ],
+    "rawSHA256": "2fe100da0cd08516d2bf2d1d04deb61090fd4486d1a86c392563d247c404277a",
+    "privateRawFile": "/Users/gordonbeeming/Developer/artifacts/myterm/private-agent-reporting-prototype/codex-native-hooks.jsonl",
+    "terminalSHA256": "a5d895ee57e7be184d02efe6f82b6e6e342ca75a5fcc50a3dcb5a95a8f0458c6",
+    "privateTerminalFile": "/Users/gordonbeeming/Developer/artifacts/myterm/private-agent-reporting-prototype/codex-terminal.bin"
+  },
+  "claude": {
+    "version": "2.1.325",
+    "records": [
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:24:00.990025+00:00",
+        "observedMonotonicNS": 373714855021041,
+        "event": {
+          "hook_event_name": "SessionStart",
+          "source": "startup",
+          "session_id": "5b8404743bf7a5653b5010da95c291b5"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:24:01.388942+00:00",
+        "observedMonotonicNS": 373715253932333,
+        "event": {
+          "hook_event_name": "UserPromptSubmit",
+          "session_id": "5b8404743bf7a5653b5010da95c291b5",
+          "prompt_id": "280691f22ed61ce28fb5691b7badd0e9"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:24:06.874247+00:00",
+        "observedMonotonicNS": 373720739202583,
+        "event": {
+          "hook_event_name": "PreToolUse",
+          "tool_name": "AskUserQuestion",
+          "session_id": "5b8404743bf7a5653b5010da95c291b5",
+          "prompt_id": "280691f22ed61ce28fb5691b7badd0e9",
+          "tool_use_id": "578cedab84119f4daffcd0a4a35cfdf7"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:24:06.921200+00:00",
+        "observedMonotonicNS": 373720786162333,
+        "event": {
+          "hook_event_name": "PermissionRequest",
+          "tool_name": "AskUserQuestion",
+          "session_id": "5b8404743bf7a5653b5010da95c291b5",
+          "prompt_id": "280691f22ed61ce28fb5691b7badd0e9"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:25:34.914078+00:00",
+        "observedMonotonicNS": 373808778504875,
+        "event": {
+          "hook_event_name": "mod.session.start"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:28:01.225052+00:00",
+        "observedMonotonicNS": 373955088673333,
+        "event": {
+          "hook_event_name": "mod.session.start"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:30:43.533858+00:00",
+        "observedMonotonicNS": 374117393346916,
+        "event": {
+          "hook_event_name": "UserPromptSubmit",
+          "session_id": "5b8404743bf7a5653b5010da95c291b5",
+          "prompt_id": "2655d54185d029c34fca211d7d2b5e68"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:30:43.618654+00:00",
+        "observedMonotonicNS": 374117478082625,
+        "event": {
+          "hook_event_name": "mod.turn.start",
+          "turn_id": "9815b5ecc759f7fce5dfa91e5f497d92"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:30:46.732340+00:00",
+        "observedMonotonicNS": 374120591711750,
+        "event": {
+          "hook_event_name": "mod.tool.start",
+          "tool_name": "AskUserQuestion",
+          "turn_id": "9815b5ecc759f7fce5dfa91e5f497d92",
+          "tool_use_id": "89270640e7fa82267c67f8cf2a3f6fae"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:30:46.772197+00:00",
+        "observedMonotonicNS": 374120631560375,
+        "event": {
+          "hook_event_name": "PreToolUse",
+          "tool_name": "AskUserQuestion",
+          "session_id": "5b8404743bf7a5653b5010da95c291b5",
+          "prompt_id": "2655d54185d029c34fca211d7d2b5e68",
+          "tool_use_id": "89270640e7fa82267c67f8cf2a3f6fae"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:30:46.820329+00:00",
+        "observedMonotonicNS": 374120679693000,
+        "event": {
+          "hook_event_name": "PermissionRequest",
+          "tool_name": "AskUserQuestion",
+          "session_id": "5b8404743bf7a5653b5010da95c291b5",
+          "prompt_id": "2655d54185d029c34fca211d7d2b5e68"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:33:30.052321+00:00",
+        "observedMonotonicNS": 374283910353458,
+        "event": {
+          "hook_event_name": "mod.turn.complete",
+          "turn_id": "9815b5ecc759f7fce5dfa91e5f497d92",
+          "is_aborted": false
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:39:01.269790+00:00",
+        "observedMonotonicNS": 374615125581000,
+        "event": {
+          "hook_event_name": "mod.session.start"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:43:33.258426+00:00",
+        "observedMonotonicNS": 374887112369291,
+        "event": {
+          "hook_event_name": "UserPromptSubmit",
+          "session_id": "5b8404743bf7a5653b5010da95c291b5",
+          "prompt_id": "3d1ca9378ce9d55e534fc8e52ee18c10"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:43:33.321008+00:00",
+        "observedMonotonicNS": 374887174947875,
+        "event": {
+          "hook_event_name": "mod.turn.start",
+          "turn_id": "f7a6b6d8e5e806b3b3b118a26dea2598"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:43:33.358654+00:00",
+        "observedMonotonicNS": 374887212621000,
+        "event": {
+          "hook_event_name": "mod.turn.step",
+          "turn_id": "f7a6b6d8e5e806b3b3b118a26dea2598"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:43:36.681380+00:00",
+        "observedMonotonicNS": 374890535290625,
+        "event": {
+          "hook_event_name": "mod.tool.start",
+          "tool_name": "AskUserQuestion",
+          "turn_id": "f7a6b6d8e5e806b3b3b118a26dea2598",
+          "tool_use_id": "df53985fb4e5680d57a0eabdf59f45eb"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:43:36.726601+00:00",
+        "observedMonotonicNS": 374890580508541,
+        "event": {
+          "hook_event_name": "PreToolUse",
+          "tool_name": "AskUserQuestion",
+          "session_id": "5b8404743bf7a5653b5010da95c291b5",
+          "prompt_id": "3d1ca9378ce9d55e534fc8e52ee18c10",
+          "tool_use_id": "df53985fb4e5680d57a0eabdf59f45eb"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:43:36.778321+00:00",
+        "observedMonotonicNS": 374890632245041,
+        "event": {
+          "hook_event_name": "mod.tool.decision",
+          "tool_name": "AskUserQuestion",
+          "turn_id": "f7a6b6d8e5e806b3b3b118a26dea2598",
+          "tool_use_id": "df53985fb4e5680d57a0eabdf59f45eb",
+          "decision": "ask",
+          "approver": "person"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:43:36.833388+00:00",
+        "observedMonotonicNS": 374890687310458,
+        "event": {
+          "hook_event_name": "PermissionRequest",
+          "tool_name": "AskUserQuestion",
+          "session_id": "5b8404743bf7a5653b5010da95c291b5",
+          "prompt_id": "3d1ca9378ce9d55e534fc8e52ee18c10"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:44:41.110463+00:00",
+        "observedMonotonicNS": 374954964011041,
+        "event": {
+          "hook_event_name": "mod.turn.complete",
+          "turn_id": "f7a6b6d8e5e806b3b3b118a26dea2598",
+          "is_aborted": false,
+          "reason": "answer"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:49:42.718864+00:00",
+        "observedMonotonicNS": 375256570304166,
+        "event": {
+          "hook_event_name": "UserPromptSubmit",
+          "session_id": "5b8404743bf7a5653b5010da95c291b5",
+          "prompt_id": "64be576796b5c6da7eb1918529e02c5d"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:49:42.768786+00:00",
+        "observedMonotonicNS": 375256620259625,
+        "event": {
+          "hook_event_name": "mod.turn.start",
+          "turn_id": "79f382605d823c239b1b487997d20278"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:49:42.808942+00:00",
+        "observedMonotonicNS": 375256660395500,
+        "event": {
+          "hook_event_name": "mod.turn.step",
+          "turn_id": "79f382605d823c239b1b487997d20278"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:49:46.539527+00:00",
+        "observedMonotonicNS": 375260390945958,
+        "event": {
+          "hook_event_name": "mod.tool.start",
+          "tool_name": "Bash",
+          "turn_id": "79f382605d823c239b1b487997d20278",
+          "tool_use_id": "d1428c53513c689c3783d65a4e93a22b"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:49:46.588054+00:00",
+        "observedMonotonicNS": 375260439444625,
+        "event": {
+          "hook_event_name": "PreToolUse",
+          "tool_name": "Bash",
+          "session_id": "5b8404743bf7a5653b5010da95c291b5",
+          "prompt_id": "64be576796b5c6da7eb1918529e02c5d",
+          "tool_use_id": "d1428c53513c689c3783d65a4e93a22b"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:49:47.790414+00:00",
+        "observedMonotonicNS": 375261641816791,
+        "event": {
+          "hook_event_name": "mod.tool.decision",
+          "tool_name": "Bash",
+          "turn_id": "79f382605d823c239b1b487997d20278",
+          "tool_use_id": "d1428c53513c689c3783d65a4e93a22b",
+          "decision": "ask",
+          "approver": "person"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:49:47.839527+00:00",
+        "observedMonotonicNS": 375261690913083,
+        "event": {
+          "hook_event_name": "PermissionRequest",
+          "tool_name": "Bash",
+          "session_id": "5b8404743bf7a5653b5010da95c291b5",
+          "prompt_id": "64be576796b5c6da7eb1918529e02c5d"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:53:14.221573+00:00",
+        "observedMonotonicNS": 375468071573666,
+        "event": {
+          "hook_event_name": "PostToolUse",
+          "tool_name": "Bash",
+          "session_id": "5b8404743bf7a5653b5010da95c291b5",
+          "prompt_id": "64be576796b5c6da7eb1918529e02c5d",
+          "tool_use_id": "d1428c53513c689c3783d65a4e93a22b"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:53:14.258390+00:00",
+        "observedMonotonicNS": 375468108373791,
+        "event": {
+          "hook_event_name": "mod.tool.complete",
+          "tool_name": "Bash",
+          "turn_id": "79f382605d823c239b1b487997d20278",
+          "tool_use_id": "d1428c53513c689c3783d65a4e93a22b",
+          "denied": false,
+          "is_error": false
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:53:14.299319+00:00",
+        "observedMonotonicNS": 375468149330666,
+        "event": {
+          "hook_event_name": "mod.tool.start",
+          "tool_name": "Bash",
+          "turn_id": "79f382605d823c239b1b487997d20278",
+          "tool_use_id": "751904306faed959c50d4dc1131ba379"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:53:14.351741+00:00",
+        "observedMonotonicNS": 375468201761333,
+        "event": {
+          "hook_event_name": "PreToolUse",
+          "tool_name": "Bash",
+          "session_id": "5b8404743bf7a5653b5010da95c291b5",
+          "prompt_id": "64be576796b5c6da7eb1918529e02c5d",
+          "tool_use_id": "751904306faed959c50d4dc1131ba379"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:53:15.543987+00:00",
+        "observedMonotonicNS": 375469393982250,
+        "event": {
+          "hook_event_name": "mod.tool.decision",
+          "tool_name": "Bash",
+          "turn_id": "79f382605d823c239b1b487997d20278",
+          "tool_use_id": "751904306faed959c50d4dc1131ba379",
+          "decision": "ask",
+          "approver": "person"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:53:15.588704+00:00",
+        "observedMonotonicNS": 375469438689708,
+        "event": {
+          "hook_event_name": "PermissionRequest",
+          "tool_name": "Bash",
+          "session_id": "5b8404743bf7a5653b5010da95c291b5",
+          "prompt_id": "64be576796b5c6da7eb1918529e02c5d"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-15T23:57:18.173350+00:00",
+        "observedMonotonicNS": 375712021699083,
+        "event": {
+          "hook_event_name": "mod.turn.complete",
+          "turn_id": "79f382605d823c239b1b487997d20278",
+          "is_aborted": false,
+          "reason": "answer"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-16T00:10:11.463880+00:00",
+        "observedMonotonicNS": 376485303152000,
+        "event": {
+          "hook_event_name": "mod.session.start"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-16T00:16:36.230029+00:00",
+        "observedMonotonicNS": 376870066290625,
+        "event": {
+          "hook_event_name": "UserPromptSubmit",
+          "session_id": "5b8404743bf7a5653b5010da95c291b5",
+          "prompt_id": "1074ee161a8cad9082f333c2908eddac"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-16T00:16:36.291766+00:00",
+        "observedMonotonicNS": 376870128011583,
+        "event": {
+          "hook_event_name": "mod.turn.start",
+          "turn_id": "2329d8fae5b863e723dcdf349ac2a2f5"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-16T00:16:36.328098+00:00",
+        "observedMonotonicNS": 376870164336208,
+        "event": {
+          "hook_event_name": "mod.turn.step",
+          "turn_id": "2329d8fae5b863e723dcdf349ac2a2f5"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-16T00:16:39.784119+00:00",
+        "observedMonotonicNS": 376873620360500,
+        "event": {
+          "hook_event_name": "mod.tool.start",
+          "tool_name": "AskUserQuestion",
+          "turn_id": "2329d8fae5b863e723dcdf349ac2a2f5",
+          "tool_use_id": "b59ee8f4eea03148de7d596c64cdc74f"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-16T00:16:39.826135+00:00",
+        "observedMonotonicNS": 376873662383416,
+        "event": {
+          "hook_event_name": "PreToolUse",
+          "tool_name": "AskUserQuestion",
+          "session_id": "5b8404743bf7a5653b5010da95c291b5",
+          "prompt_id": "1074ee161a8cad9082f333c2908eddac",
+          "tool_use_id": "b59ee8f4eea03148de7d596c64cdc74f"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-16T00:16:39.866713+00:00",
+        "observedMonotonicNS": 376873702941625,
+        "event": {
+          "hook_event_name": "mod.tool.decision",
+          "tool_name": "AskUserQuestion",
+          "turn_id": "2329d8fae5b863e723dcdf349ac2a2f5",
+          "tool_use_id": "b59ee8f4eea03148de7d596c64cdc74f",
+          "decision": "ask",
+          "approver": "person"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-16T00:16:39.913956+00:00",
+        "observedMonotonicNS": 376873750197833,
+        "event": {
+          "hook_event_name": "PermissionRequest",
+          "tool_name": "AskUserQuestion",
+          "session_id": "5b8404743bf7a5653b5010da95c291b5",
+          "prompt_id": "1074ee161a8cad9082f333c2908eddac"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-16T00:21:11.008916+00:00",
+        "observedMonotonicNS": 377144843033333,
+        "event": {
+          "hook_event_name": "mod.tool.complete",
+          "tool_name": "AskUserQuestion",
+          "turn_id": "2329d8fae5b863e723dcdf349ac2a2f5",
+          "tool_use_id": "b59ee8f4eea03148de7d596c64cdc74f",
+          "denied": false,
+          "is_error": true
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-16T00:21:11.069877+00:00",
+        "observedMonotonicNS": 377144903994916,
+        "event": {
+          "hook_event_name": "mod.turn.complete",
+          "turn_id": "2329d8fae5b863e723dcdf349ac2a2f5",
+          "is_aborted": false,
+          "reason": "answer"
+        }
+      },
+      {
+        "agent": "claude",
+        "observedUTC": "2026-11-16T00:33:55.970741+00:00",
+        "observedMonotonicNS": 377909797220458,
+        "event": {
+          "hook_event_name": "SessionEnd",
+          "session_id": "5b8404743bf7a5653b5010da95c291b5",
+          "prompt_id": "a1d5431c9d5a0c14980e3727d6895492",
+          "reason": "prompt_input_exit"
+        }
+      }
+    ],
+    "rawSHA256": "a4610862f8a1f13f1ef15b18c40b2f37117f4571bff4397f2f0ac74a4e0e1831",
+    "privateRawFile": "/Users/gordonbeeming/Developer/artifacts/myterm/private-agent-reporting-prototype/claude-native-hooks.jsonl",
+    "terminalSHA256": "a53cba87e7f1198ef37dcd928753ad90b9df7b4d932fb0c68eb9497ae2daf7bf",
+    "privateTerminalFile": "/Users/gordonbeeming/Developer/artifacts/myterm/private-agent-reporting-prototype/claude-terminal.bin"
+  }
+}

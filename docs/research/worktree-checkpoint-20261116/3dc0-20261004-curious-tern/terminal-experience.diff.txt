@@ -1,0 +1,104 @@
+diff --git a/Companion/Tests/TerminalExperienceTests.swift b/Companion/Tests/TerminalExperienceTests.swift
+index 9759717..5131681 100644
+--- a/Companion/Tests/TerminalExperienceTests.swift
++++ b/Companion/Tests/TerminalExperienceTests.swift
+@@ -8,6 +8,99 @@ import XCTest
+ 
+ @MainActor
+ final class TerminalExperienceTests: XCTestCase {
++    func testTypingEchoAppliesOnlyNewOutputWithoutRestoringHistory() async throws {
++        func waitFor(_ condition: () -> Bool) async throws {
++            for _ in 0..<200 {
++                if condition() { return }
++                try await Task.sleep(for: .milliseconds(10))
++            }
++            XCTAssertTrue(condition(), "Timed out waiting for terminal rendering")
++        }
++        let state = viewportState()
++        let host = makeView()
++        host.resize(cols: 80, rows: 24)
++        host.feed(text: "history-marker\r\nprompt> ")
++        let bytes = try host.getTerminal().exportCheckpoint()
++        let generation = UUID()
++        let assembled = try await CheckpointAssembler().ingest(
++            metadata: MessageMetadata(hostID: state.route.hostID, runtimeID: UUID(),
++                                      sessionID: state.route.sessionID),
++            chunk: CheckpointChunkParameters(transferID: UUID(), generation: generation,
++                sequence: 0, chunkIndex: 0, chunkCount: 1, totalBytes: bytes.count, bytes: bytes))
++        state.apply(checkpoint: try XCTUnwrap(assembled))
++        state.ownsControl = true
++        let revision = state.checkpointRevision
++        var sent = Data()
++        let root = RemoteTerminalView(state: state, showTerminalKeys: false,
++            requestsKeyboardFocus: false, onInput: { data in
++                sent.append(data)
++                XCTAssertTrue(state.append(output: OutputParameters(generation: generation,
++                    sequence: state.sequence + 1, bytes: data)))
++            }, onPasteImage: { _ in }, onResize: { _, _ in },
++            onResync: { error in XCTFail("Unexpected resync: \(error)") })
++        let controller = UIHostingController(rootView: root)
++        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 320, height: 220))
++        window.rootViewController = controller
++        window.isHidden = false
++        defer {
++            window.isHidden = true
++            window.rootViewController = nil
++        }
++        controller.view.layoutIfNeeded()
++        func terminal(in view: UIView) -> TerminalView? {
++            if let terminal = view as? TerminalView { return terminal }
++            return view.subviews.lazy.compactMap { terminal(in: $0) }.first
++        }
++        try await waitFor { terminal(in: controller.view) != nil }
++        let view = try XCTUnwrap(terminal(in: controller.view))
++        defer { view.updateUiClosed() }
++        func renderedText() -> String {
++            String(decoding: view.getTerminal().getBufferAsData(), as: UTF8.self)
++                .trimmingCharacters(in: .whitespacesAndNewlines)
++        }
++        try await waitFor { renderedText().contains("prompt>") }
++        // A local marker disappears if an update reimports the original checkpoint.
++        view.feed(text: "local-marker ")
++        var expectedInput = ""
++        for character in "typing-deltas" {
++            expectedInput.append(character)
++            view.insertText(String(character))
++            try await waitFor {
++                renderedText() == "history-marker\nprompt> local-marker " + expectedInput
++            }
++        }
++        XCTAssertEqual(String(decoding: sent, as: UTF8.self), "typing-deltas")
++        let rendered = String(decoding: view.getTerminal().getBufferAsData(), as: UTF8.self)
++        XCTAssertEqual(rendered.components(separatedBy: "history-marker").count - 1, 1)
++        XCTAssertEqual(renderedText(), "history-marker\nprompt> local-marker typing-deltas")
++        XCTAssertEqual(state.checkpointRevision, revision)
++        XCTAssertFalse(state.isAwaitingCheckpoint)
++
++        // Large TUI redraws cross the local compaction threshold without requiring
++        // a host snapshot. Formatting-only output keeps the history marker visible.
++        let formatting = Data(String(repeating: "\u{1b}[0m", count: 270_000).utf8)
++        XCTAssertTrue(state.append(output: OutputParameters(generation: generation,
++            sequence: state.sequence + 1, bytes: formatting)))
++        try await waitFor { state.checkpointRevision > revision }
++        XCTAssertGreaterThan(state.checkpointRevision, revision, "The view must compact rendered output")
++        // This marker is absent from the compacted checkpoint, so importing it
++        // again while typing would now lose visible text and fail the assertion.
++        view.feed(text: "^")
++        for character in "-ok" {
++            expectedInput.append(character)
++            view.insertText(String(character))
++            try await waitFor {
++                renderedText() == "history-marker\nprompt> local-marker typing-deltas^"
++                    + String(expectedInput.dropFirst("typing-deltas".count))
++            }
++        }
++        let compacted = String(decoding: view.getTerminal().getBufferAsData(), as: UTF8.self)
++        XCTAssertEqual(String(decoding: sent, as: UTF8.self), "typing-deltas-ok")
++        XCTAssertEqual(compacted.components(separatedBy: "history-marker").count - 1, 1)
++        XCTAssertEqual(renderedText(), "history-marker\nprompt> local-marker typing-deltas^-ok")
++        XCTAssertFalse(state.isAwaitingCheckpoint)
++    }
++
+     private func makeView(height: CGFloat = 220) -> TerminalView {
+         let view = TerminalView(frame: CGRect(x: 0, y: 0, width: 320, height: height))
+         view.automaticallyResizesTerminal = false

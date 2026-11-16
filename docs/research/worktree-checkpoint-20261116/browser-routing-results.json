@@ -1,0 +1,59 @@
+{
+  "os" : "Version 27.3 (Build 26C5035r)",
+  "results" : [
+    {
+      "clientOriginRequests" : [
+
+      ],
+      "error" : "",
+      "finished" : true,
+      "proxy" : "httpCONNECT",
+      "proxyRequests" : [
+        "CONNECT myterm-route-probe.invalid:49251 HTTP\/1.1",
+        "GET \/routing-probe HTTP\/1.1"
+      ],
+      "title" : "PROXY_FIXTURE",
+      "url" : "http:\/\/myterm-route-probe.invalid:49251\/routing-probe"
+    },
+    {
+      "clientOriginRequests" : [
+        "GET \/routing-probe HTTP\/1.1"
+      ],
+      "error" : "",
+      "finished" : true,
+      "proxy" : "httpCONNECT",
+      "proxyRequests" : [
+
+      ],
+      "title" : "CLIENT_LOCAL_FIXTURE",
+      "url" : "http:\/\/localhost:49251\/routing-probe"
+    },
+    {
+      "clientOriginRequests" : [
+        "GET \/routing-probe HTTP\/1.1"
+      ],
+      "error" : "",
+      "finished" : true,
+      "proxy" : "httpCONNECT",
+      "proxyRequests" : [
+
+      ],
+      "title" : "CLIENT_LOCAL_FIXTURE",
+      "url" : "http:\/\/127.0.0.1:49251\/routing-probe"
+    },
+    {
+      "clientOriginRequests" : [
+        "GET \/routing-probe HTTP\/1.1"
+      ],
+      "error" : "",
+      "finished" : true,
+      "proxy" : "httpCONNECT",
+      "proxyRequests" : [
+
+      ],
+      "title" : "CLIENT_LOCAL_FIXTURE",
+      "url" : "http:\/\/[::1]:49251\/routing-probe"
+    }
+  ],
+  "scope" : "offscreen macOS WKWebView HTTP CONNECT routing fixture; no Rust server or E2EE"
+}

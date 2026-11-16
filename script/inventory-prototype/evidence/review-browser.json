@@ -1,0 +1,15 @@
+{
+  "tool": "claude",
+  "mode": "review",
+  "model": "sonnet",
+  "permissionMode": "plan",
+  "repo": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-crisp-kakapo",
+  "sessionId": "af241e4a-0eb9-473d-af4a-b5a083335e92",
+  "status": "completed",
+  "response": "No material error in the browser additions. This was a static read of `Model.swift` and `main.swift`. I did not run anything.\n\n**Checked and correct**\n- **Agent reports:** `report` rejects non-Terminal items before any buffering (`Model.swift:92`). Browser items therefore never get buffered entries, so drain and merge can't apply an agent event to one.\n- **Navigation:** `LocalView.navigate(item)` (`:258-261`) sets only `selected`, `selectedWorkspace`, `selectedPane`, `selectedTab` and `focus`. `controller` is untouched, which the new check at `main.swift:216-219` also covers. The walkthroughs all pass the item itself.\n- **Search:** `kind` is in the haystack (`:84`). Searching \"Browser\" only matches `web`, so `.first` in the check is stable.\n- **Baseline counts:** they match the fixture. Release is 3 (build, docs, web), mac-b is 3 (docs, shell, web), and the item count is 4.\n- **Replacement:** it carries `kind`, `workspaceID` and `paneID` (`:206-207`). One thing to know: `tabID` is derived from the item id (`:13`), so the replacement gets a new tab, `tab-replacement-web`, in the same workspace and pane. That fits \"layout target\" if the target means workspace and pane, which is how the check reads it.\n- **Shared-state check:** `workspaceID` and `paneID` don't contain \"selected\", \"controller\" or \"focus\", so the check at `main.swift:227-230` still passes.\n- **Timestamp:** it is fixed at 1,794,740,400 plus the sequence, formatted in `Australia/Brisbane` with a literal 'AEST (fixture)' label (`Model.swift:161-165`). It is deterministic and honestly labelled. Browser items keep \"Not observed\" because they never receive reports.\n\n**Minor, not blocking**\n- **`merge` collision guard:** it still only compares `runtime` and `server` (`Model.swift:219`). A candidate with the same id, runtime and server but a different `kind`, `workspaceID` or `paneID` and a higher sequence would overwrite them. Browser sequences stay at 0 and ties keep the existing item, so only a hand-built fixture could hit this. If you want the \"identity collision\" claim to cover type, add `existing.kind == candidate.kind` to the guard.\n- **`confirmLost(\"web\")`:** it applies to a Browser item with no PTY (`:184`). The replacement check relies on it. It's fine as a fixture, but it is a \"browser runtime lost\" signal, not a terminal one.",
+  "exitCode": "0",
+  "startedAt": "2026-11-15T11:43:11Z",
+  "endedAt": "2026-11-15T11:43:49Z",
+  "rawFile": "/tmp/myterm-inventory-review-browser.json.json",
+  "stderrTail": ""
+}

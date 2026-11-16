@@ -1,0 +1,92 @@
+{
+  "scope": "In-memory reducer only; authentication, persistence, provider retention and production latency are not validated.",
+  "command": "node /Users/gordonbeeming/Developer/artifacts/myterm/relay-lifecycle-prototype/verify.cjs",
+  "passed": 21,
+  "failed": 0,
+  "results": [
+    {
+      "name": "Offline enabled server prevents opt-out grace",
+      "result": "pass"
+    },
+    {
+      "name": "Approved and already connected clients do not prevent grace",
+      "result": "pass"
+    },
+    {
+      "name": "Fresh reconnect cancels once without enabling servers",
+      "result": "pass"
+    },
+    {
+      "name": "Inactivity closes at 90 days with no extra grace",
+      "result": "pass"
+    },
+    {
+      "name": "Healthy idle contact survives 90 days",
+      "result": "pass"
+    },
+    {
+      "name": "Expired lease cannot be renewed by an old heartbeat",
+      "result": "pass"
+    },
+    {
+      "name": "Fresh live proof resets activity",
+      "result": "pass"
+    },
+    {
+      "name": "Contact 1 ms before grace deadline wins",
+      "result": "pass"
+    },
+    {
+      "name": "Contact exactly at grace deadline loses",
+      "result": "pass"
+    },
+    {
+      "name": "Reconnect cannot silently enable an opted-out server",
+      "result": "pass"
+    },
+    {
+      "name": "Operator activity does not reset inactivity",
+      "result": "pass"
+    },
+    {
+      "name": "Enrollment first prevents last-server opt-out trigger",
+      "result": "pass"
+    },
+    {
+      "name": "Enrollment after opt-out cancels grace",
+      "result": "pass"
+    },
+    {
+      "name": "Stale settings and duplicate opt-outs do not move deadline",
+      "result": "pass"
+    },
+    {
+      "name": "Worker restart and modeled journal reconciliation preserve cancellation",
+      "result": "pass"
+    },
+    {
+      "name": "Deletion denies late auth, enrollment and old snapshot resurrection",
+      "result": "pass"
+    },
+    {
+      "name": "Cleanup uses 24-hour and 30-day absolute bounds and is idempotent",
+      "result": "pass"
+    },
+    {
+      "name": "Missing ledger denies admission and closure acknowledgment",
+      "result": "pass"
+    },
+    {
+      "name": "Move fences source closure jobs",
+      "result": "pass"
+    },
+    {
+      "name": "Backwards clock observation does not roll model time back",
+      "result": "pass"
+    },
+    {
+      "name": "Grace is not extended by existing live heartbeat",
+      "result": "pass"
+    }
+  ]
+}

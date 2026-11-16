@@ -1,0 +1,23 @@
+{
+  "agent": "codex",
+  "version": "codex-cli 0.160.0",
+  "scope": "Actual CLI foreground process group and live zsh return. No MyTerm UI assertion or native agent marker is fabricated.",
+  "shellGroup": 43436,
+  "agentGroup": 43483,
+  "foregroundExecutables": [
+    "node",
+    "codex"
+  ],
+  "inputScreenObserved": true,
+  "returnedToSameShell": true,
+  "shellProducedPostKillOutput": true,
+  "expectedShellPID": 43436,
+  "outputMatchedAfterByteOffset": 942,
+  "killedForegroundGroupEmpty": true,
+  "result": "pass",
+  "cleanup": {
+    "leaderReaped": true,
+    "ownedForegroundGroupEmpty": true,
+    "scope": "Owned foreground group only; separate/shared provider daemons are outside this check."
+  }
+}

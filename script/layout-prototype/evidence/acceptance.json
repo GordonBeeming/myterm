@@ -1,0 +1,6 @@
+{
+  "decision": "accepted after live review",
+  "resolution": "https://github.com/GordonBeeming/myterm/issues/156#issuecomment-6844040718",
+  "production_followup": "https://github.com/GordonBeeming/myterm/issues/182",
+  "changes_since_independent_review": "Acceptance wording and links only; model behavior unchanged. Historical reviewed source hashes remain in results.json; current hashes are in accepted-results.json."
+}

@@ -1,0 +1,14 @@
+{
+  "stage": "after native question cancellation",
+  "candidateActivity": "finished",
+  "candidatePending": 0,
+  "legacyReporterActivity": "awaiting_input",
+  "screenExcerpts": [
+    "\u23fa\u00a0User declined to answer questions",
+    "\u23fa\u00a0User declined to answer questions",
+    "\u276f"
+  ],
+  "rawPrefixSHA256": "946a1eeab3b18f0090c3717d479109b5cc4ee6b65cc9bf895fba20d8775f3895",
+  "rawByteOffset": 157522,
+  "nativeCompletionReason": "mod.turn.complete"
+}

@@ -1,0 +1,794 @@
+Building for debugging...
+[Computing dependencies]
+[1 / 5]
+[1 / 2] MyTermPlatformTests-product
+warning: missing creator for mutated node: ('/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-crisp-kakapo/.build/out/Products/Debug/SwiftTerm_SwiftTerm.bundle/Contents/MacOS')
+Build complete! (0.76 sec.)
+Test Suite 'Selected tests' started at 2026-11-15 22:06:01.333.
+Test Suite 'MyTermTests.xctest' started at 2026-11-15 22:06:01.334.
+Test Suite 'AgentAttentionPermutationTests' started at 2026-11-15 22:06:01.334.
+Test Case '-[MyTermTests.AgentAttentionPermutationTests testAHiddenTabsCookAndBellNeverDisagree]' started.
+Test Case '-[MyTermTests.AgentAttentionPermutationTests testAHiddenTabsCookAndBellNeverDisagree]' passed (0.058 seconds).
+Test Case '-[MyTermTests.AgentAttentionPermutationTests testTheSelectedTabBehindAnotherAppIsFiledAndPostedThenReadOnReturn]' started.
+Test Case '-[MyTermTests.AgentAttentionPermutationTests testTheSelectedTabBehindAnotherAppIsFiledAndPostedThenReadOnReturn]' passed (0.060 seconds).
+Test Case '-[MyTermTests.AgentAttentionPermutationTests testTheTabInFrontNeverRingsTheBellOrPostsABanner]' started.
+Test Case '-[MyTermTests.AgentAttentionPermutationTests testTheTabInFrontNeverRingsTheBellOrPostsABanner]' passed (0.042 seconds).
+Test Suite 'AgentAttentionPermutationTests' passed at 2026-11-15 22:06:01.494.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.160 (0.161) seconds
+Test Suite 'AgentAttentionTests' started at 2026-11-15 22:06:01.494.
+Test Case '-[MyTermTests.AgentAttentionTests testAQuestionSurvivesBeingReadUntilTheAgentMovesOn]' started.
+Test Case '-[MyTermTests.AgentAttentionTests testAQuestionSurvivesBeingReadUntilTheAgentMovesOn]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentAttentionTests testATabTheUserCannotSeeIsMarkedUntilTheyReachIt]' started.
+Test Case '-[MyTermTests.AgentAttentionTests testATabTheUserCannotSeeIsMarkedUntilTheyReachIt]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentAttentionTests testAWorkspaceRowShowsItsMostUrgentTab]' started.
+Test Case '-[MyTermTests.AgentAttentionTests testAWorkspaceRowShowsItsMostUrgentTab]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentAttentionTests testClosingAMarkedTabForgetsIt]' started.
+Test Case '-[MyTermTests.AgentAttentionTests testClosingAMarkedTabForgetsIt]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentAttentionTests testTheSelectedTabIsStillMarkedWhileTheAppIsBehindAnother]' started.
+Test Case '-[MyTermTests.AgentAttentionTests testTheSelectedTabIsStillMarkedWhileTheAppIsBehindAnother]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AgentAttentionTests testTheTabInFrontOfTheUserIsReadAsItArrives]' started.
+Test Case '-[MyTermTests.AgentAttentionTests testTheTabInFrontOfTheUserIsReadAsItArrives]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentAttentionTests testUpdateRestartCountsHiddenWorkingAgentsAndUnansweredQuestions]' started.
+Test Case '-[MyTermTests.AgentAttentionTests testUpdateRestartCountsHiddenWorkingAgentsAndUnansweredQuestions]' passed (0.002 seconds).
+Test Suite 'AgentAttentionTests' passed at 2026-11-15 22:06:01.510.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.015 (0.015) seconds
+Test Suite 'AgentHookCommandTests' started at 2026-11-15 22:06:01.510.
+Test Case '-[MyTermTests.AgentHookCommandTests testAnAbsoluteClientPathReportsItsLauncherWithoutTheShim]' started.
+Test Case '-[MyTermTests.AgentHookCommandTests testAnAbsoluteClientPathReportsItsLauncherWithoutTheShim]' passed (1.332 seconds).
+Test Case '-[MyTermTests.AgentHookCommandTests testAnAgentOnAnotherTTYDoesNotSuppressThisPane]' started.
+Test Case '-[MyTermTests.AgentHookCommandTests testAnAgentOnAnotherTTYDoesNotSuppressThisPane]' passed (0.358 seconds).
+Test Case '-[MyTermTests.AgentHookCommandTests testANestedAgentInThePaneDoesNotReportEvenThroughAShellWrapper]' started.
+CoreData: error: Unable to create token NSXPCConnection.  NSXPCStoreServerEndpointFactory 0x78bb880bc0 -newEndpointWithError returned error Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.contactsd.persistence" UserInfo={NSDebugDescription=connection to service named com.apple.contactsd.persistence}
+CoreData: error: NSXPCStoreConnectionManager failed to initialize any connections for store at [local AddressBook path redacted] with error = Error Domain=NSCocoaErrorDomain Code=4097 "Couldn’t communicate with a helper application." UserInfo={NSUnderlyingError=0x78ba5190b0 {Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.contactsd.persistence" UserInfo={NSDebugDescription=connection to service named com.apple.contactsd.persistence}}}
+Test Case '-[MyTermTests.AgentHookCommandTests testANestedAgentInThePaneDoesNotReportEvenThroughAShellWrapper]' passed (1.052 seconds).
+Test Case '-[MyTermTests.AgentHookCommandTests testANestedIdentifierWithoutATopLevelSessionCannotBecomeAResumeHandle]' started.
+Test Case '-[MyTermTests.AgentHookCommandTests testANestedIdentifierWithoutATopLevelSessionCannotBecomeAResumeHandle]' passed (0.359 seconds).
+Test Case '-[MyTermTests.AgentHookCommandTests testAnIdentifierThatCouldReachAShellNeverLeavesTheHook]' started.
+CoreData: error: Unable to create token NSXPCConnection.  NSXPCStoreServerEndpointFactory 0x78bb880bc0 -newEndpointWithError returned error Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.contactsd.persistence" UserInfo={NSDebugDescription=connection to service named com.apple.contactsd.persistence}
+CoreData: error: NSXPCStoreConnectionManager failed to initialize any connections for store at [local AddressBook path redacted] with error = Error Domain=NSCocoaErrorDomain Code=4097 "Couldn’t communicate with a helper application." UserInfo={NSUnderlyingError=0x78ba8a8420 {Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.contactsd.persistence" UserInfo={NSDebugDescription=connection to service named com.apple.contactsd.persistence}}}
+CoreData: warning: Caught exception trying to load store metadata during error recovery: NSXPCStoreServerEndpointFactory failed to provide an endpoint
+CoreData: error: addPersistentStoreWithType:configuration:URL:options:error: returned error NSCocoaErrorDomain (4097)
+CoreData: error: userInfo:
+CoreData: error: 	NSUnderlyingException : NSXPCStoreServerEndpointFactory failed to provide an endpoint
+CoreData: error: 	NSUnderlyingError : Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.contactsd.persistence" UserInfo={NSDebugDescription=connection to service named com.apple.contactsd.persistence}
+CoreData: error: storeType: NSXPCStore
+CoreData: error: configuration: (null)
+CoreData: error: URL: [local AddressBook path redacted]
+CoreData: annotation: options:
+CoreData: annotation: 	NSReadOnlyPersistentStoreOption : 0
+CoreData: annotation: 	NSXPCStoreServerEndpointFactory : <CNCDRemotePersistentStoreEndpointFactory: 0x78bb880bc0>
+CoreData: annotation: 	skipModelCheck : 1
+CoreData: annotation: 	NSPersistentHistoryTrackingKey : 1
+Test Case '-[MyTermTests.AgentHookCommandTests testAnIdentifierThatCouldReachAShellNeverLeavesTheHook]' passed (1.159 seconds).
+Test Case '-[MyTermTests.AgentHookCommandTests testAnIdlePromptIsDroppedAndAQuestionIsReported]' started.
+Test Case '-[MyTermTests.AgentHookCommandTests testAnIdlePromptIsDroppedAndAQuestionIsReported]' passed (0.443 seconds).
+Test Case '-[MyTermTests.AgentHookCommandTests testAnInProcessSubagentDoesNotReport]' started.
+Test Case '-[MyTermTests.AgentHookCommandTests testAnInProcessSubagentDoesNotReport]' passed (0.091 seconds).
+Test Case '-[MyTermTests.AgentHookCommandTests testAntigravityNativeHooksAndStatusUseDistinctQuestionAndPermissionTokens]' started.
+Test Case '-[MyTermTests.AgentHookCommandTests testAntigravityNativeHooksAndStatusUseDistinctQuestionAndPermissionTokens]' passed (0.703 seconds).
+Test Case '-[MyTermTests.AgentHookCommandTests testAPayloadThatIsNotJSONStillReportsTheEvent]' started.
+Test Case '-[MyTermTests.AgentHookCommandTests testAPayloadThatIsNotJSONStillReportsTheEvent]' passed (0.363 seconds).
+Test Case '-[MyTermTests.AgentHookCommandTests testAPayloadWithNoSessionStillReportsTheEvent]' started.
+Test Case '-[MyTermTests.AgentHookCommandTests testAPayloadWithNoSessionStillReportsTheEvent]' passed (0.359 seconds).
+Test Case '-[MyTermTests.AgentHookCommandTests testBackgroundTaskMetadataDoesNotMakeTheMainSessionASubagent]' started.
+CoreData: error: Unable to create token NSXPCConnection.  NSXPCStoreServerEndpointFactory 0x78bb881600 -newEndpointWithError returned error Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.contactsd.persistence" UserInfo={NSDebugDescription=connection to service named com.apple.contactsd.persistence}
+CoreData: error: NSXPCStoreConnectionManager failed to initialize any connections for store at [local AddressBook path redacted] with error = Error Domain=NSCocoaErrorDomain Code=4097 "Couldn’t communicate with a helper application." UserInfo={NSUnderlyingError=0x78b9805800 {Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.contactsd.persistence" UserInfo={NSDebugDescription=connection to service named com.apple.contactsd.persistence}}}
+Test Case '-[MyTermTests.AgentHookCommandTests testBackgroundTaskMetadataDoesNotMakeTheMainSessionASubagent]' passed (0.360 seconds).
+Test Case '-[MyTermTests.AgentHookCommandTests testCodexPermissionAndCompletionShareAnInputFingerprint]' started.
+Test Case '-[MyTermTests.AgentHookCommandTests testCodexPermissionAndCompletionShareAnInputFingerprint]' passed (0.754 seconds).
+Test Case '-[MyTermTests.AgentHookCommandTests testCodexTurnAndNestedSessionIdentifiersCannotReplaceTheConversation]' started.
+Test Case '-[MyTermTests.AgentHookCommandTests testCodexTurnAndNestedSessionIdentifiersCannotReplaceTheConversation]' passed (0.361 seconds).
+Test Case '-[MyTermTests.AgentHookCommandTests testDetachedHookWrappersFindTheAgentTTYWithoutCrossingAnotherTerminal]' started.
+Test Case '-[MyTermTests.AgentHookCommandTests testDetachedHookWrappersFindTheAgentTTYWithoutCrossingAnotherTerminal]' passed (0.445 seconds).
+Test Case '-[MyTermTests.AgentHookCommandTests testGrokNativeEventNamesStartTurnsAndQuestionCompletionMatchesItsNotification]' started.
+CoreData: error: Unable to create token NSXPCConnection.  NSXPCStoreServerEndpointFactory 0x78bb881600 -newEndpointWithError returned error Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.contactsd.persistence" UserInfo={NSDebugDescription=connection to service named com.apple.contactsd.persistence}
+CoreData: error: NSXPCStoreConnectionManager failed to initialize any connections for store at [local AddressBook path redacted] with error = Error Domain=NSCocoaErrorDomain Code=4097 "Couldn’t communicate with a helper application." UserInfo={NSUnderlyingError=0x78ba5191d0 {Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.contactsd.persistence" UserInfo={NSDebugDescription=connection to service named com.apple.contactsd.persistence}}}
+CoreData: warning: Caught exception trying to load store metadata during error recovery: NSXPCStoreServerEndpointFactory failed to provide an endpoint
+CoreData: error: addPersistentStoreWithType:configuration:URL:options:error: returned error NSCocoaErrorDomain (4097)
+CoreData: error: userInfo:
+CoreData: error: 	NSUnderlyingException : NSXPCStoreServerEndpointFactory failed to provide an endpoint
+CoreData: error: 	NSUnderlyingError : Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.contactsd.persistence" UserInfo={NSDebugDescription=connection to service named com.apple.contactsd.persistence}
+CoreData: error: storeType: NSXPCStore
+CoreData: error: configuration: (null)
+CoreData: error: URL: [local AddressBook path redacted]
+CoreData: annotation: options:
+CoreData: annotation: 	NSReadOnlyPersistentStoreOption : 0
+CoreData: annotation: 	NSXPCStoreServerEndpointFactory : <CNCDRemotePersistentStoreEndpointFactory: 0x78bb881600>
+CoreData: annotation: 	skipModelCheck : 1
+CoreData: annotation: 	NSPersistentHistoryTrackingKey : 1
+Test Case '-[MyTermTests.AgentHookCommandTests testGrokNativeEventNamesStartTurnsAndQuestionCompletionMatchesItsNotification]' passed (1.896 seconds).
+Test Case '-[MyTermTests.AgentHookCommandTests testGrokReportsCamelCaseIdentityAndOnlyActionableNotifications]' started.
+CoreData: error: Unable to create token NSXPCConnection.  NSXPCStoreServerEndpointFactory 0x78bb880da0 -newEndpointWithError returned error Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.contactsd.persistence" UserInfo={NSDebugDescription=connection to service named com.apple.contactsd.persistence}
+CoreData: error: NSXPCStoreConnectionManager failed to initialize any connections for store at [local AddressBook path redacted] with error = Error Domain=NSCocoaErrorDomain Code=4097 "Couldn’t communicate with a helper application." UserInfo={NSUnderlyingError=0x78ba514f90 {Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.contactsd.persistence" UserInfo={NSDebugDescription=connection to service named com.apple.contactsd.persistence}}}
+Test Case '-[MyTermTests.AgentHookCommandTests testGrokReportsCamelCaseIdentityAndOnlyActionableNotifications]' passed (0.879 seconds).
+Test Case '-[MyTermTests.AgentHookCommandTests testInvalidEntryClockGetsANativeMonotonicFallbackBeforeEmission]' started.
+Test Case '-[MyTermTests.AgentHookCommandTests testInvalidEntryClockGetsANativeMonotonicFallbackBeforeEmission]' passed (0.679 seconds).
+Test Case '-[MyTermTests.AgentHookCommandTests testMentioningAnAgentIdentifierInThePromptDoesNotSuppressTheHook]' started.
+Test Case '-[MyTermTests.AgentHookCommandTests testMentioningAnAgentIdentifierInThePromptDoesNotSuppressTheHook]' passed (0.357 seconds).
+Test Case '-[MyTermTests.AgentHookCommandTests testOpaqueGrokTurnsAreCorrelatedWithoutEnteringTheEscapeSequence]' started.
+CoreData: error: Unable to create token NSXPCConnection.  NSXPCStoreServerEndpointFactory 0x78bb880da0 -newEndpointWithError returned error Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.contactsd.persistence" UserInfo={NSDebugDescription=connection to service named com.apple.contactsd.persistence}
+CoreData: error: NSXPCStoreConnectionManager failed to initialize any connections for store at [local AddressBook path redacted] with error = Error Domain=NSCocoaErrorDomain Code=4097 "Couldn’t communicate with a helper application." UserInfo={NSUnderlyingError=0x78ba514b70 {Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.contactsd.persistence" UserInfo={NSDebugDescription=connection to service named com.apple.contactsd.persistence}}}
+CoreData: warning: Caught exception trying to load store metadata during error recovery: NSXPCStoreServerEndpointFactory failed to provide an endpoint
+CoreData: error: addPersistentStoreWithType:configuration:URL:options:error: returned error NSCocoaErrorDomain (4097)
+CoreData: error: userInfo:
+CoreData: error: 	NSUnderlyingException : NSXPCStoreServerEndpointFactory failed to provide an endpoint
+CoreData: error: 	NSUnderlyingError : Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.contactsd.persistence" UserInfo={NSDebugDescription=connection to service named com.apple.contactsd.persistence}
+CoreData: error: storeType: NSXPCStore
+CoreData: error: configuration: (null)
+CoreData: error: URL: [local AddressBook path redacted]
+CoreData: annotation: options:
+CoreData: annotation: 	NSReadOnlyPersistentStoreOption : 0
+CoreData: annotation: 	NSXPCStoreServerEndpointFactory : <CNCDRemotePersistentStoreEndpointFactory: 0x78bb880da0>
+CoreData: annotation: 	skipModelCheck : 1
+CoreData: annotation: 	NSPersistentHistoryTrackingKey : 1
+Test Case '-[MyTermTests.AgentHookCommandTests testOpaqueGrokTurnsAreCorrelatedWithoutEnteringTheEscapeSequence]' passed (1.113 seconds).
+Test Case '-[MyTermTests.AgentHookCommandTests testQueuedSnapshotWithoutItsOriginalCaptureTimeIsDropped]' started.
+Test Case '-[MyTermTests.AgentHookCommandTests testQueuedSnapshotWithoutItsOriginalCaptureTimeIsDropped]' passed (0.254 seconds).
+Test Case '-[MyTermTests.AgentHookCommandTests testTheChildFlagOnATopLevelHookDoesNotSuppressAnyActivity]' started.
+Test Case '-[MyTermTests.AgentHookCommandTests testTheChildFlagOnATopLevelHookDoesNotSuppressAnyActivity]' passed (0.875 seconds).
+Test Case '-[MyTermTests.AgentHookCommandTests testTheCodexHookReportsTheClientAndAgentDirectory]' started.
+Test Case '-[MyTermTests.AgentHookCommandTests testTheCodexHookReportsTheClientAndAgentDirectory]' passed (0.369 seconds).
+Test Case '-[MyTermTests.AgentHookCommandTests testTheHookIsSilentOutsideMyTerm]' started.
+Test Case '-[MyTermTests.AgentHookCommandTests testTheHookIsSilentOutsideMyTerm]' passed (0.082 seconds).
+Test Case '-[MyTermTests.AgentHookCommandTests testTheHookReportsTheEventAndTheSessionToThePanesTTY]' started.
+Test Case '-[MyTermTests.AgentHookCommandTests testTheHookReportsTheEventAndTheSessionToThePanesTTY]' passed (0.355 seconds).
+Test Suite 'AgentHookCommandTests' passed at 2026-11-15 22:06:16.509.
+	 Executed 24 tests, with 0 failures (0 unexpected) in 14.997 (14.999) seconds
+Test Suite 'AgentHooksControllerTests' started at 2026-11-15 22:06:16.509.
+Test Case '-[MyTermTests.AgentHooksControllerTests testACurrentSetMissingOneHookReadsAsNotInstalledAndIsLeftAlone]' started.
+Test Case '-[MyTermTests.AgentHooksControllerTests testACurrentSetMissingOneHookReadsAsNotInstalledAndIsLeftAlone]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentHooksControllerTests testAHookInstalledByAnEarlierVersionIsReinstalledOnRefresh]' started.
+Test Case '-[MyTermTests.AgentHooksControllerTests testAHookInstalledByAnEarlierVersionIsReinstalledOnRefresh]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentHooksControllerTests testAnUnreadableSettingsFileIsReportedRatherThanOverwritten]' started.
+Test Case '-[MyTermTests.AgentHooksControllerTests testAnUnreadableSettingsFileIsReportedRatherThanOverwritten]' passed (0.000 seconds).
+Test Case '-[MyTermTests.AgentHooksControllerTests testHooksSomebodyElseWroteAreNotMistakenForAnOldMyTerm]' started.
+Test Case '-[MyTermTests.AgentHooksControllerTests testHooksSomebodyElseWroteAreNotMistakenForAnOldMyTerm]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentHooksControllerTests testInstallAddsOneHookPerReportedEvent]' started.
+Test Case '-[MyTermTests.AgentHooksControllerTests testInstallAddsOneHookPerReportedEvent]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentHooksControllerTests testInstallingTwiceLeavesOneHook]' started.
+Test Case '-[MyTermTests.AgentHooksControllerTests testInstallingTwiceLeavesOneHook]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentHooksControllerTests testInstallKeepsEverythingElseInTheFile]' started.
+Test Case '-[MyTermTests.AgentHooksControllerTests testInstallKeepsEverythingElseInTheFile]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentHooksControllerTests testRemoveLeavesNoHooksKeyBehindWhenItAddedThemAll]' started.
+Test Case '-[MyTermTests.AgentHooksControllerTests testRemoveLeavesNoHooksKeyBehindWhenItAddedThemAll]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentHooksControllerTests testRemoveTakesOutOnlyMyTermsHooks]' started.
+Test Case '-[MyTermTests.AgentHooksControllerTests testRemoveTakesOutOnlyMyTermsHooks]' passed (0.001 seconds).
+Test Suite 'AgentHooksControllerTests' passed at 2026-11-15 22:06:16.517.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.008 (0.008) seconds
+Test Suite 'AgentHooksFileTests' started at 2026-11-15 22:06:16.517.
+Test Case '-[MyTermTests.AgentHooksFileTests testAFileCutMidWriteIsReportedAndLeftAlone]' started.
+Test Case '-[MyTermTests.AgentHooksFileTests testAFileCutMidWriteIsReportedAndLeftAlone]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentHooksFileTests testAnEmptyFileIsTreatedAsNoSettings]' started.
+Test Case '-[MyTermTests.AgentHooksFileTests testAnEmptyFileIsTreatedAsNoSettings]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentHooksFileTests testASettingsFileThatIsADirectoryIsReportedNotReplaced]' started.
+Test Case '-[MyTermTests.AgentHooksFileTests testASettingsFileThatIsADirectoryIsReportedNotReplaced]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentHooksFileTests testInstallingKeepsTheFilesMode]' started.
+Test Case '-[MyTermTests.AgentHooksFileTests testInstallingKeepsTheFilesMode]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentHooksFileTests testInstallingWritesThroughASymlinkRatherThanReplacingIt]' started.
+Test Case '-[MyTermTests.AgentHooksFileTests testInstallingWritesThroughASymlinkRatherThanReplacingIt]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentHooksFileTests testTheDefaultTargetsLiveInThePasswdHomeNotTheEnvironmentsHome]' started.
+Test Case '-[MyTermTests.AgentHooksFileTests testTheDefaultTargetsLiveInThePasswdHomeNotTheEnvironmentsHome]' passed (0.000 seconds).
+Test Suite 'AgentHooksFileTests' passed at 2026-11-15 22:06:16.524.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.006 (0.006) seconds
+Test Suite 'AgentIdentityLookupTests' started at 2026-11-15 22:06:16.524.
+Test Case '-[MyTermTests.AgentIdentityLookupTests testBothLookupsObserveLivePresenceMutationsWithoutStateVersionChange]' started.
+Test Case '-[MyTermTests.AgentIdentityLookupTests testBothLookupsObserveLivePresenceMutationsWithoutStateVersionChange]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentIdentityLookupTests testSavedSessionHasNoIdentityUntilLiveReportAndLosesItOnExit]' started.
+Test Case '-[MyTermTests.AgentIdentityLookupTests testSavedSessionHasNoIdentityUntilLiveReportAndLosesItOnExit]' passed (0.004 seconds).
+Test Case '-[MyTermTests.AgentIdentityLookupTests testWorkspaceIdentityFollowsFocusedPaneAndClearedPresence]' started.
+Test Case '-[MyTermTests.AgentIdentityLookupTests testWorkspaceIdentityFollowsFocusedPaneAndClearedPresence]' passed (0.001 seconds).
+Test Suite 'AgentIdentityLookupTests' passed at 2026-11-15 22:06:16.530.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.006 (0.006) seconds
+Test Suite 'AgentInboxPersistenceTests' started at 2026-11-15 22:06:16.530.
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testAFileCutMidWriteLosesTheWholeHistory]' started.
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testAFileCutMidWriteLosesTheWholeHistory]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testAFileThatIsADirectoryStartsAnEmptyHistoryAndDoesNotStopTheLaunch]' started.
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testAFileThatIsADirectoryStartsAnEmptyHistoryAndDoesNotStopTheLaunch]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testAFileThatIsASymlinkToDevNullReadsAsEmptyAndIsReplacedByARealFileOnWrite]' started.
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testAFileThatIsASymlinkToDevNullReadsAsEmptyAndIsReplacedByARealFileOnWrite]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testAFileWithMoreEntriesThanTheCapIsTrimmedToTheNewestOnLoad]' started.
+CoreData: error: Unable to create token NSXPCConnection.  NSXPCStoreServerEndpointFactory 0x78bb8815e0 -newEndpointWithError returned error Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.contactsd.persistence" UserInfo={NSDebugDescription=connection to service named com.apple.contactsd.persistence}
+CoreData: error: NSXPCStoreConnectionManager failed to initialize any connections for store at [local AddressBook path redacted] with error = Error Domain=NSCocoaErrorDomain Code=4097 "Couldn’t communicate with a helper application." UserInfo={NSUnderlyingError=0x78ba8a9560 {Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.contactsd.persistence" UserInfo={NSDebugDescription=connection to service named com.apple.contactsd.persistence}}}
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testAFileWithMoreEntriesThanTheCapIsTrimmedToTheNewestOnLoad]' passed (0.418 seconds).
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testAnEntryWithAnActivityThisBuildDoesNotKnowIsSkippedNotFatal]' started.
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testAnEntryWithAnActivityThisBuildDoesNotKnowIsSkippedNotFatal]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testAnEntryWithAnUnknownExtraFieldIsRead]' started.
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testAnEntryWithAnUnknownExtraFieldIsRead]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testAnOversizedHistoryIsCappedOnLoad]' started.
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testAnOversizedHistoryIsCappedOnLoad]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testAnUnreadEntryOutlivesReadOnesWhenAnOversizedFileIsTrimmed]' started.
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testAnUnreadEntryOutlivesReadOnesWhenAnOversizedFileIsTrimmed]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testAnUnsortedFileComesBackNewestFirst]' started.
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testAnUnsortedFileComesBackNewestFirst]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testAReadOnlyFileIsReplacedBecauseTheWriteIsARename]' started.
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testAReadOnlyFileIsReplacedBecauseTheWriteIsARename]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testAReadOnlyParentDirectoryLosesTheWriteButNotTheSession]' started.
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testAReadOnlyParentDirectoryLosesTheWriteButNotTheSession]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testAZeroByteFileStartsAnEmptyHistory]' started.
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testAZeroByteFileStartsAnEmptyHistory]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testDuplicateEntryIdentifiersAreCollapsedToOne]' started.
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testDuplicateEntryIdentifiersAreCollapsedToOne]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testEntriesDatedInTheFutureAreKeptAndStayAheadOfNewerRealOnes]' started.
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testEntriesDatedInTheFutureAreKeptAndStayAheadOfNewerRealOnes]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testEntriesWithTheSameDateAreKeptInFileOrder]' started.
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testEntriesWithTheSameDateAreKeptInFileOrder]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testTheHistoryComesBackReadAfterARelaunch]' started.
+Test Case '-[MyTermTests.AgentInboxPersistenceTests testTheHistoryComesBackReadAfterARelaunch]' passed (0.003 seconds).
+Test Suite 'AgentInboxPersistenceTests' passed at 2026-11-15 22:06:16.975.
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.444 (0.445) seconds
+Test Suite 'AgentIndicatorAppearanceTests' started at 2026-11-15 22:06:16.975.
+Test Case '-[MyTermTests.AgentIndicatorAppearanceTests testAppearanceCopiesAllSixGlobalChoices]' started.
+Test Case '-[MyTermTests.AgentIndicatorAppearanceTests testAppearanceCopiesAllSixGlobalChoices]' passed (0.000 seconds).
+Test Case '-[MyTermTests.AgentIndicatorAppearanceTests testDoubleHopMatchesCanvasAmplitudesAndRest]' started.
+Test Case '-[MyTermTests.AgentIndicatorAppearanceTests testDoubleHopMatchesCanvasAmplitudesAndRest]' passed (0.000 seconds).
+Test Case '-[MyTermTests.AgentIndicatorAppearanceTests testEasingMatchesCSSBezierReferencePoints]' started.
+Test Case '-[MyTermTests.AgentIndicatorAppearanceTests testEasingMatchesCSSBezierReferencePoints]' passed (0.000 seconds).
+Test Case '-[MyTermTests.AgentIndicatorAppearanceTests testEnvironmentUsesDefaultAppearanceWithoutAppSetup]' started.
+Test Case '-[MyTermTests.AgentIndicatorAppearanceTests testEnvironmentUsesDefaultAppearanceWithoutAppSetup]' passed (0.000 seconds).
+Test Case '-[MyTermTests.AgentIndicatorAppearanceTests testModelAppearanceInvalidatesObserversAndReflectsSettingsChangesImmediately]' started.
+Test Case '-[MyTermTests.AgentIndicatorAppearanceTests testModelAppearanceInvalidatesObserversAndReflectsSettingsChangesImmediately]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentIndicatorAppearanceTests testPulseMatchesCanvasPeakRestAndPeriod]' started.
+Test Case '-[MyTermTests.AgentIndicatorAppearanceTests testPulseMatchesCanvasPeakRestAndPeriod]' passed (0.000 seconds).
+Test Case '-[MyTermTests.AgentIndicatorAppearanceTests testTickDashCompletesBeforeItsAnimationRests]' started.
+Test Case '-[MyTermTests.AgentIndicatorAppearanceTests testTickDashCompletesBeforeItsAnimationRests]' passed (0.000 seconds).
+Test Case '-[MyTermTests.AgentIndicatorAppearanceTests testWritingLinesFollowCanvasSequenceAndRestart]' started.
+Test Case '-[MyTermTests.AgentIndicatorAppearanceTests testWritingLinesFollowCanvasSequenceAndRestart]' passed (0.000 seconds).
+Test Suite 'AgentIndicatorAppearanceTests' passed at 2026-11-15 22:06:16.977.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Suite 'AgentLifecycleTests' started at 2026-11-15 22:06:16.977.
+Test Case '-[MyTermTests.AgentLifecycleTests testAConversationComesBackNamedAndReadyRatherThanWorking]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAConversationComesBackNamedAndReadyRatherThanWorking]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAHookThatArrivesAfterTheTabClosedTouchesNothing]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAHookThatArrivesAfterTheTabClosedTouchesNothing]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAHookThatArrivesAfterTheTabMovedLandsOnThePaneTheTabIsInNow]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAHookThatArrivesAfterTheTabMovedLandsOnThePaneTheTabIsInNow]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAHookThatArrivesAfterTheWorkspaceWasDeletedTouchesNothing]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAHookThatArrivesAfterTheWorkspaceWasDeletedTouchesNothing]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAKilledAgentsPaneDoesNotTakeTheShellsTitle]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAKilledAgentsPaneDoesNotTakeTheShellsTitle]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testALateSessionEndFromTheConversationBeforeLeavesTheCurrentOneAlone]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testALateSessionEndFromTheConversationBeforeLeavesTheCurrentOneAlone]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testALateSessionEndFromTheLastConversationLeavesTheNewOnesName]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testALateSessionEndFromTheLastConversationLeavesTheNewOnesName]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testALateSessionStartFromTheConversationBeforeLeavesTheCurrentOneAlone]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testALateSessionStartFromTheConversationBeforeLeavesTheCurrentOneAlone]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testANamedPaneWithNothingToResumeComesBackToItsPlainLabel]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testANamedPaneWithNothingToResumeComesBackToItsPlainLabel]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAnotherAgentCannotSpeakForAPendingRejoin]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAnotherAgentCannotSpeakForAPendingRejoin]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAnUnrelatedForegroundProcessDoesNotBorrowTheSavedAgentsIcon]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAnUnrelatedForegroundProcessDoesNotBorrowTheSavedAgentsIcon]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAPaneRestoredWithoutItsResumeCommandHasNoConversationToKeep]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAPaneRestoredWithoutItsResumeCommandHasNoConversationToKeep]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAPromptWithNoSessionStartStillAdoptsTheConversation]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAPromptWithNoSessionStartStillAdoptsTheConversation]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAReportQueuedBehindTheShellsExitTouchesNothing]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAReportQueuedBehindTheShellsExitTouchesNothing]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAResumeInTheSamePaneMovesTheTabToTheNewConversation]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAResumeInTheSamePaneMovesTheTabToTheNewConversation]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testASecondSessionStartWithoutAnEndStillFollowsTheNewIdentifier]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testASecondSessionStartWithoutAnEndStillFollowsTheNewIdentifier]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testASessionEndStillInFlightFromTheEarlierLifeCannotEndTheRejoinedOne]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testASessionEndStillInFlightFromTheEarlierLifeCannotEndTheRejoinedOne]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testASessionEndThatArrivesAsTheAppQuitsCannotForgetTheConversation]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testASessionEndThatArrivesAsTheAppQuitsCannotForgetTheConversation]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testASessionEndWithNoSessionStartChangesNothing]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testASessionEndWithNoSessionStartChangesNothing]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAShellThatWasHungUpKeepsItsConversationForTheNextLaunch]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAShellThatWasHungUpKeepsItsConversationForTheNextLaunch]' passed (0.005 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAShutdownKeepsEveryConversationWhateverItsHooksReport]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAShutdownKeepsEveryConversationWhateverItsHooksReport]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAStaleSessionEndWithNoIdentifierCannotEndAPendingRejoin]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAStaleSessionEndWithNoIdentifierCannotEndAPendingRejoin]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAStopBeforeANotificationLeavesTheQuestionStanding]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAStopBeforeANotificationLeavesTheQuestionStanding]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testATerminalFailureIsShownOnItsPaneAndFlagsOnlyItsWorkspace]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testATerminalFailureIsShownOnItsPaneAndFlagsOnlyItsWorkspace]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAThirdConversationInThePaneBecomesTheCurrentOne]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAThirdConversationInThePaneBecomesTheCurrentOne]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testBothAgentsKeepTheConversationAcrossTurnsAndResumeAfterQuit]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testBothAgentsKeepTheConversationAcrossTurnsAndResumeAfterQuit]' passed (0.007 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testBothAgentsLeaveNothingToResumeAfterAnExplicitExitOrReturnToShell]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testBothAgentsLeaveNothingToResumeAfterAnExplicitExitOrReturnToShell]' passed (0.010 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testBothCodexClientsResumeFromTheConversationDirectoryAfterMultipleLaunches]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testBothCodexClientsResumeFromTheConversationDirectoryAfterMultipleLaunches]' passed (0.009 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testClaudeAndCodexPanesResumeTheirOwnConversationsTogether]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testClaudeAndCodexPanesResumeTheirOwnConversationsTogether]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testClosingAPaneDiscardsItsNotice]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testClosingAPaneDiscardsItsNotice]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testCodexEndingCannotDiscardAClaudeConversationInTheSamePane]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testCodexEndingCannotDiscardAClaudeConversationInTheSamePane]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testCodexToolCompletionClearsThePermissionQuestionDuringTheTurn]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testCodexToolCompletionClearsThePermissionQuestionDuringTheTurn]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testCompletingAnotherToolDoesNotClearAnOutstandingCodexPermission]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testCompletingAnotherToolDoesNotClearAnOutstandingCodexPermission]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testForegroundDetectionDoesNotBlockARejoinedSessionsStartHook]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testForegroundDetectionDoesNotBlockARejoinedSessionsStartHook]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testRejoiningAConversationThePaneLeftIsNotAStaleReport]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testRejoiningAConversationThePaneLeftIsNotAStaleReport]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testRestoredFinishedSnapshotDoesNotReopenReadCompletionOrChangeHistory]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testRestoredFinishedSnapshotDoesNotReopenReadCompletionOrChangeHistory]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testRestoredFinishedSnapshotPreservesExistingUnreadEventIdentity]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testRestoredFinishedSnapshotPreservesExistingUnreadEventIdentity]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testRestoredPendingPermissionsRebuildStateWithoutFilingFreshQuestions]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testRestoredPendingPermissionsRebuildStateWithoutFilingFreshQuestions]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testResumedCodexShowsItsIdentityBeforeItsFirstHook]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testResumedCodexShowsItsIdentityBeforeItsFirstHook]' passed (0.005 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testRuntimeNoticesAndExitStatusesAreShownOnThePane]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testRuntimeNoticesAndExitStatusesAreShownOnThePane]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testStartupCommandWarningShowsItsMessageWithoutEndingTheTerminal]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testStartupCommandWarningShowsItsMessageWithoutEndingTheTerminal]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testTheRestoreSettingIsReadAtRelaunchNotAtQuit]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testTheRestoreSettingIsReadAtRelaunchNotAtQuit]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testTheSameConversationInTwoPanesIsKeptByBoth]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testTheSameConversationInTwoPanesIsKeptByBoth]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testTheShellComingBackInFrontRetiresTheAgentTheHooksNeverSaidLeft]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testTheShellComingBackInFrontRetiresTheAgentTheHooksNeverSaidLeft]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testTheShellExitingTakesTheAgentAndItsConversationWithIt]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testTheShellExitingTakesTheAgentAndItsConversationWithIt]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testTheShellInFrontOfAPaneWithNoAgentChangesNothing]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testTheShellInFrontOfAPaneWithNoAgentChangesNothing]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testTwoNotificationsWithNoStopBetweenThemKeepOneRow]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testTwoNotificationsWithNoStopBetweenThemKeepOneRow]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testUpdatingLaunchDetailsDoesNotRetireTheCurrentConversation]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testUpdatingLaunchDetailsDoesNotRetireTheCurrentConversation]' passed (0.002 seconds).
+Test Suite 'AgentLifecycleTests' passed at 2026-11-15 22:06:17.099.
+	 Executed 48 tests, with 0 failures (0 unexpected) in 0.120 (0.122) seconds
+Test Suite 'AgentNotificationBacklogTests' started at 2026-11-15 22:06:17.099.
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testAHistoryFileThatCannotBeReadStartsOverWithoutStoppingTheLaunch]' started.
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testAHistoryFileThatCannotBeReadStartsOverWithoutStoppingTheLaunch]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testAPaneLeavingFullScreenHasItsSelectedTabRead]' started.
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testAPaneLeavingFullScreenHasItsSelectedTabRead]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testATabBehindAFullScreenPaneIsNotInFrontOfTheUser]' started.
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testATabBehindAFullScreenPaneIsNotInFrontOfTheUser]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testClearingEmptiesTheBacklogAndRetiresTheCooks]' started.
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testClearingEmptiesTheBacklogAndRetiresTheCooks]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testClosingATabWhileNobodyIsAtTheMacReadsNothing]' started.
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testClosingATabWhileNobodyIsAtTheMacReadsNothing]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testClosingTheSelectedTabReadsTheTabItLandsOn]' started.
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testClosingTheSelectedTabReadsTheTabItLandsOn]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testDeletingAWorkspaceTakesItsEntriesOutOfTheBell]' started.
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testDeletingAWorkspaceTakesItsEntriesOutOfTheBell]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testFocusingAnotherPaneOutOfFullScreenReadsThePanesItReveals]' started.
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testFocusingAnotherPaneOutOfFullScreenReadsThePanesItReveals]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testOpeningANotificationGoesToItsTabAndReadsIt]' started.
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testOpeningANotificationGoesToItsTabAndReadsIt]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testReachingATabWithNothingWaitingDoesNotRewriteTheHistory]' started.
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testReachingATabWithNothingWaitingDoesNotRewriteTheHistory]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testTheBacklogDropsAnEntryWhoseTabIsGone]' started.
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testTheBacklogDropsAnEntryWhoseTabIsGone]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testTheBacklogFollowsATabIntoAnotherPane]' started.
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testTheBacklogFollowsATabIntoAnotherPane]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testTheBacklogListsTheWaitingTabWithItsWorkspaceAndTabNames]' started.
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testTheBacklogListsTheWaitingTabWithItsWorkspaceAndTabNames]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testTheBellAndTheCookAgreeAfterAQuestionIsAnsweredElsewhere]' started.
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testTheBellAndTheCookAgreeAfterAQuestionIsAnsweredElsewhere]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testTheHistoryComesBackReadAfterARelaunch]' started.
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testTheHistoryComesBackReadAfterARelaunch]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testTheHistoryIsSavedWhereTheWorkspaceStateIs]' started.
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testTheHistoryIsSavedWhereTheWorkspaceStateIs]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testTheInboxStillFilesAnEntryWithTheBellHidden]' started.
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testTheInboxStillFilesAnEntryWithTheBellHidden]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testTheNewestNotificationComesFirst]' started.
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testTheNewestNotificationComesFirst]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testTheSelectedTabIsFiledWhileTheAppIsBehindAnother]' started.
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testTheSelectedTabIsFiledWhileTheAppIsBehindAnother]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testTheTabInFrontOfTheUserIsNotFiledButIsRemembered]' started.
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testTheTabInFrontOfTheUserIsNotFiledButIsRemembered]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testWhatWasReadStaysInTheHistoryNewestFirst]' started.
+Test Case '-[MyTermTests.AgentNotificationBacklogTests testWhatWasReadStaysInTheHistoryNewestFirst]' passed (0.002 seconds).
+Test Suite 'AgentNotificationBacklogTests' passed at 2026-11-15 22:06:17.143.
+	 Executed 21 tests, with 0 failures (0 unexpected) in 0.042 (0.043) seconds
+Test Suite 'AgentNotificationPosterFactoryTests' started at 2026-11-15 22:06:17.143.
+Test Case '-[MyTermTests.AgentNotificationPosterFactoryTests testAProcessThatIsNotABundledAppGetsASilentPoster]' started.
+Test Case '-[MyTermTests.AgentNotificationPosterFactoryTests testAProcessThatIsNotABundledAppGetsASilentPoster]' passed (0.000 seconds).
+Test Case '-[MyTermTests.AgentNotificationPosterFactoryTests testTheSilentPosterAcceptsEveryCallWithoutPosting]' started.
+Test Case '-[MyTermTests.AgentNotificationPosterFactoryTests testTheSilentPosterAcceptsEveryCallWithoutPosting]' passed (0.000 seconds).
+Test Suite 'AgentNotificationPosterFactoryTests' passed at 2026-11-15 22:06:17.143.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'AgentNotificationTests' started at 2026-11-15 22:06:17.143.
+Test Case '-[MyTermTests.AgentNotificationTests testAFinishBehindAnotherAppIsAnnounced]' started.
+Test Case '-[MyTermTests.AgentNotificationTests testAFinishBehindAnotherAppIsAnnounced]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentNotificationTests testAWorkingAgentIsNotAnnounced]' started.
+Test Case '-[MyTermTests.AgentNotificationTests testAWorkingAgentIsNotAnnounced]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentNotificationTests testClickingABannerBringsTheTabForward]' started.
+Test Case '-[MyTermTests.AgentNotificationTests testClickingABannerBringsTheTabForward]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentNotificationTests testNothingIsPostedUntilTheUserAsksForIt]' started.
+Test Case '-[MyTermTests.AgentNotificationTests testNothingIsPostedUntilTheUserAsksForIt]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentNotificationTests testNothingIsPostedWhileMyTermIsTheAppInFront]' started.
+Test Case '-[MyTermTests.AgentNotificationTests testNothingIsPostedWhileMyTermIsTheAppInFront]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentNotificationTests testTheFolderColourWinsOverTheWorkspaceColour]' started.
+Test Case '-[MyTermTests.AgentNotificationTests testTheFolderColourWinsOverTheWorkspaceColour]' passed (0.003 seconds).
+Test Suite 'AgentNotificationTests' passed at 2026-11-15 22:06:17.156.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.013 (0.013) seconds
+Test Suite 'AgentNotificationsScrollLayoutTests' started at 2026-11-15 22:06:17.156.
+Test Case '-[MyTermTests.AgentNotificationsScrollLayoutTests testAllMeasuredRows]' started.
+Test Case '-[MyTermTests.AgentNotificationsScrollLayoutTests testAllMeasuredRows]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentNotificationsScrollLayoutTests testEmptyListHasNoScrollArea]' started.
+Test Case '-[MyTermTests.AgentNotificationsScrollLayoutTests testEmptyListHasNoScrollArea]' passed (0.000 seconds).
+Test Case '-[MyTermTests.AgentNotificationsScrollLayoutTests testInvalidMeasurementsUseTheEstimate]' started.
+Test Case '-[MyTermTests.AgentNotificationsScrollLayoutTests testInvalidMeasurementsUseTheEstimate]' passed (0.000 seconds).
+Test Case '-[MyTermTests.AgentNotificationsScrollLayoutTests testMissingMeasurementRetainsItsPositionAndUsesMeasuredAverage]' started.
+Test Case '-[MyTermTests.AgentNotificationsScrollLayoutTests testMissingMeasurementRetainsItsPositionAndUsesMeasuredAverage]' passed (0.000 seconds).
+Test Case '-[MyTermTests.AgentNotificationsScrollLayoutTests testMissingTrailingMeasurementsUseTheVisibleAverage]' started.
+Test Case '-[MyTermTests.AgentNotificationsScrollLayoutTests testMissingTrailingMeasurementsUseTheVisibleAverage]' passed (0.000 seconds).
+Test Case '-[MyTermTests.AgentNotificationsScrollLayoutTests testNoMeasurementsUses52PointEstimateForEveryVisibleRow]' started.
+Test Case '-[MyTermTests.AgentNotificationsScrollLayoutTests testNoMeasurementsUses52PointEstimateForEveryVisibleRow]' passed (0.000 seconds).
+Test Case '-[MyTermTests.AgentNotificationsScrollLayoutTests testOnlyFirstMeasuredReservesEveryVisibleRow]' started.
+Test Case '-[MyTermTests.AgentNotificationsScrollLayoutTests testOnlyFirstMeasuredReservesEveryVisibleRow]' passed (0.000 seconds).
+Test Case '-[MyTermTests.AgentNotificationsScrollLayoutTests testPeekUsesSixthRowHeightAndIgnoresLaterRows]' started.
+Test Case '-[MyTermTests.AgentNotificationsScrollLayoutTests testPeekUsesSixthRowHeightAndIgnoresLaterRows]' passed (0.000 seconds).
+Test Suite 'AgentNotificationsScrollLayoutTests' passed at 2026-11-15 22:06:17.157.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'AgentTabTitleTests' started at 2026-11-15 22:06:17.157.
+Test Case '-[MyTermTests.AgentTabTitleTests testAnotherAgentCannotTakeTheNameOffTheTab]' started.
+Test Case '-[MyTermTests.AgentTabTitleTests testAnotherAgentCannotTakeTheNameOffTheTab]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentTabTitleTests testAPaneRunningAnAgentTakesTheNameTheAgentGivesTheConversation]' started.
+Test Case '-[MyTermTests.AgentTabTitleTests testAPaneRunningAnAgentTakesTheNameTheAgentGivesTheConversation]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentTabTitleTests testAShellTitleNeverNamesATab]' started.
+Test Case '-[MyTermTests.AgentTabTitleTests testAShellTitleNeverNamesATab]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentTabTitleTests testATitleTheUserTypedOutranksTheConversationName]' started.
+Test Case '-[MyTermTests.AgentTabTitleTests testATitleTheUserTypedOutranksTheConversationName]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentTabTitleTests testLeavingTheAgentPutsTheTabBack]' started.
+Test Case '-[MyTermTests.AgentTabTitleTests testLeavingTheAgentPutsTheTabBack]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentTabTitleTests testTheNameComesBackWithTheConversationAfterARelaunch]' started.
+Test Case '-[MyTermTests.AgentTabTitleTests testTheNameComesBackWithTheConversationAfterARelaunch]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentTabTitleTests testTurningTheSettingOffTakesTheNamesOffTheTabsThatHaveThem]' started.
+Test Case '-[MyTermTests.AgentTabTitleTests testTurningTheSettingOffTakesTheNamesOffTheTabsThatHaveThem]' passed (0.001 seconds).
+Test Suite 'AgentTabTitleTests' passed at 2026-11-15 22:06:17.165.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.007 (0.008) seconds
+Test Suite 'AppModelTests' started at 2026-11-15 22:06:17.165.
+Test Case '-[MyTermTests.AppModelTests testAnAgentMyTermCannotResumeIsNotSaved]' started.
+Test Case '-[MyTermTests.AppModelTests testAnAgentMyTermCannotResumeIsNotSaved]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AppModelTests testAnAgentReportSavesTheConversationToComeBackTo]' started.
+Test Case '-[MyTermTests.AppModelTests testAnAgentReportSavesTheConversationToComeBackTo]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AppModelTests testAnAgentThatStoppedLeavesNothingToResume]' started.
+Test Case '-[MyTermTests.AppModelTests testAnAgentThatStoppedLeavesNothingToResume]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AppModelTests testAPaneStillRunningItsAgentKeepsTheSavedConversation]' started.
+Test Case '-[MyTermTests.AppModelTests testAPaneStillRunningItsAgentKeepsTheSavedConversation]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AppModelTests testAResumedAgentIsNotShownAsWorkingOrNeedingYou]' started.
+Test Case '-[MyTermTests.AppModelTests testAResumedAgentIsNotShownAsWorkingOrNeedingYou]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AppModelTests testExecAgentConversationSurvivesPersistenceAndRelaunch]' started.
+Test Case '-[MyTermTests.AppModelTests testExecAgentConversationSurvivesPersistenceAndRelaunch]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AppModelTests testTurningOffAgentRestoreBringsThePaneBackToAPrompt]' started.
+Test Case '-[MyTermTests.AppModelTests testTurningOffAgentRestoreBringsThePaneBackToAPrompt]' passed (0.003 seconds).
+Test Suite 'AppModelTests' passed at 2026-11-15 22:06:17.179.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.014 (0.014) seconds
+Test Suite 'CodexHooksTests' started at 2026-11-15 22:06:17.179.
+Test Case '-[MyTermTests.CodexHooksTests testAnotherToolsHooksInTheSameFileAreLeftAlone]' started.
+Test Case '-[MyTermTests.CodexHooksTests testAnotherToolsHooksInTheSameFileAreLeftAlone]' passed (0.001 seconds).
+Test Case '-[MyTermTests.CodexHooksTests testCodexGetsItsOwnEventNamesAndReportsAsCodex]' started.
+Test Case '-[MyTermTests.CodexHooksTests testCodexGetsItsOwnEventNamesAndReportsAsCodex]' passed (0.001 seconds).
+Test Case '-[MyTermTests.CodexHooksTests testRefreshingCodexSessionEndCorrectsOnlyTheManagedTimeout]' started.
+Test Case '-[MyTermTests.CodexHooksTests testRefreshingCodexSessionEndCorrectsOnlyTheManagedTimeout]' passed (0.001 seconds).
+Test Case '-[MyTermTests.CodexHooksTests testRefreshingOlderCodexHooksUpgradesIdentityParsingAndAddsSessionEnd]' started.
+Test Case '-[MyTermTests.CodexHooksTests testRefreshingOlderCodexHooksUpgradesIdentityParsingAndAddsSessionEnd]' passed (0.001 seconds).
+Test Case '-[MyTermTests.CodexHooksTests testTheTwoAgentsDoNotShareAFile]' started.
+Test Case '-[MyTermTests.CodexHooksTests testTheTwoAgentsDoNotShareAFile]' passed (0.000 seconds).
+Test Suite 'CodexHooksTests' passed at 2026-11-15 22:06:17.183.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.004 (0.004) seconds
+Test Suite 'NativeAgentHooksTests' started at 2026-11-15 22:06:17.183.
+Test Case '-[MyTermTests.NativeAgentHooksTests testAntigravityUsesNativeNamedGroupsAndRestoresTheOriginalStatusObject]' started.
+Test Case '-[MyTermTests.NativeAgentHooksTests testAntigravityUsesNativeNamedGroupsAndRestoresTheOriginalStatusObject]' passed (0.002 seconds).
+Test Case '-[MyTermTests.NativeAgentHooksTests testAutomaticHookRefreshPreservesDisabledCallbackAndItsCurrentOptions]' started.
+Test Case '-[MyTermTests.NativeAgentHooksTests testAutomaticHookRefreshPreservesDisabledCallbackAndItsCurrentOptions]' passed (0.002 seconds).
+Test Case '-[MyTermTests.NativeAgentHooksTests testGrokUsesItsOwnFileWithNotificationMatchersAndCancellationEvents]' started.
+Test Case '-[MyTermTests.NativeAgentHooksTests testGrokUsesItsOwnFileWithNotificationMatchersAndCancellationEvents]' passed (0.001 seconds).
+Test Case '-[MyTermTests.NativeAgentHooksTests testMalformedCallbackIsNeverOverwritten]' started.
+Test Case '-[MyTermTests.NativeAgentHooksTests testMalformedCallbackIsNeverOverwritten]' passed (0.001 seconds).
+Test Case '-[MyTermTests.NativeAgentHooksTests testRefreshingOwnedLegacyCallbackUpgradesExecWithoutLosingTheOriginalCommand]' started.
+Test Case '-[MyTermTests.NativeAgentHooksTests testRefreshingOwnedLegacyCallbackUpgradesExecWithoutLosingTheOriginalCommand]' passed (0.002 seconds).
+Test Case '-[MyTermTests.NativeAgentHooksTests testRemovingANewCallbackRestoresAbsenceAndPreservesLaterUserEdits]' started.
+Test Case '-[MyTermTests.NativeAgentHooksTests testRemovingANewCallbackRestoresAbsenceAndPreservesLaterUserEdits]' passed (0.001 seconds).
+Test Case '-[MyTermTests.NativeAgentHooksTests testSlowReporterCannotHoldTheExistingStatusCommandOrItsOutputPipe]' started.
+Test Case '-[MyTermTests.NativeAgentHooksTests testSlowReporterCannotHoldTheExistingStatusCommandOrItsOutputPipe]' passed (0.057 seconds).
+Test Case '-[MyTermTests.NativeAgentHooksTests testStatusWrapperPreservesThePreviousCommandsInputAndOutput]' started.
+Test Case '-[MyTermTests.NativeAgentHooksTests testStatusWrapperPreservesThePreviousCommandsInputAndOutput]' passed (0.019 seconds).
+Test Case '-[MyTermTests.NativeAgentHooksTests testUnresponsiveStatusReporterAndItsChildAreTerminated]' started.
+CoreData: error: Unable to create token NSXPCConnection.  NSXPCStoreServerEndpointFactory 0x78bb8815e0 -newEndpointWithError returned error Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.contactsd.persistence" UserInfo={NSDebugDescription=connection to service named com.apple.contactsd.persistence}
+CoreData: error: NSXPCStoreConnectionManager failed to initialize any connections for store at [local AddressBook path redacted] with error = Error Domain=NSCocoaErrorDomain Code=4097 "Couldn’t communicate with a helper application." UserInfo={NSUnderlyingError=0x78ba8a9440 {Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.contactsd.persistence" UserInfo={NSDebugDescription=connection to service named com.apple.contactsd.persistence}}}
+CoreData: warning: Caught exception trying to load store metadata during error recovery: NSXPCStoreServerEndpointFactory failed to provide an endpoint
+CoreData: error: addPersistentStoreWithType:configuration:URL:options:error: returned error NSCocoaErrorDomain (4097)
+CoreData: error: userInfo:
+CoreData: error: 	NSUnderlyingException : NSXPCStoreServerEndpointFactory failed to provide an endpoint
+CoreData: error: 	NSUnderlyingError : Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.contactsd.persistence" UserInfo={NSDebugDescription=connection to service named com.apple.contactsd.persistence}
+CoreData: error: storeType: NSXPCStore
+CoreData: error: configuration: (null)
+CoreData: error: URL: [local AddressBook path redacted]
+CoreData: annotation: options:
+CoreData: annotation: 	NSReadOnlyPersistentStoreOption : 0
+CoreData: annotation: 	NSXPCStoreServerEndpointFactory : <CNCDRemotePersistentStoreEndpointFactory: 0x78bb8815e0>
+CoreData: annotation: 	skipModelCheck : 1
+CoreData: annotation: 	NSPersistentHistoryTrackingKey : 1
+Test Case '-[MyTermTests.NativeAgentHooksTests testUnresponsiveStatusReporterAndItsChildAreTerminated]' passed (2.100 seconds).
+Test Suite 'NativeAgentHooksTests' passed at 2026-11-15 22:06:19.368.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 2.185 (2.185) seconds
+Test Suite 'MyTermTests.xctest' passed at 2026-11-15 22:06:19.368.
+	 Executed 189 tests, with 0 failures (0 unexpected) in 18.024 (18.034) seconds
+Test Suite 'Selected tests' passed at 2026-11-15 22:06:19.368.
+	 Executed 189 tests, with 0 failures (0 unexpected) in 18.024 (18.035) seconds
+Test Suite 'Selected tests' started at 2026-11-15 22:06:19.492.
+Test Suite 'MyTermPlatformTests.xctest' started at 2026-11-15 22:06:19.493.
+Test Suite 'AgentActivityTerminalTests' started at 2026-11-15 22:06:19.493.
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testAMarkerAtTheByteCapIsReportedAndOneOverItIsNot]' started.
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testAMarkerAtTheByteCapIsReportedAndOneOverItIsNot]' passed (0.068 seconds).
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testAMarkerInsideAMarkerReportsTheOuterWithoutTheInnersSession]' started.
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testAMarkerInsideAMarkerReportsTheOuterWithoutTheInnersSession]' passed (0.011 seconds).
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testAMarkerNeverTerminatedSwallowsTheOutputAfterItButReportsNothing]' started.
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testAMarkerNeverTerminatedSwallowsTheOutputAfterItButReportsNothing]' passed (0.001 seconds).
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testAMarkerSplitAcrossTwoWritesIsOneReport]' started.
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testAMarkerSplitAcrossTwoWritesIsOneReport]' passed (0.002 seconds).
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testOrdinaryOutputAndOtherEscapesAreNotReports]' started.
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testOrdinaryOutputAndOtherEscapesAreNotReports]' passed (0.001 seconds).
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testTheTerminalReportsTheEscapeSequenceAHookWrites]' started.
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testTheTerminalReportsTheEscapeSequenceAHookWrites]' passed (0.001 seconds).
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testTheTerminalReportsTheTitleAnAgentWrites]' started.
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testTheTerminalReportsTheTitleAnAgentWrites]' passed (0.001 seconds).
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testTwoMarkersInOneWriteAreTwoReports]' started.
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testTwoMarkersInOneWriteAreTwoReports]' passed (0.001 seconds).
+Test Suite 'AgentActivityTerminalTests' passed at 2026-11-15 22:06:19.580.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.087 (0.087) seconds
+Test Suite 'TerminalSessionConfigurationTests' started at 2026-11-15 22:06:19.580.
+Test Case '-[MyTermPlatformTests.TerminalSessionConfigurationTests testForegroundProcessDetectionIgnoresIdleShellAndFindsActiveJob]' started.
+Test Case '-[MyTermPlatformTests.TerminalSessionConfigurationTests testForegroundProcessDetectionIgnoresIdleShellAndFindsActiveJob]' passed (0.054 seconds).
+Test Suite 'TerminalSessionConfigurationTests' passed at 2026-11-15 22:06:19.634.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.054 (0.054) seconds
+Test Suite 'MyTermPlatformTests.xctest' passed at 2026-11-15 22:06:19.634.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.140 (0.141) seconds
+Test Suite 'Selected tests' passed at 2026-11-15 22:06:19.634.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.140 (0.142) seconds
+Test Suite 'Selected tests' started at 2026-11-15 22:06:19.712.
+Test Suite 'MyTermCoreTests.xctest' started at 2026-11-15 22:06:19.713.
+Test Suite 'AgentActivityMarkerTests' started at 2026-11-15 22:06:19.713.
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testAcceptsTheEventNamesOtherTerminalsUse]' started.
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testAcceptsTheEventNamesOtherTerminalsUse]' passed (0.001 seconds).
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testConversationDirectoryAndLauncherAreCapturedWithoutUsingTheTitle]' started.
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testConversationDirectoryAndLauncherAreCapturedWithoutUsingTheTitle]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testDecodedReportsKeepValidMetadataAndOptionalFieldCompatibility]' started.
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testDecodedReportsKeepValidMetadataAndOptionalFieldCompatibility]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testDecodedReportsValidateRecoveryIdentifiers]' started.
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testDecodedReportsValidateRecoveryIdentifiers]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testEmptyOptionalHookMetadataPreservesConversationIdentity]' started.
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testEmptyOptionalHookMetadataPreservesConversationIdentity]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testIgnoresCaseSpacingAndUnknownFields]' started.
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testIgnoresCaseSpacingAndUnknownFields]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testIgnoresPayloadsThatAreNotAReport]' started.
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testIgnoresPayloadsThatAreNotAReport]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testReportsTheAgentAndWhatItIsDoing]' started.
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testReportsTheAgentAndWhatItIsDoing]' passed (0.000 seconds).
+Test Suite 'AgentActivityMarkerTests' passed at 2026-11-15 22:06:19.715.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'AgentAttentionStateTests' started at 2026-11-15 22:06:19.715.
+Test Case '-[MyTermCoreTests.AgentAttentionStateTests testAQuestionOutranksAFinishWhichOutranksWork]' started.
+Test Case '-[MyTermCoreTests.AgentAttentionStateTests testAQuestionOutranksAFinishWhichOutranksWork]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentAttentionStateTests testOnlyAFinishOrAQuestionAsksForAnything]' started.
+Test Case '-[MyTermCoreTests.AgentAttentionStateTests testOnlyAFinishOrAQuestionAsksForAnything]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentAttentionStateTests testReadingATabClearsAFinishButNotAQuestion]' started.
+Test Case '-[MyTermCoreTests.AgentAttentionStateTests testReadingATabClearsAFinishButNotAQuestion]' passed (0.000 seconds).
+Test Suite 'AgentAttentionStateTests' passed at 2026-11-15 22:06:19.716.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'AgentIdentityTests' started at 2026-11-15 22:06:19.716.
+Test Case '-[MyTermCoreTests.AgentIdentityTests testKnownNamesAreCaseInsensitive]' started.
+Test Case '-[MyTermCoreTests.AgentIdentityTests testKnownNamesAreCaseInsensitive]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentIdentityTests testUnknownNamesHaveNoIdentity]' started.
+Test Case '-[MyTermCoreTests.AgentIdentityTests testUnknownNamesHaveNoIdentity]' passed (0.000 seconds).
+Test Suite 'AgentIdentityTests' passed at 2026-11-15 22:06:19.716.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'AgentIndicatorSettingsTests' started at 2026-11-15 22:06:19.716.
+Test Case '-[MyTermCoreTests.AgentIndicatorSettingsTests testEveryChoiceSurvivesRoundTripAndNormalization]' started.
+Test Case '-[MyTermCoreTests.AgentIndicatorSettingsTests testEveryChoiceSurvivesRoundTripAndNormalization]' passed (0.003 seconds).
+Test Case '-[MyTermCoreTests.AgentIndicatorSettingsTests testEveryWorkingChoiceSurvivesRoundTripAndNormalization]' started.
+Test Case '-[MyTermCoreTests.AgentIndicatorSettingsTests testEveryWorkingChoiceSurvivesRoundTripAndNormalization]' passed (0.001 seconds).
+Test Case '-[MyTermCoreTests.AgentIndicatorSettingsTests testGlobalPersistenceAcrossFolderAndWorkspaceScopes]' started.
+Test Case '-[MyTermCoreTests.AgentIndicatorSettingsTests testGlobalPersistenceAcrossFolderAndWorkspaceScopes]' passed (0.006 seconds).
+Test Case '-[MyTermCoreTests.AgentIndicatorSettingsTests testMalformedWorkingValuesUseDefaultsWithoutLosingOtherPreferences]' started.
+Test Case '-[MyTermCoreTests.AgentIndicatorSettingsTests testMalformedWorkingValuesUseDefaultsWithoutLosingOtherPreferences]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentIndicatorSettingsTests testMissingAndInvalidValuesUseDefaults]' started.
+Test Case '-[MyTermCoreTests.AgentIndicatorSettingsTests testMissingAndInvalidValuesUseDefaults]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentIndicatorSettingsTests testOverridesCannotCarryIndicatorsAndPreserveGlobalValues]' started.
+Test Case '-[MyTermCoreTests.AgentIndicatorSettingsTests testOverridesCannotCarryIndicatorsAndPreserveGlobalValues]' passed (0.000 seconds).
+Test Suite 'AgentIndicatorSettingsTests' passed at 2026-11-15 22:06:19.727.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.010 (0.011) seconds
+Test Suite 'AgentNotificationBuilderTests' started at 2026-11-15 22:06:19.727.
+Test Case '-[MyTermCoreTests.AgentNotificationBuilderTests testAFinishAndAQuestionReadDifferently]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationBuilderTests testAFinishAndAQuestionReadDifferently]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationBuilderTests testANameIsNeverSaidTwice]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationBuilderTests testANameIsNeverSaidTwice]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationBuilderTests testAnEmptyNameFallsBackRatherThanLeavingABlankBanner]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationBuilderTests testAnEmptyNameFallsBackRatherThanLeavingABlankBanner]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationBuilderTests testAWorkingAgentIsNotWorthABanner]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationBuilderTests testAWorkingAgentIsNotWorthABanner]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationBuilderTests testTheAgentNamesItself]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationBuilderTests testTheAgentNamesItself]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationBuilderTests testTheColourAndTheTabRideAlong]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationBuilderTests testTheColourAndTheTabRideAlong]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationBuilderTests testTheTitleFollowsTheNamingChoice]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationBuilderTests testTheTitleFollowsTheNamingChoice]' passed (0.000 seconds).
+Test Suite 'AgentNotificationBuilderTests' passed at 2026-11-15 22:06:19.727.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'AgentNotificationInboxClockTests' started at 2026-11-15 22:06:19.727.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testAClockStepDoesNotStopTheLatestReportFromSupersedingTheUnreadOne]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testAClockStepDoesNotStopTheLatestReportFromSupersedingTheUnreadOne]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testAClockThatStepsBackAnHourFilesTheNewerEventBelowTheOlderOne]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testAClockThatStepsBackAnHourFilesTheNewerEventBelowTheOlderOne]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testAnEightHourGapIsJustAnOlderEntry]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testAnEightHourGapIsJustAnOlderEntry]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testAnUnreadEntryIsNeverEvictedForAReadOneWhateverTheClockSays]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testAnUnreadEntryIsNeverEvictedForAReadOneWhateverTheClockSays]' passed (0.001 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testDatesAreStoredWithSubMillisecondPrecision]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testDatesAreStoredWithSubMillisecondPrecision]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testEvictionAfterAClockStepDropsTheOldestReadEntryByPosition]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testEvictionAfterAClockStepDropsTheOldestReadEntryByPosition]' passed (0.001 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testTwoEntriesInTheSameInstantAreOrderedByArrivalAndSurviveARoundTrip]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testTwoEntriesInTheSameInstantAreOrderedByArrivalAndSurviveARoundTrip]' passed (0.000 seconds).
+Test Suite 'AgentNotificationInboxClockTests' passed at 2026-11-15 22:06:19.730.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
+Test Suite 'AgentNotificationInboxLoadTests' started at 2026-11-15 22:06:19.730.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxLoadTests testAHistoryAtTheCapLoadsWhole]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxLoadTests testAHistoryAtTheCapLoadsWhole]' passed (0.002 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxLoadTests testAHistoryFileInTheWrongOrderIsPutInOrderOnLoad]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxLoadTests testAHistoryFileInTheWrongOrderIsPutInOrderOnLoad]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxLoadTests testAHistoryLongerThanTheCapIsCutToTheCapOnLoadKeepingTheNewest]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxLoadTests testAHistoryLongerThanTheCapIsCutToTheCapOnLoadKeepingTheNewest]' passed (0.004 seconds).
+Test Suite 'AgentNotificationInboxLoadTests' passed at 2026-11-15 22:06:19.736.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.006 (0.006) seconds
+Test Suite 'AgentNotificationInboxTests' started at 2026-11-15 22:06:19.736.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAFiledEntryRemembersWhereItPointsTo]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAFiledEntryRemembersWhereItPointsTo]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAFinishedAgentInAHiddenTabIsFiled]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAFinishedAgentInAHiddenTabIsFiled]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAFinishedTurnAfterAnUnansweredQuestionSupersedesTheQuestion]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAFinishedTurnAfterAnUnansweredQuestionSupersedesTheQuestion]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAnAgentInTheTabInFrontOfTheUserIsFiledAlreadyRead]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAnAgentInTheTabInFrontOfTheUserIsFiledAlreadyRead]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAnAgentThatStartsWorkingAgainTakesItsRowBack]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAnAgentThatStartsWorkingAgainTakesItsRowBack]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAnEmptyHistoryFileIsAnEmptyHistory]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAnEmptyHistoryFileIsAnEmptyHistory]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAnEntryFiledReadKeepsItsPlaceInTheHistoryWhenTheTabNeedsTheUserAgain]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAnEntryFiledReadKeepsItsPlaceInTheHistoryWhenTheTabNeedsTheUserAgain]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAQuestionAfterAFinishedTurnSupersedesTheFinishedTurn]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAQuestionAfterAFinishedTurnSupersedesTheFinishedTurn]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testATabReportingAgainNeverGrowsTheHistoryWhileItIsUnread]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testATabReportingAgainNeverGrowsTheHistoryWhileItIsUnread]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testATabThatNeedsTheUserAgainIsANewEntryAndTheReadOneStays]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testATabThatNeedsTheUserAgainIsANewEntryAndTheReadOneStays]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testClearingReadsTheWholeBacklog]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testClearingReadsTheWholeBacklog]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testOneTabKeepsOneRowAndTheLatestTime]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testOneTabKeepsOneRowAndTheLatestTime]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testReadingReadsOnlyTheTabsThatWereRead]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testReadingReadsOnlyTheTabsThatWereRead]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheCapCountsReadAndUnreadTogether]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheCapCountsReadAndUnreadTogether]' passed (0.001 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheHistoryFileKeepsTheOrderItWasSavedIn]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheHistoryFileKeepsTheOrderItWasSavedIn]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheHistoryFileWrittenByThisVersionStillDecodes]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheHistoryFileWrittenByThisVersionStillDecodes]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheHistoryForgetsTheOldestReadEntriesFirst]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheHistoryForgetsTheOldestReadEntriesFirst]' passed (0.002 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheInboxSurvivesEncoding]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheInboxSurvivesEncoding]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheLatestReportIsWhatTheTabSays]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheLatestReportIsWhatTheTabSays]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheNewestEntryComesFirst]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheNewestEntryComesFirst]' passed (0.000 seconds).
+Test Suite 'AgentNotificationInboxTests' passed at 2026-11-15 22:06:19.742.
+	 Executed 20 tests, with 0 failures (0 unexpected) in 0.005 (0.006) seconds
+Test Suite 'AgentReportFilterTests' started at 2026-11-15 22:06:19.742.
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testAntigravityChildHooksCannotReplaceTheParentConversation]' started.
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testAntigravityChildHooksCannotReplaceTheParentConversation]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testAntigravityStatusStartsWorkWithoutHooksAndRejectsOlderCallbacks]' started.
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testAntigravityStatusStartsWorkWithoutHooksAndRejectsOlderCallbacks]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testCompletionCanResolveAWaitWhenTheToolStartWasNotRecorded]' started.
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testCompletionCanResolveAWaitWhenTheToolStartWasNotRecorded]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testGrokContinuationStartsNewWorkWithoutRevivingLateCompletions]' started.
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testGrokContinuationStartsNewWorkWithoutRevivingLateCompletions]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testGrokTitlesKeepTheIdleConversationNameAndDiscardBusyDecoration]' started.
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testGrokTitlesKeepTheIdleConversationNameAndDiscardBusyDecoration]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testIdleSnapshotsClearCancelledQuestionsWithoutInventingAStartupCompletion]' started.
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testIdleSnapshotsClearCancelledQuestionsWithoutInventingAStartupCompletion]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testLateGrokReportsDoNotSettleANewerPromptAndNewSessionsResetState]' started.
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testLateGrokReportsDoNotSettleANewerPromptAndNewSessionsResetState]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testLateToolCompletionAndMissingSessionCannotOverwriteGrokAttention]' started.
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testLateToolCompletionAndMissingSessionCannotOverwriteGrokAttention]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testNewAgentResumeCommandsAndMetadataRoundTrip]' started.
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testNewAgentResumeCommandsAndMetadataRoundTrip]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testOpaqueTurnIDsAreDistinctFromRecoveryIdentifiers]' started.
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testOpaqueTurnIDsAreDistinctFromRecoveryIdentifiers]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testParallelGrokPermissionsRemainWaitingUntilTheirToolsCompleteAfterReattachment]' started.
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testParallelGrokPermissionsRemainWaitingUntilTheirToolsCompleteAfterReattachment]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testPendingGrokQuestionsCarryTheirTurnAcrossReattachment]' started.
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testPendingGrokQuestionsCarryTheirTurnAcrossReattachment]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testQuestionSurvivesStatusUpdatesAndAnotherApprovalCompleting]' started.
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testQuestionSurvivesStatusUpdatesAndAnotherApprovalCompleting]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testRestoredCompletionsSurviveIdleSnapshotsAndStaleIdleCannotFinishANewerTurn]' started.
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testRestoredCompletionsSurviveIdleSnapshotsAndStaleIdleCannotFinishANewerTurn]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testStatusSnapshotsCannotOverrideANewerWorkStart]' started.
+Test Case '-[MyTermCoreTests.AgentReportFilterTests testStatusSnapshotsCannotOverrideANewerWorkStart]' passed (0.000 seconds).
+Test Suite 'AgentReportFilterTests' passed at 2026-11-15 22:06:19.745.
+	 Executed 15 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Suite 'AgentSessionRecoveryTests' started at 2026-11-15 22:06:19.745.
+Test Case '-[MyTermCoreTests.AgentSessionRecoveryTests testAHandleKeepsOnlyIdentifiersThatAreSafeToPutInACommand]' started.
+Test Case '-[MyTermCoreTests.AgentSessionRecoveryTests testAHandleKeepsOnlyIdentifiersThatAreSafeToPutInACommand]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentSessionRecoveryTests testAMalformedConversationIsDroppedRatherThanLosingTheTab]' started.
+Test Case '-[MyTermCoreTests.AgentSessionRecoveryTests testAMalformedConversationIsDroppedRatherThanLosingTheTab]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentSessionRecoveryTests testAMarkerCarriesTheConversationToResume]' started.
+Test Case '-[MyTermCoreTests.AgentSessionRecoveryTests testAMarkerCarriesTheConversationToResume]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentSessionRecoveryTests testAMarkerDropsAnIdentifierThatCouldReachAShell]' started.
+Test Case '-[MyTermCoreTests.AgentSessionRecoveryTests testAMarkerDropsAnIdentifierThatCouldReachAShell]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentSessionRecoveryTests testAStartedOrResumedSessionDoesNotReadAsWorking]' started.
+Test Case '-[MyTermCoreTests.AgentSessionRecoveryTests testAStartedOrResumedSessionDoesNotReadAsWorking]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentSessionRecoveryTests testATerminalSessionCarriesItsConversationThroughSavedState]' started.
+Test Case '-[MyTermCoreTests.AgentSessionRecoveryTests testATerminalSessionCarriesItsConversationThroughSavedState]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentSessionRecoveryTests testCodexResumesTheSessionEvenWhenThePaneHasACustomName]' started.
+Test Case '-[MyTermCoreTests.AgentSessionRecoveryTests testCodexResumesTheSessionEvenWhenThePaneHasACustomName]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentSessionRecoveryTests testResumeCommandsUseTheAgentsOwnSyntax]' started.
+Test Case '-[MyTermCoreTests.AgentSessionRecoveryTests testResumeCommandsUseTheAgentsOwnSyntax]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentSessionRecoveryTests testTheCodexClientAndConversationDirectorySurviveSavedState]' started.
+Test Case '-[MyTermCoreTests.AgentSessionRecoveryTests testTheCodexClientAndConversationDirectorySurviveSavedState]' passed (0.000 seconds).
+Test Suite 'AgentSessionRecoveryTests' passed at 2026-11-15 22:06:19.746.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'AgentSessionTitleHostileTextTests' started at 2026-11-15 22:06:19.746.
+Test Case '-[MyTermCoreTests.AgentSessionTitleHostileTextTests testACanonicallyEquivalentTitleIsTheSameTitle]' started.
+Test Case '-[MyTermCoreTests.AgentSessionTitleHostileTextTests testACanonicallyEquivalentTitleIsTheSameTitle]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentSessionTitleHostileTextTests testAGraphemeOfTenThousandScalarsIsCutLikeAnyOtherLongTitle]' started.
+Test Case '-[MyTermCoreTests.AgentSessionTitleHostileTextTests testAGraphemeOfTenThousandScalarsIsCutLikeAnyOtherLongTitle]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentSessionTitleHostileTextTests testANameThatDrawsAsNothingIsNoName]' started.
+Test Case '-[MyTermCoreTests.AgentSessionTitleHostileTextTests testANameThatDrawsAsNothingIsNoName]' passed (0.001 seconds).
+Test Case '-[MyTermCoreTests.AgentSessionTitleHostileTextTests testAnEightBitControlIsNotPartOfTheName]' started.
+Test Case '-[MyTermCoreTests.AgentSessionTitleHostileTextTests testAnEightBitControlIsNotPartOfTheName]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentSessionTitleHostileTextTests testBidiOverridesAndZeroWidthCharactersAreNotPartOfTheName]' started.
+Test Case '-[MyTermCoreTests.AgentSessionTitleHostileTextTests testBidiOverridesAndZeroWidthCharactersAreNotPartOfTheName]' passed (0.000 seconds).
+Test Suite 'AgentSessionTitleHostileTextTests' passed at 2026-11-15 22:06:19.748.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'AgentSessionTitleTests' started at 2026-11-15 22:06:19.748.
+Test Case '-[MyTermCoreTests.AgentSessionTitleTests testANameKeepsThePunctuationItWasGiven]' started.
+Test Case '-[MyTermCoreTests.AgentSessionTitleTests testANameKeepsThePunctuationItWasGiven]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentSessionTitleTests testANameOfOnlyEmojiIsDroppedAsDecoration]' started.
+Test Case '-[MyTermCoreTests.AgentSessionTitleTests testANameOfOnlyEmojiIsDroppedAsDecoration]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentSessionTitleTests testANameOfOnlyNewlinesOrEmptyIsNil]' started.
+Test Case '-[MyTermCoreTests.AgentSessionTitleTests testANameOfOnlyNewlinesOrEmptyIsNil]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentSessionTitleTests testANameOfTenThousandCharactersIsCappedByScalarNotByteOrCharacter]' started.
+Test Case '-[MyTermCoreTests.AgentSessionTitleTests testANameOfTenThousandCharactersIsCappedByScalarNotByteOrCharacter]' passed (0.001 seconds).
+Test Case '-[MyTermCoreTests.AgentSessionTitleTests testAResumedConversationCarriesBackTheNameTheUserGaveTheTab]' started.
+Test Case '-[MyTermCoreTests.AgentSessionTitleTests testAResumedConversationCarriesBackTheNameTheUserGaveTheTab]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentSessionTitleTests testATabLabelCannotCarryAPayload]' started.
+Test Case '-[MyTermCoreTests.AgentSessionTitleTests testATabLabelCannotCarryAPayload]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentSessionTitleTests testATitleThatSaysNothingIsNoName]' started.
+Test Case '-[MyTermCoreTests.AgentSessionTitleTests testATitleThatSaysNothingIsNoName]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentSessionTitleTests testTheStatusGlyphAnAgentWritesIsNotPartOfTheName]' started.
+Test Case '-[MyTermCoreTests.AgentSessionTitleTests testTheStatusGlyphAnAgentWritesIsNotPartOfTheName]' passed (0.000 seconds).
+Test Suite 'AgentSessionTitleTests' passed at 2026-11-15 22:06:19.749.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'IdleAgentIconSettingsTests' started at 2026-11-15 22:06:19.749.
+Test Case '-[MyTermCoreTests.IdleAgentIconSettingsTests testAgentSettingsResolveToTheGlobalValueEverywhere]' started.
+Test Case '-[MyTermCoreTests.IdleAgentIconSettingsTests testAgentSettingsResolveToTheGlobalValueEverywhere]' passed (0.002 seconds).
+Test Case '-[MyTermCoreTests.IdleAgentIconSettingsTests testExplicitValuesRoundTrip]' started.
+Test Case '-[MyTermCoreTests.IdleAgentIconSettingsTests testExplicitValuesRoundTrip]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.IdleAgentIconSettingsTests testInvalidValueFallsBackInsteadOfFailingTheDecode]' started.
+Test Case '-[MyTermCoreTests.IdleAgentIconSettingsTests testInvalidValueFallsBackInsteadOfFailingTheDecode]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.IdleAgentIconSettingsTests testMissingKeyDefaultsOff]' started.
+Test Case '-[MyTermCoreTests.IdleAgentIconSettingsTests testMissingKeyDefaultsOff]' passed (0.000 seconds).
+Test Suite 'IdleAgentIconSettingsTests' passed at 2026-11-15 22:06:19.753.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
+Test Suite 'WorkspaceStoreCompatibilityTests' started at 2026-11-15 22:06:19.753.
+Test Case '-[MyTermCoreTests.WorkspaceStoreCompatibilityTests testAnAgentSessionThisBuildRefusesIsDroppedWithoutARepairNotice]' started.
+Test Case '-[MyTermCoreTests.WorkspaceStoreCompatibilityTests testAnAgentSessionThisBuildRefusesIsDroppedWithoutARepairNotice]' passed (0.002 seconds).
+Test Suite 'WorkspaceStoreCompatibilityTests' passed at 2026-11-15 22:06:19.755.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'WorkspaceStoreTests' started at 2026-11-15 22:06:19.755.
+Test Case '-[MyTermCoreTests.WorkspaceStoreTests testTheAgentBellSettingRoundTripsAndIsGlobalOnly]' started.
+Test Case '-[MyTermCoreTests.WorkspaceStoreTests testTheAgentBellSettingRoundTripsAndIsGlobalOnly]' passed (0.002 seconds).
+Test Suite 'WorkspaceStoreTests' passed at 2026-11-15 22:06:19.757.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'MyTermCoreTests.xctest' passed at 2026-11-15 22:06:19.757.
+	 Executed 99 tests, with 0 failures (0 unexpected) in 0.040 (0.044) seconds
+Test Suite 'Selected tests' passed at 2026-11-15 22:06:19.757.
+	 Executed 99 tests, with 0 failures (0 unexpected) in 0.040 (0.045) seconds
+Test Suite 'Selected tests' started at 2026-11-15 22:06:19.840.
+Test Suite 'MyTermContinuityTests.xctest' started at 2026-11-15 22:06:19.841.
+Test Suite 'MyTermContinuityTests.xctest' passed at 2026-11-15 22:06:19.841.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-11-15 22:06:19.841.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds

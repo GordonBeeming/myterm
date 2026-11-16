@@ -1,0 +1,2 @@
+PASS: malformed-history withdraws stale healthy state (fault injection)
+PASS: recorded-observer-failure withdraws stale healthy state (fault injection)

@@ -1,0 +1,22 @@
+{
+  "agent": "grok",
+  "version": "grok 1.0.77 (50ca579fa996) [stable]",
+  "scope": "Actual CLI foreground process group and live zsh return. No MyTerm UI assertion or native agent marker is fabricated.",
+  "shellGroup": 43435,
+  "agentGroup": 43450,
+  "foregroundExecutables": [
+    "grok"
+  ],
+  "inputScreenObserved": true,
+  "returnedToSameShell": true,
+  "shellProducedPostKillOutput": true,
+  "expectedShellPID": 43435,
+  "outputMatchedAfterByteOffset": 1420,
+  "killedForegroundGroupEmpty": true,
+  "result": "pass",
+  "cleanup": {
+    "leaderReaped": true,
+    "ownedForegroundGroupEmpty": true,
+    "scope": "Owned foreground group only; separate/shared provider daemons are outside this check."
+  }
+}

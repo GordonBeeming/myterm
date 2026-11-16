@@ -1,0 +1,57 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MyTerm refresh reliability evidence</title>
+<style>
+:root{--bg:#f8fafc;--surface:#ffffff;--surface-2:#f1f5f9;--border:#e2e8f0;--text:#0f172a;--accent:#0e7490;--link:#164e63;--soft:#ecfeff;--soft-text:#155e75;--font-body:'Space Grotesk',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:18px/1.55 var(--font-body)}main{max-width:1200px;margin:auto;padding:42px 32px}h1{font-size:40px;line-height:1.15;margin:10px 0 16px;letter-spacing:-.03em}h2{font-size:24px;margin:0 0 12px}p{margin:0 0 16px}.eyebrow{color:var(--soft-text);font-weight:700}.note{padding:16px 20px;background:var(--soft);color:var(--soft-text);border-left:4px solid var(--accent)}nav{display:flex;flex-wrap:wrap;gap:10px;margin:28px 0 20px}button{font:inherit;padding:10px 18px;border:1px solid var(--accent);background:var(--surface);color:var(--link);border-radius:8px;cursor:pointer}button[aria-selected=true]{background:var(--accent);color:var(--surface)}button:focus-visible{outline:3px solid var(--link);outline-offset:3px}.flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;margin:20px 0}.card{min-width:0;padding:22px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}.label{font-weight:700;color:var(--soft-text);display:block;margin-bottom:10px}.state{font-size:22px;font-weight:650}.result{border:2px solid var(--accent);padding:18px 22px;border-radius:10px;background:var(--surface)}.muted{font-size:16px}code{font:16px var(--font-mono);background:var(--surface-2);overflow-wrap:anywhere}a{color:var(--link);text-decoration:underline dotted;text-underline-offset:4px}footer{margin-top:26px;font-size:15px}section[hidden]{display:none}li{margin:5px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px}.evidence{padding:16px 20px;background:var(--surface-2);border-radius:10px;margin-top:20px}
+</style>
+<main>
+<div class="eyebrow">MyTerm · recorded native probe</div>
+<h1>A failed replacement can leave the old connection usable</h1>
+<p>The Swift and Rust callers now retain separate TLS contexts. These diagrams describe executed fixture cases; the page does not run TLS.</p>
+<p class="note">Production refresh intervals remain undecided. This probe checks failure isolation and exact shell echoes. Session control and queued background output still need product integration tests.</p>
+<nav role="tablist" aria-label="Recorded scenarios">
+<button role="tab" id="tab-failed" aria-selected="true" aria-controls="failed">Failed replacement</button>
+<button role="tab" id="tab-switch" aria-selected="false" aria-controls="switch">Successful replacement</button>
+<button role="tab" id="tab-active" aria-selected="false" aria-controls="active">Active connection fails</button>
+</nav>
+<section id="failed" role="tabpanel" aria-labelledby="tab-failed">
+<h2>Keep the old connection while evaluating a candidate</h2>
+<div class="flow">
+<div class="card"><span class="label">1 · Original</span><div class="state">Authenticated and carrying output</div><p>Its native TLS context remains allocated while the candidate starts.</p></div>
+<div class="card"><span class="label">2 · Candidate</span><div class="state">Fails or never becomes ready</div><p>Wrong identity pin, withheld/lost handshake, or corrupted records. A separate case corrupts an already authenticated candidate.</p></div>
+<div class="card"><span class="label">3 · Original</span><div class="state">Still carries exact output</div><p>The original exporter observation is unchanged. Echoes still include the same real shell PID.</p></div>
+</div>
+<p class="result">Discard the failed candidate. The fixture continues sending through the original connection.</p>
+</section>
+<section id="switch" role="tabpanel" aria-labelledby="tab-switch" hidden>
+<h2>Validate the candidate before the fixture switches</h2>
+<div class="flow">
+<div class="card"><span class="label">1 · Original</span><div class="state">Carries interleaved echoes</div><p>Original-channel output continues between fragmented candidate-handshake messages.</p></div>
+<div class="card"><span class="label">2 · Candidate</span><div class="state">Authenticates and echoes</div><p>Both peers report the same fresh exporter observation. A complete echo succeeds before selection.</p></div>
+<div class="card"><span class="label">3 · Selection</span><div class="state">New channel reaches the same shell</div><p>The Python driver selects it and drops the old contexts. The shell PID remains unchanged.</p></div>
+</div>
+<p class="result">This demonstrates native TLS overlap. Production control ownership and attachment handover are not implemented here.</p>
+</section>
+<section id="active" role="tabpanel" aria-labelledby="tab-active" hidden>
+<h2>An integrity failure invalidates the affected active connection</h2>
+<div class="flow">
+<div class="card"><span class="label">1 · Active record</span><div class="state">Ciphertext is modified</div><p>The native receiver reports BAD_RECORD_MAC and discards that TLS context.</p></div>
+<div class="card"><span class="label">2 · Invalid fallback</span><div class="state">Failed context is rejected</div><p>A later update request reports no channel. The failed TLS state is not reused.</p></div>
+<div class="card"><span class="label">3 · Recovery</span><div class="state">Fresh handshake, same shell</div><p>A new authenticated channel carries exact output from the existing server-owned shell.</p></div>
+</div>
+<p class="result">The process survives. Only the detecting peer discards its context automatically; the fixture drops the other side. This case does not demonstrate uninterrupted delivery after active-channel failure.</p>
+</section>
+<div class="evidence"><strong>Repeatable native evidence</strong><p id="summary">Run the harness to produce refresh-results.json.</p><p class="muted">Local opaque pipe forwarding; shared BoringSSL; synchronous complete-line echoes. No real relay/network, PTY, scheduler, membership integration, or long-term failure-rate claim.</p></div>
+<footer><a href="https://github.com/GordonBeeming/myterm/issues/141">Validate the account trust protocol and approval ceremony</a> · <a id="source">checks.py</a><p>Source links open in your IDE and need it running.</p></footer>
+</main>
+<script>
+const DISPLAY_STRIP_PREFIX='/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-crisp-kakapo/';
+const sourcePath=DISPLAY_STRIP_PREFIX+'script/trust-refresh-prototype/checks.py';
+const source=document.getElementById('source');source.href='http://localhost:17877/browse?path='+encodeURIComponent(sourcePath);source.textContent=sourcePath.slice(DISPLAY_STRIP_PREFIX.length);
+const evidence={"passed": 719, "total": 719, "cycles": 100, "exact_echoes": 814};
+if(evidence)document.getElementById('summary').textContent=`${evidence.passed}/${evidence.total} checks passed · ${evidence.cycles} successful replacement cycles with a rejected candidate in every cycle · ${evidence.exact_echoes} exact echoes.`;
+document.querySelectorAll('[role=tab]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('[role=tab]').forEach(tab=>{const selected=tab===button;tab.setAttribute('aria-selected',String(selected));document.getElementById(tab.getAttribute('aria-controls')).hidden=!selected;});}));
+</script>

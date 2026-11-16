@@ -1,0 +1,9 @@
+PASS: Old session end cannot close current wait
+PASS: New conversation can start after old end
+PASS: Compaction cannot downgrade a wait
+PASS: Delayed startup cannot resurrect ended conversation
+PASS: Explicit native resume can reopen a conversation
+PASS: Unsupported command route explicitly invalidates snapshot authority
+PASS: Old permission event cannot invalidate new turn
+PASS: Tool error does not pretend the turn has ended
+8 protocol-fixture checks passed

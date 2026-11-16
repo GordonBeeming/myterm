@@ -1,0 +1,10 @@
+{
+  "myterm-proto-a.txt": {
+    "exists": true,
+    "content": "ALPHA"
+  },
+  "myterm-proto-b.txt": {
+    "exists": false,
+    "content": null
+  }
+}

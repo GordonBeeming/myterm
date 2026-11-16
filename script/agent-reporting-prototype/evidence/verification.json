@@ -1,0 +1,186 @@
+[
+  {
+    "name": "codex native PreToolUse 2",
+    "kind": "native-input-replay",
+    "passed": true,
+    "activity": "awaiting_input",
+    "pending": 1,
+    "expected": "awaiting_input"
+  },
+  {
+    "name": "codex native PostToolUse 3",
+    "kind": "native-input-replay",
+    "passed": true,
+    "activity": "working",
+    "pending": 0,
+    "expected": "working"
+  },
+  {
+    "name": "codex native Stop 4",
+    "kind": "native-input-replay",
+    "passed": true,
+    "activity": "finished",
+    "pending": 0,
+    "expected": "finished"
+  },
+  {
+    "name": "codex native PreToolUse 6",
+    "kind": "native-input-replay",
+    "passed": true,
+    "activity": "awaiting_input",
+    "pending": 1,
+    "expected": "awaiting_input"
+  },
+  {
+    "name": "codex native Interrupt 7",
+    "kind": "native-input-replay",
+    "passed": true,
+    "activity": "ready",
+    "pending": 0,
+    "expected": "ready"
+  },
+  {
+    "name": "codex native PreToolUse 9",
+    "kind": "native-input-replay",
+    "passed": true,
+    "activity": "awaiting_input",
+    "pending": 1,
+    "expected": "awaiting_input"
+  },
+  {
+    "name": "codex native PostToolUse 10",
+    "kind": "native-input-replay",
+    "passed": true,
+    "activity": "working",
+    "pending": 0,
+    "expected": "working"
+  },
+  {
+    "name": "codex native Stop 11",
+    "kind": "native-input-replay",
+    "passed": true,
+    "activity": "finished",
+    "pending": 0,
+    "expected": "finished"
+  },
+  {
+    "name": "claude native mod.tool.start 8",
+    "kind": "native-input-replay",
+    "passed": true,
+    "activity": "awaiting_input",
+    "pending": 1,
+    "expected": "awaiting_input"
+  },
+  {
+    "name": "claude native mod.tool.start 16",
+    "kind": "native-input-replay",
+    "passed": true,
+    "activity": "awaiting_input",
+    "pending": 1,
+    "expected": "awaiting_input"
+  },
+  {
+    "name": "claude native mod.tool.decision 18",
+    "kind": "native-input-replay",
+    "passed": true,
+    "activity": "awaiting_input",
+    "pending": 1,
+    "expected": "awaiting_input"
+  },
+  {
+    "name": "claude native mod.turn.complete 20",
+    "kind": "native-input-replay",
+    "passed": true,
+    "activity": "finished",
+    "pending": 0,
+    "expected": "finished"
+  },
+  {
+    "name": "claude native mod.tool.decision 26",
+    "kind": "native-input-replay",
+    "passed": true,
+    "activity": "awaiting_input",
+    "pending": 1,
+    "expected": "awaiting_input"
+  },
+  {
+    "name": "claude native mod.tool.decision 32",
+    "kind": "native-input-replay",
+    "passed": true,
+    "activity": "awaiting_input",
+    "pending": 1,
+    "expected": "awaiting_input"
+  },
+  {
+    "name": "claude native mod.turn.complete 34",
+    "kind": "native-input-replay",
+    "passed": true,
+    "activity": "finished",
+    "pending": 0,
+    "expected": "finished"
+  },
+  {
+    "name": "claude native mod.tool.start 39",
+    "kind": "native-input-replay",
+    "passed": true,
+    "activity": "awaiting_input",
+    "pending": 1,
+    "expected": "awaiting_input"
+  },
+  {
+    "name": "claude native mod.tool.decision 41",
+    "kind": "native-input-replay",
+    "passed": true,
+    "activity": "awaiting_input",
+    "pending": 1,
+    "expected": "awaiting_input"
+  },
+  {
+    "name": "claude native mod.turn.complete 44",
+    "kind": "native-input-replay",
+    "passed": true,
+    "activity": "finished",
+    "pending": 0,
+    "expected": "finished"
+  },
+  {
+    "name": "old Codex callback after a newer question: PostToolUse",
+    "kind": "controlled-delivery-replay",
+    "passed": true,
+    "activity": "awaiting_input",
+    "pending": 1,
+    "expected": "awaiting_input"
+  },
+  {
+    "name": "old Codex callback after a newer question: Stop",
+    "kind": "controlled-delivery-replay",
+    "passed": true,
+    "activity": "awaiting_input",
+    "pending": 1,
+    "expected": "awaiting_input"
+  },
+  {
+    "name": "two waits while first completion is held back",
+    "kind": "controlled-delivery-replay",
+    "passed": true,
+    "activity": "awaiting_input",
+    "pending": 2,
+    "expected": "awaiting_input"
+  },
+  {
+    "name": "late first completion preserves second wait",
+    "kind": "controlled-delivery-replay",
+    "passed": true,
+    "activity": "awaiting_input",
+    "pending": 1,
+    "expected": "awaiting_input"
+  },
+  {
+    "name": "duplicate first completion preserves second wait",
+    "kind": "controlled-delivery-replay",
+    "passed": true,
+    "activity": "awaiting_input",
+    "pending": 1,
+    "expected": "awaiting_input"
+  }
+]

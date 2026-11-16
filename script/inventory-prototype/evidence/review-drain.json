@@ -1,0 +1,15 @@
+{
+  "tool": "claude",
+  "mode": "review",
+  "model": "sonnet",
+  "permissionMode": "plan",
+  "repo": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-crisp-kakapo",
+  "sessionId": "af241e4a-0eb9-473d-af4a-b5a083335e92",
+  "status": "completed",
+  "response": "No remaining material defect in the changed merge/drain path. This was a static read of `Model.swift` and `main.swift`. I did not run anything.\n\n**What I checked**\n- **Single drain:** `drain(id)` is the only drain loop (`Model.swift:102`). `report`, `reconcile` and `merge` all call it.\n- **Freshness:** on a stale server `applyOrdered` refuses (`:109`), so `drain` leaves the buffer intact and the later `reconcile(server)` applies it (`:180`).\n- **Non-Running items:** `drain` clears the buffer for an item that is not `Running` or has been removed. It also clears after any drained event ends the terminal.\n- **Obsolete events:** a consumed obsolete event advances `sequence`, so the loop continues to the next entry.\n- **Merge order:** merge filters buffered keys to above the merged sequence, then drains every item (`:231`, `:234`). A gap filled by a peer snapshot now applies the entry at `sequence + 1`, which was the earlier wedge.\n- **Tracing the three new checks** (`main.swift:190`, `:195`, `:200`, `:205`) against the code, the expected values match:\n  - **Obsolete-run drain:** 3 is consumed as obsolete and 4 applies, ending at sequence 4 and `Working`.\n  - **Snapshot fills gap:** merge takes the sequence-2 item and drains 3, so `report(4)` applies and `waits` is empty.\n  - **Offline snapshot:** the item stops at 2 while the server is stale, then `reconcile` drains 3 and leaves `waits == [\"a\"]`.\n  - **Terminal exit:** `buffered[\"build\"]` is `nil` after `terminalExit` at 2 with 3 pending.\n\n**Cosmetic only:** `drain` only looks at `sequence + 1`, and `merge` is the only place that filters old keys. A stale buffered key at or below `sequence` can therefore linger. It cannot happen on the `report` path, because buffering only happens for keys above `sequence + 1`. It can only appear if a direct `report` fills the exact position of an entry that is already buffered. It has no behavioural effect, only an extra entry in the demo's \"Buffered reports\" line.",
+  "exitCode": "0",
+  "startedAt": "2026-11-15T11:37:23Z",
+  "endedAt": "2026-11-15T11:37:51Z",
+  "rawFile": "/tmp/myterm-inventory-review-drain.json.json",
+  "stderrTail": ""
+}

@@ -1,0 +1,263 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shared layout and safe cleanup · MyTerm</title>
+<style>
+:root{color-scheme:light;--bg:#f8fafc;--surface:#ffffff;--surface-2:#f1f5f9;--text:#0f172a;--muted:#64748b;--accent:#0e7490;--accent-hover:#155e75;--link:#164e63;--border:#e2e8f0;--soft:#ecfeff;--soft-text:#155e75;--font:'Space Grotesk',ui-sans-serif,system-ui,-apple-system,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 var(--font)}main{max-width:1260px;margin:auto;padding:32px 28px}h1{font-size:34px;letter-spacing:-.03em;line-height:1.15;margin:8px 0 14px}h2{font-size:21px;line-height:1.25;margin:0 0 12px}h3{font-size:17px;margin:16px 0 8px}p{margin:8px 0 16px;max-width:100ch}.eyebrow{font-size:13px;color:var(--soft-text);letter-spacing:.08em;text-transform:uppercase}.notice{background:var(--soft);color:var(--soft-text);padding:16px 20px;border:1px solid var(--border);border-radius:8px}.tabs,.controls{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0}button{font:inherit;font-size:14px;padding:9px 13px;border:1px solid var(--accent);border-radius:6px;background:var(--surface);color:var(--text);cursor:pointer}button[aria-selected=true],button.primary{color:var(--surface);background:var(--accent)}button:disabled,button.primary:disabled{background:var(--surface);color:var(--muted);border-color:var(--border);cursor:default}button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:3px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin:16px 0}.card{min-width:0;border:1px solid var(--border);border-radius:8px;padding:18px;background:var(--surface)}.small{font-size:14px}.muted{color:var(--muted)}.list{list-style:none;margin:0;padding:0}.list li{padding:8px 0;border-bottom:1px solid var(--border);overflow-wrap:anywhere}.list li:last-child{border:0}.pill{display:inline-block;font-size:12px;border-radius:4px;background:var(--surface-2);color:var(--text);padding:2px 6px;margin:3px}.state-note{border-left:4px solid var(--accent);padding:10px 16px;background:var(--surface);min-height:56px}a{color:var(--link)}details{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:18px;margin:16px 0}summary{cursor:pointer;color:var(--soft-text);font-weight:600}table{border-collapse:collapse;width:100%;font-size:14px}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--border);vertical-align:top;overflow-wrap:anywhere}th{color:var(--soft-text)}code,pre{font-family:ui-monospace,monospace;font-size:13px;overflow-wrap:anywhere}pre{white-space:pre-wrap;background:var(--surface-2);padding:16px;max-height:450px;overflow:auto}footer{border-top:1px solid var(--border);padding-top:18px;font-size:13px;color:var(--muted)}.sequence{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.sequence span{border:1px solid var(--border);background:var(--surface);padding:10px;border-radius:6px}.sequence b{color:var(--soft-text)}
+</style>
+<main><div class="eyebrow">MyTerm · accepted protocol prototype</div>
+<h1>Shared layout. Safe cleanup.</h1>
+<p>Can independent clients converge on one layout while offline closure stays immediate and unseen processes stay safe? Explore concurrent edits, failed delivery and the evidence a server needs before terminating a runtime.</p>
+<div class="notice"><strong>Scope:</strong> deterministic in-memory state model with fixture security decisions. Buttons do not contact a relay or terminate real processes. Separate checks exercise real Ed25519 byte binding. Native storage, encrypted transport, membership integration and crash durability remain unverified.</div>
+<div class="sequence" aria-label="Close protocol" style="margin-top:18px"><span>Confirm active or unknown work</span><b>→</b><span>Persist close + outbox atomically</span><b>→</b><span>Hide closed items</span><b>→</b><span>Retry / reconcile</span><b>→</b><span>Record runtime termination</span></div>
+<div class="tabs" role="tablist" aria-label="Walkthrough scenarios" id="tabs"></div>
+<h2 id="scenario-title"></h2><p id="description"></p>
+<div class="state-note" id="note" aria-live="polite"></div>
+<div class="grid">
+<section class="card"><h2>Shared items</h2><ul class="list" id="items"></ul></section>
+<section class="card"><h2>Server processes</h2><ul class="list" id="processes"></ul></section>
+<section class="card"><h2>Cleanup evidence</h2><ul class="list" id="cleanup"></ul></section>
+</div>
+<p class="small" id="summary"></p><div class="controls"><button id="next" class="primary"></button><button id="reset">Restart walkthrough</button></div><p class="small muted" id="step-status"></p>
+<details><summary>Free play</summary><p class="small">Actions can be repeated in any order. Use Restart walkthrough to return to the same baseline.</p><div class="controls" id="free"></div></details>
+<details><summary>Recoverable edits, rejected operations and local selection</summary><div id="diagnostics"></div><pre id="raw"></pre></details>
+<details open><summary>Candidate protocol and its safety limits</summary>
+<h3>State ownership and ordering</h3><p>Each approved client and enrolled server stores the replicated operation set and a durable checkpoint. The relay stores opaque encrypted current state separately from its seven-day pending-command inbox. Sessions, processes and runtime freshness belong to their assigned servers. Selection, focus and display preferences remain client-local.</p>
+<p>Operations bind account, membership checkpoint, issuer, issuer sequence, causal dependencies, entity identity and typed changes. Verify signatures and account association before ingestion. Fetch missing dependencies before durable acknowledgment. Missing-dependency operations remain in a bounded retry buffer without durable acceptance, and are retried when prerequisites arrive. A per-issuer chain detects gaps and equivocation; a fork freezes the affected stream and conservatively pauses new attachments and destructive cleanup account-wide. Existing processes keep running. Revoking the forking issuer does not resolve its ambiguous history; trusted checkpoint repair is required. The prototype has no repair action; production must implement and validate trusted checkpoint repair. Causally later field values win. Concurrent values use validated logical clock followed by ASCII stable operation ID. Independent fields merge; losing concurrent values are recoverable. Wall-clock timestamps never decide the winner. Schema checks restrict identifiers to bounded ASCII, reject reserved object keys and nested field values, enforce typed field names and cap each encoded operation at 64 KiB. Structurally valid records rejected for epoch or membership remain in a bounded local recovery quarantine; they are never automatically accepted or executed. Unauthenticated or unknown-issuer payloads are dropped. Identical authenticated rejections are deduplicated. Dependency and recovery buffers share a per-issuer cap of 32 records / 64 KiB as well as the global budget. If a buffer is full, refuse acknowledgment so the sender retains its original record. The schema has no forward compatibility: unsupported or malformed records receive no acceptance acknowledgment, and the sending endpoint must retain its original data.</p>
+<p>The model serializes these fields as canonical sorted-key JSON for disposable signing checks. Production must define a versioned canonical encoding, size limits, integer/string restrictions and domain separation shared by Swift and Rust. Fresh content keys and signed private records follow the accepted account-trust direction; this page implements no HPKE or encrypted relay storage.</p>
+<h3>Deletion and concurrent content</h3><p>A workspace close enumerates the content identities visible in the closing client's causal view. The atomic transaction records explicit deletion tombstones and close intents for those observed runtimes. Deletion wins over edits and moves of those identities. Recovery of a deleted item uses a new identity; old identity tombstones are never removed merely because a queue expires.</p><p>A concurrent, unseen new terminal has no deletion record. It remains live in a deterministic Recovered work projection, preserving its content identity, assigned server and runtime instance. Invalid parent types, missing ancestors and cycles also enter that projection, without killing processes. A production projection needs deterministic synthetic folder/workspace/pane IDs; this model exposes the affected identities and reason rather than implementing native recovery UI.</p>
+<h3>Local closure and process confirmation</h3><p>An active foreground process or stale/unknown aggregate process report requires confirmation. A fresh report that every affected target is an idle shell closes immediately. Persist both structure changes and outbox before local acknowledgment; storage failure leaves the item visible. Cancel produces no operation. Confirmed items disappear immediately, and cleanup retries in the background. A remote rename preserves local focus; deleting the focused item chooses a surviving local item.</p><p>A healthy process-metadata subscription must bind server, session, runtime instance and sequence. A disconnected subscription is stale immediately. The precise age threshold while connected remains a production measurement. A last-known idle report cannot eliminate the race where a new foreground process starts just after the report; making that impossible would require a server round trip, contrary to the agreed immediate local workflow.</p>
+<h3>What authorizes runtime termination</h3><p>Never infer deletion from absence. Require an authenticated explicit tombstone plus an authorized cleanup request naming the exact account, server, content identity and runtime incarnation. Direct delivery needs a live connection. Rejoining servers synchronize authorized state before enabling attachment, validate complete manifests/dependencies and reject rollback against their durable checkpoint. Incomplete fetches, stale snapshots, removed servers, missing authorization and failed transports preserve processes.</p>
+<p>The model injects membership, complete-manifest validation and a nonce-bound authenticated connection as fixture facts. A fresh nonce prevents replaying a previous connection transcript; it does not prove globally latest layout or membership. Withheld relay updates can delay revocation under the accepted trust policy. Direct synchronization uses pinned endpoint identities and the latest verified membership known to peers; it does not require the account ordering server to be online. A server with newer local security state rejects older evidence. If the original delete issuer is now revoked or its epoch is stale, cleanup pauses until a currently authorized peer revalidates and endorses the existing deletion for the exact runtime. That endorsement flow remains to be implemented and tested.</p>
+<p>The bounded model requires complete synchronization for reconciliation. Explicit live close commands may later use a smaller proof, but must preserve exact-target authorization and duplicate safety. A server missing deletion evidence keeps the process alive until it obtains the evidence.</p>
+<h3>Delivery, acknowledgment and restart</h3><p>The outbox distinguishes locally persisted, unsubmitted, relay accepted, expired and runtime terminated. Relay acceptance acknowledges durable encrypted queue storage only. A target server persists an execution ledger before reporting a signed termination result; retries for the same operation and runtime return the previous result. Stop the process handle for that runtime, never a reused numeric PID. Acknowledged pending commands can leave the relay inbox. The corresponding tombstones and current-state checkpoint remain.</p><p>On reconnect: authenticate, verify known membership/checkpoints, fetch and verify complete state, ingest valid pending operations, reconcile exact runtime targets, then enable surviving attachments and refresh runtime metadata. The model tracks a separate connected/authenticated channel and unique connection nonce for each server, plus per-runtime results. The shared synchronization fixture describes the completeness, account association, membership epoch and rollback status of one account-layout manifest. An incomplete manifest deliberately pauses destructive reconciliation for every server. Individual connection, authorization and readiness facts remain per server. The model demonstrates ordering and duplicate outcomes. Its restart action copies simulated durable state; atomicity holds by construction in the reducer. It does not prove atomic disk writes, native process termination or power-loss recovery.</p>
+<h3>Accepted retention and prototype resource limits</h3>
+<table><tr><th>Data</th><th>Candidate policy</th></tr><tr><td>Pending relay commands</td><td>Seven days, or remove after target acknowledgment. Already agreed.</td></tr><tr><td>Current encrypted state</td><td>Retain independently of command expiry, subject to account lifecycle.</td></tr><tr><td>Losing edit values</td><td>30 days after the conflict is observed locally; unacknowledged recovery data remains pinned until safely included in a verified checkpoint. Accepted direction; native implementation and validation remain.</td></tr><tr><td>Deleted identity markers</td><td>Minimal tombstones for the account lifetime. Keep exact-runtime deletion/receipt evidence while cleanup is unconfirmed; successful cleanup may fold receipts into a signed checkpoint. Accepted direction; native implementation and validation remain.</td></tr><tr><td>Checkpoint compaction</td><td>Commit a verified snapshot, causal frontier, issuer high-water marks, conflict records and retained tombstones atomically. Verify equivalence before pruning operations. Discard neither unknown cleanup nor unresolved forks. Old clients rebase unsent changes through retained identity and issuer fencing. This model creates a checkpoint view and retains its source operations.</td></tr><tr><td>Model budget</td><td>At most 10,000 operations or 8 MiB of operation, dependency-buffer and recovery-quarantine data, whichever ceiling is reached first. Refuse local acknowledgment on overflow; never evict safety evidence silently. These limits are not representative of production. The simple model lists all known operation dependencies and repeatedly copies state, so byte growth is quadratic and the byte ceiling will normally be reached well before 10,000 operations. A production causal frontier requires transitive ancestry checks and measured budgets. Native work must measure storage growth and define quotas or archival before shipping.</td></tr></table>
+<p>Gordon accepted this direction after reviewing the prototype. <a href="https://github.com/GordonBeeming/myterm/issues/156#issuecomment-6844040718">Recorded decision</a> · <a href="https://github.com/GordonBeeming/myterm/issues/182">Production integration and native acceptance</a>.</p><h3>Implementation seams and remaining evidence</h3><p>Keep a deterministic Swift/Rust-compatible operation codec and merge engine; transactional local layout/outbox storage; verified encrypted snapshot store; retry scheduler; membership/checkpoint adapter; exact-runtime cleanup ledger; and native presentation adapters. Inventory and attention synchronization consume the same entity IDs and durable state, while server runtime observations use their own monotonic sequence and connection freshness.</p><p>Required before production acceptance: Swift/Rust replay interoperability, real transactional crash injection, encrypted relay queue expiry and state recovery, complete-manifest/hash verification, trust-ledger revocation and endorsement, two-Mac runtime-instance cleanup, client restart preserving sessions, direct-only partitions, compaction with old clients and storage/resource measurements. The separate inventory ticket owns real agent activity and attention evidence.</p>
+</details>
+<details><summary>Sources and reproducible checks</summary><p><a href="https://github.com/GordonBeeming/myterm/issues/156">Validate replicated layout convergence and deferred termination</a> · <a href="https://github.com/GordonBeeming/myterm/issues/131">Choose shared workspace synchronization and migration</a> · <a href="https://github.com/GordonBeeming/myterm/issues/157">Prototype mixed-server connection and close states</a> · <a href="https://github.com/GordonBeeming/myterm/issues/141">Validate the account trust protocol and approval ceremony</a> · <a href="https://github.com/GordonBeeming/myterm/issues/135">Choose the first cross-server session and agent view</a></p><p>From the repository root:</p><pre>python3 script/layout-prototype/build.py
+node script/layout-prototype/checks.cjs /private/tmp/myterm-layout-results.json
+node script/layout-prototype/visual-qa.cjs /private/tmp/myterm-layout-qa</pre><p class="small">Model-check results and an independent review accompany the local source. The page is self-contained and opens directly. No production source, account, relay or real process was changed.</p></details>
+<footer>Throwaway protocol exploration. Three product choices accepted in conversation: confirm unknown process state, recover unseen concurrent terminals, require explicit deletion evidence. Retention and conservative fork recovery were accepted after live review. Production integration and native acceptance remain open.</footer></main>
+<script>
+/* Throwaway protocol model. Security decisions are supplied by a fixture adapter.
+   No network, disk, native process or cryptographic implementation lives here. */
+const LayoutPrototype = (() => {
+  const copy = x => JSON.parse(JSON.stringify(x));
+  const canonical = x => x === null || typeof x !== 'object' ? JSON.stringify(x) : Array.isArray(x) ? '['+x.map(canonical).join(',')+']' : '{'+Object.keys(x).sort().map(k=>JSON.stringify(k)+':'+canonical(x[k])).join(',')+'}';
+  const limits = {operations:10000, bytes:8*1024*1024, historyDays:30};
+  const idOK=x=>typeof x==='string'&&/^[a-z][a-z0-9-]{0,63}$/.test(x)&&!['constructor','prototype','__proto__'].includes(x);
+  function valid(o){
+    if(!o||typeof o!=='object'||Array.isArray(o)||Object.keys(o).some(k=>!['id','issuer','account','epoch','deps','clock','kind','target','fields','day'].includes(k)))return false;
+    if(!idOK(o.issuer)||!idOK(o.account)||!idOK(o.target)||typeof o.id!=='string'||!new RegExp('^'+o.issuer+':[1-9][0-9]{0,8}$').test(o.id))return false;
+    if(![o.epoch,o.clock,o.day].every(Number.isSafeInteger)||o.epoch<1||o.clock<1||o.day<0)return false;
+    if(!Array.isArray(o.deps)||o.deps.length>10000||!o.deps.every(x=>typeof x==='string'&&/^[a-z][a-z0-9-]{0,63}:[1-9][0-9]{0,8}$/.test(x)))return false;
+    const f=o.fields;
+    if(!f||typeof f!=='object'||Array.isArray(f)||Object.keys(f).length>6)return false;
+    const allowed={create:['type','name','parent','server','incarnation'],set:['name','parent'],delete:['server','incarnation','confirmed']}[o.kind];
+    if(!allowed||Object.keys(f).some(k=>!allowed.includes(k))||Object.values(f).some(v=>v!==null&&!['string','boolean'].includes(typeof v)||typeof v==='string'&&v.length>1024))return false;
+    if('parent'in f&&f.parent!==null&&!idOK(f.parent))return false;
+    if('name'in f&&typeof f.name!=='string')return false;
+    if('server'in f&&f.server!==null&&!idOK(f.server))return false;
+    if('incarnation'in f&&f.incarnation!==null&&!idOK(f.incarnation))return false;
+    if(o.kind==='create'&&(typeof f.name!=='string'||!['account','folder','workspace','pane','content'].includes(f.type)||(f.type==='account'&&o.target!=='account')||(f.type!=='account'&&!idOK(f.parent))||(f.type==='content'&&(!idOK(f.server)||!idOK(f.incarnation)))))return false;
+    if(o.kind==='set'&&('parent'in f&&f.parent===null))return false;
+    if(o.kind==='delete'&&f.confirmed!==true)return false;
+    return canonical(o).length<=65536;
+  }
+  function initial() {
+    return {account:'personal-a', epoch:1, members:['mac','phone','server-a','server-b'], knownIssuers:['mac','phone','server-a','server-b'], ops:[], pending:[], rejected:[], conflictObserved:{}, checkpointedConflicts:[], frozen:[], durable:[], outbox:[], receipts:[], day:0, activeClient:'mac', connectionCounter:1, reconciledNonces:{}, connections:{'server-a':{connected:true,authorized:true,nonce:'server-a-1'},'server-b':{connected:true,authorized:true,nonce:'server-b-1'}},selection:{mac:'term-a',phone:'term-b'}, runtimes:[{id:'term-a',server:'server-a',incarnation:'run-a',live:true,stoppedBy:null},{id:'term-b',server:'server-b',incarnation:'run-b',live:true,stoppedBy:null}], channel:{connected:true,authorized:true,complete:true,rollback:false,nonce:'join-1',account:'personal-a',epoch:1,serverMember:true}, report:{status:'idle',fresh:true}, confirmation:false, note:'Both terminals belong to the same workspace.'};
+  }
+  function op(s,issuer,kind,target,fields={}) {
+    const own=s.ops.filter(o=>o.issuer===issuer), n=own.length+1;
+    return {id:issuer+':'+n,issuer,account:s.account,epoch:s.epoch,deps:s.ops.map(o=>o.id).sort(),clock:1+Math.max(0,...s.ops.map(o=>o.clock)),kind,target,fields:copy(fields),day:s.day};
+  }
+  function ingest(s,o,verified=true) {
+    s=copy(s);
+    if(!valid(o)){s.note='Rejected malformed or oversized operation before acknowledgment.';return s;}
+    if(!verified||!s.knownIssuers.includes(o.issuer)){s.note='Unauthenticated or unknown issuer dropped without retaining a payload.';return s;}
+    const used=()=>canonical([s.ops,s.pending,s.rejected]).length;
+    const localBuffer=()=>[...s.pending,...s.rejected.map(r=>r.payload)].filter(p=>p.issuer===o.issuer);
+    const canBuffer=()=>localBuffer().length<32&&canonical(localBuffer()).length+canonical(o).length+256<=65536&&used()+canonical(o).length+256<=limits.bytes;
+    const reject = reason => {if(!s.rejected.some(r=>canonical(r.payload)===canonical(o))&&canBuffer())s.rejected.push({id:o.id,reason,payload:copy(o)});else s.note='Recovery storage full or already recorded: no new acknowledgment; sender retains original.';return s;};
+    const old=s.ops.find(p=>p.id===o.id);
+    if(old&&canonical(old)===canonical(o))return s;
+    if(o.account!==s.account||o.epoch!==s.epoch||!s.members.includes(o.issuer))return reject('Account/current known membership rejected');
+    if(s.frozen.includes(o.issuer))return reject('Issuer stream is frozen');
+    if(old){s.frozen.push(o.issuer);return reject('Issuer equivocation: freeze this stream');}
+    const buffered=s.pending.find(p=>p.id===o.id);
+    if(buffered){if(canonical(buffered)!==canonical(o)){s.frozen.push(o.issuer);return reject('Buffered issuer equivocation: freeze this stream');}return s;}
+    if(!['create','set','delete'].includes(o.kind)||!o.target||!o.fields||!Array.isArray(o.deps)||new Set(o.deps).size!==o.deps.length)return reject('Invalid operation');
+    const deps=o.deps.map(id=>s.ops.find(p=>p.id===id));
+    if(deps.some(p=>!p)){
+      if(canBuffer()){s.pending.push(copy(o));s.note='Missing dependencies buffered without acknowledgment; fetch and retry.';}
+      else s.note='Dependency buffer full: refuse acknowledgment; sender retains original.';
+      return s;
+    }
+    const own=s.ops.filter(p=>p.issuer===o.issuer);
+    if(o.id!==o.issuer+':'+(own.length+1)||own.some(p=>!o.deps.includes(p.id)))return reject('Invalid issuer chain');
+    if(o.clock!==1+Math.max(0,...deps.map(p=>p.clock)))return reject('Invalid logical clock');
+    if(s.ops.length>=limits.operations||used()+canonical(o).length>limits.bytes){s.note='Storage budget: refuse acknowledgment, retain unsent intent';return s;}
+    s.ops.push(copy(o));s.ops.sort((a,b)=>a.clock-b.clock||(a.id<b.id?-1:a.id>b.id?1:0));
+    s.durable.push(o.id);
+    for(const h of project(s).history){const key=conflictKey(h);if(!(key in s.conflictObserved))s.conflictObserved[key]=s.day;}
+    let ready=s.pending.find(p=>p.deps.every(id=>s.ops.some(o=>o.id===id)));
+    while(ready){s.pending=s.pending.filter(p=>p.id!==ready.id);s=ingest(s,ready);ready=s.pending.find(p=>p.deps.every(id=>s.ops.some(o=>o.id===id)));}
+    return s;
+  }
+  function seed() {
+    let s=initial();
+    for(const [target,fields] of [['account',{type:'account',name:'Personal'}],['folder',{type:'folder',parent:'account',name:'Work'}],['workspace',{type:'workspace',parent:'folder',name:'Build'}],['pane',{type:'pane',parent:'workspace',name:'Terminal'}],['term-a',{type:'content',parent:'pane',name:'Mac build',server:'server-a',incarnation:'run-a'}],['term-b',{type:'content',parent:'pane',name:'Second Mac',server:'server-b',incarnation:'run-b'}]])s=ingest(s,op(s,'mac','create',target,fields));
+    return s;
+  }
+  function project(s) {
+    const entities=Object.create(null), history=[], deleted=Object.create(null), issues=[],deletions=Object.create(null),collisions=Object.create(null);
+    for(const o of s.ops){
+      if(o.kind==='delete'){deleted[o.target]=o;(deletions[o.target]||= []).push(o);continue;}
+      if(o.kind==='create'){
+        if(entities[o.target]){issues.push('Duplicate identity '+o.target);(collisions[o.target]||= [s.ops.find(p=>p.id===entities[o.target].created)]).push(o);continue;}
+        entities[o.target]={id:o.target,created:o.id,fields:copy(o.fields),writers:Object.fromEntries(Object.keys(o.fields).map(k=>[k,o.id]))};
+      }else if(entities[o.target]){
+        const e=entities[o.target];
+        for(const [k,v]of Object.entries(o.fields)){
+          if(['type','server','incarnation'].includes(k)){issues.push('Immutable field '+k);continue;}
+          const prior=s.ops.find(p=>p.id===e.writers[k]);
+          if(prior&&!o.deps.includes(prior.id)&&canonical(e.fields[k])!==canonical(v))history.push({target:o.target,field:k,value:copy(e.fields[k]),loser:prior.id,winner:o.id,day:o.day});
+          e.fields[k]=copy(v);e.writers[k]=o.id;
+        }
+      }else issues.push('Unknown identity '+o.target);
+    }
+    // Tombstones win even over a later create; recovery always uses a new identity.
+    for(const id of Object.keys(deleted))if(entities[id]){
+      entities[id].deleted=true;
+      for(const o of s.ops.filter(o=>o.target===id&&o.kind==='set'&&!deleted[id].deps.includes(o.id)))history.push({target:id,field:'deleted item edit',value:copy(o.fields),loser:o.id,winner:deleted[id].id,day:o.day});
+    }
+    const allowed={folder:'account',workspace:'folder',pane:'workspace',content:'pane'};
+    const repaired=Object.create(null);
+    for(const e of Object.values(entities)){
+      if(e.deleted)continue;
+      let current=e,seen=new Set([e.id]),reason='';
+      while(current.fields.parent){
+        const p=entities[current.fields.parent];
+        if(!p||p.deleted){reason='Missing or deleted ancestor';break;}
+        if(seen.has(p.id)){reason='Cyclic structure';break;}
+        if(allowed[current.fields.type]!==p.fields.type){reason='Invalid parent type';break;}
+        seen.add(p.id);current=p;
+      }
+      if(collisions[e.id])reason='Conflicting creation identity: preserve evidence, block attachment';
+      if(reason){repaired[e.id]=reason;issues.push(e.id+': '+reason);}
+    }
+    return {entities,deleted,deletions,collisions,history,issues,repaired};
+  }
+  function edit(s,issuer,target,fields){return ingest(s,op(s,issuer,'set',target,fields));}
+  function close(s,target,confirmed=false,commit=true){
+    const original=copy(s);s=copy(s);
+    if(!project(s).entities[target]||project(s).entities[target].deleted){s.note='No live shared item to close.';return s;}
+    const p=project(s),targets=new Set([target]);let changed=true;
+    while(changed){changed=false;for(const e of Object.values(p.entities))if(!e.deleted&&!targets.has(e.id)&&targets.has(e.fields.parent)){targets.add(e.id);changed=true;}}
+    const serverIds=[...targets].map(id=>p.entities[id]?.fields.server).filter(Boolean);
+    const liveReports=s.report.fresh&&serverIds.every(id=>s.connections[id]?.connected&&s.connections[id]?.authorized);
+    if((!liveReports||s.report.status!=='idle')&&!confirmed){s.confirmation=true;s.note='Confirm closure: a foreground process may still be running.';return s;}
+    const operations=[];
+    for(const id of targets){const e=p.entities[id];if(!e||e.deleted)continue;const o=op(s,'mac','delete',id,{server:e.fields.server||null,incarnation:e.fields.incarnation||null,confirmed:true});s=ingest(s,o);if(!s.durable.includes(o.id)){original.note='Close could not be persisted; keep the item visible.';return original;}operations.push(o);}
+    if(!commit){s=copy(arguments[0]);s.note='Crash before durable transaction: original layout survives.';return s;}
+    for(const o of operations)if(o.fields.server)s.outbox.push({operation:o.id,target:o.target,server:o.fields.server,incarnation:o.fields.incarnation,stage:'local',acceptedDay:null});
+    s=repairSelection(s);s.confirmation=false;s.note='Close transaction persisted; affected items disappear immediately. Cleanup continues.';return s;
+  }
+  function reconcile(s){
+    s=copy(s);const c=s.channel,p=project(s);
+    s.reconciledNonces={};
+    if(s.frozen.length||!c.connected||!c.authorized||!c.complete||c.rollback||!c.nonce||c.account!==s.account||c.epoch!==s.epoch||!c.serverMember){s.note='Preserved all processes: authenticated synchronization is incomplete or unauthorized.';return s;}
+    for(const r of s.runtimes){
+      const connection=s.connections[r.server];
+      if(!connection||!connection.connected||!connection.authorized||!connection.nonce||p.collisions[r.id])continue;
+      if(!s.members.includes(r.server))continue;
+      s.reconciledNonces[r.server]=connection.nonce;
+      const e=p.entities[r.id];
+      const d=(p.deletions[r.id]||[]).find(d=>d.fields.server===r.server&&d.fields.incarnation===r.incarnation&&d.fields.confirmed&&s.members.includes(d.issuer)&&d.epoch===s.epoch&&e&&e.fields.server===r.server&&e.fields.incarnation===r.incarnation);
+      if(!d)continue;
+      if(r.live){r.live=false;r.stoppedBy=d.id;}
+      if(!s.receipts.some(x=>x.operation===d.id))s.receipts.push({operation:d.id,target:r.id,incarnation:r.incarnation,nonce:connection.nonce});
+      const q=s.outbox.find(q=>q.operation===d.id);if(q)q.stage='terminated';
+    }
+    s.note='Synchronization completed before attachment; only explicitly deleted runtime instances were terminated.';return s;
+  }
+  function submit(s,available=true){s=copy(s);for(const q of s.outbox)if(q.stage!=='terminated'){if(available){q.stage='queued';q.acceptedDay=s.day;}else if(q.stage==='local')q.stage='unsubmitted';}s.note=available?'Relay accepted encrypted command fixtures. Acceptance is not termination.':'Submission failed; durable local close intent remains retryable.';return s;}
+  function advance(s,days=8){s=copy(s);s.day+=days;for(const q of s.outbox)if(q.stage==='queued'&&s.day-q.acceptedDay>=7)q.stage='expired';s.note='Pending queue expired. Durable state and explicit tombstones remain.';return s;}
+  const conflictKey=h=>[h.target,h.field,h.loser,h.winner].join('|');
+  function compact(s){
+    // The model retains source operations to verify replay, while exposing the
+    // proposed checkpoint payload. Production compaction must verify equivalence.
+    const p=project(s);
+    return {account:s.account,epoch:s.epoch,heads:s.ops.map(o=>o.id),entities:p.entities,tombstones:p.deletions,conflicts:p.history.filter(h=>!s.checkpointedConflicts.includes(conflictKey(h))||s.day-(s.conflictObserved[conflictKey(h)]??s.day)<limits.historyDays),retired:s.ops.filter(o=>o.kind==='delete').map(o=>o.target),note:'Source operations retained in this model; no destructive GC is implemented.'};
+  }
+  function restart(s){const disk=copy(s);disk.confirmation=false;disk.reconciledNonces={};disk.note='Restart replays the durable transaction and outbox. Live processes survive.';return disk;}
+  function repairSelection(s){s=copy(s);const entities=project(s).entities,live=Object.values(entities).filter(e=>e.fields.type==='content'&&!e.deleted).map(e=>e.id).sort();const client=s.activeClient;if(!live.includes(s.selection[client]))s.selection[client]=live[0]||null;return s;}
+  function merge(s,other){let result=copy(s);for(const o of other.ops)result=ingest(result,o);return repairSelection(result);}
+  function canAttach(s,id){const c=s.channel,p=project(s),e=p.entities[id],r=s.runtimes.find(r=>r.id===id),conn=r&&s.connections[r.server];return Boolean(!s.frozen.length&&!p.collisions[id]&&c.connected&&c.authorized&&c.complete&&!c.rollback&&c.serverMember&&c.account===s.account&&c.epoch===s.epoch&&c.nonce&&conn&&conn.connected&&conn.authorized&&conn.nonce&&s.reconciledNonces[r.server]===conn.nonce&&e&&!e.deleted&&r&&r.live&&r.incarnation===e.fields.incarnation&&s.members.includes(r.server));}
+  return {copy,canonical,limits,seed,op,ingest,project,edit,close,reconcile,submit,advance,compact,restart,merge,canAttach,conflictKey};
+})();
+if(typeof module!=='undefined')module.exports=LayoutPrototype;
+
+const LayoutScenarios = (() => {
+  const M=typeof LayoutPrototype!=='undefined'?LayoutPrototype:require('./model.js');
+  const step=(label,run)=>({label,run});
+  function offline(s){s=M.copy(s);s.channel.connected=false;for(const c of Object.values(s.connections))c.connected=false;return s;}
+  function online(s){s=M.copy(s);s.connectionCounter++;s.channel.connected=true;s.channel.complete=true;s.channel.authorized=true;s.channel.nonce='join-'+s.connectionCounter;for(const [id,c]of Object.entries(s.connections)){c.connected=true;c.nonce=id+'-'+s.connectionCounter;}return s;}
+  function concurrent(s){
+    const a=M.edit(s,'mac','workspace',{name:'Release'}),b=M.edit(s,'phone','workspace',{name:'Research'});
+    s=M.merge(a,b);s.note='Concurrent names converge on Research by logical clock and stable issuer ID. Release is recoverable.';return s;
+  }
+  const cases=[
+    {title:'Two clients edit',description:'Independent changes merge. Concurrent names have a stable winner and a recoverable losing value.',steps:[step('Edit the name on both clients',concurrent),step('Also rename a terminal on the phone',s=>M.edit(s,'phone','term-b',{name:'Tests'}))]},
+    {title:'Offline close',description:'A mixed-server workspace closes locally after unknown-process confirmation, even when delivery fails. Servers clean up automatically after synchronization.',steps:[step('Disconnect the servers',offline),step('Request workspace closure',s=>M.close(s,'workspace')),step('Confirm potentially running work',s=>M.close(s,'workspace',true)),step('Attempt delivery while relay is unavailable',s=>M.submit(s,false)),step('Restart the client',M.restart),step('Reconnect directly and reconcile',s=>M.reconcile(online(s)))]},
+    {title:'Queue expires',description:'The relay queue lasts seven days. Layout tombstones and durable local intent survive it.',steps:[step('Disconnect',offline),step('Request workspace closure',s=>M.close(s,'workspace')),step('Confirm potentially running work',s=>M.close(s,'workspace',true)),step('Relay accepts the commands',s=>M.submit(s)),step('Pass eight days',M.advance),step('Reconnect and clean up',s=>M.reconcile(online(s)))]},
+    {title:'Unseen new terminal',description:'A phone creates a terminal while a Mac closes the workspace. The unseen process survives in recovered structure.',steps:[step('Create concurrently and merge the close',s=>{
+      let other=M.ingest(s,M.op(s,'phone','create','term-new',{type:'content',parent:'pane',name:'Unseen work',server:'server-b',incarnation:'run-new'}));
+      let closed=M.close(s,'workspace');s=M.merge(closed,other);s.runtimes.push({id:'term-new',server:'server-b',incarnation:'run-new',live:true,stoppedBy:null});s.note='Known items are deleted. Unseen new content is retained in Recovered work.';return s;
+    }),step('Reconcile known deletion records',M.reconcile)]},
+    {title:'Unknown process',description:'Stale or unknown foreground state needs confirmation. No network request delays the local action.',steps:[step('Lose the process report',s=>{s=M.copy(s);s.report={status:'unknown',fresh:false};return s;}),step('Request closure',s=>M.close(s,'term-a')),step('Confirm the warning',s=>M.close(s,'term-a',true)),step('Reconcile',M.reconcile)]},
+    {title:'Stale layout',description:'A server rejects an incomplete or rolled-back synchronization. Absence from a snapshot never authorizes a kill.',steps:[step('Close a terminal',s=>M.close(s,'term-a')),step('Receive an incomplete layout',s=>{s=M.copy(s);s.channel.complete=false;return M.reconcile(s);}),step('Receive a rolled-back checkpoint',s=>{s=M.copy(s);s.channel.complete=true;s.channel.rollback=true;return M.reconcile(s);}),step('Complete an authenticated sync',s=>{s=online(s);s.channel.rollback=false;return M.reconcile(s);})]},
+    {title:'Removed server',description:'Removing a server preserves its processes. There is no historical cleanup notice to dismiss.',steps:[step('Close the workspace locally',s=>M.close(s,'workspace')),step('Remove the second server',s=>{s=M.copy(s);s.members=s.members.filter(x=>x!=='server-b');return s;}),step('Reconcile',M.reconcile)]},
+    {title:'Stale client returns',description:'An old rename cannot resurrect a deleted identity. Revoked issuers cannot submit new operations.',steps:[step('Merge a stale concurrent rename',s=>M.merge(M.close(s,'term-a'),M.edit(s,'phone','term-a',{name:'Old client edit'}))),step('Remove the phone and reject its next edit',s=>{s=M.copy(s);s.members=s.members.filter(x=>x!=='phone');return M.edit(s,'phone','term-b',{name:'Rejected edit'});})]},
+    {title:'Crash and restart',description:'A close transaction either persists its layout changes and outbox together or leaves the original item visible.',steps:[step('Crash before the close commits',s=>M.close(s,'workspace',false,false)),step('Close with a committed transaction',s=>M.close(s,'workspace')),step('Restart before relay submission',M.restart),step('Automatically reconcile',M.reconcile),step('Replay cleanup safely',M.reconcile)]},
+    {title:'Invalid structure',description:'Concurrent moves can form a cycle. A deterministic repair projection keeps content recoverable and never kills a process.',steps:[step('Propose an invalid parent',s=>M.edit(s,'phone','workspace',{parent:'pane'})),step('Attempt cleanup',M.reconcile)]},
+    {title:'Partial cleanup',description:'One server may finish cleanup while another remains unreachable. Connections and acknowledgment are tracked per server and runtime.',steps:[step('Close the workspace',s=>M.close(s,'workspace')),step('Reconcile only the first server',s=>{s=M.copy(s);s.connections['server-b'].connected=false;return M.reconcile(s);}),step('Reconnect and finish the second server',s=>M.reconcile(online(M.restart(s))))]},
+    {title:'Out-of-order delivery',description:'A dependent edit arrives first. It stays buffered and unacknowledged until its prerequisite is verified.',steps:[step('Deliver the later edit first',s=>{const one=M.edit(s,'phone','workspace',{name:'First'});return M.ingest(s,M.op(one,'mac','set','workspace',{name:'Second'}));}),step('Deliver the missing dependency',s=>{const o=M.op(M.seed(),'phone','set','workspace',{name:'First'});return M.ingest(s,o);})]},
+    {title:'Late conflict recovery',description:'An old offline edit first arrives on model day 40. Its recovery window starts now, and uncheckpointed losing values stay pinned.',steps:[step('Receive a 40-day-old concurrent edit',s=>{const old=M.edit(s,'phone','workspace',{name:'Offline work'});s=M.advance(M.edit(s,'mac','workspace',{name:'Local work'}),40);return M.merge(s,old);}),step('Keep the losing value past day 70 while uncheckpointed',s=>M.advance(s,31))]},
+    {title:'Invalid input',description:'A reserved identifier is refused before projection or durable acknowledgment. The replica remains usable.',steps:[step('Reject a reserved identifier',s=>M.ingest(s,M.op(s,'phone','set','constructor',{name:'Invalid'}))),step('Apply a valid edit afterward',s=>M.edit(s,'phone','workspace',{name:'Still usable'}))]},
+    {title:'Fork recovery policy',description:'Accepted conservative policy: conflicting signed history pauses new attachments and destructive cleanup account-wide. Processes keep running. Revocation alone does not repair ambiguous history; trusted checkpoint repair is still required.',steps:[step('Receive two signed versions of one edit',s=>{const a=M.op(s,'phone','set','workspace',{name:'Version one'}),b=M.copy(a);b.fields.name='Version two';return M.ingest(M.ingest(s,a),b);}),step('Revoke the forking phone',s=>{s=M.copy(s);s.members=s.members.filter(x=>x!=='phone');return s;}),step('Preserve processes while checkpoint repair is required',M.reconcile)]}
+  ];
+  return {cases,offline,online,concurrent};
+})();
+if(typeof module!=='undefined')module.exports=LayoutScenarios;
+
+
+const M=LayoutPrototype,S=LayoutScenarios;
+let index=0,position=0,state=M.seed();
+const $=id=>document.getElementById(id);
+function textList(id,rows){$(id).replaceChildren(...rows.map(row=>{const li=document.createElement('li');li.textContent=row;return li;}));}
+function render(){
+  const c=S.cases[index],p=M.project(state);
+  $('scenario-title').textContent=c.title;$('description').textContent=c.description;$('note').textContent=state.note;
+  document.querySelectorAll('[role=tab]').forEach((b,i)=>b.setAttribute('aria-selected',String(index===i)));
+  textList('items',Object.values(p.entities).filter(e=>e.fields.type!=='account').map(e=>e.fields.name+' · '+e.id+' · '+(e.deleted?'Deleted':p.repaired[e.id]?'Recovered work':e.fields.type)));
+  textList('processes',state.runtimes.map(r=>r.id+' on '+r.server+' · '+r.incarnation+' · '+(r.live?'Running':'Terminated')+' · '+(M.canAttach(state,r.id)?'Attachment ready':'Attachment blocked')));
+  textList('cleanup',state.outbox.length?state.outbox.map(q=>q.target+' · '+q.stage+' · '+q.operation):['No close intent recorded']);
+  $('summary').textContent='Model day '+state.day+' · '+state.ops.length+' durable operations · '+state.pending.length+' buffered operations · '+state.receipts.length+' runtime receipts · '+(state.confirmation?'Confirmation required':'No confirmation pending');
+  $('next').disabled=position>=c.steps.length;$('next').textContent=position<c.steps.length?c.steps[position].label:'Walkthrough complete';
+  $('step-status').textContent=position<c.steps.length?'Step '+(position+1)+' of '+c.steps.length:'Walkthrough complete';
+  $('diagnostics').textContent=p.history.length+' recoverable edit(s) · '+state.rejected.length+' rejected operation(s) · Mac selection: '+(state.selection.mac||'none')+' · Phone selection: '+(state.selection.phone||'none');
+  $('raw').textContent=JSON.stringify({recoverable:p.history,structuralRepair:p.repaired,rejected:state.rejected,channel:state.channel,connections:state.connections,pending:state.pending,recoveryQuarantine:state.rejected,checkpoint:M.compact(state)},null,2);
+}
+function choose(i){index=i;position=0;state=M.seed();render();}
+S.cases.forEach((c,i)=>{const b=document.createElement('button');b.setAttribute('role','tab');b.textContent=c.title;b.onclick=()=>choose(i);$('tabs').append(b);});
+$('next').onclick=()=>{const step=S.cases[index].steps[position];if(step){state=step.run(state);position++;render();}};
+$('reset').onclick=()=>choose(index);
+for(const [label,fn]of [['Concurrent rename',S.concurrent],['Disconnect',S.offline],['Close workspace',s=>M.close(s,'workspace')],['Confirm close',s=>M.close(s,'workspace',true)],['Cancel confirmation',s=>{s=M.copy(s);s.confirmation=false;s.note='Cancelled: the layout and runtime remain unchanged.';return s;}],['Relay accepts',s=>M.submit(s)],['Delivery fails',s=>M.submit(s,false)],['Pass eight days',M.advance],['Restart client',M.restart],['Reconnect and reconcile',s=>M.reconcile(S.online(s))]]){const b=document.createElement('button');b.textContent=label;b.onclick=()=>{state=fn(state);render();};$('free').append(b);}
+window.prototypeState=()=>M.copy(state);
+render();
+
+</script>

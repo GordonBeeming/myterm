@@ -1,0 +1,193 @@
+{
+  "checks": [
+    {
+      "width": 1920,
+      "horizontal": false,
+      "mojibake": false,
+      "complete": true,
+      "title": "Success"
+    },
+    {
+      "width": 1920,
+      "horizontal": false,
+      "mojibake": false,
+      "complete": true,
+      "title": "Source returns"
+    },
+    {
+      "width": 1920,
+      "horizontal": false,
+      "mojibake": false,
+      "complete": true,
+      "title": "Lost acknowledgement"
+    },
+    {
+      "width": 1920,
+      "horizontal": false,
+      "mojibake": false,
+      "complete": true,
+      "title": "Cancel before commit"
+    },
+    {
+      "width": 1920,
+      "horizontal": false,
+      "mojibake": false,
+      "complete": true,
+      "title": "Destination checks"
+    },
+    {
+      "width": 1920,
+      "horizontal": false,
+      "mojibake": false,
+      "complete": true,
+      "title": "Source lost"
+    },
+    {
+      "width": 1920,
+      "horizontal": false,
+      "mojibake": false,
+      "complete": true,
+      "title": "Missing content"
+    },
+    {
+      "width": 1920,
+      "horizontal": false,
+      "mojibake": false,
+      "complete": true,
+      "title": "Missing security state"
+    },
+    {
+      "width": 1920,
+      "horizontal": false,
+      "mojibake": false,
+      "complete": true,
+      "title": "Offline and chained"
+    },
+    {
+      "width": 1920,
+      "horizontal": false,
+      "mojibake": false,
+      "complete": true,
+      "title": "Expired ticket"
+    },
+    {
+      "width": 800,
+      "horizontal": false,
+      "mojibake": false,
+      "complete": true,
+      "title": "Success"
+    },
+    {
+      "width": 800,
+      "horizontal": false,
+      "mojibake": false,
+      "complete": true,
+      "title": "Source returns"
+    },
+    {
+      "width": 800,
+      "horizontal": false,
+      "mojibake": false,
+      "complete": true,
+      "title": "Lost acknowledgement"
+    },
+    {
+      "width": 800,
+      "horizontal": false,
+      "mojibake": false,
+      "complete": true,
+      "title": "Cancel before commit"
+    },
+    {
+      "width": 800,
+      "horizontal": false,
+      "mojibake": false,
+      "complete": true,
+      "title": "Destination checks"
+    },
+    {
+      "width": 800,
+      "horizontal": false,
+      "mojibake": false,
+      "complete": true,
+      "title": "Source lost"
+    },
+    {
+      "width": 800,
+      "horizontal": false,
+      "mojibake": false,
+      "complete": true,
+      "title": "Missing content"
+    },
+    {
+      "width": 800,
+      "horizontal": false,
+      "mojibake": false,
+      "complete": true,
+      "title": "Missing security state"
+    },
+    {
+      "width": 800,
+      "horizontal": false,
+      "mojibake": false,
+      "complete": true,
+      "title": "Offline and chained"
+    },
+    {
+      "width": 800,
+      "horizontal": false,
+      "mojibake": false,
+      "complete": true,
+      "title": "Expired ticket"
+    }
+  ],
+  "pairs": [
+    {
+      "fg": "0f172a",
+      "bg": "f8fafc",
+      "ratio": 17.062933971317335
+    },
+    {
+      "fg": "0f172a",
+      "bg": "ffffff",
+      "ratio": 17.85253496299567
+    },
+    {
+      "fg": "0f172a",
+      "bg": "ecfeff",
+      "ratio": 17.16163998544374
+    },
+    {
+      "fg": "64748b",
+      "bg": "ffffff",
+      "ratio": 4.758842787868666
+    },
+    {
+      "fg": "64748b",
+      "bg": "f8fafc",
+      "ratio": 4.548363604249587
+    },
+    {
+      "fg": "164e63",
+      "bg": "ffffff",
+      "ratio": 9.114421861537426
+    },
+    {
+      "fg": "164e63",
+      "bg": "f8fafc",
+      "ratio": 8.711299472735954
+    },
+    {
+      "fg": "ffffff",
+      "bg": "0e7490",
+      "ratio": 5.3577549124490425
+    },
+    {
+      "fg": "0f172a",
+      "bg": "f1f5f9",
+      "ratio": 16.295987899750777
+    }
+  ],
+  "errors": [],
+  "sourceHash": "161bfcd11ec1e98400810ccb005ca1ce888d1f32226f534d0477f075b6c69080"
+}

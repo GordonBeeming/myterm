@@ -1,0 +1,21 @@
+{
+  "timeUTC": "2026-11-15T11:45:15.792539+00:00",
+  "platform": "macOS-27.3-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "branch": "gb/feature/20261108-crisp-kakapo",
+  "sourcesSHA256": {
+    "script/inventory-prototype/Model.swift": "f426186ab81f6a36bb20a79fc8149d3c8735baa6fc9b67c0be8ca8df2347e873",
+    "script/inventory-prototype/native_ui.py": "9606ec2525148666f561c9150481d48b4b35b8a86e6057e78408bee411761386",
+    "script/inventory-prototype/native_signals.py": "98cfe469562e2297ec65905b97e03a156178c8b82d2b4c19219b9bb47d35a958",
+    "script/inventory-prototype/run.sh": "99d290821daeacd54e76db8d87fdeee8e76cc34a3756d160ca7fbccbadfe45e5",
+    "script/inventory-prototype/README.md": "48877dabaaaf9f51f025af6a50c59e11417e68bd6cb3d9313dd35f7b8cdcc330",
+    "script/inventory-prototype/main.swift": "5066f14121e0b2f09621a2b3312eedf6df7db3ad265e800f39c55e31342924bc",
+    "script/inventory-prototype/build_review.py": "151f8d23a23dcf4a6a923b53e770444acb8d7371597d197db898e6d57f897d55"
+  },
+  "binarySHA256": "f3ba6608301c5c0efac6c97efc691e5495a3d897737b5822431031703ad0ff41",
+  "modelChecks": 56,
+  "nativeUISteps": 46,
+  "existingAppTests": 117,
+  "nativeAgentSmokeProbes": 4,
+  "claims": "Mac prototype checkpoint; no production Rust/relay/client integration or complete external-agent compatibility acceptance; ticket remains open."
+}

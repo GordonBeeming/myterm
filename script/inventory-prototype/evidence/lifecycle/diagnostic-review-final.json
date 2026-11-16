@@ -1,0 +1,15 @@
+{
+  "tool": "claude",
+  "mode": "review",
+  "model": "sonnet",
+  "permissionMode": "plan",
+  "repo": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-crisp-kakapo",
+  "sessionId": "4e26e920-e0f8-4753-8e12-810b3f91c9e6",
+  "status": "completed",
+  "response": "No material blocker to reporting this compatibility checkpoint as scoped. This is static review only; I executed nothing.\n\nWhat I confirmed in the retained files:\n- **Forced exit:** Claude, Codex and Grok are each `pass` with `inputScreenObserved: true`. Their post-kill sentinels were matched after a recorded byte offset and the PID equals `shellGroup`'s shell. Antigravity is `fail` with `[Errno 1] Operation not permitted`. The report labels it Inconclusive and \"Passed once\" for the other three.\n- **Agy permission:** the pre-approval file has the exact command, options 1 to 4 and `proofFiles.exists=false` for all three files. The post-approval file has `myterm-permission-proof.txt` with a sha256, `target=finished`, `satisfied=true`, and a `sentKeysSHA256` identical to the Enter hash used for trust.\n- **Screen evidence:** `screen_evidence.py` asserts each raw capture's sha256 against the `rawSHA256` you recorded. It raises if the decisive screen is absent. Both entries carry the following marker sequence through `exited`, interval timestamps and a transcript hash.\n\nWording to keep tight in the report:\n- **Agy rejection is not in the retained JSON.** The pre and post files show a state before and after approval. The earlier \"denial\" action label is only in `native-captures.json` and records no `satisfied` result. If the report says \"denial observed\" for Agy, either drop it or keep it marked as a manual observation.\n- **Agy sign-in warning:** both Agy files have `signInWarningObserved: true`. Disclose it as a caveat so no one reads it as a clean session.\n- **Agy EPERM cause:** the forced-exit error came from the OS and the foreground set included `sh` and `perl`. The cause is unexplained, so keep it labelled inconclusive. `ownedForegroundGroupEmpty` there means the group was empty after cleanup, not that the kill worked.\n- **Absence findings:** the Codex \"no AwaitingInput\" and Claude \"no Finished\" results are limited to those captured runs and versions, as you stated. That is supportable now that quiescence, the following markers and the raw hash are retained.\n- **Synthetic terminal:** the screen excerpts come from a pyte reconstruction fed by the probe's synthetic terminal replies. Keep the \"not a native GUI screenshot\" label.\n- **Grok and Codex permission:** both stay listed as no manual accept/reject coverage.",
+  "exitCode": "0",
+  "startedAt": "2026-11-15T12:50:42Z",
+  "endedAt": "2026-11-15T12:51:06Z",
+  "rawFile": "/tmp/myterm-native-lifecycle-evidence-final-review.json.json",
+  "stderrTail": ""
+}

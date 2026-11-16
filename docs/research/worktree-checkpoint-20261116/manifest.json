@@ -1,0 +1,190 @@
+{
+  "capturedAtUtc": "2026-11-16T04:13:13.505967+00:00",
+  "scope": "Existing registered MyTerm worktrees plus the Developer worktree directories; other repositories and previously deleted worktrees are not audited. Originals remain untouched.",
+  "worktreesInspected": 23,
+  "missingRegisteredWorktrees": [],
+  "recovered": [
+    {
+      "source": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261107-jaunty-wren/docs/research/myterm-rust-terminal-state-options.md",
+      "savedAs": "docs/research/myterm-rust-terminal-state-options.md",
+      "sha256": "11dd97a1c5f0a1616f5dd9a31c56aa908b3831e3c5a96346875de452767222d6"
+    },
+    {
+      "source": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261107-crisp-marten/GLOSSARY.md",
+      "savedAs": "docs/research/worktree-checkpoint-20261116/20261107-crisp-marten/GLOSSARY.md.txt",
+      "sha256": "07f82bfdcacd31e6b71b12e48a18da30cf7aae37fdae05c81d4f999cbc4dd1c6"
+    },
+    {
+      "source": "/Users/gordonbeeming/.codex/worktrees/3dc0/20261004-curious-tern/Companion/Tests/TerminalExperienceTests.swift",
+      "savedAs": "docs/research/worktree-checkpoint-20261116/3dc0-20261004-curious-tern/TerminalExperienceTests.swift.txt",
+      "sha256": "fa1c776b033a35edbb8474ac27aeb56d70e470f3d8307a00db8fac269f27b4fd"
+    },
+    {
+      "source": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261107-rusty-stitchbird/.scratch/myterm-next/map.md",
+      "savedAs": "docs/research/worktree-checkpoint-20261116/20261107-rusty-stitchbird/map.md.txt",
+      "sha256": "00a2392cba591d60e69c5e1e2721102a0fbb363cbb5907b2bd951ccc3856869b"
+    }
+  ],
+  "duplicates": [
+    {
+      "source": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261107-rusty-stitchbird/.scratch/myterm-next/prototypes/recovery-prototype.html",
+      "sha256": "3eeb502ebfce8d84639c663c65851385df63a342b3f79ff33b8ad2359949b65e",
+      "committedCopies": [
+        "docs/planning/myterm-next/local-source/prototypes/recovery-prototype.html.txt"
+      ]
+    },
+    {
+      "source": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261107-rusty-stitchbird/.scratch/myterm-next/issues/07-proxy-browser-contract.md",
+      "sha256": "f06fb7ffa921078f1dde2404df0e3a1774d2727b20fa9e98a5a8146d8bde3119",
+      "committedCopies": [
+        "docs/planning/myterm-next/local-source/issues/07-proxy-browser-contract.md.txt"
+      ]
+    },
+    {
+      "source": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261107-rusty-stitchbird/.scratch/myterm-next/issues/06-workspace-sync-and-migration.md",
+      "sha256": "127b1052cece56376280c66c8382fc7a0467e586811ebf8d113d12b529d35623",
+      "committedCopies": [
+        "docs/planning/myterm-next/local-source/issues/06-workspace-sync-and-migration.md.txt"
+      ]
+    },
+    {
+      "source": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261107-rusty-stitchbird/.scratch/myterm-next/issues/05-server-authority-and-runtime.md",
+      "sha256": "177f9f028ac1e44e2dca11a4e3425213d1d0ca8d7aafe8240e6865798fa49b1d",
+      "committedCopies": [
+        "docs/planning/myterm-next/local-source/issues/05-server-authority-and-runtime.md.txt"
+      ]
+    },
+    {
+      "source": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261107-rusty-stitchbird/.scratch/myterm-next/issues/01-relay-compromise-and-private-metadata.md",
+      "sha256": "022ed346c42f0eb90ce61731f4f7e39e01238d04a70dfd958cb22b7374adb920",
+      "committedCopies": [
+        "docs/planning/myterm-next/local-source/issues/01-relay-compromise-and-private-metadata.md.txt"
+      ]
+    },
+    {
+      "source": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261107-rusty-stitchbird/.scratch/myterm-next/issues/08-connection-paths-and-enrollment.md",
+      "sha256": "b0f8a055c1afa578b882f26dbd9aef281ac0b2fe4bc67bfec0a2882ea5008937",
+      "committedCopies": [
+        "docs/planning/myterm-next/local-source/issues/08-connection-paths-and-enrollment.md.txt"
+      ]
+    },
+    {
+      "source": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261107-rusty-stitchbird/.scratch/myterm-next/issues/16-trust-protocol-and-approval-validation.md",
+      "sha256": "8c097b0499da20476bf6f9f2e3e4fc6dbc912845b0c3d63fd8367dcb8e2bd23b",
+      "committedCopies": [
+        "docs/planning/myterm-next/local-source/issues/16-trust-protocol-and-approval-validation.md.txt"
+      ]
+    },
+    {
+      "source": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261107-rusty-stitchbird/.scratch/myterm-next/issues/02-native-server-portability.md",
+      "sha256": "1f3dc8a2ebbd314a2b486651231ce7dc9128344ce1c70cb6998b9188212a639a",
+      "committedCopies": [
+        "docs/planning/myterm-next/local-source/issues/02-native-server-portability.md.txt"
+      ]
+    },
+    {
+      "source": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261107-rusty-stitchbird/.scratch/myterm-next/issues/09-hosted-and-self-hosted-relay.md",
+      "sha256": "04124f1f3dd2c9fe2014ebc131d674d6b44081bc6037367a981c27ca4d7fc130",
+      "committedCopies": [
+        "docs/planning/myterm-next/local-source/issues/09-hosted-and-self-hosted-relay.md.txt"
+      ]
+    },
+    {
+      "source": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261107-rusty-stitchbird/.scratch/myterm-next/issues/04-account-trust-and-key-ownership.md",
+      "sha256": "219bd2191307c67f252a2e4a34b9dd2ae3e7871a0b2f71483cb202d1bb91e5ec",
+      "committedCopies": [
+        "docs/planning/myterm-next/local-source/issues/04-account-trust-and-key-ownership.md.txt"
+      ]
+    },
+    {
+      "source": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261107-rusty-stitchbird/.scratch/myterm-next/issues/13-native-terminal-feasibility.md",
+      "sha256": "f5b70e06ac0b50360f1feca13ac95e107fa19f645886a20903c8c41880fa0025",
+      "committedCopies": [
+        "docs/planning/myterm-next/local-source/issues/13-native-terminal-feasibility.md.txt"
+      ]
+    },
+    {
+      "source": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261107-rusty-stitchbird/.scratch/myterm-next/issues/03-recovery-scenarios.md",
+      "sha256": "2ccb962ed31bd0c69891690b34f78d11a3cb4430a5e19de8f554c0e3aa71e86c",
+      "committedCopies": [
+        "docs/planning/myterm-next/local-source/issues/03-recovery-scenarios.md.txt"
+      ]
+    },
+    {
+      "source": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261107-rusty-stitchbird/.scratch/myterm-next/issues/12-native-validation-environments.md",
+      "sha256": "41631785e3a5866de43344be3a6d95090ff7ec95a2d9dc10823beb576100493c",
+      "committedCopies": [
+        "docs/planning/myterm-next/local-source/issues/12-native-validation-environments.md.txt"
+      ]
+    },
+    {
+      "source": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261107-rusty-stitchbird/.scratch/myterm-next/issues/10-cross-server-agent-visibility.md",
+      "sha256": "67e13144516d1651d16d018dab53713d7fe86f5242ff54b1747b7ddb57fdb18d",
+      "committedCopies": [
+        "docs/planning/myterm-next/local-source/issues/10-cross-server-agent-visibility.md.txt"
+      ]
+    },
+    {
+      "source": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261107-rusty-stitchbird/.scratch/myterm-next/issues/14-session-attachment-and-handoff.md",
+      "sha256": "181033888e1d614dfabdb0044cddfe4016e883b5005f753642faeafce6913f74",
+      "committedCopies": [
+        "docs/planning/myterm-next/local-source/issues/14-session-attachment-and-handoff.md.txt"
+      ]
+    },
+    {
+      "source": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261107-rusty-stitchbird/.scratch/myterm-next/issues/15-account-trust-protocol.md",
+      "sha256": "e3ce4dbdbec84941010fe82ddd33087b93ec3c0ad8c3f4dea92698537c4b369d",
+      "committedCopies": [
+        "docs/planning/myterm-next/local-source/issues/15-account-trust-protocol.md.txt"
+      ]
+    },
+    {
+      "source": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261107-rusty-stitchbird/.scratch/myterm-next/issues/11-verification-and-implementation-plan.md",
+      "sha256": "de93d0c9d797be4f89a5364a2765aa108dc1d7221e229b5fec6362aaec7788f4",
+      "committedCopies": [
+        "docs/planning/myterm-next/local-source/issues/11-verification-and-implementation-plan.md.txt"
+      ]
+    }
+  ],
+  "excluded": [
+    {
+      "source": "/Users/gordonbeeming/Developer/github/gordonbeeming/myterm/.codex/worktrees/20260915-quiet-tern/.DS_Store",
+      "reason": "Finder metadata, not project work"
+    },
+    {
+      "source": "/Users/gordonbeeming/Developer/github/gordonbeeming/myterm/.codex/worktrees/20260915-quiet-tern/Sources/.DS_Store",
+      "reason": "Finder metadata, not project work"
+    }
+  ],
+  "recoveredDiffs": [
+    {
+      "source": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261107-crisp-marten/GLOSSARY.md",
+      "savedAs": "docs/research/worktree-checkpoint-20261116/20261107-crisp-marten/glossary.diff.txt",
+      "format": "git diff against source worktree HEAD",
+      "sha256": "0f8f25cf4c08ed38e97237559aac7259e08678ce10cb107b95e2168bee129444"
+    },
+    {
+      "source": "/Users/gordonbeeming/.codex/worktrees/3dc0/20261004-curious-tern/Companion/Tests/TerminalExperienceTests.swift",
+      "savedAs": "docs/research/worktree-checkpoint-20261116/3dc0-20261004-curious-tern/terminal-experience.diff.txt",
+      "format": "git diff against source worktree HEAD",
+      "sha256": "84b5456226afb7d5340f7ecc2ea4e9a2ac5be3ddccfc589ee8b48bedcb95fb7e"
+    }
+  ],
+  "sanitizedLogs": [
+    {
+      "file": "script/inventory-prototype/evidence/existing-agent-tests.log",
+      "reason": "Incidental local AddressBook path/identifier removed; no contact content was present.",
+      "originalSha256": "5f681edf1dfdb46f35f8ceea3795ddf89644954d2a73367062d6bc9ee7ef7781",
+      "publishedSha256": "ce0f9f55ba668c05bce29316197a63b7a4d8249b4ac2f305952da41460b61d90",
+      "privateOriginal": "/Users/gordonbeeming/Developer/artifacts/myterm/private-checkpoint-20261116/existing-agent-tests.log"
+    },
+    {
+      "file": "script/inventory-prototype/evidence/lifecycle/existing-agent-regression.log",
+      "reason": "Incidental local AddressBook path/identifier removed; no contact content was present.",
+      "originalSha256": "becef64346978aebd0732e5ba42c6530baaecae31a50e1a13e9a1b0c0fab91f2",
+      "publishedSha256": "855dd76554f1d41a0ab95d221ca5088ad034242ed677c67722aceae9a788086a",
+      "privateOriginal": "/Users/gordonbeeming/Developer/artifacts/myterm/private-checkpoint-20261116/existing-agent-regression.log"
+    }
+  ],
+  "ignoredAudit": "Ignored locations were inspected. Build/dependency caches, editor state, global skill links, generated test output, and machine-local configuration were excluded; no further ignored prototype source was found."
+}

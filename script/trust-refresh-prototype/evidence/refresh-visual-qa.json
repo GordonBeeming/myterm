@@ -1,0 +1,51 @@
+{
+  "checks": [
+    {
+      "width": 1920,
+      "tab": "failed",
+      "clipped": [],
+      "horizontalOverflow": false
+    },
+    {
+      "width": 1920,
+      "tab": "switch",
+      "clipped": [],
+      "horizontalOverflow": false
+    },
+    {
+      "width": 1920,
+      "tab": "active",
+      "clipped": [],
+      "horizontalOverflow": false
+    },
+    {
+      "width": 800,
+      "tab": "failed",
+      "clipped": [],
+      "horizontalOverflow": false
+    },
+    {
+      "width": 800,
+      "tab": "switch",
+      "clipped": [],
+      "horizontalOverflow": false
+    },
+    {
+      "width": 800,
+      "tab": "active",
+      "clipped": [],
+      "horizontalOverflow": false
+    }
+  ],
+  "errors": [],
+  "mojibake": [],
+  "contrast": {
+    "#0f172a/#f8fafc": 17.06293397131733,
+    "#0f172a/#ffffff": 17.85253496299567,
+    "#0f172a/#f1f5f9": 16.295987899750777,
+    "#155e75/#ecfeff": 6.9856152369204505,
+    "#155e75/#ffffff": 7.266842816941486,
+    "#164e63/#f8fafc": 8.711299472735952,
+    "#ffffff/#0e7490": 5.3577549124490425
+  }
+}
