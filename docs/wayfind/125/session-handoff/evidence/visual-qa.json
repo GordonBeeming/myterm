@@ -1,5 +1,5 @@
 {
-  "checkedUtc": "2026-11-16T15:02:12.089324+00:00",
+  "checkedUtc": "2026-11-16T21:46:09.262338+00:00",
   "tool": "Browser.app via browser CLI",
   "headless": true,
   "requestedViewport": [
@@ -19,6 +19,7 @@
   "minimumTextContrast": 4.548363604249587,
   "tabClickAndKeyboardHandlerChecked": true,
   "nativePrototypeWindowsOpened": false,
-  "htmlSha256": "9614efb9f0f08474bd569431983013ebf118b1c32fdc8bbb69132c4113c6540b",
-  "screenshots": "Full-page screenshots visually inspected; temporary QA screenshots removed after inspection"
+  "htmlSha256": "1dd140a9ef38637ca1d876047c62c28d37032e4bf3abc15042a756d0b3b4382a",
+  "screenshots": "Full-page screenshots visually inspected; temporary QA screenshots removed after inspection",
+  "acceptedStatusUpdateChecked": true
 }
