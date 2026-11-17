@@ -1,0 +1,22 @@
+{
+  "grid": [
+    18,
+    32
+  ],
+  "request": {
+    "height": "auto",
+    "preserve": true,
+    "width": "2"
+  },
+  "geometryOne": [
+    9,
+    16,
+    1
+  ],
+  "geometryTwo": [
+    8.5,
+    16,
+    1
+  ],
+  "samePixels": false
+}

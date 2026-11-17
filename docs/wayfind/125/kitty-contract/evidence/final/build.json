@@ -1,0 +1,32 @@
+{
+  "time": "2026-11-17T12:59:24.414149+00:00",
+  "platform": "macOS-27.3-arm64-arm-64bit-Mach-O",
+  "sourceSha256": {
+    "native/source/wezterm-escape-parser/src/apc.rs": "b4025f1ba41c0212b0e81f6ed2ae5f50b3b0f4f89729906a866b9500c996eb13",
+    "native/source/term/src/screen.rs": "ff02bbd167bb69466c9053392c2c3a3b886a840e19e28ff2943e8a45b4035453",
+    "native/source/term/src/terminal.rs": "82bbc87185c2f8c65c15bc971d1a20520a14e5d3779c926647034034240156d3",
+    "native/source/term/src/terminalstate/mod.rs": "1a59c46fb103680260f84d5431ce43f11909faa45338ba8a56dd099655000fd0",
+    "native/probe/main.rs": "6bb6d539272f8f3789d0b31544942462e4b2d605b2bf8301966d81f0c9a6bb0d",
+    "native/source/term/src/terminalstate/kitty.rs": "7314ade9d3cdd4965b9902f6238d013dd1648fae3807c85dad5a59d0a5757b6b",
+    "native/source/term/src/terminalstate/prototype-kitty.rs": "c1ae3fa13c7533417b106a0c1ab21ae9b8051901b459a64dd222b38e05d219b4",
+    "native/source/term/src/terminalstate/prototype-graphics.rs": "b85493d0b8216a5be2b180079df271706a2f6905b94766c694ffaaab906be036",
+    "native/source/term/src/terminalstate/prototype-checkpoint.rs": "8a74ee789a24af028419c8d03f2a51abf9a978116047cb7e5cb481df7c3d2313",
+    "native/source/term/src/terminalstate/image.rs": "ce5883fef88da08cbe18165f620475d225c26a337a6d05113bbdeb0279d7a3af",
+    "native/SwiftTerm/Sources/SwiftTerm/KittyGraphics.swift": "1a0c2f27b8efa24852e461117d1210f5bf81b7b1858e8e4c6375eeb3bcdffaba",
+    "native/SwiftTerm/Sources/SwiftTerm/KittyPlaceholder.swift": "335db7dc64840e80b56b90b128ad8d44494525e19c17836e85e627b4b0ae75ff",
+    "native/SwiftTerm/Sources/SwiftTerm/CheckpointBridge.swift": "dede402c55906efc2bd001ea494c2fe2538496c429225a5af2675b8744dd0e2b",
+    "native/SwiftTerm/Sources/SwiftTerm/CheckpointGraphics.swift": "eb04bb3abf3747cc4a5c15fa5dc83a86d1bbcf790eebe18dc9eabe9d7f38cb13",
+    "native/SwiftTerm/Sources/SwiftTerm/Terminal.swift": "f5abdeb88d93f01057a6b7fc4ea3ee8b3e4a0f08e5f27862803db84a6ec00b19",
+    "native/SwiftTerm/Sources/SwiftTerm/TerminalCheckpoint.swift": "2bb0c0c91b384f309b1a42f90b94c4a5d8e150c193f07a31eae3bb45bebad66d",
+    "native/SwiftTerm/Sources/SwiftTerm/Apple/AppleTerminalView.swift": "17103edc02d7655d4ae32dd5e7c968109b523d5dd9d35be8ea3dc17358100950",
+    "native/SwiftTerm/Sources/SwiftTerm/Apple/TerminalImageRenderer.swift": "be4110f45c82ade830ca8dfcddd941f072defd82f5bf3b1b45db5a80210f2dda",
+    "native/swift-probe/Sources/Baseline/main.swift": "965e1a51d3b39c41d20e6427cae2c3b54138b4cc7824e37073ddcab00326f1d4",
+    "foundation/checkpoint_checks.py": "0909948aba6fac6e58ceb61da30ef42e7bba3b64d6e222eb077ca1852cd8684f"
+  },
+  "patchSha256": "2ecf8ea3e376ddfc9494221156e1475e0b5ce49825c7838879b2d48148bac90b",
+  "binarySha256": {
+    "server": "e9486d3255bd2318d394e566b52ae42a142cd5027153394950df2a094f12b018",
+    "client": "7393624468c9e7f3e9bbef8db30dfcb3ecd923ea0a638f7e3097385f1c3f90da"
+  },
+  "sourcesUnchangedDuringBuild": true
+}

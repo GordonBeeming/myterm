@@ -2,6 +2,8 @@
   "native/source/wezterm-escape-parser/src/apc.rs": "b04f7f2419fc47561551558f95843e705d32a8da79f3229fc9e02302512b833a",
   "native/source/term/src/screen.rs": "b3adb4f4f1ca44b333c35bfd554530a4544567b37d978610702c10f456c4ee11",
   "native/source/term/src/terminal.rs": "92c18b256b884245b42719150641bb476de7f56992f7a6d71b27b920d1714bae",
+  "native/source/term/src/terminalstate/mod.rs": "6d35822466fdc531aa8c8cfd8d29299455c1e4dc150accf33bb8f8ba21f74a13",
+  "native/probe/main.rs": "147208cb728d307aba8893c772703f02fcde82a0f94e0432f745f56e69cd348e",
   "native/source/term/src/terminalstate/kitty.rs": "fdc5584b6fdb8808ba1a76382612f6ef68e6bdc2e8af2d5a2ccf492ca6a7d20e",
   "native/source/term/src/terminalstate/prototype-kitty.rs": "fc07c0a8d01c10ff5ea27300d32a79d6617f3c7b525bb6777d37b47fb0976b11",
   "native/source/term/src/terminalstate/prototype-graphics.rs": "27a97088105ebe17143b4aa5583b0af2fdad818dbd7fa68a1769594587235d41",

@@ -1,0 +1,192 @@
+{
+  "truths": {
+    "relative-self-cycle-reply": true,
+    "relative-two-node-cycle-reply": true,
+    "relative-depth-limit-reply": true,
+    "relative-missing-parent-reply": true,
+    "virtual-relative-invalid-reply": true,
+    "cycle-keeps-old-placement": true,
+    "depth-thirty-two-admitted": true,
+    "depth-thirty-three-refused": true,
+    "cascade-removes-child-and-its-unreferenced-data": true,
+    "virtual-retains-a": true,
+    "virtual-retains-c": true,
+    "virtual-retains-p": true,
+    "virtual-retains-q": true,
+    "virtual-retains-x": true,
+    "virtual-retains-y": true,
+    "virtual-retains-z": true,
+    "minimum-placeholder-origin-2": true,
+    "minimum-placeholder-origin-3": true,
+    "minimum-placeholder-origin-4": true,
+    "hidden-relative-retains-full-stripes": true,
+    "parent-move-reveals-retained-relative": true,
+    "automatic-placement-identities-do-not-replace-explicit": true,
+    "straight-alpha-midtone-blends-on-green": true,
+    "single-dimension-keeps-square": true,
+    "natural-pixels-not-stretched-to-grid": true,
+    "both-dimensions-letterbox": true,
+    "scrolled-out-parent-does-not-resurrect-child": true,
+    "truecolor-blue-byte-selects-image-one": true,
+    "failed-raster-keeps-old-relative": true,
+    "failed-raster-keeps-old-ordinary": true,
+    "inactive-parent-is-not-usable": true,
+    "local-deletion-keeps-normal-parent": true,
+    "overlap-layer-retention-is-linear": true,
+    "rust-unchanged-output-does-not-reproject": true,
+    "native-unchanged-output-does-not-reproject": true,
+    "negative-control-exposes-prior-layer-duplication": true,
+    "placement-admission-refuses-without-mutation": true,
+    "deletion-frees-admission-slot": true,
+    "relative-admission-cap-before-mutation": true,
+    "relative-admission-cap-is-reported": true
+  },
+  "rejected": {
+    "self-cycle": {
+      "exit": 1,
+      "diagnostic": "bridge Kitty parent graph",
+      "inputSHA256": "533c75d63e8f96127bc0a5ba1610e36699c5904f43fd13e1116486db22bf1051"
+    },
+    "missing-parent": {
+      "exit": 1,
+      "diagnostic": "bridge Kitty parent graph",
+      "inputSHA256": "fb725395a64b5abe4a37c8ce25a09a80a72066e45e6fb239f4a81878a4bb1215"
+    },
+    "cross-buffer": {
+      "exit": 1,
+      "diagnostic": "bridge Kitty parent graph",
+      "inputSHA256": "698a8cfee14db19c233164b1d54067e7e4a436174b36783701645eac5e9533bf"
+    },
+    "virtual-child": {
+      "exit": 1,
+      "diagnostic": "bridge Kitty parent metadata",
+      "inputSHA256": "522755e9c62812c2c8caf315bb676de8cabf666190d715bc86f6704c9ed3df14"
+    },
+    "offset-overflow": {
+      "exit": 1,
+      "diagnostic": "bridge Kitty parent metadata",
+      "inputSHA256": "d48617cfde63797c1eb2de572ef336db069f15ffa7a9f3a3f64fd33dade146e0"
+    },
+    "incomplete-parent": {
+      "exit": 1,
+      "diagnostic": "bridge Kitty parent metadata",
+      "inputSHA256": "d0525f5683451c10899d07e8ec344228c0b706384a4b49265d4f469c84b62796"
+    },
+    "zero-next-identity": {
+      "exit": 1,
+      "diagnostic": "bridge Kitty next identity",
+      "inputSHA256": "086e7e6f4029da31c43089e662d14293c90a957cbd735b62eaaadfc2f15199d6"
+    },
+    "missing-relative-resource": {
+      "exit": 1,
+      "diagnostic": "bridge Kitty missing relative resource",
+      "inputSHA256": "f582f6c9477e0007b79e741e48ddaf8e185a4570a1c8fa385c0afba6b3fa5c90"
+    },
+    "unknown-relative-resource": {
+      "exit": 1,
+      "diagnostic": "bridge Kitty relative resource",
+      "inputSHA256": "b3ea9869258ff4b3383aef033622ad96718dee0dee29b496cf7d14fe06541f16"
+    },
+    "duplicate-relative-resource": {
+      "exit": 1,
+      "diagnostic": "bridge Kitty relative resource",
+      "inputSHA256": "903e4652b398de8da61e3cf272ca5da28301c65d3a4abad8b43df3aabff91a82"
+    },
+    "relative-count-overflow": {
+      "exit": 1,
+      "diagnostic": "bridge Kitty relative count limit",
+      "inputSHA256": "a0e3e6a16572fc5acb07e1b44c27aee3bfc61a0cb19a7b72955fe899982b4737"
+    },
+    "native-self-cycle": {
+      "exit": 1,
+      "diagnostic": "Kitty parent graph",
+      "inputSHA256": "776b4c64273b78fd2f1e6ae77aeab1d6d4613aaff47c3ba435f65db3d784d069"
+    },
+    "native-cache-owner": {
+      "exit": 1,
+      "diagnostic": "Kitty relative cache owner",
+      "inputSHA256": "eae9569c1203e452cc27549d8e94220435bc88ce8afb220f1268fa771149f511"
+    },
+    "native-cache-metadata": {
+      "exit": 1,
+      "diagnostic": "Kitty relative cache image",
+      "inputSHA256": "0ff82d547aab196ba79b5de68527c5eb37c8c07384a53c1a822162a06616085e"
+    },
+    "native-cache-duplicate": {
+      "exit": 1,
+      "diagnostic": "Kitty relative cache owner",
+      "inputSHA256": "aa4b3f00d931eba0694509553cae19d201f686096e5731689c17cc1666e9fc55"
+    },
+    "native-cache-invalid-png": {
+      "exit": 1,
+      "diagnostic": "Kitty relative PNG dimensions",
+      "inputSHA256": "407cf6151bfead073a27482c0731637a9610b17c41b47f88f2a7e58794363e6a"
+    },
+    "native-relative-count-overflow": {
+      "exit": 1,
+      "diagnostic": "Kitty relative cache limit",
+      "inputSHA256": "8362c335a7fcbca71a3dd91233dbb81b842762efd7f8557885050e88f11fc614"
+    },
+    "native-unsafe-coordinate": {
+      "exit": 1,
+      "diagnostic": "Kitty parent metadata",
+      "inputSHA256": "9d0162d43fe84b85af9f42b757ec54dcff435be68838d505f1973dcb7a2c9eec"
+    }
+  },
+  "alphaPixel": [
+    71,
+    127,
+    4,
+    255
+  ],
+  "coloredBounds": {
+    "singleWidth": [
+      0,
+      0,
+      18,
+      18
+    ],
+    "naturalWidth": [
+      0,
+      0,
+      100,
+      1
+    ],
+    "letterbox": [
+      0,
+      7,
+      18,
+      25
+    ]
+  },
+  "idleProjectionCounts": {
+    "rust": 1,
+    "native": 1
+  },
+  "layerCounts": [
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12
+  ],
+  "baselineLayerCounts": [
+    4,
+    6,
+    10,
+    18,
+    34,
+    66,
+    130,
+    258,
+    514
+  ],
+  "binarySHA256": {
+    "server": "40cda5d9a90917ad2705941acfe79a11939ed2026ca82840f5810ad3e7b7cc9d",
+    "client": "482d087bbb8b34a91dbb9ad20910e1d4a5f5aff5dfcc79369b0c1e32cbdb8f10"
+  }
+}

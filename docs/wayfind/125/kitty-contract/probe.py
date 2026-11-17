@@ -198,6 +198,31 @@ def fixtures():
     add('png-alpha-crop-overlap', [green+place,
          command('a=t,f=100,i=2', base64.b64encode(png.getvalue()).decode())
          +command('a=p,i=2,p=2,x=1,w=1,c=2,r=2,C=1'), b'after'])
+    add('single-width-preserves-aspect', [command('a=T,f=32,s=1,v=1,i=1,p=1,c=2,C=1', '/wAA/w=='), b'after'])
+    add('natural-width-one-hundred', [command('a=T,f=32,s=100,v=1,i=1,p=1,C=1',
+         base64.b64encode(bytes([255, 0, 0, 255])*100).decode()), b'after'])
+    add('retransmit-deletes-old-group', [image+place+image2+command('a=p,i=2,p=2,P=1,Q=1,c=1,r=1'),
+         command('a=t,f=32,s=1,v=1,i=1', 'AAD//w=='), command('a=p,i=1,p=1,c=1,r=1,C=1')])
+    add('failed-raster-keeps-old-relative', [image+place+image2+command('a=p,i=2,p=2,P=1,Q=1,c=1,r=1'),
+         command('a=p,i=2,p=2,P=1,Q=1,c=200,r=100'), b'after'])
+    add('failed-raster-keeps-old-ordinary', [image+place,
+         command('a=p,i=1,p=1,c=200,r=100,C=1'), b'after'])
+    add('parent-move-between-buffers', [image+place+image2+command('a=p,i=2,p=2,P=1,Q=1,c=1,r=1'),
+         b'\x1b[?1049h'+command('a=p,i=1,p=1,c=1,r=1,C=1'), b'\x1b[?1049l'])
+    image3 = command('a=t,f=32,s=1,v=1,i=3', '/wAA/w==')
+    image4 = command('a=t,f=32,s=1,v=1,i=4', 'AP8A/w==')
+    add('relative-groups-in-both-buffers', [image+place+image2+command('a=p,i=2,p=2,P=1,Q=1,c=1,r=1'),
+         b'\x1b[?1049h'+image3+command('a=p,i=3,p=3,c=1,r=1,C=1')+image4,
+         command('a=p,i=4,p=4,P=3,Q=3,H=1,V=1,c=1,r=1'), b'\x1b[?1049l'])
+    add('same-grid-different-size-requests', [command('a=t,f=32,s=1,v=1,i=1', '/wAA/w==')
+         +command('a=p,i=1,p=1,c=2,C=1'),
+         b'\x1b[1;5H'+command('a=p,i=1,p=2,c=2,r=2,C=1'), b'after'])
+    add('relative-same-grid-different-requests', [command('a=t,f=32,s=1,v=1,i=1', '/wAA/w==')
+         +command('a=p,i=1,p=1,c=1,r=1,C=1'),
+         command('a=p,i=1,p=2,P=1,Q=1,H=1,V=0,c=2'),
+         command('a=p,i=1,p=3,P=1,Q=1,H=5,V=0,c=2,r=2'), b'after'])
+    add('same-image-child-parent-buffer-move', [image+place+command('a=p,i=1,p=2,P=1,Q=1,c=1,r=1'),
+         b'\x1b[?1049h'+command('a=p,i=1,p=1,c=1,r=1,C=1'), b'\x1b[?1049l'])
     return cases
 
 
@@ -216,6 +241,8 @@ def main():
     parser.add_argument('--raster', action='store_true', help='Compare headless native view rendering too')
     parser.add_argument('--case', action='append', help='Run named traces only')
     parser.add_argument('--require-match', action='store_true', help='Fail on any fidelity difference or rejection')
+    parser.add_argument('--exercise-fractional-geometry', action='store_true',
+                        help='Include the existing native fractional-cell geometry gate')
     args = parser.parse_args()
     build = args.build.resolve()
     sys.path.insert(0, str(build / 'foundation'))
@@ -226,6 +253,11 @@ def main():
     if args.raster:
         env['MYTERM_PROBE_RASTER'] = '1'
     cases = fixtures()
+    if args.exercise_fractional_geometry:
+        cases.append({'name': 'natural-width-nine-geometry-gate', 'events': [
+            {'data': list(command('a=T,f=32,s=9,v=1,i=1,p=1,C=1',
+                                base64.b64encode(bytes([255, 0, 0, 255])*9).decode())), 'checkpoint': True},
+            {'data': list(b'after'), 'checkpoint': True}]})
     if args.case:
         cases = [c for c in cases if c['name'] in args.case]
         if len(cases) != len(set(args.case)):
@@ -245,7 +277,10 @@ def main():
             state = semantic(snapshot['nativeCheckpoint'])
             active = state['alternate'] if state['alternateActive'] else state['normal']
             native = {'cursor': [active['x'], active['y']],
-                      'replies': snapshot['replies'], 'kitty': state['kitty']}
+                      'replies': snapshot['replies'], 'kitty': state['kitty'],
+                      'relativeProjections': snapshot.get('relativeProjections')}
+            if 'imageGeometry' in snapshot:
+                native['imageGeometry'] = snapshot['imageGeometry']
             if args.raster:
                 native['renderedPixels'] = decoded_pixels(snapshot['renderedPNG'])
                 native['renderedPNG'] = snapshot['renderedPNG']
@@ -253,6 +288,7 @@ def main():
         for expected, snapshot in zip(entry['native'], candidate['snapshots'], strict=True):
             entry['candidate'].append({'cursor': snapshot['cursor'], 'replies': snapshot['replies'],
                                        'imageCells': snapshot['imageCells'],
+                                       'relativeProjections': snapshot.get('relativeProjections'),
                                        'cursorMatches': snapshot['cursor'] == expected['cursor'],
                                        'repliesMatch': snapshot['replies'] == expected['replies']})
         for checkpoint in candidate['checkpoints']:

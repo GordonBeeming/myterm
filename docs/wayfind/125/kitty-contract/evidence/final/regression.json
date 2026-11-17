@@ -1,0 +1,503 @@
+{
+  "cases": [
+    {
+      "name": "ascii-and-cursor",
+      "event": 2,
+      "status": "passed",
+      "checkpointBytes": 3154,
+      "importNs": 12305583,
+      "differences": []
+    },
+    {
+      "name": "unicode",
+      "event": 2,
+      "status": "passed",
+      "checkpointBytes": 3634,
+      "importNs": 10457458,
+      "differences": []
+    },
+    {
+      "name": "split-utf8",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 1789,
+      "importNs": 9840500,
+      "differences": []
+    },
+    {
+      "name": "split-csi",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 1808,
+      "importNs": 11835791,
+      "differences": []
+    },
+    {
+      "name": "split-osc",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 1808,
+      "importNs": 11644833,
+      "differences": []
+    },
+    {
+      "name": "alternate-return",
+      "event": 1,
+      "status": "passed",
+      "checkpointBytes": 6245,
+      "importNs": 11217167,
+      "differences": []
+    },
+    {
+      "name": "alternate-shrink-grow",
+      "event": 1,
+      "status": "passed",
+      "checkpointBytes": 4855,
+      "importNs": 10516958,
+      "differences": []
+    },
+    {
+      "name": "scrollback-resize",
+      "event": 1,
+      "status": "passed",
+      "checkpointBytes": 15571,
+      "importNs": 11563958,
+      "differences": []
+    },
+    {
+      "name": "query-cursor-status",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 1782,
+      "importNs": 11167916,
+      "differences": []
+    },
+    {
+      "name": "kitty-keyboard",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 1783,
+      "importNs": 11700833,
+      "differences": []
+    },
+    {
+      "name": "modes-and-hyperlink",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 2975,
+      "importNs": 12316417,
+      "differences": []
+    },
+    {
+      "name": "sixel-split",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 1865,
+      "importNs": 12150084,
+      "differences": []
+    },
+    {
+      "name": "kitty-rgba-split",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 1879,
+      "importNs": 18808084,
+      "differences": []
+    },
+    {
+      "name": "iterm-png",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 4291,
+      "importNs": 22442917,
+      "differences": []
+    },
+    {
+      "name": "styles-and-colors",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 3492,
+      "importNs": 10541083,
+      "differences": []
+    },
+    {
+      "name": "sixel-full-positive-control",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 138051,
+      "importNs": 31897125,
+      "differences": []
+    },
+    {
+      "name": "sixel-full-split",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 3089,
+      "importNs": 10239666,
+      "differences": []
+    },
+    {
+      "name": "wrap-pending",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 4838,
+      "importNs": 9858375,
+      "differences": []
+    },
+    {
+      "name": "saved-cursor",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 3499,
+      "importNs": 8518500,
+      "differences": []
+    },
+    {
+      "name": "margins-tabs-insert",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 2394,
+      "importNs": 10981084,
+      "differences": []
+    },
+    {
+      "name": "combining-after-reconnect",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 1939,
+      "importNs": 9262750,
+      "differences": []
+    },
+    {
+      "name": "query-no-replay",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 1782,
+      "importNs": 10516375,
+      "differences": []
+    },
+    {
+      "name": "long-session",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 72224,
+      "importNs": 17561375,
+      "differences": []
+    },
+    {
+      "name": "shorter-session",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 72224,
+      "importNs": 16005500,
+      "differences": []
+    },
+    {
+      "name": "token-overflow",
+      "event": 0,
+      "status": "rejected-limit",
+      "reason": "checkpoint unfinished-token limit"
+    },
+    {
+      "name": "repeat-after-reconnect",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 1939,
+      "importNs": 9702916,
+      "differences": []
+    },
+    {
+      "name": "saved-wrap-mode",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 2585,
+      "importNs": 9385083,
+      "differences": []
+    },
+    {
+      "name": "cursor-style",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 1782,
+      "importNs": 8575084,
+      "differences": []
+    },
+    {
+      "name": "dense-80x24",
+      "event": 1,
+      "status": "passed",
+      "checkpointBytes": 15677,
+      "importNs": 19520875,
+      "differences": []
+    },
+    {
+      "name": "dense-120x40",
+      "event": 1,
+      "status": "passed",
+      "checkpointBytes": 20213,
+      "importNs": 28376750,
+      "differences": []
+    },
+    {
+      "name": "allocated-cell-limit",
+      "event": 0,
+      "status": "rejected-limit",
+      "reason": "checkpoint allocated cell limit"
+    },
+    {
+      "name": "query-split-at-import",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 1790,
+      "importNs": 9066125,
+      "differences": []
+    },
+    {
+      "name": "full-history-row-shrink",
+      "event": 1,
+      "status": "passed",
+      "checkpointBytes": 29051,
+      "importNs": 11534959,
+      "differences": []
+    },
+    {
+      "name": "saved-column-shrink",
+      "event": 1,
+      "status": "passed",
+      "checkpointBytes": 1971,
+      "importNs": 8788792,
+      "differences": []
+    },
+    {
+      "name": "kitty-pending-display",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 1891,
+      "importNs": 11320834,
+      "differences": []
+    },
+    {
+      "name": "image-metadata-scrolled-away",
+      "event": 1,
+      "status": "passed",
+      "checkpointBytes": 13647,
+      "importNs": 21279084,
+      "differences": []
+    },
+    {
+      "name": "image-metadata-reset",
+      "event": 1,
+      "status": "passed",
+      "checkpointBytes": 41534,
+      "importNs": 21031833,
+      "differences": []
+    },
+    {
+      "name": "iterm-valid-png",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 3013,
+      "importNs": 16822541,
+      "differences": []
+    },
+    {
+      "name": "kitty-retained-image",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 2738,
+      "importNs": 17300125,
+      "differences": []
+    },
+    {
+      "name": "kitty-cached-offscreen",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 1832,
+      "importNs": 9395959,
+      "differences": []
+    },
+    {
+      "name": "keyboard-set-push-pop",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 1783,
+      "importNs": 8354041,
+      "differences": []
+    },
+    {
+      "name": "osc-st-split",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 1858,
+      "importNs": 7439625,
+      "differences": []
+    },
+    {
+      "name": "kitty-delete-after-restore",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 2738,
+      "importNs": 14565875,
+      "differences": []
+    },
+    {
+      "name": "alternate-keyboard-and-margins",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 2726,
+      "importNs": 8732250,
+      "differences": []
+    },
+    {
+      "name": "kitty-left-alternate",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 1971,
+      "importNs": 8607625,
+      "differences": []
+    },
+    {
+      "name": "kitty-reset",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 3293,
+      "importNs": 9417042,
+      "differences": []
+    },
+    {
+      "name": "kitty-pending-explicit-placement",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 1957,
+      "importNs": 12558000,
+      "differences": []
+    },
+    {
+      "name": "kitty-replaced-placement-alternate",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 3680,
+      "importNs": 16839166,
+      "differences": []
+    },
+    {
+      "name": "kitty-replaced-placement-normal",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 2927,
+      "importNs": 19166625,
+      "differences": []
+    },
+    {
+      "name": "automatic-placement-id",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 2738,
+      "importNs": 19278709,
+      "differences": []
+    },
+    {
+      "name": "pending-placement-offset",
+      "event": 0,
+      "status": "passed",
+      "checkpointBytes": 1916,
+      "importNs": 16353334,
+      "differences": []
+    }
+  ],
+  "exporterBoundaryControls": {
+    "non-sixel-dcs": true
+  },
+  "negativeControls": {
+    "gap": true,
+    "duplicate": true,
+    "reordered": true,
+    "non-sixel-dcs": true,
+    "mismatched-image-geometry": true,
+    "version": true,
+    "bad-dimensions": true,
+    "oversize-token": true,
+    "bad-cell-width": true,
+    "completed-query-as-token": true,
+    "oversize-checkpoint": true,
+    "overflow-cursor": true,
+    "overflow-cell": true,
+    "invalid-utf8-prefix": true,
+    "sequence-limit": true,
+    "short-tabs": true,
+    "bad-margins": true,
+    "bad-mouse-mode": true,
+    "bad-repetitions": true,
+    "bad-last-storage": true,
+    "bad-image-geometry": true,
+    "completed-Kitty-transfer": true,
+    "encoded-image-dimension-mismatch": true,
+    "image-raster-budget": true,
+    "missing-image-resource": true,
+    "truncated-envelope": true,
+    "oversize-stream-line": true,
+    "truncated-stream-line": true
+  },
+  "positiveControls": {
+    "dirty-template-replaced": true,
+    "dirty-input-confirmed": true,
+    "styled-blank-difference-visible": true,
+    "pen-difference-visible": true,
+    "negative-control-twins": true
+  },
+  "unchangedEngineProjections": [
+    "alternate-return",
+    "alternate-shrink-grow",
+    "ascii-and-cursor",
+    "iterm-png",
+    "kitty-keyboard",
+    "kitty-rgba-split",
+    "modes-and-hyperlink",
+    "query-cursor-status",
+    "scrollback-resize",
+    "sixel-full-positive-control",
+    "sixel-full-split",
+    "sixel-split",
+    "split-csi",
+    "split-osc",
+    "split-utf8",
+    "styles-and-colors",
+    "unicode"
+  ],
+  "livePty": {
+    "passed": true,
+    "sameShellAfterImport": true,
+    "pid": 97786,
+    "events": 10,
+    "actualResize": [
+      32,
+      8
+    ],
+    "queryResponses": 2,
+    "childExitedSuccessfully": true
+  },
+  "boundedOutput": {
+    "inputLines": [
+      1000,
+      10000
+    ],
+    "identicalCheckpointBytes": 72224
+  },
+  "nativeStream": {
+    "events": 26,
+    "differences": [],
+    "passed": true,
+    "transport": "concurrent native processes over OS pipe; not PTY/network"
+  },
+  "summary": {
+    "passed": 49,
+    "failed": 0,
+    "unsupported": 0,
+    "rejectedLimits": 2,
+    "negativeControls": 28,
+    "nativeStreamPassed": true,
+    "livePtyPassed": true,
+    "maximumCheckpointBytes": 138051,
+    "maximumImportNs": 31897125
+  }
+}

@@ -1,54 +1,78 @@
-# Kitty placement contract investigation
+# Kitty virtual and relative placement correction
 
-[Resolve virtual and parent Kitty placement fidelity](https://github.com/GordonBeeming/myterm/issues/187) remains open. The first native probes expose a choice about the reference behavior: SwiftTerm itself accepts cycles and leaves a child placement record after its parent is deleted. The [Kitty protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/#relative-placements) requires cycle rejection and ties a child's lifetime to its parent.
+The accepted direction for [Resolve virtual and parent Kitty placement fidelity](https://github.com/GordonBeeming/myterm/issues/187) is to correct both engines to the Kitty protocol, then compare reconnects against the corrected native client. `graphics.patch` implements the bounded correction in disposable Rust and SwiftTerm sources. Production integration remains in [Validate production terminal checkpoints and native SwiftTerm reconnect](https://github.com/GordonBeeming/myterm/issues/189).
 
-The contract is approved: correct both engines to the protocol and use the corrected native client as the reconnect reference. The implementation is in progress in `graphics.patch`, which changes disposable experiment sources. Production source has not changed, and this ticket remains open.
+The fresh replay passes 82 traces and 620 checkpoint/continuation comparisons, including decoded native view pixels, placement state, both buffers, cursor positions and terminal replies. Forty-one independent protocol assertions pass, eighteen new malformed inputs are rejected, and the broader suite passes 49 cases, two expected limit rejections, 28 receiver controls, native streaming and a real native PTY. Both retained Rust probe tests pass. The independent review found no blockers for this bounded correction; its final report distinguishes static review from checks the reviewer personally ran.
 
-## Correction checkpoint
+## State and behavior
 
-The development matrix passes 72 cases and 558 checkpoint/continuation comparisons, including native rendered pixels and direct cursor/reply equality. Its protocol controls pass 29 assertions and reject sixteen malformed inputs. Eight overlapping additions retain twelve image cells; the old executable retains 514. The broader suite passes 49 cases, two expected limit rejections, 28 receiver controls, native streaming and a real native PTY.
+The Rust parser retains U/P/Q/H/V through complete commands and unfinished transfers. Virtual placements keep their identity without creating image cells. Relative placements use their parent's origin and preserve the cursor. Automatic placement identities skip existing identities and retain their next counter through reconnect. Paint requests belong to each placement, and a request digest participates in resource identity; equal image pixels and grid dimensions cannot overwrite different paint requests.
 
-These are development results, retained under `evidence/development/`. They precede the final source rebuild and review closure. Their binary hashes identify the measured executables; source hashes from a mutable development tree do not establish build provenance. The matrix also used the native client's existing, incorrect truecolor placeholder byte order. That shared bug is being corrected against Kitty's own reference tests, so passing engine comparisons alone do not establish protocol compliance.
+Both engines reject cycles, missing or foreign-buffer parents, invalid combinations and chains longer than 32 links. A rejected graph change keeps the old placement. Deleting a parent removes descendants and unreferenced dependent image data. Geometric deletion leaves virtual placements intact. Cache deletion preserves unrelated images and images with remaining references. Retransmission starts a new image and invalidates its old placement group; moving a parent identity between buffers removes old-buffer dependants.
 
-The independent implementation review permits saving this research checkpoint, with open findings. Rebuilding relative projections on every output read still needs a cost bound and caching. A sizing concern needs a measured rendering comparison. Error handling and clipped-parent position retention need review closure. The native fractional-metric investigation remains open in [Investigate intermittent native checkpoint raster width](https://github.com/GordonBeeming/myterm/issues/197). Do not copy this checkpoint into production integration or treat the task as resolved.
+Relative placements retain their complete bounded resource, including stripes outside the viewport. Their logical coordinates may be negative or outside the buffer. Projection places only the visible intersection, so clipped pixels can reappear when a parent moves after reconnect. A parent with no retained position hides its children while keeping their identities and resources. Placeholder output or a new parent placement can reveal them without replaying historical terminal output.
 
-`prepare.py`, `base-hashes.json` and `graphics.patch` retain the experiment build path. A fresh replay and final verification are still required after the open findings are fixed.
+The native renderer prepares stripes and checks admission before replacing live placement state. Failed image creation returns an error and preserves the old placement. The correction also fixes truecolor placeholder byte order, explicit-dimension letterboxing, straight sRGB alpha interpretation and ordinary blank-cell defaults during import. The native view uses its real post-import image materialization and display refresh.
 
-## Measured behavior
+Unchanged output does not rebuild relative planes. Virtual origins are scanned together per layout update and paint uses cached visibility. The independent count control sends 100 unchanged output reads after placement and observes no additional projection in either engine. Eight overlapping additions retain twelve Rust image cells; the retained old executable retains 514. This prevents the observed exponential layer duplication. Virtual ancestors still require one text scan of the bounded buffer per input update; glyph edits can change origins without a graphics/scroll epoch. This is not a production latency or memory budget, and workload profiling remains required in the integration task.
 
-The fifteen traces exercise ordinary placements, virtual placements, pending and completed combined transfers, relative placements, negative parent offsets, missing parents, cycles, virtual/relative rejection, automatic placement identity, crops, offsets and overlaps. They compare fresh checkpoint imports and subsequent events with an uninterrupted native SwiftTerm instance.
-
-Only `ordinary-control` and `overlap` fully match. Of 76 restoration/continuation comparisons, 34 match and 42 differ. Six exports reject state: two each for automatic identity, crops and offsets. No imports reject. A successful probe command means measurement completed; these results are failing fidelity evidence.
-
-The native reference records a self-cycle and a two-node cycle, acknowledging both with OK. In the relative-placement trace, deleting parent placement 1 leaves placement 2 recorded with its reference to the absent parent. Virtual placement leaves the native cursor at (0,0), while the Rust candidate moves it. The candidate also moves the cursor for relative placements that omit C=1; native SwiftTerm correctly preserves it. Cursor movement contributes to the `normal` differences independently of placement-record fidelity.
-
-Native SwiftTerm correctly replies ENOPARENT for a missing parent and EINVAL for a virtual placement with a parent. The candidate replies OK to both invalid requests. The pinned Rust `KittyImagePlacement` parser has no fields for U, P, Q, H or V; pending transfer serialization cannot preserve those discarded keys either. The bridge writes every restored placement with no parent and `isVirtual: false`.
-
-The probe checks both native buffers, cache and placement state, decoded stripe pixels and continuation replies through the existing semantic comparator. It also retains direct candidate cursor/reply comparisons. It does not capture composited view rendering, demonstrate Unicode-placeholder rendering, exhaust deletion modes, establish depth limits or prove a complete supported graphics contract. Those remain necessary acceptance work after the behavior decision.
+The protocol authority is the [Kitty graphics specification](https://sw.kovidgoyal.net/kitty/graphics-protocol/). [Kitty's own placeholder tests](https://github.com/kovidgoyal/kitty/blob/master/kitty_tests/graphics.py) independently establish RGB packing: `38;2;0;0;42` selects image 42.
 
 ## Reproduce
 
-Use native macOS, Python with Pillow and the retained checkpoint experiment's prepared build. To prepare a fresh build from its pinned foundation and both retained corrections:
+Use macOS with the native Swift toolchain, Rust 1.99.1 and Python with Pillow. The final capture used Swift 6.4.2, Xcode 27.2, Python 3.14.3 and Pillow 12.1.1 on macOS 27.3 ARM64. The [pinned foundation instructions](https://github.com/GordonBeeming/myterm/blob/ab4f866153ff46c03e1e51de72eec8d85d233d51/script/wezterm-feasibility/README.md) describe the cached WezTerm source and dependencies. All output paths must be fresh.
 
 ```sh
-python3 docs/wayfind/125/column-zero/prepare.py \
+python3 docs/wayfind/125/kitty-contract/prepare.py \
   --baseline-source /tmp/myterm-150-baseline-20261116/source \
-  --output /tmp/myterm-kitty-contract-build
+  --output /tmp/myterm-kitty-contract
 python3 docs/wayfind/125/kitty-contract/probe.py \
-  --build /tmp/myterm-kitty-contract-build \
-  --output /tmp/myterm-kitty-contract-results.json
+  --build /tmp/myterm-kitty-contract --raster --require-match \
+  --output /tmp/myterm-kitty-matrix.json.gz
+python3 docs/wayfind/125/kitty-contract/controls.py \
+  --build /tmp/myterm-kitty-contract \
+  --matrix /tmp/myterm-kitty-matrix.json.gz \
+  --output /tmp/myterm-kitty-controls.json
+python3 docs/wayfind/125/kitty-placement/regression.py \
+  --build /tmp/myterm-kitty-contract
+CARGO_TARGET_DIR=/tmp/myterm-kitty-contract/cargo-target \
+  cargo +1.99.1 test --offline \
+  --manifest-path /tmp/myterm-kitty-contract/native/probe/Cargo.toml
 ```
 
-Preparation requires the cached pinned WezTerm source and dependencies, Rust 1.99.1 and the native Swift toolchain described in the cursor-reflow experiment. Output paths must be fresh. This probe opens no windows and controls no app or simulator.
+The optional `controls.py --baseline-server` argument points at an uncorrected cursor-reflow build and reproduces the 514-cell negative control. The normal control still enforces linear retention without that executable.
 
-`evidence/expanded-baseline.json` is the latest capture, run against `/tmp/myterm-188-complete-build`, the final retained cursor-reflow build. It includes fixtures, native placement records, candidate cursor/reply results, every restoration comparison, binary hashes, relevant source hashes and the comparator hash. It uses the current probe with direct candidate details and capture-completeness checks.
+Preparation replays the retained placement and cursor-reflow corrections, verifies twenty foundation files against `base-hashes.json`, applies `graphics.patch` without fuzz and compiles. `graphics-build.json` records the patch, source and executable hashes and checks that sources do not change during compilation. The patch includes the broader harness changes that promote automatic placement and pending offsets from rejection cases to positive restoration controls.
 
-The earlier `baseline.json` used `/tmp/myterm-188-accepted-build`; `confirmed-baseline.json` used `/tmp/myterm-188-complete-build`. Both used the earlier observational probe with SHA-256 `1c673d0001a574341e199f15fa9dc9825f6daf4a6b94e6e1473a9a60309009cb`; they lack the direct candidate details and completeness checks. Their totals match the expanded capture. The recorded binary hashes identify the executables measured; rebuilding does not promise byte-identical binaries.
+## Native rendering and geometry
 
-The six source hashes in the cursor-reflow experiment's `evidence/run.json` match the final-build sources used here; `evidence/verification.json` records each check. The native Kitty implementation also matches the vendored source. That file records the Browser.app visual checks and the checked counterexamples. No fresh compilation or production integration is claimed for these captures. The initial captures did not record Python or Pillow versions; `evidence/environment.json` records the environment used for this investigation.
+The experiment uses an actual unwindowed native NSView, an explicit coherent 1× font/image geometry, a black/white palette and an exact 640 × 480 bitmap. It opens and controls no MyTerm app window. These are headless native engine/rendering checks; they do not establish live-window, Retina, iPhone, iPad, Linux, Windows or multi-Mac acceptance.
 
-`contract.html` preserves the original native counterexamples and measured restoration failures in separate tabs. The contract direction is now accepted; the correction is still under development. The artifact is copied to the personal artifact directory for viewing.
+`rendering-review.html` separates the measured native output, the reviewer's sizing hypothesis and the transport representation. An original 1 × 1 image with width two cells paints an 18 × 18 square, while its transport grid occupies 18 × 32. The original width request and automatic height survive the bridge. A separate natural image remains 100 × 1 pixels. Pixel bounds and both-dimension letterboxing have independent assertions.
 
-`evidence/virtual-record.json` is an ad hoc focused rerun of `virtual-explicit` using the probe helpers and final build. It records the native virtual placement and the imported ordinary placement. `reviewClaimPlacements` preserves the initial review note, not a measured client state; Claude withdrew that note after checking the event index. `verification.json` and `environment.json` were also captured by ad hoc commands. The environment file was recorded after the trace captures and does not establish a separately measured environment for each one. The committed probe reproduces the main matrix; these supplementary files have no dedicated retained runner.
+The geometry diagnostic exposes a reproducible condition for the existing [native raster-width investigation](https://github.com/GordonBeeming/myterm/issues/197): unwindowed font snapping can use NSScreen's 2× fallback while image scale uses the absent window's 1× fallback. Controlled font-grid values produce 9-point versus 8.5-point cells at image scale one, and 18-pixel versus 17-pixel two-column rasters. `review_evidence.py` records that comparison. It is a measurement condition, not a live/Retina acceptance result or resolution of the separate task.
 
-Claude's review and closure are retained in `evidence/review-initial.json` and `evidence/review-closure.json`. The closure permits committing this investigation record and leaves the product decision pending. The reviewer did not rerun the probes or perform visual QA; those checks were performed in this session.
+```sh
+python3 docs/wayfind/125/kitty-contract/review_evidence.py \
+  --build /tmp/myterm-kitty-contract --output /tmp/myterm-kitty-review
+```
+
+The script writes actual raster data and the self-contained comparison page, including its private artifact-directory copy. `PROTOTYPE_FONT_GRID_SCALE=2` enables the deliberate mixed-scale diagnostic; normal verification uses the explicit coherent 1× condition.
+
+## Bounds and remaining acceptance
+
+This is a bounded static, named-image experiment. Existing limits include a 1 MiB Rust checkpoint, 100,000 allocated cells, forty normal history lines, 1,000 rows/columns, 32 cache images, 256 KiB cache pixels, 32 graphic resources and 256 KiB decoded graphic resources. Encoded caches, pending chunks and rendered resources have separate checks.
+
+The correction keeps the 1,024-placement cap and adds admission/receiver limits of 128 relative placements and 2 MiB of aggregate relative raster cost, including per-stripe overhead. The resource byte budget conservatively counts each distinct image/request pair, even when image pixels are identical. Logical coordinates can span sums of 32 signed 32-bit offsets; they do not allocate an offscreen canvas. These experimental bounds are not the released resource policy.
+
+Anonymous image identity, animation and leased formats remain explicitly unsupported by this checkpoint experiment. This work does not waive existing supported product behavior. Production must paint from the retained request and original resource, rather than treating the logical Rust cell texture grid as a final pixel raster. Full integration, supported-format/application coverage, resource policy, platform validation and the existing alternate-buffer/raster gates remain required before production acceptance or release.
+
+## Evidence
+
+`evidence/final/` contains the fresh build manifest, matrix, protocol/rejection controls, broader regressions, Rust test output and post-test hash verification. The twenty source hashes, patch hash and both executable hashes still match the fresh build after verification. The commands above produced these results; retained historical counts are not substituted for current runs.
+
+`evidence/rendering-review/` holds the actual native screenshots and encoded state used by the tabbed sizing/geometry comparison. `evidence/development/` preserves the earlier implementation review, alpha before/after probes and development captures. Those captures came from a mutable development tree: executable hashes identify what ran, but their source-tree hashes are not final build provenance. The earlier passing matrix shared the native byte-order bug; the current independent controls and corrected inputs address that weakness.
+
+The original fifteen-case investigation remains in `baseline.json`, `confirmed-baseline.json` and `expanded-baseline.json` under `evidence/`. The first used `/tmp/myterm-188-accepted-build`; the others used `/tmp/myterm-188-complete-build`. The first two used probe SHA-256 `1c673d0001a574341e199f15fa9dc9825f6daf4a6b94e6e1473a9a60309009cb`. They record the original 34/76 matching comparisons and six rejected exports, not acceptance of the correction.
+
+`INVESTIGATION.md`, `contract.html`, the first review reports, `virtual-record.json`, `verification.json` and `environment.json` preserve the original investigation. The supplementary JSON files were captured by ad hoc commands, and the environment was recorded after those trace runs. They have no dedicated runner and do not replace the final evidence.

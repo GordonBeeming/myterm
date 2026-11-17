@@ -1,0 +1,54 @@
+{
+  "time": "2026-11-17T13:03:45.289729+00:00",
+  "platform": "macOS-27.3-arm64-arm-64bit-Mach-O",
+  "sourceHashesMatchFreshBuild": {
+    "native/source/wezterm-escape-parser/src/apc.rs": true,
+    "native/source/term/src/screen.rs": true,
+    "native/source/term/src/terminal.rs": true,
+    "native/source/term/src/terminalstate/mod.rs": true,
+    "native/probe/main.rs": true,
+    "native/source/term/src/terminalstate/kitty.rs": true,
+    "native/source/term/src/terminalstate/prototype-kitty.rs": true,
+    "native/source/term/src/terminalstate/prototype-graphics.rs": true,
+    "native/source/term/src/terminalstate/prototype-checkpoint.rs": true,
+    "native/source/term/src/terminalstate/image.rs": true,
+    "native/SwiftTerm/Sources/SwiftTerm/KittyGraphics.swift": true,
+    "native/SwiftTerm/Sources/SwiftTerm/KittyPlaceholder.swift": true,
+    "native/SwiftTerm/Sources/SwiftTerm/CheckpointBridge.swift": true,
+    "native/SwiftTerm/Sources/SwiftTerm/CheckpointGraphics.swift": true,
+    "native/SwiftTerm/Sources/SwiftTerm/Terminal.swift": true,
+    "native/SwiftTerm/Sources/SwiftTerm/TerminalCheckpoint.swift": true,
+    "native/SwiftTerm/Sources/SwiftTerm/Apple/AppleTerminalView.swift": true,
+    "native/SwiftTerm/Sources/SwiftTerm/Apple/TerminalImageRenderer.swift": true,
+    "native/swift-probe/Sources/Baseline/main.swift": true,
+    "foundation/checkpoint_checks.py": true
+  },
+  "patchHashMatchesBuild": true,
+  "binaryHashesMatchBuild": true,
+  "nativeScope": "Explicit coherent 1x headless NSView; no live window, Retina, device or production acceptance.",
+  "toolchain": {
+    "swift": "Apple Swift version 6.4.2 (swiftlang-6.4.2.1.9 clang-2100.4.1.1)\nTarget: arm64-apple-macosx27.3.0",
+    "rust": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+    "xcode": "Xcode 27.2\nBuild version 27B52"
+  },
+  "buildRoot": "/tmp/myterm-187-verified-replay",
+  "visualQA": {
+    "tool": "Browser.app",
+    "viewport": [
+      1920,
+      1080
+    ],
+    "resultTabs": 3,
+    "reviewTabs": 4,
+    "noHorizontalOverflow": true,
+    "noMojibake": true,
+    "screenshotsInspected": true,
+    "textContrastAA": true,
+    "localLinksUseIDE": true
+  },
+  "whitespaceCheck": {
+    "nonPatchFiles": "passed",
+    "patchContext": "Unified-diff context and removed lines retain upstream whitespace; fuzz-free fresh replay and source hashes verify the patch."
+  },
+  "pythonCompilation": "passed"
+}
