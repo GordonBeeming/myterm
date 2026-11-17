@@ -1,0 +1,20 @@
+{
+  "timestampUtc": "2026-11-17T04:45:38.439641+00:00",
+  "platform": "macOS-27.3-arm64-arm-64bit-Mach-O",
+  "foundation": "ab4f866153ff46c03e1e51de72eec8d85d233d51",
+  "cellPixels": [
+    9,
+    16
+  ],
+  "scope": "headless native macOS checkpoint experiment",
+  "exerciseEmptyAlternateResize": false,
+  "sha256": {
+    "/private/tmp/myterm-186-clean-build/server": "c25173cf0980d9e8e865f6ff908aaca6d3db77e06da485a5fc40351d4d4dd9c7",
+    "/private/tmp/myterm-186-clean-build/client": "bf7c99750b2c8c9fc367295f484b34f2c8182eaee03cac956207dcbe2e08b785",
+    "/private/tmp/myterm-186-original-build/client": "00c464ea58485042611015294b34e82bc935a57f196d6baad3fd301c33c1124e",
+    "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/kitty-placement/check.py": "c2ed830a4c9249e4a0df538346ea4c95688ffd57ccfb44e9672c61eb7e7684dc",
+    "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/kitty-placement/placement.patch": "41c4ed7903fc2dd749b4099d26f6ee466ede631acd7cae01643ea3dd5b7524f6",
+    "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/kitty-placement/prepare.py": "13d983b5c3a27588d56a8b7e90706d45c87ca3bb9c4e7c4585e9292f6388989f",
+    "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/kitty-placement/regression.py": "704819ef6ec0def631778489de386477fe3c7be39ae3f3b413d5e543fd3a58c6"
+  }
+}

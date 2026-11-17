@@ -1,0 +1,25 @@
+{
+  "summary": {
+    "passed": 46,
+    "failed": 1,
+    "unsupported": 0,
+    "rejectedLimits": 2,
+    "negativeControls": 28,
+    "nativeStreamPassed": true,
+    "livePtyPassed": true
+  },
+  "failure": {
+    "case": "kitty-retained-image",
+    "event": 0,
+    "fields": [
+      "state.normal"
+    ],
+    "nativePixelWidth": 17,
+    "importedPixelWidth": 18
+  },
+  "repeat": {
+    "passed": 47,
+    "failed": 0
+  },
+  "cause": "unresolved; native pixel width varied between invocations"
+}

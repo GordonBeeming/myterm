@@ -1,0 +1,1272 @@
+{
+  "red": {
+    "referencePlacements": [
+      {
+        "imageId": 7,
+        "placementId": 3,
+        "parentOffsetH": 0,
+        "parentOffsetV": 0,
+        "pixelOffsetX": 0,
+        "pixelOffsetY": 0,
+        "column": 0,
+        "row": 0,
+        "columns": 1,
+        "rows": 1,
+        "zIndex": 0,
+        "isVirtual": false,
+        "isAlternateBuffer": false
+      }
+    ],
+    "oldPlacements": [],
+    "cacheMatches": true
+  },
+  "comparisons": [
+    {
+      "case": "scrolled-record",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 3906,
+      "differences": []
+    },
+    {
+      "case": "scrolled-record",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 4672,
+      "differences": []
+    },
+    {
+      "case": "delete-placement-retain-cache",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 3906,
+      "differences": []
+    },
+    {
+      "case": "delete-placement-retain-cache",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 3781,
+      "differences": []
+    },
+    {
+      "case": "delete-placement-retain-cache",
+      "cut": 2,
+      "passed": false,
+      "checkpointBytes": 4427,
+      "differences": [
+        {
+          "offset": 0,
+          "fields": [
+            "normal",
+            "kitty"
+          ],
+          "expectedKitty": {
+            "cache": [
+              [
+                7,
+                [
+                  1,
+                  1
+                ],
+                "34aaa746c25a0f105c4316bbb1f009aa359f49582656ee97d73c58132d563423"
+              ]
+            ],
+            "numbers": [],
+            "placements": [
+              {
+                "imageId": 7,
+                "placementId": 3,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 44,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": false
+              }
+            ],
+            "nextImageId": 1,
+            "nextPlacementId": 1,
+            "pending": null
+          },
+          "actualKitty": {
+            "cache": [
+              [
+                7,
+                [
+                  1,
+                  1
+                ],
+                "34aaa746c25a0f105c4316bbb1f009aa359f49582656ee97d73c58132d563423"
+              ]
+            ],
+            "numbers": [],
+            "placements": [
+              {
+                "imageId": 7,
+                "placementId": 3,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 45,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": false
+              }
+            ],
+            "nextImageId": 1,
+            "nextPlacementId": 1,
+            "pending": null
+          }
+        }
+      ]
+    },
+    {
+      "case": "delete-placement-retain-cache",
+      "cut": 3,
+      "passed": true,
+      "checkpointBytes": 3882,
+      "differences": []
+    },
+    {
+      "case": "reuse-placement",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 3906,
+      "differences": []
+    },
+    {
+      "case": "reuse-placement",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 4730,
+      "differences": []
+    },
+    {
+      "case": "reuse-placement",
+      "cut": 2,
+      "passed": true,
+      "checkpointBytes": 3907,
+      "differences": []
+    },
+    {
+      "case": "reuse-placement",
+      "cut": 3,
+      "passed": true,
+      "checkpointBytes": 3781,
+      "differences": []
+    },
+    {
+      "case": "reuse-placement",
+      "cut": 4,
+      "passed": false,
+      "checkpointBytes": 4427,
+      "differences": [
+        {
+          "offset": 0,
+          "fields": [
+            "normal",
+            "kitty"
+          ],
+          "expectedKitty": {
+            "cache": [
+              [
+                7,
+                [
+                  1,
+                  1
+                ],
+                "34aaa746c25a0f105c4316bbb1f009aa359f49582656ee97d73c58132d563423"
+              ]
+            ],
+            "numbers": [],
+            "placements": [
+              {
+                "imageId": 7,
+                "placementId": 3,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 44,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": false
+              }
+            ],
+            "nextImageId": 1,
+            "nextPlacementId": 1,
+            "pending": null
+          },
+          "actualKitty": {
+            "cache": [
+              [
+                7,
+                [
+                  1,
+                  1
+                ],
+                "34aaa746c25a0f105c4316bbb1f009aa359f49582656ee97d73c58132d563423"
+              ]
+            ],
+            "numbers": [],
+            "placements": [
+              {
+                "imageId": 7,
+                "placementId": 3,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 45,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": false
+              }
+            ],
+            "nextImageId": 1,
+            "nextPlacementId": 1,
+            "pending": null
+          }
+        }
+      ]
+    },
+    {
+      "case": "nonorigin-scroll",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 2346,
+      "differences": []
+    },
+    {
+      "case": "nonorigin-scroll",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 3906,
+      "differences": []
+    },
+    {
+      "case": "nonorigin-scroll",
+      "cut": 2,
+      "passed": false,
+      "checkpointBytes": 4427,
+      "differences": [
+        {
+          "offset": 0,
+          "fields": [
+            "normal",
+            "kitty"
+          ],
+          "expectedKitty": {
+            "cache": [
+              [
+                7,
+                [
+                  1,
+                  1
+                ],
+                "34aaa746c25a0f105c4316bbb1f009aa359f49582656ee97d73c58132d563423"
+              ]
+            ],
+            "numbers": [],
+            "placements": [
+              {
+                "imageId": 7,
+                "placementId": 3,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 44,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": false
+              }
+            ],
+            "nextImageId": 1,
+            "nextPlacementId": 1,
+            "pending": null
+          },
+          "actualKitty": {
+            "cache": [
+              [
+                7,
+                [
+                  1,
+                  1
+                ],
+                "34aaa746c25a0f105c4316bbb1f009aa359f49582656ee97d73c58132d563423"
+              ]
+            ],
+            "numbers": [],
+            "placements": [
+              {
+                "imageId": 7,
+                "placementId": 3,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 45,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": false
+              }
+            ],
+            "nextImageId": 1,
+            "nextPlacementId": 1,
+            "pending": null
+          }
+        }
+      ]
+    },
+    {
+      "case": "partial-stripes",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 2943,
+      "differences": []
+    },
+    {
+      "case": "partial-stripes",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 5023,
+      "differences": []
+    },
+    {
+      "case": "partial-stripes",
+      "cut": 2,
+      "passed": true,
+      "checkpointBytes": 3906,
+      "differences": []
+    },
+    {
+      "case": "multiple-records",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 4032,
+      "differences": []
+    },
+    {
+      "case": "multiple-records",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 3906,
+      "differences": []
+    },
+    {
+      "case": "multiple-records",
+      "cut": 2,
+      "passed": false,
+      "checkpointBytes": 4553,
+      "differences": [
+        {
+          "offset": 0,
+          "fields": [
+            "normal",
+            "kitty"
+          ],
+          "expectedKitty": {
+            "cache": [
+              [
+                7,
+                [
+                  1,
+                  1
+                ],
+                "34aaa746c25a0f105c4316bbb1f009aa359f49582656ee97d73c58132d563423"
+              ]
+            ],
+            "numbers": [],
+            "placements": [
+              {
+                "imageId": 7,
+                "placementId": 4,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 0,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": false
+              },
+              {
+                "imageId": 7,
+                "placementId": 5,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 44,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": false
+              }
+            ],
+            "nextImageId": 1,
+            "nextPlacementId": 1,
+            "pending": null
+          },
+          "actualKitty": {
+            "cache": [
+              [
+                7,
+                [
+                  1,
+                  1
+                ],
+                "34aaa746c25a0f105c4316bbb1f009aa359f49582656ee97d73c58132d563423"
+              ]
+            ],
+            "numbers": [],
+            "placements": [
+              {
+                "imageId": 7,
+                "placementId": 4,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 0,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": false
+              },
+              {
+                "imageId": 7,
+                "placementId": 5,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 45,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": false
+              }
+            ],
+            "nextImageId": 1,
+            "nextPlacementId": 1,
+            "pending": null
+          }
+        }
+      ]
+    },
+    {
+      "case": "alternate-return",
+      "cut": 0,
+      "passed": false,
+      "checkpointBytes": 3906,
+      "differences": [
+        {
+          "offset": 2,
+          "fields": [
+            "alternate",
+            "kitty"
+          ],
+          "expectedKitty": {
+            "cache": [
+              [
+                7,
+                [
+                  1,
+                  1
+                ],
+                "34aaa746c25a0f105c4316bbb1f009aa359f49582656ee97d73c58132d563423"
+              ]
+            ],
+            "numbers": [],
+            "placements": [
+              {
+                "imageId": 7,
+                "placementId": 3,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 0,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": false
+              },
+              {
+                "imageId": 7,
+                "placementId": 4,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 5,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": true
+              }
+            ],
+            "nextImageId": 1,
+            "nextPlacementId": 1,
+            "pending": null
+          },
+          "actualKitty": {
+            "cache": [
+              [
+                7,
+                [
+                  1,
+                  1
+                ],
+                "34aaa746c25a0f105c4316bbb1f009aa359f49582656ee97d73c58132d563423"
+              ]
+            ],
+            "numbers": [],
+            "placements": [
+              {
+                "imageId": 7,
+                "placementId": 3,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 0,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": false
+              },
+              {
+                "imageId": 7,
+                "placementId": 4,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 4,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": true
+              }
+            ],
+            "nextImageId": 1,
+            "nextPlacementId": 1,
+            "pending": null
+          }
+        }
+      ]
+    },
+    {
+      "case": "alternate-return",
+      "cut": 1,
+      "passed": false,
+      "checkpointBytes": 4094,
+      "differences": [
+        {
+          "offset": 0,
+          "fields": [
+            "alternate"
+          ],
+          "expectedKitty": {
+            "cache": [
+              [
+                7,
+                [
+                  1,
+                  1
+                ],
+                "34aaa746c25a0f105c4316bbb1f009aa359f49582656ee97d73c58132d563423"
+              ]
+            ],
+            "numbers": [],
+            "placements": [
+              {
+                "imageId": 7,
+                "placementId": 3,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 0,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": false
+              }
+            ],
+            "nextImageId": 1,
+            "nextPlacementId": 1,
+            "pending": null
+          },
+          "actualKitty": {
+            "cache": [
+              [
+                7,
+                [
+                  1,
+                  1
+                ],
+                "34aaa746c25a0f105c4316bbb1f009aa359f49582656ee97d73c58132d563423"
+              ]
+            ],
+            "numbers": [],
+            "placements": [
+              {
+                "imageId": 7,
+                "placementId": 3,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 0,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": false
+              }
+            ],
+            "nextImageId": 1,
+            "nextPlacementId": 1,
+            "pending": null
+          }
+        },
+        {
+          "offset": 1,
+          "fields": [
+            "alternate",
+            "kitty"
+          ],
+          "expectedKitty": {
+            "cache": [
+              [
+                7,
+                [
+                  1,
+                  1
+                ],
+                "34aaa746c25a0f105c4316bbb1f009aa359f49582656ee97d73c58132d563423"
+              ]
+            ],
+            "numbers": [],
+            "placements": [
+              {
+                "imageId": 7,
+                "placementId": 3,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 0,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": false
+              },
+              {
+                "imageId": 7,
+                "placementId": 4,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 5,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": true
+              }
+            ],
+            "nextImageId": 1,
+            "nextPlacementId": 1,
+            "pending": null
+          },
+          "actualKitty": {
+            "cache": [
+              [
+                7,
+                [
+                  1,
+                  1
+                ],
+                "34aaa746c25a0f105c4316bbb1f009aa359f49582656ee97d73c58132d563423"
+              ]
+            ],
+            "numbers": [],
+            "placements": [
+              {
+                "imageId": 7,
+                "placementId": 3,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 0,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": false
+              },
+              {
+                "imageId": 7,
+                "placementId": 4,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 0,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": true
+              }
+            ],
+            "nextImageId": 1,
+            "nextPlacementId": 1,
+            "pending": null
+          }
+        }
+      ]
+    },
+    {
+      "case": "alternate-return",
+      "cut": 2,
+      "passed": false,
+      "checkpointBytes": 4739,
+      "differences": [
+        {
+          "offset": 0,
+          "fields": [
+            "alternate",
+            "kitty"
+          ],
+          "expectedKitty": {
+            "cache": [
+              [
+                7,
+                [
+                  1,
+                  1
+                ],
+                "34aaa746c25a0f105c4316bbb1f009aa359f49582656ee97d73c58132d563423"
+              ]
+            ],
+            "numbers": [],
+            "placements": [
+              {
+                "imageId": 7,
+                "placementId": 3,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 0,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": false
+              },
+              {
+                "imageId": 7,
+                "placementId": 4,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 5,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": true
+              }
+            ],
+            "nextImageId": 1,
+            "nextPlacementId": 1,
+            "pending": null
+          },
+          "actualKitty": {
+            "cache": [
+              [
+                7,
+                [
+                  1,
+                  1
+                ],
+                "34aaa746c25a0f105c4316bbb1f009aa359f49582656ee97d73c58132d563423"
+              ]
+            ],
+            "numbers": [],
+            "placements": [
+              {
+                "imageId": 7,
+                "placementId": 3,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 0,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": false
+              },
+              {
+                "imageId": 7,
+                "placementId": 4,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 0,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": true
+              }
+            ],
+            "nextImageId": 1,
+            "nextPlacementId": 1,
+            "pending": null
+          }
+        }
+      ]
+    },
+    {
+      "case": "alternate-return",
+      "cut": 3,
+      "passed": true,
+      "checkpointBytes": 4246,
+      "differences": []
+    },
+    {
+      "case": "alternate-return",
+      "cut": 4,
+      "passed": false,
+      "checkpointBytes": 4767,
+      "differences": [
+        {
+          "offset": 0,
+          "fields": [
+            "normal",
+            "kitty"
+          ],
+          "expectedKitty": {
+            "cache": [
+              [
+                7,
+                [
+                  1,
+                  1
+                ],
+                "34aaa746c25a0f105c4316bbb1f009aa359f49582656ee97d73c58132d563423"
+              ]
+            ],
+            "numbers": [],
+            "placements": [
+              {
+                "imageId": 7,
+                "placementId": 3,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 44,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": false
+              }
+            ],
+            "nextImageId": 1,
+            "nextPlacementId": 1,
+            "pending": null
+          },
+          "actualKitty": {
+            "cache": [
+              [
+                7,
+                [
+                  1,
+                  1
+                ],
+                "34aaa746c25a0f105c4316bbb1f009aa359f49582656ee97d73c58132d563423"
+              ]
+            ],
+            "numbers": [],
+            "placements": [
+              {
+                "imageId": 7,
+                "placementId": 3,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 45,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": false
+              }
+            ],
+            "nextImageId": 1,
+            "nextPlacementId": 1,
+            "pending": null
+          }
+        }
+      ]
+    },
+    {
+      "case": "replace-across-buffers",
+      "cut": 0,
+      "passed": false,
+      "checkpointBytes": 3906,
+      "differences": [
+        {
+          "offset": 1,
+          "fields": [
+            "alternate",
+            "kitty"
+          ],
+          "expectedKitty": {
+            "cache": [
+              [
+                7,
+                [
+                  1,
+                  1
+                ],
+                "34aaa746c25a0f105c4316bbb1f009aa359f49582656ee97d73c58132d563423"
+              ]
+            ],
+            "numbers": [],
+            "placements": [
+              {
+                "imageId": 7,
+                "placementId": 3,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 5,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": true
+              }
+            ],
+            "nextImageId": 1,
+            "nextPlacementId": 1,
+            "pending": null
+          },
+          "actualKitty": {
+            "cache": [
+              [
+                7,
+                [
+                  1,
+                  1
+                ],
+                "34aaa746c25a0f105c4316bbb1f009aa359f49582656ee97d73c58132d563423"
+              ]
+            ],
+            "numbers": [],
+            "placements": [
+              {
+                "imageId": 7,
+                "placementId": 3,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 4,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": true
+              }
+            ],
+            "nextImageId": 1,
+            "nextPlacementId": 1,
+            "pending": null
+          }
+        }
+      ]
+    },
+    {
+      "case": "replace-across-buffers",
+      "cut": 1,
+      "passed": false,
+      "checkpointBytes": 4613,
+      "differences": [
+        {
+          "offset": 0,
+          "fields": [
+            "alternate",
+            "kitty"
+          ],
+          "expectedKitty": {
+            "cache": [
+              [
+                7,
+                [
+                  1,
+                  1
+                ],
+                "34aaa746c25a0f105c4316bbb1f009aa359f49582656ee97d73c58132d563423"
+              ]
+            ],
+            "numbers": [],
+            "placements": [
+              {
+                "imageId": 7,
+                "placementId": 3,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 5,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": true
+              }
+            ],
+            "nextImageId": 1,
+            "nextPlacementId": 1,
+            "pending": null
+          },
+          "actualKitty": {
+            "cache": [
+              [
+                7,
+                [
+                  1,
+                  1
+                ],
+                "34aaa746c25a0f105c4316bbb1f009aa359f49582656ee97d73c58132d563423"
+              ]
+            ],
+            "numbers": [],
+            "placements": [
+              {
+                "imageId": 7,
+                "placementId": 3,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 0,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": true
+              }
+            ],
+            "nextImageId": 1,
+            "nextPlacementId": 1,
+            "pending": null
+          }
+        }
+      ]
+    },
+    {
+      "case": "replace-across-buffers",
+      "cut": 2,
+      "passed": true,
+      "checkpointBytes": 4071,
+      "differences": []
+    },
+    {
+      "case": "replace-across-buffers",
+      "cut": 3,
+      "passed": false,
+      "checkpointBytes": 4767,
+      "differences": [
+        {
+          "offset": 0,
+          "fields": [
+            "normal",
+            "kitty"
+          ],
+          "expectedKitty": {
+            "cache": [
+              [
+                7,
+                [
+                  1,
+                  1
+                ],
+                "34aaa746c25a0f105c4316bbb1f009aa359f49582656ee97d73c58132d563423"
+              ]
+            ],
+            "numbers": [],
+            "placements": [
+              {
+                "imageId": 7,
+                "placementId": 3,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 44,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": false
+              }
+            ],
+            "nextImageId": 1,
+            "nextPlacementId": 1,
+            "pending": null
+          },
+          "actualKitty": {
+            "cache": [
+              [
+                7,
+                [
+                  1,
+                  1
+                ],
+                "34aaa746c25a0f105c4316bbb1f009aa359f49582656ee97d73c58132d563423"
+              ]
+            ],
+            "numbers": [],
+            "placements": [
+              {
+                "imageId": 7,
+                "placementId": 3,
+                "parentOffsetH": 0,
+                "parentOffsetV": 0,
+                "pixelOffsetX": 0,
+                "pixelOffsetY": 0,
+                "column": 0,
+                "row": 45,
+                "columns": 1,
+                "rows": 1,
+                "zIndex": 0,
+                "isVirtual": false,
+                "isAlternateBuffer": false
+              }
+            ],
+            "nextImageId": 1,
+            "nextPlacementId": 1,
+            "pending": null
+          }
+        }
+      ]
+    },
+    {
+      "case": "reset",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 3906,
+      "differences": []
+    },
+    {
+      "case": "reset",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 1651,
+      "differences": []
+    },
+    {
+      "case": "reset",
+      "cut": 2,
+      "passed": true,
+      "checkpointBytes": 2346,
+      "differences": []
+    }
+  ],
+  "receiverControls": {
+    "duplicate": "corrupt(\"bridge Kitty placement record\")",
+    "dangling-image": "corrupt(\"bridge Kitty placement record\")",
+    "missing-placement-id": "corrupt(\"bridge Kitty placement record\")",
+    "negative-row": "corrupt(\"bridge Kitty placement record\")",
+    "oversized-dimension": "corrupt(\"bridge Kitty placement record\")",
+    "too-many-records": "corrupt(\"bridge Kitty placement count\")"
+  },
+  "serverLimit": {
+    "rejected1025": true,
+    "recoveredAfterDeletion": true
+  },
+  "summary": {
+    "passed": 21,
+    "failed": 11,
+    "receiverRejected": 6
+  }
+}

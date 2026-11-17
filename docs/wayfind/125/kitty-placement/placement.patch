@@ -1,0 +1,240 @@
+--- a/SwiftTerm/Sources/SwiftTerm/CheckpointBridge.swift
++++ b/SwiftTerm/Sources/SwiftTerm/CheckpointBridge.swift
+@@ -29,7 +29,10 @@
+ private struct BridgeKeyboard: Decodable { let flags: Int, stack: [Int] }
+ private struct BridgeKittyImage: Decodable { let id: UInt32, rgba: [UInt8], width: Int, height: Int }
+ private struct BridgeKittyNumber: Decodable { let number: UInt32, id: UInt32 }
+-private struct BridgeKittyPlacementBuffer: Decodable { let id: UInt32, placement: UInt32?, alternate: Bool }
++private struct BridgeKittyPlacementBuffer: Decodable {
++    let id: UInt32, placement: UInt32?, alternate: Bool
++    let column: Int, row: Int, imageColumn: Int, imageRow: Int, columns: Int, rows: Int, zIndex: Int, pixelOffsetX: Int, pixelOffsetY: Int
++}
+ private struct BridgeKitty: Decodable { let pendingCommands: [[UInt8]], images: [BridgeKittyImage], numbers: [BridgeKittyNumber]; let placementBuffers: [BridgeKittyPlacementBuffer] }
+ private struct BridgeState: Decodable {
+     let columns: Int, rows: Int, normal: BridgeBuffer, alternate: BridgeBuffer, alternateActive: Bool
+@@ -263,7 +266,10 @@
+                         guard placement.placementId != nil, let resource = s.graphics.first(where: {$0.key == placement.resource}) else {
+                             throw TerminalCheckpointError.corrupt("bridge Kitty placement identity")
+                         }
+-                        image.kittyColumn = placement.column; image.kittyRow = index-placement.stripe
++                        guard let owner = s.kitty.placementBuffers.first(where: {
++                            $0.id == placement.imageId && $0.placement == placement.placementId
++                        }) else { throw TerminalCheckpointError.corrupt("bridge Kitty stripe owner") }
++                        image.kittyColumn = owner.imageColumn; image.kittyRow = owner.imageRow
+                         image.kittyColumns = (resource.displayWidth+s.cellPixels[0]-1)/s.cellPixels[0]
+                         image.kittyRows = stripes.count
+                         image.imageNumber = s.kitty.numbers.first(where: {$0.id == placement.imageId})?.number
+@@ -278,25 +284,24 @@
+         }
+         native.normalBuffer = try buffer(s.normal, native.normalBuffer, active: !s.alternateActive, normal: true)
+         native.alternateBuffer = try buffer(s.alternate, native.alternateBuffer, active: s.alternateActive, normal: false)
++        guard s.kitty.placementBuffers.count <= 1024 else {
++            throw TerminalCheckpointError.corrupt("bridge Kitty placement count")
++        }
+         var placementKeys = Set<String>()
+-        native.kitty.placements = []
+-        for (alternate,buffer) in [(false,native.normalBuffer),(true,native.alternateBuffer)] {
+-            for line in buffer.lines { for image in line.images where image.isKitty {
+-                guard let id = image.imageId, let placement = image.placementId, ids.contains(id) else {
+-                    throw TerminalCheckpointError.corrupt("bridge Kitty placement reference")
+-                }
+-                guard let owner = s.kitty.placementBuffers.first(where: {$0.id == id && $0.placement == placement}) else {
+-                    throw TerminalCheckpointError.corrupt("bridge Kitty placement owner")
+-                }
+-                if owner.alternate != alternate { continue }
+-                let key = "\(id):\(placement)"
+-                if placementKeys.insert(key).inserted {
+-                    native.kitty.placements.append(CheckpointKittyPlacement(imageId: id,placementId: placement,
+-                        parentImageId: nil,parentPlacementId: nil,parentOffsetH: 0,parentOffsetV: 0,pixelOffsetX: 0,pixelOffsetY: 0,
+-                        column: image.kittyColumn,row: image.kittyRow,columns: image.kittyColumns,rows: image.kittyRows,
+-                        zIndex: image.zIndex,isVirtual: false,isAlternateBuffer: alternate))
+-                }
+-            }}
++        native.kitty.placements = try s.kitty.placementBuffers.map { record in
++            guard let placement = record.placement, ids.contains(record.id),
++                  placementKeys.insert("\(record.id):\(placement)").inserted,
++                  (0...1000).contains(record.column), (0...1040).contains(record.row),
++                  (0...1000).contains(record.imageColumn), (0...1040).contains(record.imageRow),
++                  (1...2048).contains(record.columns), (1...2048).contains(record.rows),
++                  (0...1024).contains(record.pixelOffsetX), (0...1024).contains(record.pixelOffsetY) else {
++                throw TerminalCheckpointError.corrupt("bridge Kitty placement record")
++            }
++            return CheckpointKittyPlacement(imageId: record.id,placementId: placement,
++                parentImageId: nil,parentPlacementId: nil,parentOffsetH: 0,parentOffsetV: 0,
++                pixelOffsetX: record.pixelOffsetX,pixelOffsetY: record.pixelOffsetY,
++                column: record.column,row: record.row,columns: record.columns,rows: record.rows,
++                zIndex: record.zIndex,isVirtual: false,isAlternateBuffer: record.alternate)
+         }
+         native.graphemes = freshTerminal.indexToCharMap.map { CheckpointGrapheme(index: $0.key, character: String($0.value)) }
+         native.lastCharIndex = freshTerminal.lastCharIndex
+--- a/source/term/src/terminalstate/image.rs
++++ b/source/term/src/terminalstate/image.rs
+@@ -64,8 +64,13 @@
+ impl TerminalState {
+     pub(crate) fn assign_image_to_cells(
+         &mut self,
+-        params: ImageAttachParams,
++        mut params: ImageAttachParams,
+     ) -> anyhow::Result<PlacementInfo> {
++        // Native rasterization scrolls even when Kitty restores the cursor afterwards.
++        let restore_cursor = matches!(params.style, ImageAttachStyle::Kitty) && params.do_not_move_cursor
++            && !self.screen.alt_screen_is_active;
++        let saved_cursor = self.cursor;
++        if restore_cursor { params.do_not_move_cursor = false; }
+         let seqno = self.seqno;
+         let physical_cols = self.screen().physical_cols;
+         let physical_rows = self.screen().physical_rows;
+@@ -280,6 +285,7 @@
+             }
+         }
+ 
++        if restore_cursor { self.cursor = saved_cursor; }
+         Ok(PlacementInfo {
+             first_row,
+             rows: height_in_cells,
+--- a/source/term/src/terminalstate/kitty.rs
++++ b/source/term/src/terminalstate/kitty.rs
+@@ -26,6 +26,7 @@
+     placements: HashMap<(u32, Option<u32>), PlacementInfo>,
+     prototype_placement_buffers: HashMap<(u32, Option<u32>), bool>,
+     used_memory: usize,
++    prototype_records: HashMap<(u32, Option<u32>), serde_json::Value>,
+ }
+ 
+ impl KittyImageState {
+@@ -102,6 +103,10 @@
+             placement,
+             verbosity
+         );
++        // Refuse a new record before changing the placement table or image cells.
++        anyhow::ensure!(self.kitty_img.placements.len() < 1024
++            || self.kitty_img.placements.contains_key(&(image_id, placement.placement_id)),
++            "Kitty placement count limit");
+         if image_id != 0 {
+             self.kitty_remove_placement(image_id, placement.placement_id);
+         }
+@@ -119,6 +124,8 @@
+         let target_width = placement.columns.map(|n|n as usize*(self.pixel_width/self.screen().physical_cols)).unwrap_or(image_width as usize);
+         let target_height = placement.rows.map(|n|n as usize*(self.pixel_height/self.screen().physical_rows)).unwrap_or(image_height as usize);
+         self.prototype_store_image_request(img.hash(),target_width,target_height,prototype_request);
++        let record_column = self.cursor.x;
++        let record_row = self.screen().scrollback_rows().saturating_sub(self.screen().physical_rows) as i64 + self.cursor.y;
+         let info = self.assign_image_to_cells(ImageAttachParams {
+             image_width,
+             image_height,
+@@ -142,8 +149,20 @@
+             .placements
+             .insert((image_id, placement.placement_id), info);
+         self.kitty_img.prototype_placement_buffers.insert((image_id, placement.placement_id), self.screen.alt_screen_is_active);
++        // Metadata has its own bound because placements can outlive all retained cells.
++        let live = &self.kitty_img.placements;
++        self.kitty_img.prototype_records.retain(|key,_| live.contains_key(key));
++        if self.kitty_img.prototype_records.len() < 1024
++            || self.kitty_img.prototype_records.contains_key(&(image_id, placement.placement_id)) {
++            self.kitty_img.prototype_records.insert((image_id, placement.placement_id), serde_json::json!({
++                "column":record_column,"row":record_row,"imageColumn":record_column,"imageRow":record_row,
++                "columns":info.cols,"rows":info.rows,
++                "zIndex":placement.z_index.unwrap_or(0),
++                "pixelOffsetX":placement.x_offset.unwrap_or(0),"pixelOffsetY":placement.y_offset.unwrap_or(0)}));
++        }
+         let placements = &self.kitty_img.placements;
+         self.kitty_img.prototype_placement_buffers.retain(|key,_| placements.contains_key(key));
++        self.prototype_update_kitty_records();
+         log::trace!(
+             "record placement for {} (image_number {:?}) {:?}",
+             image_id,
+--- a/source/term/src/terminalstate/mod.rs
++++ b/source/term/src/terminalstate/mod.rs
+@@ -1187,7 +1187,8 @@
+             seqno,
+             blank_attr,
+             bidi_mode,
+-        )
++        );
++        self.prototype_update_kitty_records();
+     }
+ 
+     fn scroll_down(&mut self, num_rows: usize) {
+@@ -1203,7 +1204,8 @@
+             seqno,
+             blank_attr,
+             bidi_mode,
+-        )
++        );
++        self.prototype_update_kitty_records();
+     }
+ 
+     /// Defined by FinalTermSemanticPrompt; a fresh-line is a NOP if the
+@@ -2023,7 +2025,7 @@
+                 if !self.screen.is_alt_screen_active() {
+                     self.dec_save_cursor();
+                     self.prototype_switch_buffer(true);
+-                    self.set_cursor_pos(&Position::Absolute(0), &Position::Absolute(0));
++                    // Native SwiftTerm carries the normal cursor into the alternate buffer.
+                     self.pen = CellAttributes::default();
+                     self.erase_in_display(EraseInDisplay::EraseDisplay);
+                 }
+--- a/source/term/src/terminalstate/prototype-kitty.rs
++++ b/source/term/src/terminalstate/prototype-kitty.rs
+@@ -39,11 +39,30 @@
+             anyhow::ensure!(bytes<=16384, "Kitty pending byte limit");
+             commands.push(command);
+         }
++        anyhow::ensure!(self.placements.len()<=1024, "Kitty placement count limit");
+         let mut placement_buffers = Vec::new();
+         for key in self.placements.keys() {
+             let alternate = self.prototype_placement_buffers.get(key)
+                 .ok_or_else(|| anyhow::anyhow!("missing Kitty placement buffer"))?;
+-            placement_buffers.push(serde_json::json!({"id":key.0,"placement":key.1,"alternate":alternate}));
++            let mut record = self.prototype_records.get(key)
++                .ok_or_else(||anyhow::anyhow!("missing Kitty placement record"))?.clone();
++            anyhow::ensure!(key.1.is_some(), "unsupported automatic Kitty placement identity");
++            for field in ["column","imageColumn"] {
++                anyhow::ensure!(record[field].as_u64().map_or(false, |n|n<=1000), "Kitty placement column limit");
++            }
++            for field in ["row","imageRow"] {
++                anyhow::ensure!(record[field].as_u64().map_or(false, |n|n<=1040), "Kitty placement row limit");
++            }
++            for field in ["columns","rows"] {
++                anyhow::ensure!(record[field].as_u64().map_or(false, |n|(1..=2048).contains(&n)), "Kitty placement dimension limit");
++            }
++            for field in ["pixelOffsetX","pixelOffsetY"] {
++                anyhow::ensure!(record[field].as_u64().map_or(false, |n|n<=1024), "Kitty placement offset limit");
++            }
++            record["id"] = serde_json::json!(key.0);
++            record["placement"] = serde_json::json!(key.1);
++            record["alternate"] = serde_json::json!(alternate);
++            placement_buffers.push(record);
+         }
+         placement_buffers.sort_by_key(|p|(p["id"].as_u64(),p["placement"].as_u64()));
+         Ok(serde_json::json!({"pendingCommands":commands,"images":images,"numbers":numbers,"placementBuffers":placement_buffers}))
+@@ -65,3 +84,29 @@
+         self.kitty_img.number_to_id.retain(|_,id| cached.contains_key(id));
+     }
+ }
++
++impl TerminalState {
++    pub(super) fn prototype_update_kitty_records(&mut self) {
++        let mut positions = HashMap::new();
++        let screen = self.screen();
++        let alternate = self.screen.alt_screen_is_active;
++        for (row,line) in screen.lines_in_phys_range(0..screen.scrollback_rows()).iter().enumerate() {
++            for cell in line.visible_cells() {
++                for image in cell.attrs().images().unwrap_or_default() {
++                    if let Some(id) = image.image_id() {
++                        let key = (id,image.placement_id());
++                        if self.kitty_img.prototype_placement_buffers.get(&key) == Some(&alternate) {
++                            positions.entry(key).or_insert((row,cell.cell_index()));
++                        }
++                    }
++                }
++            }
++        }
++        for (key,(row,column)) in positions {
++            if let Some(record) = self.kitty_img.prototype_records.get_mut(&key) {
++                record["row"] = serde_json::json!(row);
++                record["column"] = serde_json::json!(column);
++            }
++        }
++    }
++}

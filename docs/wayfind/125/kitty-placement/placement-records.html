@@ -1,0 +1,42 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kitty placement records through reconnect</title>
+<style>
+:root{--bg:#f8fafc;--surface:#fff;--surface-2:#f1f5f9;--border:#e2e8f0;--text:#0f172a;--text-muted:#64748b;--accent:#0e7490;--accent-soft:#ecfeff;--accent-soft-text:#155e75;--font-display:'Space Grotesk',system-ui,sans-serif;--font-body:'Space Grotesk',system-ui,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:18px/1.55 var(--font-body)}main{max-width:1260px;margin:50px auto;padding:0 32px}h1{font:600 38px/1.2 var(--font-display);margin:0 0 12px}h2{font-size:24px;margin-top:0}p{max-width:1000px}nav{display:flex;gap:12px;margin:30px 0;flex-wrap:wrap}button{font:inherit;border:1px solid var(--accent);border-radius:8px;padding:12px 20px;background:var(--surface);color:var(--accent-soft-text);cursor:pointer}button[aria-selected=true]{background:var(--accent);color:var(--surface)}section{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px}section[hidden]{display:none}.flow{display:grid;grid-template-columns:minmax(260px,1fr) 50px minmax(260px,1fr);gap:16px;align-items:center;margin:28px 0}.node{background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:22px;min-width:0}.node strong{display:block;font-size:24px}.arrow{text-align:center;color:var(--accent);font-size:36px}.row{border:1px solid var(--border);margin:6px 0;padding:7px 15px;border-radius:6px}.retained{background:var(--accent-soft);color:var(--accent-soft-text)}code,pre{font-family:var(--font-mono);overflow-wrap:anywhere}pre{white-space:pre-wrap;background:var(--surface-2);padding:18px;border-radius:10px;font-size:15px}footer{font-size:15px;color:var(--text-muted);margin-top:24px}a{color:var(--accent-soft-text)}@media(max-width:700px){main{margin:25px auto}.flow{grid-template-columns:1fr}.arrow{transform:rotate(90deg)}}
+</style>
+<main>
+<h1>Placement identity survives discarded cells</h1>
+<p>A checkpoint needs the live placement table as well as retained image stripes. The native placement record and an image stripe's creation coordinates are separate pieces of state.</p>
+<nav role="tablist" aria-label="Scenarios">
+<button role="tab" aria-selected="true" data-panel="native">Native baseline</button>
+<button role="tab" aria-selected="false" data-panel="proposal">Review proposal</button>
+<button role="tab" aria-selected="false" data-panel="tested">Tested correction</button>
+</nav>
+<section id="native" role="tabpanel">
+<h2>The native record follows the first retained stripe</h2>
+<p>Real native run: image <code>7</code>, placement <code>3</code>, two columns by three rows, a 20 × 6 terminal, 40 history lines, then 47 newlines.</p>
+<div class="flow"><div class="node"><div class="row">Stripe 0: discarded</div><div class="row">Stripe 1: discarded</div><div class="row retained">Stripe 2: retained row 0</div></div><div class="arrow">→</div><div class="node"><strong>Record row = 0</strong>Columns = 2 · Rows = 3<br>Image creation row = 0</div></div>
+<p>SwiftTerm's <code>collectKittyPlacementPositions</code> takes the first surviving image row. <code>updateKittyRelativePlacementsForCurrentBuffer</code> updates the record from that position. Once every stripe is gone, the record remains at its last observed position.</p>
+</section>
+<section id="proposal" role="tabpanel" hidden>
+<h2>A negative origin changes the native model</h2>
+<div class="flow"><div class="node">Original origin 0<br>Two discarded rows<div class="row retained">Remaining stripe at row 0</div></div><div class="arrow">→</div><div class="node"><strong>Proposed origin = −2</strong>This is the review's geometric-origin model. The measured native record says 0.</div></div>
+<p>The proposal is an inference from the original rectangle. It is not the value exported by uninterrupted native SwiftTerm. Changing the native placement model would need its own decision and tests.</p>
+</section>
+<section id="tested" role="tabpanel" hidden>
+<h2>Transfer records independently of retained pixels</h2>
+<div class="flow"><div class="node"><strong>Rust server</strong>Live placement identity and buffer ownership<br>Current record coordinates<br>Separate stripe creation coordinates</div><div class="arrow">→</div><div class="node"><strong>Fresh native client</strong>Restore every live record<br>Render only retained stripes<br>Continue deletion and ID reuse</div></div>
+<p>The partial-stripe test exports record row <code>0</code> from both uninterrupted and restored native clients. The original all-cells-discarded test retains one placement and matching cached pixels; the old importer restores zero placements.</p>
+<pre id="evidence"></pre>
+<p>The test runner also preserves a separate failure mode for bottom-edge alternate-buffer creation. An unused native buffer can retain excess capacity after shrinking; that discrepancy remains a production acceptance blocker.</p>
+</section>
+<footer>Evidence: headless native macOS, Rust checkpoint producer and native SwiftTerm clients. This diagram describes a bounded experiment; it does not establish production integration.</footer>
+</main>
+<script>
+const evidence={native:{imageId:7,placementId:3,row:0,columns:2,rows:3,retainedImageRows:[0]},restored:{imageId:7,placementId:3,row:0,columns:2,rows:3,retainedImageRows:[0]}};
+document.querySelector('#evidence').textContent=Object.entries(evidence).map(([name,value])=>name+': '+JSON.stringify(value)).join('\n');
+for(const b of document.querySelectorAll('[role=tab]'))b.onclick=()=>{for(const t of document.querySelectorAll('[role=tab]'))t.setAttribute('aria-selected',String(t===b));for(const s of document.querySelectorAll('[role=tabpanel]'))s.hidden=s.id!==b.dataset.panel};
+</script>

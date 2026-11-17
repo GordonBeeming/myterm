@@ -1,0 +1,46 @@
+{
+  "native": {
+    "placements": [
+      {
+        "imageId": 7,
+        "placementId": 3,
+        "parentOffsetH": 0,
+        "parentOffsetV": 0,
+        "pixelOffsetX": 0,
+        "pixelOffsetY": 0,
+        "column": 0,
+        "row": 0,
+        "columns": 2,
+        "rows": 3,
+        "zIndex": 0,
+        "isVirtual": false,
+        "isAlternateBuffer": false
+      }
+    ],
+    "retainedImageRows": [
+      0
+    ]
+  },
+  "restored": {
+    "placements": [
+      {
+        "imageId": 7,
+        "placementId": 3,
+        "parentOffsetH": 0,
+        "parentOffsetV": 0,
+        "pixelOffsetX": 0,
+        "pixelOffsetY": 0,
+        "column": 0,
+        "row": 0,
+        "columns": 2,
+        "rows": 3,
+        "zIndex": 0,
+        "isVirtual": false,
+        "isAlternateBuffer": false
+      }
+    ],
+    "retainedImageRows": [
+      0
+    ]
+  }
+}

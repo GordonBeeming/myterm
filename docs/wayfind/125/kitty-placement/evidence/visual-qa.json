@@ -1,0 +1,16 @@
+{
+  "browser": "Browser.app, GordonBeeming/myterm",
+  "viewport": [
+    1920,
+    1080
+  ],
+  "allThreeTabsInspected": true,
+  "horizontalOverflow": false,
+  "mojibake": false,
+  "contrast": {
+    "body": 17.85,
+    "selectedTab": 5.36,
+    "highlight": 6.99,
+    "footer": 4.55
+  }
+}

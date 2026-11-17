@@ -1,0 +1,1 @@
+{"stage":"server placement limit", "result":"subprocess timeout after 60 seconds", "fixture":"1025 overlapping placements", "observedRssBytesApprox":9151807488, "continuationsReachedLimitStage":true}

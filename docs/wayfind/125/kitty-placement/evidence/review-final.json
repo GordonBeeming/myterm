@@ -1,0 +1,15 @@
+{
+  "tool": "claude",
+  "mode": "review",
+  "model": "sonnet",
+  "permissionMode": "plan",
+  "repo": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125",
+  "sessionId": "bccc2715-6568-4ae7-a9e8-0bbdbc18e264",
+  "status": "completed",
+  "response": "No blocking defects remain. All three prior coverage findings are closed, with a few small gaps left.\n\n**Evidence checked (nothing re-run)**\n- `evidence/results.json` shows 38 of 38 continuations passing and 13 receiver controls rejected. Each rejection has the expected message.\n- Every script and binary hash in `evidence/run.json` matches the current files, including `prepare.py`, `regression.py`, `placement.patch` and the original-build client.\n- The README's claims match the evidence:\n  - It states 38 comparisons, 13 receiver rejections and 47 regression cases.\n  - It lists the alternate-buffer failures as unresolved and tracked in issue #196.\n  - It makes no deterministic-raster claim.\n\n**Prior findings**\n1. **Placement scroll (closed).** `bottom-tall-C0` and `bottom-tall-C1` fill the history, then place `c=2,r=3` at the bottom (`check.py:56-58`). All six cuts compare against native and pass.\n2. **Untested limits and receiver fields (closed).**\n   - The receiver controls now cover `imageRow`, `imageColumn`, `column`, `row`, `columns` and both pixel offsets, one field per control.\n   - Producer controls reject `X=1025` and a missing `p=`, and each recovers after deletion.\n   - The expected diagnostic strings are asserted.\n3. **Replacement test and cells (closed).** The limit trace asserts image-cell counts of `[0,1,2,0]`, which covers rejected admission leaving no cells, a new slot after one deletion, replacement at capacity, and cleanup.\n\n**Remaining gaps (low severity, none blocking)**\n- **`bridge Kitty stripe owner` guard.**\n  - The receiver check at `placement.patch:21-24` has no control.\n  - The control sample is the first checkpoint of `scrolled-record`, after 65 newlines, so it holds no stripe cells and the guard can't fire.\n  - To cover it, take a checkpoint from `partial-stripes` (before the final scroll) and change the owner id.\n- **Bounds only tested one way.**\n  - Only the upper bounds of `column`, `row` and `imageColumn` are tested, plus the lower bound of `imageRow` (`-1`).\n  - There is no negative `column` or `imageColumn`, no oversized `imageRow`, and no `columns` or `rows` above 2048 on the producer side.\n  - Each is one more `update()` in `changes`.\n- **No tall placement on the alternate screen.** The `restore_cursor` rule in `image.rs` skips the alternate screen, and no case checks a placement taller than the remaining rows there. This sits inside the known alternate discrepancy, so it is a production concern for issue #196, not a defect in this patch.",
+  "exitCode": "0",
+  "startedAt": "2026-11-17T04:46:42Z",
+  "endedAt": "2026-11-17T04:47:25Z",
+  "rawFile": "/private/tmp/myterm-186-review-tests.json.json",
+  "stderrTail": ""
+}

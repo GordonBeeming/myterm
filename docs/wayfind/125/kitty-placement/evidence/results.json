@@ -1,0 +1,329 @@
+{
+  "red": {
+    "referencePlacements": [
+      {
+        "imageId": 7,
+        "placementId": 3,
+        "parentOffsetH": 0,
+        "parentOffsetV": 0,
+        "pixelOffsetX": 0,
+        "pixelOffsetY": 0,
+        "column": 0,
+        "row": 0,
+        "columns": 1,
+        "rows": 1,
+        "zIndex": 0,
+        "isVirtual": false,
+        "isAlternateBuffer": false
+      }
+    ],
+    "oldPlacements": [],
+    "cacheMatches": true
+  },
+  "comparisons": [
+    {
+      "case": "scrolled-record",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 3935,
+      "differences": []
+    },
+    {
+      "case": "scrolled-record",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 4701,
+      "differences": []
+    },
+    {
+      "case": "delete-placement-retain-cache",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 3935,
+      "differences": []
+    },
+    {
+      "case": "delete-placement-retain-cache",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 3781,
+      "differences": []
+    },
+    {
+      "case": "delete-placement-retain-cache",
+      "cut": 2,
+      "passed": true,
+      "checkpointBytes": 4457,
+      "differences": []
+    },
+    {
+      "case": "delete-placement-retain-cache",
+      "cut": 3,
+      "passed": true,
+      "checkpointBytes": 3882,
+      "differences": []
+    },
+    {
+      "case": "reuse-placement",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 3935,
+      "differences": []
+    },
+    {
+      "case": "reuse-placement",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 4760,
+      "differences": []
+    },
+    {
+      "case": "reuse-placement",
+      "cut": 2,
+      "passed": true,
+      "checkpointBytes": 3937,
+      "differences": []
+    },
+    {
+      "case": "reuse-placement",
+      "cut": 3,
+      "passed": true,
+      "checkpointBytes": 3781,
+      "differences": []
+    },
+    {
+      "case": "reuse-placement",
+      "cut": 4,
+      "passed": true,
+      "checkpointBytes": 4457,
+      "differences": []
+    },
+    {
+      "case": "nonorigin-scroll",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 2375,
+      "differences": []
+    },
+    {
+      "case": "nonorigin-scroll",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 3935,
+      "differences": []
+    },
+    {
+      "case": "nonorigin-scroll",
+      "cut": 2,
+      "passed": true,
+      "checkpointBytes": 4457,
+      "differences": []
+    },
+    {
+      "case": "partial-stripes",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 2972,
+      "differences": []
+    },
+    {
+      "case": "partial-stripes",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 4458,
+      "differences": []
+    },
+    {
+      "case": "partial-stripes",
+      "cut": 2,
+      "passed": true,
+      "checkpointBytes": 3935,
+      "differences": []
+    },
+    {
+      "case": "bottom-tall-C0",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 3781,
+      "differences": []
+    },
+    {
+      "case": "bottom-tall-C0",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 5054,
+      "differences": []
+    },
+    {
+      "case": "bottom-tall-C0",
+      "cut": 2,
+      "passed": true,
+      "checkpointBytes": 4234,
+      "differences": []
+    },
+    {
+      "case": "bottom-tall-C1",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 3781,
+      "differences": []
+    },
+    {
+      "case": "bottom-tall-C1",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 5054,
+      "differences": []
+    },
+    {
+      "case": "bottom-tall-C1",
+      "cut": 2,
+      "passed": true,
+      "checkpointBytes": 4234,
+      "differences": []
+    },
+    {
+      "case": "multiple-records",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 4090,
+      "differences": []
+    },
+    {
+      "case": "multiple-records",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 3935,
+      "differences": []
+    },
+    {
+      "case": "multiple-records",
+      "cut": 2,
+      "passed": true,
+      "checkpointBytes": 4612,
+      "differences": []
+    },
+    {
+      "case": "alternate-return",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 3935,
+      "differences": []
+    },
+    {
+      "case": "alternate-return",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 4123,
+      "differences": []
+    },
+    {
+      "case": "alternate-return",
+      "cut": 2,
+      "passed": true,
+      "checkpointBytes": 4797,
+      "differences": []
+    },
+    {
+      "case": "alternate-return",
+      "cut": 3,
+      "passed": true,
+      "checkpointBytes": 4275,
+      "differences": []
+    },
+    {
+      "case": "alternate-return",
+      "cut": 4,
+      "passed": true,
+      "checkpointBytes": 4797,
+      "differences": []
+    },
+    {
+      "case": "replace-across-buffers",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 3935,
+      "differences": []
+    },
+    {
+      "case": "replace-across-buffers",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 4642,
+      "differences": []
+    },
+    {
+      "case": "replace-across-buffers",
+      "cut": 2,
+      "passed": true,
+      "checkpointBytes": 4071,
+      "differences": []
+    },
+    {
+      "case": "replace-across-buffers",
+      "cut": 3,
+      "passed": true,
+      "checkpointBytes": 4797,
+      "differences": []
+    },
+    {
+      "case": "reset",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 3935,
+      "differences": []
+    },
+    {
+      "case": "reset",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 1651,
+      "differences": []
+    },
+    {
+      "case": "reset",
+      "cut": 2,
+      "passed": true,
+      "checkpointBytes": 2375,
+      "differences": []
+    }
+  ],
+  "receiverControls": {
+    "duplicate": "corrupt(\"bridge Kitty placement record\")",
+    "dangling-image": "corrupt(\"bridge Kitty placement record\")",
+    "missing-placement-id": "corrupt(\"bridge Kitty placement record\")",
+    "negative-row": "corrupt(\"bridge Kitty placement record\")",
+    "oversized-dimension": "corrupt(\"bridge Kitty placement record\")",
+    "negative-image-row": "corrupt(\"bridge Kitty placement record\")",
+    "oversized-image-column": "corrupt(\"bridge Kitty placement record\")",
+    "oversized-column": "corrupt(\"bridge Kitty placement record\")",
+    "oversized-row": "corrupt(\"bridge Kitty placement record\")",
+    "zero-columns": "corrupt(\"bridge Kitty placement record\")",
+    "oversized-offset-x": "corrupt(\"bridge Kitty placement record\")",
+    "oversized-offset-y": "corrupt(\"bridge Kitty placement record\")",
+    "too-many-records": "corrupt(\"bridge Kitty placement count\")"
+  },
+  "producerControls": {
+    "offset": {
+      "rejected": true,
+      "recoveredAfterDeletion": true,
+      "diagnostic": "Kitty placement offset limit"
+    },
+    "automatic-id": {
+      "rejected": true,
+      "recoveredAfterDeletion": true,
+      "diagnostic": "unsupported automatic Kitty placement identity"
+    }
+  },
+  "serverLimit": {
+    "rejected1025BeforeMutation": true,
+    "recoveredAfterSingleDeletion": true,
+    "replacedAtCapacity": true,
+    "allDeleted": true
+  },
+  "summary": {
+    "passed": 38,
+    "failed": 0,
+    "receiverRejected": 13
+  }
+}
