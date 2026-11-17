@@ -1,0 +1,70 @@
+{
+  "time": "2026-11-17T09:27:09.360999+00:00",
+  "sourceMatchesRecordedFinalBuild": {
+    "source/term/src/screen.rs": true,
+    "source/term/src/terminalstate/mod.rs": true,
+    "source/term/src/terminalstate/prototype-checkpoint.rs": true,
+    "SwiftTerm/Sources/SwiftTerm/CheckpointBridge.swift": true,
+    "SwiftTerm/Sources/SwiftTerm/Buffer.swift": true,
+    "SwiftTerm/Sources/SwiftTerm/Terminal.swift": true
+  },
+  "counterexamplesVerified": [
+    "native self-cycle acknowledged and retained",
+    "native two-node cycle retained",
+    "native child record outlives deleted parent",
+    "native virtual cursor stays while Rust cursor moves"
+  ],
+  "controlCases": [
+    "ordinary-control",
+    "overlap"
+  ],
+  "visualQA": {
+    "tool": "Browser.app",
+    "viewport": [
+      1920,
+      1080
+    ],
+    "tabsInspected": 3,
+    "tableRows": 15,
+    "horizontalOverflow": false,
+    "mojibake": false,
+    "contrastRatios": {
+      "#0f172a on #ffffff": 17.85253496299567,
+      "#64748b on #ffffff": 4.758842787868665,
+      "#64748b on #f8fafc": 4.548363604249586,
+      "#0e7490 on #ffffff": 5.3577549124490425,
+      "#ffffff on #0e7490": 5.3577549124490425,
+      "#0f172a on #ecfeff": 17.16163998544374
+    },
+    "screenshotsInspected": true
+  },
+  "pythonCompilation": "passed",
+  "gitDiffCheck": "passed",
+  "nativeKittySourceMatchesVendoredSource": true,
+  "sourceHashComparisons": {
+    "source/term/src/screen.rs": {
+      "expected": "b3adb4f4f1ca44b333c35bfd554530a4544567b37d978610702c10f456c4ee11",
+      "actual": "b3adb4f4f1ca44b333c35bfd554530a4544567b37d978610702c10f456c4ee11"
+    },
+    "source/term/src/terminalstate/mod.rs": {
+      "expected": "6d35822466fdc531aa8c8cfd8d29299455c1e4dc150accf33bb8f8ba21f74a13",
+      "actual": "6d35822466fdc531aa8c8cfd8d29299455c1e4dc150accf33bb8f8ba21f74a13"
+    },
+    "source/term/src/terminalstate/prototype-checkpoint.rs": {
+      "expected": "f3073d4eec0dfea66d68c434d424db2c7ce3f3699551743b149f78f3c74d9cb2",
+      "actual": "f3073d4eec0dfea66d68c434d424db2c7ce3f3699551743b149f78f3c74d9cb2"
+    },
+    "SwiftTerm/Sources/SwiftTerm/CheckpointBridge.swift": {
+      "expected": "aaf98e0ef1a3f1ca715982b82f04ab455d21b1a46a06db750bfe1ce88deec41d",
+      "actual": "aaf98e0ef1a3f1ca715982b82f04ab455d21b1a46a06db750bfe1ce88deec41d"
+    },
+    "SwiftTerm/Sources/SwiftTerm/Buffer.swift": {
+      "expected": "3ad2aae86d0337d5377320dd5697e1d31d288a851bce1a673f3f910ab74f8229",
+      "actual": "3ad2aae86d0337d5377320dd5697e1d31d288a851bce1a673f3f910ab74f8229"
+    },
+    "SwiftTerm/Sources/SwiftTerm/Terminal.swift": {
+      "expected": "b6152aa8a3d1ed8d2ab9958e2d7d80d02e7eb7d6b1f50691f102e0a34e314564",
+      "actual": "b6152aa8a3d1ed8d2ab9958e2d7d80d02e7eb7d6b1f50691f102e0a34e314564"
+    }
+  }
+}

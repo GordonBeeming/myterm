@@ -1,0 +1,7 @@
+{
+  "time": "2026-11-17T09:36:27.019057+00:00",
+  "python": "3.14.3 (v3.14.3:323c59a5e34, Feb  3 2026, 11:41:37) [Clang 16.0.0 (clang-1600.0.26.6)]",
+  "pillow": "12.1.1",
+  "platform": "macOS-27.3-arm64-arm-64bit-Mach-O",
+  "scope": "Recorded after the trace runs; investigation environment, not a per-capture measurement."
+}
