@@ -1,0 +1,20 @@
+{
+  "native/source/wezterm-escape-parser/src/apc.rs": "b04f7f2419fc47561551558f95843e705d32a8da79f3229fc9e02302512b833a",
+  "native/source/term/src/screen.rs": "b3adb4f4f1ca44b333c35bfd554530a4544567b37d978610702c10f456c4ee11",
+  "native/source/term/src/terminal.rs": "92c18b256b884245b42719150641bb476de7f56992f7a6d71b27b920d1714bae",
+  "native/source/term/src/terminalstate/kitty.rs": "fdc5584b6fdb8808ba1a76382612f6ef68e6bdc2e8af2d5a2ccf492ca6a7d20e",
+  "native/source/term/src/terminalstate/prototype-kitty.rs": "fc07c0a8d01c10ff5ea27300d32a79d6617f3c7b525bb6777d37b47fb0976b11",
+  "native/source/term/src/terminalstate/prototype-graphics.rs": "27a97088105ebe17143b4aa5583b0af2fdad818dbd7fa68a1769594587235d41",
+  "native/source/term/src/terminalstate/prototype-checkpoint.rs": "f3073d4eec0dfea66d68c434d424db2c7ce3f3699551743b149f78f3c74d9cb2",
+  "native/source/term/src/terminalstate/image.rs": "79a7ab66d2d1849f88fa142a38dd8ae21be6f19c4311a6ce5fee350389fe80c9",
+  "native/SwiftTerm/Sources/SwiftTerm/KittyGraphics.swift": "29e3cc9133e9a5c42e91a2e9cadef80abbcda44dabf7f080cd3c6d2359c8e403",
+  "native/SwiftTerm/Sources/SwiftTerm/KittyPlaceholder.swift": "0f4c89da129e24c841e5083c49cef8d6827a95142202311bfebbffa30d063cfe",
+  "native/SwiftTerm/Sources/SwiftTerm/CheckpointBridge.swift": "aaf98e0ef1a3f1ca715982b82f04ab455d21b1a46a06db750bfe1ce88deec41d",
+  "native/SwiftTerm/Sources/SwiftTerm/CheckpointGraphics.swift": "6b1b3543aa6d8fe74faf6d4b9e50cbc7313a7a52cf0795ecdf1190d91e87b704",
+  "native/SwiftTerm/Sources/SwiftTerm/Terminal.swift": "b6152aa8a3d1ed8d2ab9958e2d7d80d02e7eb7d6b1f50691f102e0a34e314564",
+  "native/SwiftTerm/Sources/SwiftTerm/TerminalCheckpoint.swift": "7a165349c634b93924a6e4b383d5148e1c102562d8dddfdd6f05beb0a675fc83",
+  "native/SwiftTerm/Sources/SwiftTerm/Apple/AppleTerminalView.swift": "c4a1c717a28183d209a0e88a3c915c74739a26303cab266f4ba8cbd257104e93",
+  "native/SwiftTerm/Sources/SwiftTerm/Apple/TerminalImageRenderer.swift": "81e3079abd8b990686fc62dbee67e12cf1c02649749403e7b3040d7067738107",
+  "native/swift-probe/Sources/Baseline/main.swift": "778acf37817ea022bbb82382955be8c26209cd6ae058808753caae8db23e7867",
+  "foundation/checkpoint_checks.py": "cb2cc30ef92d901295ef91a7d46e214c4621eae7e01754cb8c0c860c821b423f"
+}

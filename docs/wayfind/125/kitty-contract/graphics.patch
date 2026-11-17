@@ -1,0 +1,2127 @@
+--- a/native/source/wezterm-escape-parser/src/apc.rs
++++ b/native/source/wezterm-escape-parser/src/apc.rs
+@@ -591,6 +591,11 @@
+ 
+ #[derive(Debug, Clone, PartialEq, Eq)]
+ pub struct KittyImagePlacement {
++    pub virtual_placement: bool,
++    pub parent_image_id: Option<u32>,
++    pub parent_placement_id: Option<u32>,
++    pub parent_offset_h: i64,
++    pub parent_offset_v: i64,
+     /// source rectangle bounds.
+     /// Default is whole image.
+     /// x=...
+@@ -625,15 +630,18 @@
+ impl KittyImagePlacement {
+     fn from_keys(keys: &BTreeMap<&str, &str>) -> Option<Self> {
+         Some(Self {
++            virtual_placement: geti::<u32>(keys, "U").unwrap_or(0) == 1,
++            parent_image_id: geti(keys, "P"), parent_placement_id: geti(keys, "Q"),
++            parent_offset_h: geti(keys, "H").unwrap_or(0), parent_offset_v: geti(keys, "V").unwrap_or(0),
+             x: geti(keys, "x"),
+             y: geti(keys, "y"),
+             w: geti(keys, "w"),
+             h: geti(keys, "h"),
+             x_offset: geti(keys, "X"),
+             y_offset: geti(keys, "Y"),
+-            columns: geti(keys, "c"),
+-            rows: geti(keys, "r"),
+-            placement_id: geti(keys, "p"),
++            columns: geti(keys, "c").filter(|n|*n != 0),
++            rows: geti(keys, "r").filter(|n|*n != 0),
++            placement_id: geti(keys, "p").filter(|n|*n != 0),
+             do_not_move_cursor: match get(keys, "C") {
+                 None | Some("0") => false,
+                 Some("1") => true,
+@@ -644,6 +652,10 @@
+     }
+ 
+     fn to_keys(&self, keys: &mut BTreeMap<&'static str, String>) {
++        if self.virtual_placement { keys.insert("U", "1".into()); }
++        set(keys, "P", &self.parent_image_id); set(keys, "Q", &self.parent_placement_id);
++        if self.parent_offset_h != 0 { keys.insert("H", self.parent_offset_h.to_string()); }
++        if self.parent_offset_v != 0 { keys.insert("V", self.parent_offset_v.to_string()); }
+         set(keys, "x", &self.x);
+         set(keys, "y", &self.y);
+         set(keys, "w", &self.w);
+@@ -667,6 +679,7 @@
+ /// the data is available to be placed again.
+ #[derive(Debug, Clone, PartialEq, Eq)]
+ pub enum KittyImageDelete {
++    ByImageIdRange { min_id: u32, max_id: u32, delete: bool },
+     /// d='a' or d='A'.
+     /// Delete all placements on visible screen
+     All { delete: bool },
+@@ -735,15 +748,16 @@
+         let d = d.chars().next()?;
+         let delete = d.is_ascii_uppercase();
+         match d {
++             'r' | 'R' => Some(Self::ByImageIdRange { min_id: geti(keys,"x")?, max_id: geti(keys,"y")?, delete }),
+             'a' | 'A' => Some(Self::All { delete }),
+             'i' | 'I' => Some(Self::ByImageId {
+                 image_id: geti(keys, "i")?,
+-                placement_id: geti(keys, "p"),
++                placement_id: geti(keys, "p").filter(|n|*n!=0),
+                 delete,
+             }),
+             'n' | 'N' => Some(Self::ByImageNumber {
+                 image_number: geti(keys, "I")?,
+-                placement_id: geti(keys, "p"),
++                placement_id: geti(keys, "p").filter(|n|*n!=0),
+                 delete,
+             }),
+             'c' | 'C' => Some(Self::AtCursorPosition { delete }),
+@@ -781,6 +795,9 @@
+         }
+ 
+         match self {
++            Self::ByImageIdRange { min_id,max_id,delete } => {
++                keys.insert("d",d('r',delete)); keys.insert("x",min_id.to_string()); keys.insert("y",max_id.to_string());
++            },
+             Self::All { delete } => {
+                 keys.insert("d", d('a', delete));
+             }
+@@ -818,7 +835,7 @@
+                 keys.insert("y", y.to_string());
+             }
+             Self::DeleteAtZ { x, y, z, delete } => {
+-                keys.insert("d", d('p', delete));
++                keys.insert("d", d('q', delete));
+                 keys.insert("x", x.to_string());
+                 keys.insert("y", y.to_string());
+                 keys.insert("z", z.to_string());
+--- a/native/source/term/src/terminal.rs
++++ b/native/source/term/src/terminal.rs
+@@ -183,6 +183,7 @@
+             }
+ 
+         }
++        self.state.prototype_update_kitty_records();
+         self.trigger_unseen_output_notif();
+     }
+ 
+--- a/native/source/term/src/terminalstate/kitty.rs
++++ b/native/source/term/src/terminalstate/kitty.rs
+@@ -1,12 +1,13 @@
+ use crate::terminalstate::image::*;
+-use crate::terminalstate::{ImageAttachParams, PlacementInfo};
+-use crate::{StableRowIndex, TerminalState};
++use crate::terminalstate::{ImageAttachParams, PlacementInfo, BridgeGraphics};
++use crate::TerminalState;
+ use ::image::{
+     DynamicImage, GenericImage, GenericImageView, ImageBuffer, RgbImage, Rgba, RgbaImage,
+ };
+ use anyhow::Context;
+ use std::collections::{HashMap, HashSet};
+ use std::io::Write;
++use std::convert::TryFrom;
+ use std::sync::Arc;
+ use std::time::Duration;
+ use wezterm_cell::image::ImageDataType;
+@@ -20,6 +21,11 @@
+ #[derive(Debug, Default)]
+ pub struct KittyImageState {
+     accumulator: Vec<KittyImage>,
++    prototype_next_placement: u32,
++    prototype_next_image: u32,
++    prototype_relative_data: HashMap<(u32,Option<u32>),(Arc<ImageData>,usize,usize)>,
++    prototype_projection_error: bool,
++    prototype_updating_placement: bool,
+     max_image_id: u32,
+     number_to_id: HashMap<u32, u32>,
+     id_to_data: HashMap<u32, Arc<ImageData>>,
+@@ -71,29 +77,32 @@
+ }
+ 
+ impl TerminalState {
+-    fn kitty_img_place(
++    fn kitty_img_place(&mut self, image_id: Option<u32>, image_number: Option<u32>,
++        placement: KittyImagePlacement, verbosity: KittyImageVerbosity, reply_image_id: Option<u32>) -> anyhow::Result<()> {
++        // Rasterization can scroll while a replaced parent is temporarily absent.
++        // Reproject descendants only after the new parent record is committed.
++        self.kitty_img.prototype_updating_placement = true;
++        let result = self.kitty_img_place_inner(image_id,image_number,placement,verbosity,reply_image_id);
++        self.kitty_img.prototype_updating_placement = false;
++        self.prototype_update_kitty_records();
++        result
++    }
++
++    fn kitty_img_place_inner(
+         &mut self,
+         image_id: Option<u32>,
+         image_number: Option<u32>,
+-        placement: KittyImagePlacement,
++        mut placement: KittyImagePlacement,
+         verbosity: KittyImageVerbosity,
++        reply_image_id: Option<u32>,
+     ) -> anyhow::Result<()> {
+         let requested_identity = image_id.is_some() || image_number.is_some();
+-        let image_id = match image_id {
++        let image_id = match image_id.or_else(||image_number.and_then(|number|self.kitty_img.number_to_id.get(&number).copied())) {
+             Some(id) => id,
+-            None => *self
+-                .kitty_img
+-                .number_to_id
+-                .get(
+-                    &image_number
+-                        .ok_or_else(|| anyhow::anyhow!("no image_id or image_number specified!"))?,
+-                )
+-                .ok_or_else(|| {
+-                    anyhow::anyhow!(
+-                        "image_number has no matching image id {:?} in number_to_id",
+-                        image_number
+-                    )
+-                })?,
++            None => {
++                self.kitty_send_response(verbosity,false,reply_image_id,image_number,"ENOENT: image not found".into());
++                return Ok(());
++            }
+         };
+ 
+         log::trace!(
+@@ -103,30 +112,97 @@
+             placement,
+             verbosity
+         );
++        let requested_placement = placement.placement_id;
++        let saved_cursor = self.cursor;
++        if let Some(message) = self.prototype_parent_error(image_id, &placement) {
++            self.kitty_send_response(verbosity, false, reply_image_id, image_number, message);
++            return Ok(());
++        }
++        let relative = placement.parent_image_id.is_some() && placement.parent_placement_id.is_some();
+         // Refuse a new record before changing the placement table or image cells.
+         anyhow::ensure!(self.kitty_img.placements.len() < 1024
+             || self.kitty_img.placements.contains_key(&(image_id, placement.placement_id)),
+             "Kitty placement count limit");
+-        if image_id != 0 {
+-            self.kitty_remove_placement(image_id, placement.placement_id);
+-        }
+-        let img = Arc::clone(self.kitty_img.id_to_data.get(&image_id).ok_or_else(|| {
+-            anyhow::anyhow!(
+-                "no matching image id {} in id_to_data for image_number {:?}",
+-                image_id,
+-                image_number
+-            )
+-        })?);
+-
+-        let (image_width, image_height) = img.data().dimensions()?;
++        let mut img = match self.kitty_img.id_to_data.get(&image_id) {
++            Some(image) => Arc::clone(image),
++            None => {
++                self.kitty_send_response(verbosity,false,reply_image_id,image_number,"ENOENT: image not found".into());
++                return Ok(());
++            }
++        };
++
++        let (mut image_width, mut image_height) = img.data().dimensions()?;
++        if !placement.virtual_placement && (placement.x.unwrap_or(0) != 0 || placement.y.unwrap_or(0) != 0
++            || placement.w.unwrap_or(0) != 0 || placement.h.unwrap_or(0) != 0) {
++            let x = placement.x.unwrap_or(0); let y = placement.y.unwrap_or(0);
++            let w = placement.w.filter(|v|*v != 0).unwrap_or(image_width.saturating_sub(x)).min(image_width.saturating_sub(x));
++            let h = placement.h.filter(|v|*v != 0).unwrap_or(image_height.saturating_sub(y)).min(image_height.saturating_sub(y));
++            if w == 0 || h == 0 {
++                self.cursor = saved_cursor;
++                self.kitty_send_response(verbosity,false,reply_image_id,image_number,"EINVAL: bad crop".into());
++                return Ok(());
++            }
++            let cropped = {
++                let data = img.data();
++                match &*data {
++                    ImageDataType::Rgba8{data,..} => {
++                        let mut crop = Vec::with_capacity(w as usize*h as usize*4);
++                        for row in y..y+h {
++                            let start = ((row*image_width+x)*4) as usize;
++                            crop.extend_from_slice(&data[start..start+w as usize*4]);
++                        }
++                        crop
++                    },
++                    _ => anyhow::bail!("unsupported Kitty crop resource"),
++                }
++            };
++            img = Arc::new(ImageData::with_data(ImageDataType::new_single_frame(w,h,cropped)));
++            image_width=w; image_height=h;
++            placement.x=None; placement.y=None; placement.w=None; placement.h=None;
++        }
++        let cell_width = self.pixel_width / self.screen().physical_cols;
++        let cell_height = self.pixel_height / self.screen().physical_rows;
++        placement.x_offset = placement.x_offset.map(|v|v.min(cell_width.saturating_sub(1) as u32));
++        placement.y_offset = placement.y_offset.map(|v|v.min(cell_height.saturating_sub(1) as u32));
+ 
+         let prototype_request = serde_json::json!({"width":placement.columns.map(|n|n.to_string()).unwrap_or_else(||"auto".into()),"height":placement.rows.map(|n|n.to_string()).unwrap_or_else(||"auto".into()),"preserve":placement.columns.is_none() || placement.rows.is_none()});
+-        let target_width = placement.columns.map(|n|n as usize*(self.pixel_width/self.screen().physical_cols)).unwrap_or(image_width as usize);
+-        let target_height = placement.rows.map(|n|n as usize*(self.pixel_height/self.screen().physical_rows)).unwrap_or(image_height as usize);
++        anyhow::ensure!(placement.columns.map_or(true,|n|n<=2048) && placement.rows.map_or(true,|n|n<=2048), "Kitty placement dimension limit");
++        let mut target_width = placement.columns.map(|n|n as usize*cell_width).unwrap_or(image_width as usize);
++        let mut target_height = placement.rows.map(|n|n as usize*cell_height).unwrap_or(image_height as usize);
++        if placement.columns.is_some() && placement.rows.is_none() { target_height = target_width*image_height as usize/image_width as usize; }
++        if placement.rows.is_some() && placement.columns.is_none() { target_width = target_height*image_width as usize/image_height as usize; }
++        anyhow::ensure!(cell_width > 0 && cell_height > 0, "Kitty cell geometry limit");
++        anyhow::ensure!(placement.columns.map_or(true,|n|n<=2048) && placement.rows.map_or(true,|n|n<=2048), "Kitty placement dimension limit");
++        anyhow::ensure!(placement.virtual_placement || (target_width<=2048 && target_height<=2048), "Kitty placement display limit");
++        let grid_columns = target_width.max(1).div_ceil(cell_width);
++        let grid_rows = target_height.max(1).div_ceil(cell_height);
++        target_width = grid_columns*cell_width;
++        target_height = grid_rows*cell_height;
++        let relative_origin = if let (Some(parent_image),Some(parent_placement)) = (placement.parent_image_id,placement.parent_placement_id) {
++            let (row,column) = self.prototype_parent_position((parent_image,Some(parent_placement)))?;
++            Some((row+placement.parent_offset_v as i64,column+placement.parent_offset_h as i64))
++        } else { None };
++        if placement.placement_id.is_none() {
++            let mut id = self.kitty_img.prototype_next_placement.max(1);
++            while self.kitty_img.placements.keys().any(|key|key.1 == Some(id)) {
++                id = id.wrapping_add(1).max(1);
++            }
++            self.kitty_img.prototype_next_placement = id.wrapping_add(1).max(1);
++            placement.placement_id = Some(id);
++        }
++        if image_id != 0 { self.kitty_remove_placement(image_id, placement.placement_id); }
++
+         self.prototype_store_image_request(img.hash(),target_width,target_height,prototype_request);
+-        let record_column = self.cursor.x;
+-        let record_row = self.screen().scrollback_rows().saturating_sub(self.screen().physical_rows) as i64 + self.cursor.y;
+-        let info = self.assign_image_to_cells(ImageAttachParams {
++        let record_column = relative_origin.map_or(self.cursor.x as i64,|v|v.1);
++        let record_row = relative_origin.map_or(self.screen().scrollback_rows().saturating_sub(self.screen().physical_rows) as i64+self.cursor.y,|v|v.0);
++        if relative {
++            self.kitty_img.prototype_relative_data.insert((image_id,placement.placement_id),(Arc::clone(&img),target_width,target_height));
++        }
++        let info = if placement.virtual_placement || relative {
++            PlacementInfo { first_row:self.screen().visible_row_to_stable_row(self.cursor.y),
++                cols:if relative {grid_columns} else {placement.columns.unwrap_or(0) as usize},
++                rows:if relative {grid_rows} else {placement.rows.unwrap_or(0) as usize} }
++        } else { self.assign_image_to_cells(ImageAttachParams {
+             image_width,
+             image_height,
+             source_width: placement.w,
+@@ -138,12 +214,13 @@
+             data: img,
+             style: ImageAttachStyle::Kitty,
+             z_index: placement.z_index.unwrap_or(0),
+-            columns: placement.columns.map(|x| x as usize),
+-            rows: placement.rows.map(|x| x as usize),
++            columns: Some(grid_columns),
++            rows: Some(grid_rows),
+             image_id: Some(image_id),
+             placement_id: placement.placement_id,
+             do_not_move_cursor: placement.do_not_move_cursor,
+-        })?;
++        })? };
++        if relative { self.cursor = saved_cursor; }
+ 
+         self.kitty_img
+             .placements
+@@ -157,6 +234,9 @@
+             self.kitty_img.prototype_records.insert((image_id, placement.placement_id), serde_json::json!({
+                 "column":record_column,"row":record_row,"imageColumn":record_column,"imageRow":record_row,
+                 "columns":info.cols,"rows":info.rows,
++                "isVirtual":placement.virtual_placement,
++                "parentImageId":placement.parent_image_id,"parentPlacementId":placement.parent_placement_id,
++                "parentOffsetH":placement.parent_offset_h,"parentOffsetV":placement.parent_offset_v,
+                 "zIndex":placement.z_index.unwrap_or(0),
+                 "pixelOffsetX":placement.x_offset.unwrap_or(0),"pixelOffsetY":placement.y_offset.unwrap_or(0)}));
+         }
+@@ -172,10 +252,10 @@
+ 
+         if requested_identity && image_id != 0 && matches!(verbosity, KittyImageVerbosity::Verbose) {
+             let mut response = match image_number {
+-                Some(number) => format!("\x1b_GI={number},i={image_id}"),
++                Some(number) => format!("\x1b_Gi={image_id},I={number}"),
+                 None => format!("\x1b_Gi={image_id}"),
+             };
+-            if let Some(placement_id) = placement.placement_id {
++            if let Some(placement_id) = requested_placement {
+                 response.push_str(&format!(",p={placement_id}"));
+             }
+             response.push_str(";OK\x1b\\");
+@@ -186,15 +266,27 @@
+     }
+ 
+     fn kitty_img_inner(&mut self, img: KittyImage) -> anyhow::Result<()> {
+-        match self
+-            .coalesce_kitty_accumulation(img)
+-            .context("coalesce_kitty_accumulation")?
+-        {
++        let source = self.kitty_img.accumulator.first().unwrap_or(&img);
++        let verbosity = source.verbosity();
++        let (image_id,image_number) = match source {
++            KittyImage::TransmitData{transmit,..} | KittyImage::TransmitDataAndDisplay{transmit,..} =>
++                (transmit.image_id,transmit.image_number),
++            _ => (None,None),
++        };
++        let coalesced = match self.coalesce_kitty_accumulation(img) {
++            Ok(value) => value,
++            Err(error) => {
++                log::debug!("invalid Kitty transfer: {:#}",error);
++                self.kitty_send_response(verbosity,false,image_id,image_number,"EINVAL: bad payload".into());
++                return Ok(());
++            }
++        };
++        match coalesced {
+             KittyImage::TransmitData {
+                 transmit,
+                 verbosity,
+             } => {
+-                self.kitty_img_transmit(transmit, verbosity)?;
++                self.prototype_transmit_checked(transmit,verbosity,verbosity);
+                 Ok(())
+             }
+             KittyImage::TransmitDataAndDisplay {
+@@ -204,9 +296,13 @@
+             } => {
+                 log::trace!("TransmitDataAndDisplay {:#?} {:#?}", transmit, placement);
+                 let image_number = transmit.image_number;
++                let reply_image_id = transmit.image_id;
+                 // Combined transmit-and-place has one acknowledgement, after placement.
+-                let image_id = self.kitty_img_transmit(transmit, KittyImageVerbosity::Quiet)?;
+-                self.kitty_img_place(Some(image_id), image_number, placement, verbosity)
++                let image_id = match self.prototype_transmit_checked(transmit,KittyImageVerbosity::Quiet,verbosity) {
++                    Some(id) => id,
++                    None => return Ok(()),
++                };
++                self.kitty_img_place(Some(image_id), image_number, placement, verbosity,reply_image_id)
+             }
+             _ => anyhow::bail!("impossible KittImage variant"),
+         }
+@@ -277,40 +373,13 @@
+                 placement,
+                 verbosity,
+             } => {
+-                self.kitty_img_place(image_id, image_number, placement, verbosity)?;
+-            }
+-            KittyImage::Delete {
+-                what:
+-                    KittyImageDelete::ByImageId {
+-                        image_id,
+-                        placement_id,
+-                        delete,
+-                    },
+-                verbosity,
+-            } => {
+-                log::trace!(
+-                    "remove a placement: image_id {} placement_id {:?} delete {} verb {:?}",
+-                    image_id,
+-                    placement_id,
+-                    delete,
+-                    verbosity
+-                );
+-
+-                self.kitty_remove_placement(image_id, placement_id);
+-
+-                if delete {
+-                    self.kitty_img.remove_data_for_id(image_id);
+-                }
+-            }
+-            KittyImage::Delete {
+-                what: KittyImageDelete::All { delete },
+-                verbosity: _,
+-            } => {
+-                self.kitty_remove_all_placements(delete);
+-            }
+-            KittyImage::Delete { what, verbosity } => {
+-                log::warn!("unhandled KittyImage::Delete {:?} {:?}", what, verbosity);
+-            }
++                if image_id.is_some() && image_number.is_some() {
++                    self.kitty_send_response(verbosity,false,image_id,None,"EINVAL: i and I are mutually exclusive".into());
++                } else {
++                    self.kitty_img_place(image_id, image_number, placement, verbosity,image_id)?;
++                }
++            }
++            KittyImage::Delete {what, verbosity: _} => { self.kitty_img.accumulator.clear(); self.prototype_delete_selection(what); }
+             KittyImage::TransmitFrame {
+                 transmit,
+                 frame,
+@@ -336,21 +405,21 @@
+         placement_id: Option<u32>,
+         info: PlacementInfo,
+     ) {
++        let _ = info;
+         let seqno = self.seqno;
+-        let screen = self.screen_mut();
+-        let range =
+-            screen.stable_range(&(info.first_row..info.first_row + info.rows as StableRowIndex));
+-        for idx in range {
+-            let line = screen.line_mut(idx);
+-            for c in line.cells_mut() {
+-                c.attrs_mut()
+-                    .detach_image_with_placement(image_id, placement_id);
+-            }
+-            line.update_last_change_seqno(seqno);
++        for screen in [&mut self.screen.screen,&mut self.screen.alt_screen] {
++            for row in 0..screen.scrollback_rows() {
++                let line = screen.line_mut(row);
++                for cell in line.cells_mut() { cell.attrs_mut().detach_image_with_placement(image_id,placement_id); }
++                line.update_last_change_seqno(seqno);
++            }
+         }
+     }
+ 
+     fn kitty_remove_placement(&mut self, image_id: u32, placement_id: Option<u32>) {
++        self.kitty_img.prototype_relative_data.retain(|key,_|key.0 != image_id || (placement_id.is_some() && key.1 != placement_id));
++        self.kitty_img.prototype_records.retain(|key,_|key.0 != image_id || (placement_id.is_some() && key.1 != placement_id));
++        self.kitty_img.prototype_placement_buffers.retain(|key,_|key.0 != image_id || (placement_id.is_some() && key.1 != placement_id));
+         if placement_id.is_some() {
+             if let Some(info) = self.kitty_img.placements.remove(&(image_id, placement_id)) {
+                 log::trace!("removed placement {} {:?}", image_id, placement_id);
+@@ -379,6 +448,10 @@
+     }
+ 
+     pub(crate) fn kitty_remove_all_placements(&mut self, delete: bool) {
++        self.kitty_img.prototype_relative_data.clear();
++        self.kitty_img.prototype_projection_error = false;
++        self.kitty_img.prototype_records.clear();
++        self.kitty_img.prototype_placement_buffers.clear();
+         for ((image_id, p), info) in std::mem::take(&mut self.kitty_img.placements).into_iter() {
+             self.kitty_remove_placement_from_model(image_id, p, info);
+         }
+@@ -413,7 +486,7 @@
+ 
+         match (image_id, image_no) {
+             (Some(id), Some(no)) => {
+-                write!(self.writer, "\x1b_GI={},i={};{}\x1b\\", no, id, message).ok();
++                write!(self.writer, "\x1b_Gi={},I={};{}\x1b\\", id, no, message).ok();
+             }
+             (Some(id), None) => {
+                 write!(self.writer, "\x1b_Gi={};{}\x1b\\", id, message).ok();
+@@ -786,22 +859,6 @@
+         transmit: KittyImageTransmit,
+     ) -> anyhow::Result<(u32, Option<u32>, ImageDataType)> {
+         log::trace!("transmit {:?}", transmit);
+-        let (id, no) = match (transmit.image_id, transmit.image_number) {
+-            (Some(_), Some(_)) => {
+-                // TODO: send an EINVAL error back here
+-                anyhow::bail!("cannot use both i= and I= in the same request");
+-            }
+-            (None, None) => {
+-                // Assume image id 0
+-                (0, None)
+-            }
+-            (Some(id), None) => (id, None),
+-            (None, Some(no)) => {
+-                let id = self.kitty_img.max_image_id + 1;
+-                self.kitty_img.number_to_id.insert(no, id);
+-                (id, Some(no))
+-            }
+-        };
+ 
+         let data = transmit
+             .data
+@@ -860,6 +917,25 @@
+             }
+         };
+ 
++        let (id, no) = match (transmit.image_id, transmit.image_number) {
++            (Some(_), Some(_)) => {
++                // TODO: send an EINVAL error back here
++                anyhow::bail!("cannot use both i= and I= in the same request");
++            }
++            (None, None) => {
++                // Assume image id 0
++                (0, None)
++            }
++            (Some(id), None) => (id, None),
++            (None, Some(no)) => {
++                let mut id = self.kitty_img.prototype_next_image.max(1);
++                while self.kitty_img.id_to_data.contains_key(&id) { id = id.wrapping_add(1).max(1); }
++                self.kitty_img.prototype_next_image = id.wrapping_add(1).max(1);
++                self.kitty_img.number_to_id.insert(no, id);
++                (id, Some(no))
++            }
++        };
++
+         Ok((id, no, img))
+     }
+ 
+@@ -897,7 +973,7 @@
+             let mut data = vec![];
+             let mut trans;
+             let place;
+-            let final_verbosity = img.verbosity();
++            let final_verbosity = self.kitty_img.accumulator.first().map(|v|v.verbosity()).unwrap_or_else(||img.verbosity());
+ 
+             self.kitty_img.accumulator.push(img);
+ 
+@@ -931,23 +1007,23 @@
+                 }
+             }
+ 
+-            let mut b64_decoded = vec![];
+-            for mut data in data.into_iter() {
+-                match &mut data {
+-                    KittyImageData::DirectBin(b) => {
+-                        b64_decoded.append(b);
++            let b64_decoded = if data.iter().all(|v|matches!(v,KittyImageData::Direct(_))) {
++                let mut text = String::new();
++                for item in data {
++                    if let KittyImageData::Direct(chunk) = item { text.push_str(&chunk); }
++                }
++                KittyImageData::Direct(text).load_data()?
++            } else {
++                let mut bytes = Vec::new();
++                for item in data {
++                    match item {
++                        KittyImageData::DirectBin(mut chunk) => bytes.append(&mut chunk),
++                        KittyImageData::Direct(_) => bytes.append(&mut item.load_data()?),
++                        _ => anyhow::bail!("non-direct Kitty transfer chunk"),
+                     }
+-                    KittyImageData::Direct(b) => {
+-                        if !b.is_empty() {
+-                            b64_decoded.append(&mut data.load_data()?);
+-                        }
+-                    }
+-                    data => {
+-                        anyhow::bail!("expected data chunks to be Direct data, found {:#?}", data)
+-                    }
+-                }
+-            }
+-
++                }
++                bytes
++            };
+             trans.data = KittyImageData::DirectBin(b64_decoded);
+ 
+             if let Some(placement) = place {
+--- a/native/source/term/src/terminalstate/prototype-kitty.rs
++++ b/native/source/term/src/terminalstate/prototype-kitty.rs
+@@ -1,10 +1,12 @@
+ // Only in-progress direct transfers are rebuilt from bounded semantic records.
+ impl KittyImageState {
+     pub(super) fn prototype_checkpoint(&self) -> anyhow::Result<serde_json::Value> {
++        anyhow::ensure!(!self.prototype_projection_error, "Kitty relative projection failed");
+         anyhow::ensure!(self.id_to_data.len()<=32 && self.number_to_id.len()<=32, "Kitty cache count limit");
+         let mut images = Vec::new();
+         let mut total = 0;
+         for (id,image) in &self.id_to_data {
++            anyhow::ensure!(*id != 0,"unsupported anonymous Kitty image identity");
+             let data = image.data();
+             match &*data {
+                 ImageDataType::Rgba8{data,width,height,..} => {
+@@ -25,9 +27,7 @@
+             let transmit = match image {
+                 KittyImage::TransmitData{transmit,..} => transmit,
+                 KittyImage::TransmitDataAndDisplay{transmit,placement,..} => {
+-                    anyhow::ensure!(placement.x.is_none() && placement.y.is_none() && placement.w.is_none()
+-                        && placement.h.is_none() && placement.x_offset.is_none() && placement.y_offset.is_none(),
+-                        "unsupported pending Kitty placement geometry");
++                    let _ = placement;
+                     transmit
+                 },
+                 _ => anyhow::bail!("unsupported pending Kitty action"),
+@@ -48,13 +48,13 @@
+                 .ok_or_else(||anyhow::anyhow!("missing Kitty placement record"))?.clone();
+             anyhow::ensure!(key.1.is_some(), "unsupported automatic Kitty placement identity");
+             for field in ["column","imageColumn"] {
+-                anyhow::ensure!(record[field].as_u64().map_or(false, |n|n<=1000), "Kitty placement column limit");
++                anyhow::ensure!(record[field].as_i64().map_or(false, |n|if record["parentImageId"].is_number() {(-68_719_478_000..=68_719_478_000).contains(&n)} else {(0..=1000).contains(&n)}), "Kitty placement column limit");
+             }
+             for field in ["row","imageRow"] {
+-                anyhow::ensure!(record[field].as_u64().map_or(false, |n|n<=1040), "Kitty placement row limit");
++                anyhow::ensure!(record[field].as_i64().map_or(false, |n|if record["parentImageId"].is_number() {(-68_719_478_000..=68_719_478_000).contains(&n)} else {(0..=1040).contains(&n)}), "Kitty placement row limit");
+             }
+             for field in ["columns","rows"] {
+-                anyhow::ensure!(record[field].as_u64().map_or(false, |n|(1..=2048).contains(&n)), "Kitty placement dimension limit");
++                anyhow::ensure!(record[field].as_u64().map_or(false, |n|(if record["isVirtual"].as_bool()==Some(true) {0} else {1}..=2048).contains(&n)), "Kitty placement dimension limit");
+             }
+             for field in ["pixelOffsetX","pixelOffsetY"] {
+                 anyhow::ensure!(record[field].as_u64().map_or(false, |n|n<=1024), "Kitty placement offset limit");
+@@ -65,7 +65,7 @@
+             placement_buffers.push(record);
+         }
+         placement_buffers.sort_by_key(|p|(p["id"].as_u64(),p["placement"].as_u64()));
+-        Ok(serde_json::json!({"pendingCommands":commands,"images":images,"numbers":numbers,"placementBuffers":placement_buffers}))
++        Ok(serde_json::json!({"nextImageId":self.prototype_next_image.max(1),"nextPlacementId":self.prototype_next_placement.max(1),"pendingCommands":commands,"images":images,"numbers":numbers,"placementBuffers":placement_buffers}))
+     }
+ }
+ 
+@@ -86,7 +86,8 @@
+ }
+ 
+ impl TerminalState {
+-    pub(super) fn prototype_update_kitty_records(&mut self) {
++    pub(crate) fn prototype_update_kitty_records(&mut self) {
++        if self.kitty_img.prototype_updating_placement || self.kitty_img.prototype_records.is_empty() { return; }
+         let mut positions = HashMap::new();
+         let screen = self.screen();
+         let alternate = self.screen.alt_screen_is_active;
+@@ -104,9 +105,269 @@
+         }
+         for (key,(row,column)) in positions {
+             if let Some(record) = self.kitty_img.prototype_records.get_mut(&key) {
++                if record["parentImageId"].is_number() { continue; }
+                 record["row"] = serde_json::json!(row);
+                 record["column"] = serde_json::json!(column);
+             }
+         }
+-    }
+-}
++        let keys: Vec<_> = self.kitty_img.prototype_records.iter().filter(|(key,r)|
++            r["parentImageId"].is_number() && r["parentPlacementId"].is_number()
++                && self.kitty_img.prototype_placement_buffers.get(key) == Some(&alternate)).map(|(k,_)|*k).collect();
++        for key in keys {
++            match self.prototype_parent_position(key).and_then(|desired|self.prototype_project_relative(key,desired)) {
++                Ok(()) => {},
++                Err(error) => { self.kitty_img.prototype_projection_error = true; log::error!("Kitty projection: {:#}",error); }
++            }
++        }
++    }
++}
++
++impl TerminalState {
++    fn prototype_parent_error(&self, image_id: u32, p: &KittyImagePlacement) -> Option<String> {
++        if p.parent_offset_h < i32::MIN as i64 || p.parent_offset_h > i32::MAX as i64
++            || p.parent_offset_v < i32::MIN as i64 || p.parent_offset_v > i32::MAX as i64 {
++            return Some("EINVAL: parent offset out of range".into());
++        }
++        if p.columns.map_or(false,|v|v>2048) || p.rows.map_or(false,|v|v>2048) {
++            return Some("EINVAL: placement dimensions out of range".into());
++        }
++
++        if p.virtual_placement && (p.parent_image_id.is_some() || p.parent_placement_id.is_some()) {
++            return Some("EINVAL: virtual placement cannot refer to parent".into());
++        }
++        if p.parent_image_id.is_some() != p.parent_placement_id.is_some() {
++            return Some("EINVAL: incomplete parent reference".into());
++        }
++        let (parent_image,parent_placement) = match (p.parent_image_id,p.parent_placement_id) {
++            (Some(i),Some(j)) => (i,j), _ => return None,
++        };
++        let parent = (parent_image,Some(parent_placement));
++        if !self.kitty_img.placements.contains_key(&parent) { return Some("ENOPARENT: parent placement not found".into()); }
++        if self.kitty_img.prototype_placement_buffers.get(&parent) != Some(&self.screen.alt_screen_is_active) {
++            return Some("ENOPARENT: parent placement not in current buffer".into());
++        }
++        let child = (image_id,p.placement_id);
++        let mut current = Some(parent);
++        let mut seen = HashSet::new();
++        let mut depth = 0;
++        while let Some(key) = current {
++            if key == child || !seen.insert(key) { return Some("ECYCLE: cyclic placement reference".into()); }
++            depth += 1;
++            if depth > 32 { return Some("ETOODEEP: placement chain limit".into()); }
++            current = self.kitty_img.prototype_records.get(&key).and_then(|r|
++                r["parentImageId"].as_u64().zip(r["parentPlacementId"].as_u64())
++                    .map(|(i,j)|(i as u32,Some(j as u32))));
++        }
++        None
++    }
++
++    fn prototype_parent_position(&self, key: (u32,Option<u32>)) -> anyhow::Result<(i64,i64)> {
++        let mut cursor = key;
++        let mut offset = (0i64,0i64);
++        let mut seen = HashSet::new();
++        loop {
++            anyhow::ensure!(seen.len() <= 32 && seen.insert(cursor), "invalid Kitty parent graph");
++            let r = self.kitty_img.prototype_records.get(&cursor).ok_or_else(||anyhow::anyhow!("missing parent record"))?;
++            if r["isVirtual"].as_bool() == Some(true) {
++                if let Some((row,col)) = self.prototype_virtual_position(cursor) { return Ok((row+offset.0,col+offset.1)); }
++            }
++            if let Some((i,j)) = r["parentImageId"].as_u64().zip(r["parentPlacementId"].as_u64()) {
++                offset.0 += r["parentOffsetV"].as_i64().unwrap_or(0);
++                offset.1 += r["parentOffsetH"].as_i64().unwrap_or(0);
++                cursor = (u32::try_from(i)?,Some(u32::try_from(j)?));
++            } else {
++                let row = r["row"].as_i64().ok_or_else(||anyhow::anyhow!("invalid parent row"))?;
++                let col = r["column"].as_i64().ok_or_else(||anyhow::anyhow!("invalid parent column"))?;
++                return Ok((row+offset.0,col+offset.1));
++            }
++        }
++    }
++
++    fn prototype_delete_keys(&mut self, roots: HashSet<(u32,Option<u32>)>, delete: bool, extra: Vec<u32>) {
++        let mut removed = roots.clone();
++        loop {
++            let mut added = false;
++            for (key,r) in &self.kitty_img.prototype_records {
++                if let Some((i,j)) = r["parentImageId"].as_u64().zip(r["parentPlacementId"].as_u64()) {
++                    if removed.contains(&(i as u32,Some(j as u32))) && removed.insert(*key) { added = true; }
++                }
++            }
++            if !added { break; }
++        }
++        let descendant_images: HashSet<_> = removed.difference(&roots).map(|key|key.0).collect();
++        for (i,p) in &removed {
++            self.kitty_remove_placement(*i,*p);
++            self.kitty_img.prototype_records.remove(&(*i,*p));
++            self.kitty_img.prototype_placement_buffers.remove(&(*i,*p));
++        }
++        let mut free = descendant_images;
++        if delete { free.extend(removed.iter().map(|key|key.0)); free.extend(extra); }
++        for i in free {
++            if !self.kitty_img.placements.keys().any(|key|key.0 == i) { self.kitty_img.remove_data_for_id(i); self.kitty_img.number_to_id.retain(|_,id|*id != i); }
++        }
++    }
++}
++
++impl TerminalState {
++    fn prototype_delete_selection(&mut self, what: KittyImageDelete) {
++        let history = self.screen().scrollback_rows().saturating_sub(self.screen().physical_rows) as i64;
++        let current = self.screen.alt_screen_is_active;
++        let mut roots = HashSet::new();
++        let mut free_data = false;
++        for (key,r) in &self.kitty_img.prototype_records {
++            let left = r["column"].as_i64().unwrap_or(0);
++            let top = r["row"].as_i64().unwrap_or(0);
++            let width = r["columns"].as_i64().unwrap_or(1).max(1);
++            let height = r["rows"].as_i64().unwrap_or(1).max(1);
++            let z = r["zIndex"].as_i64().unwrap_or(0);
++            let col_hit = |x:i64| x >= left && x < left+width;
++            let row_hit = |y:i64| y >= top && y < top+height;
++            let active = self.kitty_img.prototype_placement_buffers.get(key) == Some(&current);
++            let geometric = !matches!(&what,KittyImageDelete::ByImageId{..}|KittyImageDelete::ByImageNumber{..}|KittyImageDelete::ByImageIdRange{..});
++            if geometric && r["isVirtual"].as_bool() == Some(true) { continue; }
++            let hit = match &what {
++                KittyImageDelete::ByImageIdRange{min_id,max_id,delete} => {free_data=*delete;key.0>=(*min_id).min(*max_id) && key.0<=(*min_id).max(*max_id)},
++                KittyImageDelete::ByImageId{image_id,placement_id,delete} => {free_data=*delete;key.0 == *image_id && (placement_id.is_none() || key.1 == *placement_id)},
++                KittyImageDelete::ByImageNumber{image_number,placement_id,delete} => {free_data=*delete;self.kitty_img.number_to_id.get(image_number)==Some(&key.0) && (placement_id.is_none() || key.1 == *placement_id)},
++                KittyImageDelete::All{delete} => {free_data=*delete; active && left < self.screen().physical_cols as i64 && left+width > 0 && top < history+self.screen().physical_rows as i64 && top+height > history},
++                KittyImageDelete::AtCursorPosition{delete} => {free_data=*delete;active && col_hit(self.cursor.x as i64) && row_hit(history+self.cursor.y)},
++                KittyImageDelete::DeleteAt{x,y,delete} => {free_data=*delete;active && col_hit(*x as i64-1) && row_hit(history+*y as i64-1)},
++                KittyImageDelete::DeleteAtZ{x,y,z:level,delete} => {free_data=*delete;active && z == *level as i64 && col_hit(*x as i64-1) && row_hit(history+*y as i64-1)},
++                KittyImageDelete::DeleteColumn{x,delete} => {free_data=*delete;active && col_hit(*x as i64-1)},
++                KittyImageDelete::DeleteRow{y,delete} => {free_data=*delete;active && row_hit(history+*y as i64-1)},
++                KittyImageDelete::DeleteZ{z:level,delete} => {free_data=*delete; z == *level as i64},
++                KittyImageDelete::AnimationFrames{..} => false,
++            };
++            if hit { roots.insert(*key); }
++        }
++        // Uppercase deletion also releases an unplaced cache entry.
++        let extra = match &what {
++            KittyImageDelete::ByImageId{image_id,..} => vec![*image_id],
++            KittyImageDelete::ByImageNumber{image_number,..} => self.kitty_img.number_to_id.get(image_number).copied().into_iter().collect(),
++            KittyImageDelete::ByImageIdRange{min_id,max_id,..} => self.kitty_img.id_to_data.keys().filter(|id|**id>=(*min_id).min(*max_id) && **id<=(*min_id).max(*max_id)).copied().collect(),
++            _ => Vec::new(),
++        };
++        free_data |= match what {
++            KittyImageDelete::ByImageIdRange{delete,..}|KittyImageDelete::ByImageId{delete,..}|KittyImageDelete::ByImageNumber{delete,..}|
++            KittyImageDelete::All{delete}|KittyImageDelete::AtCursorPosition{delete}|
++            KittyImageDelete::DeleteAt{delete,..}|KittyImageDelete::DeleteAtZ{delete,..}|
++            KittyImageDelete::DeleteColumn{delete,..}|KittyImageDelete::DeleteRow{delete,..}|
++            KittyImageDelete::DeleteZ{delete,..}|KittyImageDelete::AnimationFrames{delete} => delete,
++        };
++        self.prototype_delete_keys(roots,free_data,extra);
++    }
++}
++
++const PROTOTYPE_KITTY_DIACRITICS: &[u32] = &[0x0305,0x030D,0x030E,0x0310,0x0312,0x033D,0x033E,0x033F,0x0346,0x034A,0x034B,0x034C,0x0350,0x0351,0x0352,0x0357,0x035B,0x0363,0x0364,0x0365,0x0366,0x0367,0x0368,0x0369,0x036A,0x036B,0x036C,0x036D,0x036E,0x036F,0x0483,0x0484,0x0485,0x0486,0x0487,0x0592,0x0593,0x0594,0x0595,0x0597,0x0598,0x0599,0x059C,0x059D,0x059E,0x059F,0x05A0,0x05A1,0x05A8,0x05A9,0x05AB,0x05AC,0x05AF,0x05C4,0x0610,0x0611,0x0612,0x0613,0x0614,0x0615,0x0616,0x0617,0x0657,0x0658,0x0659,0x065A,0x065B,0x065D,0x065E,0x06D6,0x06D7,0x06D8,0x06D9,0x06DA,0x06DB,0x06DC,0x06DF,0x06E0,0x06E1,0x06E2,0x06E4,0x06E7,0x06E8,0x06EB,0x06EC,0x0730,0x0732,0x0733,0x0735,0x0736,0x073A,0x073D,0x073F,0x0740,0x0741,0x0743,0x0745,0x0747,0x0749,0x074A,0x07EB,0x07EC,0x07ED,0x07EE,0x07EF,0x07F0,0x07F1,0x07F3,0x0816,0x0817,0x0818,0x0819,0x081B,0x081C,0x081D,0x081E,0x081F,0x0820,0x0821,0x0822,0x0823,0x0825,0x0826,0x0827,0x0829,0x082A,0x082B,0x082C,0x082D,0x0951,0x0953,0x0954,0x0F82,0x0F83,0x0F86,0x0F87,0x135D,0x135E,0x135F,0x17DD,0x193A,0x1A17,0x1A75,0x1A76,0x1A77,0x1A78,0x1A79,0x1A7A,0x1A7B,0x1A7C,0x1B6B,0x1B6D,0x1B6E,0x1B6F,0x1B70,0x1B71,0x1B72,0x1B73,0x1CD0,0x1CD1,0x1CD2,0x1CDA,0x1CDB,0x1CE0,0x1DC0,0x1DC1,0x1DC3,0x1DC4,0x1DC5,0x1DC6,0x1DC7,0x1DC8,0x1DC9,0x1DCB,0x1DCC,0x1DD1,0x1DD2,0x1DD3,0x1DD4,0x1DD5,0x1DD6,0x1DD7,0x1DD8,0x1DD9,0x1DDA,0x1DDB,0x1DDC,0x1DDD,0x1DDE,0x1DDF,0x1DE0,0x1DE1,0x1DE2,0x1DE3,0x1DE4,0x1DE5,0x1DE6,0x1DFE,0x20D0,0x20D1,0x20D4,0x20D5,0x20D6,0x20D7,0x20DB,0x20DC,0x20E1,0x20E7,0x20E9,0x20F0,0x2CEF,0x2CF0,0x2CF1,0x2DE0,0x2DE1,0x2DE2,0x2DE3,0x2DE4,0x2DE5,0x2DE6,0x2DE7,0x2DE8,0x2DE9,0x2DEA,0x2DEB,0x2DEC,0x2DED,0x2DEE,0x2DEF,0x2DF0,0x2DF1,0x2DF2,0x2DF3,0x2DF4,0x2DF5,0x2DF6,0x2DF7,0x2DF8,0x2DF9,0x2DFA,0x2DFB,0x2DFC,0x2DFD,0x2DFE,0x2DFF,0xA66F,0xA67C,0xA67D,0xA6F0,0xA6F1,0xA8E0,0xA8E1,0xA8E2,0xA8E3,0xA8E4,0xA8E5,0xA8E6,0xA8E7,0xA8E8,0xA8E9,0xA8EA,0xA8EB,0xA8EC,0xA8ED,0xA8EE,0xA8EF,0xA8F0,0xA8F1,0xAAB0,0xAAB2,0xAAB3,0xAAB7,0xAAB8,0xAABE,0xAABF,0xAAC1,0xFE20,0xFE21,0xFE22,0xFE23,0xFE24,0xFE25,0xFE26,0x10A0F,0x10A38,0x1D185,0x1D186,0x1D187,0x1D188,0x1D189,0x1D1AA,0x1D1AB,0x1D1AC,0x1D1AD,0x1D242,0x1D243,0x1D244];
++
++impl TerminalState {
++    fn prototype_virtual_position(&self, key: (u32,Option<u32>)) -> Option<(i64,i64)> {
++        fn color(c: crate::color::ColorAttribute) -> u32 {
++            use crate::color::ColorAttribute::*;
++            match c {
++                Default => 0, PaletteIndex(i) => i as u32,
++                TrueColorWithPaletteFallback(c,_) | TrueColorWithDefaultFallback(c) => {
++                    let (r,g,b,_) = c.to_srgb_u8(); ((r as u32)<<16) | ((g as u32)<<8) | b as u32
++                }
++            }
++        }
++        let mut result: Option<(i64,i64)> = None;
++        for (row,line) in self.screen().lines_in_phys_range(0..self.screen().scrollback_rows()).iter().enumerate() {
++            let mut previous: Option<(usize,usize,usize,u32,u32,u32)> = None;
++            for cell in line.visible_cells() {
++                let col = cell.cell_index();
++                if col >= self.screen().physical_cols { break; }
++                let mut chars = cell.str().chars();
++                if chars.next() != Some('\u{10eeee}') { previous=None;continue; }
++                let marks: Vec<_> = chars.filter_map(|c|PROTOTYPE_KITTY_DIACRITICS.iter().position(|v|*v == c as u32)).collect();
++                let fg = color(cell.attrs().foreground()); let ul = color(cell.attrs().underline_color());
++                let adjacent = previous.filter(|p|p.0+1 == col && p.4 == fg && p.5 == ul);
++                let pr = marks.first().copied().unwrap_or_else(||adjacent.map_or(0,|p|p.1));
++                let pc = marks.get(1).copied().unwrap_or_else(||adjacent.filter(|p|p.1 == pr).map_or(0,|p|p.2+1));
++                let msb = marks.get(2).copied().map(|n|n.min(255) as u32).unwrap_or_else(||
++                    adjacent.filter(|p|p.1 == pr && (marks.len()<2 || p.2+1 == pc)).map_or(0,|p|p.3));
++                previous=Some((col,pr,pc,msb,fg,ul));
++                if fg | (msb<<24) == key.0 && (ul == 0 || Some(ul) == key.1) {
++                    result = Some((result.map_or(row as i64,|v|v.0.min(row as i64)),result.map_or(col as i64,|v|v.1.min(col as i64))));
++                }
++            }
++        }
++        result
++    }
++}
++
++impl KittyImageState {
++    pub(super) fn prototype_relative_hashes(&self) -> Vec<[u8;32]> {
++        self.prototype_relative_data.values().map(|(image,_,_)|image.hash()).collect()
++    }
++    pub(super) fn prototype_relative_resources(&self, graphics: &mut BridgeGraphics,
++        requests: &HashMap<([u8;32],usize,usize),serde_json::Value>, cell_height: usize) -> anyhow::Result<Vec<serde_json::Value>> {
++        let mut result = Vec::new();
++        let mut raster_cost = 0usize;
++        for (key,(image,width,height)) in &self.prototype_relative_data {
++            raster_cost = raster_cost.checked_add(width*height*4 + height.div_ceil(cell_height)*4096).ok_or_else(||anyhow::anyhow!("relative raster budget overflow"))?;
++            anyhow::ensure!(raster_cost<=2_097_152,"Kitty relative raster byte limit");
++            let resource = graphics.relative_resource(image,*width,*height,requests)?;
++            result.push(serde_json::json!({"id":key.0,"placement":key.1,"resource":resource}));
++        }
++        result.sort_by_key(|r|(r["id"].as_u64(),r["placement"].as_u64()));
++        Ok(result)
++    }
++}
++
++impl TerminalState {
++    fn prototype_project_relative(&mut self, key: (u32,Option<u32>), desired: (i64,i64)) -> anyhow::Result<()> {
++        use ordered_float::NotNan;
++        use wezterm_cell::image::ImageCell;
++        use wezterm_surface::TextureCoordinate;
++        let (data,width,height) = self.kitty_img.prototype_relative_data.get(&key)
++            .ok_or_else(||anyhow::anyhow!("missing relative resource"))?.clone();
++        let record = self.kitty_img.prototype_records.get_mut(&key).ok_or_else(||anyhow::anyhow!("missing relative record"))?;
++        record["row"] = desired.0.into(); record["column"] = desired.1.into();
++        record["imageRow"] = desired.0.into(); record["imageColumn"] = desired.1.into();
++        let z = record["zIndex"].as_i64().unwrap_or(0) as i32;
++        let left = record["pixelOffsetX"].as_u64().unwrap_or(0) as u16;
++        let top = record["pixelOffsetY"].as_u64().unwrap_or(0) as u16;
++        let cw = self.pixel_width/self.screen().physical_cols;
++        let ch = self.pixel_height/self.screen().physical_rows;
++        anyhow::ensure!(cw>0 && ch>0 && width>0 && height>0 && width<=2048 && height<=2048,"relative projection geometry");
++        let rows = height.div_ceil(ch) as i64; let cols = width.div_ceil(cw) as i64;
++        let seqno = self.seqno;
++        let screen = self.screen_mut();
++        for row in 0..screen.scrollback_rows() {
++            for cell in screen.line_mut(row).cells_mut() { cell.attrs_mut().detach_image_with_placement(key.0,key.1); }
++        }
++        for row in desired.0.max(0)..(desired.0+rows).min(screen.scrollback_rows() as i64) {
++            for col in desired.1.max(0)..(desired.1+cols).min(screen.physical_cols as i64) {
++                let x = (col-desired.1) as f32*cw as f32/width as f32;
++                let y = (row-desired.0) as f32*ch as f32/height as f32;
++                let image = ImageCell::with_z_index(TextureCoordinate::new(NotNan::new(x)?,NotNan::new(y)?),
++                    TextureCoordinate::new(NotNan::new(x+cw as f32/width as f32)?,NotNan::new(y+ch as f32/height as f32)?),
++                    Arc::clone(&data),z,left,top,0,0,Some(key.0),key.1);
++                let line = screen.line_mut(row as usize);
++                let mut cell = line.cells_mut().get(col as usize).cloned().unwrap_or_else(wezterm_cell::Cell::blank);
++                cell.attrs_mut().attach_image(Box::new(image));
++                line.set_cell_clearing_image_placements(col as usize,cell,seqno);
++            }
++        }
++        Ok(())
++    }
++}
++
++impl TerminalState {
++    fn prototype_transmit_checked(&mut self, transmit: KittyImageTransmit, success: KittyImageVerbosity, failure: KittyImageVerbosity) -> Option<u32> {
++        let id = transmit.image_id; let number = transmit.image_number;
++        if id.is_some() && number.is_some() {
++            self.kitty_send_response(failure,false,id,None,"EINVAL: i and I are mutually exclusive".into());
++            return None;
++        }
++        match self.kitty_img_transmit(transmit,success) {
++            Ok(value) => Some(value),
++            Err(error) => {
++                log::debug!("invalid Kitty image: {:#}",error);
++                self.kitty_send_response(failure,false,id,number,"EINVAL: bad payload".into());
++                None
++            }
++        }
++    }
++}
+--- a/native/source/term/src/terminalstate/prototype-graphics.rs
++++ b/native/source/term/src/terminalstate/prototype-graphics.rs
+@@ -13,7 +13,7 @@
+             for img in cell.attrs().images().unwrap_or_default() {
+                 let tl = img.top_left(); let br = img.bottom_right();
+                 let (left,top,right,bottom) = img.padding();
+-                anyhow::ensure!(left==0 && top==0 && cell_width>right as usize && cell_height>bottom as usize,
++                anyhow::ensure!((img.image_id().is_some() || (left==0 && top==0)) && cell_width>right as usize && cell_height>bottom as usize,
+                     "unsupported image padding");
+                 let dx = br.x.into_inner() - tl.x.into_inner();
+                 let dy = br.y.into_inner() - tl.y.into_inner();
+@@ -23,7 +23,8 @@
+                 anyhow::ensure!((1..=2048).contains(&display_width) && (1..=2048).contains(&display_height), "image display limit");
+                 let column_offset = (tl.x.into_inner() as f64*display_width as f64/cell_width as f64).round() as usize;
+                 let stripe = (tl.y.into_inner() as f64*display_height as f64/cell_height as f64).round() as usize;
+-                let column = cell.cell_index().checked_sub(column_offset).ok_or_else(||anyhow::anyhow!("image origin clipped"))?;
++                let column = cell.cell_index() as i64-column_offset as i64;
++                anyhow::ensure!(column>=0 || img.image_id().is_some(), "image origin clipped");
+                 if img.image_id().is_some() {
+                     anyhow::ensure!(img.placement_id().is_some(), "unsupported automatic Kitty placement identity");
+                 }
+@@ -67,3 +68,25 @@
+         Ok(placements.into_values().collect())
+     }
+ }
++
++impl BridgeGraphics {
++    fn relative_resource(&mut self, image: &std::sync::Arc<wezterm_surface::change::ImageData>, width: usize, height: usize,
++        requests: &std::collections::HashMap<([u8;32],usize,usize),BridgeValue>) -> anyhow::Result<String> {
++        let key = format!("{}-{}-{}",hex::encode(image.hash()),width,height);
++        if !self.resources.contains_key(&key) {
++            anyhow::ensure!(self.resources.len()<32 && (1..=2048).contains(&width) && (1..=2048).contains(&height), "relative resource limit");
++            let data = image.data();
++            match &*data {
++                wezterm_cell::image::ImageDataType::Rgba8{data,width:source_width,height:source_height,..} => {
++                    self.decoded_bytes += data.len();
++                    anyhow::ensure!(self.decoded_bytes<=262144,"checkpoint image byte limit");
++                    let request = requests.get(&(image.hash(),width,height)).ok_or_else(||anyhow::anyhow!("missing relative image request"))?;
++                    self.resources.insert(key.clone(),json!({"key":key,"rgba":data,"encoded":[],"width":source_width,"height":source_height,
++                        "displayWidth":width,"displayHeight":height,"request":request}));
++                },
++                _ => anyhow::bail!("unsupported relative resource"),
++            }
++        }
++        Ok(key)
++    }
++}
+--- a/native/source/term/src/terminalstate/prototype-checkpoint.rs
++++ b/native/source/term/src/terminalstate/prototype-checkpoint.rs
+@@ -101,6 +101,7 @@
+ impl TerminalState {
+     pub(crate) fn prototype_store_image_request(&mut self, hash: [u8;32], width: usize, height: usize, request: BridgeValue) {
+         let mut referenced: std::collections::HashSet<[u8;32]> = self.image_cache.iter().map(|(key,_)|*key).collect();
++        referenced.extend(self.kitty_img.prototype_relative_hashes());
+         for screen in [&self.screen.screen,&self.screen.alt_screen] {
+             for line in screen.lines_in_phys_range(0..screen.scrollback_rows()) {
+                 for cell in line.visible_cells() { for image in cell.attrs().images().unwrap_or_default() {
+@@ -237,6 +238,9 @@
+         let cell_height = self.pixel_height/self.screen.physical_rows;
+         let normal = bridge_screen(&self.screen.screen, true, if !self.screen.alt_screen_is_active {active_margins} else {self.screen.screen.prototype_margins}, &mut budget, &mut allocated, &mut graphics,cell_width,cell_height,&self.prototype_image_requests)?;
+         let alternate = bridge_screen(&self.screen.alt_screen, false, if self.screen.alt_screen_is_active {active_margins} else {self.screen.alt_screen.prototype_margins}, &mut budget, &mut allocated, &mut graphics,cell_width,cell_height,&self.prototype_image_requests)?;
++        let relative = self.kitty_img.prototype_relative_resources(&mut graphics,&self.prototype_image_requests,cell_height)?;
++        let mut kitty = kitty;
++        kitty["relativeResources"] = json!(relative);
+         Ok(json!({"columns":self.screen.physical_cols,"rows":self.screen.physical_rows,
+             "normal":normal,"alternate":alternate,"graphics":graphics.resources.into_values().collect::<Vec<_>>(),
+             "cellPixels":[cell_width,cell_height],
+--- a/native/source/term/src/terminalstate/image.rs
++++ b/native/source/term/src/terminalstate/image.rs
+@@ -246,8 +246,14 @@
+                     }
+                 };
+ 
+-                self.screen_mut()
+-                    .set_cell(cursor_x + x, cursor_y, &cell, seqno);
++                if matches!(params.style, ImageAttachStyle::Kitty) {
++                    // The cloned cell already carries existing layers. The ordinary
++                    // text setter would append them again, doubling overlaps.
++                    let row = self.screen().phys_row(cursor_y);
++                    self.screen_mut().line_mut(row).set_cell_clearing_image_placements(cursor_x+x,cell,seqno);
++                } else {
++                    self.screen_mut().set_cell(cursor_x+x,cursor_y,&cell,seqno);
++                }
+                 xpos += x_delta;
+             }
+             ypos += y_delta;
+@@ -311,6 +317,7 @@
+ }
+ 
+ pub(crate) fn check_image_dimensions(width: u32, height: u32) -> anyhow::Result<()> {
++    anyhow::ensure!(width>0 && height>0,"image dimensions must be positive");
+     const MAX_IMAGE_SIZE: u32 = 100_000_000;
+     let size = width.saturating_mul(height).saturating_mul(4);
+     if size > MAX_IMAGE_SIZE {
+--- a/native/SwiftTerm/Sources/SwiftTerm/KittyGraphics.swift
++++ b/native/SwiftTerm/Sources/SwiftTerm/KittyGraphics.swift
+@@ -41,6 +41,8 @@
+     var preserveAspectRatio: Bool
+     var cursorPolicy: Int
+     var isRelative: Bool
++    var originColumn: Int? = nil
++    var originRow: Int? = nil
+     var pixelOffsetX: Int
+     var pixelOffsetY: Int
+ }
+@@ -137,6 +139,7 @@
+     var nextPlacementId: UInt32 = 1
+     var pending: KittyGraphicsPending?
+     var placementsByKey: [KittyPlacementKey: KittyPlacementRecord] = [:]
++    var relativeStripes: [KittyPlacementKey: [TerminalImage]] = [:]
+     var totalImageBytes: Int = 0
+     var nextImageAccessTick: UInt64 = 1
+ }
+@@ -181,7 +184,7 @@
+ }
+ 
+ extension KittyGraphicsState {
+-    func makeCheckpoint() -> CheckpointKittyState {
++    func makeCheckpoint() throws -> CheckpointKittyState {
+         let images = imagesById.map { id, image -> CheckpointKittyImage in
+             switch image.payload {
+             case .png(let data):
+@@ -211,7 +214,11 @@
+         return CheckpointKittyState(
+             images: images, imageNumbers: numbers, nextImageId: nextImageId,
+             nextPlacementId: nextPlacementId, pending: pending, placements: placements,
+-            totalImageBytes: totalImageBytes, nextImageAccessTick: nextImageAccessTick
++            totalImageBytes: totalImageBytes, nextImageAccessTick: nextImageAccessTick,
++            relativeImages: relativeStripes.isEmpty ? nil : try relativeStripes.map { key, stripes in
++                CheckpointKittyRelativeImages(imageId: key.imageId, placementId: key.placementId,
++                    images: try stripes.map { try CheckpointImage($0) })
++            }.sorted { ($0.imageId,$0.placementId) < ($1.imageId,$1.placementId) }
+         )
+     }
+ 
+@@ -242,6 +249,9 @@
+                 zIndex: placement.zIndex, isVirtual: placement.isVirtual,
+                 isAlternateBuffer: placement.isAlternateBuffer
+             )
++        }
++        for item in snapshot.relativeImages ?? [] {
++            state.relativeStripes[KittyPlacementKey(imageId: item.imageId, placementId: item.placementId)] = item.images.map(RestoredTerminalImage.init)
+         }
+         state.nextImageId = snapshot.nextImageId
+         state.nextPlacementId = snapshot.nextPlacementId
+@@ -351,7 +361,7 @@
+         let cropHeight = intValue("h", default: 0)
+         let imageId = uintValue("i")
+         let imageNumber = uintValue("I")
+-        let placementId = uintValue("p")
++        let placementId = uintValue("p").flatMap { $0 == 0 ? nil : $0 }
+         let parentImageId = uintValue("P")
+         let parentPlacementId = uintValue("Q")
+         let offsetH = intValue("H", default: 0)
+@@ -468,6 +478,10 @@
+     }
+ 
+     private func handleKittyPut(control: KittyGraphicsControl) {
++        guard control.imageId == nil || control.imageNumber == nil else {
++            sendKittyError(control: control, message: "EINVAL: i and I are mutually exclusive")
++            return
++        }
+         let resolved = resolveKittyImageForDisplay(control: control)
+         guard let image = resolved.image else {
+             sendKittyError(control: control, message: "ENOENT: image not found")
+@@ -484,6 +498,8 @@
+     private func handleKittyDelete(control: KittyGraphicsControl) {
+         let mode = control.deleteMode ?? "a"
+         let freesData = String(mode).uppercased() == String(mode)
++        let beforeImages = Set(kittyGraphicsState.placementsByKey.values.map(\.imageId))
++        let numberedImage = control.imageNumber.flatMap { kittyGraphicsState.imageNumbers[$0] }
+         switch String(mode).lowercased() {
+         case "a":
+             deletePlacementsVisibleOnScreen()
+@@ -532,21 +548,35 @@
+                 sendKittyError(control: control, message: "EINVAL: missing id range")
+                 return
+             }
+-            let minId = UInt32(min(control.cropX, control.cropY))
+-            let maxId = UInt32(max(control.cropX, control.cropY))
++            guard let minId = UInt32(exactly: min(control.cropX, control.cropY)),
++                  let maxId = UInt32(exactly: max(control.cropX, control.cropY)) else {
++                sendKittyError(control: control, message: "EINVAL: image id range out of bounds")
++                return
++            }
+             deletePlacementsByImageIdRange(minId: minId, maxId: maxId)
+         default:
+             sendKittyError(control: control, message: "EINVAL: unsupported delete")
+         }
+         if freesData {
+-            cleanupUnusedKittyImages()
++            let afterImages = Set(kittyGraphicsState.placementsByKey.values.map(\.imageId))
++            var candidates = beforeImages.subtracting(afterImages)
++            if String(mode).lowercased() == "i", let id = control.imageId { candidates.insert(id) }
++            if String(mode).lowercased() == "n", let id = numberedImage { candidates.insert(id) }
++            if String(mode).lowercased() == "r",
++               let lower = UInt32(exactly: min(control.cropX,control.cropY)), let upper = UInt32(exactly: max(control.cropX,control.cropY)) {
++                candidates.formUnion(kittyGraphicsState.imagesById.keys.filter { $0>=lower && $0<=upper })
++            }
++            let used = collectUsedKittyImageIds()
++            for id in candidates where !used.contains(id) { removeKittyImage(imageId: id) }
+         }
+     }
+ 
+     private func resolveKittyImageId(control: KittyGraphicsControl) -> (imageId: UInt32?, imageNumber: UInt32?, shouldReply: Bool, errorMessage: String?) {
+         if let number = control.imageNumber {
+-            let newId = kittyGraphicsState.nextImageId
+-            kittyGraphicsState.nextImageId &+= 1
++            var newId = kittyGraphicsState.nextImageId
++            while newId == 0 || kittyGraphicsState.imagesById[newId] != nil { newId &+= 1 }
++            kittyGraphicsState.nextImageId = newId &+ 1
++            if kittyGraphicsState.nextImageId == 0 { kittyGraphicsState.nextImageId = 1 }
+             return (newId, number, control.suppressResponses == 0, nil)
+         }
+ 
+@@ -623,16 +653,25 @@
+         let bytesPerPixel = 4
+         let bytesPerRow = width * bytesPerPixel
+         var output = [UInt8](repeating: 0, count: height * bytesPerRow)
+-        guard let context = CGContext(data: &output,
++        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
++              let context = CGContext(data: &output,
+                                       width: width,
+                                       height: height,
+                                       bitsPerComponent: 8,
+                                       bytesPerRow: bytesPerRow,
+-                                      space: CGColorSpaceCreateDeviceRGB(),
++                                      space: colorSpace,
+                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+             return nil
+         }
+         context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
++        // Bitmap drawing returns premultiplied channels; the Kitty payload and
++        // bitmap renderer exchange straight sRGB RGBA samples.
++        for index in stride(from: 0, to: output.count, by: 4) {
++            let alpha = Int(output[index+3])
++            for channel in 0..<3 {
++                output[index+channel] = alpha == 0 ? 0 : UInt8(min(255,(Int(output[index+channel])*255+alpha/2)/alpha))
++            }
++        }
+         return (output, width, height)
+         #else
+         return nil
+@@ -1121,13 +1160,23 @@
+     #endif
+ 
+     private func displayKittyImage(payload: KittyGraphicsPayload, control: KittyGraphicsControl, imageId: UInt32?, imageNumber: UInt32?) -> Bool {
++        guard (Int(Int32.min)...Int(Int32.max)).contains(control.offsetH),
++              (Int(Int32.min)...Int(Int32.max)).contains(control.offsetV) else {
++            sendKittyError(control: control, message: "EINVAL: parent offset out of range")
++            return false
++        }
++        guard control.columns <= 2048, control.rows <= 2048 else {
++            sendKittyError(control: control, message: "EINVAL: placement dimensions out of range")
++            return false
++        }
++
+         if control.unicodePlaceholder == 1 {
+             if control.parentImageId != nil || control.parentPlacementId != nil {
+                 sendKittyError(control: control, message: "EINVAL: virtual placement cannot refer to parent")
+                 return false
+             }
+             if let imageId = imageId {
+-                let origin = resolveKittyPlacementOrigin(control: control)
++                let origin = resolveKittyPlacementOrigin(control: control, imageId: imageId)
+                 if let errorMessage = origin.errorMessage {
+                     sendKittyError(control: control, message: errorMessage)
+                     return false
+@@ -1172,7 +1221,7 @@
+         let preserveAspectRatio = control.columns == 0 || control.rows == 0
+         let cropRequested = control.cropX != 0 || control.cropY != 0 || control.cropWidth != 0 || control.cropHeight != 0
+         var displayPayload = payload
+-        let origin = resolveKittyPlacementOrigin(control: control)
++        let origin = resolveKittyPlacementOrigin(control: control, imageId: imageId)
+         if let errorMessage = origin.errorMessage {
+             sendKittyError(control: control, message: errorMessage)
+             return false
+@@ -1221,9 +1270,10 @@
+             pixelOffsetY = min(pixelOffsetY, maxY)
+         }
+ 
++        let effectivePlacementId = control.placementId ?? nextKittyPlacementId()
+         kittyPlacementContext = KittyPlacementContext(imageId: imageId ?? control.imageId,
+                                                       imageNumber: imageNumber ?? control.imageNumber,
+-                                                      placementId: control.placementId,
++                                                      placementId: effectivePlacementId,
+                                                       parentImageId: control.parentImageId,
+                                                       parentPlacementId: control.parentPlacementId,
+                                                       parentOffsetH: control.offsetH,
+@@ -1234,6 +1284,7 @@
+                                                       preserveAspectRatio: preserveAspectRatio,
+                                                       cursorPolicy: control.cursorPolicy,
+                                                       isRelative: origin.isRelative,
++                                                      originColumn: origin.col, originRow: origin.row,
+                                                       pixelOffsetX: pixelOffsetX,
+                                                       pixelOffsetY: pixelOffsetY)
+         defer {
+@@ -1244,17 +1295,6 @@
+ 
+         if let imageId = imageId, let placementId = control.placementId {
+             removeKittyPlacement(imageId: imageId, placementId: placementId)
+-        }
+-
+-        if let col = origin.col, let row = origin.row {
+-            let targetRow = row - buffer.yBase
+-            if targetRow >= 0 && targetRow < buffer.lines.count {
+-                buffer.y = targetRow
+-                buffer.x = max(0, min(col, cols - 1))
+-            } else {
+-                sendKittyError(control: control, message: "EINVAL: placement out of range")
+-                return false
+-            }
+         }
+ 
+         let placementCol = buffer.x
+@@ -1286,14 +1326,33 @@
+                                      rows: moveRows,
+                                      useIndex: useIndex)
+         }
++        updateKittyRelativePlacementsForCurrentBuffer()
+         return true
+     }
+ 
+-    private func resolveKittyPlacementOrigin(control: KittyGraphicsControl) -> (col: Int?, row: Int?, isRelative: Bool, errorMessage: String?) {
++    private func resolveKittyPlacementOrigin(control: KittyGraphicsControl, imageId: UInt32?) -> (col: Int?, row: Int?, isRelative: Bool, errorMessage: String?) {
++        if (control.parentImageId == nil) != (control.parentPlacementId == nil) {
++            return (nil, nil, true, "EINVAL: incomplete parent reference")
++        }
+         guard let parentImageId = control.parentImageId, let parentPlacementId = control.parentPlacementId else {
+             return (nil, nil, false, nil)
+         }
+         let key = KittyPlacementKey(imageId: parentImageId, placementId: parentPlacementId)
++        let child = imageId.flatMap { id in control.placementId.map { KittyPlacementKey(imageId: id, placementId: $0) } }
++        var ancestor: KittyPlacementKey? = key
++        var seen = Set<KittyPlacementKey>()
++        var depth = 0
++        while let current = ancestor {
++            if current == child || !seen.insert(current).inserted {
++                return (nil, nil, true, "ECYCLE: cyclic placement reference")
++            }
++            depth += 1
++            if depth > 32 { return (nil, nil, true, "ETOODEEP: placement chain limit") }
++            if let record = kittyGraphicsState.placementsByKey[current],
++               let image = record.parentImageId, let placement = record.parentPlacementId {
++                ancestor = KittyPlacementKey(imageId: image, placementId: placement)
++            } else { ancestor = nil }
++        }
+         guard let parent = kittyGraphicsState.placementsByKey[key] else {
+             return (nil, nil, true, "ENOPARENT: parent placement not found")
+         }
+@@ -1315,13 +1374,14 @@
+     }
+ 
+     private func nextKittyPlacementId() -> UInt32 {
+-        var id = kittyGraphicsState.nextPlacementId
+-        kittyGraphicsState.nextPlacementId &+= 1
+-        if id == 0 {
+-            id = kittyGraphicsState.nextPlacementId
++        while true {
++            let id = kittyGraphicsState.nextPlacementId
+             kittyGraphicsState.nextPlacementId &+= 1
+-        }
+-        return id == 0 ? 1 : id
++            if kittyGraphicsState.nextPlacementId == 0 { kittyGraphicsState.nextPlacementId = 1 }
++            if id != 0 && !kittyGraphicsState.placementsByKey.keys.contains(where: { $0.placementId == id }) {
++                return id
++            }
++        }
+     }
+ 
+     private func collectKittyPlacementPositions(in buffer: Buffer) -> [KittyPlacementKey: (row: Int, col: Int)] {
+@@ -1351,6 +1411,52 @@
+         return positions
+     }
+ 
++    func kittyPlacementsHiddenByVirtualParents() -> Set<KittyPlacementKey> {
++        var hidden = Set<KittyPlacementKey>()
++        var visibility: [KittyPlacementKey: Bool] = [:]
++        for (key, record) in kittyGraphicsState.placementsByKey where record.isAlternateBuffer == isCurrentBufferAlternate {
++            var current = record
++            var currentKey = key
++            var visited = Set<KittyPlacementKey>()
++            while visited.insert(currentKey).inserted {
++                if current.isVirtual {
++                    let visible: Bool
++                    if let cached = visibility[currentKey] { visible = cached }
++                    else { visible = virtualKittyPosition(for: currentKey) != nil; visibility[currentKey] = visible }
++                    if !visible { hidden.insert(key) }
++                    break
++                }
++                guard let image = current.parentImageId, let placement = current.parentPlacementId else { break }
++                currentKey = KittyPlacementKey(imageId: image, placementId: placement)
++                guard let parent = kittyGraphicsState.placementsByKey[currentKey] else { hidden.insert(key); break }
++                current = parent
++            }
++        }
++        return hidden
++    }
++
++    private func virtualKittyPosition(for key: KittyPlacementKey) -> (row: Int, col: Int)? {
++        var result: (row: Int, col: Int)?
++        for row in 0..<buffer.lines.count {
++            var previous: KittyPlaceholderCell?
++            var previousAttribute: Attribute?
++            let line = buffer.lines[row]
++            for col in 0..<min(cols, line.count) {
++                let data = line[col]
++                let placeholder = KittyPlaceholderDecoder.decode(character: getCharacter(for: data),
++                    attribute: data.attribute, row: row, col: col, previous: previous,
++                    previousAttribute: previousAttribute)
++                previous = placeholder
++                previousAttribute = data.attribute
++                if let placeholder, placeholder.imageId == key.imageId,
++                   placeholder.placementId == 0 || placeholder.placementId == key.placementId {
++                    result = (min(result?.row ?? row, row), min(result?.col ?? col, col))
++                }
++            }
++        }
++        return result
++    }
++
+     private func resolveKittyPlacementPosition(for key: KittyPlacementKey,
+                                                positions: [KittyPlacementKey: (row: Int, col: Int)],
+                                                resolved: inout [KittyPlacementKey: (row: Int, col: Int)],
+@@ -1369,7 +1475,7 @@
+ 
+         var base: (row: Int, col: Int)?
+         if record.isVirtual {
+-            base = (row: record.row, col: record.col)
++            base = virtualKittyPosition(for: key) ?? (row: record.row, col: record.col)
+         } else if let pos = positions[key] {
+             base = pos
+         } else {
+@@ -1447,7 +1553,7 @@
+         let positions = collectKittyPlacementPositions(in: buffer)
+ 
+         for (key, record) in kittyGraphicsState.placementsByKey where record.isAlternateBuffer == isAlt {
+-            if record.isVirtual {
++            if record.isVirtual || record.parentImageId != nil {
+                 continue
+             }
+             guard let pos = positions[key] else {
+@@ -1481,14 +1587,25 @@
+                 kittyGraphicsState.placementsByKey[key] = updated
+                 continue
+             }
+-            let current = positions[key] ?? (row: record.row, col: record.col)
+-            let deltaRow = desired.row - current.row
+-            if deltaRow != 0 || desired.col != current.col {
+-                moveKittyPlacementImages(in: buffer,
+-                                         key: key,
+-                                         deltaRow: deltaRow,
+-                                         newTopRow: desired.row,
+-                                         newLeftCol: desired.col)
++            if let stripes = kittyGraphicsState.relativeStripes[key] {
++                _ = removeKittyPlacements(in: buffer, lineRange: 0..<buffer.lines.count) { image in
++                    image.kittyImageId == key.imageId && image.kittyPlacementId == key.placementId
++                }
++                for (offset, image) in stripes.enumerated() {
++                    if var kitty = image as? KittyPlacementImage {
++                        kitty.col = desired.col; kitty.kittyCol = desired.col; kitty.kittyRow = desired.row
++                    }
++                    let row = desired.row + offset
++                    if row >= 0 && row < buffer.lines.count && desired.col < cols && desired.col+record.cols > 0 {
++                        buffer.attachImage(image, toLineAt: row)
++                        let displayRow = row-buffer.yBase
++                        if displayRow >= 0 && displayRow < rows { updateRange(displayRow) }
++                    }
++                }
++            } else {
++                let current = positions[key] ?? (row: record.row, col: record.col)
++                moveKittyPlacementImages(in: buffer, key: key, deltaRow: desired.row-current.row,
++                                         newTopRow: desired.row, newLeftCol: desired.col)
+             }
+             updated.row = desired.row
+             updated.col = desired.col
+@@ -1539,7 +1656,9 @@
+         for key in combined {
+             kittyGraphicsState.placementsByKey.removeValue(forKey: key)
+         }
+-        kittyGraphicsState.placementsByKey.removeValue(forKey: KittyPlacementKey(imageId: imageId, placementId: placementId))
++        let key = KittyPlacementKey(imageId: imageId, placementId: placementId)
++        kittyGraphicsState.placementsByKey.removeValue(forKey: key)
++        kittyGraphicsState.relativeStripes.removeValue(forKey: key)
+     }
+ 
+     private func sendKittyOk(control: KittyGraphicsControl, imageId: UInt32?, imageNumber: UInt32?, placementId: UInt32?) {
+@@ -1564,7 +1683,7 @@
+     }
+ 
+     private func sendKittyError(control: KittyGraphicsControl, message: String) {
+-        if control.suppressResponses != 0 {
++        if control.suppressResponses == 2 {
+             return
+         }
+         var controlData = "G"
+@@ -1586,6 +1705,7 @@
+         kittyGraphicsState.imagesById.removeAll()
+         kittyGraphicsState.imageNumbers.removeAll()
+         kittyGraphicsState.placementsByKey.removeAll()
++        kittyGraphicsState.relativeStripes.removeAll()
+         kittyGraphicsState.totalImageBytes = 0
+         kittyGraphicsState.nextImageAccessTick = 1
+         updateRange(startLine: buffer.scrollTop, endLine: buffer.scrollBottom)
+@@ -1607,7 +1727,7 @@
+         let start = buffer.yBase
+         let end = min(buffer.yBase + rows, buffer.lines.count)
+         let removedKeys = removeKittyPlacements(in: buffer, lineRange: start..<end) { _ in true }
+-        let recordKeys = removePlacementRecords { record in
++        let recordKeys = removePlacementRecords(localOnly: true, includeVirtual: false) { record in
+             recordIntersectsScreen(record)
+         }
+         let extraKeys = recordKeys.subtracting(removedKeys)
+@@ -1675,7 +1795,7 @@
+             return self.kittyPlacementIntersectsCell(image, col: colIndex, row: rowIndex)
+         }
+         let removedKeys = removeKittyPlacements(in: buffer, lineRange: 0..<buffer.lines.count, predicate: predicate)
+-        let recordKeys = removePlacementRecords { record in
++        let recordKeys = removePlacementRecords(localOnly: true, includeVirtual: false) { record in
+             if let zIndex = zIndex, record.zIndex != zIndex {
+                 return false
+             }
+@@ -1693,7 +1813,7 @@
+             self.kittyPlacementIntersectsColumn(image, col: colIndex)
+         }
+         let removedKeys = removeKittyPlacements(in: buffer, lineRange: 0..<buffer.lines.count, predicate: predicate)
+-        let recordKeys = removePlacementRecords { record in
++        let recordKeys = removePlacementRecords(localOnly: true, includeVirtual: false) { record in
+             recordIntersectsColumn(record, col: colIndex)
+         }
+         let extraKeys = recordKeys.subtracting(removedKeys)
+@@ -1708,7 +1828,7 @@
+             self.kittyPlacementIntersectsRow(image, row: rowIndex)
+         }
+         let removedKeys = removeKittyPlacements(in: buffer, lineRange: 0..<buffer.lines.count, predicate: predicate)
+-        let recordKeys = removePlacementRecords { record in
++        let recordKeys = removePlacementRecords(localOnly: true, includeVirtual: false) { record in
+             recordIntersectsRow(record, row: rowIndex)
+         }
+         let extraKeys = recordKeys.subtracting(removedKeys)
+@@ -1724,7 +1844,7 @@
+         let removedKeys = removeKittyPlacements(in: normalBuffer, lineRange: 0..<normalBuffer.lines.count, predicate: predicate)
+         let altRemoved = removeKittyPlacements(in: altBuffer, lineRange: 0..<altBuffer.lines.count, predicate: predicate)
+         let allRemoved = removedKeys.union(altRemoved)
+-        let recordKeys = removePlacementRecords { record in
++        let recordKeys = removePlacementRecords(includeVirtual: false) { record in
+             record.zIndex == zIndex
+         }
+         let extraKeys = recordKeys.subtracting(allRemoved)
+@@ -1794,13 +1914,32 @@
+         return removedKeys.union(altRemoved)
+     }
+ 
+-    private func removePlacementRecords(_ predicate: (KittyPlacementRecord) -> Bool) -> Set<KittyPlacementKey> {
++    private func removePlacementRecords(localOnly: Bool = false, includeVirtual: Bool = true, _ predicate: (KittyPlacementRecord) -> Bool) -> Set<KittyPlacementKey> {
+         var removed = Set<KittyPlacementKey>()
+-        for (key, record) in kittyGraphicsState.placementsByKey where predicate(record) {
++        for (key, record) in kittyGraphicsState.placementsByKey where predicate(record)
++            && (!localOnly || record.isAlternateBuffer == isCurrentBufferAlternate) && (includeVirtual || !record.isVirtual) {
+             removed.insert(key)
+         }
++        let roots = removed
++        var changed = true
++        while changed {
++            changed = false
++            for (key, record) in kittyGraphicsState.placementsByKey where !removed.contains(key) {
++                if let image = record.parentImageId, let placement = record.parentPlacementId,
++                   removed.contains(KittyPlacementKey(imageId: image, placementId: placement)) {
++                    removed.insert(key)
++                    changed = true
++                }
++            }
++        }
++        let descendants = removed.subtracting(roots)
++        _ = removeKittyPlacementsByKey(descendants)
+         for key in removed {
+             kittyGraphicsState.placementsByKey.removeValue(forKey: key)
++            kittyGraphicsState.relativeStripes.removeValue(forKey: key)
++        }
++        for image in Set(descendants.map(\.imageId)) where !kittyGraphicsState.placementsByKey.values.contains(where: { $0.imageId == image }) {
++            removeKittyImage(imageId: image)
+         }
+         return removed
+     }
+--- a/native/SwiftTerm/Sources/SwiftTerm/KittyPlaceholder.swift
++++ b/native/SwiftTerm/Sources/SwiftTerm/KittyPlaceholder.swift
+@@ -107,7 +107,7 @@
+         case .ansi256(let code):
+             return UInt32(code)
+         case .trueColor(let red, let green, let blue):
+-            return UInt32(red) | (UInt32(green) << 8) | (UInt32(blue) << 16)
++            return (UInt32(red) << 16) | (UInt32(green) << 8) | UInt32(blue)
+         case .defaultColor, .defaultInvertedColor:
+             return 0
+         }
+--- a/native/SwiftTerm/Sources/SwiftTerm/CheckpointBridge.swift
++++ b/native/SwiftTerm/Sources/SwiftTerm/CheckpointBridge.swift
+@@ -31,9 +31,11 @@
+ private struct BridgeKittyNumber: Decodable { let number: UInt32, id: UInt32 }
+ private struct BridgeKittyPlacementBuffer: Decodable {
+     let id: UInt32, placement: UInt32?, alternate: Bool
++    let parentImageId: UInt32?, parentPlacementId: UInt32?, parentOffsetH: Int?, parentOffsetV: Int?, isVirtual: Bool?
+     let column: Int, row: Int, imageColumn: Int, imageRow: Int, columns: Int, rows: Int, zIndex: Int, pixelOffsetX: Int, pixelOffsetY: Int
+ }
+-private struct BridgeKitty: Decodable { let pendingCommands: [[UInt8]], images: [BridgeKittyImage], numbers: [BridgeKittyNumber]; let placementBuffers: [BridgeKittyPlacementBuffer] }
++private struct BridgeRelativeResource: Decodable { let id: UInt32, placement: UInt32, resource: String }
++private struct BridgeKitty: Decodable { let pendingCommands: [[UInt8]], images: [BridgeKittyImage], numbers: [BridgeKittyNumber]; let placementBuffers: [BridgeKittyPlacementBuffer]; let nextPlacementId: UInt32?; let nextImageId: UInt32?; let relativeResources: [BridgeRelativeResource]? }
+ private struct BridgeState: Decodable {
+     let columns: Int, rows: Int, normal: BridgeBuffer, alternate: BridgeBuffer, alternateActive: Bool
+     let cursor: [Int], wrapNext: Bool, pen: BridgeAttribute, title: String, iconTitle: String?
+@@ -127,7 +129,7 @@
+                 controls[String(pair[0])] = String(pair[1])
+             }
+             guard controls["a"] == nil || controls["a"] == "t" || controls["a"] == "T", controls["m"] == "1", controls["t"] == nil || controls["t"] == "d",
+-                  Set(controls.keys).isSubset(of: ["a","f","s","v","i","I","m","q","o","t","p","c","r","C","z"]) else {
++                  Set(controls.keys).isSubset(of: ["a","f","s","v","i","I","m","q","o","t","p","c","r","C","z","U","P","Q","H","V","x","y","w","h","X","Y"]) else {
+                 throw TerminalCheckpointError.corrupt("bridge Kitty requires unfinished direct transmission")
+             }
+             freshTerminal.feed(byteArray: command)
+@@ -154,6 +156,8 @@
+             guard ids.contains(number.id) else { throw TerminalCheckpointError.corrupt("bridge Kitty number reference") }
+             return CheckpointKittyNumber(number: number.number,imageId: number.id)
+         }
++        native.kitty.nextImageId = s.kitty.nextImageId ?? 1
++        native.kitty.nextPlacementId = s.kitty.nextPlacementId ?? 1
+         native.kitty.totalImageBytes = kittyBytes
+         native.kitty.nextImageAccessTick = UInt64(s.kitty.images.count+1)
+         native.columns = s.columns; native.rows = s.rows
+@@ -210,7 +214,7 @@
+             result.savedY = source.saved?.y ?? source.defaultSavedY
+             result.savedOriginMode = source.saved?.origin ?? false
+             result.savedMarginMode = source.saved?.margin ?? false
+-            result.savedAttribute = try CheckpointAttribute(source.saved?.pen.value() ?? Attribute.empty)
++            result.savedAttribute = try CheckpointAttribute(source.saved?.pen.value() ?? CharData.defaultAttr)
+             result.currentAttribute = native.currentAttribute
+             result.insertMode = s.modes.insert; result.marginMode = s.modes.margin; result.wraparound = s.modes.wrap
+             if source.saved != nil {
+@@ -232,7 +236,7 @@
+                 }
+                 cellBudget += line.width
+                 guard cellBudget <= 100000 else { throw TerminalCheckpointError.corrupt("bridge cell limit") }
+-                var cells = Array(repeating: CharData(attribute: .empty), count: line.width)
++                var cells = Array(repeating: CharData(attribute: CharData.defaultAttr), count: line.width)
+                 var nextColumn = 0
+                 for c in line.cells {
+                     guard c.x >= nextColumn, c.x < line.width, (1...2).contains(c.width),
+@@ -261,7 +265,7 @@
+                 }
+                 let images = try ownedImages.map { placement -> CheckpointImage in
+                     guard let stripes = renderedResources[placement.resource], stripes.indices.contains(placement.stripe),
+-                          (0..<line.width).contains(placement.column) else { throw TerminalCheckpointError.corrupt("bridge image placement") }
++                          (placement.column < line.width && (placement.column>=0 || placement.imageId != nil)) else { throw TerminalCheckpointError.corrupt("bridge image placement") }
+                     var image = stripes[placement.stripe]
+                     image.column = placement.column
+                     image.isKitty = placement.imageId != nil
+@@ -274,6 +278,7 @@
+                         guard let owner = s.kitty.placementBuffers.first(where: {
+                             $0.id == placement.imageId && $0.placement == placement.placementId
+                         }) else { throw TerminalCheckpointError.corrupt("bridge Kitty stripe owner") }
++                        image.pixelOffsetX = owner.pixelOffsetX; image.pixelOffsetY = owner.pixelOffsetY
+                         image.kittyColumn = owner.imageColumn; image.kittyRow = owner.imageRow
+                         image.kittyColumns = (resource.displayWidth+s.cellPixels[0]-1)/s.cellPixels[0]
+                         image.kittyRows = stripes.count
+@@ -282,7 +287,7 @@
+                     return image
+                 }
+                 return CheckpointLine(isWrapped: index > 0 ? source.lines[index - 1].wrapped : source.firstWrapped ?? false, renderMode: 0,
+-                    fillCharacter: try CheckpointCell(CharData(attribute: .empty)), cellCount: line.width,
++                    fillCharacter: try CheckpointCell(CharData(attribute: CharData.defaultAttr)), cellCount: line.width,
+                     cellData: encoded.data, hyperlinks: encoded.hyperlinks, images: images, generation: 0)
+             }
+             return result
+@@ -296,17 +301,70 @@
+         native.kitty.placements = try s.kitty.placementBuffers.map { record in
+             guard let placement = record.placement, ids.contains(record.id),
+                   placementKeys.insert("\(record.id):\(placement)").inserted,
+-                  (0...1000).contains(record.column), (0...1040).contains(record.row),
+-                  (0...1000).contains(record.imageColumn), (0...1040).contains(record.imageRow),
+-                  (1...2048).contains(record.columns), (1...2048).contains(record.rows),
++                  (record.parentImageId == nil ? (0...1000).contains(record.column) : (-68_719_478_000...68_719_478_000).contains(record.column)),
++                  (record.parentImageId == nil ? (0...1040).contains(record.row) : (-68_719_478_000...68_719_478_000).contains(record.row)),
++                  (record.parentImageId == nil ? (0...1000).contains(record.imageColumn) : (-68_719_478_000...68_719_478_000).contains(record.imageColumn)),
++                  (record.parentImageId == nil ? (0...1040).contains(record.imageRow) : (-68_719_478_000...68_719_478_000).contains(record.imageRow)),
++                  ((record.isVirtual == true ? 0 : 1)...2048).contains(record.columns),
++                  ((record.isVirtual == true ? 0 : 1)...2048).contains(record.rows),
+                   (0...1024).contains(record.pixelOffsetX), (0...1024).contains(record.pixelOffsetY) else {
+                 throw TerminalCheckpointError.corrupt("bridge Kitty placement record")
+             }
+             return CheckpointKittyPlacement(imageId: record.id,placementId: placement,
+-                parentImageId: nil,parentPlacementId: nil,parentOffsetH: 0,parentOffsetV: 0,
++                parentImageId: record.parentImageId,parentPlacementId: record.parentPlacementId,
++                parentOffsetH: record.parentOffsetH ?? 0,parentOffsetV: record.parentOffsetV ?? 0,
+                 pixelOffsetX: record.pixelOffsetX,pixelOffsetY: record.pixelOffsetY,
+                 column: record.column,row: record.row,columns: record.columns,rows: record.rows,
+-                zIndex: record.zIndex,isVirtual: false,isAlternateBuffer: record.alternate)
++                zIndex: record.zIndex,isVirtual: record.isVirtual ?? false,isAlternateBuffer: record.alternate)
++        }
++        guard native.kitty.nextPlacementId > 0, native.kitty.nextImageId > 0 else { throw TerminalCheckpointError.corrupt("bridge Kitty next identity") }
++        let records = Dictionary(uniqueKeysWithValues: native.kitty.placements.map {
++            (KittyPlacementKey(imageId: $0.imageId, placementId: $0.placementId), $0)
++        })
++        for record in native.kitty.placements {
++            guard (Int(Int32.min)...Int(Int32.max)).contains(record.parentOffsetH),
++                  (Int(Int32.min)...Int(Int32.max)).contains(record.parentOffsetV),
++                  (record.parentImageId == nil) == (record.parentPlacementId == nil),
++                  !record.isVirtual || record.parentImageId == nil else {
++                throw TerminalCheckpointError.corrupt("bridge Kitty parent metadata")
++            }
++            var current = record
++            var visited = Set([KittyPlacementKey(imageId: record.imageId, placementId: record.placementId)])
++            var depth = 0
++            while let id = current.parentImageId, let placement = current.parentPlacementId {
++                let key = KittyPlacementKey(imageId: id, placementId: placement)
++                depth += 1
++                guard depth <= 32, visited.insert(key).inserted,
++                      let parent = records[key], parent.isAlternateBuffer == record.isAlternateBuffer else {
++                    throw TerminalCheckpointError.corrupt("bridge Kitty parent graph")
++                }
++                current = parent
++            }
++        }
++        let relativeResources = s.kitty.relativeResources ?? []
++        var relativeKeys = Set<KittyPlacementKey>()
++        var relativeRasterCost = 0
++        native.kitty.relativeImages = relativeResources.isEmpty ? nil : try relativeResources.map { item in
++            let key = KittyPlacementKey(imageId: item.id, placementId: item.placement)
++            guard relativeKeys.insert(key).inserted, let owner = records[key], owner.parentImageId != nil,
++                  let stripes = renderedResources[item.resource], stripes.count == owner.rows else {
++                throw TerminalCheckpointError.corrupt("bridge Kitty relative resource")
++            }
++            relativeRasterCost += stripes.reduce(0) { $0 + $1.pixelWidth*$1.pixelHeight*4+4096 }
++            guard relativeRasterCost <= 2_097_152 else { throw TerminalCheckpointError.corrupt("bridge Kitty relative raster byte limit") }
++            let images = stripes.map { stripe in
++                var image = stripe
++                image.isKitty = true; image.imageId = item.id; image.placementId = item.placement
++                image.imageNumber = s.kitty.numbers.first(where: { $0.id == item.id })?.number
++                image.column = owner.column; image.kittyColumn = owner.column; image.kittyRow = owner.row
++                image.kittyColumns = owner.columns; image.kittyRows = owner.rows; image.zIndex = owner.zIndex
++                image.pixelOffsetX = owner.pixelOffsetX; image.pixelOffsetY = owner.pixelOffsetY
++                return image
++            }
++            return CheckpointKittyRelativeImages(imageId: item.id, placementId: item.placement, images: images)
++        }
++        guard relativeKeys.count == native.kitty.placements.filter({ $0.parentImageId != nil }).count else {
++            throw TerminalCheckpointError.corrupt("bridge Kitty missing relative resource")
+         }
+         native.graphemes = freshTerminal.indexToCharMap.map { CheckpointGrapheme(index: $0.key, character: String($0.value)) }
+         native.lastCharIndex = freshTerminal.lastCharIndex
+--- a/native/SwiftTerm/Sources/SwiftTerm/CheckpointGraphics.swift
++++ b/native/SwiftTerm/Sources/SwiftTerm/CheckpointGraphics.swift
+@@ -54,10 +54,11 @@
+             }
+         }
+         else {
+-        guard let provider = CGDataProvider(data: Data(resource.rgba) as CFData),
++        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
++              let provider = CGDataProvider(data: Data(resource.rgba) as CFData),
+               let image = CGImage(width: resource.width,height: resource.height,bitsPerComponent: 8,bitsPerPixel: 32,
+-                bytesPerRow: resource.width*4,space: CGColorSpaceCreateDeviceRGB(),
+-                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
++                bytesPerRow: resource.width*4,space: colorSpace,
++                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.last.rawValue),
+                 provider: provider,decode: nil,shouldInterpolate: true,intent: .defaultIntent),
+               let bytes = NSBitmapImageRep(cgImage: image).representation(using: .png,properties: [:]) else {
+             throw TerminalCheckpointError.corrupt("bridge image encoding")
+@@ -91,3 +92,8 @@
+     }
+     return result
+ }
++
++// Flush the same native display update used by the app before headless raster capture.
++extension TerminalView {
++    public func refreshRustPrototypeView() { updateDisplay() }
++}
+--- a/native/SwiftTerm/Sources/SwiftTerm/Terminal.swift
++++ b/native/SwiftTerm/Sources/SwiftTerm/Terminal.swift
+@@ -5021,6 +5021,7 @@
+     public func parse (buffer: ArraySlice<UInt8>)
+     {
+         parser.parse(data: buffer)
++        if self.buffer.hasAnyImages { updateKittyRelativePlacementsForCurrentBuffer() }
+     }
+      
+     /**
+@@ -5210,6 +5211,8 @@
+         let savedCursorHidden = cursorHidden
+         setup (isReset: true)
+         clearAllKittyImages()
++        kittyGraphicsState.nextImageId = 1
++        kittyGraphicsState.nextPlacementId = 1
+         cursorHidden = savedCursorHidden
+         refresh (startRow: 0, endRow: rows-1)
+         syncScrollArea ()
+--- a/native/SwiftTerm/Sources/SwiftTerm/TerminalCheckpoint.swift
++++ b/native/SwiftTerm/Sources/SwiftTerm/TerminalCheckpoint.swift
+@@ -8,6 +8,10 @@
+ //
+ 
+ import Foundation
++#if canImport(ImageIO)
++import ImageIO
++import CoreGraphics
++#endif
+ 
+ enum TerminalCheckpointLimits {
+     static let encodedBytes = 32 * 1024 * 1024
+@@ -488,6 +492,12 @@
+     var base64Payload: [UInt8]
+ }
+ 
++struct CheckpointKittyRelativeImages: Codable {
++    var imageId: UInt32
++    var placementId: UInt32
++    var images: [CheckpointImage]
++}
++
+ struct CheckpointKittyState: Codable {
+     var images: [CheckpointKittyImage]
+     var imageNumbers: [CheckpointKittyNumber]
+@@ -497,6 +507,7 @@
+     var placements: [CheckpointKittyPlacement]
+     var totalImageBytes: Int
+     var nextImageAccessTick: UInt64
++    var relativeImages: [CheckpointKittyRelativeImages]? = nil
+ }
+ 
+ protocol TerminalCheckpointImageExporting: TerminalImage {
+@@ -939,6 +950,73 @@
+             throw TerminalCheckpointError.corrupt("Kitty references are invalid")
+         }
+ 
++        let placements = Dictionary(uniqueKeysWithValues: kitty.placements.map {
++            (KittyPlacementKey(imageId: $0.imageId, placementId: $0.placementId), $0)
++        })
++        for record in kitty.placements {
++            guard (-68_719_478_000...68_719_478_000).contains(record.column),
++                  (-68_719_478_000...68_719_478_000).contains(record.row),
++                  (0...4096).contains(record.columns), (0...4096).contains(record.rows),
++                  record.isVirtual || (record.columns>0 && record.rows>0),
++                  (record.parentImageId == nil) == (record.parentPlacementId == nil),
++                  !record.isVirtual || record.parentImageId == nil,
++                  (Int(Int32.min)...Int(Int32.max)).contains(record.parentOffsetH),
++                  (Int(Int32.min)...Int(Int32.max)).contains(record.parentOffsetV) else {
++                throw TerminalCheckpointError.corrupt("Kitty parent metadata is invalid")
++            }
++            var current = record
++            var seen = Set([KittyPlacementKey(imageId: record.imageId, placementId: record.placementId)])
++            var depth = 0
++            while let id = current.parentImageId, let placement = current.parentPlacementId {
++                let key = KittyPlacementKey(imageId: id, placementId: placement)
++                depth += 1
++                guard depth <= 32, seen.insert(key).inserted,
++                      let parent = placements[key], parent.isAlternateBuffer == record.isAlternateBuffer else {
++                    throw TerminalCheckpointError.corrupt("Kitty parent graph is invalid")
++                }
++                current = parent
++            }
++        }
++
++        let relative = kitty.relativeImages ?? []
++        guard relative.count <= 1024 else { throw TerminalCheckpointError.corrupt("Kitty relative cache limit") }
++        var relativeKeys = Set<KittyPlacementKey>()
++        var relativeDecodedBytes = 0
++        for item in relative {
++            let key = KittyPlacementKey(imageId: item.imageId, placementId: item.placementId)
++            guard relativeKeys.insert(key).inserted, let owner = placements[key], owner.parentImageId != nil,
++                  item.images.count == owner.rows, item.images.count <= 2048 else {
++                throw TerminalCheckpointError.corrupt("Kitty relative cache owner")
++            }
++            for image in item.images {
++                guard image.isKitty, image.imageId == item.imageId, image.placementId == item.placementId,
++                      image.column == owner.column, image.kittyColumn == owner.column, image.kittyRow == owner.row,
++                      image.kittyColumns == owner.columns, image.kittyRows == owner.rows, image.zIndex == owner.zIndex,
++                      image.pixelOffsetX == owner.pixelOffsetX, image.pixelOffsetY == owner.pixelOffsetY,
++                      image.pixelWidth > 0, image.pixelWidth <= 2048, image.pixelHeight > 0, image.pixelHeight <= 2048 else {
++                    throw TerminalCheckpointError.corrupt("Kitty relative cache image")
++                }
++                imageBytes += image.data.count
++#if canImport(ImageIO)
++                guard let source = CGImageSourceCreateWithData(image.data as CFData,
++                        [kCGImageSourceShouldCache: false] as CFDictionary),
++                      CGImageSourceGetCount(source) == 1,
++                      let properties = CGImageSourceCopyPropertiesAtIndex(source,0,nil) as? [CFString: Any],
++                      let width = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue,
++                      let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue,
++                      (1...4096).contains(width), (1...4096).contains(height) else {
++                    throw TerminalCheckpointError.corrupt("Kitty relative PNG dimensions")
++                }
++                relativeDecodedBytes += width*height*4
++                guard relativeDecodedBytes <= TerminalCheckpointLimits.imageBytes,
++                      CGImageSourceCreateImageAtIndex(source,0,[kCGImageSourceShouldCache: true] as CFDictionary) != nil else {
++                    throw TerminalCheckpointError.corrupt("Kitty relative PNG decode limit")
++                }
++#endif
++            }
++        }
++        guard imageBytes <= TerminalCheckpointLimits.imageBytes else { throw TerminalCheckpointError.corrupt("Kitty relative cache byte limit") }
++
+         var graphemeIndexes = Set<Int32>()
+         for entry in graphemes {
+             guard entry.index > Int32(CharData.maxRune),
+@@ -987,7 +1065,8 @@
+             cellCount += line.cellCount
+             for image in line.images {
+                 guard image.pixelWidth > 0, image.pixelHeight > 0,
+-                      image.column >= 0, image.column < line.cellCount else {
++                      (image.column >= 0 || (image.isKitty && image.kittyColumns > 0 && image.column > -image.kittyColumns)),
++                      image.column < line.cellCount else {
+                     throw TerminalCheckpointError.corrupt("line image geometry is invalid")
+                 }
+                 imageBytes += image.data.count
+@@ -1019,10 +1098,18 @@
+             CheckpointPosition(column: !isCurrentBufferAlternate && $0.start.row < omitted ? 0 : $0.start.col,
+                                row: isCurrentBufferAlternate ? $0.start.row : max(0, $0.start.row - omitted))
+         }
+-        var kitty = kittyGraphicsState.makeCheckpoint()
++        var kitty = try kittyGraphicsState.makeCheckpoint()
+         if omitted > 0 {
+             for index in kitty.placements.indices where !kitty.placements[index].isAlternateBuffer {
+                 kitty.placements[index].row -= omitted
++            }
++            if var relative = kitty.relativeImages {
++                for index in relative.indices where kitty.placements.first(where: {
++                    $0.imageId == relative[index].imageId && $0.placementId == relative[index].placementId
++                })?.isAlternateBuffer == false {
++                    for stripe in relative[index].images.indices { relative[index].images[stripe].kittyRow -= omitted }
++                }
++                kitty.relativeImages = relative
+             }
+         }
+         return TerminalCheckpointState(
+--- a/native/SwiftTerm/Sources/SwiftTerm/Apple/AppleTerminalView.swift
++++ b/native/SwiftTerm/Sources/SwiftTerm/Apple/AppleTerminalView.swift
+@@ -1303,6 +1303,7 @@
+             }
+         }
+         var placeholderImageCache: [UInt32: TTImage] = [:]
++        let hiddenKitty = terminal.kittyPlacementsHiddenByVirtualParents()
+ 
+         #if os(macOS)
+         // Clear the invalidated region before painting. We fill only cells that carry
+@@ -1386,6 +1387,8 @@
+                         continue
+                     }
+                     if image.kittyIsKitty {
++                        if let id = image.kittyImageId, let placement = image.kittyPlacementId,
++                           hiddenKitty.contains(KittyPlacementKey(imageId: id, placementId: placement)) { continue }
+                         if image.kittyZIndex < 0 {
+                             underTextImages.append(image)
+                         } else {
+@@ -2489,6 +2492,33 @@
+ 
+     /// Materializes image values restored by `Terminal.importCheckpoint`, then
+     /// refreshes native layout, scroll state, renderer caches, and cursor state.
++    private func materializeCheckpointImage(_ image: TerminalImage) throws -> TerminalImage {
++    guard let checkpointImage = image as? RestoredTerminalImage else {
++        return image
++    }
++    guard let nativeImage = TTImage(data: checkpointImage.encodedImage) else {
++        throw TerminalCheckpointError.corrupt("checkpoint image could not be decoded")
++    }
++    let appleImage = AppleImage(
++        image: nativeImage,
++        width: checkpointImage.pixelWidth,
++        height: checkpointImage.pixelHeight,
++        onCol: checkpointImage.col
++    )
++    appleImage.kittyIsKitty = checkpointImage.kittyIsKitty
++    appleImage.kittyImageId = checkpointImage.kittyImageId
++    appleImage.kittyImageNumber = checkpointImage.kittyImageNumber
++    appleImage.kittyPlacementId = checkpointImage.kittyPlacementId
++    appleImage.kittyZIndex = checkpointImage.kittyZIndex
++    appleImage.kittyCol = checkpointImage.kittyCol
++    appleImage.kittyRow = checkpointImage.kittyRow
++    appleImage.kittyCols = checkpointImage.kittyCols
++    appleImage.kittyRows = checkpointImage.kittyRows
++    appleImage.kittyPixelOffsetX = checkpointImage.kittyPixelOffsetX
++    appleImage.kittyPixelOffsetY = checkpointImage.kittyPixelOffsetY
++    return appleImage
++    }
++
+     public func invalidateAfterCheckpointImport() throws {
+         var preparedLines: [(BufferLine, [TerminalImage])] = []
+         for buffer in [terminal.normalBuffer, terminal.altBuffer] {
+@@ -2498,35 +2528,15 @@
+                 var restored: [TerminalImage] = []
+                 restored.reserveCapacity(images.count)
+                 for image in images {
+-                    guard let checkpointImage = image as? RestoredTerminalImage else {
+-                        restored.append(image)
+-                        continue
+-                    }
+-                    guard let nativeImage = TTImage(data: checkpointImage.encodedImage) else {
+-                        throw TerminalCheckpointError.corrupt("checkpoint image could not be decoded")
+-                    }
+-                    let appleImage = AppleImage(
+-                        image: nativeImage,
+-                        width: checkpointImage.pixelWidth,
+-                        height: checkpointImage.pixelHeight,
+-                        onCol: checkpointImage.col
+-                    )
+-                    appleImage.kittyIsKitty = checkpointImage.kittyIsKitty
+-                    appleImage.kittyImageId = checkpointImage.kittyImageId
+-                    appleImage.kittyImageNumber = checkpointImage.kittyImageNumber
+-                    appleImage.kittyPlacementId = checkpointImage.kittyPlacementId
+-                    appleImage.kittyZIndex = checkpointImage.kittyZIndex
+-                    appleImage.kittyCol = checkpointImage.kittyCol
+-                    appleImage.kittyRow = checkpointImage.kittyRow
+-                    appleImage.kittyCols = checkpointImage.kittyCols
+-                    appleImage.kittyRows = checkpointImage.kittyRows
+-                    appleImage.kittyPixelOffsetX = checkpointImage.kittyPixelOffsetX
+-                    appleImage.kittyPixelOffsetY = checkpointImage.kittyPixelOffsetY
+-                    restored.append(appleImage)
++                    restored.append(try materializeCheckpointImage(image))
+                 }
+                 preparedLines.append((line, restored))
+             }
+         }
++        let preparedRelative = try terminal.kittyGraphicsState.relativeStripes.mapValues { images in
++            try images.map { try materializeCheckpointImage($0) }
++        }
++        terminal.kittyGraphicsState.relativeStripes = preparedRelative
+         for (line, images) in preparedLines {
+             line.images = images
+         }
+--- a/native/SwiftTerm/Sources/SwiftTerm/Apple/TerminalImageRenderer.swift
++++ b/native/SwiftTerm/Sources/SwiftTerm/Apple/TerminalImageRenderer.swift
+@@ -51,8 +51,8 @@
+     public func createImageFromBitmap(source: Terminal, bytes: inout [UInt8], width: Int, height: Int) {
+         guard width > 0, height > 0, width <= 8_192, height <= 8_192,
+               width * height <= Self.maximumSourcePixels, bytes.count == width * height * 4 else { return }
+-        let rgbColorSpace = CGColorSpaceCreateDeviceRGB()
+-        let bitmapInfo: CGBitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)
++        guard let rgbColorSpace = CGColorSpace(name: CGColorSpace.sRGB) else { return }
++        let bitmapInfo: CGBitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.last.rawValue)
+         let pixelData = NSData(bytes: bytes, length: bytes.count)
+         guard let providerRef: CGDataProvider = CGDataProvider(data: pixelData) else {
+             return
+@@ -65,7 +65,14 @@
+             return
+         }
+         
+-        let image = TTImage (cgImage: cgimage, size: CGSize (width: width, height: height))
++        #if os(macOS)
++        // An explicit bitmap representation keeps source pixels independent of
++        // the display scale chosen for a lazy NSImage representation.
++        let image = TTImage(size: CGSize(width: width, height: height))
++        image.addRepresentation(NSBitmapImageRep(cgImage: cgimage))
++        #else
++        let image = TTImage(cgImage: cgimage, size: CGSize(width: width, height: height))
++        #endif
+         if let context = terminal.kittyPlacementContext {
+             insertImage (image, width: context.widthRequest, height: context.heightRequest, preserveAspectRatio: context.preserveAspectRatio)
+         } else {
+@@ -182,8 +189,9 @@
+         guard stripeRasterBytes <= CGFloat(Self.maximumNewRasterBytes),
+               proposedCost <= CGFloat(Self.maximumRetainedStripeCost) else { return }
+         evictOldStripes(reserving: proposedCost)
+-        let placementRow = buffer.y + buffer.yBase
+-        let placementCol = buffer.x
++        let placementRow = placementContext?.originRow ?? (buffer.y + buffer.yBase)
++        let placementCol = placementContext?.originColumn ?? buffer.x
++        var relativeStripes: [TerminalImage] = []
+         if let context = placementContext,
+            let imageId = context.imageId,
+            let placementId = context.placementId {
+@@ -212,7 +220,7 @@
+         #endif
+         
+         let heightRatio = img.size.height/height
+-        for _ in 0..<rows {
++        for stripeIndex in 0..<rows {
+             #if os(macOS)
+             srcY -= cellDimension.height * heightRatio
+             #endif
+@@ -223,7 +231,7 @@
+             srcY += cellDimension.height * heightRatio
+             #endif
+             
+-            let attachedImage = TerminalView.AppleImage (image: stripe, width: Int (stripeSize.width), height: Int (cellDimension.height), onCol: terminal.buffer.x)
++            let attachedImage = TerminalView.AppleImage (image: stripe, width: Int (stripeSize.width), height: Int (cellDimension.height), onCol: placementCol)
+             if let context = placementContext {
+                 attachedImage.kittyIsKitty = true
+                 attachedImage.kittyImageId = context.imageId
+@@ -238,6 +246,14 @@
+                 attachedImage.kittyPixelOffsetY = context.pixelOffsetY
+             }
+             
++            if placementContext?.isRelative == true {
++                relativeStripes.append(attachedImage)
++                let target = placementRow + stripeIndex
++                if target >= 0 && target < buffer.lines.count && placementCol < terminal.cols && placementCol+cols > 0 {
++                    buffer.attachImage(attachedImage, toLineAt: target)
++                }
++                continue
++            }
+             buffer.attachImage(attachedImage, toLineAt: buffer.y+buffer.yBase)
+ 
+             terminal.updateRange (buffer.y)
+@@ -252,6 +268,10 @@
+                 didScroll = true
+             }
+             buffer.x = savedX
++        }
++        if let context = placementContext, context.isRelative,
++           let image = context.imageId, let placement = context.placementId {
++            terminal.kittyGraphicsState.relativeStripes[KittyPlacementKey(imageId: image, placementId: placement)] = relativeStripes
+         }
+         if didScroll {
+             terminal.updateFullScreen()
+--- a/native/swift-probe/Sources/Baseline/main.swift
++++ b/native/swift-probe/Sources/Baseline/main.swift
+@@ -1,6 +1,7 @@
+ import AppKit
+ import Foundation
+ import SwiftTerm
++import CryptoKit
+ 
+ struct Event: Decodable {
+     var data: [UInt8]?
+@@ -22,6 +23,8 @@
+ @MainActor
+ func makeView(_ recorder: Recorder) -> TerminalView {
+     let view = TerminalView(frame: CGRect(x: 0, y: 0, width: 640, height: 480))
++    view.nativeBackgroundColor = .black
++    view.nativeForegroundColor = .white
+     view.terminalDelegate = recorder
+     view.getTerminal().resize(cols: 20, rows: 6)
+     view.getTerminal().changeScrollback(40)
+@@ -69,7 +72,7 @@
+ }
+ 
+ struct Delivery: Decodable { let sequence: Int; let event: Event }
+-struct Request: Decodable { let checkpoint: [UInt8]?; let events: [Delivery]; let dirty: [UInt8]? }
++struct Request: Decodable { let checkpoint: [UInt8]?; let events: [Delivery]; let dirty: [UInt8]?; var nativeCheckpoint: [UInt8]? = nil }
+ 
+ final class BoundedInput {
+     private var pending = Data()
+@@ -134,8 +137,15 @@
+     if let dirty = request.dirty { terminal.feed(byteArray: dirty) }
+     var sequence = -1
+     let start = DispatchTime.now().uptimeNanoseconds
+-    if let checkpoint = request.checkpoint {
++    guard request.checkpoint == nil || request.nativeCheckpoint == nil else {
++        throw TerminalCheckpointError.corrupt("ambiguous checkpoint request")
++    }
++    if let native = request.nativeCheckpoint {
++        try terminal.importCheckpoint(Data(native))
++        try view.invalidateAfterCheckpointImport()
++    } else if let checkpoint = request.checkpoint {
+         sequence = try terminal.importRustPrototypeCheckpoint(Data(checkpoint),geometry: view.imageRenderingGeometry)
++        try view.invalidateAfterCheckpointImport()
+     }
+     let importNs = DispatchTime.now().uptimeNanoseconds - start
+     if CommandLine.arguments.contains("--import-ack") {
+@@ -145,11 +155,23 @@
+     recorder.suppressed = false
+     var snapshots: [[String: Any]] = []
+     func capture() throws -> [String: Any] {
++        if ProcessInfo.processInfo.environment["MYTERM_PROBE_RASTER"] == "1" { view.refreshRustPrototypeView() }
+         var result = try snapshot(terminal, recorder)
+         result["nativeCheckpoint"] = try terminal.exportCheckpoint().base64EncodedString()
++        if ProcessInfo.processInfo.environment["MYTERM_PROBE_RASTER"] == "1" {
++            guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
++                throw TerminalCheckpointError.corrupt("native view bitmap unavailable")
++            }
++            view.cacheDisplay(in: view.bounds, to: bitmap)
++            guard let png = bitmap.representation(using: .png, properties: [:]) else {
++                throw TerminalCheckpointError.corrupt("native view PNG unavailable")
++            }
++            result["renderedPNG"] = png.base64EncodedString()
++            result["renderedSHA256"] = SHA256.hash(data: png).map { String(format:"%02x", $0) }.joined()
++        }
+         return result
+     }
+-    if request.checkpoint != nil { snapshots.append(try capture()) }
++    if request.checkpoint != nil || request.nativeCheckpoint != nil { snapshots.append(try capture()) }
+     func apply(_ delivery: Delivery) throws {
+         guard sequence < Int.max, delivery.sequence == sequence + 1 else {
+             throw NSError(domain: "CheckpointPrototype", code: 1,
+--- a/foundation/checkpoint_checks.py
++++ b/foundation/checkpoint_checks.py
+@@ -162,20 +162,21 @@
+         {"name":"kitty-replaced-placement-normal", "events":[{"data":list(kitty_whole+b"\x1b[?1049h"+kitty_place+b"\x1b[?1049l\x1b[3;5H"+kitty_whole+kitty_place),"checkpoint":True},
+             {"data":list(b"!\x1b_Ga=d,d=I,i=1;\x1b\\")} ]},
+     ]
++    # Previously unsupported states are now positive restoration controls.
++    fixtures += [
++        {"name":"automatic-placement-id","events":[{"data":list(kitty_whole+b"\x1b_Ga=p,i=1,c=2,r=1;\x1b\\"),"checkpoint":True}, {"data":list(b"after")}]},
++        {"name":"pending-placement-offset","events":[{"data":list(b"\x1b_Ga=T,f=32,s=1,v=1,i=7,p=3,X=1,m=1;/wAA\x1b\\"),"checkpoint":True}, {"data":list(b"\x1b_Gm=0;/w==\x1b\\after")}]},
++    ]
+     env = dict(os.environ, CELL_WIDTH="9", CELL_HEIGHT="16")
+     payload = json.dumps(fixtures).encode()
+     (out / "fixtures.json").write_bytes(payload)
+     candidate = json.loads(run([str(rust)], out / "rust-capture.log", data=payload, env=env))
+     (out / "rust-traces.json").write_text(json.dumps(candidate))
+     boundary_fixtures = [
+-        {"name":"automatic-placement-id","events":[{"data":list(kitty_whole+b"\x1b_Ga=p,i=1,c=2,r=1;\x1b\\"),"checkpoint":True}]},
+-        {"name":"pending-placement-offset","events":[{"data":list(b"\x1b_Ga=T,f=32,s=1,v=1,i=7,p=3,X=1,m=1;/wAA\x1b\\"),"checkpoint":True}]},
+         {"name":"non-sixel-dcs","events":[{"data":list(b"\x1bP$qm"),"checkpoint":True}]},
+     ]
+     boundaries = json.loads(run([str(rust)],out/"boundary-capture.log",data=json.dumps(boundary_fixtures).encode(),env=env))
+-    expected_boundaries = {"automatic-placement-id":"unsupported automatic Kitty placement identity",
+-        "pending-placement-offset":"unsupported pending Kitty placement geometry",
+-        "non-sixel-dcs":"unsupported partial parser token"}
++    expected_boundaries = {"non-sixel-dcs":"unsupported partial parser token"}
+     boundary_controls = {}
+     for name,diagnostic in expected_boundaries.items():
+         checkpoint = boundaries[name]["checkpoints"][0]

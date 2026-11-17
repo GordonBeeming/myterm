@@ -1,0 +1,147 @@
+{
+  "truths": {
+    "relative-self-cycle-reply": true,
+    "relative-two-node-cycle-reply": true,
+    "relative-depth-limit-reply": true,
+    "relative-missing-parent-reply": true,
+    "virtual-relative-invalid-reply": true,
+    "cycle-keeps-old-placement": true,
+    "depth-thirty-two-admitted": true,
+    "depth-thirty-three-refused": true,
+    "cascade-removes-child-and-its-unreferenced-data": true,
+    "virtual-retains-a": true,
+    "virtual-retains-c": true,
+    "virtual-retains-p": true,
+    "virtual-retains-q": true,
+    "virtual-retains-x": true,
+    "virtual-retains-y": true,
+    "virtual-retains-z": true,
+    "minimum-placeholder-origin-2": true,
+    "minimum-placeholder-origin-3": true,
+    "minimum-placeholder-origin-4": true,
+    "hidden-relative-retains-full-stripes": true,
+    "parent-move-reveals-retained-relative": true,
+    "automatic-placement-identities-do-not-replace-explicit": true,
+    "straight-alpha-midtone-blends-on-green": true,
+    "inactive-parent-is-not-usable": true,
+    "local-deletion-keeps-normal-parent": true,
+    "overlap-layer-retention-is-linear": true,
+    "negative-control-exposes-prior-layer-duplication": true,
+    "placement-admission-refuses-without-mutation": true,
+    "deletion-frees-admission-slot": true
+  },
+  "rejected": {
+    "self-cycle": {
+      "exit": 1,
+      "diagnostic": "bridge Kitty parent graph",
+      "inputSHA256": "c92eb853e606e4210ae1adf51fef1aaf00e8a4f1896a0af422041ae2dff1fd0c"
+    },
+    "missing-parent": {
+      "exit": 1,
+      "diagnostic": "bridge Kitty parent graph",
+      "inputSHA256": "cf674e4fd8d0608a6e286bd3d6aec2fef55f4be2c51654b2f44c28737846de2d"
+    },
+    "cross-buffer": {
+      "exit": 1,
+      "diagnostic": "bridge Kitty parent graph",
+      "inputSHA256": "b623dc4a713c936ca1439fbe2c597640ca7465c293c6cb1a2e59127a89933bd2"
+    },
+    "virtual-child": {
+      "exit": 1,
+      "diagnostic": "bridge Kitty parent metadata",
+      "inputSHA256": "9be0dcca6d7d65f598ada1b5723945a47936c20aa65cb1c064f06677766062a9"
+    },
+    "offset-overflow": {
+      "exit": 1,
+      "diagnostic": "bridge Kitty parent metadata",
+      "inputSHA256": "db926883ea394ac6355960dcca8467dabd02f3375298218a963b9ccb7fe312d9"
+    },
+    "incomplete-parent": {
+      "exit": 1,
+      "diagnostic": "bridge Kitty parent metadata",
+      "inputSHA256": "58a066b10a92f4d17b2933584ce9dd41d9f7b5458dc10144e25085fc99d79f3e"
+    },
+    "zero-next-identity": {
+      "exit": 1,
+      "diagnostic": "bridge Kitty next identity",
+      "inputSHA256": "b11db8f1c4fd8fe5751411d69a5af5f44a9a133b4257490a7cf84713a6d37147"
+    },
+    "missing-relative-resource": {
+      "exit": 1,
+      "diagnostic": "bridge Kitty missing relative resource",
+      "inputSHA256": "5fd9a2544bb36cb040942efc9849af7d5711f4535973fde8e5f80462f77dc9bc"
+    },
+    "unknown-relative-resource": {
+      "exit": 1,
+      "diagnostic": "bridge Kitty relative resource",
+      "inputSHA256": "75429b1a8dd17f82c1a4fa962f1ef3730ede74f82cbdda63a09c91d673ac5b82"
+    },
+    "duplicate-relative-resource": {
+      "exit": 1,
+      "diagnostic": "bridge Kitty relative resource",
+      "inputSHA256": "a33e88913668e70a4c09a873534d6a087237f38e32e75ce00387f01c7a5a72ad"
+    },
+    "native-self-cycle": {
+      "exit": 1,
+      "diagnostic": "Kitty parent graph",
+      "inputSHA256": "67b624c3487243adf68d9b680413c328d90aec7d9bf5f6dc32f65104815fc6a6"
+    },
+    "native-cache-owner": {
+      "exit": 1,
+      "diagnostic": "Kitty relative cache owner",
+      "inputSHA256": "b81a4640844d980add90988409f909ab79a965ed243690105c7424cf9110f9c9"
+    },
+    "native-cache-metadata": {
+      "exit": 1,
+      "diagnostic": "Kitty relative cache image",
+      "inputSHA256": "2a31d7f6cdcb6e1a060792ea39835a000ed11f2da4479d97473a462678d372a5"
+    },
+    "native-cache-duplicate": {
+      "exit": 1,
+      "diagnostic": "Kitty relative cache owner",
+      "inputSHA256": "169f2911fe04778c6457d896cf37fae2d60baa7531d92e144506c54ad5d2481f"
+    },
+    "native-cache-invalid-png": {
+      "exit": 1,
+      "diagnostic": "Kitty relative PNG dimensions",
+      "inputSHA256": "1a608748e38fc0d306ab86a3290db4ecd5eeb67fa35c3ea579b7e8b5e2b4b0bf"
+    },
+    "native-unsafe-coordinate": {
+      "exit": 1,
+      "diagnostic": "Kitty parent metadata",
+      "inputSHA256": "c804a602fed7f0be11d217624e4ba8db96d10efcb63aa3a78ac176ccd9b7ec12"
+    }
+  },
+  "alphaPixel": [
+    71,
+    127,
+    4,
+    255
+  ],
+  "layerCounts": [
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12
+  ],
+  "baselineLayerCounts": [
+    4,
+    6,
+    10,
+    18,
+    34,
+    66,
+    130,
+    258,
+    514
+  ],
+  "binarySHA256": {
+    "server": "e2e40e7d0bf58ada4fd92c81cfa59c0d35239ca528023e0ba70c78a940dd3859",
+    "client": "3b40484fa04794764fc4747e5c17cf0d087aef91cac8d2029a49e8cafe3c47cf"
+  }
+}

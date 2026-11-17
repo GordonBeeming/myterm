@@ -2,7 +2,17 @@
 
 [Resolve virtual and parent Kitty placement fidelity](https://github.com/GordonBeeming/myterm/issues/187) remains open. The first native probes expose a choice about the reference behavior: SwiftTerm itself accepts cycles and leaves a child placement record after its parent is deleted. The [Kitty protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/#relative-placements) requires cycle rejection and ties a child's lifetime to its parent.
 
-The proposed contract is to correct both engines to the protocol and use the corrected native client as the reconnect reference. Gordon's decision is pending. No graphics implementation or production source has changed.
+The contract is approved: correct both engines to the protocol and use the corrected native client as the reconnect reference. The implementation is in progress in `graphics.patch`, which changes disposable experiment sources. Production source has not changed, and this ticket remains open.
+
+## Correction checkpoint
+
+The development matrix passes 72 cases and 558 checkpoint/continuation comparisons, including native rendered pixels and direct cursor/reply equality. Its protocol controls pass 29 assertions and reject sixteen malformed inputs. Eight overlapping additions retain twelve image cells; the old executable retains 514. The broader suite passes 49 cases, two expected limit rejections, 28 receiver controls, native streaming and a real native PTY.
+
+These are development results, retained under `evidence/development/`. They precede the final source rebuild and review closure. Their binary hashes identify the measured executables; source hashes from a mutable development tree do not establish build provenance. The matrix also used the native client's existing, incorrect truecolor placeholder byte order. That shared bug is being corrected against Kitty's own reference tests, so passing engine comparisons alone do not establish protocol compliance.
+
+The independent implementation review permits saving this research checkpoint, with open findings. Rebuilding relative projections on every output read still needs a cost bound and caching. A sizing concern needs a measured rendering comparison. Error handling and clipped-parent position retention need review closure. The native fractional-metric investigation remains open in [Investigate intermittent native checkpoint raster width](https://github.com/GordonBeeming/myterm/issues/197). Do not copy this checkpoint into production integration or treat the task as resolved.
+
+`prepare.py`, `base-hashes.json` and `graphics.patch` retain the experiment build path. A fresh replay and final verification are still required after the open findings are fixed.
 
 ## Measured behavior
 
@@ -37,7 +47,7 @@ The earlier `baseline.json` used `/tmp/myterm-188-accepted-build`; `confirmed-ba
 
 The six source hashes in the cursor-reflow experiment's `evidence/run.json` match the final-build sources used here; `evidence/verification.json` records each check. The native Kitty implementation also matches the vendored source. That file records the Browser.app visual checks and the checked counterexamples. No fresh compilation or production integration is claimed for these captures. The initial captures did not record Python or Pillow versions; `evidence/environment.json` records the environment used for this investigation.
 
-`contract.html` shows the native counterexamples, the proposed behavior and the measured restoration failures in separate tabs. The artifact is copied to the personal artifact directory for viewing. Its proposal is not an accepted resolution.
+`contract.html` preserves the original native counterexamples and measured restoration failures in separate tabs. The contract direction is now accepted; the correction is still under development. The artifact is copied to the personal artifact directory for viewing.
 
 `evidence/virtual-record.json` is an ad hoc focused rerun of `virtual-explicit` using the probe helpers and final build. It records the native virtual placement and the imported ordinary placement. `reviewClaimPlacements` preserves the initial review note, not a measured client state; Claude withdrew that note after checking the event index. `verification.json` and `environment.json` were also captured by ad hoc commands. The environment file was recorded after the trace captures and does not establish a separately measured environment for each one. The committed probe reproduces the main matrix; these supplementary files have no dedicated retained runner.
 
