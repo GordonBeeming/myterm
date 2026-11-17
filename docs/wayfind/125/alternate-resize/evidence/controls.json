@@ -1,0 +1,77 @@
+{
+  "validHistoricalRowAccepted": 5,
+  "rejections": [
+    {
+      "buffer": "alternate",
+      "field": "saved",
+      "value": -1,
+      "rejected": true
+    },
+    {
+      "buffer": "alternate",
+      "field": "saved",
+      "value": 1000,
+      "rejected": true
+    },
+    {
+      "buffer": "normal",
+      "field": "saved",
+      "value": 3,
+      "rejected": true
+    },
+    {
+      "buffer": "alternate",
+      "field": "defaultSavedY",
+      "value": -1,
+      "rejected": true
+    },
+    {
+      "buffer": "alternate",
+      "field": "defaultSavedY",
+      "value": 1000,
+      "rejected": true
+    },
+    {
+      "buffer": "normal",
+      "field": "defaultSavedY",
+      "value": 3,
+      "rejected": true
+    },
+    {
+      "buffer": "alternate",
+      "field": "cursor",
+      "value": 3,
+      "rejected": true
+    }
+  ],
+  "upperBoundControls": [
+    {
+      "field": "saved",
+      "retainedRow": 999,
+      "restoredRow": 2
+    },
+    {
+      "field": "defaultSavedY",
+      "retainedRow": 999,
+      "restoredRow": 2
+    }
+  ],
+  "positiveTrimControls": [
+    {
+      "savedRow": 4,
+      "trimmed": 3,
+      "retainedAndRestoredRow": 1
+    },
+    {
+      "savedRow": 5,
+      "trimmed": 3,
+      "retainedAndRestoredRow": 2
+    }
+  ],
+  "runnerSha256": "d0dcebb9bdcd5d2f6813cda85d9a9d0b9ea6151df4d6485d2b3d2743055a7a3b",
+  "matrixRunnerSha256": "13e6abd48c466ad726a3c569972f099d57e974ae6ae0c780f183e796e7ac6d8c",
+  "binarySha256": {
+    "server": "f4d6f4aeac19def2b929d6970abe577209001661115c9e08e10cd0b1427cd6be",
+    "client": "4a75c58bcecb04427d9743c8420aeccd460962f527d5c160e03a1804f0d75ff0"
+  }
+}

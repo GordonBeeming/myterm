@@ -1,0 +1,94 @@
+--- a/native/SwiftTerm/Sources/SwiftTerm/Buffer.swift
++++ b/native/SwiftTerm/Sources/SwiftTerm/Buffer.swift
+@@ -431,6 +431,11 @@
+         }
+         let newMaxLength = getCorrectBufferLength(newRows)
+         if newMaxLength > lines.maxLength {
++            lines.maxLength = newMaxLength
++        }
++        if lines.count == 0 {
++            // Unused alternate buffers must obey the same no-history capacity as
++            // populated buffers, including when resized before their first use.
+             lines.maxLength = newMaxLength
+         }
+         if lines.count > 0 {
+--- a/native/source/term/src/terminalstate/image.rs
++++ b/native/source/term/src/terminalstate/image.rs
+@@ -92,8 +92,7 @@
+     ) -> anyhow::Result<PreparedImageAttach> {
+         // Native rasterization scrolls even when Kitty restores the cursor afterwards.
+         let restore_cursor = matches!(params.style, ImageAttachStyle::Kitty)
+-            && params.do_not_move_cursor
+-            && !self.screen.alt_screen_is_active;
++            && params.do_not_move_cursor;
+         let saved_cursor = self.cursor;
+         if restore_cursor {
+             params.do_not_move_cursor = false;
+--- a/native/source/term/src/terminalstate/mod.rs
++++ b/native/source/term/src/terminalstate/mod.rs
+@@ -2017,8 +2017,9 @@
+             Mode::SetDecPrivateMode(DecPrivateMode::Code(
+                 DecPrivateModeCode::ClearAndEnableAlternateScreen,
+             )) => {
++                // Repeated 1049 entry saves the active buffer cursor too.
++                self.dec_save_cursor();
+                 if !self.screen.is_alt_screen_active() {
+-                    self.dec_save_cursor();
+                     self.prototype_switch_buffer(true);
+                     // Native SwiftTerm carries the normal cursor into the alternate buffer.
+                     self.pen = CellAttributes::default();
+--- a/native/source/term/src/screen.rs
++++ b/native/source/term/src/screen.rs
+@@ -246,9 +246,13 @@
+         let old_rows = self.physical_rows;
+         let physical_rows = size.rows.max(1);
+         let pulled = physical_rows.saturating_sub(old_rows).min(old_history);
+-        self.prototype_unsaved_y = (self.prototype_unsaved_y + pulled).min(physical_rows - 1);
++        if self.allow_scrollback {
++            self.prototype_unsaved_y = (self.prototype_unsaved_y + pulled).min(physical_rows - 1);
++        }
+         if let Some(saved) = self.saved_cursor.as_mut() {
+-            saved.position.y = (saved.position.y + pulled as i64).min(physical_rows as i64 - 1);
++            if self.allow_scrollback {
++                saved.position.y = (saved.position.y + pulled as i64).min(physical_rows as i64 - 1);
++            }
+             saved.position.x = (saved.position.x + usize::from(saved.wrap_next)).min(size.cols.max(1) - 1);
+             saved.wrap_next = false;
+         }
+@@ -376,6 +380,14 @@
+         }
+         // Shrinking a full viewport must retain only the configured history.
+         let removed = self.lines.len().saturating_sub(capacity);
++        if !self.allow_scrollback {
++            // Alternate saved rows follow top trimming, without normal-screen
++            // cursor-relative adjustment or viewport clamping.
++            self.prototype_unsaved_y = old_default_saved_y.saturating_sub(removed);
++            if let (Some(saved), Some(old_y)) = (self.saved_cursor.as_mut(), old_saved_y) {
++                saved.position.y = (old_y - removed as i64).max(0);
++            }
++        }
+         for _ in 0..removed {
+             if let Some(line) = self.lines.pop_front() {
+                 self.prototype_first_wrapped = line.last_cell_was_wrapped();
+--- a/native/SwiftTerm/Sources/SwiftTerm/CheckpointBridge.swift
++++ b/native/SwiftTerm/Sources/SwiftTerm/CheckpointBridge.swift
+@@ -182,14 +182,17 @@
+             authoritativeGeometry: geometry)
+         var cellBudget = 0
+         func buffer(_ source: BridgeBuffer, _ template: CheckpointBuffer, active: Bool, normal: Bool) throws -> CheckpointBuffer {
++            // Alternate saved rows can outlive a height shrink; restore clamps
++            // the live cursor. Bound retained rows by the experiment's maximum height.
++            let savedRows = normal ? s.rows : 1000
+             guard source.lines.count >= s.rows, source.lines.count <= s.rows + (normal ? 40 : 0),
+                   source.margins.count == 4, source.margins[0] >= 0, source.margins[1] > source.margins[0],
+                   source.margins[1] <= s.rows, source.margins[2] >= 0, source.margins[3] > source.margins[2],
+-                  source.margins[3] <= s.columns, (0..<s.rows).contains(source.defaultSavedY) else {
++                  source.margins[3] <= s.columns, (0..<savedRows).contains(source.defaultSavedY) else {
+                 throw TerminalCheckpointError.corrupt("bridge line limit")
+             }
+             if let saved = source.saved {
+-                guard (0...s.columns).contains(saved.x), (0..<s.rows).contains(saved.y),
++                guard (0...s.columns).contains(saved.x), (0..<savedRows).contains(saved.y),
+                       !saved.wrapNext || saved.x < s.columns else {
+                     throw TerminalCheckpointError.corrupt("bridge saved cursor bounds")
+                 }

@@ -1,0 +1,5 @@
+{
+  "platform": "macOS-27.3-arm64-arm-64bit-Mach-O",
+  "swift": "Apple Swift version 6.4.2 (swiftlang-6.4.2.1.9 clang-2100.4.1.1)\nTarget: arm64-apple-macosx27.3.0\n",
+  "rust": "rustc 1.99.1 (58cf8f9c3 2026-10-13)\n"
+}
