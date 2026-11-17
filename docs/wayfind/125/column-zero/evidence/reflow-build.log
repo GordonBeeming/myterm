@@ -1,0 +1,100 @@
+warning: use of deprecated associated function `core::num::<impl usize>::max_value`: replaced by the `MAX` associated constant on this type
+  --> /private/tmp/myterm-188-complete-build/native/source/bidi/src/lib.rs:27:31
+   |
+27 | const DELETED: usize = usize::max_value();
+   |                               ^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+
+warning: `wezterm-bidi` (lib) generated 1 warning
+warning: use of deprecated associated function `core::num::<impl u32>::max_value`: replaced by the `MAX` associated constant on this type
+    --> /private/tmp/myterm-188-complete-build/native/source/wezterm-escape-parser/src/csi.rs:1314:77
+     |
+1314 |                 if top.as_one_based() == 1 && bottom.as_one_based() == u32::max_value() {
+     |                                                                             ^^^^^^^^^
+     |
+     = note: `#[warn(deprecated)]` on by default
+
+warning: use of deprecated associated function `core::num::<impl u32>::max_value`: replaced by the `MAX` associated constant on this type
+    --> /private/tmp/myterm-188-complete-build/native/source/wezterm-escape-parser/src/csi.rs:1321:77
+     |
+1321 |                 if left.as_one_based() == 1 && right.as_one_based() == u32::max_value() {
+     |                                                                             ^^^^^^^^^
+
+warning: use of deprecated associated function `core::num::<impl u8>::max_value`: replaced by the `MAX` associated constant on this type
+    --> /private/tmp/myterm-188-complete-build/native/source/wezterm-escape-parser/src/csi.rs:1736:36
+     |
+1736 |             if *v <= i64::from(u8::max_value()) {
+     |                                    ^^^^^^^^^
+
+warning: use of deprecated associated function `core::num::<impl u32>::max_value`: replaced by the `MAX` associated constant on this type
+    --> /private/tmp/myterm-188-complete-build/native/source/wezterm-escape-parser/src/csi.rs:1759:64
+     |
+1759 |         CsiParam::Integer(v) if *v > 0 && *v <= i64::from(u32::max_value()) => Ok(*v as u32),
+     |                                                                ^^^^^^^^^
+
+warning: use of deprecated associated function `core::num::<impl u32>::max_value`: replaced by the `MAX` associated constant on this type
+    --> /private/tmp/myterm-188-complete-build/native/source/wezterm-escape-parser/src/csi.rs:2104:44
+     |
+2104 |                 bottom: OneBased::new(u32::max_value()),
+     |                                            ^^^^^^^^^
+
+warning: use of deprecated associated function `core::num::<impl u32>::max_value`: replaced by the `MAX` associated constant on this type
+    --> /private/tmp/myterm-188-complete-build/native/source/wezterm-escape-parser/src/csi.rs:2111:48
+     |
+2111 |                     bottom: OneBased::new(u32::max_value()),
+     |                                                ^^^^^^^^^
+
+warning: use of deprecated associated function `core::num::<impl u32>::max_value`: replaced by the `MAX` associated constant on this type
+    --> /private/tmp/myterm-188-complete-build/native/source/wezterm-escape-parser/src/csi.rs:2191:47
+     |
+2191 |                     right: OneBased::new(u32::max_value()),
+     |                                               ^^^^^^^^^
+
+warning: use of deprecated associated function `core::num::<impl u8>::max_value`: replaced by the `MAX` associated constant on this type
+   --> /private/tmp/myterm-188-complete-build/native/source/wezterm-escape-parser/src/esc.rs:145:43
+    |
+145 |                 if packed > u16::from(u8::max_value()) {
+    |                                           ^^^^^^^^^
+
+warning: use of deprecated associated function `core::num::<impl u32>::max_value`: replaced by the `MAX` associated constant on this type
+   --> /private/tmp/myterm-188-complete-build/native/source/wezterm-escape-parser/src/lib.rs:576:68
+    |
+576 |             CsiParam::Integer(v) if *v > 0 && *v <= i64::from(u32::max_value()) => {
+    |                                                                    ^^^^^^^^^
+
+warning: use of deprecated associated function `core::num::<impl u32>::max_value`: replaced by the `MAX` associated constant on this type
+   --> /private/tmp/myterm-188-complete-build/native/source/wezterm-escape-parser/src/lib.rs:588:29
+    |
+588 |                 value: u32::max_value(),
+    |                             ^^^^^^^^^
+
+warning: use of deprecated associated function `core::num::<impl u32>::max_value`: replaced by the `MAX` associated constant on this type
+   --> /private/tmp/myterm-188-complete-build/native/source/wezterm-escape-parser/src/lib.rs:590:68
+    |
+590 |             CsiParam::Integer(v) if *v > 0 && *v <= i64::from(u32::max_value()) => {
+    |                                                                    ^^^^^^^^^
+
+warning: `wezterm-escape-parser` (lib) generated 11 warnings
+   Compiling wezterm-term v0.1.0 (/private/tmp/myterm-188-complete-build/native/source/term)
+warning: use of deprecated type alias `image::io::Reader`: this type has been moved and renamed to image::ImageReader
+  --> /private/tmp/myterm-188-complete-build/native/source/term/src/terminalstate/prototype-graphics.rs:41:55
+   |
+41 | ...                   let reader = ::image::io::Reader::new(std::io::Cursor::new(bytes)).with_guessed_format()?;
+   |                                                 ^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+
+warning: method `prototype_is_empty` is never used
+    --> /private/tmp/myterm-188-complete-build/native/source/term/src/terminalstate/kitty.rs:1024:27
+     |
+1023 | impl KittyImageState {
+     | -------------------- method in this implementation
+1024 |             pub(super) fn prototype_is_empty(&self) -> bool {
+     |                           ^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `wezterm-term` (lib) generated 2 warnings
+   Compiling myterm-wezterm-feasibility-prototype v0.0.0 (/private/tmp/myterm-188-complete-build/native/probe)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.39s

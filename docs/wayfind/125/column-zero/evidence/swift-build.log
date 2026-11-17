@@ -1,0 +1,58 @@
+Building for debugging...
+[Planning deferred tasks]
+warning: missing creator for mutated node: ('/private/tmp/myterm-188-complete-build/native/swift-build/out/Products/Debug/SwiftTerm_SwiftTerm.bundle/Contents/MacOS')
+[33 / 52] SwiftTerm_SwiftTerm
+[37 / 52]
+[38 / 53] SwiftTerm
+[49 / 142]
+[55 / 142]
+[60 / 142]
+[62 / 142]
+[69 / 142]
+[72 / 142]
+[80 / 142]
+[85 / 142]
+[86 / 142]
+[100 / 142]
+[104 / 142]
+[106 / 142]
+[127 / 142] SwiftTerm
+[136 / 143]
+[136 / 143] SwiftTerm
+[136 / 143] Baseline-product
+[147 / 215] SwiftTerm
+[149 / 215]
+[157 / 215]
+[160 / 215] SwiftTerm
+[166 / 215]
+/private/tmp/myterm-188-complete-build/native/SwiftTerm/Sources/SwiftTerm/Apple/Metal/MetalTerminalRenderer.swift:1744:22: warning: result of call to 'withUnsafeBytes' is unused [#NoUsage]
+1742 |                 return nil
+1743 |             }
+1744 |             vertices.withUnsafeBytes { raw in
+     |                      `- warning: result of call to 'withUnsafeBytes' is unused [#NoUsage]
+1745 |                 memcpy(buffer.contents(), raw.baseAddress!, byteCount)
+1746 |             }
+
+/private/tmp/myterm-188-complete-build/native/SwiftTerm/Sources/SwiftTerm/Apple/Metal/MetalTerminalRenderer.swift:1950:18: warning: result of call to 'withUnsafeBytes' is unused [#NoUsage]
+1948 |             return (nil, 0)
+1949 |         }
+1950 |         vertices.withUnsafeBytes { raw in
+     |                  `- warning: result of call to 'withUnsafeBytes' is unused [#NoUsage]
+1951 |             memcpy(buffer.contents(), raw.baseAddress!, byteCount)
+1952 |         }
+
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>
+[168 / 215]
+[170 / 215]
+[178 / 215]
+[183 / 215] SwiftTerm
+[185 / 215]
+[186 / 215]
+[199 / 215]
+[201 / 215]
+[204 / 215]
+[206 / 215]
+[210 / 215] Baseline-product
+[211 / 215] Baseline-product
+[213 / 215] Baseline-product
+Build complete! (9.67 sec.)

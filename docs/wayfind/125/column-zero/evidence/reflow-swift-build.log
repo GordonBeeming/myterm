@@ -1,0 +1,8 @@
+Building for debugging...
+[1 / 1]
+[2 / 8] SwiftTerm
+[4 / 10] SwiftTerm
+[11 / 15] Baseline-product
+[14 / 15] Baseline-product
+warning: missing creator for mutated node: ('/private/tmp/myterm-188-complete-build/native/swift-build/out/Products/Debug/SwiftTerm_SwiftTerm.bundle/Contents/MacOS')
+Build complete! (1.92 sec.)

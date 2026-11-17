@@ -1,0 +1,15 @@
+{
+  "tool": "claude",
+  "mode": "review",
+  "model": "sonnet",
+  "permissionMode": "plan",
+  "repo": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125",
+  "sessionId": "0e551b99-d742-477a-b6ef-ef04ed955142",
+  "status": "completed",
+  "response": "**No remaining blockers. Verdict: clean on the code I inspected, with the evidence still to come.**\n\n**The fix looks right.**\n- The early return (`mod.rs:982-988` in `/tmp/myterm-188-build/native`) matches native `Terminal.resize`, which returns on unchanged cols/rows (`Terminal.swift:5530`). It runs before `increment_seqno`, the pending-wrap `+1`, `Screen::resize` and `set_cursor_pos`, so live and saved pending wrap, the cursors and the margins are all left alone. Both saved-cursor `wrap_next` mutations, the one in `Screen::resize` and the one in `TerminalState::resize`, now sit behind that return too.\n- It still updates `pixel_width`, `pixel_height` and `dpi`.\n- A DPI-only resize no longer reaches the reflow path. Native has no DPI concept in its text state, so this is correct. For identical dimensions `tabs.resize` is a no-op, so skipping it loses nothing.\n\n**Not yet verified:** `/tmp/myterm-188-noop-build/native` still has the old `mod.rs`. It has no early return and no `pub(crate) wrap_next`, so it is the pre-patch source or a build that hasn't been prepared yet. I did not run the repro, and I'm treating its pass and the `unchanged-size-*` results as pending. The 57-case, controls and placement reruns need to run on a build that actually contains this patch. Confirm that the regenerated `reflow.patch` includes the early return (the diff at `reflow.patch:187-189`) and that `prepare.py` applied it.\n\n**Limit:** no test combines an unchanged-size resize while the alternate buffer is active, though the early return is buffer-independent.",
+  "exitCode": "0",
+  "startedAt": "2026-11-17T07:46:18Z",
+  "endedAt": "2026-11-17T07:46:47Z",
+  "rawFile": "/tmp/myterm-188-noop-review.json.json",
+  "stderrTail": ""
+}

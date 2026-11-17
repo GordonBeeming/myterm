@@ -1,0 +1,14 @@
+{
+  "wrap-corrected-matrix.json.gz": {
+    "comparisons": 1168,
+    "failed": 321
+  },
+  "candidate-matrix.json.gz": {
+    "comparisons": 1168,
+    "failed": 390
+  },
+  "baseline-matrix.json.gz": {
+    "comparisons": 1168,
+    "failed": 579
+  }
+}

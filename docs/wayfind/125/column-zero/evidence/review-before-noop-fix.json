@@ -1,0 +1,15 @@
+{
+  "tool": "claude",
+  "mode": "review",
+  "model": "sonnet",
+  "permissionMode": "plan",
+  "repo": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125",
+  "sessionId": "0e551b99-d742-477a-b6ef-ef04ed955142",
+  "status": "completed",
+  "response": "**Verdict: not clean. One blocking bug, reproduced against `/tmp/myterm-188-build`.**\n\n**Blocking: a same-size resize with pending wrap breaks the next checkpoint.**\n- **Native behaviour:** `Terminal.resize` returns early when the size is unchanged (`Terminal.swift:5530`). Nothing changes, so pending wrap stays set.\n- **Candidate behaviour:** `TerminalState::resize` adds the `+1` for pending wrap to `cursor_main`/`cursor_alt` (`reflow.patch:212-215`). `Screen::resize` then returns that cursor unchanged on its same-size early return (`screen.rs`, the `return cursor;` after the `physical_rows == ... && size.dpi == self.dpi` check). `set_cursor_pos` gets x = cols, which moves the cursor out of the pending state and clears `wrap_next`. Native would have kept it.\n- **Second effect:** the saved-cursor change `saved.position.x + wrap_next` and `saved.wrap_next = false` runs before that early return, so a same-size resize also clears a saved pending wrap that native keeps.\n- **Reproduction:** the trace is `ABCDEFGHIJKLMNOPQRST`, then `resize [20,6]` (the unchanged size), then `XY`, with a checkpoint after each event.\n  - The first two checkpoints export fine.\n  - The third fails with `checkpoint stored column limit` (`prototype-checkpoint.rs:70`). The line grew past the viewport width.\n  - The same trace without the resize exports fine, as do the no-pending and shrink-pending variants.\n  - So a valid terminal state, such as a DPI-only or repeated identical resize while a line is at pending wrap, can't be checkpointed afterwards.\n- **Fix:** make same-size resize a true no-op, matching `Terminal.resize`.\n  - In `TerminalState::resize`, return early when cols and rows are unchanged.\n  - Or in `Screen::resize`, do the saved-cursor `wrap_next` handling after the same-size early return, and have the early return give back the un-incremented cursor.\n  - Add a case with pending wrap, a same-size resize and subsequent output, plus the same with a saved pending wrap.\n\n**Checked, no defect found:**\n- Both `prototype_cursor` fields are written from the adjusted cursors, so exports stay in range after a shrink.\n- `prototype_clear_alt_buffer` keeps `saved_cursor`, `keyboard_stack` and `prototype_unsaved_y`, and clears the last-print anchor for the alternate buffer.\n- Pending-wrap conversion of the saved cursor is correct on a real size change.\n\n**Limits:** I did not rerun the full suites, and I edited nothing. I didn't test the saved-wrap variant of the same-size case; it follows from the code order. The `Terminal::resize` early return is the smallest fix.",
+  "exitCode": "0",
+  "startedAt": "2026-11-17T07:44:26Z",
+  "endedAt": "2026-11-17T07:45:28Z",
+  "rawFile": "/tmp/myterm-188-closure-review.json.json",
+  "stderrTail": ""
+}

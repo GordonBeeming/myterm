@@ -1,0 +1,15 @@
+{
+  "wideBoundaryAccepted": true,
+  "rejected": {
+    "past-final-column": "corrupt(\"bridge cell geometry or grapheme\")",
+    "negative-column": "corrupt(\"bridge cell geometry or grapheme\")",
+    "oversized-width": "corrupt(\"bridge cell geometry or grapheme\")",
+    "wide-repetitions": "corrupt(\"bridge cell geometry or grapheme\")",
+    "overlapping-cell": "corrupt(\"bridge cell geometry or grapheme\")",
+    "invalid-first-wrap-type": "DecodingError.typeMismatch: Expected value of type Bool. Path: state.normal.firstWrapped. Debug description: Expected to decode Bool but found a string instead.",
+    "inactive-cursor-shape": "corrupt(\"bridge inactive cursor bounds\")",
+    "inactive-cursor-column": "corrupt(\"bridge inactive cursor bounds\")",
+    "inactive-cursor-row": "corrupt(\"bridge inactive cursor bounds\")",
+    "oversized-default-saved-row": "corrupt(\"bridge line limit\")"
+  }
+}

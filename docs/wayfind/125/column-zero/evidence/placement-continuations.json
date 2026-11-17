@@ -1,0 +1,291 @@
+{
+  "red": {
+    "referencePlacements": [
+      {
+        "imageId": 7,
+        "placementId": 3,
+        "parentOffsetH": 0,
+        "parentOffsetV": 0,
+        "pixelOffsetX": 0,
+        "pixelOffsetY": 0,
+        "column": 0,
+        "row": 0,
+        "columns": 1,
+        "rows": 1,
+        "zIndex": 0,
+        "isVirtual": false,
+        "isAlternateBuffer": false
+      }
+    ],
+    "oldPlacements": [],
+    "cacheMatches": true
+  },
+  "comparisons": [
+    {
+      "case": "scrolled-record",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 4007,
+      "differences": []
+    },
+    {
+      "case": "scrolled-record",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 4773,
+      "differences": []
+    },
+    {
+      "case": "delete-placement-retain-cache",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 4007,
+      "differences": []
+    },
+    {
+      "case": "delete-placement-retain-cache",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 3853,
+      "differences": []
+    },
+    {
+      "case": "delete-placement-retain-cache",
+      "cut": 2,
+      "passed": true,
+      "checkpointBytes": 4529,
+      "differences": []
+    },
+    {
+      "case": "delete-placement-retain-cache",
+      "cut": 3,
+      "passed": true,
+      "checkpointBytes": 3954,
+      "differences": []
+    },
+    {
+      "case": "reuse-placement",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 4007,
+      "differences": []
+    },
+    {
+      "case": "reuse-placement",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 4832,
+      "differences": []
+    },
+    {
+      "case": "reuse-placement",
+      "cut": 2,
+      "passed": true,
+      "checkpointBytes": 4009,
+      "differences": []
+    },
+    {
+      "case": "reuse-placement",
+      "cut": 3,
+      "passed": true,
+      "checkpointBytes": 3853,
+      "differences": []
+    },
+    {
+      "case": "reuse-placement",
+      "cut": 4,
+      "passed": true,
+      "checkpointBytes": 4529,
+      "differences": []
+    },
+    {
+      "case": "nonorigin-scroll",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 2447,
+      "differences": []
+    },
+    {
+      "case": "nonorigin-scroll",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 4007,
+      "differences": []
+    },
+    {
+      "case": "nonorigin-scroll",
+      "cut": 2,
+      "passed": true,
+      "checkpointBytes": 4529,
+      "differences": []
+    },
+    {
+      "case": "partial-stripes",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 3044,
+      "differences": []
+    },
+    {
+      "case": "partial-stripes",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 4530,
+      "differences": []
+    },
+    {
+      "case": "partial-stripes",
+      "cut": 2,
+      "passed": true,
+      "checkpointBytes": 4007,
+      "differences": []
+    },
+    {
+      "case": "bottom-tall-C0",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 3853,
+      "differences": []
+    },
+    {
+      "case": "bottom-tall-C0",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 5126,
+      "differences": []
+    },
+    {
+      "case": "bottom-tall-C0",
+      "cut": 2,
+      "passed": true,
+      "checkpointBytes": 4306,
+      "differences": []
+    },
+    {
+      "case": "bottom-tall-C1",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 3853,
+      "differences": []
+    },
+    {
+      "case": "bottom-tall-C1",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 5126,
+      "differences": []
+    },
+    {
+      "case": "bottom-tall-C1",
+      "cut": 2,
+      "passed": true,
+      "checkpointBytes": 4306,
+      "differences": []
+    },
+    {
+      "case": "multiple-records",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 4162,
+      "differences": []
+    },
+    {
+      "case": "multiple-records",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 4007,
+      "differences": []
+    },
+    {
+      "case": "multiple-records",
+      "cut": 2,
+      "passed": true,
+      "checkpointBytes": 4684,
+      "differences": []
+    },
+    {
+      "case": "alternate-return",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 4007,
+      "differences": []
+    },
+    {
+      "case": "alternate-return",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 4950,
+      "differences": []
+    },
+    {
+      "case": "alternate-return",
+      "cut": 2,
+      "passed": true,
+      "checkpointBytes": 5473,
+      "differences": []
+    },
+    {
+      "case": "alternate-return",
+      "cut": 3,
+      "passed": true,
+      "checkpointBytes": 4196,
+      "differences": []
+    },
+    {
+      "case": "alternate-return",
+      "cut": 4,
+      "passed": true,
+      "checkpointBytes": 4718,
+      "differences": []
+    },
+    {
+      "case": "replace-across-buffers",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 4007,
+      "differences": []
+    },
+    {
+      "case": "replace-across-buffers",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 5318,
+      "differences": []
+    },
+    {
+      "case": "replace-across-buffers",
+      "cut": 2,
+      "passed": true,
+      "checkpointBytes": 3992,
+      "differences": []
+    },
+    {
+      "case": "replace-across-buffers",
+      "cut": 3,
+      "passed": true,
+      "checkpointBytes": 4718,
+      "differences": []
+    },
+    {
+      "case": "reset",
+      "cut": 0,
+      "passed": true,
+      "checkpointBytes": 4007,
+      "differences": []
+    },
+    {
+      "case": "reset",
+      "cut": 1,
+      "passed": true,
+      "checkpointBytes": 3233,
+      "differences": []
+    },
+    {
+      "case": "reset",
+      "cut": 2,
+      "passed": true,
+      "checkpointBytes": 3806,
+      "differences": []
+    }
+  ]
+}

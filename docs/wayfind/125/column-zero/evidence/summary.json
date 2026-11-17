@@ -1,0 +1,23 @@
+{
+  "nativeMatrix": {
+    "cases": 57,
+    "comparisons": 1380,
+    "failed": 0,
+    "failedCases": {}
+  },
+  "regression": {
+    "passed": 47,
+    "failed": 0,
+    "unsupported": 0,
+    "rejectedLimits": 2,
+    "negativeControls": 28,
+    "nativeStreamPassed": true,
+    "livePtyPassed": true,
+    "maximumCheckpointBytes": 137472,
+    "maximumImportNs": 20425458
+  },
+  "receiverRejections": 10,
+  "placementComparisonsPassed": 38,
+  "nativeSourcesMatchReviewedScratch": true,
+  "review": "review-final.json"
+}

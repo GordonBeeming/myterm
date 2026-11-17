@@ -1,0 +1,24 @@
+{
+  "createdAt": "2026-11-17T07:51:35.360699+00:00",
+  "platform": "macOS-27.3-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "foundationRevision": "ab4f866153ff46c03e1e51de72eec8d85d233d51",
+  "researchBase": "6f152697ad6717a47a00c74ff05756781e477129",
+  "build": "/tmp/myterm-188-complete-build",
+  "nativeSourcesMatchReviewedScratch": true,
+  "sourceSha256": {
+    "source/term/src/screen.rs": "b3adb4f4f1ca44b333c35bfd554530a4544567b37d978610702c10f456c4ee11",
+    "source/term/src/terminalstate/mod.rs": "6d35822466fdc531aa8c8cfd8d29299455c1e4dc150accf33bb8f8ba21f74a13",
+    "source/term/src/terminalstate/prototype-checkpoint.rs": "f3073d4eec0dfea66d68c434d424db2c7ce3f3699551743b149f78f3c74d9cb2",
+    "SwiftTerm/Sources/SwiftTerm/CheckpointBridge.swift": "aaf98e0ef1a3f1ca715982b82f04ab455d21b1a46a06db750bfe1ce88deec41d",
+    "SwiftTerm/Sources/SwiftTerm/Buffer.swift": "3ad2aae86d0337d5377320dd5697e1d31d288a851bce1a673f3f910ab74f8229",
+    "SwiftTerm/Sources/SwiftTerm/Terminal.swift": "b6152aa8a3d1ed8d2ab9958e2d7d80d02e7eb7d6b1f50691f102e0a34e314564"
+  },
+  "toolchain": {
+    "swift": "swift-driver version: 1.168.6 Apple Swift version 6.4.2 (swiftlang-6.4.2.1.9 clang-2100.4.1.1)\nTarget: arm64-apple-macosx27.3.0",
+    "rust": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+    "xcode": "Xcode 27.2\nBuild version 27B52"
+  },
+  "patchSha256": "13e0ce28cb6c52c22afda75d145b055b4d3b49185b558f94d914a45e9ed24a13",
+  "patchReplayMatchesBuiltSources": true
+}

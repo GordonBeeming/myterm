@@ -1,0 +1,219 @@
+--- a/source/term/src/screen.rs
++++ b/source/term/src/screen.rs
+@@ -49,0 +50,2 @@
++    pub(crate) prototype_first_wrapped: bool,
++    pub(crate) prototype_cursor: CursorPosition,
+@@ -93,0 +96,2 @@
++            prototype_first_wrapped: false,
++            prototype_cursor: CursorPosition::default(),
+@@ -97,0 +102 @@
++        self.prototype_first_wrapped = false;
+@@ -116,0 +122,12 @@
++        let mut logical_rows = 0;
++
++        // SwiftTerm leaves the cursor's logical line for the application to redraw.
++        // Preserve its physical rows instead of reflowing them with surrounding output.
++        let mut cursor_start = cursor_y;
++        while cursor_start > 0 && self.lines[cursor_start - 1].last_cell_was_wrapped() {
++            cursor_start -= 1;
++        }
++        let mut cursor_end = cursor_y;
++        while cursor_end + 1 < self.lines.len() && self.lines[cursor_end].last_cell_was_wrapped() {
++            cursor_end += 1;
++        }
+@@ -118,0 +136,12 @@
++            if (cursor_start..=cursor_end).contains(&phys_idx) {
++                if phys_idx == cursor_y {
++                    adjusted_cursor = (cursor_x.min(physical_cols - 1), rewrapped.len());
++                }
++                if physical_cols < self.physical_cols && line.len() > physical_cols {
++                    let wrapped = line.last_cell_was_wrapped();
++                    line.resize(physical_cols, seqno);
++                    line.set_last_cell_was_wrapped(wrapped, seqno);
++                }
++                rewrapped.push_back(line);
++                continue;
++            }
+@@ -119,0 +149 @@
++            logical_rows += 1;
+@@ -133,0 +164,3 @@
++                    // Wrapped predecessors occupy the old viewport width even
++                    // when a cursor-line grow left their tail unallocated.
++                    prior.resize((logical_rows - 1) * self.physical_cols, seqno);
+@@ -178,0 +212 @@
++            logical_rows = 0;
+@@ -180,0 +215 @@
++
+@@ -204,0 +240,2 @@
++        let old_default_saved_y = self.prototype_unsaved_y;
++        let old_saved_y = self.saved_cursor.as_ref().map(|s| s.position.y);
+@@ -210 +247,5 @@
+-        if let Some(saved) = self.saved_cursor.as_mut() { saved.position.y = (saved.position.y + pulled as i64).min(physical_rows as i64 - 1); saved.position.x = saved.position.x.min(size.cols.max(1) - 1); }
++        if let Some(saved) = self.saved_cursor.as_mut() {
++            saved.position.y = (saved.position.y + pulled as i64).min(physical_rows as i64 - 1);
++            saved.position.x = (saved.position.x + usize::from(saved.wrap_next)).min(size.cols.max(1) - 1);
++            saved.wrap_next = false;
++        }
+@@ -232 +273,2 @@
+-            if self.lines.back().map(Line::is_whitespace).unwrap_or(false) {
++            if (old_history == 0 || physical_cols == self.physical_cols)
++                && self.lines.back().map(Line::is_whitespace).unwrap_or(false) {
+@@ -323,0 +366,8 @@
++        if self.allow_scrollback {
++            // Terminal.resizeBuffers keeps the saved row's distance from the live cursor.
++            let delta = new_cursor_y - cursor.y;
++            self.prototype_unsaved_y = (old_default_saved_y as i64 + delta).clamp(0, physical_rows as i64 - 1) as usize;
++            if let (Some(saved), Some(old_y)) = (self.saved_cursor.as_mut(), old_saved_y) {
++                saved.position.y = (old_y + delta).clamp(0, physical_rows as i64 - 1);
++            }
++        }
+@@ -326 +376,5 @@
+-        for _ in 0..removed { self.lines.pop_front(); }
++        for _ in 0..removed {
++            if let Some(line) = self.lines.pop_front() {
++                self.prototype_first_wrapped = line.last_cell_was_wrapped();
++            }
++        }
+@@ -332 +386 @@
+-            y: if clamp_blank_cursor { cursor.y } else { new_cursor_y },
++            y: new_cursor_y,
+@@ -718,0 +773 @@
++                if remove_idx == 0 { self.prototype_first_wrapped = line.last_cell_was_wrapped(); }
+@@ -740 +795,3 @@
+-            self.lines.remove(remove_idx);
++            if let Some(line) = self.lines.remove(remove_idx) {
++                if remove_idx == 0 { self.prototype_first_wrapped = line.last_cell_was_wrapped(); }
++            }
+@@ -777 +834 @@
+-            self.lines.pop_front();
++            if let Some(line) = self.lines.pop_front() { self.prototype_first_wrapped = line.last_cell_was_wrapped(); }
+--- a/source/term/src/terminalstate/mod.rs
++++ b/source/term/src/terminalstate/mod.rs
+@@ -144 +144 @@
+-    wrap_next: bool,
++    pub(crate) wrap_next: bool,
+@@ -981,0 +982,7 @@
++        if size.cols == self.screen().physical_cols && size.rows == self.screen().physical_rows {
++            // Native text resize is a no-op at the same dimensions, including pending wrap.
++            self.pixel_width = size.pixel_width;
++            self.pixel_height = size.pixel_height;
++            self.dpi = size.dpi;
++            return;
++        }
+@@ -983 +990 @@
+-        let (cursor_main, cursor_alt) = if self.screen.alt_screen_is_active {
++        let (mut cursor_main, mut cursor_alt) = if self.screen.alt_screen_is_active {
+@@ -985,6 +992 @@
+-                self.screen
+-                    .screen
+-                    .saved_cursor
+-                    .as_ref()
+-                    .map(|s| s.position)
+-                    .unwrap_or_else(CursorPosition::default),
++                self.screen.screen.prototype_cursor,
+@@ -996,6 +998 @@
+-                self.screen
+-                    .alt_screen
+-                    .saved_cursor
+-                    .as_ref()
+-                    .map(|s| s.position)
+-                    .unwrap_or_else(CursorPosition::default),
++                self.screen.alt_screen.prototype_cursor,
+@@ -1004,0 +1002,6 @@
++        // SwiftTerm stores pending wrap as a cursor one column beyond the line.
++        // A resize clamps that logical position to the new viewport and clears wrap.
++        if self.wrap_next {
++            if self.screen.alt_screen_is_active { cursor_alt.x += 1; }
++            else { cursor_main.x += 1; }
++        }
+@@ -1018,0 +1022,2 @@
++        self.screen.screen.prototype_cursor = adjusted_cursor_main;
++        self.screen.alt_screen.prototype_cursor = adjusted_cursor_alt;
+@@ -1025,6 +1029,0 @@
+-            if let Some(saved) = self.screen.screen.saved_cursor.as_mut() {
+-                saved.position.x = adjusted_cursor_main.x;
+-                saved.position.y = adjusted_cursor_main.y;
+-                saved.position.seqno = self.seqno;
+-                saved.wrap_next = false;
+-            }
+@@ -1036,6 +1034,0 @@
+-            if let Some(saved) = self.screen.alt_screen.saved_cursor.as_mut() {
+-                saved.position.x = adjusted_cursor_alt.x;
+-                saved.position.y = adjusted_cursor_alt.y;
+-                saved.position.seqno = self.seqno;
+-                saved.wrap_next = false;
+-            }
+@@ -1822,0 +1816 @@
++                    self.prototype_clear_alt_buffer();
+@@ -2037,0 +2032 @@
++                    self.prototype_clear_alt_buffer();
+@@ -2239,0 +2235 @@
++        let full_display = matches!(&erase, EraseInDisplay::EraseDisplay);
+@@ -2266,0 +2263,5 @@
++                if full_display {
++                    // Native erase resets the incoming continuation flag too.
++                    if line_idx == 0 { screen.prototype_first_wrapped = false; }
++                    else { screen.line_mut(line_idx - 1).set_last_cell_was_wrapped(false, seqno); }
++                }
+@@ -2775 +2776 @@
+-        let x = saved.position.x;
++        let x = (saved.position.x + usize::from(saved.wrap_next)).min(self.screen().physical_cols - 1);
+@@ -2781 +2782,2 @@
+-        self.wrap_next = saved.wrap_next;
++        // Native restore clamps the saved logical column and clears pending wrap.
++        self.wrap_next = false;
+--- a/source/term/src/terminalstate/prototype-checkpoint.rs
++++ b/source/term/src/terminalstate/prototype-checkpoint.rs
+@@ -97 +97 @@
+-    Ok(json!({"lines":output,"saved":bridge_saved(&screen.saved_cursor)?,"margins":margins,
++    Ok(json!({"lines":output,"firstWrapped":screen.prototype_first_wrapped,"cursor":[screen.prototype_cursor.x, screen.prototype_cursor.y],"saved":bridge_saved(&screen.saved_cursor)?,"margins":margins,
+@@ -154,0 +155,10 @@
++    pub(crate) fn prototype_clear_alt_buffer(&mut self) {
++        // Native Buffer.clear resets live content and margins but keeps saved state.
++        let mut cleared = Screen::new(self.get_size(), &self.config, false, self.seqno, self.get_bidi_mode());
++        std::mem::swap(&mut cleared.saved_cursor, &mut self.screen.alt_screen.saved_cursor);
++        std::mem::swap(&mut cleared.keyboard_stack, &mut self.screen.alt_screen.keyboard_stack);
++        cleared.prototype_unsaved_y = self.screen.alt_screen.prototype_unsaved_y;
++        self.screen.alt_screen = cleared;
++        self.prototype_last_print[1] = None;
++    }
++
+@@ -159,2 +169,9 @@
+-        if self.screen.alt_screen_is_active {self.screen.alt_screen.prototype_margins = margins;}
+-        else {self.screen.screen.prototype_margins = margins;}
++        let mut live_cursor = self.cursor;
++        if self.wrap_next { live_cursor.x += 1; }
++        if self.screen.alt_screen_is_active {
++            self.screen.alt_screen.prototype_margins = margins;
++            self.screen.alt_screen.prototype_cursor = live_cursor;
++        } else {
++            self.screen.screen.prototype_margins = margins;
++            self.screen.screen.prototype_cursor = live_cursor;
++        }
+--- a/SwiftTerm/Sources/SwiftTerm/CheckpointBridge.swift
++++ b/SwiftTerm/Sources/SwiftTerm/CheckpointBridge.swift
+@@ -23 +23 @@
+-private struct BridgeBuffer: Decodable { let lines: [BridgeLine], saved: BridgeSaved?, margins: [Int], defaultSavedY: Int }
++private struct BridgeBuffer: Decodable { let lines: [BridgeLine], firstWrapped: Bool?, cursor: [Int]?, saved: BridgeSaved?, margins: [Int], defaultSavedY: Int }
+@@ -192,0 +193,5 @@
++            if let cursor = source.cursor {
++                guard cursor.count == 2, (0...s.columns).contains(cursor[0]), (0..<s.rows).contains(cursor[1]) else {
++                    throw TerminalCheckpointError.corrupt("bridge inactive cursor bounds")
++                }
++            }
+@@ -199,2 +204,2 @@
+-            result.x = active ? s.cursor[0] + (s.wrapNext ? 1 : 0) : source.saved?.x ?? 0
+-            result.y = active ? s.cursor[1] : source.saved?.y ?? 0
++            result.x = active ? s.cursor[0] + (s.wrapNext ? 1 : 0) : source.cursor?[0] ?? source.saved?.x ?? 0
++            result.y = active ? s.cursor[1] : source.cursor?[1] ?? source.saved?.y ?? 0
+@@ -235 +240 @@
+-                          c.width * c.repetitions <= line.width - c.x,
++                          (c.width * c.repetitions <= line.width - c.x || (c.width == 2 && c.x == line.width - 1)),
+@@ -246,2 +251,2 @@
+-                    for column in c.x..<(c.x + c.width * c.repetitions) { cells[column] = value }
+-                    if c.width == 2 { cells[c.x + 1] = CharData(attribute: value.attribute, code: 0, size: 0) }
++                    for column in c.x..<min(line.width, c.x + c.width * c.repetitions) { cells[column] = value }
++                    if c.width == 2 && c.x + 1 < line.width { cells[c.x + 1] = CharData(attribute: value.attribute, code: 0, size: 0) }
+@@ -279 +284 @@
+-                return CheckpointLine(isWrapped: index > 0 && source.lines[index - 1].wrapped, renderMode: 0,
++                return CheckpointLine(isWrapped: index > 0 ? source.lines[index - 1].wrapped : source.firstWrapped ?? false, renderMode: 0,

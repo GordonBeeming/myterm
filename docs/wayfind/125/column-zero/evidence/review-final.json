@@ -1,0 +1,15 @@
+{
+  "tool": "claude",
+  "mode": "review",
+  "model": "sonnet",
+  "permissionMode": "plan",
+  "repo": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125",
+  "sessionId": "0e551b99-d742-477a-b6ef-ef04ed955142",
+  "status": "completed",
+  "response": "**Verdict: clean. I found no blocking issue in the `dec_restore_cursor` change.**\n\nI read `dec_restore_cursor` in `/tmp/myterm-188-build/native/.../mod.rs:2755-2793` against native `cmdRestoreCursor` (`Terminal.swift:2650-2666`).\n\n- **Column:** native sets `buffer.x = min(max(0, savedX), cols-1)`. A saved pending wrap is stored as `savedX = cols`, so it restores to `cols-1` with no pending state.\n- **Candidate:** it computes `(saved.position.x + usize::from(saved.wrap_next)).min(physical_cols - 1)`, passes that to `set_cursor_pos`, and sets `wrap_next = false`. That gives the same logical column and the same cleared wrap.\n- **Your repro:** the next `X` overwrites the final `T` at column 19, and the following `Y` wraps to the next row at x=1. That matches native.\n- **Fallbacks:** with no saved cursor, x is 0, matching native `savedX` default.\n- **Origin mode:** it is cleared before `set_cursor_pos`, so the row isn't shifted by margins. Native restores `originMode` afterwards, and so does the candidate.\n- **Other state:** the saved record is left untouched, and the other fields (pen, charsets, wrap, reverse wrap, margin mode) are restored as native does.\n- **Same-size no-op:** it still holds, as reviewed earlier.\n\n**Limits, not defects:**\n- `shift_out = false` and `newline_mode = false` in the restore have no counterpart in native `cmdRestoreCursor`. They are existing lines outside this change and I didn't test them.\n- I did not run anything, so the \"all 40 comparisons pass\" result and the fresh-build 57-case run are yours to confirm. Check that the regenerated `reflow.patch` includes this `dec_restore_cursor` hunk and that the fresh build applied it. Earlier, `/tmp/myterm-188-noop-build` did not match the scratch source.",
+  "exitCode": "0",
+  "startedAt": "2026-11-17T07:49:58Z",
+  "endedAt": "2026-11-17T07:50:20Z",
+  "rawFile": "/tmp/myterm-188-restore-review.json.json",
+  "stderrTail": ""
+}
