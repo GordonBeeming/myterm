@@ -1,0 +1,2460 @@
+{
+  "scope": "native Swift schema adapter plus Python scratch-file transaction candidate",
+  "environment": {
+    "system": "Darwin",
+    "release": "27.3.0",
+    "machine": "arm64",
+    "swift": "Apple Swift version 6.4.2 (swiftlang-6.4.2.1.9 clang-2100.4.1.1)\nTarget: arm64-apple-macosx27.3.0"
+  },
+  "passed": 221,
+  "failed": 0,
+  "records": [
+    {
+      "name": "v1 inactive split tabs: full session identity/content retention",
+      "passed": true,
+      "original": {
+        "00000000-0000-0000-0000-0000000007da": {
+          "kind": "terminal",
+          "value": {
+            "id": "00000000-0000-0000-0000-0000000007DA",
+            "paneID": "00000000-0000-0000-0000-0000000007DB",
+            "workingDirectory": "file:///prototype/work",
+            "recentText": "preserve this output"
+          }
+        },
+        "00000000-0000-0000-0000-0000000007dc": {
+          "kind": "browser",
+          "value": {
+            "id": "00000000-0000-0000-0000-0000000007DC",
+            "paneID": "00000000-0000-0000-0000-0000000007DD",
+            "url": "https://example.invalid/review",
+            "profile": {
+              "scope": "project-directory",
+              "persistentStoreID": "00000000-0000-0000-0000-0000000007DE",
+              "projectDirectory": "file:///prototype/work"
+            }
+          }
+        },
+        "00000000-0000-0000-0000-000000000bc2": {
+          "kind": "terminal",
+          "value": {
+            "id": "00000000-0000-0000-0000-000000000BC2",
+            "paneID": "00000000-0000-0000-0000-000000000BC3",
+            "workingDirectory": "file:///prototype/work",
+            "recentText": "preserve this output"
+          }
+        },
+        "00000000-0000-0000-0000-000000000bc4": {
+          "kind": "browser",
+          "value": {
+            "id": "00000000-0000-0000-0000-000000000BC4",
+            "paneID": "00000000-0000-0000-0000-000000000BC5",
+            "url": "https://example.invalid/review",
+            "profile": {
+              "scope": "project-directory",
+              "persistentStoreID": "00000000-0000-0000-0000-000000000BC6",
+              "projectDirectory": "file:///prototype/work"
+            }
+          }
+        }
+      },
+      "converted": {
+        "00000000-0000-0000-0000-0000000007da": {
+          "kind": "terminal",
+          "value": {
+            "id": "00000000-0000-0000-0000-0000000007da",
+            "paneID": "00000000-0000-0000-0000-0000000007db",
+            "recentText": "preserve this output",
+            "workingDirectory": "file:///prototype/work"
+          }
+        },
+        "00000000-0000-0000-0000-000000000bc2": {
+          "kind": "terminal",
+          "value": {
+            "id": "00000000-0000-0000-0000-000000000bc2",
+            "paneID": "00000000-0000-0000-0000-000000000bc3",
+            "recentText": "preserve this output",
+            "workingDirectory": "file:///prototype/work"
+          }
+        },
+        "00000000-0000-0000-0000-000000000bc4": {
+          "kind": "browser",
+          "value": {
+            "id": "00000000-0000-0000-0000-000000000bc4",
+            "paneID": "00000000-0000-0000-0000-000000000bc5",
+            "profile": {
+              "persistentStoreID": "00000000-0000-0000-0000-000000000BC6",
+              "projectDirectory": "file:///prototype/work",
+              "scope": "project-directory"
+            },
+            "url": "https://example.invalid/review"
+          }
+        },
+        "00000000-0000-0000-0000-0000000007dc": {
+          "kind": "browser",
+          "value": {
+            "id": "00000000-0000-0000-0000-0000000007dc",
+            "paneID": "00000000-0000-0000-0000-0000000007dd",
+            "profile": {
+              "persistentStoreID": "00000000-0000-0000-0000-0000000007DE",
+              "projectDirectory": "file:///prototype/work",
+              "scope": "project-directory"
+            },
+            "url": "https://example.invalid/review"
+          }
+        }
+      }
+    },
+    {
+      "name": "v1 inactive split tabs: native structural rewrite recorded",
+      "passed": true,
+      "expectedFocusedSessions": [
+        "00000000-0000-0000-0000-0000000007da",
+        "00000000-0000-0000-0000-000000000bc2",
+        "00000000-0000-0000-0000-000000000bc4"
+      ],
+      "actualFocusedSessions": [
+        "00000000-0000-0000-0000-0000000007da",
+        "00000000-0000-0000-0000-000000000bc2",
+        "00000000-0000-0000-0000-000000000bc4"
+      ],
+      "original": {
+        "id": "00000000-0000-0000-0000-0000000007D2",
+        "title": "Same name",
+        "folderID": "00000000-0000-0000-0000-0000000007D1",
+        "isPinned": true,
+        "tabs": [
+          {
+            "id": "00000000-0000-0000-0000-0000000007D3",
+            "customTitle": "Keep title",
+            "focusedTerminalSessionID": "00000000-0000-0000-0000-0000000007DA",
+            "focusedPaneID": "00000000-0000-0000-0000-0000000007DB",
+            "content": {
+              "type": "terminal",
+              "splitTree": {
+                "type": "horizontal",
+                "children": [
+                  {
+                    "type": "terminal",
+                    "session": {
+                      "id": "00000000-0000-0000-0000-0000000007DA",
+                      "paneID": "00000000-0000-0000-0000-0000000007DB",
+                      "workingDirectory": "file:///prototype/work",
+                      "recentText": "preserve this output"
+                    }
+                  },
+                  {
+                    "type": "browser",
+                    "session": {
+                      "id": "00000000-0000-0000-0000-0000000007DC",
+                      "paneID": "00000000-0000-0000-0000-0000000007DD",
+                      "url": "https://example.invalid/review",
+                      "profile": {
+                        "scope": "project-directory",
+                        "persistentStoreID": "00000000-0000-0000-0000-0000000007DE",
+                        "projectDirectory": "file:///prototype/work"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "00000000-0000-0000-0000-000000000BBB",
+            "customTitle": "Inactive split tab",
+            "focusedTerminalSessionID": "00000000-0000-0000-0000-000000000BC2",
+            "focusedPaneID": "00000000-0000-0000-0000-000000000BC3",
+            "content": {
+              "type": "terminal",
+              "splitTree": {
+                "type": "vertical",
+                "children": [
+                  {
+                    "type": "terminal",
+                    "session": {
+                      "id": "00000000-0000-0000-0000-000000000BC2",
+                      "paneID": "00000000-0000-0000-0000-000000000BC3",
+                      "workingDirectory": "file:///prototype/work",
+                      "recentText": "preserve this output"
+                    }
+                  },
+                  {
+                    "type": "browser",
+                    "session": {
+                      "id": "00000000-0000-0000-0000-000000000BC4",
+                      "paneID": "00000000-0000-0000-0000-000000000BC5",
+                      "url": "https://example.invalid/review",
+                      "profile": {
+                        "scope": "project-directory",
+                        "persistentStoreID": "00000000-0000-0000-0000-000000000BC6",
+                        "projectDirectory": "file:///prototype/work"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "selectedTabID": "00000000-0000-0000-0000-0000000007D3"
+      },
+      "converted": {
+        "focusedTabGroupID": "5b166b88-da34-5a95-a9bc-51cce55c62b6",
+        "folderID": "00000000-0000-0000-0000-0000000007d1",
+        "id": "00000000-0000-0000-0000-0000000007d2",
+        "isPinned": true,
+        "layout": {
+          "children": [
+            {
+              "group": {
+                "id": "5b166b88-da34-5a95-a9bc-51cce55c62b6",
+                "selectedTabID": "00000000-0000-0000-0000-0000000007d3",
+                "tabs": [
+                  {
+                    "content": {
+                      "session": {
+                        "id": "00000000-0000-0000-0000-0000000007da",
+                        "paneID": "00000000-0000-0000-0000-0000000007db",
+                        "recentText": "preserve this output",
+                        "workingDirectory": "file:///prototype/work"
+                      },
+                      "type": "terminal"
+                    },
+                    "customTitle": "Keep title",
+                    "id": "00000000-0000-0000-0000-0000000007d3"
+                  },
+                  {
+                    "content": {
+                      "session": {
+                        "id": "00000000-0000-0000-0000-000000000bc2",
+                        "paneID": "00000000-0000-0000-0000-000000000bc3",
+                        "recentText": "preserve this output",
+                        "workingDirectory": "file:///prototype/work"
+                      },
+                      "type": "terminal"
+                    },
+                    "customTitle": "Inactive split tab",
+                    "id": "00000000-0000-0000-0000-000000000bbb"
+                  },
+                  {
+                    "content": {
+                      "session": {
+                        "id": "00000000-0000-0000-0000-000000000bc4",
+                        "paneID": "00000000-0000-0000-0000-000000000bc5",
+                        "profile": {
+                          "persistentStoreID": "00000000-0000-0000-0000-000000000BC6",
+                          "projectDirectory": "file:///prototype/work",
+                          "scope": "project-directory"
+                        },
+                        "url": "https://example.invalid/review"
+                      },
+                      "type": "browser"
+                    },
+                    "id": "fa887ddb-a988-55ef-89ba-dc8156efc739"
+                  }
+                ]
+              },
+              "type": "group"
+            },
+            {
+              "group": {
+                "id": "5b166a88-da34-58e2-a99c-50cce51280e5",
+                "selectedTabID": "53d5613e-3c57-5260-8636-3f294b4dce2a",
+                "tabs": [
+                  {
+                    "content": {
+                      "session": {
+                        "id": "00000000-0000-0000-0000-0000000007dc",
+                        "paneID": "00000000-0000-0000-0000-0000000007dd",
+                        "profile": {
+                          "persistentStoreID": "00000000-0000-0000-0000-0000000007DE",
+                          "projectDirectory": "file:///prototype/work",
+                          "scope": "project-directory"
+                        },
+                        "url": "https://example.invalid/review"
+                      },
+                      "type": "browser"
+                    },
+                    "id": "53d5613e-3c57-5260-8636-3f294b4dce2a"
+                  }
+                ]
+              },
+              "type": "group"
+            }
+          ],
+          "id": "3673de0e-e445-50be-9855-aaae18441665",
+          "orientation": "horizontal",
+          "type": "split",
+          "weights": [
+            0.5,
+            0.5
+          ]
+        },
+        "title": "Same name"
+      }
+    },
+    {
+      "name": "v1 inactive split tabs: full migration retains content identities",
+      "passed": true
+    },
+    {
+      "name": "production/v1: stable source and IDs",
+      "passed": true,
+      "expected": [
+        "00000000-0000-0000-0000-000000000001",
+        "00000000-0000-0000-0000-000000000002",
+        "00000000-0000-0000-0000-000000000003",
+        "00000000-0000-0000-0000-00000000000a",
+        "00000000-0000-0000-0000-00000000000b",
+        "00000000-0000-0000-0000-00000000000c",
+        "00000000-0000-0000-0000-00000000000d"
+      ],
+      "actual": [
+        "00000000-0000-0000-0000-000000000001",
+        "00000000-0000-0000-0000-000000000002",
+        "e35a50a3-cdd9-52db-819b-a05798bcba76",
+        "00000000-0000-0000-0000-00000000000a",
+        "00000000-0000-0000-0000-00000000000b",
+        "00000000-0000-0000-0000-000000000003",
+        "e35a4fa3-cdd9-5128-827b-a15798c2d801",
+        "00000000-0000-0000-0000-00000000000c",
+        "00000000-0000-0000-0000-00000000000d",
+        "eaa0498e-926b-5ad2-9e78-1712732947c9",
+        "ce604d50-fdcf-5718-b07a-06a07e816fb2"
+      ]
+    },
+    {
+      "name": "production/v1: terminal/browser content",
+      "passed": true,
+      "expected": {
+        "00000000-0000-0000-0000-00000000000a": {
+          "kind": "terminal",
+          "value": {
+            "id": "00000000-0000-0000-0000-00000000000a",
+            "paneID": "00000000-0000-0000-0000-00000000000b",
+            "recentText": "preserve this output",
+            "workingDirectory": "file:///prototype/work"
+          }
+        },
+        "00000000-0000-0000-0000-00000000000c": {
+          "kind": "browser",
+          "value": {
+            "id": "00000000-0000-0000-0000-00000000000c",
+            "paneID": "00000000-0000-0000-0000-00000000000d",
+            "profile": {
+              "persistentStoreID": "00000000-0000-0000-0000-00000000000E",
+              "projectDirectory": "file:///prototype/work",
+              "scope": "project-directory"
+            },
+            "url": "https://example.invalid/review"
+          }
+        }
+      },
+      "actual": {
+        "00000000-0000-0000-0000-00000000000a": {
+          "kind": "terminal",
+          "server": "local-a",
+          "value": {
+            "id": "00000000-0000-0000-0000-00000000000a",
+            "paneID": "00000000-0000-0000-0000-00000000000b",
+            "recentText": "preserve this output",
+            "workingDirectory": "file:///prototype/work"
+          }
+        },
+        "00000000-0000-0000-0000-00000000000c": {
+          "kind": "browser",
+          "server": "local-a",
+          "value": {
+            "id": "00000000-0000-0000-0000-00000000000c",
+            "paneID": "00000000-0000-0000-0000-00000000000d",
+            "profile": {
+              "persistentStoreID": "00000000-0000-0000-0000-00000000000E",
+              "projectDirectory": "file:///prototype/work",
+              "scope": "project-directory"
+            },
+            "url": "https://example.invalid/review"
+          }
+        }
+      }
+    },
+    {
+      "name": "production/v1: server binding",
+      "passed": true
+    },
+    {
+      "name": "production/v1: shared preference separation",
+      "passed": true
+    },
+    {
+      "name": "production/v1: server payload outside shared structure",
+      "passed": true
+    },
+    {
+      "name": "production/v1: concrete preference values retained",
+      "passed": true,
+      "actual": [
+        {
+          "field": "isExpanded",
+          "owner": "00000000-0000-0000-0000-000000000001",
+          "value": false
+        },
+        {
+          "field": "globalSettings",
+          "owner": "client",
+          "value": {
+            "acceptsNewTabLinks": false,
+            "allowsLocalFileJavaScript": false,
+            "browserDataScope": "workspace",
+            "browserFilePatterns": [
+              "*.html",
+              "*.htm"
+            ],
+            "companionBrowserMode": "nativeProxy",
+            "cursorBlink": true,
+            "cursorShape": "block",
+            "finishedIndicatorColor": "blue",
+            "finishedIndicatorIcon": "tickDraw",
+            "fontPostScriptName": "Menlo-Regular",
+            "fontSize": 17,
+            "lineEditingMode": "emacs",
+            "markdownOpenCommand": "ide browse {file}",
+            "namesTabsFromAgentSessions": true,
+            "nativeTextFilePatterns": [
+              "*.md",
+              "*.markdown",
+              "*.mdown",
+              "*.mdx",
+              "*.mkd",
+              "*.mkdn",
+              "*.json",
+              "*.jsonc",
+              "*.json5",
+              "*.geojson",
+              "*.yaml",
+              "*.yml",
+              "*.toml",
+              "*.xml",
+              "*.ini",
+              "*.cfg",
+              "*.conf",
+              "*.txt",
+              "*.text",
+              "*.log",
+              "*.csv",
+              "*.tsv",
+              "*.html",
+              "*.htm",
+              "*.css",
+              "*.scss",
+              "*.sass",
+              "*.less",
+              "*.js",
+              "*.jsx",
+              "*.ts",
+              "*.tsx",
+              "*.mjs",
+              "*.cjs",
+              "*.swift",
+              "*.c",
+              "*.h",
+              "*.m",
+              "*.mm",
+              "*.cc",
+              "*.cpp",
+              "*.cxx",
+              "*.hpp",
+              "*.cs",
+              "*.java",
+              "*.kt",
+              "*.kts",
+              "*.go",
+              "*.rs",
+              "*.py",
+              "*.rb",
+              "*.php",
+              "*.sh",
+              "*.zsh",
+              "*.fish",
+              "*.ps1",
+              "*.psm1",
+              "*.psd1",
+              "*.ps1xml",
+              "*.cdxml",
+              "*.sql",
+              "README",
+              "README.md",
+              "LICENSE",
+              "Dockerfile",
+              "Makefile",
+              ".env",
+              ".gitignore",
+              ".gitattributes",
+              ".gitmodules",
+              ".editorconfig",
+              ".dockerignore",
+              ".npmrc",
+              ".nvmrc",
+              ".ruby-version",
+              ".tool-versions"
+            ],
+            "newSessionWorkingDirectory": {
+              "type": "home"
+            },
+            "optionAsMeta": true,
+            "questionIndicatorColor": "purple",
+            "questionIndicatorIcon": "pulsingBubble",
+            "restoresAgentSessions": true,
+            "scrollbackLines": 10000,
+            "sharesBrowserSignInsWithCompanion": true,
+            "shell": {
+              "type": "loginShell"
+            },
+            "showsAgentNotificationBell": true,
+            "showsClaudeAccount": true,
+            "showsIdleAgentIcon": false,
+            "terminalAppearance": "system",
+            "terminalTheme": "system",
+            "webLinkDestination": {
+              "type": "myterm"
+            },
+            "workingIndicatorColor": "gray",
+            "workingIndicatorIcon": "stirringCook"
+          }
+        },
+        {
+          "field": "selectedWorkspaceID",
+          "owner": "client",
+          "value": "00000000-0000-0000-0000-000000000002"
+        },
+        {
+          "field": "focusedTabGroupID",
+          "owner": "00000000-0000-0000-0000-000000000002",
+          "value": "e35a50a3-cdd9-52db-819b-a05798bcba76"
+        },
+        {
+          "field": "selectedTabID",
+          "owner": "e35a50a3-cdd9-52db-819b-a05798bcba76",
+          "value": "00000000-0000-0000-0000-000000000003"
+        },
+        {
+          "field": "selectedTabID",
+          "owner": "e35a4fa3-cdd9-5128-827b-a15798c2d801",
+          "value": "eaa0498e-926b-5ad2-9e78-1712732947c9"
+        }
+      ]
+    },
+    {
+      "name": "production/v1: exact retry",
+      "passed": true
+    },
+    {
+      "name": "production/v1: source backup bytes and limit",
+      "passed": true
+    },
+    {
+      "name": "production: actual channel path fixture",
+      "passed": true
+    },
+    {
+      "name": "production/v2: stable source and IDs",
+      "passed": true,
+      "expected": [
+        "00000000-0000-0000-0000-000000000001",
+        "00000000-0000-0000-0000-000000000002",
+        "e35a50a3-cdd9-52db-819b-a05798bcba76",
+        "00000000-0000-0000-0000-00000000000a",
+        "00000000-0000-0000-0000-00000000000b",
+        "00000000-0000-0000-0000-000000000003",
+        "e35a4fa3-cdd9-5128-827b-a15798c2d801",
+        "00000000-0000-0000-0000-00000000000c",
+        "00000000-0000-0000-0000-00000000000d",
+        "eaa0498e-926b-5ad2-9e78-1712732947c9",
+        "ce604d50-fdcf-5718-b07a-06a07e816fb2"
+      ],
+      "actual": [
+        "00000000-0000-0000-0000-000000000001",
+        "00000000-0000-0000-0000-000000000002",
+        "e35a50a3-cdd9-52db-819b-a05798bcba76",
+        "00000000-0000-0000-0000-00000000000a",
+        "00000000-0000-0000-0000-00000000000b",
+        "00000000-0000-0000-0000-000000000003",
+        "e35a4fa3-cdd9-5128-827b-a15798c2d801",
+        "00000000-0000-0000-0000-00000000000c",
+        "00000000-0000-0000-0000-00000000000d",
+        "eaa0498e-926b-5ad2-9e78-1712732947c9",
+        "ce604d50-fdcf-5718-b07a-06a07e816fb2"
+      ]
+    },
+    {
+      "name": "production/v2: terminal/browser content",
+      "passed": true,
+      "expected": {
+        "00000000-0000-0000-0000-00000000000a": {
+          "kind": "terminal",
+          "value": {
+            "id": "00000000-0000-0000-0000-00000000000a",
+            "paneID": "00000000-0000-0000-0000-00000000000b",
+            "recentText": "preserve this output",
+            "workingDirectory": "file:///prototype/work"
+          }
+        },
+        "00000000-0000-0000-0000-00000000000c": {
+          "kind": "browser",
+          "value": {
+            "id": "00000000-0000-0000-0000-00000000000c",
+            "paneID": "00000000-0000-0000-0000-00000000000d",
+            "profile": {
+              "persistentStoreID": "00000000-0000-0000-0000-00000000000E",
+              "projectDirectory": "file:///prototype/work",
+              "scope": "project-directory"
+            },
+            "url": "https://example.invalid/review"
+          }
+        }
+      },
+      "actual": {
+        "00000000-0000-0000-0000-00000000000a": {
+          "kind": "terminal",
+          "server": "local-a",
+          "value": {
+            "id": "00000000-0000-0000-0000-00000000000a",
+            "paneID": "00000000-0000-0000-0000-00000000000b",
+            "recentText": "preserve this output",
+            "workingDirectory": "file:///prototype/work"
+          }
+        },
+        "00000000-0000-0000-0000-00000000000c": {
+          "kind": "browser",
+          "server": "local-a",
+          "value": {
+            "id": "00000000-0000-0000-0000-00000000000c",
+            "paneID": "00000000-0000-0000-0000-00000000000d",
+            "profile": {
+              "persistentStoreID": "00000000-0000-0000-0000-00000000000E",
+              "projectDirectory": "file:///prototype/work",
+              "scope": "project-directory"
+            },
+            "url": "https://example.invalid/review"
+          }
+        }
+      }
+    },
+    {
+      "name": "production/v2: server binding",
+      "passed": true
+    },
+    {
+      "name": "production/v2: shared preference separation",
+      "passed": true
+    },
+    {
+      "name": "production/v2: server payload outside shared structure",
+      "passed": true
+    },
+    {
+      "name": "production/v2: concrete preference values retained",
+      "passed": true,
+      "actual": [
+        {
+          "field": "isExpanded",
+          "owner": "00000000-0000-0000-0000-000000000001",
+          "value": false
+        },
+        {
+          "field": "globalSettings",
+          "owner": "client",
+          "value": {
+            "acceptsNewTabLinks": false,
+            "allowsLocalFileJavaScript": false,
+            "browserDataScope": "workspace",
+            "browserFilePatterns": [
+              "*.html",
+              "*.htm"
+            ],
+            "companionBrowserMode": "nativeProxy",
+            "cursorBlink": true,
+            "cursorShape": "block",
+            "finishedIndicatorColor": "blue",
+            "finishedIndicatorIcon": "tickDraw",
+            "fontPostScriptName": "Menlo-Regular",
+            "fontSize": 17,
+            "lineEditingMode": "emacs",
+            "markdownOpenCommand": "ide browse {file}",
+            "namesTabsFromAgentSessions": true,
+            "nativeTextFilePatterns": [
+              "*.md",
+              "*.markdown",
+              "*.mdown",
+              "*.mdx",
+              "*.mkd",
+              "*.mkdn",
+              "*.json",
+              "*.jsonc",
+              "*.json5",
+              "*.geojson",
+              "*.yaml",
+              "*.yml",
+              "*.toml",
+              "*.xml",
+              "*.ini",
+              "*.cfg",
+              "*.conf",
+              "*.txt",
+              "*.text",
+              "*.log",
+              "*.csv",
+              "*.tsv",
+              "*.html",
+              "*.htm",
+              "*.css",
+              "*.scss",
+              "*.sass",
+              "*.less",
+              "*.js",
+              "*.jsx",
+              "*.ts",
+              "*.tsx",
+              "*.mjs",
+              "*.cjs",
+              "*.swift",
+              "*.c",
+              "*.h",
+              "*.m",
+              "*.mm",
+              "*.cc",
+              "*.cpp",
+              "*.cxx",
+              "*.hpp",
+              "*.cs",
+              "*.java",
+              "*.kt",
+              "*.kts",
+              "*.go",
+              "*.rs",
+              "*.py",
+              "*.rb",
+              "*.php",
+              "*.sh",
+              "*.zsh",
+              "*.fish",
+              "*.ps1",
+              "*.psm1",
+              "*.psd1",
+              "*.ps1xml",
+              "*.cdxml",
+              "*.sql",
+              "README",
+              "README.md",
+              "LICENSE",
+              "Dockerfile",
+              "Makefile",
+              ".env",
+              ".gitignore",
+              ".gitattributes",
+              ".gitmodules",
+              ".editorconfig",
+              ".dockerignore",
+              ".npmrc",
+              ".nvmrc",
+              ".ruby-version",
+              ".tool-versions"
+            ],
+            "newSessionWorkingDirectory": {
+              "type": "home"
+            },
+            "optionAsMeta": true,
+            "questionIndicatorColor": "purple",
+            "questionIndicatorIcon": "pulsingBubble",
+            "restoresAgentSessions": true,
+            "scrollbackLines": 10000,
+            "sharesBrowserSignInsWithCompanion": true,
+            "shell": {
+              "type": "loginShell"
+            },
+            "showsAgentNotificationBell": true,
+            "showsClaudeAccount": true,
+            "showsIdleAgentIcon": false,
+            "terminalAppearance": "system",
+            "terminalTheme": "system",
+            "webLinkDestination": {
+              "type": "myterm"
+            },
+            "workingIndicatorColor": "gray",
+            "workingIndicatorIcon": "stirringCook"
+          }
+        },
+        {
+          "field": "selectedWorkspaceID",
+          "owner": "client",
+          "value": "00000000-0000-0000-0000-000000000002"
+        },
+        {
+          "field": "focusedTabGroupID",
+          "owner": "00000000-0000-0000-0000-000000000002",
+          "value": "e35a50a3-cdd9-52db-819b-a05798bcba76"
+        },
+        {
+          "field": "selectedTabID",
+          "owner": "e35a50a3-cdd9-52db-819b-a05798bcba76",
+          "value": "00000000-0000-0000-0000-000000000003"
+        },
+        {
+          "field": "selectedTabID",
+          "owner": "e35a4fa3-cdd9-5128-827b-a15798c2d801",
+          "value": "eaa0498e-926b-5ad2-9e78-1712732947c9"
+        }
+      ]
+    },
+    {
+      "name": "production/v2: exact retry",
+      "passed": true
+    },
+    {
+      "name": "production/v2: source backup bytes and limit",
+      "passed": true
+    },
+    {
+      "name": "production: explicit additional import",
+      "passed": true,
+      "reason": "existing account layout requires explicit additional import"
+    },
+    {
+      "name": "production: same-name workspaces stay separate",
+      "passed": true
+    },
+    {
+      "name": "production: mixed-server assignment preserved",
+      "passed": true
+    },
+    {
+      "name": "production: conflicting source vs account",
+      "passed": true,
+      "reason": "account identity collision; neither side changed"
+    },
+    {
+      "name": "production: backup preserves source",
+      "passed": true,
+      "exitCode": 1,
+      "stderr": "Traceback (most recent call last):\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/worker.py\", line 8, in <module>\n    migrate(Path(source), Path(target), Path(decoder), fault=fault, channel=channel)\n    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/migration.py\", line 351, in migrate\n    recovery = backup(source_path, source, fault, pinned)\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/migration.py\", line 271, in backup\n    raise OSError(errno.ENOSPC, 'injected backup write failure')\nOSError: [Errno 28] injected backup write failure\n"
+    },
+    {
+      "name": "production: backup named failure reached",
+      "passed": true
+    },
+    {
+      "name": "production: backup commit boundary",
+      "passed": true,
+      "targetExists": false
+    },
+    {
+      "name": "production: failed backup stops commit",
+      "passed": true
+    },
+    {
+      "name": "production: backup restart and retry",
+      "passed": true,
+      "retry": "committed"
+    },
+    {
+      "name": "production: validation preserves source",
+      "passed": true,
+      "exitCode": 1,
+      "stderr": "Traceback (most recent call last):\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/worker.py\", line 8, in <module>\n    migrate(Path(source), Path(target), Path(decoder), fault=fault, channel=channel)\n    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/migration.py\", line 350, in migrate\n    raise Refused('candidate validation failed')\nmigration.Refused: candidate validation failed\n"
+    },
+    {
+      "name": "production: validation named failure reached",
+      "passed": true
+    },
+    {
+      "name": "production: validation commit boundary",
+      "passed": true,
+      "targetExists": false
+    },
+    {
+      "name": "production: validation restart and retry",
+      "passed": true,
+      "retry": "committed"
+    },
+    {
+      "name": "production: full preserves source",
+      "passed": true,
+      "exitCode": 1,
+      "stderr": "Traceback (most recent call last):\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/worker.py\", line 8, in <module>\n    migrate(Path(source), Path(target), Path(decoder), fault=fault, channel=channel)\n    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/migration.py\", line 360, in migrate\n    atomic(target, result, fault)\n    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/migration.py\", line 42, in atomic\n    raise OSError(errno.ENOSPC, 'injected full disk')\nOSError: [Errno 28] injected full disk\n"
+    },
+    {
+      "name": "production: full named failure reached",
+      "passed": true
+    },
+    {
+      "name": "production: full commit boundary",
+      "passed": true,
+      "targetExists": false
+    },
+    {
+      "name": "production: full restart and retry",
+      "passed": true,
+      "retry": "committed"
+    },
+    {
+      "name": "production: atomic preserves source",
+      "passed": true,
+      "exitCode": 1,
+      "stderr": "Traceback (most recent call last):\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/worker.py\", line 8, in <module>\n    migrate(Path(source), Path(target), Path(decoder), fault=fault, channel=channel)\n    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/migration.py\", line 360, in migrate\n    atomic(target, result, fault)\n    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/migration.py\", line 47, in atomic\n    raise OSError(errno.EIO, 'injected failed replace')\nOSError: [Errno 5] injected failed replace\n"
+    },
+    {
+      "name": "production: atomic named failure reached",
+      "passed": true
+    },
+    {
+      "name": "production: atomic commit boundary",
+      "passed": true,
+      "targetExists": false
+    },
+    {
+      "name": "production: atomic restart and retry",
+      "passed": true,
+      "retry": "committed"
+    },
+    {
+      "name": "production: sync preserves source",
+      "passed": true,
+      "exitCode": 1,
+      "stderr": "Traceback (most recent call last):\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/worker.py\", line 8, in <module>\n    migrate(Path(source), Path(target), Path(decoder), fault=fault, channel=channel)\n    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/migration.py\", line 360, in migrate\n    atomic(target, result, fault)\n    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/migration.py\", line 50, in atomic\n    raise OSError(errno.EIO, 'injected uncertain directory sync')\nOSError: [Errno 5] injected uncertain directory sync\n"
+    },
+    {
+      "name": "production: sync named failure reached",
+      "passed": true
+    },
+    {
+      "name": "production: sync commit boundary",
+      "passed": true,
+      "targetExists": true
+    },
+    {
+      "name": "production: sync restart and retry",
+      "passed": true,
+      "retry": "already committed"
+    },
+    {
+      "name": "production: before preserves source",
+      "passed": true,
+      "exitCode": 71,
+      "stderr": ""
+    },
+    {
+      "name": "production: before named exit reached",
+      "passed": true
+    },
+    {
+      "name": "production: before commit boundary",
+      "passed": true,
+      "targetExists": false
+    },
+    {
+      "name": "production: before restart and retry",
+      "passed": true,
+      "retry": "committed"
+    },
+    {
+      "name": "production: after preserves source",
+      "passed": true,
+      "exitCode": 72,
+      "stderr": ""
+    },
+    {
+      "name": "production: after named exit reached",
+      "passed": true
+    },
+    {
+      "name": "production: after commit boundary",
+      "passed": true,
+      "targetExists": true
+    },
+    {
+      "name": "production: after restart and retry",
+      "passed": true,
+      "retry": "already committed"
+    },
+    {
+      "name": "production: backup-kill preserves source",
+      "passed": true,
+      "exitCode": 73,
+      "stderr": ""
+    },
+    {
+      "name": "production: backup-kill named exit reached",
+      "passed": true
+    },
+    {
+      "name": "production: partial backup never ready",
+      "passed": true
+    },
+    {
+      "name": "production: backup-kill commit boundary",
+      "passed": true,
+      "targetExists": false
+    },
+    {
+      "name": "production: backup-kill restart and retry",
+      "passed": true,
+      "retry": "committed"
+    },
+    {
+      "name": "production: readonly preserves source",
+      "passed": true,
+      "exitCode": 1,
+      "stderr": "Traceback (most recent call last):\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/worker.py\", line 8, in <module>\n    migrate(Path(source), Path(target), Path(decoder), fault=fault, channel=channel)\n    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/migration.py\", line 316, in migrate\n    lock = locks.enter_context(open(path.with_suffix(path.suffix + '.migration.lock'), 'a+b'))\n                               ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nPermissionError: [Errno 13] Permission denied: '/private/tmp/myterm-migration-imc2wfrv/fault-readonly/target/account.json.migration.lock'\n"
+    },
+    {
+      "name": "production: readonly commit boundary",
+      "passed": true,
+      "targetExists": false
+    },
+    {
+      "name": "production: real EACCES observed",
+      "passed": true
+    },
+    {
+      "name": "production: readonly restart and retry",
+      "passed": true,
+      "retry": "committed"
+    },
+    {
+      "name": "production: existing account survives full",
+      "passed": true
+    },
+    {
+      "name": "production: existing account full retry",
+      "passed": true
+    },
+    {
+      "name": "production: existing account survives atomic",
+      "passed": true
+    },
+    {
+      "name": "production: existing account atomic retry",
+      "passed": true
+    },
+    {
+      "name": "production: existing account survives validation",
+      "passed": true
+    },
+    {
+      "name": "production: existing account validation retry",
+      "passed": true
+    },
+    {
+      "name": "production: existing account survives backup",
+      "passed": true
+    },
+    {
+      "name": "production: existing account backup retry",
+      "passed": true
+    },
+    {
+      "name": "production: existing account survives sync",
+      "passed": true
+    },
+    {
+      "name": "production: existing account sync retry",
+      "passed": true
+    },
+    {
+      "name": "production: private target permissions",
+      "passed": true
+    },
+    {
+      "name": "production: durable pin survives rotation 0",
+      "passed": true
+    },
+    {
+      "name": "production: durable pin survives rotation 1",
+      "passed": true
+    },
+    {
+      "name": "production: durable pin survives rotation 2",
+      "passed": true
+    },
+    {
+      "name": "production: durable pin survives rotation 3",
+      "passed": true
+    },
+    {
+      "name": "production: durable pin survives rotation 4",
+      "passed": true
+    },
+    {
+      "name": "production: durable pin survives rotation 5",
+      "passed": true
+    },
+    {
+      "name": "production: durable pin survives rotation 6",
+      "passed": true
+    },
+    {
+      "name": "production: durable pin survives rotation 7",
+      "passed": true
+    },
+    {
+      "name": "production: durable pin survives rotation 8",
+      "passed": true
+    },
+    {
+      "name": "production: successful retry releases durable pin",
+      "passed": true
+    },
+    {
+      "name": "production: old backup names share five-copy limit",
+      "passed": true
+    },
+    {
+      "name": "production: competing migrator refused",
+      "passed": true
+    },
+    {
+      "name": "production: wrong target channel",
+      "passed": true,
+      "reason": "account/channel mismatch"
+    },
+    {
+      "name": "production: source is target",
+      "passed": true,
+      "reason": "source and target must be separate"
+    },
+    {
+      "name": "production: refuses unknown version",
+      "passed": true,
+      "reason": "unsupported or absent version"
+    },
+    {
+      "name": "production: refuses lossy array",
+      "passed": true,
+      "reason": "native decoder reported repair: {\"backupFailures\": [], \"dropped\": 1, \"identifiersRepaired\": 0, \"migrated\": false, \"sourceVersion\": 2, \"structureRepaired\": 0}"
+    },
+    {
+      "name": "production: refuses duplicate IDs",
+      "passed": true,
+      "reason": "conflicting source identities"
+    },
+    {
+      "name": "production: refuses structural repair",
+      "passed": true,
+      "reason": "native decoder reported repair: {\"backupFailures\": [], \"dropped\": 0, \"identifiersRepaired\": 0, \"migrated\": false, \"sourceVersion\": 2, \"structureRepaired\": 1}"
+    },
+    {
+      "name": "production: refuses unknown field",
+      "passed": true,
+      "reason": "v2 normalized or unknown content would be lost"
+    },
+    {
+      "name": "production: refuses damaged JSON",
+      "passed": true,
+      "reason": "Expecting property name enclosed in double quotes: line 1 column 2 (char 1)"
+    },
+    {
+      "name": "production: refuses duplicate JSON keys",
+      "passed": true,
+      "reason": "duplicate JSON key: version"
+    },
+    {
+      "name": "production: legacy settings repair exact refusal",
+      "passed": true,
+      "reason": "legacy settings changed"
+    },
+    {
+      "name": "production: refuses legacy settings repair",
+      "passed": true,
+      "reason": "legacy settings changed"
+    },
+    {
+      "name": "production: legacy folder repair exact refusal",
+      "passed": true,
+      "reason": "native conversion lost an identity"
+    },
+    {
+      "name": "production: refuses legacy folder repair",
+      "passed": true,
+      "reason": "native conversion lost an identity"
+    },
+    {
+      "name": "production: legacy unknown field exact refusal",
+      "passed": true,
+      "reason": "unknown legacy fields at workspace"
+    },
+    {
+      "name": "production: refuses legacy unknown field",
+      "passed": true,
+      "reason": "unknown legacy fields at workspace"
+    },
+    {
+      "name": "production: rejects changed source channel",
+      "passed": true,
+      "reason": "source channel mismatch"
+    },
+    {
+      "name": "production: rejects changed account",
+      "passed": true,
+      "reason": "account/channel mismatch"
+    },
+    {
+      "name": "production: rejects changed assigned server",
+      "passed": true,
+      "reason": "account identity collision; neither side changed"
+    },
+    {
+      "name": "production: abandoned attempt 0 exits at boundary",
+      "passed": true
+    },
+    {
+      "name": "production: abandoned attempt 1 exits at boundary",
+      "passed": true
+    },
+    {
+      "name": "production: abandoned attempt 2 exits at boundary",
+      "passed": true
+    },
+    {
+      "name": "production: abandoned attempt 3 exits at boundary",
+      "passed": true
+    },
+    {
+      "name": "production: abandoned attempt 4 exits at boundary",
+      "passed": true
+    },
+    {
+      "name": "production: abandoned pins stop sixth attempt",
+      "passed": true,
+      "reason": "all five backups protected; source left unchanged"
+    },
+    {
+      "name": "production: five slots rotate oldest eligible",
+      "passed": true
+    },
+    {
+      "name": "production: all slots pinned stops safely",
+      "passed": true,
+      "reason": "all five backups protected; source left unchanged"
+    },
+    {
+      "name": "production: failed rotation keeps pinned recovery",
+      "passed": true
+    },
+    {
+      "name": "development/v1: stable source and IDs",
+      "passed": true,
+      "expected": [
+        "00000000-0000-0000-0000-000000000001",
+        "00000000-0000-0000-0000-000000000002",
+        "00000000-0000-0000-0000-000000000003",
+        "00000000-0000-0000-0000-00000000000a",
+        "00000000-0000-0000-0000-00000000000b",
+        "00000000-0000-0000-0000-00000000000c",
+        "00000000-0000-0000-0000-00000000000d"
+      ],
+      "actual": [
+        "00000000-0000-0000-0000-000000000001",
+        "00000000-0000-0000-0000-000000000002",
+        "e35a50a3-cdd9-52db-819b-a05798bcba76",
+        "00000000-0000-0000-0000-00000000000a",
+        "00000000-0000-0000-0000-00000000000b",
+        "00000000-0000-0000-0000-000000000003",
+        "e35a4fa3-cdd9-5128-827b-a15798c2d801",
+        "00000000-0000-0000-0000-00000000000c",
+        "00000000-0000-0000-0000-00000000000d",
+        "eaa0498e-926b-5ad2-9e78-1712732947c9",
+        "ce604d50-fdcf-5718-b07a-06a07e816fb2"
+      ]
+    },
+    {
+      "name": "development/v1: terminal/browser content",
+      "passed": true,
+      "expected": {
+        "00000000-0000-0000-0000-00000000000a": {
+          "kind": "terminal",
+          "value": {
+            "id": "00000000-0000-0000-0000-00000000000a",
+            "paneID": "00000000-0000-0000-0000-00000000000b",
+            "recentText": "preserve this output",
+            "workingDirectory": "file:///prototype/work"
+          }
+        },
+        "00000000-0000-0000-0000-00000000000c": {
+          "kind": "browser",
+          "value": {
+            "id": "00000000-0000-0000-0000-00000000000c",
+            "paneID": "00000000-0000-0000-0000-00000000000d",
+            "profile": {
+              "persistentStoreID": "00000000-0000-0000-0000-00000000000E",
+              "projectDirectory": "file:///prototype/work",
+              "scope": "project-directory"
+            },
+            "url": "https://example.invalid/review"
+          }
+        }
+      },
+      "actual": {
+        "00000000-0000-0000-0000-00000000000a": {
+          "kind": "terminal",
+          "server": "local-a",
+          "value": {
+            "id": "00000000-0000-0000-0000-00000000000a",
+            "paneID": "00000000-0000-0000-0000-00000000000b",
+            "recentText": "preserve this output",
+            "workingDirectory": "file:///prototype/work"
+          }
+        },
+        "00000000-0000-0000-0000-00000000000c": {
+          "kind": "browser",
+          "server": "local-a",
+          "value": {
+            "id": "00000000-0000-0000-0000-00000000000c",
+            "paneID": "00000000-0000-0000-0000-00000000000d",
+            "profile": {
+              "persistentStoreID": "00000000-0000-0000-0000-00000000000E",
+              "projectDirectory": "file:///prototype/work",
+              "scope": "project-directory"
+            },
+            "url": "https://example.invalid/review"
+          }
+        }
+      }
+    },
+    {
+      "name": "development/v1: server binding",
+      "passed": true
+    },
+    {
+      "name": "development/v1: shared preference separation",
+      "passed": true
+    },
+    {
+      "name": "development/v1: server payload outside shared structure",
+      "passed": true
+    },
+    {
+      "name": "development/v1: concrete preference values retained",
+      "passed": true,
+      "actual": [
+        {
+          "field": "isExpanded",
+          "owner": "00000000-0000-0000-0000-000000000001",
+          "value": false
+        },
+        {
+          "field": "globalSettings",
+          "owner": "client",
+          "value": {
+            "acceptsNewTabLinks": false,
+            "allowsLocalFileJavaScript": false,
+            "browserDataScope": "workspace",
+            "browserFilePatterns": [
+              "*.html",
+              "*.htm"
+            ],
+            "companionBrowserMode": "nativeProxy",
+            "cursorBlink": true,
+            "cursorShape": "block",
+            "finishedIndicatorColor": "blue",
+            "finishedIndicatorIcon": "tickDraw",
+            "fontPostScriptName": "Menlo-Regular",
+            "fontSize": 17,
+            "lineEditingMode": "emacs",
+            "markdownOpenCommand": "ide browse {file}",
+            "namesTabsFromAgentSessions": true,
+            "nativeTextFilePatterns": [
+              "*.md",
+              "*.markdown",
+              "*.mdown",
+              "*.mdx",
+              "*.mkd",
+              "*.mkdn",
+              "*.json",
+              "*.jsonc",
+              "*.json5",
+              "*.geojson",
+              "*.yaml",
+              "*.yml",
+              "*.toml",
+              "*.xml",
+              "*.ini",
+              "*.cfg",
+              "*.conf",
+              "*.txt",
+              "*.text",
+              "*.log",
+              "*.csv",
+              "*.tsv",
+              "*.html",
+              "*.htm",
+              "*.css",
+              "*.scss",
+              "*.sass",
+              "*.less",
+              "*.js",
+              "*.jsx",
+              "*.ts",
+              "*.tsx",
+              "*.mjs",
+              "*.cjs",
+              "*.swift",
+              "*.c",
+              "*.h",
+              "*.m",
+              "*.mm",
+              "*.cc",
+              "*.cpp",
+              "*.cxx",
+              "*.hpp",
+              "*.cs",
+              "*.java",
+              "*.kt",
+              "*.kts",
+              "*.go",
+              "*.rs",
+              "*.py",
+              "*.rb",
+              "*.php",
+              "*.sh",
+              "*.zsh",
+              "*.fish",
+              "*.ps1",
+              "*.psm1",
+              "*.psd1",
+              "*.ps1xml",
+              "*.cdxml",
+              "*.sql",
+              "README",
+              "README.md",
+              "LICENSE",
+              "Dockerfile",
+              "Makefile",
+              ".env",
+              ".gitignore",
+              ".gitattributes",
+              ".gitmodules",
+              ".editorconfig",
+              ".dockerignore",
+              ".npmrc",
+              ".nvmrc",
+              ".ruby-version",
+              ".tool-versions"
+            ],
+            "newSessionWorkingDirectory": {
+              "type": "home"
+            },
+            "optionAsMeta": true,
+            "questionIndicatorColor": "purple",
+            "questionIndicatorIcon": "pulsingBubble",
+            "restoresAgentSessions": true,
+            "scrollbackLines": 10000,
+            "sharesBrowserSignInsWithCompanion": true,
+            "shell": {
+              "type": "loginShell"
+            },
+            "showsAgentNotificationBell": true,
+            "showsClaudeAccount": true,
+            "showsIdleAgentIcon": false,
+            "terminalAppearance": "system",
+            "terminalTheme": "system",
+            "webLinkDestination": {
+              "type": "myterm"
+            },
+            "workingIndicatorColor": "gray",
+            "workingIndicatorIcon": "stirringCook"
+          }
+        },
+        {
+          "field": "selectedWorkspaceID",
+          "owner": "client",
+          "value": "00000000-0000-0000-0000-000000000002"
+        },
+        {
+          "field": "focusedTabGroupID",
+          "owner": "00000000-0000-0000-0000-000000000002",
+          "value": "e35a50a3-cdd9-52db-819b-a05798bcba76"
+        },
+        {
+          "field": "selectedTabID",
+          "owner": "e35a50a3-cdd9-52db-819b-a05798bcba76",
+          "value": "00000000-0000-0000-0000-000000000003"
+        },
+        {
+          "field": "selectedTabID",
+          "owner": "e35a4fa3-cdd9-5128-827b-a15798c2d801",
+          "value": "eaa0498e-926b-5ad2-9e78-1712732947c9"
+        }
+      ]
+    },
+    {
+      "name": "development/v1: exact retry",
+      "passed": true
+    },
+    {
+      "name": "development/v1: source backup bytes and limit",
+      "passed": true
+    },
+    {
+      "name": "development: actual channel path fixture",
+      "passed": true
+    },
+    {
+      "name": "development/v2: stable source and IDs",
+      "passed": true,
+      "expected": [
+        "00000000-0000-0000-0000-000000000001",
+        "00000000-0000-0000-0000-000000000002",
+        "e35a50a3-cdd9-52db-819b-a05798bcba76",
+        "00000000-0000-0000-0000-00000000000a",
+        "00000000-0000-0000-0000-00000000000b",
+        "00000000-0000-0000-0000-000000000003",
+        "e35a4fa3-cdd9-5128-827b-a15798c2d801",
+        "00000000-0000-0000-0000-00000000000c",
+        "00000000-0000-0000-0000-00000000000d",
+        "eaa0498e-926b-5ad2-9e78-1712732947c9",
+        "ce604d50-fdcf-5718-b07a-06a07e816fb2"
+      ],
+      "actual": [
+        "00000000-0000-0000-0000-000000000001",
+        "00000000-0000-0000-0000-000000000002",
+        "e35a50a3-cdd9-52db-819b-a05798bcba76",
+        "00000000-0000-0000-0000-00000000000a",
+        "00000000-0000-0000-0000-00000000000b",
+        "00000000-0000-0000-0000-000000000003",
+        "e35a4fa3-cdd9-5128-827b-a15798c2d801",
+        "00000000-0000-0000-0000-00000000000c",
+        "00000000-0000-0000-0000-00000000000d",
+        "eaa0498e-926b-5ad2-9e78-1712732947c9",
+        "ce604d50-fdcf-5718-b07a-06a07e816fb2"
+      ]
+    },
+    {
+      "name": "development/v2: terminal/browser content",
+      "passed": true,
+      "expected": {
+        "00000000-0000-0000-0000-00000000000a": {
+          "kind": "terminal",
+          "value": {
+            "id": "00000000-0000-0000-0000-00000000000a",
+            "paneID": "00000000-0000-0000-0000-00000000000b",
+            "recentText": "preserve this output",
+            "workingDirectory": "file:///prototype/work"
+          }
+        },
+        "00000000-0000-0000-0000-00000000000c": {
+          "kind": "browser",
+          "value": {
+            "id": "00000000-0000-0000-0000-00000000000c",
+            "paneID": "00000000-0000-0000-0000-00000000000d",
+            "profile": {
+              "persistentStoreID": "00000000-0000-0000-0000-00000000000E",
+              "projectDirectory": "file:///prototype/work",
+              "scope": "project-directory"
+            },
+            "url": "https://example.invalid/review"
+          }
+        }
+      },
+      "actual": {
+        "00000000-0000-0000-0000-00000000000a": {
+          "kind": "terminal",
+          "server": "local-a",
+          "value": {
+            "id": "00000000-0000-0000-0000-00000000000a",
+            "paneID": "00000000-0000-0000-0000-00000000000b",
+            "recentText": "preserve this output",
+            "workingDirectory": "file:///prototype/work"
+          }
+        },
+        "00000000-0000-0000-0000-00000000000c": {
+          "kind": "browser",
+          "server": "local-a",
+          "value": {
+            "id": "00000000-0000-0000-0000-00000000000c",
+            "paneID": "00000000-0000-0000-0000-00000000000d",
+            "profile": {
+              "persistentStoreID": "00000000-0000-0000-0000-00000000000E",
+              "projectDirectory": "file:///prototype/work",
+              "scope": "project-directory"
+            },
+            "url": "https://example.invalid/review"
+          }
+        }
+      }
+    },
+    {
+      "name": "development/v2: server binding",
+      "passed": true
+    },
+    {
+      "name": "development/v2: shared preference separation",
+      "passed": true
+    },
+    {
+      "name": "development/v2: server payload outside shared structure",
+      "passed": true
+    },
+    {
+      "name": "development/v2: concrete preference values retained",
+      "passed": true,
+      "actual": [
+        {
+          "field": "isExpanded",
+          "owner": "00000000-0000-0000-0000-000000000001",
+          "value": false
+        },
+        {
+          "field": "globalSettings",
+          "owner": "client",
+          "value": {
+            "acceptsNewTabLinks": false,
+            "allowsLocalFileJavaScript": false,
+            "browserDataScope": "workspace",
+            "browserFilePatterns": [
+              "*.html",
+              "*.htm"
+            ],
+            "companionBrowserMode": "nativeProxy",
+            "cursorBlink": true,
+            "cursorShape": "block",
+            "finishedIndicatorColor": "blue",
+            "finishedIndicatorIcon": "tickDraw",
+            "fontPostScriptName": "Menlo-Regular",
+            "fontSize": 17,
+            "lineEditingMode": "emacs",
+            "markdownOpenCommand": "ide browse {file}",
+            "namesTabsFromAgentSessions": true,
+            "nativeTextFilePatterns": [
+              "*.md",
+              "*.markdown",
+              "*.mdown",
+              "*.mdx",
+              "*.mkd",
+              "*.mkdn",
+              "*.json",
+              "*.jsonc",
+              "*.json5",
+              "*.geojson",
+              "*.yaml",
+              "*.yml",
+              "*.toml",
+              "*.xml",
+              "*.ini",
+              "*.cfg",
+              "*.conf",
+              "*.txt",
+              "*.text",
+              "*.log",
+              "*.csv",
+              "*.tsv",
+              "*.html",
+              "*.htm",
+              "*.css",
+              "*.scss",
+              "*.sass",
+              "*.less",
+              "*.js",
+              "*.jsx",
+              "*.ts",
+              "*.tsx",
+              "*.mjs",
+              "*.cjs",
+              "*.swift",
+              "*.c",
+              "*.h",
+              "*.m",
+              "*.mm",
+              "*.cc",
+              "*.cpp",
+              "*.cxx",
+              "*.hpp",
+              "*.cs",
+              "*.java",
+              "*.kt",
+              "*.kts",
+              "*.go",
+              "*.rs",
+              "*.py",
+              "*.rb",
+              "*.php",
+              "*.sh",
+              "*.zsh",
+              "*.fish",
+              "*.ps1",
+              "*.psm1",
+              "*.psd1",
+              "*.ps1xml",
+              "*.cdxml",
+              "*.sql",
+              "README",
+              "README.md",
+              "LICENSE",
+              "Dockerfile",
+              "Makefile",
+              ".env",
+              ".gitignore",
+              ".gitattributes",
+              ".gitmodules",
+              ".editorconfig",
+              ".dockerignore",
+              ".npmrc",
+              ".nvmrc",
+              ".ruby-version",
+              ".tool-versions"
+            ],
+            "newSessionWorkingDirectory": {
+              "type": "home"
+            },
+            "optionAsMeta": true,
+            "questionIndicatorColor": "purple",
+            "questionIndicatorIcon": "pulsingBubble",
+            "restoresAgentSessions": true,
+            "scrollbackLines": 10000,
+            "sharesBrowserSignInsWithCompanion": true,
+            "shell": {
+              "type": "loginShell"
+            },
+            "showsAgentNotificationBell": true,
+            "showsClaudeAccount": true,
+            "showsIdleAgentIcon": false,
+            "terminalAppearance": "system",
+            "terminalTheme": "system",
+            "webLinkDestination": {
+              "type": "myterm"
+            },
+            "workingIndicatorColor": "gray",
+            "workingIndicatorIcon": "stirringCook"
+          }
+        },
+        {
+          "field": "selectedWorkspaceID",
+          "owner": "client",
+          "value": "00000000-0000-0000-0000-000000000002"
+        },
+        {
+          "field": "focusedTabGroupID",
+          "owner": "00000000-0000-0000-0000-000000000002",
+          "value": "e35a50a3-cdd9-52db-819b-a05798bcba76"
+        },
+        {
+          "field": "selectedTabID",
+          "owner": "e35a50a3-cdd9-52db-819b-a05798bcba76",
+          "value": "00000000-0000-0000-0000-000000000003"
+        },
+        {
+          "field": "selectedTabID",
+          "owner": "e35a4fa3-cdd9-5128-827b-a15798c2d801",
+          "value": "eaa0498e-926b-5ad2-9e78-1712732947c9"
+        }
+      ]
+    },
+    {
+      "name": "development/v2: exact retry",
+      "passed": true
+    },
+    {
+      "name": "development/v2: source backup bytes and limit",
+      "passed": true
+    },
+    {
+      "name": "development: explicit additional import",
+      "passed": true,
+      "reason": "existing account layout requires explicit additional import"
+    },
+    {
+      "name": "development: same-name workspaces stay separate",
+      "passed": true
+    },
+    {
+      "name": "development: mixed-server assignment preserved",
+      "passed": true
+    },
+    {
+      "name": "development: conflicting source vs account",
+      "passed": true,
+      "reason": "account identity collision; neither side changed"
+    },
+    {
+      "name": "development: backup preserves source",
+      "passed": true,
+      "exitCode": 1,
+      "stderr": "Traceback (most recent call last):\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/worker.py\", line 8, in <module>\n    migrate(Path(source), Path(target), Path(decoder), fault=fault, channel=channel)\n    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/migration.py\", line 351, in migrate\n    recovery = backup(source_path, source, fault, pinned)\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/migration.py\", line 271, in backup\n    raise OSError(errno.ENOSPC, 'injected backup write failure')\nOSError: [Errno 28] injected backup write failure\n"
+    },
+    {
+      "name": "development: backup named failure reached",
+      "passed": true
+    },
+    {
+      "name": "development: backup commit boundary",
+      "passed": true,
+      "targetExists": false
+    },
+    {
+      "name": "development: failed backup stops commit",
+      "passed": true
+    },
+    {
+      "name": "development: backup restart and retry",
+      "passed": true,
+      "retry": "committed"
+    },
+    {
+      "name": "development: validation preserves source",
+      "passed": true,
+      "exitCode": 1,
+      "stderr": "Traceback (most recent call last):\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/worker.py\", line 8, in <module>\n    migrate(Path(source), Path(target), Path(decoder), fault=fault, channel=channel)\n    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/migration.py\", line 350, in migrate\n    raise Refused('candidate validation failed')\nmigration.Refused: candidate validation failed\n"
+    },
+    {
+      "name": "development: validation named failure reached",
+      "passed": true
+    },
+    {
+      "name": "development: validation commit boundary",
+      "passed": true,
+      "targetExists": false
+    },
+    {
+      "name": "development: validation restart and retry",
+      "passed": true,
+      "retry": "committed"
+    },
+    {
+      "name": "development: full preserves source",
+      "passed": true,
+      "exitCode": 1,
+      "stderr": "Traceback (most recent call last):\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/worker.py\", line 8, in <module>\n    migrate(Path(source), Path(target), Path(decoder), fault=fault, channel=channel)\n    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/migration.py\", line 360, in migrate\n    atomic(target, result, fault)\n    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/migration.py\", line 42, in atomic\n    raise OSError(errno.ENOSPC, 'injected full disk')\nOSError: [Errno 28] injected full disk\n"
+    },
+    {
+      "name": "development: full named failure reached",
+      "passed": true
+    },
+    {
+      "name": "development: full commit boundary",
+      "passed": true,
+      "targetExists": false
+    },
+    {
+      "name": "development: full restart and retry",
+      "passed": true,
+      "retry": "committed"
+    },
+    {
+      "name": "development: atomic preserves source",
+      "passed": true,
+      "exitCode": 1,
+      "stderr": "Traceback (most recent call last):\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/worker.py\", line 8, in <module>\n    migrate(Path(source), Path(target), Path(decoder), fault=fault, channel=channel)\n    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/migration.py\", line 360, in migrate\n    atomic(target, result, fault)\n    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/migration.py\", line 47, in atomic\n    raise OSError(errno.EIO, 'injected failed replace')\nOSError: [Errno 5] injected failed replace\n"
+    },
+    {
+      "name": "development: atomic named failure reached",
+      "passed": true
+    },
+    {
+      "name": "development: atomic commit boundary",
+      "passed": true,
+      "targetExists": false
+    },
+    {
+      "name": "development: atomic restart and retry",
+      "passed": true,
+      "retry": "committed"
+    },
+    {
+      "name": "development: sync preserves source",
+      "passed": true,
+      "exitCode": 1,
+      "stderr": "Traceback (most recent call last):\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/worker.py\", line 8, in <module>\n    migrate(Path(source), Path(target), Path(decoder), fault=fault, channel=channel)\n    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/migration.py\", line 360, in migrate\n    atomic(target, result, fault)\n    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/migration.py\", line 50, in atomic\n    raise OSError(errno.EIO, 'injected uncertain directory sync')\nOSError: [Errno 5] injected uncertain directory sync\n"
+    },
+    {
+      "name": "development: sync named failure reached",
+      "passed": true
+    },
+    {
+      "name": "development: sync commit boundary",
+      "passed": true,
+      "targetExists": true
+    },
+    {
+      "name": "development: sync restart and retry",
+      "passed": true,
+      "retry": "already committed"
+    },
+    {
+      "name": "development: before preserves source",
+      "passed": true,
+      "exitCode": 71,
+      "stderr": ""
+    },
+    {
+      "name": "development: before named exit reached",
+      "passed": true
+    },
+    {
+      "name": "development: before commit boundary",
+      "passed": true,
+      "targetExists": false
+    },
+    {
+      "name": "development: before restart and retry",
+      "passed": true,
+      "retry": "committed"
+    },
+    {
+      "name": "development: after preserves source",
+      "passed": true,
+      "exitCode": 72,
+      "stderr": ""
+    },
+    {
+      "name": "development: after named exit reached",
+      "passed": true
+    },
+    {
+      "name": "development: after commit boundary",
+      "passed": true,
+      "targetExists": true
+    },
+    {
+      "name": "development: after restart and retry",
+      "passed": true,
+      "retry": "already committed"
+    },
+    {
+      "name": "development: backup-kill preserves source",
+      "passed": true,
+      "exitCode": 73,
+      "stderr": ""
+    },
+    {
+      "name": "development: backup-kill named exit reached",
+      "passed": true
+    },
+    {
+      "name": "development: partial backup never ready",
+      "passed": true
+    },
+    {
+      "name": "development: backup-kill commit boundary",
+      "passed": true,
+      "targetExists": false
+    },
+    {
+      "name": "development: backup-kill restart and retry",
+      "passed": true,
+      "retry": "committed"
+    },
+    {
+      "name": "development: readonly preserves source",
+      "passed": true,
+      "exitCode": 1,
+      "stderr": "Traceback (most recent call last):\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/worker.py\", line 8, in <module>\n    migrate(Path(source), Path(target), Path(decoder), fault=fault, channel=channel)\n    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125/docs/wayfind/125/workspace-migration/migration.py\", line 316, in migrate\n    lock = locks.enter_context(open(path.with_suffix(path.suffix + '.migration.lock'), 'a+b'))\n                               ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nPermissionError: [Errno 13] Permission denied: '/private/tmp/myterm-migration-0zq00xg2/fault-readonly/target/account.json.migration.lock'\n"
+    },
+    {
+      "name": "development: readonly commit boundary",
+      "passed": true,
+      "targetExists": false
+    },
+    {
+      "name": "development: real EACCES observed",
+      "passed": true
+    },
+    {
+      "name": "development: readonly restart and retry",
+      "passed": true,
+      "retry": "committed"
+    },
+    {
+      "name": "development: existing account survives full",
+      "passed": true
+    },
+    {
+      "name": "development: existing account full retry",
+      "passed": true
+    },
+    {
+      "name": "development: existing account survives atomic",
+      "passed": true
+    },
+    {
+      "name": "development: existing account atomic retry",
+      "passed": true
+    },
+    {
+      "name": "development: existing account survives validation",
+      "passed": true
+    },
+    {
+      "name": "development: existing account validation retry",
+      "passed": true
+    },
+    {
+      "name": "development: existing account survives backup",
+      "passed": true
+    },
+    {
+      "name": "development: existing account backup retry",
+      "passed": true
+    },
+    {
+      "name": "development: existing account survives sync",
+      "passed": true
+    },
+    {
+      "name": "development: existing account sync retry",
+      "passed": true
+    },
+    {
+      "name": "development: private target permissions",
+      "passed": true
+    },
+    {
+      "name": "development: durable pin survives rotation 0",
+      "passed": true
+    },
+    {
+      "name": "development: durable pin survives rotation 1",
+      "passed": true
+    },
+    {
+      "name": "development: durable pin survives rotation 2",
+      "passed": true
+    },
+    {
+      "name": "development: durable pin survives rotation 3",
+      "passed": true
+    },
+    {
+      "name": "development: durable pin survives rotation 4",
+      "passed": true
+    },
+    {
+      "name": "development: durable pin survives rotation 5",
+      "passed": true
+    },
+    {
+      "name": "development: durable pin survives rotation 6",
+      "passed": true
+    },
+    {
+      "name": "development: durable pin survives rotation 7",
+      "passed": true
+    },
+    {
+      "name": "development: durable pin survives rotation 8",
+      "passed": true
+    },
+    {
+      "name": "development: successful retry releases durable pin",
+      "passed": true
+    },
+    {
+      "name": "development: old backup names share five-copy limit",
+      "passed": true
+    },
+    {
+      "name": "development: competing migrator refused",
+      "passed": true
+    },
+    {
+      "name": "development: wrong target channel",
+      "passed": true,
+      "reason": "account/channel mismatch"
+    },
+    {
+      "name": "development: source is target",
+      "passed": true,
+      "reason": "source and target must be separate"
+    },
+    {
+      "name": "development: refuses unknown version",
+      "passed": true,
+      "reason": "unsupported or absent version"
+    },
+    {
+      "name": "development: refuses lossy array",
+      "passed": true,
+      "reason": "native decoder reported repair: {\"backupFailures\": [], \"dropped\": 1, \"identifiersRepaired\": 0, \"migrated\": false, \"sourceVersion\": 2, \"structureRepaired\": 0}"
+    },
+    {
+      "name": "development: refuses duplicate IDs",
+      "passed": true,
+      "reason": "conflicting source identities"
+    },
+    {
+      "name": "development: refuses structural repair",
+      "passed": true,
+      "reason": "native decoder reported repair: {\"backupFailures\": [], \"dropped\": 0, \"identifiersRepaired\": 0, \"migrated\": false, \"sourceVersion\": 2, \"structureRepaired\": 1}"
+    },
+    {
+      "name": "development: refuses unknown field",
+      "passed": true,
+      "reason": "v2 normalized or unknown content would be lost"
+    },
+    {
+      "name": "development: refuses damaged JSON",
+      "passed": true,
+      "reason": "Expecting property name enclosed in double quotes: line 1 column 2 (char 1)"
+    },
+    {
+      "name": "development: refuses duplicate JSON keys",
+      "passed": true,
+      "reason": "duplicate JSON key: version"
+    },
+    {
+      "name": "development: legacy settings repair exact refusal",
+      "passed": true,
+      "reason": "legacy settings changed"
+    },
+    {
+      "name": "development: refuses legacy settings repair",
+      "passed": true,
+      "reason": "legacy settings changed"
+    },
+    {
+      "name": "development: legacy folder repair exact refusal",
+      "passed": true,
+      "reason": "native conversion lost an identity"
+    },
+    {
+      "name": "development: refuses legacy folder repair",
+      "passed": true,
+      "reason": "native conversion lost an identity"
+    },
+    {
+      "name": "development: legacy unknown field exact refusal",
+      "passed": true,
+      "reason": "unknown legacy fields at workspace"
+    },
+    {
+      "name": "development: refuses legacy unknown field",
+      "passed": true,
+      "reason": "unknown legacy fields at workspace"
+    },
+    {
+      "name": "development: rejects changed source channel",
+      "passed": true,
+      "reason": "source channel mismatch"
+    },
+    {
+      "name": "development: rejects changed account",
+      "passed": true,
+      "reason": "account/channel mismatch"
+    },
+    {
+      "name": "development: rejects changed assigned server",
+      "passed": true,
+      "reason": "account identity collision; neither side changed"
+    },
+    {
+      "name": "development: abandoned attempt 0 exits at boundary",
+      "passed": true
+    },
+    {
+      "name": "development: abandoned attempt 1 exits at boundary",
+      "passed": true
+    },
+    {
+      "name": "development: abandoned attempt 2 exits at boundary",
+      "passed": true
+    },
+    {
+      "name": "development: abandoned attempt 3 exits at boundary",
+      "passed": true
+    },
+    {
+      "name": "development: abandoned attempt 4 exits at boundary",
+      "passed": true
+    },
+    {
+      "name": "development: abandoned pins stop sixth attempt",
+      "passed": true,
+      "reason": "all five backups protected; source left unchanged"
+    },
+    {
+      "name": "development: five slots rotate oldest eligible",
+      "passed": true
+    },
+    {
+      "name": "development: all slots pinned stops safely",
+      "passed": true,
+      "reason": "all five backups protected; source left unchanged"
+    },
+    {
+      "name": "development: failed rotation keeps pinned recovery",
+      "passed": true
+    }
+  ],
+  "inventories": {
+    "v1": {
+      "identities": [
+        "00000000-0000-0000-0000-000000000001",
+        "00000000-0000-0000-0000-000000000002",
+        "00000000-0000-0000-0000-000000000003",
+        "00000000-0000-0000-0000-00000000000a",
+        "00000000-0000-0000-0000-00000000000b",
+        "00000000-0000-0000-0000-00000000000c",
+        "00000000-0000-0000-0000-00000000000d"
+      ],
+      "sessions": {
+        "00000000-0000-0000-0000-00000000000a": {
+          "kind": "terminal",
+          "value": {
+            "id": "00000000-0000-0000-0000-00000000000A",
+            "paneID": "00000000-0000-0000-0000-00000000000B",
+            "workingDirectory": "file:///prototype/work",
+            "recentText": "preserve this output"
+          }
+        },
+        "00000000-0000-0000-0000-00000000000c": {
+          "kind": "browser",
+          "value": {
+            "id": "00000000-0000-0000-0000-00000000000C",
+            "paneID": "00000000-0000-0000-0000-00000000000D",
+            "url": "https://example.invalid/review",
+            "profile": {
+              "scope": "project-directory",
+              "persistentStoreID": "00000000-0000-0000-0000-00000000000E",
+              "projectDirectory": "file:///prototype/work"
+            }
+          }
+        }
+      }
+    },
+    "v2": {
+      "identities": [
+        "00000000-0000-0000-0000-000000000001",
+        "00000000-0000-0000-0000-000000000002",
+        "e35a50a3-cdd9-52db-819b-a05798bcba76",
+        "00000000-0000-0000-0000-00000000000a",
+        "00000000-0000-0000-0000-00000000000b",
+        "00000000-0000-0000-0000-000000000003",
+        "e35a4fa3-cdd9-5128-827b-a15798c2d801",
+        "00000000-0000-0000-0000-00000000000c",
+        "00000000-0000-0000-0000-00000000000d",
+        "eaa0498e-926b-5ad2-9e78-1712732947c9",
+        "ce604d50-fdcf-5718-b07a-06a07e816fb2"
+      ],
+      "sessions": {
+        "00000000-0000-0000-0000-00000000000a": {
+          "kind": "terminal",
+          "value": {
+            "id": "00000000-0000-0000-0000-00000000000a",
+            "paneID": "00000000-0000-0000-0000-00000000000b",
+            "recentText": "preserve this output",
+            "workingDirectory": "file:///prototype/work"
+          }
+        },
+        "00000000-0000-0000-0000-00000000000c": {
+          "kind": "browser",
+          "value": {
+            "id": "00000000-0000-0000-0000-00000000000c",
+            "paneID": "00000000-0000-0000-0000-00000000000d",
+            "profile": {
+              "persistentStoreID": "00000000-0000-0000-0000-00000000000E",
+              "projectDirectory": "file:///prototype/work",
+              "scope": "project-directory"
+            },
+            "url": "https://example.invalid/review"
+          }
+        }
+      }
+    },
+    "remote-v2": {
+      "identities": [
+        "00000000-0000-0000-0000-000000000065",
+        "00000000-0000-0000-0000-000000000066",
+        "710d6f45-ae59-5f47-a4ac-95ace7b5f86b",
+        "00000000-0000-0000-0000-00000000006e",
+        "00000000-0000-0000-0000-00000000006f",
+        "00000000-0000-0000-0000-000000000067",
+        "710d6e45-ae59-5d94-a48c-94ace7ef99dc",
+        "00000000-0000-0000-0000-000000000070",
+        "00000000-0000-0000-0000-000000000071",
+        "30e7c6df-6c7a-561e-ada3-ca0c915d69d3",
+        "a7ce7f37-ad10-556c-ab9f-6d78ea57d2ea"
+      ],
+      "sessions": {
+        "00000000-0000-0000-0000-00000000006e": {
+          "kind": "terminal",
+          "value": {
+            "id": "00000000-0000-0000-0000-00000000006e",
+            "paneID": "00000000-0000-0000-0000-00000000006f",
+            "recentText": "preserve this output",
+            "workingDirectory": "file:///prototype/work"
+          }
+        },
+        "00000000-0000-0000-0000-000000000070": {
+          "kind": "browser",
+          "value": {
+            "id": "00000000-0000-0000-0000-000000000070",
+            "paneID": "00000000-0000-0000-0000-000000000071",
+            "profile": {
+              "persistentStoreID": "00000000-0000-0000-0000-000000000072",
+              "projectDirectory": "file:///prototype/work",
+              "scope": "project-directory"
+            },
+            "url": "https://example.invalid/review"
+          }
+        }
+      }
+    },
+    "v1-multiple-tabs": {
+      "identities": [
+        "00000000-0000-0000-0000-0000000007d1",
+        "00000000-0000-0000-0000-0000000007d2",
+        "00000000-0000-0000-0000-0000000007d3",
+        "00000000-0000-0000-0000-0000000007da",
+        "00000000-0000-0000-0000-0000000007db",
+        "00000000-0000-0000-0000-0000000007dc",
+        "00000000-0000-0000-0000-0000000007dd",
+        "00000000-0000-0000-0000-000000000bbb",
+        "00000000-0000-0000-0000-000000000bc2",
+        "00000000-0000-0000-0000-000000000bc3",
+        "00000000-0000-0000-0000-000000000bc4",
+        "00000000-0000-0000-0000-000000000bc5"
+      ],
+      "sessions": {
+        "00000000-0000-0000-0000-0000000007da": {
+          "kind": "terminal",
+          "value": {
+            "id": "00000000-0000-0000-0000-0000000007DA",
+            "paneID": "00000000-0000-0000-0000-0000000007DB",
+            "workingDirectory": "file:///prototype/work",
+            "recentText": "preserve this output"
+          }
+        },
+        "00000000-0000-0000-0000-0000000007dc": {
+          "kind": "browser",
+          "value": {
+            "id": "00000000-0000-0000-0000-0000000007DC",
+            "paneID": "00000000-0000-0000-0000-0000000007DD",
+            "url": "https://example.invalid/review",
+            "profile": {
+              "scope": "project-directory",
+              "persistentStoreID": "00000000-0000-0000-0000-0000000007DE",
+              "projectDirectory": "file:///prototype/work"
+            }
+          }
+        },
+        "00000000-0000-0000-0000-000000000bc2": {
+          "kind": "terminal",
+          "value": {
+            "id": "00000000-0000-0000-0000-000000000BC2",
+            "paneID": "00000000-0000-0000-0000-000000000BC3",
+            "workingDirectory": "file:///prototype/work",
+            "recentText": "preserve this output"
+          }
+        },
+        "00000000-0000-0000-0000-000000000bc4": {
+          "kind": "browser",
+          "value": {
+            "id": "00000000-0000-0000-0000-000000000BC4",
+            "paneID": "00000000-0000-0000-0000-000000000BC5",
+            "url": "https://example.invalid/review",
+            "profile": {
+              "scope": "project-directory",
+              "persistentStoreID": "00000000-0000-0000-0000-000000000BC6",
+              "projectDirectory": "file:///prototype/work"
+            }
+          }
+        }
+      }
+    },
+    "v2-multiple-tabs": {
+      "identities": [
+        "00000000-0000-0000-0000-0000000007d1",
+        "00000000-0000-0000-0000-0000000007d2",
+        "5b166b88-da34-5a95-a9bc-51cce55c62b6",
+        "00000000-0000-0000-0000-0000000007da",
+        "00000000-0000-0000-0000-0000000007db",
+        "00000000-0000-0000-0000-0000000007d3",
+        "00000000-0000-0000-0000-000000000bc2",
+        "00000000-0000-0000-0000-000000000bc3",
+        "00000000-0000-0000-0000-000000000bbb",
+        "00000000-0000-0000-0000-000000000bc4",
+        "00000000-0000-0000-0000-000000000bc5",
+        "fa887ddb-a988-55ef-89ba-dc8156efc739",
+        "5b166a88-da34-58e2-a99c-50cce51280e5",
+        "00000000-0000-0000-0000-0000000007dc",
+        "00000000-0000-0000-0000-0000000007dd",
+        "53d5613e-3c57-5260-8636-3f294b4dce2a",
+        "3673de0e-e445-50be-9855-aaae18441665"
+      ],
+      "sessions": {
+        "00000000-0000-0000-0000-0000000007da": {
+          "kind": "terminal",
+          "value": {
+            "id": "00000000-0000-0000-0000-0000000007da",
+            "paneID": "00000000-0000-0000-0000-0000000007db",
+            "recentText": "preserve this output",
+            "workingDirectory": "file:///prototype/work"
+          }
+        },
+        "00000000-0000-0000-0000-000000000bc2": {
+          "kind": "terminal",
+          "value": {
+            "id": "00000000-0000-0000-0000-000000000bc2",
+            "paneID": "00000000-0000-0000-0000-000000000bc3",
+            "recentText": "preserve this output",
+            "workingDirectory": "file:///prototype/work"
+          }
+        },
+        "00000000-0000-0000-0000-000000000bc4": {
+          "kind": "browser",
+          "value": {
+            "id": "00000000-0000-0000-0000-000000000bc4",
+            "paneID": "00000000-0000-0000-0000-000000000bc5",
+            "profile": {
+              "persistentStoreID": "00000000-0000-0000-0000-000000000BC6",
+              "projectDirectory": "file:///prototype/work",
+              "scope": "project-directory"
+            },
+            "url": "https://example.invalid/review"
+          }
+        },
+        "00000000-0000-0000-0000-0000000007dc": {
+          "kind": "browser",
+          "value": {
+            "id": "00000000-0000-0000-0000-0000000007dc",
+            "paneID": "00000000-0000-0000-0000-0000000007dd",
+            "profile": {
+              "persistentStoreID": "00000000-0000-0000-0000-0000000007DE",
+              "projectDirectory": "file:///prototype/work",
+              "scope": "project-directory"
+            },
+            "url": "https://example.invalid/review"
+          }
+        }
+      }
+    }
+  },
+  "hashes": {
+    "docs/wayfind/125/workspace-migration/Decoder.swift": "ce40bd3b4fb8962b2fc1b887e6be1c44fd30ffc0a4b0d6018cff0d394af2b88b",
+    "docs/wayfind/125/workspace-migration/migration.py": "64bd61f4ecbaca160cecd2e6e73fee9c2c1569cb47fbc3df580a5779a0c8d08b",
+    "docs/wayfind/125/workspace-migration/probe.py": "0b37f8310aaec7c05fbbc0f24780c0e9fcc0320d361b368e733f214d12960d26",
+    "docs/wayfind/125/workspace-migration/worker.py": "d7274260b4acbc9536d20037e65c92a93d8106bfc43a44bcf0cc9b0dac00dc90",
+    "Sources/MyTermCore/AgentActivity.swift": "97bf6ed52dfc9b9b357961c548664304d4961bfa15064204f609a40976327410",
+    "Sources/MyTermCore/AgentIdentity.swift": "390e8cb8ad46984044851e9271e26c2203adcea535019ba02fbffcd304c67b2a",
+    "Sources/MyTermCore/AgentIndicatorStyle.swift": "a94a84ff2e7bc0554d35b179e22a5f2aeecd390c266a909e932fb45024ddd4bb",
+    "Sources/MyTermCore/AgentNotification.swift": "399bc31aaf085e198ffd7d9a635ccff3cc43e87a7a25b47acea53daa4eb8d136",
+    "Sources/MyTermCore/AgentNotificationInbox.swift": "0f79197d54e4d0024a3c2e87520cb651415323d685b97321b35a7da9440299ea",
+    "Sources/MyTermCore/AgentReportFilter.swift": "6e8351dd1a5bff1150adb01d332cda7d3b2a2f001b4f54660f55f1ef83089bb0",
+    "Sources/MyTermCore/AgentSessionRecovery.swift": "6da5e60c3b8e5035cece387f71df4af38922c7b750f4ccd66da8538a75cd20e0",
+    "Sources/MyTermCore/AgentSessionTitle.swift": "553d2c25328f6da7dc04e94b9073e127d469017ab788c16c69a21e319fe68e58",
+    "Sources/MyTermCore/BrowserCookieProtocol.swift": "b695d6248784b18d2df49bb997a9968dd923ba6162f5e306b47f0d2a6779b040",
+    "Sources/MyTermCore/ChannelConfigurationStore.swift": "3e44771d7ca80ba57008c7c943a7721e252af4a7160afe9bc75adb5d5a0061b5",
+    "Sources/MyTermCore/ClaudeAccount.swift": "cab10a5578fe6fb93b9616b51518a183fe6947a01bd696b08baa3e140e323ad9",
+    "Sources/MyTermCore/Identifiers.swift": "8823e73db83665972559940dd9ba101afdbe294472c50f4e484afc69c252e3d0",
+    "Sources/MyTermCore/KeyChord.swift": "5eec25831548b063ac4076cec5410cbfb1bb3888a73a0b705b960c10accfe9ee",
+    "Sources/MyTermCore/RemoteBrowserProtocol.swift": "9932b3819a31c52ce53fb81d2fd77863fcf8fd8ada6883444e7b1c7d0dd7496a",
+    "Sources/MyTermCore/RemoteProtocol.swift": "6c7455bfeaf80e60dca96542ceff73a9ba45a12c1eae99b510bcc6be01e42b4c",
+    "Sources/MyTermCore/SessionNavigation.swift": "74ebbc8505f0b61a81b5ba2a35daf8a12c9e943e2cf818c3b0a6d3968511e3b7",
+    "Sources/MyTermCore/Settings.swift": "03c58902e3220549693d4de70d47c868e78086c3f943484e83017252c926d9b4",
+    "Sources/MyTermCore/SystemPermission.swift": "2b03cb58ec97d090482c8064cf09f7328207544c8bb1c583ad395b26ff7fb40f",
+    "Sources/MyTermCore/Tab+DisplayTitle.swift": "1a9813a11a9bed080fbe550febc5b4a1a362859aa2e038222808cecd0d22d7c8",
+    "Sources/MyTermCore/TerminalSnippet.swift": "ceac12e45d7460728ab5d16847fbcbad9277955ea21f95a715b23e591195c58e",
+    "Sources/MyTermCore/UpdateCheck.swift": "b89bce9ab7a302e3b0591c0b8545fedb14cadf163c15496f766edb6e41b04ee0",
+    "Sources/MyTermCore/WorkspaceImport.swift": "04c3cabd144104ae6505a37b2cf038933a8f1072cc90e5bf11864b110daadea9",
+    "Sources/MyTermCore/WorkspaceModel.swift": "d32d20f1062a812a13666560d9e222869c194045ba9df301812f63a3e2c85544",
+    "Sources/MyTermCore/WorkspaceStore.swift": "1171fc7f1930dbfbb31fbe6e27bf5c9f6ab52ad7fd8402ad8ebb4fc9e26c6dd2"
+  }
+}

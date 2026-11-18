@@ -1,0 +1,3277 @@
+{
+  "pageSHA256": "1306018ade7022b3316ba3667c6a04f43c1f544ad24433a115f575ec2c842584",
+  "views": 92,
+  "observations": [
+    {
+      "overflow": false,
+      "contrast": 5.120786403449727,
+      "height": 1080,
+      "mojibake": false,
+      "width": 1920,
+      "checkedText": 63,
+      "state": {
+        "preferences": false,
+        "runtimes": [],
+        "workspaces": [],
+        "explicit": false,
+        "backupReady": false,
+        "collision": false,
+        "validated": false,
+        "backups": [],
+        "receipt": false,
+        "scenario": 0,
+        "damaged": false,
+        "status": "Ready to inspect source.",
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "backupFailure": false
+      },
+      "scenario": 0,
+      "step": -1
+    },
+    {
+      "state": {
+        "validated": true,
+        "status": "Source, contents and identities validated.",
+        "workspaces": [],
+        "backups": [],
+        "scenario": 0,
+        "damaged": false,
+        "explicit": false,
+        "receipt": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "backupFailure": false,
+        "runtimes": [],
+        "preferences": false,
+        "backupReady": false,
+        "collision": false
+      },
+      "checkedText": 63,
+      "mojibake": false,
+      "width": 1920,
+      "overflow": false,
+      "contrast": 5.120786403449727,
+      "height": 1080,
+      "scenario": 0,
+      "step": 0
+    },
+    {
+      "overflow": false,
+      "height": 1080,
+      "checkedText": 64,
+      "mojibake": false,
+      "contrast": 5.120786403449727,
+      "state": {
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "preferences": false,
+        "backupReady": true,
+        "damaged": false,
+        "receipt": false,
+        "backupFailure": false,
+        "runtimes": [],
+        "backups": [
+          {
+            "name": "original recovery",
+            "protected": true
+          }
+        ],
+        "explicit": false,
+        "workspaces": [],
+        "validated": true,
+        "scenario": 0,
+        "collision": false,
+        "status": "Original bytes backed up and durably pinned."
+      },
+      "width": 1920,
+      "scenario": 0,
+      "step": 1
+    },
+    {
+      "overflow": false,
+      "checkedText": 66,
+      "mojibake": false,
+      "contrast": 5.120786403449727,
+      "state": {
+        "collision": false,
+        "runtimes": [
+          "terminal-local \u2192 server-a",
+          "browser-local \u2192 server-a"
+        ],
+        "backups": [
+          {
+            "protected": false,
+            "name": "original recovery"
+          }
+        ],
+        "backupFailure": false,
+        "receipt": true,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "scenario": 0,
+        "damaged": false,
+        "workspaces": [
+          "Same name / workspace-local"
+        ],
+        "preferences": true,
+        "explicit": false,
+        "validated": true,
+        "backupReady": true,
+        "status": "Snapshot and receipt committed together. Original source remains."
+      },
+      "width": 1920,
+      "height": 1080,
+      "scenario": 0,
+      "step": 2
+    },
+    {
+      "state": {
+        "backupReady": true,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "workspaces": [
+          "Same name / workspace-local"
+        ],
+        "backupFailure": false,
+        "collision": false,
+        "damaged": false,
+        "backups": [
+          {
+            "protected": false,
+            "name": "original recovery"
+          }
+        ],
+        "preferences": true,
+        "receipt": true,
+        "runtimes": [
+          "terminal-local \u2192 server-a",
+          "browser-local \u2192 server-a"
+        ],
+        "validated": true,
+        "explicit": false,
+        "status": "Receipt found; original import recovered without duplication.",
+        "scenario": 0
+      },
+      "height": 1080,
+      "contrast": 5.120786403449727,
+      "mojibake": false,
+      "overflow": false,
+      "checkedText": 66,
+      "width": 1920,
+      "scenario": 0,
+      "step": 3
+    },
+    {
+      "width": 1920,
+      "mojibake": false,
+      "checkedText": 67,
+      "contrast": 5.120786403449727,
+      "overflow": false,
+      "height": 1080,
+      "state": {
+        "scenario": 1,
+        "backupFailure": false,
+        "workspaces": [],
+        "damaged": false,
+        "backupReady": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "explicit": false,
+        "collision": false,
+        "receipt": false,
+        "preferences": false,
+        "status": "Ready to inspect source.",
+        "runtimes": [],
+        "backups": [
+          {
+            "protected": true,
+            "name": "old-1"
+          },
+          {
+            "name": "old-2",
+            "protected": false
+          },
+          {
+            "name": "old-3",
+            "protected": false
+          },
+          {
+            "name": "old-4",
+            "protected": false
+          },
+          {
+            "name": "old-5",
+            "protected": false
+          }
+        ],
+        "validated": false
+      },
+      "scenario": 1,
+      "step": -1
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "contrast": 5.120786403449727,
+      "checkedText": 67,
+      "overflow": false,
+      "mojibake": false,
+      "state": {
+        "runtimes": [],
+        "preferences": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "status": "Source, contents and identities validated.",
+        "explicit": false,
+        "backupReady": false,
+        "damaged": false,
+        "scenario": 1,
+        "backups": [
+          {
+            "name": "old-1",
+            "protected": true
+          },
+          {
+            "name": "old-2",
+            "protected": false
+          },
+          {
+            "name": "old-3",
+            "protected": false
+          },
+          {
+            "protected": false,
+            "name": "old-4"
+          },
+          {
+            "protected": false,
+            "name": "old-5"
+          }
+        ],
+        "workspaces": [],
+        "validated": true,
+        "receipt": false,
+        "collision": false,
+        "backupFailure": false
+      },
+      "scenario": 1,
+      "step": 0
+    },
+    {
+      "mojibake": false,
+      "height": 1080,
+      "checkedText": 67,
+      "width": 1920,
+      "state": {
+        "backups": [
+          {
+            "name": "old-1",
+            "protected": true
+          },
+          {
+            "protected": false,
+            "name": "old-3"
+          },
+          {
+            "protected": false,
+            "name": "old-4"
+          },
+          {
+            "protected": false,
+            "name": "old-5"
+          },
+          {
+            "protected": true,
+            "name": "original recovery"
+          }
+        ],
+        "receipt": false,
+        "preferences": false,
+        "runtimes": [],
+        "workspaces": [],
+        "collision": false,
+        "explicit": false,
+        "damaged": false,
+        "backupFailure": false,
+        "backupReady": true,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "status": "Original bytes backed up and durably pinned.",
+        "validated": true,
+        "scenario": 1
+      },
+      "overflow": false,
+      "contrast": 5.120786403449727,
+      "scenario": 1,
+      "step": 1
+    },
+    {
+      "contrast": 5.120786403449727,
+      "checkedText": 69,
+      "height": 1080,
+      "state": {
+        "scenario": 1,
+        "receipt": true,
+        "backupFailure": false,
+        "preferences": true,
+        "status": "Snapshot and receipt committed together. Original source remains.",
+        "runtimes": [
+          "terminal-local \u2192 server-a",
+          "browser-local \u2192 server-a"
+        ],
+        "workspaces": [
+          "Same name / workspace-local"
+        ],
+        "backupReady": true,
+        "damaged": false,
+        "collision": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "explicit": false,
+        "validated": true,
+        "backups": [
+          {
+            "name": "old-1",
+            "protected": true
+          },
+          {
+            "protected": false,
+            "name": "old-3"
+          },
+          {
+            "protected": false,
+            "name": "old-4"
+          },
+          {
+            "protected": false,
+            "name": "old-5"
+          },
+          {
+            "protected": false,
+            "name": "original recovery"
+          }
+        ]
+      },
+      "width": 1920,
+      "mojibake": false,
+      "overflow": false,
+      "scenario": 1,
+      "step": 2
+    },
+    {
+      "overflow": false,
+      "mojibake": false,
+      "contrast": 5.120786403449727,
+      "state": {
+        "runtimes": [],
+        "explicit": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "receipt": false,
+        "backupFailure": true,
+        "damaged": false,
+        "validated": false,
+        "collision": false,
+        "scenario": 2,
+        "backups": [
+          {
+            "name": "old-1",
+            "protected": true
+          },
+          {
+            "name": "old-2",
+            "protected": false
+          },
+          {
+            "name": "old-3",
+            "protected": false
+          },
+          {
+            "protected": false,
+            "name": "old-4"
+          },
+          {
+            "protected": false,
+            "name": "old-5"
+          }
+        ],
+        "workspaces": [],
+        "preferences": false,
+        "backupReady": false,
+        "status": "Ready to inspect source."
+      },
+      "width": 1920,
+      "checkedText": 69,
+      "height": 1080,
+      "scenario": 2,
+      "step": -1
+    },
+    {
+      "width": 1920,
+      "contrast": 5.120786403449727,
+      "overflow": false,
+      "checkedText": 69,
+      "state": {
+        "receipt": false,
+        "validated": true,
+        "preferences": false,
+        "scenario": 2,
+        "explicit": false,
+        "status": "Source, contents and identities validated.",
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "workspaces": [],
+        "runtimes": [],
+        "damaged": false,
+        "backupReady": false,
+        "backupFailure": true,
+        "backups": [
+          {
+            "protected": true,
+            "name": "old-1"
+          },
+          {
+            "name": "old-2",
+            "protected": false
+          },
+          {
+            "protected": false,
+            "name": "old-3"
+          },
+          {
+            "protected": false,
+            "name": "old-4"
+          },
+          {
+            "protected": false,
+            "name": "old-5"
+          }
+        ],
+        "collision": false
+      },
+      "height": 1080,
+      "mojibake": false,
+      "scenario": 2,
+      "step": 0
+    },
+    {
+      "height": 1080,
+      "width": 1920,
+      "overflow": false,
+      "checkedText": 68,
+      "mojibake": false,
+      "state": {
+        "collision": false,
+        "preferences": false,
+        "damaged": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "backupReady": false,
+        "runtimes": [],
+        "receipt": false,
+        "backupFailure": true,
+        "scenario": 2,
+        "workspaces": [],
+        "backups": [
+          {
+            "protected": true,
+            "name": "old-1"
+          },
+          {
+            "name": "old-3",
+            "protected": false
+          },
+          {
+            "protected": false,
+            "name": "old-4"
+          },
+          {
+            "name": "old-5",
+            "protected": false
+          }
+        ],
+        "validated": true,
+        "status": "Stopped: backup write failed after slot reclamation; source and protected copies retained.",
+        "explicit": false
+      },
+      "contrast": 5.120786403449727,
+      "scenario": 2,
+      "step": 1
+    },
+    {
+      "height": 1080,
+      "width": 1920,
+      "contrast": 5.120786403449727,
+      "state": {
+        "preferences": false,
+        "backupReady": false,
+        "backupFailure": false,
+        "damaged": false,
+        "runtimes": [],
+        "validated": true,
+        "status": "Backup failure cleared. Retry is available.",
+        "scenario": 2,
+        "workspaces": [],
+        "collision": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "receipt": false,
+        "explicit": false,
+        "backups": [
+          {
+            "name": "old-1",
+            "protected": true
+          },
+          {
+            "name": "old-3",
+            "protected": false
+          },
+          {
+            "protected": false,
+            "name": "old-4"
+          },
+          {
+            "protected": false,
+            "name": "old-5"
+          }
+        ]
+      },
+      "mojibake": false,
+      "checkedText": 68,
+      "overflow": false,
+      "scenario": 2,
+      "step": 2
+    },
+    {
+      "contrast": 5.120786403449727,
+      "checkedText": 69,
+      "state": {
+        "scenario": 2,
+        "collision": false,
+        "explicit": false,
+        "preferences": false,
+        "status": "Original bytes backed up and durably pinned.",
+        "backupFailure": false,
+        "runtimes": [],
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "receipt": false,
+        "backupReady": true,
+        "workspaces": [],
+        "backups": [
+          {
+            "name": "old-1",
+            "protected": true
+          },
+          {
+            "protected": false,
+            "name": "old-3"
+          },
+          {
+            "protected": false,
+            "name": "old-4"
+          },
+          {
+            "name": "old-5",
+            "protected": false
+          },
+          {
+            "name": "original recovery",
+            "protected": true
+          }
+        ],
+        "damaged": false,
+        "validated": true
+      },
+      "height": 1080,
+      "overflow": false,
+      "mojibake": false,
+      "width": 1920,
+      "scenario": 2,
+      "step": 3
+    },
+    {
+      "mojibake": false,
+      "width": 1920,
+      "state": {
+        "damaged": false,
+        "collision": false,
+        "backups": [
+          {
+            "name": "old-1",
+            "protected": true
+          },
+          {
+            "name": "old-3",
+            "protected": false
+          },
+          {
+            "protected": false,
+            "name": "old-4"
+          },
+          {
+            "name": "old-5",
+            "protected": false
+          },
+          {
+            "name": "original recovery",
+            "protected": false
+          }
+        ],
+        "runtimes": [
+          "terminal-local \u2192 server-a",
+          "browser-local \u2192 server-a"
+        ],
+        "preferences": true,
+        "backupFailure": false,
+        "workspaces": [
+          "Same name / workspace-local"
+        ],
+        "scenario": 2,
+        "validated": true,
+        "explicit": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "receipt": true,
+        "status": "Snapshot and receipt committed together. Original source remains.",
+        "backupReady": true
+      },
+      "contrast": 5.120786403449727,
+      "height": 1080,
+      "checkedText": 71,
+      "overflow": false,
+      "scenario": 2,
+      "step": 4
+    },
+    {
+      "overflow": false,
+      "contrast": 5.120786403449727,
+      "width": 1920,
+      "state": {
+        "backups": [],
+        "receipt": false,
+        "validated": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "collision": false,
+        "scenario": 3,
+        "damaged": false,
+        "backupFailure": false,
+        "backupReady": false,
+        "workspaces": [],
+        "runtimes": [],
+        "explicit": false,
+        "preferences": false,
+        "status": "Ready to inspect source."
+      },
+      "mojibake": false,
+      "checkedText": 65,
+      "height": 1080,
+      "scenario": 3,
+      "step": -1
+    },
+    {
+      "overflow": false,
+      "contrast": 5.120786403449727,
+      "checkedText": 65,
+      "width": 1920,
+      "height": 1080,
+      "state": {
+        "validated": true,
+        "runtimes": [],
+        "status": "Source, contents and identities validated.",
+        "receipt": false,
+        "scenario": 3,
+        "backupReady": false,
+        "explicit": false,
+        "damaged": false,
+        "collision": false,
+        "workspaces": [],
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "backups": [],
+        "backupFailure": false,
+        "preferences": false
+      },
+      "mojibake": false,
+      "scenario": 3,
+      "step": 0
+    },
+    {
+      "mojibake": false,
+      "checkedText": 66,
+      "state": {
+        "damaged": false,
+        "scenario": 3,
+        "status": "Original bytes backed up and durably pinned.",
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "preferences": false,
+        "backupFailure": false,
+        "workspaces": [],
+        "collision": false,
+        "receipt": false,
+        "runtimes": [],
+        "backups": [
+          {
+            "name": "original recovery",
+            "protected": true
+          }
+        ],
+        "validated": true,
+        "backupReady": true,
+        "explicit": false
+      },
+      "width": 1920,
+      "overflow": false,
+      "contrast": 5.120786403449727,
+      "height": 1080,
+      "scenario": 3,
+      "step": 1
+    },
+    {
+      "contrast": 5.120786403449727,
+      "overflow": false,
+      "mojibake": false,
+      "height": 1080,
+      "width": 1920,
+      "checkedText": 66,
+      "state": {
+        "runtimes": [],
+        "receipt": false,
+        "collision": false,
+        "backupFailure": false,
+        "backupReady": false,
+        "status": "Restarted. Snapshot, receipt and recovery pins survive.",
+        "explicit": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "backups": [
+          {
+            "protected": true,
+            "name": "original recovery"
+          }
+        ],
+        "preferences": false,
+        "validated": false,
+        "workspaces": [],
+        "scenario": 3,
+        "damaged": false
+      },
+      "scenario": 3,
+      "step": 2
+    },
+    {
+      "state": {
+        "damaged": false,
+        "preferences": false,
+        "workspaces": [],
+        "status": "Source, contents and identities validated.",
+        "backupFailure": false,
+        "receipt": false,
+        "backupReady": false,
+        "runtimes": [],
+        "scenario": 3,
+        "collision": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "backups": [
+          {
+            "protected": true,
+            "name": "original recovery"
+          }
+        ],
+        "explicit": false,
+        "validated": true
+      },
+      "overflow": false,
+      "contrast": 5.120786403449727,
+      "width": 1920,
+      "checkedText": 66,
+      "height": 1080,
+      "mojibake": false,
+      "scenario": 3,
+      "step": 3
+    },
+    {
+      "state": {
+        "workspaces": [],
+        "explicit": false,
+        "validated": true,
+        "scenario": 3,
+        "status": "Reused the protected recovery copy.",
+        "preferences": false,
+        "backups": [
+          {
+            "protected": true,
+            "name": "original recovery"
+          }
+        ],
+        "damaged": false,
+        "backupReady": true,
+        "runtimes": [],
+        "collision": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "backupFailure": false,
+        "receipt": false
+      },
+      "checkedText": 66,
+      "contrast": 5.120786403449727,
+      "overflow": false,
+      "height": 1080,
+      "width": 1920,
+      "mojibake": false,
+      "scenario": 3,
+      "step": 4
+    },
+    {
+      "mojibake": false,
+      "overflow": false,
+      "checkedText": 68,
+      "contrast": 5.120786403449727,
+      "width": 1920,
+      "height": 1080,
+      "state": {
+        "validated": true,
+        "backupReady": true,
+        "workspaces": [
+          "Same name / workspace-local"
+        ],
+        "scenario": 3,
+        "preferences": true,
+        "damaged": false,
+        "runtimes": [
+          "terminal-local \u2192 server-a",
+          "browser-local \u2192 server-a"
+        ],
+        "backups": [
+          {
+            "protected": false,
+            "name": "original recovery"
+          }
+        ],
+        "backupFailure": false,
+        "collision": false,
+        "receipt": true,
+        "explicit": false,
+        "status": "Snapshot and receipt committed together. Original source remains.",
+        "source": "original bytes / workspace-local / terminal-local / browser-local"
+      },
+      "scenario": 3,
+      "step": 5
+    },
+    {
+      "height": 1080,
+      "overflow": false,
+      "width": 1920,
+      "checkedText": 64,
+      "contrast": 5.120786403449727,
+      "state": {
+        "validated": false,
+        "backupReady": false,
+        "backups": [],
+        "explicit": false,
+        "damaged": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "runtimes": [],
+        "backupFailure": false,
+        "status": "Ready to inspect source.",
+        "workspaces": [],
+        "receipt": false,
+        "collision": false,
+        "preferences": false,
+        "scenario": 4
+      },
+      "mojibake": false,
+      "scenario": 4,
+      "step": -1
+    },
+    {
+      "checkedText": 64,
+      "height": 1080,
+      "overflow": false,
+      "contrast": 5.120786403449727,
+      "mojibake": false,
+      "width": 1920,
+      "state": {
+        "runtimes": [],
+        "collision": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "scenario": 4,
+        "backupReady": false,
+        "backupFailure": false,
+        "status": "Source, contents and identities validated.",
+        "validated": true,
+        "explicit": false,
+        "preferences": false,
+        "receipt": false,
+        "backups": [],
+        "workspaces": [],
+        "damaged": false
+      },
+      "scenario": 4,
+      "step": 0
+    },
+    {
+      "state": {
+        "scenario": 4,
+        "explicit": false,
+        "runtimes": [],
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "status": "Original bytes backed up and durably pinned.",
+        "backups": [
+          {
+            "name": "original recovery",
+            "protected": true
+          }
+        ],
+        "receipt": false,
+        "validated": true,
+        "backupReady": true,
+        "workspaces": [],
+        "collision": false,
+        "backupFailure": false,
+        "preferences": false,
+        "damaged": false
+      },
+      "width": 1920,
+      "height": 1080,
+      "contrast": 5.120786403449727,
+      "mojibake": false,
+      "overflow": false,
+      "checkedText": 65,
+      "scenario": 4,
+      "step": 1
+    },
+    {
+      "state": {
+        "preferences": true,
+        "workspaces": [
+          "Same name / workspace-local"
+        ],
+        "damaged": false,
+        "runtimes": [
+          "terminal-local \u2192 server-a",
+          "browser-local \u2192 server-a"
+        ],
+        "backupReady": true,
+        "validated": true,
+        "backups": [
+          {
+            "name": "original recovery",
+            "protected": false
+          }
+        ],
+        "backupFailure": false,
+        "collision": false,
+        "receipt": true,
+        "scenario": 4,
+        "explicit": false,
+        "status": "Snapshot and receipt committed together. Original source remains.",
+        "source": "original bytes / workspace-local / terminal-local / browser-local"
+      },
+      "width": 1920,
+      "checkedText": 67,
+      "mojibake": false,
+      "overflow": false,
+      "contrast": 5.120786403449727,
+      "height": 1080,
+      "scenario": 4,
+      "step": 2
+    },
+    {
+      "mojibake": false,
+      "checkedText": 67,
+      "state": {
+        "runtimes": [
+          "terminal-local \u2192 server-a",
+          "browser-local \u2192 server-a"
+        ],
+        "collision": false,
+        "backupReady": false,
+        "scenario": 4,
+        "backupFailure": false,
+        "status": "Restarted. Snapshot, receipt and recovery pins survive.",
+        "validated": false,
+        "workspaces": [
+          "Same name / workspace-local"
+        ],
+        "preferences": true,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "backups": [
+          {
+            "protected": false,
+            "name": "original recovery"
+          }
+        ],
+        "damaged": false,
+        "explicit": false,
+        "receipt": true
+      },
+      "width": 1920,
+      "overflow": false,
+      "contrast": 5.120786403449727,
+      "height": 1080,
+      "scenario": 4,
+      "step": 3
+    },
+    {
+      "checkedText": 67,
+      "height": 1080,
+      "state": {
+        "collision": false,
+        "scenario": 4,
+        "damaged": false,
+        "runtimes": [
+          "terminal-local \u2192 server-a",
+          "browser-local \u2192 server-a"
+        ],
+        "explicit": false,
+        "preferences": true,
+        "validated": false,
+        "backupFailure": false,
+        "backups": [
+          {
+            "name": "original recovery",
+            "protected": false
+          }
+        ],
+        "status": "Receipt found; original import recovered without duplication.",
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "receipt": true,
+        "workspaces": [
+          "Same name / workspace-local"
+        ],
+        "backupReady": false
+      },
+      "mojibake": false,
+      "contrast": 5.120786403449727,
+      "overflow": false,
+      "width": 1920,
+      "scenario": 4,
+      "step": 4
+    },
+    {
+      "state": {
+        "workspaces": [
+          "Same name / workspace-remote"
+        ],
+        "collision": false,
+        "preferences": false,
+        "backupFailure": false,
+        "backupReady": false,
+        "runtimes": [
+          "terminal-remote \u2192 server-b"
+        ],
+        "explicit": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "backups": [],
+        "validated": false,
+        "status": "Ready to inspect source.",
+        "damaged": false,
+        "receipt": false,
+        "scenario": 5
+      },
+      "checkedText": 65,
+      "height": 1080,
+      "mojibake": false,
+      "width": 1920,
+      "contrast": 5.120786403449727,
+      "overflow": false,
+      "scenario": 5,
+      "step": -1
+    },
+    {
+      "mojibake": false,
+      "state": {
+        "backupFailure": false,
+        "collision": false,
+        "damaged": false,
+        "validated": false,
+        "backups": [],
+        "backupReady": false,
+        "explicit": false,
+        "runtimes": [
+          "terminal-remote \u2192 server-b"
+        ],
+        "preferences": false,
+        "scenario": 5,
+        "status": "Stopped: choose additional import first.",
+        "receipt": false,
+        "workspaces": [
+          "Same name / workspace-remote"
+        ],
+        "source": "original bytes / workspace-local / terminal-local / browser-local"
+      },
+      "checkedText": 65,
+      "width": 1920,
+      "contrast": 5.120786403449727,
+      "overflow": false,
+      "height": 1080,
+      "scenario": 5,
+      "step": 0
+    },
+    {
+      "width": 1920,
+      "mojibake": false,
+      "overflow": false,
+      "height": 1080,
+      "checkedText": 65,
+      "state": {
+        "workspaces": [
+          "Same name / workspace-remote"
+        ],
+        "backupFailure": false,
+        "damaged": false,
+        "backups": [],
+        "receipt": false,
+        "backupReady": false,
+        "explicit": true,
+        "runtimes": [
+          "terminal-remote \u2192 server-b"
+        ],
+        "status": "Explicit additional import selected.",
+        "collision": false,
+        "scenario": 5,
+        "preferences": false,
+        "validated": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local"
+      },
+      "contrast": 5.120786403449727,
+      "scenario": 5,
+      "step": 1
+    },
+    {
+      "height": 1080,
+      "mojibake": false,
+      "state": {
+        "preferences": false,
+        "status": "Source, contents and identities validated.",
+        "workspaces": [
+          "Same name / workspace-remote"
+        ],
+        "damaged": false,
+        "backups": [],
+        "explicit": true,
+        "receipt": false,
+        "scenario": 5,
+        "backupReady": false,
+        "validated": true,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "backupFailure": false,
+        "collision": false,
+        "runtimes": [
+          "terminal-remote \u2192 server-b"
+        ]
+      },
+      "width": 1920,
+      "overflow": false,
+      "contrast": 5.120786403449727,
+      "checkedText": 65,
+      "scenario": 5,
+      "step": 2
+    },
+    {
+      "overflow": false,
+      "height": 1080,
+      "checkedText": 66,
+      "contrast": 5.120786403449727,
+      "width": 1920,
+      "state": {
+        "collision": false,
+        "backupReady": true,
+        "preferences": false,
+        "workspaces": [
+          "Same name / workspace-remote"
+        ],
+        "backupFailure": false,
+        "scenario": 5,
+        "explicit": true,
+        "receipt": false,
+        "damaged": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "validated": true,
+        "backups": [
+          {
+            "protected": true,
+            "name": "original recovery"
+          }
+        ],
+        "status": "Original bytes backed up and durably pinned.",
+        "runtimes": [
+          "terminal-remote \u2192 server-b"
+        ]
+      },
+      "mojibake": false,
+      "scenario": 5,
+      "step": 3
+    },
+    {
+      "height": 1080,
+      "width": 1920,
+      "contrast": 5.120786403449727,
+      "mojibake": false,
+      "overflow": false,
+      "state": {
+        "validated": true,
+        "scenario": 5,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "receipt": true,
+        "backups": [
+          {
+            "protected": false,
+            "name": "original recovery"
+          }
+        ],
+        "preferences": true,
+        "workspaces": [
+          "Same name / workspace-remote",
+          "Same name / workspace-local"
+        ],
+        "backupReady": true,
+        "damaged": false,
+        "status": "Snapshot and receipt committed together. Original source remains.",
+        "runtimes": [
+          "terminal-remote \u2192 server-b",
+          "terminal-local \u2192 server-a",
+          "browser-local \u2192 server-a"
+        ],
+        "explicit": true,
+        "collision": false,
+        "backupFailure": false
+      },
+      "checkedText": 69,
+      "scenario": 5,
+      "step": 4
+    },
+    {
+      "overflow": false,
+      "contrast": 5.120786403449727,
+      "width": 1920,
+      "checkedText": 63,
+      "mojibake": false,
+      "state": {
+        "workspaces": [
+          "Same name / workspace-remote"
+        ],
+        "status": "Ready to inspect source.",
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "scenario": 6,
+        "validated": false,
+        "backupFailure": false,
+        "runtimes": [
+          "terminal-remote \u2192 server-b"
+        ],
+        "damaged": false,
+        "backups": [],
+        "explicit": true,
+        "collision": true,
+        "receipt": false,
+        "backupReady": false,
+        "preferences": false
+      },
+      "height": 1080,
+      "scenario": 6,
+      "step": -1
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "checkedText": 63,
+      "mojibake": false,
+      "overflow": false,
+      "contrast": 5.120786403449727,
+      "state": {
+        "collision": true,
+        "backups": [],
+        "workspaces": [
+          "Same name / workspace-remote"
+        ],
+        "backupFailure": false,
+        "scenario": 6,
+        "runtimes": [
+          "terminal-remote \u2192 server-b"
+        ],
+        "backupReady": false,
+        "receipt": false,
+        "damaged": false,
+        "explicit": true,
+        "status": "Stopped: conflicting identities; neither side changed.",
+        "preferences": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "validated": false
+      },
+      "scenario": 6,
+      "step": 0
+    },
+    {
+      "overflow": false,
+      "contrast": 5.120786403449727,
+      "checkedText": 63,
+      "state": {
+        "status": "Stopped: validation has not succeeded.",
+        "collision": true,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "runtimes": [
+          "terminal-remote \u2192 server-b"
+        ],
+        "backupReady": false,
+        "explicit": true,
+        "scenario": 6,
+        "workspaces": [
+          "Same name / workspace-remote"
+        ],
+        "damaged": false,
+        "backupFailure": false,
+        "receipt": false,
+        "validated": false,
+        "preferences": false,
+        "backups": []
+      },
+      "mojibake": false,
+      "width": 1920,
+      "height": 1080,
+      "scenario": 6,
+      "step": 1
+    },
+    {
+      "overflow": false,
+      "height": 1080,
+      "checkedText": 63,
+      "contrast": 5.120786403449727,
+      "width": 1920,
+      "state": {
+        "preferences": false,
+        "damaged": false,
+        "status": "Stopped: validated source and backup required.",
+        "scenario": 6,
+        "runtimes": [
+          "terminal-remote \u2192 server-b"
+        ],
+        "backups": [],
+        "backupFailure": false,
+        "validated": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "receipt": false,
+        "backupReady": false,
+        "collision": true,
+        "workspaces": [
+          "Same name / workspace-remote"
+        ],
+        "explicit": true
+      },
+      "mojibake": false,
+      "scenario": 6,
+      "step": 2
+    },
+    {
+      "mojibake": false,
+      "overflow": false,
+      "contrast": 5.120786403449727,
+      "width": 1920,
+      "checkedText": 67,
+      "state": {
+        "preferences": false,
+        "collision": false,
+        "damaged": false,
+        "runtimes": [],
+        "receipt": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "explicit": false,
+        "backupReady": false,
+        "backupFailure": false,
+        "status": "Ready to inspect source.",
+        "backups": [
+          {
+            "name": "old-1",
+            "protected": true
+          },
+          {
+            "name": "old-2",
+            "protected": true
+          },
+          {
+            "name": "old-3",
+            "protected": true
+          },
+          {
+            "name": "old-4",
+            "protected": true
+          },
+          {
+            "name": "old-5",
+            "protected": true
+          }
+        ],
+        "workspaces": [],
+        "validated": false,
+        "scenario": 7
+      },
+      "height": 1080,
+      "scenario": 7,
+      "step": -1
+    },
+    {
+      "state": {
+        "runtimes": [],
+        "backupReady": false,
+        "validated": true,
+        "backupFailure": false,
+        "scenario": 7,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "workspaces": [],
+        "backups": [
+          {
+            "name": "old-1",
+            "protected": true
+          },
+          {
+            "protected": true,
+            "name": "old-2"
+          },
+          {
+            "protected": true,
+            "name": "old-3"
+          },
+          {
+            "protected": true,
+            "name": "old-4"
+          },
+          {
+            "name": "old-5",
+            "protected": true
+          }
+        ],
+        "status": "Source, contents and identities validated.",
+        "explicit": false,
+        "damaged": false,
+        "collision": false,
+        "preferences": false,
+        "receipt": false
+      },
+      "overflow": false,
+      "height": 1080,
+      "width": 1920,
+      "mojibake": false,
+      "checkedText": 67,
+      "contrast": 5.120786403449727,
+      "scenario": 7,
+      "step": 0
+    },
+    {
+      "height": 1080,
+      "contrast": 5.120786403449727,
+      "width": 1920,
+      "overflow": false,
+      "mojibake": false,
+      "state": {
+        "damaged": false,
+        "scenario": 7,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "validated": true,
+        "preferences": false,
+        "receipt": false,
+        "backupFailure": false,
+        "collision": false,
+        "runtimes": [],
+        "backups": [
+          {
+            "name": "old-1",
+            "protected": true
+          },
+          {
+            "protected": true,
+            "name": "old-2"
+          },
+          {
+            "protected": true,
+            "name": "old-3"
+          },
+          {
+            "name": "old-4",
+            "protected": true
+          },
+          {
+            "name": "old-5",
+            "protected": true
+          }
+        ],
+        "status": "Stopped: all five copies are protected.",
+        "explicit": false,
+        "workspaces": [],
+        "backupReady": false
+      },
+      "checkedText": 67,
+      "scenario": 7,
+      "step": 1
+    },
+    {
+      "width": 1920,
+      "mojibake": false,
+      "overflow": false,
+      "checkedText": 67,
+      "height": 1080,
+      "state": {
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "backupFailure": false,
+        "explicit": false,
+        "backupReady": false,
+        "preferences": false,
+        "collision": false,
+        "status": "Stopped: validated source and backup required.",
+        "validated": true,
+        "receipt": false,
+        "backups": [
+          {
+            "protected": true,
+            "name": "old-1"
+          },
+          {
+            "protected": true,
+            "name": "old-2"
+          },
+          {
+            "name": "old-3",
+            "protected": true
+          },
+          {
+            "name": "old-4",
+            "protected": true
+          },
+          {
+            "protected": true,
+            "name": "old-5"
+          }
+        ],
+        "workspaces": [],
+        "runtimes": [],
+        "damaged": false,
+        "scenario": 7
+      },
+      "contrast": 5.120786403449727,
+      "scenario": 7,
+      "step": 2
+    },
+    {
+      "checkedText": 62,
+      "width": 1920,
+      "state": {
+        "workspaces": [],
+        "damaged": true,
+        "status": "Ready to inspect source.",
+        "collision": false,
+        "backupFailure": false,
+        "backupReady": false,
+        "runtimes": [],
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "explicit": false,
+        "receipt": false,
+        "validated": false,
+        "scenario": 8,
+        "backups": [],
+        "preferences": false
+      },
+      "overflow": false,
+      "contrast": 5.120786403449727,
+      "height": 1080,
+      "mojibake": false,
+      "scenario": 8,
+      "step": -1
+    },
+    {
+      "overflow": false,
+      "height": 1080,
+      "contrast": 5.120786403449727,
+      "mojibake": false,
+      "width": 1920,
+      "state": {
+        "scenario": 8,
+        "backupFailure": false,
+        "workspaces": [],
+        "backupReady": false,
+        "explicit": false,
+        "backups": [],
+        "receipt": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "damaged": true,
+        "validated": false,
+        "preferences": false,
+        "runtimes": [],
+        "status": "Stopped: damaged content requires review.",
+        "collision": false
+      },
+      "checkedText": 62,
+      "scenario": 8,
+      "step": 0
+    },
+    {
+      "height": 1080,
+      "mojibake": false,
+      "state": {
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "runtimes": [],
+        "explicit": false,
+        "backupReady": false,
+        "workspaces": [],
+        "damaged": true,
+        "preferences": false,
+        "status": "Stopped: validation has not succeeded.",
+        "backups": [],
+        "receipt": false,
+        "scenario": 8,
+        "validated": false,
+        "backupFailure": false,
+        "collision": false
+      },
+      "width": 1920,
+      "contrast": 5.120786403449727,
+      "checkedText": 62,
+      "overflow": false,
+      "scenario": 8,
+      "step": 1
+    },
+    {
+      "contrast": 5.120786403449727,
+      "height": 1080,
+      "state": {
+        "workspaces": [],
+        "receipt": false,
+        "scenario": 8,
+        "status": "Stopped: validated source and backup required.",
+        "collision": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "backupReady": false,
+        "validated": false,
+        "runtimes": [],
+        "explicit": false,
+        "backupFailure": false,
+        "damaged": true,
+        "preferences": false,
+        "backups": []
+      },
+      "overflow": false,
+      "checkedText": 62,
+      "width": 1920,
+      "mojibake": false,
+      "scenario": 8,
+      "step": 2
+    },
+    {
+      "checkedText": 63,
+      "mojibake": false,
+      "width": 390,
+      "overflow": false,
+      "state": {
+        "status": "Ready to inspect source.",
+        "damaged": false,
+        "validated": false,
+        "receipt": false,
+        "backupFailure": false,
+        "preferences": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "explicit": false,
+        "scenario": 0,
+        "backups": [],
+        "backupReady": false,
+        "collision": false,
+        "workspaces": [],
+        "runtimes": []
+      },
+      "contrast": 5.120786403449727,
+      "height": 844,
+      "scenario": 0,
+      "step": -1
+    },
+    {
+      "state": {
+        "backups": [],
+        "scenario": 0,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "explicit": false,
+        "validated": true,
+        "backupFailure": false,
+        "collision": false,
+        "damaged": false,
+        "workspaces": [],
+        "backupReady": false,
+        "runtimes": [],
+        "preferences": false,
+        "receipt": false,
+        "status": "Source, contents and identities validated."
+      },
+      "contrast": 5.120786403449727,
+      "mojibake": false,
+      "width": 390,
+      "overflow": false,
+      "height": 844,
+      "checkedText": 63,
+      "scenario": 0,
+      "step": 0
+    },
+    {
+      "height": 844,
+      "width": 390,
+      "checkedText": 64,
+      "mojibake": false,
+      "contrast": 5.120786403449727,
+      "state": {
+        "runtimes": [],
+        "backupFailure": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "backupReady": true,
+        "explicit": false,
+        "scenario": 0,
+        "backups": [
+          {
+            "name": "original recovery",
+            "protected": true
+          }
+        ],
+        "validated": true,
+        "damaged": false,
+        "receipt": false,
+        "workspaces": [],
+        "status": "Original bytes backed up and durably pinned.",
+        "collision": false,
+        "preferences": false
+      },
+      "overflow": false,
+      "scenario": 0,
+      "step": 1
+    },
+    {
+      "mojibake": false,
+      "state": {
+        "collision": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "damaged": false,
+        "backups": [
+          {
+            "protected": false,
+            "name": "original recovery"
+          }
+        ],
+        "preferences": true,
+        "runtimes": [
+          "terminal-local \u2192 server-a",
+          "browser-local \u2192 server-a"
+        ],
+        "backupReady": true,
+        "scenario": 0,
+        "receipt": true,
+        "validated": true,
+        "explicit": false,
+        "status": "Snapshot and receipt committed together. Original source remains.",
+        "workspaces": [
+          "Same name / workspace-local"
+        ],
+        "backupFailure": false
+      },
+      "height": 844,
+      "overflow": false,
+      "width": 390,
+      "contrast": 5.120786403449727,
+      "checkedText": 66,
+      "scenario": 0,
+      "step": 2
+    },
+    {
+      "overflow": false,
+      "checkedText": 66,
+      "height": 844,
+      "state": {
+        "runtimes": [
+          "terminal-local \u2192 server-a",
+          "browser-local \u2192 server-a"
+        ],
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "explicit": false,
+        "backups": [
+          {
+            "name": "original recovery",
+            "protected": false
+          }
+        ],
+        "backupFailure": false,
+        "damaged": false,
+        "backupReady": true,
+        "workspaces": [
+          "Same name / workspace-local"
+        ],
+        "validated": true,
+        "scenario": 0,
+        "preferences": true,
+        "receipt": true,
+        "collision": false,
+        "status": "Receipt found; original import recovered without duplication."
+      },
+      "width": 390,
+      "contrast": 5.120786403449727,
+      "mojibake": false,
+      "scenario": 0,
+      "step": 3
+    },
+    {
+      "checkedText": 67,
+      "overflow": false,
+      "width": 390,
+      "height": 844,
+      "mojibake": false,
+      "contrast": 5.120786403449727,
+      "state": {
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "collision": false,
+        "backups": [
+          {
+            "name": "old-1",
+            "protected": true
+          },
+          {
+            "name": "old-2",
+            "protected": false
+          },
+          {
+            "protected": false,
+            "name": "old-3"
+          },
+          {
+            "name": "old-4",
+            "protected": false
+          },
+          {
+            "name": "old-5",
+            "protected": false
+          }
+        ],
+        "workspaces": [],
+        "backupReady": false,
+        "runtimes": [],
+        "explicit": false,
+        "backupFailure": false,
+        "preferences": false,
+        "status": "Ready to inspect source.",
+        "validated": false,
+        "damaged": false,
+        "receipt": false,
+        "scenario": 1
+      },
+      "scenario": 1,
+      "step": -1
+    },
+    {
+      "overflow": false,
+      "state": {
+        "workspaces": [],
+        "runtimes": [],
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "backupFailure": false,
+        "validated": true,
+        "explicit": false,
+        "backups": [
+          {
+            "name": "old-1",
+            "protected": true
+          },
+          {
+            "protected": false,
+            "name": "old-2"
+          },
+          {
+            "protected": false,
+            "name": "old-3"
+          },
+          {
+            "name": "old-4",
+            "protected": false
+          },
+          {
+            "name": "old-5",
+            "protected": false
+          }
+        ],
+        "collision": false,
+        "backupReady": false,
+        "damaged": false,
+        "receipt": false,
+        "status": "Source, contents and identities validated.",
+        "scenario": 1,
+        "preferences": false
+      },
+      "contrast": 5.120786403449727,
+      "width": 390,
+      "checkedText": 67,
+      "mojibake": false,
+      "height": 844,
+      "scenario": 1,
+      "step": 0
+    },
+    {
+      "state": {
+        "runtimes": [],
+        "backups": [
+          {
+            "name": "old-1",
+            "protected": true
+          },
+          {
+            "protected": false,
+            "name": "old-3"
+          },
+          {
+            "name": "old-4",
+            "protected": false
+          },
+          {
+            "name": "old-5",
+            "protected": false
+          },
+          {
+            "name": "original recovery",
+            "protected": true
+          }
+        ],
+        "collision": false,
+        "explicit": false,
+        "damaged": false,
+        "workspaces": [],
+        "status": "Original bytes backed up and durably pinned.",
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "receipt": false,
+        "scenario": 1,
+        "validated": true,
+        "backupReady": true,
+        "backupFailure": false,
+        "preferences": false
+      },
+      "checkedText": 67,
+      "width": 390,
+      "contrast": 5.120786403449727,
+      "height": 844,
+      "overflow": false,
+      "mojibake": false,
+      "scenario": 1,
+      "step": 1
+    },
+    {
+      "contrast": 5.120786403449727,
+      "width": 390,
+      "state": {
+        "backups": [
+          {
+            "protected": true,
+            "name": "old-1"
+          },
+          {
+            "protected": false,
+            "name": "old-3"
+          },
+          {
+            "protected": false,
+            "name": "old-4"
+          },
+          {
+            "protected": false,
+            "name": "old-5"
+          },
+          {
+            "protected": false,
+            "name": "original recovery"
+          }
+        ],
+        "damaged": false,
+        "workspaces": [
+          "Same name / workspace-local"
+        ],
+        "collision": false,
+        "validated": true,
+        "backupFailure": false,
+        "status": "Snapshot and receipt committed together. Original source remains.",
+        "explicit": false,
+        "scenario": 1,
+        "receipt": true,
+        "runtimes": [
+          "terminal-local \u2192 server-a",
+          "browser-local \u2192 server-a"
+        ],
+        "backupReady": true,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "preferences": true
+      },
+      "checkedText": 69,
+      "height": 844,
+      "mojibake": false,
+      "overflow": false,
+      "scenario": 1,
+      "step": 2
+    },
+    {
+      "state": {
+        "explicit": false,
+        "backupReady": false,
+        "backupFailure": true,
+        "workspaces": [],
+        "preferences": false,
+        "backups": [
+          {
+            "protected": true,
+            "name": "old-1"
+          },
+          {
+            "name": "old-2",
+            "protected": false
+          },
+          {
+            "protected": false,
+            "name": "old-3"
+          },
+          {
+            "protected": false,
+            "name": "old-4"
+          },
+          {
+            "protected": false,
+            "name": "old-5"
+          }
+        ],
+        "scenario": 2,
+        "status": "Ready to inspect source.",
+        "receipt": false,
+        "runtimes": [],
+        "damaged": false,
+        "validated": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "collision": false
+      },
+      "mojibake": false,
+      "width": 390,
+      "contrast": 5.120786403449727,
+      "checkedText": 69,
+      "height": 844,
+      "overflow": false,
+      "scenario": 2,
+      "step": -1
+    },
+    {
+      "state": {
+        "validated": true,
+        "explicit": false,
+        "receipt": false,
+        "damaged": false,
+        "scenario": 2,
+        "backupFailure": true,
+        "status": "Source, contents and identities validated.",
+        "preferences": false,
+        "collision": false,
+        "backups": [
+          {
+            "name": "old-1",
+            "protected": true
+          },
+          {
+            "name": "old-2",
+            "protected": false
+          },
+          {
+            "name": "old-3",
+            "protected": false
+          },
+          {
+            "name": "old-4",
+            "protected": false
+          },
+          {
+            "name": "old-5",
+            "protected": false
+          }
+        ],
+        "workspaces": [],
+        "runtimes": [],
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "backupReady": false
+      },
+      "contrast": 5.120786403449727,
+      "width": 390,
+      "mojibake": false,
+      "checkedText": 69,
+      "overflow": false,
+      "height": 844,
+      "scenario": 2,
+      "step": 0
+    },
+    {
+      "width": 390,
+      "checkedText": 68,
+      "overflow": false,
+      "height": 844,
+      "mojibake": false,
+      "contrast": 5.120786403449727,
+      "state": {
+        "workspaces": [],
+        "damaged": false,
+        "explicit": false,
+        "backupFailure": true,
+        "backupReady": false,
+        "validated": true,
+        "receipt": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "backups": [
+          {
+            "name": "old-1",
+            "protected": true
+          },
+          {
+            "protected": false,
+            "name": "old-3"
+          },
+          {
+            "protected": false,
+            "name": "old-4"
+          },
+          {
+            "name": "old-5",
+            "protected": false
+          }
+        ],
+        "collision": false,
+        "scenario": 2,
+        "runtimes": [],
+        "preferences": false,
+        "status": "Stopped: backup write failed after slot reclamation; source and protected copies retained."
+      },
+      "scenario": 2,
+      "step": 1
+    },
+    {
+      "height": 844,
+      "checkedText": 68,
+      "state": {
+        "scenario": 2,
+        "receipt": false,
+        "collision": false,
+        "status": "Backup failure cleared. Retry is available.",
+        "workspaces": [],
+        "backups": [
+          {
+            "protected": true,
+            "name": "old-1"
+          },
+          {
+            "name": "old-3",
+            "protected": false
+          },
+          {
+            "name": "old-4",
+            "protected": false
+          },
+          {
+            "protected": false,
+            "name": "old-5"
+          }
+        ],
+        "validated": true,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "damaged": false,
+        "backupFailure": false,
+        "runtimes": [],
+        "backupReady": false,
+        "explicit": false,
+        "preferences": false
+      },
+      "overflow": false,
+      "contrast": 5.120786403449727,
+      "width": 390,
+      "mojibake": false,
+      "scenario": 2,
+      "step": 2
+    },
+    {
+      "state": {
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "status": "Original bytes backed up and durably pinned.",
+        "backupFailure": false,
+        "runtimes": [],
+        "workspaces": [],
+        "preferences": false,
+        "explicit": false,
+        "backupReady": true,
+        "backups": [
+          {
+            "protected": true,
+            "name": "old-1"
+          },
+          {
+            "name": "old-3",
+            "protected": false
+          },
+          {
+            "name": "old-4",
+            "protected": false
+          },
+          {
+            "protected": false,
+            "name": "old-5"
+          },
+          {
+            "name": "original recovery",
+            "protected": true
+          }
+        ],
+        "collision": false,
+        "damaged": false,
+        "scenario": 2,
+        "receipt": false,
+        "validated": true
+      },
+      "checkedText": 69,
+      "contrast": 5.120786403449727,
+      "overflow": false,
+      "mojibake": false,
+      "width": 390,
+      "height": 844,
+      "scenario": 2,
+      "step": 3
+    },
+    {
+      "state": {
+        "receipt": true,
+        "preferences": true,
+        "backupFailure": false,
+        "backups": [
+          {
+            "name": "old-1",
+            "protected": true
+          },
+          {
+            "protected": false,
+            "name": "old-3"
+          },
+          {
+            "protected": false,
+            "name": "old-4"
+          },
+          {
+            "protected": false,
+            "name": "old-5"
+          },
+          {
+            "protected": false,
+            "name": "original recovery"
+          }
+        ],
+        "validated": true,
+        "status": "Snapshot and receipt committed together. Original source remains.",
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "scenario": 2,
+        "workspaces": [
+          "Same name / workspace-local"
+        ],
+        "runtimes": [
+          "terminal-local \u2192 server-a",
+          "browser-local \u2192 server-a"
+        ],
+        "collision": false,
+        "backupReady": true,
+        "explicit": false,
+        "damaged": false
+      },
+      "height": 844,
+      "contrast": 5.120786403449727,
+      "checkedText": 71,
+      "overflow": false,
+      "mojibake": false,
+      "width": 390,
+      "scenario": 2,
+      "step": 4
+    },
+    {
+      "checkedText": 65,
+      "overflow": false,
+      "state": {
+        "validated": false,
+        "preferences": false,
+        "collision": false,
+        "runtimes": [],
+        "scenario": 3,
+        "receipt": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "damaged": false,
+        "workspaces": [],
+        "backups": [],
+        "backupFailure": false,
+        "status": "Ready to inspect source.",
+        "backupReady": false,
+        "explicit": false
+      },
+      "contrast": 5.120786403449727,
+      "mojibake": false,
+      "height": 844,
+      "width": 390,
+      "scenario": 3,
+      "step": -1
+    },
+    {
+      "height": 844,
+      "checkedText": 65,
+      "overflow": false,
+      "contrast": 5.120786403449727,
+      "mojibake": false,
+      "state": {
+        "status": "Source, contents and identities validated.",
+        "backupFailure": false,
+        "receipt": false,
+        "backups": [],
+        "damaged": false,
+        "explicit": false,
+        "runtimes": [],
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "preferences": false,
+        "collision": false,
+        "scenario": 3,
+        "validated": true,
+        "workspaces": [],
+        "backupReady": false
+      },
+      "width": 390,
+      "scenario": 3,
+      "step": 0
+    },
+    {
+      "mojibake": false,
+      "contrast": 5.120786403449727,
+      "overflow": false,
+      "width": 390,
+      "height": 844,
+      "checkedText": 66,
+      "state": {
+        "backupFailure": false,
+        "runtimes": [],
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "explicit": false,
+        "collision": false,
+        "backups": [
+          {
+            "name": "original recovery",
+            "protected": true
+          }
+        ],
+        "workspaces": [],
+        "receipt": false,
+        "preferences": false,
+        "validated": true,
+        "status": "Original bytes backed up and durably pinned.",
+        "scenario": 3,
+        "damaged": false,
+        "backupReady": true
+      },
+      "scenario": 3,
+      "step": 1
+    },
+    {
+      "checkedText": 66,
+      "overflow": false,
+      "state": {
+        "preferences": false,
+        "validated": false,
+        "receipt": false,
+        "collision": false,
+        "workspaces": [],
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "backups": [
+          {
+            "name": "original recovery",
+            "protected": true
+          }
+        ],
+        "status": "Restarted. Snapshot, receipt and recovery pins survive.",
+        "explicit": false,
+        "runtimes": [],
+        "damaged": false,
+        "backupReady": false,
+        "backupFailure": false,
+        "scenario": 3
+      },
+      "contrast": 5.120786403449727,
+      "height": 844,
+      "width": 390,
+      "mojibake": false,
+      "scenario": 3,
+      "step": 2
+    },
+    {
+      "overflow": false,
+      "checkedText": 66,
+      "height": 844,
+      "width": 390,
+      "state": {
+        "damaged": false,
+        "status": "Source, contents and identities validated.",
+        "collision": false,
+        "scenario": 3,
+        "backups": [
+          {
+            "protected": true,
+            "name": "original recovery"
+          }
+        ],
+        "receipt": false,
+        "validated": true,
+        "backupFailure": false,
+        "workspaces": [],
+        "backupReady": false,
+        "explicit": false,
+        "preferences": false,
+        "runtimes": [],
+        "source": "original bytes / workspace-local / terminal-local / browser-local"
+      },
+      "contrast": 5.120786403449727,
+      "mojibake": false,
+      "scenario": 3,
+      "step": 3
+    },
+    {
+      "width": 390,
+      "mojibake": false,
+      "checkedText": 66,
+      "height": 844,
+      "overflow": false,
+      "state": {
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "receipt": false,
+        "explicit": false,
+        "scenario": 3,
+        "damaged": false,
+        "validated": true,
+        "workspaces": [],
+        "backups": [
+          {
+            "name": "original recovery",
+            "protected": true
+          }
+        ],
+        "status": "Reused the protected recovery copy.",
+        "backupFailure": false,
+        "backupReady": true,
+        "collision": false,
+        "preferences": false,
+        "runtimes": []
+      },
+      "contrast": 5.120786403449727,
+      "scenario": 3,
+      "step": 4
+    },
+    {
+      "contrast": 5.120786403449727,
+      "mojibake": false,
+      "width": 390,
+      "checkedText": 68,
+      "overflow": false,
+      "state": {
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "workspaces": [
+          "Same name / workspace-local"
+        ],
+        "backupReady": true,
+        "receipt": true,
+        "damaged": false,
+        "status": "Snapshot and receipt committed together. Original source remains.",
+        "explicit": false,
+        "preferences": true,
+        "backupFailure": false,
+        "backups": [
+          {
+            "protected": false,
+            "name": "original recovery"
+          }
+        ],
+        "scenario": 3,
+        "collision": false,
+        "validated": true,
+        "runtimes": [
+          "terminal-local \u2192 server-a",
+          "browser-local \u2192 server-a"
+        ]
+      },
+      "height": 844,
+      "scenario": 3,
+      "step": 5
+    },
+    {
+      "height": 844,
+      "overflow": false,
+      "mojibake": false,
+      "contrast": 5.120786403449727,
+      "width": 390,
+      "checkedText": 64,
+      "state": {
+        "damaged": false,
+        "runtimes": [],
+        "backups": [],
+        "collision": false,
+        "preferences": false,
+        "scenario": 4,
+        "receipt": false,
+        "explicit": false,
+        "validated": false,
+        "status": "Ready to inspect source.",
+        "workspaces": [],
+        "backupReady": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "backupFailure": false
+      },
+      "scenario": 4,
+      "step": -1
+    },
+    {
+      "contrast": 5.120786403449727,
+      "state": {
+        "status": "Source, contents and identities validated.",
+        "backups": [],
+        "backupFailure": false,
+        "receipt": false,
+        "backupReady": false,
+        "scenario": 4,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "explicit": false,
+        "validated": true,
+        "runtimes": [],
+        "preferences": false,
+        "collision": false,
+        "workspaces": [],
+        "damaged": false
+      },
+      "overflow": false,
+      "width": 390,
+      "height": 844,
+      "checkedText": 64,
+      "mojibake": false,
+      "scenario": 4,
+      "step": 0
+    },
+    {
+      "mojibake": false,
+      "state": {
+        "receipt": false,
+        "workspaces": [],
+        "validated": true,
+        "explicit": false,
+        "collision": false,
+        "backups": [
+          {
+            "protected": true,
+            "name": "original recovery"
+          }
+        ],
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "status": "Original bytes backed up and durably pinned.",
+        "preferences": false,
+        "scenario": 4,
+        "damaged": false,
+        "backupFailure": false,
+        "runtimes": [],
+        "backupReady": true
+      },
+      "checkedText": 65,
+      "contrast": 5.120786403449727,
+      "width": 390,
+      "height": 844,
+      "overflow": false,
+      "scenario": 4,
+      "step": 1
+    },
+    {
+      "overflow": false,
+      "width": 390,
+      "contrast": 5.120786403449727,
+      "height": 844,
+      "checkedText": 67,
+      "mojibake": false,
+      "state": {
+        "backupReady": true,
+        "backupFailure": false,
+        "runtimes": [
+          "terminal-local \u2192 server-a",
+          "browser-local \u2192 server-a"
+        ],
+        "validated": true,
+        "workspaces": [
+          "Same name / workspace-local"
+        ],
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "status": "Snapshot and receipt committed together. Original source remains.",
+        "collision": false,
+        "preferences": true,
+        "damaged": false,
+        "scenario": 4,
+        "explicit": false,
+        "receipt": true,
+        "backups": [
+          {
+            "name": "original recovery",
+            "protected": false
+          }
+        ]
+      },
+      "scenario": 4,
+      "step": 2
+    },
+    {
+      "state": {
+        "workspaces": [
+          "Same name / workspace-local"
+        ],
+        "backupReady": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "validated": false,
+        "runtimes": [
+          "terminal-local \u2192 server-a",
+          "browser-local \u2192 server-a"
+        ],
+        "preferences": true,
+        "damaged": false,
+        "backupFailure": false,
+        "scenario": 4,
+        "receipt": true,
+        "backups": [
+          {
+            "protected": false,
+            "name": "original recovery"
+          }
+        ],
+        "explicit": false,
+        "collision": false,
+        "status": "Restarted. Snapshot, receipt and recovery pins survive."
+      },
+      "width": 390,
+      "height": 844,
+      "contrast": 5.120786403449727,
+      "overflow": false,
+      "mojibake": false,
+      "checkedText": 67,
+      "scenario": 4,
+      "step": 3
+    },
+    {
+      "state": {
+        "validated": false,
+        "backups": [
+          {
+            "name": "original recovery",
+            "protected": false
+          }
+        ],
+        "backupReady": false,
+        "receipt": true,
+        "status": "Receipt found; original import recovered without duplication.",
+        "backupFailure": false,
+        "explicit": false,
+        "scenario": 4,
+        "workspaces": [
+          "Same name / workspace-local"
+        ],
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "collision": false,
+        "preferences": true,
+        "runtimes": [
+          "terminal-local \u2192 server-a",
+          "browser-local \u2192 server-a"
+        ],
+        "damaged": false
+      },
+      "contrast": 5.120786403449727,
+      "mojibake": false,
+      "overflow": false,
+      "checkedText": 67,
+      "width": 390,
+      "height": 844,
+      "scenario": 4,
+      "step": 4
+    },
+    {
+      "contrast": 5.120786403449727,
+      "width": 390,
+      "state": {
+        "preferences": false,
+        "backups": [],
+        "damaged": false,
+        "receipt": false,
+        "status": "Ready to inspect source.",
+        "scenario": 5,
+        "runtimes": [
+          "terminal-remote \u2192 server-b"
+        ],
+        "explicit": false,
+        "backupReady": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "collision": false,
+        "validated": false,
+        "workspaces": [
+          "Same name / workspace-remote"
+        ],
+        "backupFailure": false
+      },
+      "overflow": false,
+      "mojibake": false,
+      "height": 844,
+      "checkedText": 65,
+      "scenario": 5,
+      "step": -1
+    },
+    {
+      "overflow": false,
+      "checkedText": 65,
+      "contrast": 5.120786403449727,
+      "mojibake": false,
+      "height": 844,
+      "width": 390,
+      "state": {
+        "collision": false,
+        "status": "Stopped: choose additional import first.",
+        "workspaces": [
+          "Same name / workspace-remote"
+        ],
+        "runtimes": [
+          "terminal-remote \u2192 server-b"
+        ],
+        "backups": [],
+        "explicit": false,
+        "damaged": false,
+        "backupReady": false,
+        "preferences": false,
+        "receipt": false,
+        "scenario": 5,
+        "backupFailure": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "validated": false
+      },
+      "scenario": 5,
+      "step": 0
+    },
+    {
+      "state": {
+        "runtimes": [
+          "terminal-remote \u2192 server-b"
+        ],
+        "validated": false,
+        "backups": [],
+        "scenario": 5,
+        "preferences": false,
+        "status": "Explicit additional import selected.",
+        "explicit": true,
+        "backupReady": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "damaged": false,
+        "workspaces": [
+          "Same name / workspace-remote"
+        ],
+        "receipt": false,
+        "collision": false,
+        "backupFailure": false
+      },
+      "width": 390,
+      "height": 844,
+      "checkedText": 65,
+      "mojibake": false,
+      "contrast": 5.120786403449727,
+      "overflow": false,
+      "scenario": 5,
+      "step": 1
+    },
+    {
+      "height": 844,
+      "contrast": 5.120786403449727,
+      "overflow": false,
+      "width": 390,
+      "checkedText": 65,
+      "state": {
+        "runtimes": [
+          "terminal-remote \u2192 server-b"
+        ],
+        "damaged": false,
+        "backupFailure": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "backups": [],
+        "collision": false,
+        "validated": true,
+        "status": "Source, contents and identities validated.",
+        "workspaces": [
+          "Same name / workspace-remote"
+        ],
+        "receipt": false,
+        "backupReady": false,
+        "preferences": false,
+        "explicit": true,
+        "scenario": 5
+      },
+      "mojibake": false,
+      "scenario": 5,
+      "step": 2
+    },
+    {
+      "contrast": 5.120786403449727,
+      "checkedText": 66,
+      "mojibake": false,
+      "height": 844,
+      "overflow": false,
+      "state": {
+        "workspaces": [
+          "Same name / workspace-remote"
+        ],
+        "receipt": false,
+        "backupFailure": false,
+        "scenario": 5,
+        "damaged": false,
+        "status": "Original bytes backed up and durably pinned.",
+        "backupReady": true,
+        "preferences": false,
+        "validated": true,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "collision": false,
+        "runtimes": [
+          "terminal-remote \u2192 server-b"
+        ],
+        "backups": [
+          {
+            "name": "original recovery",
+            "protected": true
+          }
+        ],
+        "explicit": true
+      },
+      "width": 390,
+      "scenario": 5,
+      "step": 3
+    },
+    {
+      "mojibake": false,
+      "contrast": 5.120786403449727,
+      "width": 390,
+      "overflow": false,
+      "height": 844,
+      "checkedText": 69,
+      "state": {
+        "runtimes": [
+          "terminal-remote \u2192 server-b",
+          "terminal-local \u2192 server-a",
+          "browser-local \u2192 server-a"
+        ],
+        "scenario": 5,
+        "preferences": true,
+        "collision": false,
+        "receipt": true,
+        "status": "Snapshot and receipt committed together. Original source remains.",
+        "validated": true,
+        "backups": [
+          {
+            "protected": false,
+            "name": "original recovery"
+          }
+        ],
+        "backupFailure": false,
+        "explicit": true,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "damaged": false,
+        "backupReady": true,
+        "workspaces": [
+          "Same name / workspace-remote",
+          "Same name / workspace-local"
+        ]
+      },
+      "scenario": 5,
+      "step": 4
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "contrast": 5.120786403449727,
+      "state": {
+        "backupReady": false,
+        "status": "Ready to inspect source.",
+        "receipt": false,
+        "scenario": 6,
+        "explicit": true,
+        "workspaces": [
+          "Same name / workspace-remote"
+        ],
+        "backups": [],
+        "validated": false,
+        "collision": true,
+        "preferences": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "damaged": false,
+        "runtimes": [
+          "terminal-remote \u2192 server-b"
+        ],
+        "backupFailure": false
+      },
+      "checkedText": 63,
+      "overflow": false,
+      "mojibake": false,
+      "scenario": 6,
+      "step": -1
+    },
+    {
+      "overflow": false,
+      "height": 844,
+      "mojibake": false,
+      "state": {
+        "collision": true,
+        "explicit": true,
+        "preferences": false,
+        "workspaces": [
+          "Same name / workspace-remote"
+        ],
+        "validated": false,
+        "backups": [],
+        "runtimes": [
+          "terminal-remote \u2192 server-b"
+        ],
+        "backupReady": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "damaged": false,
+        "scenario": 6,
+        "backupFailure": false,
+        "status": "Stopped: conflicting identities; neither side changed.",
+        "receipt": false
+      },
+      "contrast": 5.120786403449727,
+      "checkedText": 63,
+      "width": 390,
+      "scenario": 6,
+      "step": 0
+    },
+    {
+      "overflow": false,
+      "height": 844,
+      "width": 390,
+      "checkedText": 63,
+      "mojibake": false,
+      "state": {
+        "preferences": false,
+        "backups": [],
+        "scenario": 6,
+        "validated": false,
+        "backupReady": false,
+        "explicit": true,
+        "receipt": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "workspaces": [
+          "Same name / workspace-remote"
+        ],
+        "runtimes": [
+          "terminal-remote \u2192 server-b"
+        ],
+        "status": "Stopped: validation has not succeeded.",
+        "backupFailure": false,
+        "collision": true,
+        "damaged": false
+      },
+      "contrast": 5.120786403449727,
+      "scenario": 6,
+      "step": 1
+    },
+    {
+      "contrast": 5.120786403449727,
+      "overflow": false,
+      "width": 390,
+      "mojibake": false,
+      "state": {
+        "workspaces": [
+          "Same name / workspace-remote"
+        ],
+        "backups": [],
+        "preferences": false,
+        "receipt": false,
+        "explicit": true,
+        "collision": true,
+        "scenario": 6,
+        "validated": false,
+        "status": "Stopped: validated source and backup required.",
+        "backupReady": false,
+        "runtimes": [
+          "terminal-remote \u2192 server-b"
+        ],
+        "backupFailure": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "damaged": false
+      },
+      "checkedText": 63,
+      "height": 844,
+      "scenario": 6,
+      "step": 2
+    },
+    {
+      "mojibake": false,
+      "height": 844,
+      "checkedText": 67,
+      "width": 390,
+      "contrast": 5.120786403449727,
+      "overflow": false,
+      "state": {
+        "backupReady": false,
+        "backupFailure": false,
+        "status": "Ready to inspect source.",
+        "validated": false,
+        "receipt": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "runtimes": [],
+        "damaged": false,
+        "backups": [
+          {
+            "protected": true,
+            "name": "old-1"
+          },
+          {
+            "name": "old-2",
+            "protected": true
+          },
+          {
+            "name": "old-3",
+            "protected": true
+          },
+          {
+            "protected": true,
+            "name": "old-4"
+          },
+          {
+            "protected": true,
+            "name": "old-5"
+          }
+        ],
+        "workspaces": [],
+        "scenario": 7,
+        "preferences": false,
+        "explicit": false,
+        "collision": false
+      },
+      "scenario": 7,
+      "step": -1
+    },
+    {
+      "state": {
+        "backupFailure": false,
+        "receipt": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "preferences": false,
+        "status": "Source, contents and identities validated.",
+        "workspaces": [],
+        "runtimes": [],
+        "backupReady": false,
+        "collision": false,
+        "explicit": false,
+        "scenario": 7,
+        "validated": true,
+        "backups": [
+          {
+            "protected": true,
+            "name": "old-1"
+          },
+          {
+            "protected": true,
+            "name": "old-2"
+          },
+          {
+            "protected": true,
+            "name": "old-3"
+          },
+          {
+            "protected": true,
+            "name": "old-4"
+          },
+          {
+            "protected": true,
+            "name": "old-5"
+          }
+        ],
+        "damaged": false
+      },
+      "overflow": false,
+      "mojibake": false,
+      "width": 390,
+      "contrast": 5.120786403449727,
+      "checkedText": 67,
+      "height": 844,
+      "scenario": 7,
+      "step": 0
+    },
+    {
+      "mojibake": false,
+      "contrast": 5.120786403449727,
+      "height": 844,
+      "checkedText": 67,
+      "state": {
+        "backupReady": false,
+        "scenario": 7,
+        "receipt": false,
+        "backups": [
+          {
+            "name": "old-1",
+            "protected": true
+          },
+          {
+            "protected": true,
+            "name": "old-2"
+          },
+          {
+            "protected": true,
+            "name": "old-3"
+          },
+          {
+            "protected": true,
+            "name": "old-4"
+          },
+          {
+            "protected": true,
+            "name": "old-5"
+          }
+        ],
+        "backupFailure": false,
+        "workspaces": [],
+        "validated": true,
+        "preferences": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "status": "Stopped: all five copies are protected.",
+        "collision": false,
+        "explicit": false,
+        "damaged": false,
+        "runtimes": []
+      },
+      "width": 390,
+      "overflow": false,
+      "scenario": 7,
+      "step": 1
+    },
+    {
+      "width": 390,
+      "checkedText": 67,
+      "mojibake": false,
+      "overflow": false,
+      "contrast": 5.120786403449727,
+      "height": 844,
+      "state": {
+        "collision": false,
+        "workspaces": [],
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "backups": [
+          {
+            "name": "old-1",
+            "protected": true
+          },
+          {
+            "protected": true,
+            "name": "old-2"
+          },
+          {
+            "name": "old-3",
+            "protected": true
+          },
+          {
+            "name": "old-4",
+            "protected": true
+          },
+          {
+            "name": "old-5",
+            "protected": true
+          }
+        ],
+        "preferences": false,
+        "backupReady": false,
+        "backupFailure": false,
+        "receipt": false,
+        "damaged": false,
+        "explicit": false,
+        "status": "Stopped: validated source and backup required.",
+        "scenario": 7,
+        "runtimes": [],
+        "validated": true
+      },
+      "scenario": 7,
+      "step": 2
+    },
+    {
+      "mojibake": false,
+      "width": 390,
+      "height": 844,
+      "overflow": false,
+      "state": {
+        "receipt": false,
+        "backups": [],
+        "explicit": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "backupReady": false,
+        "status": "Ready to inspect source.",
+        "damaged": true,
+        "collision": false,
+        "scenario": 8,
+        "workspaces": [],
+        "backupFailure": false,
+        "preferences": false,
+        "runtimes": [],
+        "validated": false
+      },
+      "contrast": 5.120786403449727,
+      "checkedText": 62,
+      "scenario": 8,
+      "step": -1
+    },
+    {
+      "overflow": false,
+      "checkedText": 62,
+      "height": 844,
+      "contrast": 5.120786403449727,
+      "mojibake": false,
+      "state": {
+        "receipt": false,
+        "scenario": 8,
+        "backups": [],
+        "runtimes": [],
+        "backupReady": false,
+        "collision": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "explicit": false,
+        "validated": false,
+        "damaged": true,
+        "status": "Stopped: damaged content requires review.",
+        "preferences": false,
+        "backupFailure": false,
+        "workspaces": []
+      },
+      "width": 390,
+      "scenario": 8,
+      "step": 0
+    },
+    {
+      "width": 390,
+      "mojibake": false,
+      "height": 844,
+      "checkedText": 62,
+      "overflow": false,
+      "state": {
+        "scenario": 8,
+        "collision": false,
+        "damaged": true,
+        "receipt": false,
+        "preferences": false,
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "status": "Stopped: validation has not succeeded.",
+        "runtimes": [],
+        "explicit": false,
+        "workspaces": [],
+        "backupFailure": false,
+        "validated": false,
+        "backupReady": false,
+        "backups": []
+      },
+      "contrast": 5.120786403449727,
+      "scenario": 8,
+      "step": 1
+    },
+    {
+      "overflow": false,
+      "contrast": 5.120786403449727,
+      "height": 844,
+      "state": {
+        "source": "original bytes / workspace-local / terminal-local / browser-local",
+        "explicit": false,
+        "validated": false,
+        "collision": false,
+        "scenario": 8,
+        "runtimes": [],
+        "backupReady": false,
+        "backupFailure": false,
+        "workspaces": [],
+        "damaged": true,
+        "preferences": false,
+        "receipt": false,
+        "status": "Stopped: validated source and backup required.",
+        "backups": []
+      },
+      "width": 390,
+      "checkedText": 62,
+      "mojibake": false,
+      "scenario": 8,
+      "step": 2
+    }
+  ],
+  "minimumContrast": 5.120786403449727
+}

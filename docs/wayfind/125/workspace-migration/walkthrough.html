@@ -1,0 +1,78 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Workspace migration • discussion prototype</title>
+<style>
+:root{--bg:#f8fafc;--surface:#fff;--surface-2:#f1f5f9;--text:#0f172a;--muted:#475569;--accent:#0e7490;--soft:#ecfeff;--border:#e2e8f0;--font: 'Space Grotesk',ui-sans-serif,system-ui,-apple-system,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 var(--font)}main{max-width:1300px;margin:auto;padding:40px 24px}h1{font-size:clamp(28px,4vw,46px);line-height:1.12;max-width:950px}h2{font-size:22px;margin:0 0 12px}h3{font-size:17px}p{max-width:950px}small,.muted{color:var(--muted)}.tag{color:var(--accent);font-weight:700;letter-spacing:.06em}.notice{background:var(--soft);border-left:4px solid var(--accent);padding:18px 22px;margin:24px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:18px;margin:22px 0}.card{min-width:0;background:var(--surface);border:1px solid var(--border);padding:22px;border-radius:12px}button{font:inherit;background:var(--surface);color:var(--accent);border:1px solid var(--accent);border-radius:7px;padding:9px 13px;cursor:pointer;white-space:normal;text-align:left}button:hover,button[aria-selected=true]{background:var(--accent);color:white}button:focus-visible{outline:3px solid var(--accent);outline-offset:3px}.row{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0}.status{padding:14px;background:var(--surface-2);border-radius:8px;overflow-wrap:anywhere}ol,ul{padding-left:22px}li{margin:5px 0}.slot{padding:9px;background:var(--surface-2);margin:6px 0;border-radius:5px}code{overflow-wrap:anywhere;font-family:ui-monospace,monospace;font-size:.87em}details{margin-top:14px}summary{cursor:pointer}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}footer{margin:30px 0;color:var(--muted)}a{color:var(--accent)}
+</style>
+<main>
+<div class="tag">MYTERM / THROWAWAY RESEARCH</div>
+<h1>Keep identities. Protect the recovery copy.</h1>
+<p>Can an upgrade add existing work to an account layout without losing content, duplicating sessions or keeping more than five automatic backups per state file?</p>
+<div class="notice"><strong>This page is an in-memory discussion model.</strong> Its buttons do not run Swift, touch files, enroll an account or migrate MyTerm. The separate native-schema and scratch-file probe supplies the executed evidence. The redesigned account-layout store and integrated migration workflow remain unimplemented.</div>
+<section class="card"><h2>Executed evidence</h2><p id="evidence"><strong>221 passing checks; zero failures.</strong> Native Swift schema decoding and Python scratch-file transactions ran on macOS ARM64. See <code>evidence/results.json</code> for individual observations, fixture inventories and source hashes. Repeat with <code>python3 docs/wayfind/125/workspace-migration/probe.py --output /private/tmp/myterm-migration-review</code>.</p><p>Real macOS file permissions and process exits are exercised. Full disk, failed replace and directory-sync errors are injected. No power-loss, live MyTerm session, encrypted account transaction or multi-device acceptance is claimed.</p></section>
+<h2 style="margin-top:30px">Choose a scenario</h2>
+<div class="row" id="tabs" role="tablist" aria-label="Migration scenarios"></div>
+<p id="description"></p>
+<div class="row" id="steps"></div>
+<div class="status" id="status" role="status" aria-live="polite"></div>
+<div class="grid">
+<section class="card"><h2>Original file</h2><p id="source"></p><p>Production: <code>myterm/workspace-state.json</code><br>Development: <code>myterm-dev/workspace-state.json</code></p><p>Every operation in this candidate leaves the source bytes in place. Conversion uses a disposable copy.</p></section>
+<section class="card"><h2>Account snapshot</h2><div id="account"></div><p id="preferences"></p></section>
+<section class="card"><h2>Automatic backups</h2><div id="backups"></div><p>Five slots per state file. At capacity, reclaim the oldest eligible slot before writing a new copy. A durable pin protects an interrupted migration's recovery copy. If all slots are protected, stop.</p></section>
+</div>
+<section class="card"><h2>Free play</h2><p>Actions are always available. Invalid transitions stop with a reason; they do not change the original file.</p><div class="row" id="actions"></div><details><summary>Full discussion state</summary><pre id="state"></pre></details></section>
+<section class="card" style="margin-top:22px"><h2>Review points</h2><ul><li>Damaged or lossy sources stop automatic migration and retain the original. A repair report is evidence to review, never proof of a complete migration.</li><li>An existing account layout requires an explicit additional-import choice. First account enrollment's already agreed additive join remains a separate workflow.</li><li>Same-name workspaces remain distinct. A true identity collision stops; the candidate never regenerates an identity to hide it.</li><li>The complete candidate, local preferences and retry receipt commit together in one disposable snapshot. Production must compose these boundaries with the chosen replicated-layout and trust protocols.</li></ul></section>
+<section class="card" style="margin-top:22px"><h2>Native version-1 conversion to review</h2><p>The existing Swift converter keeps all four content identities in this fixture, but turns the inactive vertical split into additional tabs in the focused group. The original document is retained for recovery. The production direction for this structural rewrite needs your review.</p><div class="grid"><section><h3>Actual version-1 fixture</h3><pre>Workspace: Same name
+  Tab: Keep title [00000000-0000-0000-0000-0000000007D3]
+    horizontal split
+      terminal [00000000-0000-0000-0000-0000000007DA]
+      browser [00000000-0000-0000-0000-0000000007DC]
+  Tab: Inactive split tab [00000000-0000-0000-0000-000000000BBB]
+    vertical split
+      terminal [00000000-0000-0000-0000-000000000BC2]
+      browser [00000000-0000-0000-0000-000000000BC4]</pre></section><section><h3>Actual native version-2 conversion</h3><pre>Workspace: Same name
+  horizontal split
+    Group [5b166b88-da34-5a95-a9bc-51cce55c62b6]
+      terminal [00000000-0000-0000-0000-0000000007da]
+      terminal [00000000-0000-0000-0000-000000000bc2]
+      browser [00000000-0000-0000-0000-000000000bc4]
+    Group [5b166a88-da34-58e2-a99c-50cce51280e5]
+      browser [00000000-0000-0000-0000-0000000007dc]</pre></section></div></section>
+<footer><a href="https://github.com/GordonBeeming/myterm/issues/158">Validate workspace migration and five-backup retention</a> · Prototype awaiting human review</footer>
+</main>
+<script>
+// Pure discussion module. This is separate from the executed Python/Swift candidate.
+const MigrationDiscussion=(()=>{
+const scenarios=[
+{name:'Fresh upgrade',description:'A supported source is validated, backed up and added with its original identities.',initial:{},steps:['Validate source','Protect backup','Commit snapshot','Retry']},
+{name:'Five occupied slots',description:'Rotate an eligible old backup while a different recovery copy stays protected.',initial:{full:true,pinned:true},steps:['Validate source','Protect backup','Commit snapshot']},
+{name:'Backup fails',description:'Reclaim one eligible slot before writing at capacity. A failed write leaves four backups, including the protected copy; the original stays untouched.',initial:{backupFailure:true,full:true,pinned:true},steps:['Validate source','Protect backup','Clear failure','Protect backup','Commit snapshot']},
+{name:'Crash before commit',description:'An abrupt exit leaves the durable recovery pin. Restart validates again and reuses the same copy.',initial:{},steps:['Validate source','Protect backup','Restart','Validate source','Protect backup','Commit snapshot']},
+{name:'Lost acknowledgment',description:'A committed snapshot carries its retry receipt, so restarting cannot import it twice.',initial:{},steps:['Validate source','Protect backup','Commit snapshot','Restart','Retry']},
+{name:'Existing account',description:'Remote work survives. Explicit additional import adds a second same-name workspace with a different identity.',initial:{existing:true},steps:['Validate source','Allow additional import','Validate source','Protect backup','Commit snapshot']},
+{name:'Identity collision',description:'An existing workspace owns the same identity. Refuse without overwriting either side.',initial:{collision:true,existing:true,explicit:true},steps:['Validate source','Protect backup','Commit snapshot']},
+{name:'All backups protected',description:'No eligible slot exists. Preserve every protected backup and the source, and stop.',initial:{allPinned:true,full:true},steps:['Validate source','Protect backup','Commit snapshot']},
+{name:'Damaged source',description:'The native decoder would drop or repair content. Automatic conversion stops for review.',initial:{damaged:true},steps:['Validate source','Protect backup','Commit snapshot']}
+];
+function initial(index){const options=scenarios[index].initial;return{scenario:index,source:'original bytes / workspace-local / terminal-local / browser-local',validated:false,backupReady:false,receipt:false,explicit:!!options.explicit,backupFailure:!!options.backupFailure,damaged:!!options.damaged,collision:!!options.collision,backups:options.full?Array.from({length:5},(_,i)=>({name:'old-'+(i+1),protected:!!options.allPinned||(!!options.pinned&&i===0)})):[],workspaces:options.existing?['Same name / workspace-remote']:[],runtimes:options.existing?['terminal-remote → server-b']:[],preferences:false,status:'Ready to inspect source.'}}
+function reduce(state,action){const s=structuredClone(state);switch(action){
+case 'Validate source':if(s.receipt){s.status='This source is already committed.';break}if(s.damaged){s.status='Stopped: damaged content requires review.';break}if(s.workspaces.length&&!s.explicit){s.status='Stopped: choose additional import first.';break}if(s.collision){s.status='Stopped: conflicting identities; neither side changed.';break}s.validated=true;s.status='Source, contents and identities validated.';break;
+case 'Protect backup':if(!s.validated){s.status='Stopped: validation has not succeeded.';break}if(s.backups.some(b=>b.name==='original recovery')){s.backupReady=true;s.status='Reused the protected recovery copy.';break}if(s.backups.length===5){let i=s.backups.findIndex(b=>!b.protected);if(i<0){s.status='Stopped: all five copies are protected.';break}s.backups.splice(i,1)}if(s.backupFailure){s.status='Stopped: backup write failed after slot reclamation; source and protected copies retained.';break}s.backups.push({name:'original recovery',protected:true});s.backupReady=true;s.status='Original bytes backed up and durably pinned.';break;
+case 'Commit snapshot':if(s.receipt){s.status='Receipt found; no duplicate import.';break}if(!s.validated||!s.backupReady){s.status='Stopped: validated source and backup required.';break}s.workspaces.push('Same name / workspace-local');s.runtimes.push('terminal-local → server-a','browser-local → server-a');s.preferences=true;s.receipt=true;s.backups=s.backups.map(b=>b.name==='original recovery'?{...b,protected:false}:b);s.status='Snapshot and receipt committed together. Original source remains.';break;
+case 'Restart':s.validated=false;s.backupReady=false;s.status='Restarted. Snapshot, receipt and recovery pins survive.';break;
+case 'Retry':s.status=s.receipt?'Receipt found; original import recovered without duplication.':'No receipt: validate, protect backup and commit again.';break;
+case 'Allow additional import':s.explicit=true;s.status='Explicit additional import selected.';break;
+case 'Clear failure':s.backupFailure=false;s.status='Backup failure cleared. Retry is available.';break;
+}return s}
+return{scenarios,initial,reduce};})();
+const actions=['Validate source','Protect backup','Commit snapshot','Restart','Retry','Allow additional import','Clear failure'];
+let state=MigrationDiscussion.initial(0);
+function button(label,callback){const b=document.createElement('button');b.textContent=label;b.onclick=callback;return b}
+function dispatch(action){state=MigrationDiscussion.reduce(state,action);render()}
+function selectScenario(index){state=MigrationDiscussion.initial(index);render()}
+function render(){const scenario=MigrationDiscussion.scenarios[state.scenario];document.querySelector('#description').textContent=scenario.description;const tabs=document.querySelector('#tabs');tabs.replaceChildren();MigrationDiscussion.scenarios.forEach((sc,i)=>{const b=button(sc.name,()=>selectScenario(i));b.setAttribute('role','tab');b.setAttribute('aria-selected',i===state.scenario);tabs.append(b)});const steps=document.querySelector('#steps');steps.replaceChildren(...scenario.steps.map((step,i)=>button((i+1)+'. '+step,()=>dispatch(step))));document.querySelector('#status').textContent=state.status;document.querySelector('#source').textContent=state.source;const account=document.querySelector('#account');account.replaceChildren();for(const item of [...state.workspaces,...state.runtimes]){const p=document.createElement('p');p.textContent=item;account.append(p)}if(!account.childNodes.length)account.textContent='No account snapshot committed.';document.querySelector('#preferences').textContent=state.preferences?'Selection, focus and display settings retained locally.':'Client preferences have not been committed.';const backups=document.querySelector('#backups');backups.replaceChildren();const count=document.createElement('p');count.textContent=state.backups.length+' of 5 automatic backups';backups.append(count);state.backups.forEach((slot,i)=>{const d=document.createElement('div');d.className='slot';d.textContent=(i+1)+'. '+slot.name+(slot.protected?' · protected':' · eligible');backups.append(d)});document.querySelector('#state').textContent=JSON.stringify(state,null,2)}
+document.querySelector('#actions').replaceChildren(...actions.map(action=>button(action,()=>dispatch(action))));render();
+</script>

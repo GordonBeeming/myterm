@@ -1,0 +1,16 @@
+Re-review the final source and README in docs/wayfind/125/workspace-migration/ after your review. Stay read-only; no git network, edits, commits, browser or GUI. The final retained evidence/results.json now passes 220 checks and binds the current code hashes. Please check those hashes afresh. State whether this bounded experiment is ready for human direction review and identify remaining material blockers separately from documented production acceptance.
+
+Changes responding to your findings:
+- Identity assertions inspect shared plus runtime ONLY, excluding the retained raw source.
+- Actual terminal/browser payload comparisons and concrete local focus/selection/font/expansion values are recorded.
+- v1 settings/folder repair and unknown fields now have exact refusal assertions. Duplicate JSON keys reject.
+- A multi-tab/multi-leaf v1 fixture records full source and native output. The README explicitly documents native flattening of inactive split content into focused-group tabs, wider corpus acceptance remains open.
+- Changed actual source channel, account and assigned-server bindings are tested. Arbitrary scratch-path routing remains caller supplied and is explicitly documented, not claimed as production channel routing.
+- A backup partial uses the reclaimed slot with .partial, a child process exits mid-write, and retry cleans it before making a ready backup. Maximum-five includes no sixth staged backup. Capacity rotation necessarily reclaims an eligible old copy first; failed writing leaves fewer eligible backups. The walkthrough now starts that scenario with five copies and shows four after failure. This is an explicit candidate tradeoff for human review; source and pinned backups survive.
+- Durable pin exhaustion from five changed-source crashes is tested; a sixth stops safely. Safe abandonment is explicitly a production requirement.
+- Shared layout now has content identity/pane/server references only; full runtime payload lives separately. Complete raw source is in the client-local experiment portion. No encrypted/native account-store composition is claimed.
+- Legacy native .v1-backup and timestamped recovery-backup names are counted and the pre-v2 protected copy survives. The expected oldest eligible slot is checked.
+- Read-only directory failure is correctly described as lock creation, not commit-time failure.
+- Unknown/older v2 changes conservatively refuse; supported fixtures are bounded, not a claim of all historic compatibility.
+
+README and HTML exist now. The prior raw report was empty only because your runner was still in progress; it is now completed. Browser evidence is being regenerated for final HTML text, with the same 92 step views; focus and all native integration remain outside scope. Please read the current source rather than relying on the first review's interim versions.
