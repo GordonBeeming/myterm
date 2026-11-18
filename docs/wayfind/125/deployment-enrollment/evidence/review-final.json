@@ -1,0 +1,15 @@
+{
+  "tool": "claude",
+  "mode": "review",
+  "model": "sonnet",
+  "permissionMode": "plan",
+  "repo": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/wayfind-125",
+  "sessionId": "726a0b37-1865-403e-8db4-68e023a95746",
+  "status": "completed",
+  "response": "**No blocker for publishing this as a research checkpoint.** Read-only; I did not rebuild or rerun.\n\n## Hashes match\n\nI hashed the current files and compared them with the three recorded copies:\n\n| File | Current SHA-256 | Recorded in `results.json`, `evidence/macos-arm64.json` and the walkthrough |\n|---|---|---|\n| `src/main.rs` | `458e3bac…` | matches |\n| `probe.py` | `c56875b2…` | matches |\n| `Cargo.lock` | `315aad55…` | matches |\n\nAll three copies also record 94 of 94 cases passing with `failure: null`, and the case names are identical across the three. The mismatch from my last review is gone.\n\n## The listed changes are present\n\n- **Key aliases:** `key()` re-encodes the decoded bytes and rejects any non-identical string with `noncanonical-key` (`main.rs:51`). The probe has an uppercase-key tamper case (`probe.py:281`).\n- **Provisional tombstone:** `remove` no longer requires current membership. It validates the key and applies `room_for`, so the cap still holds (`main.rs:257-265`). Two native controls cover it, at `probe.py:232` and `:234`. The second shows a delivered tombstone evicts a provisional identity without revoking its credential.\n- **Real-clock TTLs:** the real-clock `single-use` and `reusable` credentials now use `ttl=5` (`probe.py:358`, `:373`).\n\n## Two harmless leftovers\n\n- `remove` on an identity that is already removed commits a redundant event. It adds no state, because the set insert is idempotent, but it does append to the journal and fails with `identity-cap` at saturation.\n- The enrollment-exhaustion and creator stand-in limits are documented as you described, and I don't see anything else that is undisclosed.\n\nEverything else is a documented limit: private operator pipe, honest clocks across restart, power loss, authority rollback, endpoint persistence, plaintext loopback and TLS. None of it blocks a research checkpoint.",
+  "exitCode": "0",
+  "startedAt": "2026-11-18T01:18:43Z",
+  "endedAt": "2026-11-18T01:19:05Z",
+  "rawFile": "/private/tmp/myterm-193-review-final.json.json",
+  "stderrTail": ""
+}

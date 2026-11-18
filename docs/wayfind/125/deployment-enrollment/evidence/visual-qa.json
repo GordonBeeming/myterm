@@ -1,0 +1,50 @@
+{
+  "browser": "Browser.app",
+  "wide": {
+    "cases": [
+      {
+        "case": "Single-use race",
+        "result": "Server A is already verified. Reconnect preserves its admission.",
+        "steps": 5
+      },
+      {
+        "case": "Offline enrollment",
+        "result": "Server A is already verified. Reconnect preserves its admission.",
+        "steps": 4
+      },
+      {
+        "case": "Late first presentation",
+        "result": "Server A is admitted through fresh trusted approval using its existing identity.",
+        "steps": 5
+      },
+      {
+        "case": "Withheld revocation",
+        "result": "Server A is admitted through fresh trusted approval using its existing identity.",
+        "steps": 8
+      }
+    ],
+    "checks": 94,
+    "horizontalOverflow": false,
+    "mojibake": false,
+    "viewport": [
+      1920,
+      1080
+    ]
+  },
+  "narrow": {
+    "horizontalOverflow": false,
+    "mojibake": false,
+    "viewport": [
+      390,
+      844
+    ]
+  },
+  "contrast": {
+    "body": 17.062933971317335,
+    "mutedCard": 4.758842787868666,
+    "selectedTab": 7.266842816941486,
+    "stateLabels": 16.295987899750777,
+    "tag": 6.9856152369204505
+  },
+  "screenshots_inspected": true
+}
