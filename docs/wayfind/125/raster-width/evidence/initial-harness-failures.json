@@ -1,0 +1,12 @@
+{
+  "firstRun": {
+    "foundation": "older retained final-replay development tree; not accepted as final evidence",
+    "comparisons": 120,
+    "failingWindowTrials": 13,
+    "cause": "Restored windows kept 640x480 while the reference had resized; restored viewport was subsequently initialized from the matching reference capture."
+  },
+  "secondRun": {
+    "cause": "Python round uses ties-to-even, unlike positive Swift rounded() ties-away-from-zero. At 8.5 points and image scale one, the runner passed cell pixel width 8 instead of 9, causing a geometry rejection. Replaced with floor(x+0.5). This rejection is not evidence of an interprocess geometry change."
+  },
+  "finalRun": "Fresh build from verified-replay, guarded against retained accepted foundation hashes. See build.json and summary.json."
+}

@@ -1,0 +1,128 @@
+--- a/native/swift-probe/Sources/Baseline/main.swift
++++ b/native/swift-probe/Sources/Baseline/main.swift
+@@ -20,10 +20,40 @@
+     func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
+ }
+ 
++var diagnosticWindow: NSWindow?
++var diagnosticBeforeWindow: [Double] = []
++@MainActor
++func pump() { RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.15)) }
+ @MainActor
+ func makeView(_ recorder: Recorder) throws -> TerminalView {
+     let scale = Double(ProcessInfo.processInfo.environment["PROTOTYPE_FONT_GRID_SCALE"] ?? "1") ?? 0
+-    let view = try RustPrototypeTerminalView(frame:CGRect(x:0,y:0,width:640,height:480),fontGridScale:scale)
++    let frame = CGRect(x:0,y:0,width:Double(ProcessInfo.processInfo.environment["RASTER_WIDTH"] ?? "640") ?? 640,height:Double(ProcessInfo.processInfo.environment["RASTER_HEIGHT"] ?? "480") ?? 480)
++    let mode = ProcessInfo.processInfo.environment["RASTER_MODE"] ?? "controlled"
++    if mode == "window-early" { _ = NSApplication.shared; NSApp.setActivationPolicy(.regular) }
++    let view: TerminalView
++    if mode == "controlled" {
++        view = try RustPrototypeTerminalView(frame:frame,fontGridScale:scale)
++    } else { view = TerminalView(frame:frame) }
++    let before = view.imageRenderingGeometry
++    diagnosticBeforeWindow = [Double(before.cellSize.width),Double(before.cellSize.height),Double(before.displayScale)]
++    if mode.hasPrefix("window") {
++        _ = NSApplication.shared
++        NSApp.setActivationPolicy(.regular)
++        let screenIndex = Int(ProcessInfo.processInfo.environment["RASTER_SCREEN"] ?? "0") ?? -1
++        guard NSScreen.screens.indices.contains(screenIndex) else { throw TerminalCheckpointError.corrupt("screen index unavailable") }
++        let screen = NSScreen.screens[screenIndex]
++        let origin = screen.visibleFrame.origin
++        let window = NSWindow(contentRect: NSRect(x:origin.x+30,y:origin.y+30,width:frame.width,height:frame.height),
++            styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
++        window.title = "MyTerm raster-width diagnostic"
++        window.isReleasedWhenClosed = false
++        window.contentView = view
++        window.orderFrontRegardless()
++        window.setFrameOrigin(NSPoint(x:screen.visibleFrame.midX-frame.width/2,y:screen.visibleFrame.midY-frame.height/2))
++        diagnosticWindow = window
++        pump()
++        if ProcessInfo.processInfo.environment["RASTER_RESET_FONT"] == "1" { view.font = view.font }
++    }
+     view.nativeBackgroundColor = .black
+     view.nativeForegroundColor = .white
+     view.terminalDelegate = recorder
+@@ -135,6 +165,12 @@
+     let recorder = Recorder()
+     let view = try makeView(recorder)
+     let terminal = view.getTerminal()
++    let measured = view.imageRenderingGeometry
++    let diagnostic: [String:Any] = ["imageGeometry":[Double(measured.cellSize.width),Double(measured.cellSize.height),Double(measured.displayScale)],
++        "beforeWindow":diagnosticBeforeWindow,"windowScale":view.window?.backingScaleFactor ?? 0,
++        "screenScale":NSScreen.main?.backingScaleFactor ?? 0]
++    FileHandle.standardError.write(try JSONSerialization.data(withJSONObject:diagnostic,options:[.sortedKeys]))
++    FileHandle.standardError.write(Data("\n".utf8))
+     if let dirty = request.dirty { terminal.feed(byteArray: dirty) }
+     var sequence = -1
+     let start = DispatchTime.now().uptimeNanoseconds
+@@ -160,6 +196,15 @@
+         var result = try snapshot(terminal, recorder)
+         let geometry = view.imageRenderingGeometry
+         result["imageGeometry"] = [Double(geometry.cellSize.width),Double(geometry.cellSize.height),Double(geometry.displayScale)]
++        result["diagnostic"] = ["beforeWindow":diagnosticBeforeWindow,
++            "windowScale":view.window?.backingScaleFactor ?? 0,
++            "actualScreenIndex":NSScreen.screens.firstIndex(where: { $0 === view.window?.screen }) ?? -1,
++            "screenScale":NSScreen.main?.backingScaleFactor ?? 0,
++            "screenScales":NSScreen.screens.map { $0.backingScaleFactor },
++            "windowVisible":view.window?.isVisible ?? false,
++            "isUsingMetal":view.isUsingMetalRenderer,"windowNumber":view.window?.windowNumber ?? 0,
++            "fontName":view.font.fontName,"fontSize":view.font.pointSize,
++            "rawGlyphWidth":view.font.advancement(forGlyph:view.font.glyph(withName:"W")).width] as [String:Any]
+         result["nativeCheckpoint"] = try terminal.exportCheckpoint().base64EncodedString()
+         if ProcessInfo.processInfo.environment["MYTERM_PROBE_RASTER"] == "1" {
+             guard let bitmap = NSBitmapImageRep(bitmapDataPlanes:nil,pixelsWide:Int(view.bounds.width),
+@@ -173,6 +218,18 @@
+                 throw TerminalCheckpointError.corrupt("native view PNG unavailable")
+             }
+             result["renderedPNG"] = png.base64EncodedString()
++            let backingScale = view.window?.backingScaleFactor ?? 1
++            guard let backing = NSBitmapImageRep(bitmapDataPlanes:nil,pixelsWide:Int(view.bounds.width*backingScale),
++                pixelsHigh:Int(view.bounds.height*backingScale),bitsPerSample:8,samplesPerPixel:4,
++                hasAlpha:true,isPlanar:false,colorSpaceName:.calibratedRGB,bytesPerRow:0,bitsPerPixel:0) else {
++                throw TerminalCheckpointError.corrupt("backing bitmap unavailable")
++            }
++            backing.size = view.bounds.size
++            view.cacheDisplay(in:view.bounds,to:backing)
++            guard let backingPNG = backing.representation(using:.png,properties:[:]) else {
++                throw TerminalCheckpointError.corrupt("backing PNG unavailable")
++            }
++            result["backingPNG"] = backingPNG.base64EncodedString()
+             result["renderedSHA256"] = SHA256.hash(data: png).map { String(format:"%02x", $0) }.joined()
+         }
+         return result
+@@ -183,7 +240,20 @@
+             throw NSError(domain: "CheckpointPrototype", code: 1,
+                 userInfo: [NSLocalizedDescriptionKey: "delivery sequence gap, duplicate or reordering"])
+         }
++        if delivery.sequence == 1, let target = ProcessInfo.processInfo.environment["RASTER_MOVE_SCREEN"],
++           let index = Int(target), let window = diagnosticWindow {
++            guard NSScreen.screens.indices.contains(index) else { throw TerminalCheckpointError.corrupt("move screen unavailable") }
++            let origin = NSScreen.screens[index].visibleFrame.origin
++            window.setFrameOrigin(NSPoint(x:origin.x+30,y:origin.y+30))
++            pump()
++            if ProcessInfo.processInfo.environment["RASTER_RESET_FONT"] == "1" { view.font = view.font }
++        }
+         if let size = delivery.event.resize {
++            if let window = diagnosticWindow {
++                window.setContentSize(NSSize(width:CGFloat(size[0])*view.imageRenderingGeometry.cellSize.width,
++                    height:CGFloat(size[1])*view.imageRenderingGeometry.cellSize.height))
++                pump()
++            }
+             guard size.count == 2, (2...1000).contains(size[0]), (1...1000).contains(size[1]) else {
+                 throw NSError(domain: "CheckpointPrototype", code: 2)
+             }
+@@ -202,7 +272,13 @@
+     let result: [String: Any] = ["snapshots": snapshots, "sequence":sequence,"importNs":importNs]
+     FileHandle.standardOutput.write(try JSONSerialization.data(withJSONObject: result, options: [.sortedKeys]))
+ }
+-do { try bridgeRun() } catch {
++do {
++    try bridgeRun()
++    if let seconds = Double(ProcessInfo.processInfo.environment["RASTER_HOLD"] ?? "0"),seconds > 0 {
++        RunLoop.current.run(until: Date(timeIntervalSinceNow:seconds))
++    }
++    diagnosticWindow?.close()
++} catch {
+     FileHandle.standardError.write(Data("\(error)\n".utf8))
+     exit(1)
+ }

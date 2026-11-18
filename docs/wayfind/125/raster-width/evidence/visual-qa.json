@@ -1,0 +1,21 @@
+{
+  "desktopViewport": [
+    1920,
+    1080
+  ],
+  "mobileViewport": [
+    390,
+    844
+  ],
+  "horizontalOverflow": false,
+  "mojibake": false,
+  "tabsInspected": 3,
+  "contrastRatios": {
+    "#0f172a on #ffffff": 17.85,
+    "#64748b on #ffffff": 4.76,
+    "#64748b on #f8fafc": 4.55,
+    "#0e7490 on #ffffff": 5.36,
+    "#ffffff on #0e7490": 5.36,
+    "#0f172a on #ecfeff": 17.16
+  }
+}

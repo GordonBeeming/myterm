@@ -1,0 +1,37 @@
+{
+  "time": "2026-11-18T01:11:20.644083+00:00",
+  "trials": 34,
+  "comparisons": 204,
+  "observedFailures": [],
+  "requiredGateFailures": [],
+  "negativeControl": {
+    "oneWidth": [
+      18
+    ],
+    "twoWidth": [
+      17
+    ],
+    "differentPixels": true
+  },
+  "geometryCounts": {
+    "[9, 16, 1]": 29,
+    "[9, 16, 2]": 3,
+    "[8.5, 16, 2]": 2
+  },
+  "movementRuns": 12,
+  "binarySha256": {
+    "raster-client": "4a6d52ae2f64c700b5ed61c37cea09b8c6e4b3905f598abdc3fbf857e9e7771a",
+    "server": "e9486d3255bd2318d394e566b52ae42a142cd5027153394950df2a094f12b018"
+  },
+  "crossGeometryControls": {
+    "passed": 2,
+    "sameWireReferenceWidth": [
+      18
+    ],
+    "sameWireRestoredWidth": [
+      17
+    ],
+    "differentWireRejected": true
+  },
+  "crossGeometryCommandsRunSeparatelyAfterWindowAssessment": true
+}

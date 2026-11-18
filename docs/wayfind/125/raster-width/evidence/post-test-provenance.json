@@ -1,0 +1,6 @@
+{
+  "diagnosticSource": true,
+  "patch": true,
+  "binaries": true,
+  "appExecutable": true
+}

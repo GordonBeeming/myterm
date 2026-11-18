@@ -1,0 +1,476 @@
+{
+  "assertions": [
+    {
+      "name": "historical widths are exactly 18 and 17",
+      "passed": true
+    },
+    {
+      "name": "exact pixel comparison detects the mixed-grid difference",
+      "passed": true
+    },
+    {
+      "name": "window-first uses a visible real window",
+      "passed": true
+    },
+    {
+      "name": "window-first reaches its requested screen",
+      "passed": true
+    },
+    {
+      "name": "window-first uses the window image scale",
+      "passed": true
+    },
+    {
+      "name": "window-first has the predicted font cell width",
+      "passed": true
+    },
+    {
+      "name": "window-first has a two-column stripe of the predicted width",
+      "passed": true
+    },
+    {
+      "name": "window-first preserves exact state and pixels through import and resize",
+      "passed": true
+    },
+    {
+      "name": "window-early-0-reset-0 uses a visible real window",
+      "passed": true
+    },
+    {
+      "name": "window-early-0-reset-0 reaches its requested screen",
+      "passed": true
+    },
+    {
+      "name": "window-early-0-reset-0 uses the window image scale",
+      "passed": true
+    },
+    {
+      "name": "window-early-0-reset-0 has the predicted font cell width",
+      "passed": true
+    },
+    {
+      "name": "window-early-0-reset-0 has a two-column stripe of the predicted width",
+      "passed": true
+    },
+    {
+      "name": "window-early-0-reset-0 preserves exact state and pixels through import and resize",
+      "passed": true
+    },
+    {
+      "name": "window-early-0-reset-1 uses a visible real window",
+      "passed": true
+    },
+    {
+      "name": "window-early-0-reset-1 reaches its requested screen",
+      "passed": true
+    },
+    {
+      "name": "window-early-0-reset-1 uses the window image scale",
+      "passed": true
+    },
+    {
+      "name": "window-early-0-reset-1 has the predicted font cell width",
+      "passed": true
+    },
+    {
+      "name": "window-early-0-reset-1 has a two-column stripe of the predicted width",
+      "passed": true
+    },
+    {
+      "name": "window-early-0-reset-1 preserves exact state and pixels through import and resize",
+      "passed": true
+    },
+    {
+      "name": "window-late-0-reset-0 uses a visible real window",
+      "passed": true
+    },
+    {
+      "name": "window-late-0-reset-0 reaches its requested screen",
+      "passed": true
+    },
+    {
+      "name": "window-late-0-reset-0 uses the window image scale",
+      "passed": true
+    },
+    {
+      "name": "window-late-0-reset-0 has the predicted font cell width",
+      "passed": true
+    },
+    {
+      "name": "window-late-0-reset-0 has a two-column stripe of the predicted width",
+      "passed": true
+    },
+    {
+      "name": "window-late-0-reset-0 preserves exact state and pixels through import and resize",
+      "passed": true
+    },
+    {
+      "name": "window-late-0-reset-1 uses a visible real window",
+      "passed": true
+    },
+    {
+      "name": "window-late-0-reset-1 reaches its requested screen",
+      "passed": true
+    },
+    {
+      "name": "window-late-0-reset-1 uses the window image scale",
+      "passed": true
+    },
+    {
+      "name": "window-late-0-reset-1 has the predicted font cell width",
+      "passed": true
+    },
+    {
+      "name": "window-late-0-reset-1 has a two-column stripe of the predicted width",
+      "passed": true
+    },
+    {
+      "name": "window-late-0-reset-1 preserves exact state and pixels through import and resize",
+      "passed": true
+    },
+    {
+      "name": "window-early-1-reset-0 uses a visible real window",
+      "passed": true
+    },
+    {
+      "name": "window-early-1-reset-0 reaches its requested screen",
+      "passed": true
+    },
+    {
+      "name": "window-early-1-reset-0 uses the window image scale",
+      "passed": true
+    },
+    {
+      "name": "window-early-1-reset-0 has the predicted font cell width",
+      "passed": true
+    },
+    {
+      "name": "window-early-1-reset-0 has a two-column stripe of the predicted width",
+      "passed": true
+    },
+    {
+      "name": "window-early-1-reset-0 preserves exact state and pixels through import and resize",
+      "passed": true
+    },
+    {
+      "name": "window-early-1-reset-1 uses a visible real window",
+      "passed": true
+    },
+    {
+      "name": "window-early-1-reset-1 reaches its requested screen",
+      "passed": true
+    },
+    {
+      "name": "window-early-1-reset-1 uses the window image scale",
+      "passed": true
+    },
+    {
+      "name": "window-early-1-reset-1 has the predicted font cell width",
+      "passed": true
+    },
+    {
+      "name": "window-early-1-reset-1 has a two-column stripe of the predicted width",
+      "passed": true
+    },
+    {
+      "name": "window-early-1-reset-1 preserves exact state and pixels through import and resize",
+      "passed": true
+    },
+    {
+      "name": "window-late-1-reset-0 uses a visible real window",
+      "passed": true
+    },
+    {
+      "name": "window-late-1-reset-0 reaches its requested screen",
+      "passed": true
+    },
+    {
+      "name": "window-late-1-reset-0 uses the window image scale",
+      "passed": true
+    },
+    {
+      "name": "window-late-1-reset-0 has the predicted font cell width",
+      "passed": true
+    },
+    {
+      "name": "window-late-1-reset-0 has a two-column stripe of the predicted width",
+      "passed": true
+    },
+    {
+      "name": "window-late-1-reset-0 preserves exact state and pixels through import and resize",
+      "passed": true
+    },
+    {
+      "name": "window-late-1-reset-1 uses a visible real window",
+      "passed": true
+    },
+    {
+      "name": "window-late-1-reset-1 reaches its requested screen",
+      "passed": true
+    },
+    {
+      "name": "window-late-1-reset-1 uses the window image scale",
+      "passed": true
+    },
+    {
+      "name": "window-late-1-reset-1 has the predicted font cell width",
+      "passed": true
+    },
+    {
+      "name": "window-late-1-reset-1 has a two-column stripe of the predicted width",
+      "passed": true
+    },
+    {
+      "name": "window-late-1-reset-1 preserves exact state and pixels through import and resize",
+      "passed": true
+    },
+    {
+      "name": "window-early-2-reset-0 uses a visible real window",
+      "passed": true
+    },
+    {
+      "name": "window-early-2-reset-0 reaches its requested screen",
+      "passed": true
+    },
+    {
+      "name": "window-early-2-reset-0 uses the window image scale",
+      "passed": true
+    },
+    {
+      "name": "window-early-2-reset-0 has the predicted font cell width",
+      "passed": true
+    },
+    {
+      "name": "window-early-2-reset-0 has a two-column stripe of the predicted width",
+      "passed": true
+    },
+    {
+      "name": "window-early-2-reset-0 preserves exact state and pixels through import and resize",
+      "passed": true
+    },
+    {
+      "name": "window-early-2-reset-1 uses a visible real window",
+      "passed": true
+    },
+    {
+      "name": "window-early-2-reset-1 reaches its requested screen",
+      "passed": true
+    },
+    {
+      "name": "window-early-2-reset-1 uses the window image scale",
+      "passed": true
+    },
+    {
+      "name": "window-early-2-reset-1 has the predicted font cell width",
+      "passed": true
+    },
+    {
+      "name": "window-early-2-reset-1 has a two-column stripe of the predicted width",
+      "passed": true
+    },
+    {
+      "name": "window-early-2-reset-1 preserves exact state and pixels through import and resize",
+      "passed": true
+    },
+    {
+      "name": "window-late-2-reset-0 uses a visible real window",
+      "passed": true
+    },
+    {
+      "name": "window-late-2-reset-0 reaches its requested screen",
+      "passed": true
+    },
+    {
+      "name": "window-late-2-reset-0 uses the window image scale",
+      "passed": true
+    },
+    {
+      "name": "window-late-2-reset-0 has the predicted font cell width",
+      "passed": true
+    },
+    {
+      "name": "window-late-2-reset-0 has a two-column stripe of the predicted width",
+      "passed": true
+    },
+    {
+      "name": "window-late-2-reset-0 preserves exact state and pixels through import and resize",
+      "passed": true
+    },
+    {
+      "name": "window-late-2-reset-1 uses a visible real window",
+      "passed": true
+    },
+    {
+      "name": "window-late-2-reset-1 reaches its requested screen",
+      "passed": true
+    },
+    {
+      "name": "window-late-2-reset-1 uses the window image scale",
+      "passed": true
+    },
+    {
+      "name": "window-late-2-reset-1 has the predicted font cell width",
+      "passed": true
+    },
+    {
+      "name": "window-late-2-reset-1 has a two-column stripe of the predicted width",
+      "passed": true
+    },
+    {
+      "name": "window-late-2-reset-1 preserves exact state and pixels through import and resize",
+      "passed": true
+    },
+    {
+      "name": "real 1x and 2x windows were both exercised",
+      "passed": true
+    },
+    {
+      "name": "move 0 reaches actual start and target screens",
+      "passed": true
+    },
+    {
+      "name": "move 0 keeps a real visible window",
+      "passed": true
+    },
+    {
+      "name": "move 0 does not implicitly refresh the cached font cell",
+      "passed": true
+    },
+    {
+      "name": "move 1 reaches actual start and target screens",
+      "passed": true
+    },
+    {
+      "name": "move 1 keeps a real visible window",
+      "passed": true
+    },
+    {
+      "name": "move 1 explicitly refreshed cells match each window scale",
+      "passed": true
+    },
+    {
+      "name": "move 2 reaches actual start and target screens",
+      "passed": true
+    },
+    {
+      "name": "move 2 keeps a real visible window",
+      "passed": true
+    },
+    {
+      "name": "move 2 does not implicitly refresh the cached font cell",
+      "passed": true
+    },
+    {
+      "name": "move 3 reaches actual start and target screens",
+      "passed": true
+    },
+    {
+      "name": "move 3 keeps a real visible window",
+      "passed": true
+    },
+    {
+      "name": "move 3 explicitly refreshed cells match each window scale",
+      "passed": true
+    },
+    {
+      "name": "move 4 reaches actual start and target screens",
+      "passed": true
+    },
+    {
+      "name": "move 4 keeps a real visible window",
+      "passed": true
+    },
+    {
+      "name": "move 4 does not implicitly refresh the cached font cell",
+      "passed": true
+    },
+    {
+      "name": "move 5 reaches actual start and target screens",
+      "passed": true
+    },
+    {
+      "name": "move 5 keeps a real visible window",
+      "passed": true
+    },
+    {
+      "name": "move 5 explicitly refreshed cells match each window scale",
+      "passed": true
+    },
+    {
+      "name": "move 6 reaches actual start and target screens",
+      "passed": true
+    },
+    {
+      "name": "move 6 keeps a real visible window",
+      "passed": true
+    },
+    {
+      "name": "move 6 does not implicitly refresh the cached font cell",
+      "passed": true
+    },
+    {
+      "name": "move 7 reaches actual start and target screens",
+      "passed": true
+    },
+    {
+      "name": "move 7 keeps a real visible window",
+      "passed": true
+    },
+    {
+      "name": "move 7 explicitly refreshed cells match each window scale",
+      "passed": true
+    },
+    {
+      "name": "move 8 reaches actual start and target screens",
+      "passed": true
+    },
+    {
+      "name": "move 8 keeps a real visible window",
+      "passed": true
+    },
+    {
+      "name": "move 8 does not implicitly refresh the cached font cell",
+      "passed": true
+    },
+    {
+      "name": "move 9 reaches actual start and target screens",
+      "passed": true
+    },
+    {
+      "name": "move 9 keeps a real visible window",
+      "passed": true
+    },
+    {
+      "name": "move 9 explicitly refreshed cells match each window scale",
+      "passed": true
+    },
+    {
+      "name": "move 10 reaches actual start and target screens",
+      "passed": true
+    },
+    {
+      "name": "move 10 keeps a real visible window",
+      "passed": true
+    },
+    {
+      "name": "move 10 does not implicitly refresh the cached font cell",
+      "passed": true
+    },
+    {
+      "name": "move 11 reaches actual start and target screens",
+      "passed": true
+    },
+    {
+      "name": "move 11 keeps a real visible window",
+      "passed": true
+    },
+    {
+      "name": "move 11 explicitly refreshed cells match each window scale",
+      "passed": true
+    }
+  ],
+  "passed": 117,
+  "failed": [],
+  "windowTrials": 13,
+  "movementRuns": 12
+}
