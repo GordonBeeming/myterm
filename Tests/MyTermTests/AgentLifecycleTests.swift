@@ -30,6 +30,18 @@ final class AgentLifecycleTests: XCTestCase {
         XCTAssertTrue(fixture.session.isRunning)
     }
 
+    func testASlowShellsWaitingNoticeIsNotAProblemAndClearsWhenTheCommandIsSent() throws {
+        let fixture = try makeFixture(isActive: false)
+        let sessionID = try fixture.terminalSessionID()
+        let workspaceID = try XCTUnwrap(fixture.model.store.workspaces.first?.id)
+        fixture.session.emit(.runtimeNotice("Shell startup is taking longer than usual."))
+        XCTAssertEqual(fixture.model.terminalNotices[sessionID]?.kind, .notice)
+        XCTAssertFalse(fixture.model.hasTerminalNotice(inWorkspace: workspaceID),
+                       "a shell that is only slow must not flag its workspace as a problem")
+        fixture.session.emit(.initialCommandSentAfterDelay)
+        XCTAssertNil(fixture.model.terminalNotices[sessionID])
+    }
+
     // MARK: - Terminal problems stay on their own pane
 
     func testATerminalFailureIsShownOnItsPaneAndFlagsOnlyItsWorkspace() throws {
