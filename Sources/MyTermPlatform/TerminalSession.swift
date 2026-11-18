@@ -250,6 +250,9 @@ public enum TerminalSessionEvent: Equatable, Sendable {
     case failed(TerminalSessionFailure)
     /// A startup command could not be sent, but the terminal process is still usable.
     case initialCommandFailed(TerminalSessionFailure)
+    /// A shell that missed the readiness grace period became ready, and its startup command was
+    /// sent. Any notice that said the command was still waiting no longer applies.
+    case initialCommandSentAfterDelay
     case runtimeNotice(String)
     case idleShellStarted
     /// The process in front of the pane's shell changed. `nil` means the shell has the pane

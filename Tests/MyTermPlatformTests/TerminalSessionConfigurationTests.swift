@@ -250,19 +250,57 @@ final class TerminalSessionConfigurationTests: XCTestCase {
                           "MYTERM_ORIGINAL_ZDOTDIR": root.path, "MYTERM_RESOURCE_DIR": resources.path]
         ))
         defer { session.terminate() }
-        var warned = false
+        session.startupReadinessGracePeriod = 0.3
+        var notice: String?
         var failed = false
         session.onEvent = { event in
-            if case .initialCommandFailed = event { warned = true }
+            if case .runtimeNotice(let message) = event { notice = message }
+            if case .initialCommandFailed = event { failed = true }
             if case .failed = event { failed = true }
         }
         try session.start()
-        let deadline = Date().addingTimeInterval(12)
-        while !warned, Date() < deadline { try await Task.sleep(for: .milliseconds(50)) }
-        XCTAssertTrue(warned)
+        let deadline = Date().addingTimeInterval(5)
+        while notice == nil, Date() < deadline { try await Task.sleep(for: .milliseconds(50)) }
+        XCTAssertTrue(notice?.contains("printf ran") == true, "The waiting notice must name the command to run manually")
         XCTAssertFalse(failed)
         XCTAssertTrue(session.isRunning)
         XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path))
+    }
+
+    @MainActor
+    func testSlowShellStillRunsTheSavedCommandAfterTheGracePeriod() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "myterm-slow-readiness-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        // A cold login with many shells starting at once can hold the first prompt back this way.
+        try "HISTFILE=/dev/null\n/bin/sleep 1\n".write(
+            to: root.appending(path: ".zshrc"), atomically: true, encoding: .utf8
+        )
+        let resources = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().appending(path: "Resources")
+        let marker = root.appending(path: "command-ran")
+        let session = try SwiftTermTerminalSession(configuration: TerminalSessionConfiguration(
+            shell: URL(fileURLWithPath: "/bin/zsh"), workingDirectory: root,
+            shellArguments: ["-i"], initialCommand: "printf ran > '\(marker.path)'",
+            environment: ["ZDOTDIR": resources.appending(path: "zsh").path,
+                          "MYTERM_ORIGINAL_ZDOTDIR": root.path, "MYTERM_RESOURCE_DIR": resources.path]
+        ))
+        defer { session.terminate() }
+        session.startupReadinessGracePeriod = 0.2
+        var events: [TerminalSessionEvent] = []
+        session.onEvent = { events.append($0) }
+        try session.start()
+        let deadline = Date().addingTimeInterval(8)
+        while !FileManager.default.fileExists(atPath: marker.path), Date() < deadline {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path), "A slow shell must still receive its saved command")
+        let noticeIndex = events.firstIndex { if case .runtimeNotice = $0 { true } else { false } }
+        let sentIndex = events.firstIndex(of: .initialCommandSentAfterDelay)
+        XCTAssertNotNil(noticeIndex)
+        XCTAssertNotNil(sentIndex)
+        if let noticeIndex, let sentIndex { XCTAssertLessThan(noticeIndex, sentIndex) }
+        XCTAssertFalse(events.contains { if case .initialCommandFailed = $0 { true } else { false } })
     }
 
     // Channel values are full-scale so the expected NSColor can be written out directly

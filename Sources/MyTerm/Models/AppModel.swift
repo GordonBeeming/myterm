@@ -2671,6 +2671,8 @@ final class AppModel {
             presentTerminalNotice(message, kind: .notice, sessionID: sessionID)
         case .initialCommandFailed(let error):
             presentTerminalNotice(error.localizedDescription, kind: .error, sessionID: sessionID)
+        case .initialCommandSentAfterDelay:
+            dismissTerminalNotice(sessionID: sessionID)
         case .processTerminated(let exitCode):
             if let exitCode, exitCode != 0 {
                 presentTerminalNotice("Terminal exited with status \(exitCode).", kind: .error, sessionID: sessionID)

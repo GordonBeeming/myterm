@@ -70,6 +70,10 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
     private var didTerminate = false
     private var startupToken: String?
     private var startupReadinessTimer: Timer?
+    /// How long a new shell has to signal readiness before the pane says it is still waiting.
+    /// The saved command is still sent when the shell does become ready.
+    var startupReadinessGracePeriod: TimeInterval = 10
+    private var startupCommandOverdue = false
     private var contentChangeHandler: (@MainActor () -> Void)?
     public private(set) var remoteGeneration = UUID()
     public private(set) var remoteSequence: UInt64 = 0
@@ -136,6 +140,10 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
                 self.startupReadinessTimer = nil
                 self.startupToken = nil
                 self.sendInitialCommand()
+                if self.startupCommandOverdue {
+                    self.startupCommandOverdue = false
+                    self.onEvent?(.initialCommandSentAfterDelay)
+                }
             }
         }
         terminal.autoresizingMask = [.width, .height]
@@ -169,6 +177,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         startupReadinessTimer?.invalidate()
         startupReadinessTimer = nil
         startupToken = nil
+        startupCommandOverdue = false
         var arguments = configuration.shellArguments
         var startupFailure: TerminalSessionFailure?
         if configuration.initialCommand?.isEmpty == false {
@@ -355,14 +364,18 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         } else if startupToken == nil, persistentConnection?.createdHost != false {
             sendInitialCommand()
         } else if startupToken != nil {
-            let timer = Timer(timeInterval: 10, repeats: false) { [weak self] _ in
+            // The token stays live past the grace period. Many shells start at once after a login,
+            // and a shell that is only slow must still receive its command. Readiness is signalled
+            // as its first prompt opens, so the user has not had a prompt to type at before then.
+            let timer = Timer(timeInterval: startupReadinessGracePeriod, repeats: false) { [weak self] _ in
                 MainActor.assumeIsolated {
                     guard let self, self.isRunning, self.startupToken != nil else { return }
-                    self.startupToken = nil
                     self.startupReadinessTimer = nil
-                    self.onEvent?(.initialCommandFailed(TerminalSessionFailure(
-                        message: "Shell startup did not signal readiness. The saved command was not sent; run it manually once the shell is ready."
-                    )))
+                    self.startupCommandOverdue = true
+                    let command = self.configuration.initialCommand ?? ""
+                    self.onEvent?(.runtimeNotice(
+                        "Shell startup is taking longer than usual. The saved command will run when the shell is ready. If the prompt appears and it does not run, run it manually: \(command)"
+                    ))
                 }
             }
             RunLoop.main.add(timer, forMode: .common)
@@ -787,6 +800,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         startupReadinessTimer?.invalidate()
         startupReadinessTimer = nil
         startupToken = nil
+        startupCommandOverdue = false
         workingDirectoryPoller?.stop()
         workingDirectoryPoller = nil
         foregroundProcessTimer?.invalidate()
