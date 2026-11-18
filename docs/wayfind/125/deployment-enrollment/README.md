@@ -26,7 +26,7 @@ Gordon agreed that single-use redemption requires the designated account server 
 
 The walkthrough separates live probe results from its interactive model. The model is a discussion aid and does not run native cryptography.
 
-One reconciliation behavior needs live review: a server recognized only provisionally through an offline credential remains recognized locally across expiry, but a newly delivered revocation invalidates that provisional recognition unless the authority has already recorded the server's admission. A locally claimed timestamp cannot prove that admission preceded revocation. This applies the existing conservative ordering rule; the probe adds no trusted clock or quorum.
+Gordon accepted the reconciliation behavior in the [prototype resolution](https://github.com/GordonBeeming/myterm/issues/193#issuecomment-6966419727): a server recognized only provisionally through an offline credential remains recognized locally across expiry, but a newly delivered revocation invalidates that provisional recognition unless the authority has already recorded the server's admission. A locally claimed timestamp cannot prove that admission preceded revocation. This applies the existing conservative ordering rule; the probe adds no trusted clock or quorum.
 
 ## Evidence and limits
 
@@ -45,3 +45,5 @@ The authority floors its wall clock by elapsed monotonic time within one process
 The fixture contains signed names and identities, with no production runtime sessions. Same-name enrollment preserves separate directory entries; session survival, session ownership, server liveness UI, golden-image provisioning and product discovery integration remain untested. No native Linux/Windows, physical-device, multi-Mac or Azure VM scale-set run is claimed.
 
 Production acceptance remains in [Validate production account trust and channel security](https://github.com/GordonBeeming/myterm/issues/178). Real Azure execution remains in [Validate Azure VM scale-set enrollment after basic native connections work](https://github.com/GordonBeeming/myterm/issues/194).
+
+The candidate is accepted as bounded feasibility evidence. [Implement production deployment credentials and server enrollment](https://github.com/GordonBeeming/myterm/issues/198) tracks production work. The retained walkthrough is the pre-acceptance review snapshot; the linked ticket resolution records the final decision.
