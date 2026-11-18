@@ -15,5 +15,3 @@ def widths(snapshot):
     state = plistlib.loads(base64.b64decode(snapshot['nativeCheckpoint']))['state']
     return [image['pixelWidth'] for line in state['normalBuffer']['lines']
             for image in line.get('images', [])]
-
-
