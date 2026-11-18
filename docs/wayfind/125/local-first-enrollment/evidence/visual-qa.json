@@ -1,0 +1,404 @@
+{
+  "views": 52,
+  "runs": [
+    {
+      "frames": [
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "first",
+          "step": 0
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "first",
+          "step": 1
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "first",
+          "step": 2
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "reject",
+          "step": 0
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "reject",
+          "step": 1
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "retry",
+          "step": 0
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "retry",
+          "step": 1
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "retry",
+          "step": 2
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "retry",
+          "step": 3
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "return",
+          "step": 0
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "return",
+          "step": 1
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "return",
+          "step": 2
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "return",
+          "step": 3
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "return",
+          "step": 4
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "revoke",
+          "step": 0
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "revoke",
+          "step": 1
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "revoke",
+          "step": 2
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "revoke",
+          "step": 3
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "revoke",
+          "step": 4
+        },
+        {
+          "freeVisible": true,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "free",
+          "step": 0
+        },
+        {
+          "freeVisible": true,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "free",
+          "step": 0
+        },
+        {
+          "freeVisible": true,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "free",
+          "step": 0
+        },
+        {
+          "freeVisible": true,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "free",
+          "step": 0
+        },
+        {
+          "freeVisible": true,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "free",
+          "step": 0
+        },
+        {
+          "freeVisible": true,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "free",
+          "step": 0
+        },
+        {
+          "freeVisible": true,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "free",
+          "step": 0
+        }
+      ],
+      "height": 1080,
+      "width": 1920
+    },
+    {
+      "frames": [
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "first",
+          "step": 0
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "first",
+          "step": 1
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "first",
+          "step": 2
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "reject",
+          "step": 0
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "reject",
+          "step": 1
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "retry",
+          "step": 0
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "retry",
+          "step": 1
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "retry",
+          "step": 2
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "retry",
+          "step": 3
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "return",
+          "step": 0
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "return",
+          "step": 1
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "return",
+          "step": 2
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "return",
+          "step": 3
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "return",
+          "step": 4
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "revoke",
+          "step": 0
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "revoke",
+          "step": 1
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "revoke",
+          "step": 2
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "revoke",
+          "step": 3
+        },
+        {
+          "freeVisible": false,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "revoke",
+          "step": 4
+        },
+        {
+          "freeVisible": true,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "free",
+          "step": 0
+        },
+        {
+          "freeVisible": true,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "free",
+          "step": 0
+        },
+        {
+          "freeVisible": true,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "free",
+          "step": 0
+        },
+        {
+          "freeVisible": true,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "free",
+          "step": 0
+        },
+        {
+          "freeVisible": true,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "free",
+          "step": 0
+        },
+        {
+          "freeVisible": true,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "free",
+          "step": 0
+        },
+        {
+          "freeVisible": true,
+          "mojibake": false,
+          "overflow": false,
+          "scenario": "free",
+          "step": 0
+        }
+      ],
+      "height": 844,
+      "width": 390
+    }
+  ],
+  "contrast": [
+    {
+      "contrast": 17.062933971317335,
+      "selector": "body"
+    },
+    {
+      "contrast": 9.114421861537426,
+      "selector": "a"
+    },
+    {
+      "contrast": 8.761692778498059,
+      "selector": ".tag"
+    },
+    {
+      "contrast": 5.3577549124490425,
+      "selector": "button[aria-selected=true]"
+    },
+    {
+      "contrast": 16.295987899750777,
+      "selector": "pre"
+    }
+  ],
+  "page_sha256": "e464ac531069aa34f3d999fce3ff809f57510219d325a009d3565a127c329148"
+}
