@@ -1,0 +1,244 @@
+{
+  "checks" : [
+    {
+      "name" : "Search crosses server and workspace boundaries",
+      "result" : "pass"
+    },
+    {
+      "name" : "Filtering uses stable ID despite duplicate names",
+      "result" : "pass"
+    },
+    {
+      "name" : "Duplicate names visibly distinguished",
+      "result" : "pass"
+    },
+    {
+      "name" : "Navigation leaves control and other-client selection unchanged",
+      "result" : "pass"
+    },
+    {
+      "name" : "Rename preserves content and runtime identity",
+      "result" : "pass"
+    },
+    {
+      "name" : "Agent identity alone means Unknown",
+      "result" : "pass"
+    },
+    {
+      "name" : "Native model represents Ready",
+      "result" : "pass"
+    },
+    {
+      "name" : "Native model represents Working",
+      "result" : "pass"
+    },
+    {
+      "name" : "Native model represents Finished",
+      "result" : "pass"
+    },
+    {
+      "name" : "Reading completion retains Finished and clears attention",
+      "result" : "pass"
+    },
+    {
+      "name" : "Exact completion acknowledgment synchronizes across clients",
+      "result" : "pass"
+    },
+    {
+      "name" : "Old displayed completion cannot acknowledge a later turn",
+      "result" : "pass"
+    },
+    {
+      "name" : "Stale client acknowledgment cannot clear a later turn",
+      "result" : "pass"
+    },
+    {
+      "name" : "Concurrent waits survive read, unrelated work and reverse completion",
+      "result" : "pass"
+    },
+    {
+      "name" : "A completion cannot hide an outstanding question",
+      "result" : "pass"
+    },
+    {
+      "name" : "Agent exit clears presence while terminal remains running",
+      "result" : "pass"
+    },
+    {
+      "name" : "Exited terminal retained until tab closure",
+      "result" : "pass"
+    },
+    {
+      "name" : "Delayed, repeated and wrong-owner events rejected",
+      "result" : "pass"
+    },
+    {
+      "name" : "Prior agent incarnation cannot overwrite replacement agent",
+      "result" : "pass"
+    },
+    {
+      "name" : "Malformed waits and unknown activities rejected without consuming sequence",
+      "result" : "pass"
+    },
+    {
+      "name" : "Quiet healthy connection preserves Working",
+      "result" : "pass"
+    },
+    {
+      "name" : "Reconnect transport alone cannot establish runtime freshness",
+      "result" : "pass"
+    },
+    {
+      "name" : "Snapshot absence never deletes an item or stops a runtime",
+      "result" : "pass"
+    },
+    {
+      "name" : "Deletion beats stale snapshots in either merge order",
+      "result" : "pass"
+    },
+    {
+      "name" : "Runtime identity collisions cannot replace an existing session",
+      "result" : "pass"
+    },
+    {
+      "name" : "Replacement requires fresh confirmed loss and a new identity",
+      "result" : "pass"
+    },
+    {
+      "name" : "Reordered request resolutions buffer gaps and apply both",
+      "result" : "pass"
+    },
+    {
+      "name" : "Unknown resolution cannot erase an unread completion",
+      "result" : "pass"
+    },
+    {
+      "name" : "Resolving a request after completion preserves Finished attention",
+      "result" : "pass"
+    },
+    {
+      "name" : "Repeated identity observation preserves reliable Working activity",
+      "result" : "pass"
+    },
+    {
+      "name" : "A retired agent cannot return through a delayed identity report",
+      "result" : "pass"
+    },
+    {
+      "name" : "Terminal exit is independent of agent incarnation",
+      "result" : "pass"
+    },
+    {
+      "name" : "A stale snapshot cannot restore a retired agent incarnation",
+      "result" : "pass"
+    },
+    {
+      "name" : "Confirmed loss merges at equal sequence and cannot be undone by later stale activity",
+      "result" : "pass"
+    },
+    {
+      "name" : "Server names synchronize without borrowing connection freshness",
+      "result" : "pass"
+    },
+    {
+      "name" : "New directory entries arrive stale",
+      "result" : "pass"
+    },
+    {
+      "name" : "Concurrent rename fixture operations converge by stable operation identity",
+      "result" : "pass"
+    },
+    {
+      "name" : "Ready snapshot cannot erase a finished turn in the same incarnation",
+      "result" : "pass"
+    },
+    {
+      "name" : "Confirmed loss cannot relabel an already exited terminal",
+      "result" : "pass"
+    },
+    {
+      "name" : "Buffered obsolete observations drain without wedging the next incarnation",
+      "result" : "pass"
+    },
+    {
+      "name" : "A peer snapshot fills a gap and drains the next buffered report",
+      "result" : "pass"
+    },
+    {
+      "name" : "A snapshot received offline drains reports only after reconciliation",
+      "result" : "pass"
+    },
+    {
+      "name" : "Terminal exit discards buffered reports for the ended runtime",
+      "result" : "pass"
+    },
+    {
+      "name" : "Concurrent replacement requests use one idempotent server allocation",
+      "result" : "pass"
+    },
+    {
+      "name" : "Browser entries are searchable and navigate to their existing layout target without control",
+      "result" : "pass"
+    },
+    {
+      "name" : "Agent reports cannot attach to browser content",
+      "result" : "pass"
+    },
+    {
+      "name" : "Browser replacement preserves browser type and the layout target",
+      "result" : "pass"
+    },
+    {
+      "name" : "AES-GCM encrypts current layout, activity, acknowledgments and tombstones",
+      "result" : "pass"
+    },
+    {
+      "name" : "Envelope contains only public header fields and sealed bytes",
+      "result" : "pass"
+    },
+    {
+      "name" : "Ciphertext modification rejected",
+      "result" : "pass"
+    },
+    {
+      "name" : "Cross-account substitution rejected",
+      "result" : "pass"
+    },
+    {
+      "name" : "Caller-supplied checkpoint floor rejects an older generation",
+      "result" : "pass"
+    },
+    {
+      "name" : "Changing generation without resealing fails authentication",
+      "result" : "pass"
+    },
+    {
+      "name" : "Local fixture expires a seven-day command file while retaining encrypted current state",
+      "result" : "pass"
+    },
+    {
+      "name" : "Fresh native process restores encrypted state without other clients",
+      "result" : "pass"
+    },
+    {
+      "name" : "Shared state does not serialize client-local navigation or control",
+      "result" : "pass"
+    }
+  ],
+  "failed" : 0,
+  "illustrativeBounds" : {
+    "bufferedReportsPerItem" : 32,
+    "maximumReportNumber" : 1000000,
+    "sealedSnapshotBytes" : 8388608
+  },
+  "loadFixture" : {
+    "items" : 1004,
+    "jsonBytes" : 311043,
+    "oneEncodeAnd100SearchesMilliseconds" : 175.56703090667725
+  },
+  "passed" : 56,
+  "platform" : "macOS ARM64",
+  "scope" : "Native Swift reference model and CryptoKit filesystem\/process checks; layout authorization, source ordering and trust checkpoints are fixture inputs. No real relay or distributed synchronization.",
+  "snapshotBytes" : 1879,
+  "timeUTC" : "2026-11-15T11:42:58Z"
+}

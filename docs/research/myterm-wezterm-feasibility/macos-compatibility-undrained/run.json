@@ -1,0 +1,25 @@
+{
+  "timestampUtc": "2026-11-08T13:46:00.775308+00:00",
+  "os": "macOS-27.3-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "wezterm": "458a100c1bf4134d36cb5c42dd90e4c8266d9e1a",
+  "finl": "a1892f26245529f2ef3877a9ebd610c96cec07a6",
+  "cellPixels": [
+    9,
+    16
+  ],
+  "fixtureSha256": "f17f4173910429490df30b34c9ad6acf2867be7cc67107a87de1fdbc63332dac",
+  "scope": "patched scratch copies; measured projection only; reconnect is unproven",
+  "rust": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "swift": "Apple Swift version 6.4.2 (swiftlang-6.4.2.1.9 clang-2100.4.1.1)\nTarget: arm64-apple-macosx27.3.0",
+  "baselineSourceSha256": "e57c636da9c16e4f44b2db7b582713909baadadc7397f8de9697c12623ee229a",
+  "cargoLockSha256": "dbce14947cd32170fce0c90fe855ceba4a956c774df8c021a75312f05924801a",
+  "rustPatchSha256": "55d6f00fff7657436c83f5e4cad215e5810b70ae98be45a95ef3d397cf48a702",
+  "swiftPatchSha256": "dac9c3124237bbbafd0eb873330cd35cec27b9c1684259db66b96d32273016d8",
+  "controlFixtureSha256": "7744fbf767bd4fe24d52bed1c3f4a2394f21141de4f32e5e3b8f5cb623ce1739",
+  "probeSourceSha256": "381f5a87c979618a994f7251f5c63d9c3631a17f8d60355428e4943bacdfc0a0",
+  "baselineReference": "/private/tmp/myterm-wezterm-macos-repro",
+  "originalMatches": 15,
+  "correctedMatches": 17,
+  "controlMatches": 9
+}

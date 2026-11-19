@@ -1,0 +1,53 @@
+Building for debugging...
+[Computing dependencies]
+[1 / 5]
+warning: missing creator for mutated node: ('/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-crisp-kakapo/.build/out/Products/Debug/SwiftTerm_SwiftTerm.bundle/Contents/MacOS')
+Build complete! (0.40 sec.)
+Test Suite 'Selected tests' started at 2026-11-15 21:23:49.463.
+Test Suite 'MyTermTests.xctest' started at 2026-11-15 21:23:49.464.
+Test Suite 'MyTermTests.xctest' passed at 2026-11-15 21:23:49.464.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-11-15 21:23:49.464.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+Test Suite 'Selected tests' started at 2026-11-15 21:23:49.530.
+Test Suite 'MyTermPlatformTests.xctest' started at 2026-11-15 21:23:49.531.
+Test Suite 'AgentActivityTerminalTests' started at 2026-11-15 21:23:49.531.
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testAMarkerAtTheByteCapIsReportedAndOneOverItIsNot]' started.
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testAMarkerAtTheByteCapIsReportedAndOneOverItIsNot]' passed (0.051 seconds).
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testAMarkerInsideAMarkerReportsTheOuterWithoutTheInnersSession]' started.
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testAMarkerInsideAMarkerReportsTheOuterWithoutTheInnersSession]' passed (0.002 seconds).
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testAMarkerNeverTerminatedSwallowsTheOutputAfterItButReportsNothing]' started.
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testAMarkerNeverTerminatedSwallowsTheOutputAfterItButReportsNothing]' passed (0.001 seconds).
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testAMarkerSplitAcrossTwoWritesIsOneReport]' started.
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testAMarkerSplitAcrossTwoWritesIsOneReport]' passed (0.002 seconds).
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testOrdinaryOutputAndOtherEscapesAreNotReports]' started.
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testOrdinaryOutputAndOtherEscapesAreNotReports]' passed (0.001 seconds).
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testTheTerminalReportsTheEscapeSequenceAHookWrites]' started.
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testTheTerminalReportsTheEscapeSequenceAHookWrites]' passed (0.003 seconds).
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testTheTerminalReportsTheTitleAnAgentWrites]' started.
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testTheTerminalReportsTheTitleAnAgentWrites]' passed (0.001 seconds).
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testTwoMarkersInOneWriteAreTwoReports]' started.
+Test Case '-[MyTermPlatformTests.AgentActivityTerminalTests testTwoMarkersInOneWriteAreTwoReports]' passed (0.001 seconds).
+Test Suite 'AgentActivityTerminalTests' passed at 2026-11-15 21:23:49.594.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.062 (0.063) seconds
+Test Suite 'PersistentTerminalStartupTests' started at 2026-11-15 21:23:49.594.
+Test Case '-[MyTermPlatformTests.PersistentTerminalStartupTests testDetachReattachesSameShellAndReappliesCurrentRuntimeAndFittedGeometry]' started.
+Test Case '-[MyTermPlatformTests.PersistentTerminalStartupTests testDetachReattachesSameShellAndReappliesCurrentRuntimeAndFittedGeometry]' passed (1.580 seconds).
+Test Suite 'PersistentTerminalStartupTests' passed at 2026-11-15 21:23:51.174.
+	 Executed 1 test, with 0 failures (0 unexpected) in 1.580 (1.580) seconds
+Test Suite 'MyTermPlatformTests.xctest' passed at 2026-11-15 21:23:51.174.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 1.643 (1.644) seconds
+Test Suite 'Selected tests' passed at 2026-11-15 21:23:51.174.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 1.643 (1.644) seconds
+Test Suite 'Selected tests' started at 2026-11-15 21:23:51.239.
+Test Suite 'MyTermCoreTests.xctest' started at 2026-11-15 21:23:51.240.
+Test Suite 'MyTermCoreTests.xctest' passed at 2026-11-15 21:23:51.240.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-11-15 21:23:51.240.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+Test Suite 'Selected tests' started at 2026-11-15 21:23:51.307.
+Test Suite 'MyTermContinuityTests.xctest' started at 2026-11-15 21:23:51.307.
+Test Suite 'MyTermContinuityTests.xctest' passed at 2026-11-15 21:23:51.307.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-11-15 21:23:51.308.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds

@@ -1,0 +1,438 @@
+[
+  {
+    "name": "codex native PreToolUse 2",
+    "payloads": [
+      "agent=codex;event=ready;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=awaiting_input;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7"
+    ],
+    "expected": [
+      "awaitingInput"
+    ]
+  },
+  {
+    "name": "codex native PostToolUse 3",
+    "payloads": [
+      "agent=codex;event=ready;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=awaiting_input;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7"
+    ],
+    "expected": [
+      "working"
+    ]
+  },
+  {
+    "name": "codex native Stop 4",
+    "payloads": [
+      "agent=codex;event=ready;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=awaiting_input;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=finished;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7"
+    ],
+    "expected": [
+      "finished"
+    ]
+  },
+  {
+    "name": "codex native PreToolUse 6",
+    "payloads": [
+      "agent=codex;event=ready;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=awaiting_input;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=finished;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=de44220f0212b42845cb749c4d6f029fac363e5bc23febee1314723d4ade90ff",
+      "agent=codex;event=awaiting_input;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=de44220f0212b42845cb749c4d6f029fac363e5bc23febee1314723d4ade90ff"
+    ],
+    "expected": [
+      "awaitingInput"
+    ]
+  },
+  {
+    "name": "codex native Interrupt 7",
+    "payloads": [
+      "agent=codex;event=ready;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=awaiting_input;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=finished;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=de44220f0212b42845cb749c4d6f029fac363e5bc23febee1314723d4ade90ff",
+      "agent=codex;event=awaiting_input;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=de44220f0212b42845cb749c4d6f029fac363e5bc23febee1314723d4ade90ff",
+      "agent=codex;event=ready;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=de44220f0212b42845cb749c4d6f029fac363e5bc23febee1314723d4ade90ff"
+    ],
+    "expected": [
+      "ready"
+    ]
+  },
+  {
+    "name": "codex native PreToolUse 9",
+    "payloads": [
+      "agent=codex;event=ready;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=awaiting_input;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=finished;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=de44220f0212b42845cb749c4d6f029fac363e5bc23febee1314723d4ade90ff",
+      "agent=codex;event=awaiting_input;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=de44220f0212b42845cb749c4d6f029fac363e5bc23febee1314723d4ade90ff",
+      "agent=codex;event=ready;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=de44220f0212b42845cb749c4d6f029fac363e5bc23febee1314723d4ade90ff",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=49c57086a7ca7e618472d66d04837ee9eada2b6c07439da8db6ed7361872747f",
+      "agent=codex;event=awaiting_input;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=49c57086a7ca7e618472d66d04837ee9eada2b6c07439da8db6ed7361872747f"
+    ],
+    "expected": [
+      "awaitingInput"
+    ]
+  },
+  {
+    "name": "codex native PostToolUse 10",
+    "payloads": [
+      "agent=codex;event=ready;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=awaiting_input;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=finished;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=de44220f0212b42845cb749c4d6f029fac363e5bc23febee1314723d4ade90ff",
+      "agent=codex;event=awaiting_input;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=de44220f0212b42845cb749c4d6f029fac363e5bc23febee1314723d4ade90ff",
+      "agent=codex;event=ready;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=de44220f0212b42845cb749c4d6f029fac363e5bc23febee1314723d4ade90ff",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=49c57086a7ca7e618472d66d04837ee9eada2b6c07439da8db6ed7361872747f",
+      "agent=codex;event=awaiting_input;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=49c57086a7ca7e618472d66d04837ee9eada2b6c07439da8db6ed7361872747f",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=49c57086a7ca7e618472d66d04837ee9eada2b6c07439da8db6ed7361872747f"
+    ],
+    "expected": [
+      "working"
+    ]
+  },
+  {
+    "name": "codex native Stop 11",
+    "payloads": [
+      "agent=codex;event=ready;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=awaiting_input;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=finished;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=de44220f0212b42845cb749c4d6f029fac363e5bc23febee1314723d4ade90ff",
+      "agent=codex;event=awaiting_input;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=de44220f0212b42845cb749c4d6f029fac363e5bc23febee1314723d4ade90ff",
+      "agent=codex;event=ready;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=de44220f0212b42845cb749c4d6f029fac363e5bc23febee1314723d4ade90ff",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=49c57086a7ca7e618472d66d04837ee9eada2b6c07439da8db6ed7361872747f",
+      "agent=codex;event=awaiting_input;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=49c57086a7ca7e618472d66d04837ee9eada2b6c07439da8db6ed7361872747f",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=49c57086a7ca7e618472d66d04837ee9eada2b6c07439da8db6ed7361872747f",
+      "agent=codex;event=finished;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=49c57086a7ca7e618472d66d04837ee9eada2b6c07439da8db6ed7361872747f"
+    ],
+    "expected": [
+      "finished"
+    ]
+  },
+  {
+    "name": "claude native mod.tool.start 8",
+    "payloads": [
+      "agent=claude;event=ready;session=70a34782092abf29c7ea2d186836e597;snapshot=1",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=29812330f5940929c6c6afd48aa6e91e4e3a730af8d6da2d66ce14dba3b3286b",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=29812330f5940929c6c6afd48aa6e91e4e3a730af8d6da2d66ce14dba3b3286b"
+    ],
+    "expected": [
+      "awaitingInput"
+    ]
+  },
+  {
+    "name": "claude native mod.tool.start 16",
+    "payloads": [
+      "agent=claude;event=ready;session=70a34782092abf29c7ea2d186836e597;snapshot=1",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=29812330f5940929c6c6afd48aa6e91e4e3a730af8d6da2d66ce14dba3b3286b",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=29812330f5940929c6c6afd48aa6e91e4e3a730af8d6da2d66ce14dba3b3286b",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995"
+    ],
+    "expected": [
+      "awaitingInput"
+    ]
+  },
+  {
+    "name": "claude native mod.tool.decision 18",
+    "payloads": [
+      "agent=claude;event=ready;session=70a34782092abf29c7ea2d186836e597;snapshot=1",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=29812330f5940929c6c6afd48aa6e91e4e3a730af8d6da2d66ce14dba3b3286b",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=29812330f5940929c6c6afd48aa6e91e4e3a730af8d6da2d66ce14dba3b3286b",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995"
+    ],
+    "expected": [
+      "awaitingInput"
+    ]
+  },
+  {
+    "name": "claude native mod.turn.complete 20",
+    "payloads": [
+      "agent=claude;event=ready;session=70a34782092abf29c7ea2d186836e597;snapshot=1",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=29812330f5940929c6c6afd48aa6e91e4e3a730af8d6da2d66ce14dba3b3286b",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=29812330f5940929c6c6afd48aa6e91e4e3a730af8d6da2d66ce14dba3b3286b",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=finished;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995"
+    ],
+    "expected": [
+      "finished"
+    ]
+  },
+  {
+    "name": "claude native mod.tool.decision 26",
+    "payloads": [
+      "agent=claude;event=ready;session=70a34782092abf29c7ea2d186836e597;snapshot=1",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=29812330f5940929c6c6afd48aa6e91e4e3a730af8d6da2d66ce14dba3b3286b",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=29812330f5940929c6c6afd48aa6e91e4e3a730af8d6da2d66ce14dba3b3286b",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=finished;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f"
+    ],
+    "expected": [
+      "awaitingInput"
+    ]
+  },
+  {
+    "name": "claude native mod.tool.decision 32",
+    "payloads": [
+      "agent=claude;event=ready;session=70a34782092abf29c7ea2d186836e597;snapshot=1",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=29812330f5940929c6c6afd48aa6e91e4e3a730af8d6da2d66ce14dba3b3286b",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=29812330f5940929c6c6afd48aa6e91e4e3a730af8d6da2d66ce14dba3b3286b",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=finished;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f"
+    ],
+    "expected": [
+      "awaitingInput"
+    ]
+  },
+  {
+    "name": "claude native mod.turn.complete 34",
+    "payloads": [
+      "agent=claude;event=ready;session=70a34782092abf29c7ea2d186836e597;snapshot=1",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=29812330f5940929c6c6afd48aa6e91e4e3a730af8d6da2d66ce14dba3b3286b",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=29812330f5940929c6c6afd48aa6e91e4e3a730af8d6da2d66ce14dba3b3286b",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=finished;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=finished;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f"
+    ],
+    "expected": [
+      "finished"
+    ]
+  },
+  {
+    "name": "claude native mod.tool.start 39",
+    "payloads": [
+      "agent=claude;event=ready;session=70a34782092abf29c7ea2d186836e597;snapshot=1",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=29812330f5940929c6c6afd48aa6e91e4e3a730af8d6da2d66ce14dba3b3286b",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=29812330f5940929c6c6afd48aa6e91e4e3a730af8d6da2d66ce14dba3b3286b",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=finished;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=finished;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=db3fef7aba7a608736b8ad4286e7eae761abdb5e99c693784c4bad111157494a",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=db3fef7aba7a608736b8ad4286e7eae761abdb5e99c693784c4bad111157494a",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=db3fef7aba7a608736b8ad4286e7eae761abdb5e99c693784c4bad111157494a"
+    ],
+    "expected": [
+      "awaitingInput"
+    ]
+  },
+  {
+    "name": "claude native mod.tool.decision 41",
+    "payloads": [
+      "agent=claude;event=ready;session=70a34782092abf29c7ea2d186836e597;snapshot=1",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=29812330f5940929c6c6afd48aa6e91e4e3a730af8d6da2d66ce14dba3b3286b",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=29812330f5940929c6c6afd48aa6e91e4e3a730af8d6da2d66ce14dba3b3286b",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=finished;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=finished;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=db3fef7aba7a608736b8ad4286e7eae761abdb5e99c693784c4bad111157494a",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=db3fef7aba7a608736b8ad4286e7eae761abdb5e99c693784c4bad111157494a",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=db3fef7aba7a608736b8ad4286e7eae761abdb5e99c693784c4bad111157494a",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=db3fef7aba7a608736b8ad4286e7eae761abdb5e99c693784c4bad111157494a"
+    ],
+    "expected": [
+      "awaitingInput"
+    ]
+  },
+  {
+    "name": "claude native mod.turn.complete 44",
+    "payloads": [
+      "agent=claude;event=ready;session=70a34782092abf29c7ea2d186836e597;snapshot=1",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=29812330f5940929c6c6afd48aa6e91e4e3a730af8d6da2d66ce14dba3b3286b",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=29812330f5940929c6c6afd48aa6e91e4e3a730af8d6da2d66ce14dba3b3286b",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=finished;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=finished;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=db3fef7aba7a608736b8ad4286e7eae761abdb5e99c693784c4bad111157494a",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=db3fef7aba7a608736b8ad4286e7eae761abdb5e99c693784c4bad111157494a",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=db3fef7aba7a608736b8ad4286e7eae761abdb5e99c693784c4bad111157494a",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=db3fef7aba7a608736b8ad4286e7eae761abdb5e99c693784c4bad111157494a",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=db3fef7aba7a608736b8ad4286e7eae761abdb5e99c693784c4bad111157494a",
+      "agent=claude;event=finished;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=db3fef7aba7a608736b8ad4286e7eae761abdb5e99c693784c4bad111157494a"
+    ],
+    "expected": [
+      "finished"
+    ]
+  },
+  {
+    "name": "old Codex callback after a newer question: PostToolUse",
+    "payloads": [
+      "agent=codex;event=ready;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=awaiting_input;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=finished;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=de44220f0212b42845cb749c4d6f029fac363e5bc23febee1314723d4ade90ff",
+      "agent=codex;event=awaiting_input;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=de44220f0212b42845cb749c4d6f029fac363e5bc23febee1314723d4ade90ff",
+      "agent=codex;event=ready;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=de44220f0212b42845cb749c4d6f029fac363e5bc23febee1314723d4ade90ff",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=49c57086a7ca7e618472d66d04837ee9eada2b6c07439da8db6ed7361872747f",
+      "agent=codex;event=awaiting_input;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=49c57086a7ca7e618472d66d04837ee9eada2b6c07439da8db6ed7361872747f"
+    ],
+    "expected": [
+      "awaitingInput"
+    ]
+  },
+  {
+    "name": "old Codex callback after a newer question: Stop",
+    "payloads": [
+      "agent=codex;event=ready;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=awaiting_input;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=finished;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=8eede3f6bed45976255e9e7055dbcf53c076d5d5e7bf39bf91598bd8ee50f3b7",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=de44220f0212b42845cb749c4d6f029fac363e5bc23febee1314723d4ade90ff",
+      "agent=codex;event=awaiting_input;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=de44220f0212b42845cb749c4d6f029fac363e5bc23febee1314723d4ade90ff",
+      "agent=codex;event=ready;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=de44220f0212b42845cb749c4d6f029fac363e5bc23febee1314723d4ade90ff",
+      "agent=codex;event=working;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=49c57086a7ca7e618472d66d04837ee9eada2b6c07439da8db6ed7361872747f",
+      "agent=codex;event=awaiting_input;session=8cc968b4fac9b183035ef9df2ad118ba;snapshot=1;turn=49c57086a7ca7e618472d66d04837ee9eada2b6c07439da8db6ed7361872747f"
+    ],
+    "expected": [
+      "awaitingInput"
+    ]
+  },
+  {
+    "name": "two waits while first completion is held back",
+    "payloads": [
+      "agent=claude;event=ready;session=70a34782092abf29c7ea2d186836e597;snapshot=1",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=29812330f5940929c6c6afd48aa6e91e4e3a730af8d6da2d66ce14dba3b3286b",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=29812330f5940929c6c6afd48aa6e91e4e3a730af8d6da2d66ce14dba3b3286b",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=finished;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f"
+    ],
+    "expected": [
+      "awaitingInput"
+    ]
+  },
+  {
+    "name": "late first completion preserves second wait",
+    "payloads": [
+      "agent=claude;event=ready;session=70a34782092abf29c7ea2d186836e597;snapshot=1",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=29812330f5940929c6c6afd48aa6e91e4e3a730af8d6da2d66ce14dba3b3286b",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=29812330f5940929c6c6afd48aa6e91e4e3a730af8d6da2d66ce14dba3b3286b",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=finished;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f"
+    ],
+    "expected": [
+      "awaitingInput"
+    ]
+  },
+  {
+    "name": "duplicate first completion preserves second wait",
+    "payloads": [
+      "agent=claude;event=ready;session=70a34782092abf29c7ea2d186836e597;snapshot=1",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=29812330f5940929c6c6afd48aa6e91e4e3a730af8d6da2d66ce14dba3b3286b",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=29812330f5940929c6c6afd48aa6e91e4e3a730af8d6da2d66ce14dba3b3286b",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=finished;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=5f4babc7beb9ba1ba5feb918644e5f8bb6feb2a83815d1aa99179357e3f25995",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=working;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f",
+      "agent=claude;event=awaiting_input;session=70a34782092abf29c7ea2d186836e597;snapshot=1;turn=b34fea808b1a16ddaca2279df48e7f02447341abc0af01001769d9193ba99d1f"
+    ],
+    "expected": [
+      "awaitingInput"
+    ]
+  }
+]

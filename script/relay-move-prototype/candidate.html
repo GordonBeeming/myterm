@@ -1,0 +1,161 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MyTerm account move prototype</title>
+<style>
+:root{--bg:#f8fafc;--surface:#ffffff;--surface-2:#f1f5f9;--text:#0f172a;--muted:#64748b;--accent:#0e7490;--accent-dark:#164e63;--soft:#ecfeff;--border:#e2e8f0;--font:'Space Grotesk',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 var(--font)}main{max-width:1200px;margin:auto;padding:40px 24px 70px}h1{font-size:40px;line-height:1.15;margin:12px 0 20px}h2{font-size:23px;margin:24px 0 12px}h3{font-size:18px;margin:8px 0}p{margin:8px 0 16px}a{color:var(--accent-dark)}.eyebrow{color:var(--accent-dark);font-weight:700}.notice{background:var(--soft);border-left:4px solid var(--accent);padding:16px 20px;margin:20px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}.card{min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px}.value{font-size:22px;font-weight:650;overflow-wrap:anywhere}.label{color:var(--muted);font-size:14px}button{font:inherit;cursor:pointer;border:1px solid var(--accent);border-radius:7px;background:var(--surface);color:var(--accent-dark);padding:8px 12px}button:hover,button[aria-selected=true]{background:var(--accent);color:var(--surface)}button:focus-visible{outline:3px solid var(--accent-dark);outline-offset:3px}.buttons,.tabs{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}table{width:100%;border-collapse:collapse}th,td{padding:12px;text-align:left;border-bottom:1px solid var(--border);vertical-align:top}code{font-family:ui-monospace,monospace;font-size:.86em;background:var(--surface-2);padding:2px 4px;overflow-wrap:anywhere}li{margin-bottom:9px}.trace{padding-left:22px}.flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}.flow>div{border-top:4px solid var(--accent);padding:12px;background:var(--surface)}details{margin-top:24px}summary{cursor:pointer;font-size:22px;font-weight:650}footer{margin-top:35px;color:var(--muted);font-size:14px}@media(max-width:600px){main{padding:24px 16px}h1{font-size:30px}table{font-size:14px}th,td{padding:8px}}
+</style>
+<main>
+<div class="eyebrow">MyTerm · throwaway protocol prototype · direction selected; production gates open</div>
+<h1>Move the account, keep endpoint trust</h1>
+<p>Can one ordered location change move a personal account between relays while preserving its identity, endpoint approvals and server-owned sessions?</p>
+<div class="notice">This page runs an in-memory state model. Passkey ceremonies, encryption, network delivery, disk durability and terminal continuity are simulated. The separate Node harness uses real Ed25519 signatures for message-binding checks. Neither establishes a production migration protocol.</div>
+<div class="flow"><div><b>1 · Reserve and prepare</b><br>Destination passkey, empty account, compatible features and a durable staged transfer.</div><div><b>2 · Commit once</b><br>Explicit endpoint approval and source passkey, or the accepted explicit unavailable-source override. The existing ordering server signs the location change.</div><div><b>3 · Finish and discover</b><br>Activate the destination, obtain fresh relay sessions and publish bounded forwarding. Retry the same commit after interruptions.</div></div>
+<h2>Explore the boundary</h2><div id="tabs" class="tabs" role="tablist" aria-label="Move scenarios"></div>
+<h3 id="scenario-title"></h3><p id="scenario-description"></p><button id="next">Run next step</button> <button id="reset">Restart scenario</button><p id="step-status"></p>
+<div id="state" class="grid" aria-live="polite"></div>
+<h3>Free play</h3><div id="actions" class="buttons"></div>
+<h3>What happened</h3><ol id="trace" class="trace" aria-live="polite"></ol>
+<div class="notice"><b>Recorded checks:</b> 82/82 reference-model and Ed25519 message-binding checks pass on macOS ARM64 with Node v24.14.0. Ten walkthroughs also pass headless interaction checks at widths of 1920 and 800 pixels. The repeatable harness and validation limits are in <code>script/relay-move-prototype/README.md</code>.</div>
+<details open><summary>Proposed protocol</summary>
+<h2>Trust and signed messages</h2>
+<p>The personal account anchor and ordering-server identity stay the same across relays. Every move is an account-management operation in the existing ordered journal. An approved endpoint requests it; the current ordering server validates membership, approval and the exact preceding checkpoint. The relay cannot appoint a replacement authority. If the ordering server is unavailable, the move waits.</p>
+<p>A destination-issued ticket binds the protocol version, random move ID, source account anchor, prior location receipt, destination relay origin and pinned service identity, destination account ID, transfer public key, required feature digest and ticket expiry. The destination signs those exact fields. The trusted endpoint confirms the destination through its verified HTTPS origin, binds its service key, and first authorizes export to that exact ticket. After staging, a second endpoint confirmation signs the ticket digest and exact transfer manifest. Hostname strings supplied by the source alone do not establish destination identity.</p>
+<p>The normal path also requires a fresh source-passkey assertion bound to the exact ticket digest, predecessor checkpoint and a fresh single-use challenge/expiry before export, including its destination, account and transfer key. Final endpoint confirmation separately binds the staged manifest before commit. Destination and source assertions use their respective relying-party identities. The destination passkey remains the destination login credential; source credentials are not transplanted. Passkey sign-in alone does not confer endpoint approval. Ceremony adapters are fixtures in this prototype. Real passkey challenge consumption and export-grant nonce consumption remain integration work; a signed nonce alone does not demonstrate single-use enforcement.</p>
+<p>After validating the staged transfer, the destination signs a prepared receipt over the ticket and manifest digests. Final endpoint approval confirms the staged manifest; the ordering server serializes a location commit binding the ticket, manifest, prepared receipt and preceding account checkpoint. Request IDs make retries idempotent. Competing requests with the same predecessor cannot both commit. This extends the agreed honest, non-rolled-back ordering-server assumption; it does not eliminate that protocol's fork/freshness limits.</p>
+<h2>What the destination can read</h2>
+<table><thead><tr><th>Record</th><th>Move behavior</th></tr></thead><tbody>
+<tr><td>Opaque account mapping, feature requirements, routing handles, service configuration and credential status indexes</td><td>Transferred inside the destination-key-encrypted outer envelope. The destination decrypts relay-managed fields. Reapply destination policy; do not import source operator privileges, suspensions or quotas as account authority.</td></tr>
+<tr><td>Private directory, layout, activity and queued encrypted account records; signed membership history and key envelopes</td><td>Copy encrypted bytes and their manifest digests. Only approved endpoints decrypt private content and validate signed inner records. Relay validation of a manifest is not validation of private plaintext.</td></tr>
+<tr><td>Endpoint identity, content and deployment-credential private keys</td><td>Remain at their existing endpoints or deployment secret stores. They are never plaintext in either relay or the transfer. Existing encrypted recipient envelopes move unchanged; their account context uses the immutable account anchor rather than the destination storage-account handle.</td></tr>
+<tr><td>Single-use invitations and reusable deployment credentials</td><td>Preserve signed credential IDs, issuer bindings, expiry/revocation and winning allocation evidence. Enrollment-only role secrets stay in deployment configuration. Source-bound opaque bearer tokens are not assumed portable; their migration adapter must be validated or replaced explicitly.</td></tr>
+<tr><td>Passkey records, relay login tokens, live sockets, rate-limit buckets and operational logs</td><td>Do not import as destination authentication. Source passkeys remain only as required for pending source authorization/cleanup. Endpoints prove existing membership and key possession to receive fresh destination-scoped relay sessions. No manual endpoint reapproval is intended. Operational retention follows each operator's policy.</td></tr>
+</tbody></table>
+<h2>Commit, cancellation and retry</h2>
+<ol><li>The destination atomically reserves an empty account for one move, checks registration and compatibility, and stages a manifest-verified transfer. A retry of the same ticket returns the same state; another account or ticket cannot reuse that reservation.</li><li>After source authentication and endpoint export authorization, freeze the source relay's account-state writes and capture a final encrypted-record watermark. Local/direct terminal activity continues. Publications after the watermark must be buffered at trusted publishers and replayed at the destination. Prepared data stays reserved through uncertain delivery; it must not disappear merely because the ticket expires.</li><li>Before the ordered commit, cancellation requires an ordered abort/tombstone, allowing the destination to release its reservation and the source to resume writes. The authority checks ticket expiry at commit. An expired uncommitted ticket needs a new ceremony. An abort cannot race past a committed location change.</li><li>The authority persists the complete location commit before acknowledging it. From this point the destination is the account's logical home. A lost acknowledgement requires querying/replaying that same commit, never a rollback. Destination activation may still be pending, causing temporary relay unavailability.</li><li>The destination activates only after verifying the ordered commit. Fresh destination sessions replace source relay tokens. After activation acknowledgement, the source removes active transfer data under the deletion/backup policy and retains only authenticated forwarding material. The old relay must validate current ordered location before accepting account mutations; if unable to do so, it cannot safely remain writable.</li><li>A later move is a new forward operation from the latest committed location. A committed destination lost before recovery is a further outage case, not permission to revive the old home. Production crash recovery must exercise every durable boundary; in-memory retries here do not prove disk or distributed transaction behavior.</li></ol>
+<h2>Unavailable source and offline endpoints</h2>
+<p>Agreed: an unavailable-source move must involve the existing ordering server, and its destination account must be empty. Gordon also accepted the explicit override: destination passkey sign-in, approval from one trusted endpoint and that server may authorize a move without a source-passkey assertion or a second approving device. The accepted risk is that an attacker able to use an approved endpoint’s trusted identity could invoke this path. This is an explicit fallback ceremony, not an automatic downgrade after a timeout. If the source returns, the signed ordered move fences it. The claim that the source is gone is user-declared; it is not cryptographically provable. One endpoint plus the existing authority may explicitly override source-passkey confirmation; this is an accepted trust boundary, not proof that an outage occurred. Whenever the source cannot obtain current authority state, including an authority outage before or after preparation, it must remain fenced for account writes until a commit or ordered abort is verified.</p>
+<p>The fallback can transfer only ciphertext, history and envelopes available from trusted endpoint caches or another verified replica. Relay-only queued content changes may be unavailable. Missing security state is never restored by guessing: preserve the authority’s verified revocation history, and keep any single-use invitation whose winning allocation cannot be verified unusable until its original issuer can reconcile it or a new credential is issued. A user’s acceptance of lost content cannot authorize replay of spent invitations. This is a required fail-closed rule, not a tested credential-reconciliation implementation. Gordon accepted proceeding with available verified copies after explicit acknowledgement that newer content may be irrecoverable, including changes the app cannot enumerate. This acknowledgement is bound to the current move ticket and must be renewed if the available transfer changes. The prototype demonstrates this path separately from the hard stop for unverified security state. It does not claim to recover inaccessible data.</p>
+<p>Returning endpoints start with their pinned account anchor, verified authority configuration and checkpoint. A relay forwarding response is a discovery hint. Before following it, verify the contiguous ordered history, destination/key bindings, membership changes and a destination-signed activation receipt. Reject stale history, a conflicting extension or an unknown authority; fetch missing chain segments. The signature fixture checks a single location extension and activation receipt; full authority-configuration changes, membership propagation and multi-hop cryptographic validation remain integration work. A manual URL alone proves nothing. A valid but withheld newer move remains subject to the accepted freshness limitation.</p>
+<p>Each source retains its own forwarding receipt for fourteen days by default, configurable by that operator. Later moves never extend earlier expiries. The destination and trusted endpoints retain continuity evidence beyond those source TTLs. Endpoints returning after expiry need a manually supplied destination or a reachable trusted endpoint. New deployment instances with only a dead bootstrap address also need an updated address; credential continuity does not imply location discovery.</p>
+<h2>Review gates</h2>
+<p>Accepted through live discussion: require the existing ordering server; reject an occupied destination account; allow the explicit source-passkey override using one trusted endpoint; allow fallback from available verified content after explicit loss acknowledgement. Security state must still be verified. The prototype direction is selected; production protocol composition and acceptance remain follow-up work.</p>
+<p>Implementation workstreams after acceptance: signed move records and location checkpoints; destination reservation/staging plus durable recovery; source authorization/export/fencing and deletion-safe cleanup; endpoint discovery and fresh relay admission; credential bootstrap continuity; native fault, privacy and integration acceptance. These are proposed follow-ups, not completed work. Returning-endpoint relay admission still needs a concrete protocol: encrypted membership alone is not readable authority for a destination relay. The destination must validate a scoped grant from the moved account authority and endpoint key possession without treating relay sign-in as endpoint approval. That composition is not tested by this model.</p>
+<p>Validation limits: the reducer assumes verified messages, honest endpoints and one current authority. It models reachability as switches and persistence as retained memory. Node checks independently sign and verify selected message fields. Passkeys, HPKE/AES-GCM transfer composition, real relays, key stores, byte-level framing, native platforms, real terminals, partitions and crash persistence remain untested here. Production security review remains required.</p>
+</details>
+<footer>Related decisions: <a href="https://github.com/GordonBeeming/myterm/issues/134">Choose hosted and self-hosted relay account operations</a> · <a href="https://github.com/GordonBeeming/myterm/issues/141">Validate the account trust protocol and approval ceremony</a> · <a href="https://nodejs.org/api/crypto.html">Node signature API</a></footer>
+</main>
+<script id="model">
+'use strict';
+const MoveModel = (() => {
+  const initial = () => ({home:'Live',active:'Live',epoch:0,phase:'idle',anchor:'unchanged-account-anchor',exportApproved:false,sourceUp:true,destinationUp:true,authorityUp:true,empty:true,compatible:true,complete:true,securityComplete:true,destinationLogin:false,sourceLogin:false,fallback:false,approved:false,pending:null,history:[],forwarding:[],day:0,endpointHome:'Live',endpointEpoch:0,trace:[]});
+  const actions = {login:'Destination passkey',sourceLogin:'Source passkey',fallback:'Confirm source-loss fallback',approve:'Authorize export at endpoint',confirm:'Approve staged manifest',sourceWrite:'Try writing at original Live relay',reserve:'Reserve empty destination',prepare:'Stage verified transfer',commit:'Commit at ordering server',activate:'Activate destination',cancel:'Cancel move',sourceDown:'Toggle source availability',destinationDown:'Toggle destination availability',authorityDown:'Toggle ordering server',occupied:'Toggle occupied destination',incompatible:'Toggle compatibility',missing:'Toggle missing content',acknowledge:'Accept possible content loss',missingSecurity:'Toggle missing security state',advance:'Advance 15 days',discover:'Follow old relay forwarding',manual:'Verify supplied destination',chain:'Start next move'};
+  function step(before,action) {
+    const s=structuredClone(before); let result='';
+    const reject=message=>{result='Blocked: '+message;};
+    const p=()=>s.pending;
+    switch(action){
+      case 'login': if(s.destinationUp){s.destinationLogin=true;result='Destination passkey accepted (fixture).';}else reject('destination unavailable.');break;
+      case 'sourceLogin': if(!p())reject('reserve a destination ticket first.');else if(s.sourceUp){s.sourceLogin=true;result='Source passkey accepted (fixture).';}else reject('source unavailable; use the explicit fallback.');break;
+      case 'fallback': if(s.sourceUp)reject('source is reachable; use normal source confirmation.');else {s.fallback=true;result='User explicitly selected unavailable-source ceremony (fixture).';}break;
+      case 'approve': if(!p())reject('reserve a destination ticket first.');else {s.exportApproved=true;result='Trusted endpoint authorized export bound to the destination ticket (fixture).';}break;
+      case 'confirm': if(!p()?.prepared||p().committed)reject('stage an uncommitted manifest first.');else {s.approved=true;result='Trusted endpoint approved the exact staged manifest and ticket (fixture).';}break;
+      case 'sourceWrite': if(!s.sourceUp)reject('source unavailable.');else if(!s.authorityUp)reject('source cannot verify current location.');else if(s.home!=='Live'||s.phase==='committed'||(p()?.from==='Live'&&p().fenced&&!p().committed))reject('original Live relay is fenced; publish to verified current home.');else result='Source accepts an account-state write (fixture).';break;
+      case 'reserve':
+        if(p()){result='Same reservation returned; no second ticket created.';break;}
+        if(!s.destinationUp||!s.destinationLogin)reject('destination sign-in required.');
+        else if(!s.empty)reject('destination already contains another account.');
+        else if(!s.compatible)reject('destination lacks required features.');
+        else {s.pending={id:'move-'+(s.epoch+1),from:s.home,to:s.home==='Live'?'Beta':s.home==='Beta'?'Self-hosted':'Live',previous:s.epoch,expires:s.day+1,manifest:'encrypted-records-'+s.epoch,lossAcknowledged:false,fenced:false,prepared:false,committed:false};s.phase='reserved';result='Destination reserved for this account and ticket.';}break;
+      case 'acknowledge':
+        if(!p()||p().committed||s.sourceUp||!s.fallback||s.complete)reject('use explicit source-loss fallback with missing content.');
+        else {p().lossAcknowledged=true;result='User acknowledged that newer content may be lost or unknown for this ticket (fixture).';}break;
+      case 'prepare':
+        if(!p()||p().committed)reject('an uncommitted reservation is required.');
+        else if(!s.destinationUp)reject('destination unavailable.');
+        else if(!s.exportApproved)reject('trusted endpoint must authorize export before transfer.');
+        else if(s.sourceUp&&!s.sourceLogin)reject('source passkey required before export.');
+        else if(!s.sourceUp&&!s.sourceLogin&&!s.fallback)reject('explicit source-loss fallback required.');
+        else if(!s.securityComplete)reject('security state must be verified; content-loss consent cannot override it.');
+        else if(!s.complete&&(!s.fallback||s.sourceUp||!p().lossAcknowledged))reject('explicit acknowledgement of possible content loss required for source-loss fallback.');
+        else {p().prepared=true;p().fenced=true;s.approved=false;s.phase='prepared';result='Transfer manifest staged; source writes fenced (simulated).';}break;
+      case 'commit':
+        if(p()?.committed){result='Same durable commit returned; location unchanged.';break;}
+        if(!p()?.prepared)reject('destination must prepare the bound transfer.');
+        else if(!s.authorityUp)reject('existing ordering server unavailable.');
+        else if(!s.securityComplete)reject('security state must be verified.');
+        else if(!s.complete&&!p().lossAcknowledged)reject('possible content loss has not been acknowledged.');
+        else if(!s.approved)reject('final trusted-endpoint approval of staged manifest required.');
+        else if(s.sourceUp&&!s.sourceLogin)reject('normal move needs source passkey confirmation.');
+        else if(!s.sourceUp&&!s.sourceLogin&&!s.fallback)reject('explicit unavailable-source ceremony required.');
+        else if(s.day>p().expires)reject('ticket expired before commit.');
+        else if(p().previous!==s.epoch)reject('a competing move changed the predecessor.');
+        else {const old=s.home;p().committed=true;p().forwardUntil=s.day+14;s.epoch++;s.home=p().to;s.phase='committed';s.history.push({from:old,to:s.home,epoch:s.epoch});result='Ordered location committed. Retry forward; rollback is now forbidden.';}break;
+      case 'activate':
+        if(!p()?.committed)reject('ordered location commit required.');
+        else if(!s.destinationUp)reject('destination unavailable; retry the same commit.');
+        else if(s.phase==='active'){result='Activation already complete; no forwarding extension.';}
+        else {s.active=s.home;s.phase='active';s.forwarding.push({from:p().from,to:p().to,epoch:s.epoch,until:p().forwardUntil});result='Destination active; fresh relay sessions and bounded forwarding (simulated).';}break;
+      case 'cancel':
+        if(!p())reject('no pending move.');
+        else if(p().committed)reject('committed moves cannot roll back.');
+        else if(!s.authorityUp)reject('ordered abort cannot be confirmed.');
+        else {s.pending=null;s.phase='idle';s.approved=false;s.exportApproved=false;s.sourceLogin=false;s.fallback=false;result='Ordered abort releases staging; source remains home (simulated).';}break;
+      case 'sourceDown':s.sourceUp=!s.sourceUp;result='Source '+(s.sourceUp?'reachable.':'unavailable; explicit fallback requires existing authority.');break;
+      case 'destinationDown':s.destinationUp=!s.destinationUp;result='Destination '+(s.destinationUp?'reachable.':'unavailable.');break;
+      case 'authorityDown':s.authorityUp=!s.authorityUp;result='Ordering server '+(s.authorityUp?'reachable.':'unavailable; no alternate authority.');break;
+      case 'occupied':s.empty=!s.empty;result='Destination '+(s.empty?'empty.':'occupied.');break;
+      case 'incompatible':s.compatible=!s.compatible;result='Destination compatibility '+s.compatible+'.';break;
+      case 'missing':
+        if(p()?.committed){reject('committed transfer cannot be edited.');break;}
+        s.complete=!s.complete;if(p()){p().lossAcknowledged=false;p().prepared=false;s.approved=false;s.phase='reserved';}result='Complete available content '+s.complete+'; stage and confirm changed transfer again.';break;
+      case 'missingSecurity':
+        if(p()?.committed){reject('committed transfer cannot be edited.');break;}
+        s.securityComplete=!s.securityComplete;if(p()){p().lossAcknowledged=false;p().prepared=false;s.approved=false;s.phase='reserved';}result='Verified security state '+s.securityComplete+'. Missing security state always blocks transfer.';break;
+      case 'advance':s.day+=15;result='Fifteen days passed. Each old relay expires its own forwarding.';break;
+      case 'discover':{
+        let home=s.endpointHome,epoch=s.endpointEpoch;
+        while(epoch<s.epoch){const f=s.forwarding.find(f=>f.from===home&&f.epoch>epoch&&f.until>s.day);if(!f)break;home=f.to;epoch=f.epoch;}
+        if(home!==s.home||epoch!==s.epoch||s.phase!=='active')reject('forwarding unavailable or destination not active; need verified discovery.');
+        else {s.endpointHome=home;s.endpointEpoch=epoch;result='Endpoint verifies chain from its pinned checkpoint (fixture).';}break;}
+      case 'manual':
+        if(s.phase!=='active')reject('destination not active.');
+        else {s.endpointHome=s.home;s.endpointEpoch=s.epoch;result='Supplied destination verified against retained account history (fixture), not URL alone.';}break;
+      case 'chain':
+        if(s.phase!=='active')reject('finish the current move first.');
+        else {s.pending=null;s.phase='idle';s.sourceLogin=false;s.destinationLogin=false;s.fallback=false;s.approved=false;s.exportApproved=false;s.sourceUp=true;s.destinationUp=true;result='New move starts from latest location; old forwarding expiry unchanged.';}break;
+      default:throw new Error('Unknown action: '+action);
+    }
+    s.trace.push({action,result});return s;
+  }
+  const normal=['login','reserve','sourceLogin','approve','prepare','confirm','commit','activate'];
+  const scenarios=[
+    {name:'Success',description:'A normal move uses separate passkey ceremonies and the existing ordered account history.',steps:normal},
+    {name:'Source returns',description:'Accepted override: after a fallback commit, a returning source must verify the current ordered location before accepting account writes. If it cannot verify, it remains unavailable for writes.',steps:['sourceDown','login','reserve','fallback','approve','prepare','confirm','commit','activate','sourceDown','sourceWrite','authorityDown','sourceWrite']},
+    {name:'Lost acknowledgement',description:'The location commit survives delivery failure. Retry and cancel show the irreversible boundary.',steps:['login','reserve','sourceLogin','approve','prepare','confirm','commit','destinationDown','activate','cancel','commit','destinationDown','activate']},
+    {name:'Cancel before commit',description:'An ordered abort releases a prepared destination; no location change occurs.',steps:['login','reserve','sourceLogin','approve','prepare','confirm','cancel']},
+    {name:'Destination checks',description:'Occupied accounts and incompatible features stop the ceremony before source state changes.',steps:['login','occupied','reserve','occupied','incompatible','reserve','incompatible','reserve']},
+    {name:'Source lost',description:'Accepted override: the explicit fallback bypasses the unreachable source passkey but still requires the current ordering server.',steps:['sourceDown','login','reserve','fallback','approve','prepare','confirm','authorityDown','commit','authorityDown','commit','activate']},
+    {name:'Missing content',description:'Fallback may proceed after explicit acknowledgement that newer encrypted content could be lost. Missing security state remains a separate hard stop.',steps:['sourceDown','missing','login','reserve','fallback','approve','prepare','acknowledge','prepare','confirm','commit','activate']},
+    {name:'Missing security state',description:'Acknowledging missing content cannot authorize a move with unverified security history or unsafe credential state.',steps:['sourceDown','missing','missingSecurity','login','reserve','fallback','approve','acknowledge','prepare']},
+    {name:'Offline and chained',description:'Live → Beta → Self-hosted. Expiring an earlier relay does not erase endpoint trust; manual discovery still verifies continuity.',steps:[...normal,'chain',...normal,'advance','discover','manual']},
+    {name:'Expired ticket',description:'A prepared but uncommitted ticket expires. Commit fails; an ordered abort is still possible.',steps:['login','reserve','sourceLogin','approve','prepare','confirm','advance','commit','cancel']}
+  ];
+  return {initial,step,actions,scenarios};
+})();
+</script>
+<script>
+let selected=0,index=0,state=MoveModel.initial();
+const el=id=>document.getElementById(id);
+function render(){
+ const scenario=MoveModel.scenarios[selected];el('scenario-title').textContent=scenario.name;el('scenario-description').textContent=scenario.description;el('step-status').textContent=index<scenario.steps.length?'Next: '+MoveModel.actions[scenario.steps[index]]:'Walkthrough complete. Free play remains available.';
+ el('tabs').replaceChildren(...MoveModel.scenarios.map((x,i)=>{const b=document.createElement('button');b.textContent=x.name;b.setAttribute('role','tab');b.setAttribute('aria-selected',String(i===selected));b.onclick=()=>{selected=i;restart()};return b}));
+ const fields=[['Account home',state.home+' · location epoch '+state.epoch+' · same account anchor'],['Destination activation',state.active+' · '+state.phase],['Returning endpoint',state.endpointHome+' · checkpoint '+state.endpointEpoch],['Reachability','Source '+state.sourceUp+' / destination '+state.destinationUp+' / authority '+state.authorityUp],['Authorization','Destination '+state.destinationLogin+' / source '+state.sourceLogin+' / export '+state.exportApproved+' / final '+state.approved+' / fallback '+state.fallback],['Transfer',state.pending?state.pending.id+' · '+state.pending.from+' → '+state.pending.to+' · expires day '+state.pending.expires+' · '+(state.pending.committed?'committed':state.pending.prepared?'prepared':'reserved'):'No reservation'],['Data and compatibility','Complete content '+state.complete+' / verified security '+state.securityComplete+' / loss acknowledged '+(state.pending?.lossAcknowledged||false)+' / compatible '+state.compatible+' / empty '+state.empty],['Forwarding (day '+state.day+')',state.forwarding.length?state.forwarding.map(f=>f.from+' → '+f.to+' until day '+f.until).join('; '):'No records'],['Ordered location history',state.history.length?state.history.map(h=>h.epoch+': '+h.from+' → '+h.to).join('; '):'Genesis at Live']];
+ el('state').replaceChildren(...fields.map(([label,value])=>{const card=document.createElement('div');card.className='card';const l=document.createElement('div');l.className='label';l.textContent=label;const v=document.createElement('div');v.className='value';v.textContent=value;card.append(l,v);return card}));
+ el('trace').replaceChildren(...state.trace.slice(-8).map(x=>{const li=document.createElement('li');li.textContent=x.result;return li}));
+}
+function restart(){index=0;state=MoveModel.initial();render()}
+el('actions').replaceChildren(...Object.entries(MoveModel.actions).map(([action,label])=>{const b=document.createElement('button');b.textContent=label;b.onclick=()=>{state=MoveModel.step(state,action);render()};return b}));
+el('next').onclick=()=>{const steps=MoveModel.scenarios[selected].steps;if(index<steps.length){state=MoveModel.step(state,steps[index++]);render()}};el('reset').onclick=restart;render();
+</script>

@@ -1,0 +1,29 @@
+{
+  "timestampUtc": "2026-11-16T02:01:59.406361+00:00",
+  "platform": "macOS-27.3-arm64-arm-64bit-Mach-O",
+  "commands": [
+    "python3 -m unittest discover -s script/native-comparison -p test_probe.py",
+    "python3 script/wezterm-feasibility/run.py --output /tmp/myterm-150-baseline-20261116",
+    "python3 script/wezterm-feasibility/checkpoint.py --source /tmp/myterm-150-baseline-20261116/source --output /tmp/myterm-150-checkpoint-20261116"
+  ],
+  "pythonHarnessTests": {
+    "passed": 7
+  },
+  "retainedInputHashVerification": {
+    "prototypeAndBaselineDriver": 19,
+    "vendorInputs": 124,
+    "mismatches": []
+  },
+  "summary": {
+    "passed": 36,
+    "failed": 0,
+    "unsupported": 0,
+    "rejectedLimits": 2,
+    "negativeControls": 26,
+    "nativeStreamPassed": true,
+    "livePtyPassed": true,
+    "maximumCheckpointBytes": 137378,
+    "maximumImportNs": 17401375
+  },
+  "scope": "Fresh native macOS headless revalidation. Full scratch build and per-case captures are local temporary files; prior complete retained capture is macos-checkpoint-fidelity. No production, network, multi-Mac or cross-platform acceptance."
+}

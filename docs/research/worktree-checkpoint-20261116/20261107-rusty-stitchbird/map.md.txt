@@ -1,0 +1,5 @@
+# MyTerm next planning moved to GitHub
+
+Continue with [MyTerm next architecture and implementation](https://github.com/GordonBeeming/myterm/issues/125).
+
+The original map and ticket files are preserved in `docs/planning/myterm-next/local-source/`; the GitHub issues are now canonical.

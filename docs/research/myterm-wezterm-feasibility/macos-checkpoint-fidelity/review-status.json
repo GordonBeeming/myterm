@@ -1,0 +1,6 @@
+{
+  "status": "blocked-awaiting-current-external-review-authorization",
+  "summary": "The local native fidelity gate is green. Automatic approval review rejected the external Claude command twice; an explicit approval request for these updated files is pending. The new fixes have not received independent review.",
+  "reason": "The automatic reviewer would not accept the earlier consent quoted by the assistant as trusted authorization for this updated payload.",
+  "priorReviewScope": "Reviews in sibling macos-checkpoint cover the earlier partial prototype, not the current fixes."
+}

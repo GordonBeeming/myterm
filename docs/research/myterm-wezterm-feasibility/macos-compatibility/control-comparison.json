@@ -1,0 +1,56 @@
+{
+  "alt-minimal": {
+    "differences": [],
+    "projectionMatches": true,
+    "swiftCheckpointChecks": 7,
+    "rustToSwiftReconnect": "not implemented"
+  },
+  "iterm-minimal": {
+    "differences": [],
+    "projectionMatches": true,
+    "swiftCheckpointChecks": 1,
+    "rustToSwiftReconnect": "not implemented"
+  },
+  "kitty-combined": {
+    "differences": [],
+    "projectionMatches": true,
+    "swiftCheckpointChecks": 1,
+    "rustToSwiftReconnect": "not implemented"
+  },
+  "kitty-minimal": {
+    "differences": [],
+    "projectionMatches": true,
+    "swiftCheckpointChecks": 3,
+    "rustToSwiftReconnect": "not implemented"
+  },
+  "kitty-no-move": {
+    "differences": [],
+    "projectionMatches": true,
+    "swiftCheckpointChecks": 1,
+    "rustToSwiftReconnect": "not implemented"
+  },
+  "kitty-quiet": {
+    "differences": [],
+    "projectionMatches": true,
+    "swiftCheckpointChecks": 1,
+    "rustToSwiftReconnect": "not implemented"
+  },
+  "kitty-transmit-id": {
+    "differences": [],
+    "projectionMatches": true,
+    "swiftCheckpointChecks": 1,
+    "rustToSwiftReconnect": "not implemented"
+  },
+  "kitty-two-rows": {
+    "differences": [],
+    "projectionMatches": true,
+    "swiftCheckpointChecks": 1,
+    "rustToSwiftReconnect": "not implemented"
+  },
+  "resize-minimal": {
+    "differences": [],
+    "projectionMatches": true,
+    "swiftCheckpointChecks": 5,
+    "rustToSwiftReconnect": "not implemented"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "tool": "claude",
+  "mode": "review",
+  "model": "sonnet",
+  "permissionMode": "plan",
+  "repo": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-crisp-kakapo",
+  "sessionId": "d4e3811e-63fa-49cb-b14e-56f341f29c2c",
+  "status": "completed",
+  "response": "**No material blockers to human decision review.** `checks.cjs` passes 123/123, and `scenarios.js` has 15 walkthroughs. `candidate.html` embeds the current `model.js` and `scenarios.js` and starts with the `build.py` shell, so it is in sync. The README says \"fifteen walkthroughs\", which matches. I did not run `visual-qa.cjs`.\n\n**Confirmed fixed (probed against the current code)**\n- **Unverified and unknown-issuer ops:** dropped before quarantine. `ingest` returns with a note only.\n- **Per-issuer cap:** 60 ghost-dependency ops from the phone leave `pending` at 32. 40 stale-epoch ops leave `rejected` at 32.\n- **Duplicates:** quarantine entries are deduplicated.\n- **Pending equivocation:** two different buffered ops with the same id freeze the issuer (`frozen: ['phone']`).\n- **Schema:** a second account root and a nameless folder create are both rejected (6 ops each, unchanged).\n- **Close freshness:** a close after `offline()` now asks for confirmation. With only server-b offline, closing a server-a terminal does not prompt, and closing the workspace does.\n- **Page text:** the fork policy (\"revocation does not repair history\", account-wide pause) is stated as proposed. No-forward-compatibility and the global-manifest versus per-server-connectivity split are explicit.\n\n**Residual notes (low, not blockers)**\n1. **Quarantine slots are never freed.**\n   - Counterexample: an issuer who has accumulated 32 stale-epoch rejections can no longer buffer legitimate out-of-order ops. Those get \"buffer full, sender retains\".\n   - The prototype has no discard or reapprove action. This falls under the documented \"no repair action\", but you could add one line to the page.\n2. **`members` and `knownIssuers` are separate lists.** An op from a device added only to `members` would be dropped as \"unknown issuer\". The model has no add-device path, so this is invisible today. Worth a note when the add-device flow is designed.\n3. **The per-issuer cap is 32 records and 64 KiB.** Both quarantine and pending count against it, so a compromised member can only exhaust its own share (plus the global byte budget). That matches the stated intent.\n\nEverything else I flagged earlier is fixed or documented as pending. That covers the global fork pause, the retention and checkpoint policy, endorsement, crash and native integration, and the quadratic dependency model.",
+  "exitCode": "0",
+  "startedAt": "2026-11-12T11:12:20Z",
+  "endedAt": "2026-11-12T11:12:59Z",
+  "rawFile": "/private/tmp/myterm-layout-last-review.json.json",
+  "stderrTail": ""
+}

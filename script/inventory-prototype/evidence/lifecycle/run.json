@@ -1,0 +1,116 @@
+{
+  "timeUTC": "2026-11-15T12:55:51.022195+00:00",
+  "existingAppTests": {
+    "passed": 297,
+    "failed": 0
+  },
+  "nativeReportingGaps": 2,
+  "nativeCaptures": 10,
+  "replayedNativeReports": 135,
+  "forcedExit": {
+    "passed": 3,
+    "inconclusive": 1,
+    "scope": "Single startup/input-screen observations; owned foreground group only"
+  },
+  "visualQA": [
+    {
+      "viewport": [
+        1920,
+        842
+      ],
+      "views": [
+        {
+          "mojibake": false,
+          "tab": 0,
+          "panel": [
+            "screenPanel"
+          ],
+          "overflow": false
+        },
+        {
+          "mojibake": false,
+          "tab": 1,
+          "panel": [
+            "screenPanel"
+          ],
+          "overflow": false
+        },
+        {
+          "mojibake": false,
+          "tab": 2,
+          "panel": [
+            "permissionPanel"
+          ],
+          "overflow": false
+        },
+        {
+          "mojibake": false,
+          "tab": 3,
+          "panel": [
+            "exitPanel"
+          ],
+          "overflow": false
+        }
+      ]
+    },
+    {
+      "views": [
+        {
+          "tab": 0,
+          "panel": [
+            "screenPanel"
+          ],
+          "overflow": false,
+          "mojibake": false
+        },
+        {
+          "overflow": false,
+          "tab": 1,
+          "panel": [
+            "screenPanel"
+          ],
+          "mojibake": false
+        },
+        {
+          "overflow": false,
+          "tab": 2,
+          "panel": [
+            "permissionPanel"
+          ],
+          "mojibake": false
+        },
+        {
+          "overflow": false,
+          "tab": 3,
+          "panel": [
+            "exitPanel"
+          ],
+          "mojibake": false
+        }
+      ],
+      "viewport": [
+        390,
+        842
+      ]
+    }
+  ],
+  "minimumCheckedTextContrast": 4.697112144822063,
+  "sourceSHA256": {
+    "script/inventory-prototype/LIFECYCLE.md": "3ede948274aafa88da59ca8aa1047a3835eeb43828530e6c4e097539ad19a793",
+    "script/inventory-prototype/exit_probe.py": "d191875ded6b8d7f6b82023bb94f8e5bb4022e40bc4d5ebc00a13cf7de908348",
+    "script/inventory-prototype/build_lifecycle_review.py": "0d217a5fb61bbdb98954fde7129b6768ffb80b0cc02b216210e72790dfd0db25",
+    "script/inventory-prototype/screen_evidence.py": "9a31d03616dce472bf73f490fae0faf8c7cb98ff8b6830ff0d839615e7e88e08",
+    "script/inventory-prototype/lifecycle_probe.py": "bc35f6c1839783a1771d1fe6767f70dae63f61736030ff905a152cb88b0a2960",
+    "script/inventory-prototype/replay_native.swift": "91766a49b2f66e1161de7e258b84779ef23a211bda0ecaa1c3502d43ba10e3a2"
+  },
+  "productionSourceSHA256": {
+    "Resources/myterm-agent-hook": "d82e4a2453bc6c02da1173e97d5117dcccead9d48ff05e1619b39d67c58b979f",
+    "Resources/myterm-agent-normalize.js": "5f7eb1bb00c20ddf1ecf540acbad13c9cbda111287e5a5be14ef55150d4f44d0",
+    "Resources/myterm-antigravity-status": "338e17394e0f5e659725c087fe1bf3c19b63befd8b34de3639249bc5ae211c7a",
+    "Sources/MyTermCore/AgentActivity.swift": "57b1cb9e34d229006c36917fce3a15307566f408587a366a4b9bbe5c5e0c7ba4",
+    "Sources/MyTermCore/AgentReportFilter.swift": "6e8351dd1a5bff1150adb01d332cda7d3b2a2f001b4f54660f55f1ef83089bb0"
+  },
+  "repairIssue": "https://github.com/GordonBeeming/myterm/issues/185",
+  "scope": "Compatibility checkpoint; manual native observations, existing-app regressions and production parser replay. Full Rust/relay/client/platform acceptance remains open.",
+  "reportSHA256": "07d490969267d957747a4be45bf8abc237185088e35ebf80aac3330e7af5af4a"
+}

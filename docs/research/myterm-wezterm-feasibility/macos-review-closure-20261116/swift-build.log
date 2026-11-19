@@ -1,0 +1,18 @@
+warning: missing creator for mutated node: ('/private/tmp/myterm-150-review-fixes-f-20261116/swift-build/out/Products/Debug/SwiftTerm_SwiftTerm.bundle/Contents/MacOS')
+/private/tmp/myterm-150-review-fixes-f-20261116/SwiftTerm/Sources/SwiftTerm/Apple/Metal/MetalTerminalRenderer.swift:1744:22: warning: result of call to 'withUnsafeBytes' is unused [#NoUsage]
+1742 |                 return nil
+1743 |             }
+1744 |             vertices.withUnsafeBytes { raw in
+     |                      `- warning: result of call to 'withUnsafeBytes' is unused [#NoUsage]
+1745 |                 memcpy(buffer.contents(), raw.baseAddress!, byteCount)
+1746 |             }
+
+/private/tmp/myterm-150-review-fixes-f-20261116/SwiftTerm/Sources/SwiftTerm/Apple/Metal/MetalTerminalRenderer.swift:1950:18: warning: result of call to 'withUnsafeBytes' is unused [#NoUsage]
+1948 |             return (nil, 0)
+1949 |         }
+1950 |         vertices.withUnsafeBytes { raw in
+     |                  `- warning: result of call to 'withUnsafeBytes' is unused [#NoUsage]
+1951 |             memcpy(buffer.contents(), raw.baseAddress!, byteCount)
+1952 |         }
+
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>

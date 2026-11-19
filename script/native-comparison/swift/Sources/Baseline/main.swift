@@ -87,7 +87,11 @@ func run() throws {
                 terminal.feed(byteArray: bytes)
                 restored?.getTerminal().feed(byteArray: bytes)
             }
-            snapshots.append(try snapshot(terminal, recorder))
+            var measured = try snapshot(terminal, recorder)
+            if let pixels = view.cellSizeInPixels(source: terminal) {
+                measured["cellPixels"] = [pixels.width, pixels.height]
+            }
+            snapshots.append(measured)
             if let copy = restored?.getTerminal() {
                 checks.append(try copy.exportCheckpoint() == terminal.exportCheckpoint())
             }

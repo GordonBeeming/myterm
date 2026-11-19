@@ -1,0 +1,1 @@
+These superseded captures read the asynchronous query writer without a drain barrier. Do not use them as accepted reply measurements. The sibling macos-local directory contains the synchronized rerun.

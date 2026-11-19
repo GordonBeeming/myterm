@@ -1,0 +1,15 @@
+{
+  "tool": "claude",
+  "mode": "review",
+  "model": "sonnet",
+  "permissionMode": "plan",
+  "repo": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-crisp-kakapo",
+  "sessionId": "e8c44ac3-1e87-4261-ac11-5056ef73dd3d",
+  "status": "failed",
+  "response": "",
+  "exitCode": "1",
+  "startedAt": "2026-11-10T20:51:24Z",
+  "endedAt": "2026-11-10T20:51:28Z",
+  "rawFile": "/private/tmp/myterm-refresh-followup-model-review.json.json",
+  "stderrTail": "No conversation found with session ID: e8c44ac3-1e87-4261-ac11-5056ef73dd3d"
+}

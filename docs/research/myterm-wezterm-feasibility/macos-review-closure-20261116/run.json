@@ -1,0 +1,29 @@
+{
+  "timestampUtc": "2026-11-16T02:16:48.284045+00:00",
+  "os": "macOS-27.3-arm64-arm-64bit-Mach-O",
+  "wezterm": "458a100c1bf4134d36cb5c42dd90e4c8266d9e1a",
+  "finl": "a1892f26245529f2ef3877a9ebd610c96cec07a6",
+  "scope": "scratch checkpoint bridge; tested subset only; not release acceptance",
+  "sources": {
+    "checkpoint.py": "7fd9f00407e4807d1b9eed18137114a7e747d140c4df5b448bd33ef5b002074c",
+    "checkpoint-state.rs": "9e1c4484f84c3f4ced03299b6c41b765eb5007b6e4f988def4a6d990747220aa",
+    "CheckpointBridge.swift": "e65c26b791510fda5cab5c14dcf9874672a6903ac2d67f1aa428fc53c08dc78f",
+    "checkpoint-driver.swift": "8bd51e183baff7f61707fd061e3e2c69a88752b336367b17274777182a98e62d",
+    "checkpoint_checks.py": "cb2cc30ef92d901295ef91a7d46e214c4621eae7e01754cb8c0c860c821b423f",
+    "checkpoint-stream.rs": "80772d79771907f3ec4659eb3f3f2489339cef437ddd06d4af328e7c244d3962",
+    "main.rs": "6f40bd8f975b4f710c211ac3b0ccc7b7ee131f2db4350bc24024e1ea2f6ad872",
+    "wezterm-compatibility.patch": "ba1d0c313a04d735c003391990cf37b49f4ecc62bfb05368e2fa8397df6796fb",
+    "swift-dcs-finalization.patch": "dac9c3124237bbbafd0eb873330cd35cec27b9c1684259db66b96d32273016d8",
+    "Cargo.toml.in": "619adbde0a4aa4637784668b98bcb0f35434fb4c7f94b3d5cf8ab6b2c28c4fbb",
+    "Cargo.lock": "dbce14947cd32170fce0c90fe855ceba4a956c774df8c021a75312f05924801a",
+    "checkpoint_report.py": "9da7d9776f4dd3db4418bec9f8ecc2dd852e0eafe69f77654a78552b26ac6c21",
+    "checkpoint_compatibility.py": "4ae4cec0272731eb874ccea4b7c72129b124e5c7578d04f1986b01ec644d498c",
+    "checkpoint-graphics.rs": "27a97088105ebe17143b4aa5583b0af2fdad818dbd7fa68a1769594587235d41",
+    "CheckpointGraphics.swift": "6b1b3543aa6d8fe74faf6d4b9e50cbc7313a7a52cf0795ecdf1190d91e87b704",
+    "checkpoint-kitty.rs": "d0110f4f679652e50b94fa73184a0bc373512eec3d3681b414c498fafd9d7f49",
+    "checkpoint-pty.rs": "a6289d4cc8a5a5621e271c414e913d7d2a62afea37595477611b8e483331fee0",
+    "checkpoint_pty_checks.py": "6291306b1ffd9392a4be747a962361036fe63a8ba1cde79fd747182d8a875658"
+  },
+  "baselineDriverSha256": "e57c636da9c16e4f44b2db7b582713909baadadc7397f8de9697c12623ee229a",
+  "probeLockSha256": "b11815b8581cca314217680dcf0f6d7d969887db03fde00ba5b4b6102dbc0a62"
+}

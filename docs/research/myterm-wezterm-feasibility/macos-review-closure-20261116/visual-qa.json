@@ -1,0 +1,26 @@
+{
+  "browser": "Browser.app",
+  "profile": "GordonBeeming/myterm",
+  "beforeViewport": [
+    1920,
+    842
+  ],
+  "afterViewport": [
+    1920,
+    842
+  ],
+  "requestedViewport": [
+    1920,
+    1080
+  ],
+  "afterDisplayCap": true,
+  "tabsChecked": [
+    "gate",
+    "before",
+    "graphics",
+    "scope"
+  ],
+  "horizontalOverflow": false,
+  "mojibake": false,
+  "notes": "Final accepted report: four tabs and all seven before/after scenarios checked at 1920x842 with no horizontal overflow or mojibake. Earlier 1100x654 checks remain valid. Display limits the requested height. Existing brand colors and contrast checks unchanged."
+}

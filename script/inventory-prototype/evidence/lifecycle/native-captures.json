@@ -1,0 +1,653 @@
+[
+  {
+    "name": "claude-question",
+    "agent": "claude",
+    "version": "2.1.325",
+    "payloads": [
+      "agent=claude;event=ready;session=b127c4b1250b2480;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=claude;event=working;session=b127c4b1250b2480;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=claude;event=awaiting_input;session=b127c4b1250b2480;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=claude;event=finished;session=b127c4b1250b2480;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=claude;event=working;session=b127c4b1250b2480;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=claude;event=awaiting_input;session=b127c4b1250b2480;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=claude;event=working;session=b127c4b1250b2480;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=claude;event=finished;session=b127c4b1250b2480;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=claude;event=exited;session=b127c4b1250b2480;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured="
+    ],
+    "rawSHA256": "70a22323eba2e95302953dca7c9582a17bd3c2276afb5d47083907b3aa8be5ef",
+    "privateCaptureDirectory": "/tmp/myterm-native-lifecycle-claude-wmevqkk9",
+    "privateRawFile": "/Users/gordonbeeming/Developer/artifacts/myterm/private-native-lifecycle/claude-question.bin"
+  },
+  {
+    "name": "codex-question",
+    "agent": "codex",
+    "version": "0.160.0",
+    "payloads": [
+      "agent=codex;event=ready;session=e75ab375a39eec26;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=codex;event=working;session=e75ab375a39eec26;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=codex;event=working;session=e75ab375a39eec26;tool=0908436080980fe214d58aa70d38dcec1b6e01dce6ff151dd3a55f8ab5c4e8c6;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=codex;event=working;session=e75ab375a39eec26;tool=1f676602fb4c0e4821a78755ac97569b6eb0c99c67aedf789ec0f244271d0ef9;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=codex;event=finished;session=e75ab375a39eec26;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=codex;event=working;session=e75ab375a39eec26;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=codex;event=working;session=e75ab375a39eec26;tool=a584e880399e8b93afb1670a6e20bea0ea1378d9e584ceb98271596aa39cc65f;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=codex;event=finished;session=e75ab375a39eec26;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=codex;event=exited;session=e75ab375a39eec26;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured="
+    ],
+    "rawSHA256": "f592b97257acab30ed53bdc91f89df9793ca966d9e28926270522cf520c079ef",
+    "privateCaptureDirectory": "/tmp/myterm-native-lifecycle-codex-psm_0_ef",
+    "privateRawFile": "/Users/gordonbeeming/Developer/artifacts/myterm/private-native-lifecycle/codex-question.bin"
+  },
+  {
+    "name": "antigravity-question",
+    "agent": "antigravity",
+    "version": "1.5.9",
+    "payloads": [
+      "agent=antigravity;event=ready;session=f55c38246c8dd5d7;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=353199.645724",
+      "agent=antigravity;event=working;session=f55c38246c8dd5d7;tool=;turn=;turn_start=;snapshot=;work_start=1;call=;captured=353199.781946",
+      "agent=antigravity;event=awaiting_input;session=f55c38246c8dd5d7;tool=5c5b8b161f45470a92b099df29b4b7837d563f86128f103e5f0cc4b6a1c534c7;turn=;turn_start=;snapshot=;work_start=;call=;captured=353207.736018",
+      "agent=antigravity;event=working;session=f55c38246c8dd5d7;tool=5c5b8b161f45470a92b099df29b4b7837d563f86128f103e5f0cc4b6a1c534c7;turn=;turn_start=;snapshot=;work_start=;call=;captured=353287.624818",
+      "agent=antigravity;event=working;session=f55c38246c8dd5d7;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=353287.620242",
+      "agent=antigravity;event=working;session=f55c38246c8dd5d7;tool=;turn=;turn_start=;snapshot=;work_start=1;call=;captured=353287.759039",
+      "agent=antigravity;event=working;session=f55c38246c8dd5d7;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=353287.916672",
+      "agent=antigravity;event=finished;session=f55c38246c8dd5d7;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=353552.745538",
+      "agent=antigravity;event=working;session=f55c38246c8dd5d7;tool=;turn=;turn_start=;snapshot=;work_start=1;call=;captured=353595.774495",
+      "agent=antigravity;event=finished;session=f55c38246c8dd5d7;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=353595.752409",
+      "agent=antigravity;event=working;session=f55c38246c8dd5d7;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=353596.051150",
+      "agent=antigravity;event=working;session=f55c38246c8dd5d7;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=353602.615219",
+      "agent=antigravity;event=working;session=f55c38246c8dd5d7;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=353602.916824",
+      "agent=antigravity;event=awaiting_input;session=f55c38246c8dd5d7;tool=5c5b8b161f45470a92b099df29b4b7837d563f86128f103e5f0cc4b6a1c534c7;turn=;turn_start=;snapshot=;work_start=;call=;captured=353603.187883",
+      "agent=antigravity;event=working;session=f55c38246c8dd5d7;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=353603.217986",
+      "agent=antigravity;event=working;session=f55c38246c8dd5d7;tool=5c5b8b161f45470a92b099df29b4b7837d563f86128f103e5f0cc4b6a1c534c7;turn=;turn_start=;snapshot=;work_start=;call=;captured=353683.608234",
+      "agent=antigravity;event=working;session=f55c38246c8dd5d7;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=353683.601892",
+      "agent=antigravity;event=working;session=f55c38246c8dd5d7;tool=;turn=;turn_start=;snapshot=;work_start=1;call=;captured=353683.754832",
+      "agent=antigravity;event=working;session=f55c38246c8dd5d7;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=353683.901996",
+      "agent=antigravity;event=working;session=f55c38246c8dd5d7;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=353689.855073",
+      "agent=antigravity;event=working;session=f55c38246c8dd5d7;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=353690.156586",
+      "agent=antigravity;event=finished;session=f55c38246c8dd5d7;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=353690.220132",
+      "agent=antigravity;event=finished;session=f55c38246c8dd5d7;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=353690.454796",
+      "agent=antigravity;event=finished;session=f55c38246c8dd5d7;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=353690.973594",
+      "agent=antigravity;event=finished;session=f55c38246c8dd5d7;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=353911.632850",
+      "agent=antigravity;event=finished;session=f55c38246c8dd5d7;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=353911.933419"
+    ],
+    "rawSHA256": "dabefc3016bb3c42ac667fcb7ac26d8361dfde84311dae38731c54daf3870330",
+    "privateCaptureDirectory": "/tmp/myterm-native-lifecycle-antigravity-okudpnma",
+    "privateRawFile": "/Users/gordonbeeming/Developer/artifacts/myterm/private-native-lifecycle/antigravity-question.bin"
+  },
+  {
+    "name": "grok-question",
+    "agent": "grok",
+    "version": "1.0.77",
+    "payloads": [
+      "agent=grok;event=ready;session=559208e80557b8b9;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=grok;event=working;session=559208e80557b8b9;tool=;turn=f49cfd4babf38e8b0d47b4039615ce768af2b4eebf64abc928a054d5f361008a;turn_start=1;snapshot=;work_start=;call=;captured=",
+      "agent=grok;event=working;session=559208e80557b8b9;tool=0019c3303bb8f975f734b3c9b0c49a8dc8fc60c12149e84dd548927c7180caa4;turn=;turn_start=;snapshot=;work_start=1;call=0badbdd91e10f93fa9194509986d18324ef13bf1b578980a8add44739ba3b097;captured=",
+      "agent=grok;event=awaiting_input;session=559208e80557b8b9;tool=0019c3303bb8f975f734b3c9b0c49a8dc8fc60c12149e84dd548927c7180caa4;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=grok;event=working;session=559208e80557b8b9;tool=0019c3303bb8f975f734b3c9b0c49a8dc8fc60c12149e84dd548927c7180caa4;turn=;turn_start=;snapshot=;work_start=;call=0badbdd91e10f93fa9194509986d18324ef13bf1b578980a8add44739ba3b097;captured=",
+      "agent=grok;event=finished;session=559208e80557b8b9;tool=;turn=f49cfd4babf38e8b0d47b4039615ce768af2b4eebf64abc928a054d5f361008a;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=grok;event=finished;session=559208e80557b8b9;tool=;turn=;turn_start=;snapshot=1;work_start=;call=;captured=",
+      "agent=grok;event=working;session=559208e80557b8b9;tool=;turn=6bc7c618b81091f33d78fa33c4c3dc9622d428220131ec702d45a726272a09d8;turn_start=1;snapshot=;work_start=;call=;captured=",
+      "agent=grok;event=working;session=559208e80557b8b9;tool=0019c3303bb8f975f734b3c9b0c49a8dc8fc60c12149e84dd548927c7180caa4;turn=;turn_start=;snapshot=;work_start=1;call=4545a25d918bb33bd418e369ab2012780138cf49d640a219f58979021080ec75;captured=",
+      "agent=grok;event=awaiting_input;session=559208e80557b8b9;tool=0019c3303bb8f975f734b3c9b0c49a8dc8fc60c12149e84dd548927c7180caa4;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=grok;event=finished;session=559208e80557b8b9;tool=;turn=6bc7c618b81091f33d78fa33c4c3dc9622d428220131ec702d45a726272a09d8;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=grok;event=finished;session=559208e80557b8b9;tool=;turn=;turn_start=;snapshot=1;work_start=;call=;captured=",
+      "agent=grok;event=working;session=559208e80557b8b9;tool=;turn=9cd1b1874d56ae70aa779d5a0d48a78e679a532462127513859fb4d3ee42a392;turn_start=1;snapshot=;work_start=;call=;captured=",
+      "agent=grok;event=working;session=559208e80557b8b9;tool=0019c3303bb8f975f734b3c9b0c49a8dc8fc60c12149e84dd548927c7180caa4;turn=;turn_start=;snapshot=;work_start=1;call=24f8086e833032467bb6dda0749994a7e6eeeb258e35309635391da3be6597ec;captured=",
+      "agent=grok;event=working;session=559208e80557b8b9;tool=0019c3303bb8f975f734b3c9b0c49a8dc8fc60c12149e84dd548927c7180caa4;turn=;turn_start=;snapshot=;work_start=;call=24f8086e833032467bb6dda0749994a7e6eeeb258e35309635391da3be6597ec;captured=",
+      "agent=grok;event=working;session=559208e80557b8b9;tool=0019c3303bb8f975f734b3c9b0c49a8dc8fc60c12149e84dd548927c7180caa4;turn=;turn_start=;snapshot=;work_start=;call=09f611af8fd9ededb10703a681a5404291ebc70ece5f604668f533206c975f82;captured=",
+      "agent=grok;event=working;session=559208e80557b8b9;tool=0019c3303bb8f975f734b3c9b0c49a8dc8fc60c12149e84dd548927c7180caa4;turn=;turn_start=;snapshot=;work_start=;call=5cc7fb6329684ec49b3e1d8af3217a10f4cc4d3c7b4f82ae02ad715d412aba59;captured=",
+      "agent=grok;event=exited;session=559208e80557b8b9;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=grok;event=working;session=559208e80557b8b9;tool=0019c3303bb8f975f734b3c9b0c49a8dc8fc60c12149e84dd548927c7180caa4;turn=;turn_start=;snapshot=;work_start=;call=09c1614278215463f203aecb395320b7a64736f61830c72bf2693eec194873f0;captured="
+    ],
+    "rawSHA256": "edc2b4922738cb37f8bef3cf4aac3ecba7e683928d11f0d259391cbd537e4d55",
+    "privateCaptureDirectory": "/tmp/myterm-native-lifecycle-grok-a2jfgzh5",
+    "privateRawFile": "/Users/gordonbeeming/Developer/artifacts/myterm/private-native-lifecycle/grok-question.bin"
+  },
+  {
+    "name": "claude-permission",
+    "agent": "claude",
+    "version": "2.1.325",
+    "payloads": [
+      "agent=claude;event=ready;session=8a9ceb88dd1c7cc9;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=claude;event=working;session=8a9ceb88dd1c7cc9;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=claude;event=awaiting_input;session=8a9ceb88dd1c7cc9;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=claude;event=working;session=8a9ceb88dd1c7cc9;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=claude;event=awaiting_input;session=8a9ceb88dd1c7cc9;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=claude;event=exited;session=8a9ceb88dd1c7cc9;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured="
+    ],
+    "rawSHA256": "3dbf6e0c521056729222a377f76ccc22a5cee9c77f7707e069e07cbee6e7efbc",
+    "privateCaptureDirectory": "/tmp/myterm-native-lifecycle-claude-9tbpiz_8",
+    "actions": [
+      {
+        "label": "Startup observed",
+        "observedAfterSeconds": 0.285,
+        "bytes": 1308,
+        "markerCount": 0,
+        "processExitCode": null
+      },
+      {
+        "label": "Trust owned scratch directory and await native permission",
+        "observedAfterSeconds": 26.601,
+        "bytes": 12405,
+        "markerCount": 3,
+        "processExitCode": null
+      },
+      {
+        "label": "Inspect actual permission interface",
+        "observedAfterSeconds": 78.724,
+        "bytes": 14531,
+        "markerCount": 3,
+        "processExitCode": null
+      },
+      {
+        "label": "Reject native Bash permission without persistent rule changes",
+        "observedAfterSeconds": 171.496,
+        "bytes": 19401,
+        "markerCount": 3,
+        "processExitCode": null
+      },
+      {
+        "label": "Request second harmless command to exercise approval",
+        "observedAfterSeconds": 192.536,
+        "bytes": 19712,
+        "markerCount": 3,
+        "processExitCode": null
+      },
+      {
+        "label": "Prepare independent native permission requests with scratch-file proof",
+        "observedAfterSeconds": 258.033,
+        "bytes": 20804,
+        "markerCount": 3,
+        "processExitCode": null
+      },
+      {
+        "label": "Submit parallel permission test",
+        "observedAfterSeconds": 302.04,
+        "bytes": 30169,
+        "markerCount": 5,
+        "processExitCode": null
+      },
+      {
+        "label": "Reject repeated simple command; concurrent case rerun separately",
+        "observedAfterSeconds": 408.33,
+        "bytes": 36465,
+        "markerCount": 5,
+        "processExitCode": null
+      },
+      {
+        "label": "Prepare clean exit after denial test",
+        "observedAfterSeconds": 455.911,
+        "bytes": 37280,
+        "markerCount": 5,
+        "processExitCode": null
+      },
+      {
+        "label": "Submit clean exit",
+        "observedAfterSeconds": 521.358,
+        "bytes": 38224,
+        "markerCount": 6,
+        "processExitCode": 0
+      }
+    ],
+    "processExitCode": 0,
+    "privateRawFile": "/Users/gordonbeeming/Developer/artifacts/myterm/private-native-lifecycle/claude-permission.bin",
+    "signInWarningObserved": false
+  },
+  {
+    "name": "antigravity-permission",
+    "agent": "antigravity",
+    "version": "1.5.9",
+    "payloads": [
+      "agent=antigravity;event=ready;session=285218be71206af9;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=353967.915777",
+      "agent=antigravity;event=working;session=285218be71206af9;tool=;turn=;turn_start=;snapshot=;work_start=1;call=;captured=353968.043915",
+      "agent=antigravity;event=awaiting_input;session=285218be71206af9;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=353977.358072",
+      "agent=antigravity;event=awaiting_input;session=285218be71206af9;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=353979.331911",
+      "agent=antigravity;event=awaiting_input;session=285218be71206af9;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=353979.626098",
+      "agent=antigravity;event=awaiting_input;session=285218be71206af9;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=354111.494725",
+      "agent=antigravity;event=finished;session=285218be71206af9;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=354111.790740",
+      "agent=antigravity;event=finished;session=285218be71206af9;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=354112.145305",
+      "agent=antigravity;event=finished;session=285218be71206af9;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=354155.583587",
+      "agent=antigravity;event=finished;session=285218be71206af9;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=354221.087194",
+      "agent=antigravity;event=finished;session=285218be71206af9;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=354221.394750",
+      "agent=antigravity;event=working;session=285218be71206af9;tool=;turn=;turn_start=;snapshot=;work_start=1;call=;captured=354253.778694",
+      "agent=antigravity;event=finished;session=285218be71206af9;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=354253.759862",
+      "agent=antigravity;event=working;session=285218be71206af9;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=354254.058341",
+      "agent=antigravity;event=working;session=285218be71206af9;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=354263.999494",
+      "agent=antigravity;event=working;session=285218be71206af9;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=354264.297716",
+      "agent=antigravity;event=working;session=285218be71206af9;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=354265.883285",
+      "agent=antigravity;event=working;session=285218be71206af9;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=354266.181899",
+      "agent=antigravity;event=working;session=285218be71206af9;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=354266.483504",
+      "agent=antigravity;event=awaiting_input;session=285218be71206af9;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=354267.760617",
+      "agent=antigravity;event=working;session=285218be71206af9;tool=;turn=;turn_start=;snapshot=;work_start=1;call=;captured=354368.021875",
+      "agent=antigravity;event=working;session=285218be71206af9;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=354368.001675",
+      "agent=antigravity;event=working;session=285218be71206af9;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=354368.292522",
+      "agent=antigravity;event=working;session=285218be71206af9;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=354382.405194",
+      "agent=antigravity;event=working;session=285218be71206af9;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=354382.705148",
+      "agent=antigravity;event=working;session=285218be71206af9;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=354383.004752",
+      "agent=antigravity;event=finished;session=285218be71206af9;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=354383.175004",
+      "agent=antigravity;event=working;session=285218be71206af9;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=354383.305074",
+      "agent=antigravity;event=finished;session=285218be71206af9;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=354383.606023",
+      "agent=antigravity;event=finished;session=285218be71206af9;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=354383.906451",
+      "agent=antigravity;event=finished;session=285218be71206af9;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=354485.820287",
+      "agent=antigravity;event=finished;session=285218be71206af9;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=354486.123834"
+    ],
+    "rawSHA256": "e8f207681bd846a757b04737f14481ee7f62a56583ff9fc6a74eb9a0ecb9b348",
+    "privateCaptureDirectory": "/tmp/myterm-native-lifecycle-antigravity-ayl200ma",
+    "actions": [
+      {
+        "label": "Startup observed",
+        "observedAfterSeconds": 0.173,
+        "bytes": 643,
+        "markerCount": 0,
+        "processExitCode": null
+      },
+      {
+        "label": "Trust owned scratch directory and await native permission",
+        "observedAfterSeconds": 14.428,
+        "bytes": 3583,
+        "markerCount": 4,
+        "processExitCode": null
+      },
+      {
+        "label": "Inspect actual permission interface",
+        "observedAfterSeconds": 78.706,
+        "bytes": 3917,
+        "markerCount": 5,
+        "processExitCode": null
+      },
+      {
+        "label": "Reject native command permission using No cancel",
+        "observedAfterSeconds": 146.85,
+        "bytes": 5905,
+        "markerCount": 7,
+        "processExitCode": null
+      },
+      {
+        "label": "Request second harmless command to exercise approval",
+        "observedAfterSeconds": 192.684,
+        "bytes": 6763,
+        "markerCount": 9,
+        "processExitCode": null
+      },
+      {
+        "label": "Prepare permission approval with scratch-file proof",
+        "observedAfterSeconds": 258.517,
+        "bytes": 8191,
+        "markerCount": 11,
+        "processExitCode": null
+      },
+      {
+        "label": "Submit approval test",
+        "observedAfterSeconds": 302.82,
+        "bytes": 23343,
+        "markerCount": 20,
+        "processExitCode": null
+      },
+      {
+        "label": "Approve exactly one scratch-file command without saving a rule",
+        "observedAfterSeconds": 418.211,
+        "bytes": 35124,
+        "markerCount": 27,
+        "processExitCode": null
+      },
+      {
+        "label": "Prepare clean exit after approval",
+        "observedAfterSeconds": 523.174,
+        "bytes": 38316,
+        "markerCount": 32,
+        "processExitCode": null
+      },
+      {
+        "label": "Submit clean exit after native approval flow",
+        "observedAfterSeconds": 558.664,
+        "bytes": 41602,
+        "markerCount": 32,
+        "processExitCode": 0
+      }
+    ],
+    "processExitCode": 0,
+    "privateRawFile": "/Users/gordonbeeming/Developer/artifacts/myterm/private-native-lifecycle/antigravity-permission.bin",
+    "signInWarningObserved": true
+  },
+  {
+    "name": "grok-command",
+    "agent": "grok",
+    "version": "1.0.77",
+    "payloads": [
+      "agent=grok;event=ready;session=c380e531b179e27c;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=grok;event=working;session=c380e531b179e27c;tool=;turn=5cb6b5778389bca1b02ac38d2370ab83bd07b7a72cbb721fcdf8316f9e5a9eb6;turn_start=1;snapshot=;work_start=;call=;captured=",
+      "agent=grok;event=working;session=c380e531b179e27c;tool=387607aab3ea6e54d78192a59c7b9c1c00e1edac33d9ce4b7d396a64d064dd7e;turn=;turn_start=;snapshot=;work_start=1;call=03879b185bef3cb362c320d8d534a8303d289bd78f0a6b3498232c6ae116d834;captured=",
+      "agent=grok;event=working;session=c380e531b179e27c;tool=387607aab3ea6e54d78192a59c7b9c1c00e1edac33d9ce4b7d396a64d064dd7e;turn=;turn_start=;snapshot=;work_start=;call=03879b185bef3cb362c320d8d534a8303d289bd78f0a6b3498232c6ae116d834;captured=",
+      "agent=grok;event=finished;session=c380e531b179e27c;tool=;turn=5cb6b5778389bca1b02ac38d2370ab83bd07b7a72cbb721fcdf8316f9e5a9eb6;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=grok;event=finished;session=c380e531b179e27c;tool=;turn=;turn_start=;snapshot=1;work_start=;call=;captured=",
+      "agent=grok;event=exited;session=c380e531b179e27c;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured="
+    ],
+    "rawSHA256": "4940cde660510658e3cec83309781e3b0f451246d636f3f65fddac80f42f563f",
+    "privateCaptureDirectory": "/tmp/myterm-native-lifecycle-grok-446igico",
+    "actions": [
+      {
+        "label": "Startup observed",
+        "observedAfterSeconds": 0.201,
+        "bytes": 978,
+        "markerCount": 0,
+        "processExitCode": null
+      },
+      {
+        "label": "Trust owned scratch directory and await native permission",
+        "observedAfterSeconds": 39.822,
+        "bytes": 30750,
+        "markerCount": 5,
+        "processExitCode": null
+      },
+      {
+        "label": "Inspect actual permission interface",
+        "observedAfterSeconds": 78.732,
+        "bytes": 30750,
+        "markerCount": 5,
+        "processExitCode": null
+      },
+      {
+        "label": "Request clean CLI shutdown",
+        "observedAfterSeconds": 148.434,
+        "bytes": 32381,
+        "markerCount": 6,
+        "processExitCode": null
+      },
+      {
+        "label": "Submit clean shutdown command",
+        "observedAfterSeconds": 192.801,
+        "bytes": 33084,
+        "markerCount": 7,
+        "processExitCode": 0
+      },
+      {
+        "label": "Driver closed and owned process reaped",
+        "observedAfterSeconds": 256.015,
+        "bytes": 33084,
+        "markerCount": 7,
+        "processExitCode": 0
+      }
+    ],
+    "processExitCode": 0,
+    "privateRawFile": "/Users/gordonbeeming/Developer/artifacts/myterm/private-native-lifecycle/grok-command.bin",
+    "signInWarningObserved": false
+  },
+  {
+    "name": "codex-command",
+    "agent": "codex",
+    "version": "0.160.0",
+    "payloads": [
+      "agent=codex;event=ready;session=49d7bd1ce077b558;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=codex;event=working;session=49d7bd1ce077b558;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=codex;event=awaiting_input;session=49d7bd1ce077b558;tool=8a3e39502ca00b95c173ee977dc0030cc296878e74086f3bcdd0dfbe73d9fac5;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=codex;event=working;session=49d7bd1ce077b558;tool=8a3e39502ca00b95c173ee977dc0030cc296878e74086f3bcdd0dfbe73d9fac5;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=codex;event=finished;session=49d7bd1ce077b558;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=codex;event=exited;session=49d7bd1ce077b558;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured="
+    ],
+    "rawSHA256": "a50e9091576cb3b165762d76b91c6e2d4a9a64e34a70f64b2760965ea46fa0f7",
+    "privateCaptureDirectory": "/tmp/myterm-native-lifecycle-codex-89_twduy",
+    "actions": [
+      {
+        "label": "Startup observed",
+        "observedAfterSeconds": 8.559,
+        "bytes": 20048,
+        "markerCount": 3,
+        "processExitCode": null
+      },
+      {
+        "label": "Inspect native Codex command-approval request before decision",
+        "observedAfterSeconds": 74.165,
+        "bytes": 33441,
+        "markerCount": 5,
+        "processExitCode": null
+      },
+      {
+        "label": "Clean EOF exit after automatically resolved approval request",
+        "observedAfterSeconds": 254.916,
+        "bytes": 34140,
+        "markerCount": 6,
+        "processExitCode": 0
+      },
+      {
+        "label": "Native CLI exited",
+        "observedAfterSeconds": 255.923,
+        "bytes": 34140,
+        "markerCount": 6,
+        "processExitCode": 0
+      },
+      {
+        "label": "Driver closed and owned process reaped",
+        "observedAfterSeconds": 255.924,
+        "bytes": 34140,
+        "markerCount": 6,
+        "processExitCode": 0
+      }
+    ],
+    "processExitCode": 0,
+    "privateRawFile": "/Users/gordonbeeming/Developer/artifacts/myterm/private-native-lifecycle/codex-command.bin",
+    "signInWarningObserved": false
+  },
+  {
+    "name": "claude-parallel",
+    "agent": "claude",
+    "version": "2.1.325",
+    "payloads": [
+      "agent=claude;event=ready;session=49d1a81efd9b0015;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=claude;event=working;session=49d1a81efd9b0015;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=claude;event=awaiting_input;session=49d1a81efd9b0015;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=claude;event=awaiting_input;session=49d1a81efd9b0015;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=",
+      "agent=claude;event=exited;session=49d1a81efd9b0015;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured="
+    ],
+    "rawSHA256": "1406eddef9a2ffad9decd8bc024760af0ff7a89a06b2ed05a3e603dec480f1c5",
+    "privateCaptureDirectory": "/tmp/myterm-native-lifecycle-claude-e2n11tw9",
+    "actions": [
+      {
+        "label": "Startup observed",
+        "observedAfterSeconds": 0.262,
+        "bytes": 1308,
+        "markerCount": 0,
+        "processExitCode": null
+      },
+      {
+        "label": "Trust owned scratch and observe native parallel permission prompts",
+        "observedAfterSeconds": 64.728,
+        "bytes": 12853,
+        "markerCount": 3,
+        "processExitCode": null
+      },
+      {
+        "label": "Observe first parallel Bash permission command",
+        "observedAfterSeconds": 121.249,
+        "bytes": 15153,
+        "markerCount": 3,
+        "processExitCode": null
+      },
+      {
+        "label": "Approve first native parallel command only",
+        "observedAfterSeconds": 161.717,
+        "bytes": 21702,
+        "markerCount": 4,
+        "processExitCode": null
+      },
+      {
+        "label": "Observe second approval remains pending after first file exists",
+        "observedAfterSeconds": 212.458,
+        "bytes": 23776,
+        "markerCount": 4,
+        "processExitCode": null
+      },
+      {
+        "label": "Reject second parallel command after only the first file was written",
+        "observedAfterSeconds": 273.08,
+        "bytes": 28132,
+        "markerCount": 4,
+        "processExitCode": null
+      },
+      {
+        "label": "Prepare clean exit after independent approval and denial",
+        "observedAfterSeconds": 451.975,
+        "bytes": 28947,
+        "markerCount": 4,
+        "processExitCode": null
+      },
+      {
+        "label": "Submit clean exit after native parallel permission test",
+        "observedAfterSeconds": 477.958,
+        "bytes": 29894,
+        "markerCount": 5,
+        "processExitCode": 0
+      }
+    ],
+    "processExitCode": 0,
+    "privateRawFile": "/Users/gordonbeeming/Developer/artifacts/myterm/private-native-lifecycle/claude-parallel.bin",
+    "signInWarningObserved": false
+  },
+  {
+    "name": "antigravity-write-approval",
+    "agent": "antigravity",
+    "version": "1.5.9",
+    "privateCaptureDirectory": "/tmp/myterm-native-lifecycle-antigravity-3jbxyxts",
+    "privateRawFile": "/Users/gordonbeeming/Developer/artifacts/myterm/private-native-lifecycle/antigravity-write-approval.bin",
+    "rawSHA256": "bd4cf89954b838f32dd1880f4a036f2d821992c7c30b7ba83e2032b9d5890001",
+    "payloads": [
+      "agent=antigravity;event=ready;session=f4b0bc2b6af93dee;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=355627.371285",
+      "agent=antigravity;event=working;session=f4b0bc2b6af93dee;tool=;turn=;turn_start=;snapshot=;work_start=1;call=;captured=355627.488503",
+      "agent=antigravity;event=awaiting_input;session=f4b0bc2b6af93dee;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=355639.059560",
+      "agent=antigravity;event=awaiting_input;session=f4b0bc2b6af93dee;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=355728.526694",
+      "agent=antigravity;event=awaiting_input;session=f4b0bc2b6af93dee;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=355728.824502",
+      "agent=antigravity;event=working;session=f4b0bc2b6af93dee;tool=;turn=;turn_start=;snapshot=;work_start=1;call=;captured=355874.238038",
+      "agent=antigravity;event=working;session=f4b0bc2b6af93dee;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=355874.223400",
+      "agent=antigravity;event=working;session=f4b0bc2b6af93dee;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=355874.528723",
+      "agent=antigravity;event=working;session=f4b0bc2b6af93dee;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=355881.437671",
+      "agent=antigravity;event=working;session=f4b0bc2b6af93dee;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=355881.737908",
+      "agent=antigravity;event=finished;session=f4b0bc2b6af93dee;tool=;turn=;turn_start=;snapshot=;work_start=;call=;captured=355882.043482",
+      "agent=antigravity;event=working;session=f4b0bc2b6af93dee;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=355882.039768",
+      "agent=antigravity;event=finished;session=f4b0bc2b6af93dee;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=355882.339824",
+      "agent=antigravity;event=finished;session=f4b0bc2b6af93dee;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=355882.772151",
+      "agent=antigravity;event=finished;session=f4b0bc2b6af93dee;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=356066.452314",
+      "agent=antigravity;event=finished;session=f4b0bc2b6af93dee;tool=3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50;turn=;turn_start=;snapshot=1;work_start=;call=;captured=356066.750993"
+    ],
+    "actions": [
+      {
+        "label": "Startup observed",
+        "observedAfterSeconds": 0.196,
+        "bytes": 643,
+        "markerCount": 0,
+        "processExitCode": null
+      },
+      {
+        "target": "awaiting_input",
+        "satisfied": true,
+        "timeoutSeconds": 25,
+        "startByteOffset": 1348,
+        "markersBefore": 3,
+        "markersAfter": 4,
+        "sentKeysSHA256": "9d1e0e2d9459d06523ad13e28a4093c2316baafe7aec5b25f30eba2e113599c4"
+      },
+      {
+        "label": "Trust owned scratch directory and wait for command permission",
+        "observedAfterSeconds": 104.517,
+        "bytes": 3979,
+        "markerCount": 4,
+        "processExitCode": null
+      },
+      {
+        "target": null,
+        "satisfied": false,
+        "timeoutSeconds": 2,
+        "startByteOffset": 4313,
+        "markersBefore": 5,
+        "markersAfter": 5,
+        "sentKeysSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "label": "Retain pre-approval filesystem proof and permission screen",
+        "observedAfterSeconds": 206.169,
+        "bytes": 4313,
+        "markerCount": 5,
+        "processExitCode": null
+      },
+      {
+        "target": "finished",
+        "satisfied": true,
+        "timeoutSeconds": 35,
+        "startByteOffset": 4313,
+        "markersBefore": 5,
+        "markersAfter": 11,
+        "sentKeysSHA256": "9d1e0e2d9459d06523ad13e28a4093c2316baafe7aec5b25f30eba2e113599c4"
+      },
+      {
+        "label": "Approve native command once, without adding a persistent permission rule",
+        "observedAfterSeconds": 258.01,
+        "bytes": 12126,
+        "markerCount": 11,
+        "processExitCode": null
+      },
+      {
+        "target": null,
+        "satisfied": false,
+        "timeoutSeconds": 2,
+        "startByteOffset": 14162,
+        "markersBefore": 14,
+        "markersAfter": 16,
+        "sentKeysSHA256": "783ece18206af6a54cc9b3891b1820582db993c6ff58271a79da3ac0e025fd07"
+      },
+      {
+        "label": "Prepare clean exit after retained approval evidence",
+        "observedAfterSeconds": 444.761,
+        "bytes": 15378,
+        "markerCount": 16,
+        "processExitCode": null
+      },
+      {
+        "target": null,
+        "satisfied": false,
+        "timeoutSeconds": 5,
+        "startByteOffset": 15378,
+        "markersBefore": 16,
+        "markersAfter": 16,
+        "sentKeysSHA256": "9d1e0e2d9459d06523ad13e28a4093c2316baafe7aec5b25f30eba2e113599c4"
+      },
+      {
+        "label": "Submit clean exit after approval capture",
+        "observedAfterSeconds": 559.976,
+        "bytes": 18124,
+        "markerCount": 16,
+        "processExitCode": 0
+      },
+      {
+        "label": "Native CLI exited",
+        "observedAfterSeconds": 560.985,
+        "bytes": 18124,
+        "markerCount": 16,
+        "processExitCode": 0
+      },
+      {
+        "label": "Driver closed; see explicit cleanup checks",
+        "observedAfterSeconds": 560.985,
+        "bytes": 18124,
+        "markerCount": 16,
+        "processExitCode": 0
+      }
+    ],
+    "processExitCode": 0,
+    "proofFiles": {
+      "myterm-permission-proof.txt": {
+        "exists": true,
+        "size": 8,
+        "sha256": "f1995216dcfbca4efddfa35f22f1deceaa1d31ee7a829f9d6d72ed78a1aa258a"
+      },
+      "myterm-permission-a.txt": {
+        "exists": false
+      },
+      "myterm-permission-b.txt": {
+        "exists": false
+      }
+    },
+    "cleanup": {
+      "leaderReaped": true,
+      "ownedForegroundGroupEmpty": true,
+      "scope": "Owned foreground group only; separate/shared provider daemons are outside this check."
+    },
+    "signInWarningObserved": true
+  }
+]

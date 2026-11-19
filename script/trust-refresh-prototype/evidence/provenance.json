@@ -1,0 +1,29 @@
+{
+  "dependency_commit": "0131ae9d78e42fcc2c1811315e62410ad96d8230",
+  "dependency_archive_sha256": "893e755fe720627769d7bd49d15815e86cc0fd4a4ae84b3717caf6fce4255bb4",
+  "source_sha256": {
+    "channel-client.swift": "f9168b3ca640cfb61813206888ffb485063b2b7c9f3339fdaa91189aa16573df",
+    "channel-server.rs": "cb201bd7dbf98394695323085952c3bd3b331bcfe017439dcae723ee0ce98c98",
+    "channel.c": "b9278ed685c9bc65c668ee464e9186634eaf3b7fa32db6ded7c497e246567536",
+    "channel.h": "0f5083d421cd885d81c8095e4809d09d61192107a3c744f836931cf50ab2e0ed",
+    "checks.py": "048c7f409afdec90909d0b17dfa57d7bab9edb15f4b6f31986d98ec4ace306c1",
+    "removal-signatures.c": "aba2aa625612784849e52b028a61736313d0655662e8f1b73d61adb0edca0b33",
+    "removal-signatures.h": "58bf1351192e3e81a93128b4b538d5c9eb080bc25f258be26dc5fe136f7fdb18",
+    "run.py": "924e7eed79d0a2c104bfa0f360a3bee8a93785a5cd1cf22b9629df7e6412e0a6"
+  },
+  "environment": {
+    "system": "macOS-27.3-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "python": "3.14.3",
+    "swiftc": "swift-driver version: 1.168.6 Apple Swift version 6.4.2 (swiftlang-6.4.2.1.9 clang-2100.4.1.1)\nTarget: arm64-apple-macosx27.3.0",
+    "rustc": "rustc 1.89.0 (29483883e 2025-08-04)",
+    "clang": "Apple clang version 21.0.0 (clang-2100.4.1.1)\nTarget: arm64-apple-darwin27.3.0\nThread model: posix\nInstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin",
+    "cmake": "cmake version 4.2.3\n\nCMake suite maintained and supported by Kitware (kitware.com/cmake)."
+  },
+  "binary_sha256": {
+    "channel-client": "af32e21f3503e5dfba685c14356a94983636d7dfc02bb346ee905b7965f0a218",
+    "channel-server": "c2ddc87767da6877a77f90a399c7367ad2501520d2ff3427a03d5d8f73814399",
+    "channel.o": "de12aec260341a5f43e8fe4f87ce5e49a018cc388c8acab80e9d4a3d359fe34c",
+    "removal-signatures.o": "6d31e916d3ac4b52c1130d1567d9a1bb0ea28e9e7027befdf5898b7c899f3fe0"
+  }
+}

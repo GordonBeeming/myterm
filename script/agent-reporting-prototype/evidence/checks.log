@@ -1,0 +1,24 @@
+PASS: codex native PreToolUse 2: observed awaitingInput, expected awaitingInput
+PASS: codex native PostToolUse 3: observed working, expected working
+PASS: codex native Stop 4: observed finished, expected finished
+PASS: codex native PreToolUse 6: observed awaitingInput, expected awaitingInput
+PASS: codex native Interrupt 7: observed ready, expected ready
+PASS: codex native PreToolUse 9: observed awaitingInput, expected awaitingInput
+PASS: codex native PostToolUse 10: observed working, expected working
+PASS: codex native Stop 11: observed finished, expected finished
+PASS: claude native mod.tool.start 8: observed awaitingInput, expected awaitingInput
+PASS: claude native mod.tool.start 16: observed awaitingInput, expected awaitingInput
+PASS: claude native mod.tool.decision 18: observed awaitingInput, expected awaitingInput
+PASS: claude native mod.turn.complete 20: observed finished, expected finished
+PASS: claude native mod.tool.decision 26: observed awaitingInput, expected awaitingInput
+PASS: claude native mod.tool.decision 32: observed awaitingInput, expected awaitingInput
+PASS: claude native mod.turn.complete 34: observed finished, expected finished
+PASS: claude native mod.tool.start 39: observed awaitingInput, expected awaitingInput
+PASS: claude native mod.tool.decision 41: observed awaitingInput, expected awaitingInput
+PASS: claude native mod.turn.complete 44: observed finished, expected finished
+PASS: old Codex callback after a newer question: PostToolUse: observed awaitingInput, expected awaitingInput
+PASS: old Codex callback after a newer question: Stop: observed awaitingInput, expected awaitingInput
+PASS: two waits while first completion is held back: observed awaitingInput, expected awaitingInput
+PASS: late first completion preserves second wait: observed awaitingInput, expected awaitingInput
+PASS: duplicate first completion preserves second wait: observed awaitingInput, expected awaitingInput
+23 / 23 candidate state checks passed

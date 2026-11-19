@@ -1,0 +1,20 @@
+{
+  "agent": "antigravity",
+  "version": "1.5.9",
+  "scope": "Actual CLI foreground process group and live zsh return. No MyTerm UI assertion or native agent marker is fabricated.",
+  "shellGroup": 43434,
+  "agentGroup": 43497,
+  "foregroundExecutables": [
+    "agy",
+    "sh",
+    "perl"
+  ],
+  "inputScreenObserved": true,
+  "result": "fail",
+  "error": "[Errno 1] Operation not permitted",
+  "cleanup": {
+    "leaderReaped": true,
+    "ownedForegroundGroupEmpty": true,
+    "scope": "Owned foreground group only; separate/shared provider daemons are outside this check."
+  }
+}

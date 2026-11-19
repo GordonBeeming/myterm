@@ -1,0 +1,37 @@
+const fs=require('node:fs');
+const vm=require('node:vm');
+const assert=require('node:assert/strict');
+const html=fs.readFileSync(__dirname+'/index.html','utf8');
+const context=vm.createContext({structuredClone});
+vm.runInContext(html.match(/<script id="model">([\s\S]*?)<\/script>/)[1]+';globalThis.model=Lifecycle;',context);
+const M=context.model,D=M.DAY;
+const results=[];
+function check(name,run){try{run();results.push({name,result:'pass'});}catch(e){results.push({name,result:'fail',error:e.message});}}
+const apply=(s,type,id,extra={})=>M.reduce(s,{type,id,...extra});
+const advance=(s,ms)=>apply(s,'advance',null,{ms});
+function bothOff(){return apply(apply(M.initial(),'off','a'),'off','b');}
+check('Offline enabled server prevents opt-out grace',()=>{let s=apply(M.initial(),'off','a');s=advance(s,30*D);assert.equal(s.phase,'active');assert.equal(s.pending,null)});
+check('Approved and already connected clients do not prevent grace',()=>{let s=apply(M.initial(),'connect','c');s=apply(apply(s,'off','a'),'off','b');assert.equal(s.phase,'pending closure');s=advance(s,30*D);assert.equal(s.phase,'deleted');assert.equal(s.reason,'last-server opt-out')});
+check('Fresh reconnect cancels once without enabling servers',()=>{let s=advance(bothOff(),29*D);s=apply(s,'connect','c');s=advance(s,2*D);s=apply(s,'off','b');assert.equal(s.phase,'active');assert.equal(s.pending,null);assert.equal(s.endpoints.a.relay,false);assert.equal(s.endpoints.b.relay,false)});
+check('Inactivity closes at 90 days with no extra grace',()=>{let s=advance(M.initial(),90*D-1);assert.equal(s.phase,'active');s=advance(s,1);assert.equal(s.phase,'deleted');assert.equal(s.reason,'90 days without contact')});
+check('Healthy idle contact survives 90 days',()=>{let s=apply(M.initial(),'connect','c');s=apply(s,'healthy');assert.equal(s.phase,'active');assert.equal(M.live(s),true)});
+check('Expired lease cannot be renewed by an old heartbeat',()=>{let s=apply(M.initial(),'connect','c');s=advance(s,M.LEASE);const last=s.lastContact;s=apply(s,'heartbeat','c');assert.equal(s.lastContact,last);assert.equal(M.live(s),false)});
+check('Fresh live proof resets activity',()=>{let s=apply(M.initial(),'connect','c');s=advance(s,30000);s=apply(s,'heartbeat','c');assert.equal(s.lastContact,s.now)});
+check('Contact 1 ms before grace deadline wins',()=>{let s=advance(bothOff(),30*D-1);s=apply(s,'connect','d');assert.equal(s.phase,'active');s=advance(s,1);assert.equal(s.phase,'active')});
+check('Contact exactly at grace deadline loses',()=>{let s=advance(bothOff(),30*D);s=apply(s,'connect','d');assert.equal(s.phase,'deleted')});
+check('Reconnect cannot silently enable an opted-out server',()=>{let s=bothOff();s=apply(s,'connect','a');assert.equal(s.endpoints.a.live,false);assert.equal(s.phase,'pending closure')});
+check('Operator activity does not reset inactivity',()=>{let s=advance(M.initial(),89*D);s=apply(s,'operator');s=advance(s,D);assert.equal(s.phase,'deleted')});
+check('Enrollment first prevents last-server opt-out trigger',()=>{let s=apply(M.initial(),'off','a');s=apply(s,'enroll');s=apply(s,'off','b');assert.equal(s.phase,'active');assert.equal(s.pending,null)});
+check('Enrollment after opt-out cancels grace',()=>{let s=apply(bothOff(),'enroll');assert.equal(s.phase,'active');assert.equal(s.pending,null)});
+check('Stale settings and duplicate opt-outs do not move deadline',()=>{let s=bothOff();const due=s.pending;s=advance(s,D);s=apply(s,'stale','a');s=apply(s,'off','b');assert.equal(s.pending,due)});
+check('Worker restart and modeled journal reconciliation preserve cancellation',()=>{let s=apply(bothOff(),'connect','c');const activity=s.lastContact;s=apply(s,'restart');s=apply(s,'restore');assert.equal(s.pending,null);assert.equal(s.lastContact,activity);assert.equal(s.phase,'active')});
+check('Deletion denies late auth, enrollment and old snapshot resurrection',()=>{let s=apply(M.initial(),'delete');for(const type of ['restore','connect','enroll'])s=apply(s,type,'c');assert.equal(s.phase,'deleted');assert.equal(s.localWork,true)});
+check('Cleanup uses 24-hour and 30-day absolute bounds and is idempotent',()=>{let s=apply(M.initial(),'delete');s=advance(s,D-1);assert.equal(s.activeData,true);s=advance(s,1);assert.equal(s.activeData,false);assert.equal(s.backups,true);s=advance(s,29*D);assert.equal(s.backups,false);const deleted=s.deleted;s=advance(s,D);assert.equal(s.deleted,deleted);assert.equal(s.localWork,true)});
+check('Missing ledger denies admission and closure acknowledgment',()=>{let s=apply(M.initial(),'ledgerFail');s=apply(s,'connect','c');assert.equal(M.live(s),false);s=apply(s,'delete');assert.equal(s.phase,'active');s=advance(s,90*D);assert.equal(s.phase,'active');s=apply(s,'ledgerOk');assert.equal(s.phase,'deleted')});
+check('Move fences source closure jobs',()=>{let s=apply(bothOff(),'move');s=advance(s,90*D);s=apply(s,'delete');assert.equal(s.phase,'moved');assert.equal(s.deleted,null)});
+check('Backwards clock observation does not roll model time back',()=>{let s=advance(M.initial(),D);const now=s.now;s=advance(s,-D);assert.equal(s.now,now)});
+check('Grace is not extended by existing live heartbeat',()=>{let s=apply(M.initial(),'connect','c');s=apply(apply(s,'off','a'),'off','b');s=advance(s,30000);s=apply(s,'heartbeat','c');assert.equal(s.phase,'pending closure');assert.notEqual(s.pending,null)});
+const report={scope:'In-memory reducer only; authentication, persistence, provider retention and production latency are not validated.',command:'node /Users/gordonbeeming/Developer/artifacts/myterm/relay-lifecycle-prototype/verify.cjs',passed:results.filter(x=>x.result==='pass').length,failed:results.filter(x=>x.result==='fail').length,results};
+fs.writeFileSync(__dirname+'/verification.json',JSON.stringify(report,null,2)+'\n');
+console.log(JSON.stringify(report,null,2));
+if(report.failed)process.exitCode=1;

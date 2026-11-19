@@ -1,0 +1,211 @@
+[
+  {
+    "agent": "claude",
+    "version": "2.1.325 (Claude Code)",
+    "exitCode": 0,
+    "timedOut": false,
+    "lifecycleSmokePassed": true,
+    "oscReports": [
+      {
+        "agent": "claude",
+        "event": "ready",
+        "turn_start": "",
+        "snapshot": "",
+        "work_start": "",
+        "hasTurnID": false,
+        "hasToolRequestID": false,
+        "hasToolCallID": false,
+        "hasCapturedTime": false
+      },
+      {
+        "agent": "claude",
+        "event": "working",
+        "turn_start": "",
+        "snapshot": "",
+        "work_start": "",
+        "hasTurnID": false,
+        "hasToolRequestID": false,
+        "hasToolCallID": false,
+        "hasCapturedTime": false
+      },
+      {
+        "agent": "claude",
+        "event": "finished",
+        "turn_start": "",
+        "snapshot": "",
+        "work_start": "",
+        "hasTurnID": false,
+        "hasToolRequestID": false,
+        "hasToolCallID": false,
+        "hasCapturedTime": false
+      },
+      {
+        "agent": "claude",
+        "event": "exited",
+        "turn_start": "",
+        "snapshot": "",
+        "work_start": "",
+        "hasTurnID": false,
+        "hasToolRequestID": false,
+        "hasToolCallID": false,
+        "hasCapturedTime": false
+      }
+    ],
+    "outputSHA256": "7301817ce6eff38e704bf76a682f59e91424479d434170ed7927b0d4020cc453",
+    "scope": "Real installed CLI in a native PTY using existing hooks in print/exec mode; one no-tool turn only. Missing reports here would not establish absence of interactive signals. No permissions, questions, forced exit or detached restoration exercised."
+  },
+  {
+    "agent": "codex",
+    "version": "codex-cli 0.160.0",
+    "exitCode": 0,
+    "timedOut": false,
+    "lifecycleSmokePassed": true,
+    "oscReports": [
+      {
+        "agent": "codex",
+        "event": "ready",
+        "turn_start": "",
+        "snapshot": "",
+        "work_start": "",
+        "hasTurnID": false,
+        "hasToolRequestID": false,
+        "hasToolCallID": false,
+        "hasCapturedTime": false
+      },
+      {
+        "agent": "codex",
+        "event": "working",
+        "turn_start": "",
+        "snapshot": "",
+        "work_start": "",
+        "hasTurnID": false,
+        "hasToolRequestID": false,
+        "hasToolCallID": false,
+        "hasCapturedTime": false
+      },
+      {
+        "agent": "codex",
+        "event": "finished",
+        "turn_start": "",
+        "snapshot": "",
+        "work_start": "",
+        "hasTurnID": false,
+        "hasToolRequestID": false,
+        "hasToolCallID": false,
+        "hasCapturedTime": false
+      },
+      {
+        "agent": "codex",
+        "event": "exited",
+        "turn_start": "",
+        "snapshot": "",
+        "work_start": "",
+        "hasTurnID": false,
+        "hasToolRequestID": false,
+        "hasToolCallID": false,
+        "hasCapturedTime": false
+      }
+    ],
+    "outputSHA256": "fd60ef2276c4cfc51d533b45d63ca5640432d592b06e673d4f137e97ee69dc8d",
+    "scope": "Real installed CLI in a native PTY using existing hooks in print/exec mode; one no-tool turn only. Missing reports here would not establish absence of interactive signals. No permissions, questions, forced exit or detached restoration exercised."
+  },
+  {
+    "agent": "antigravity",
+    "version": "1.5.9",
+    "exitCode": 0,
+    "timedOut": false,
+    "lifecycleSmokePassed": true,
+    "oscReports": [
+      {
+        "agent": "antigravity",
+        "event": "ready",
+        "turn_start": "",
+        "snapshot": "",
+        "work_start": "",
+        "hasTurnID": false,
+        "hasToolRequestID": false,
+        "hasToolCallID": false,
+        "hasCapturedTime": true
+      },
+      {
+        "agent": "antigravity",
+        "event": "working",
+        "turn_start": "",
+        "snapshot": "",
+        "work_start": "1",
+        "hasTurnID": false,
+        "hasToolRequestID": false,
+        "hasToolCallID": false,
+        "hasCapturedTime": true
+      },
+      {
+        "agent": "antigravity",
+        "event": "finished",
+        "turn_start": "",
+        "snapshot": "",
+        "work_start": "",
+        "hasTurnID": false,
+        "hasToolRequestID": false,
+        "hasToolCallID": false,
+        "hasCapturedTime": true
+      }
+    ],
+    "outputSHA256": "3486a29fd0dfbe0b9455df7fa04b2b8f52bfdd9f7d787801257e778cc1d30cff",
+    "scope": "Real installed CLI in a native PTY using existing hooks in print/exec mode; one no-tool turn only. Missing reports here would not establish absence of interactive signals. No permissions, questions, forced exit or detached restoration exercised."
+  },
+  {
+    "agent": "grok",
+    "version": "grok 1.0.77 (50ca579fa996) [stable]",
+    "exitCode": 0,
+    "timedOut": false,
+    "lifecycleSmokePassed": true,
+    "oscReports": [
+      {
+        "agent": "grok",
+        "event": "ready",
+        "turn_start": "",
+        "snapshot": "",
+        "work_start": "",
+        "hasTurnID": false,
+        "hasToolRequestID": false,
+        "hasToolCallID": false,
+        "hasCapturedTime": false
+      },
+      {
+        "agent": "grok",
+        "event": "working",
+        "turn_start": "1",
+        "snapshot": "",
+        "work_start": "",
+        "hasTurnID": true,
+        "hasToolRequestID": false,
+        "hasToolCallID": false,
+        "hasCapturedTime": false
+      },
+      {
+        "agent": "grok",
+        "event": "finished",
+        "turn_start": "",
+        "snapshot": "",
+        "work_start": "",
+        "hasTurnID": true,
+        "hasToolRequestID": false,
+        "hasToolCallID": false,
+        "hasCapturedTime": false
+      },
+      {
+        "agent": "grok",
+        "event": "exited",
+        "turn_start": "",
+        "snapshot": "",
+        "work_start": "",
+        "hasTurnID": false,
+        "hasToolRequestID": false,
+        "hasToolCallID": false,
+        "hasCapturedTime": false
+      }
+    ],
+    "outputSHA256": "0d5a4a6f8092f622684e30c653e10e46f3e6a1a9cb4dd27430d7cc02785ec93c",
+    "scope": "Real installed CLI in a native PTY using existing hooks in print/exec mode; one no-tool turn only. Missing reports here would not establish absence of interactive signals. No permissions, questions, forced exit or detached restoration exercised."
+  }
+]

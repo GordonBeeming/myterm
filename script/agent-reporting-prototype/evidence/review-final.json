@@ -1,0 +1,15 @@
+{
+  "tool": "claude",
+  "mode": "review",
+  "model": "sonnet",
+  "permissionMode": "plan",
+  "repo": "/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-crisp-kakapo",
+  "sessionId": "8a6ddc8d-f559-4a1f-9504-f5030e31f536",
+  "status": "completed",
+  "response": "**Static review, nothing run: I see no remaining material blocker for the narrow feasibility claims.**\n\nI re-read `register.js` and `observe.py` in full. For `candidate.py` I only grepped the diff for the unsupported-route changes.\n\nWhat I checked:\n- **Pass-through.** `register.js` now handles null results (`result?.`, `result ?? {}`). Both observer sinks are guarded, so a failing log can't alter results, errors or denials. `tool.check` still returns the original `result`, and `tool.call` rethrows the original error.\n- **Stale or corrupt state.** `observe.py` withdraws `candidate-state.json`, writes `capture-invalid.json` and exits nonzero on replay failure. That ends the silent-stale problem.\n- **Codex permission route.** The grep shows `emit()` now sets `usable` and `authority`, and `payload` is null when the activity is unknown. That matches the unsupported-route record you describe, so there is no stale usable snapshot.\n\nNon-blocking caveats to keep in the report:\n- **Timeout option is only mock-tested.** `{ timeoutMs: 1000 }` on `$.process.run` is exercised against mocks. If the real mod host ignores that option, the observer calls are unbounded again. Say that the real host honouring it is unconfirmed.\n- **A timeout kill can leave state one event behind.** If the observer is killed after appending the record but before replacing `candidate-state.json`, the snapshot still has `captureValid: true` but lags the log. It is rare and self-corrects on the next event.\n- **Approved tools stay in `awaiting_input` until completion.** You already list this as a known limit.\n- **The Claude tool-call and permission-ordering evidence is from one run.** It comes from a single local capture of 2.1.325, and the single-run caveat applies to the permission sequencing too.",
+  "exitCode": "0",
+  "startedAt": "2026-11-16T00:35:16Z",
+  "endedAt": "2026-11-16T00:35:38Z",
+  "rawFile": "/tmp/myterm-reporting-prototype-final-review.json.json",
+  "stderrTail": ""
+}

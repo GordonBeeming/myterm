@@ -1,0 +1,250 @@
+{
+  "wrap-0-via-6": {
+    "passed": true,
+    "originalCursor": [
+      1,
+      0
+    ],
+    "patchedCursor": [
+      1,
+      0
+    ]
+  },
+  "wrap-19-via-6": {
+    "passed": true,
+    "originalCursor": [
+      19,
+      0
+    ],
+    "patchedCursor": [
+      19,
+      0
+    ]
+  },
+  "wrap-20-via-6": {
+    "passed": true,
+    "originalCursor": [
+      19,
+      0
+    ],
+    "patchedCursor": [
+      19,
+      0
+    ]
+  },
+  "wrap-21-via-6": {
+    "passed": true,
+    "originalCursor": [
+      2,
+      1
+    ],
+    "patchedCursor": [
+      2,
+      1
+    ]
+  },
+  "wrap-39-via-6": {
+    "passed": true,
+    "originalCursor": [
+      19,
+      1
+    ],
+    "patchedCursor": [
+      19,
+      1
+    ]
+  },
+  "wrap-40-via-6": {
+    "passed": true,
+    "originalCursor": [
+      19,
+      1
+    ],
+    "patchedCursor": [
+      19,
+      1
+    ]
+  },
+  "wrap-41-via-6": {
+    "passed": true,
+    "originalCursor": [
+      2,
+      2
+    ],
+    "patchedCursor": [
+      2,
+      2
+    ]
+  },
+  "wrap-0-via-10": {
+    "passed": true,
+    "originalCursor": [
+      1,
+      0
+    ],
+    "patchedCursor": [
+      1,
+      0
+    ]
+  },
+  "wrap-19-via-10": {
+    "passed": true,
+    "originalCursor": [
+      19,
+      0
+    ],
+    "patchedCursor": [
+      19,
+      0
+    ]
+  },
+  "wrap-20-via-10": {
+    "passed": true,
+    "originalCursor": [
+      19,
+      0
+    ],
+    "patchedCursor": [
+      19,
+      0
+    ]
+  },
+  "wrap-21-via-10": {
+    "passed": true,
+    "originalCursor": [
+      2,
+      1
+    ],
+    "patchedCursor": [
+      2,
+      1
+    ]
+  },
+  "wrap-39-via-10": {
+    "passed": true,
+    "originalCursor": [
+      19,
+      1
+    ],
+    "patchedCursor": [
+      19,
+      1
+    ]
+  },
+  "wrap-40-via-10": {
+    "passed": true,
+    "originalCursor": [
+      19,
+      1
+    ],
+    "patchedCursor": [
+      19,
+      1
+    ]
+  },
+  "wrap-41-via-10": {
+    "passed": true,
+    "originalCursor": [
+      2,
+      2
+    ],
+    "patchedCursor": [
+      2,
+      2
+    ]
+  },
+  "wrap-0-via-20": {
+    "passed": true,
+    "originalCursor": [
+      1,
+      0
+    ],
+    "patchedCursor": [
+      1,
+      0
+    ]
+  },
+  "wrap-19-via-20": {
+    "passed": true,
+    "originalCursor": [
+      19,
+      0
+    ],
+    "patchedCursor": [
+      19,
+      0
+    ]
+  },
+  "wrap-20-via-20": {
+    "passed": true,
+    "originalCursor": [
+      19,
+      0
+    ],
+    "patchedCursor": [
+      19,
+      0
+    ]
+  },
+  "wrap-21-via-20": {
+    "passed": true,
+    "originalCursor": [
+      2,
+      1
+    ],
+    "patchedCursor": [
+      2,
+      1
+    ]
+  },
+  "wrap-39-via-20": {
+    "passed": true,
+    "originalCursor": [
+      19,
+      1
+    ],
+    "patchedCursor": [
+      19,
+      1
+    ]
+  },
+  "wrap-40-via-20": {
+    "passed": true,
+    "originalCursor": [
+      19,
+      1
+    ],
+    "patchedCursor": [
+      19,
+      1
+    ]
+  },
+  "wrap-41-via-20": {
+    "passed": true,
+    "originalCursor": [
+      2,
+      2
+    ],
+    "patchedCursor": [
+      2,
+      2
+    ]
+  },
+  "sixel-8452": {
+    "passed": true,
+    "originalCursor": [
+      4,
+      1
+    ],
+    "patchedCursor": [
+      4,
+      1
+    ]
+  },
+  "hidden-column-retention": {
+    "passed": true,
+    "maximumTestedColumns": 1000,
+    "maximumStoredColumns": 999,
+    "scope": "999 text cells survive this resize sequence; historical width persists; no production retention bound established"
+  }
+}
