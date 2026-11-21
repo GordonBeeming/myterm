@@ -65,8 +65,20 @@ final class AgentSessionRecoveryTests: XCTestCase {
     }
 
     func testEveryShellReadsTheProfileBackExactly() throws {
-        // fish reads `\\` and `\'` as escapes inside single quotes; POSIX shells do not.
-        let path = #"/Users/some one/work\b's $(x) `y`"#
+        // fish reads `\\` and `\'` as escapes inside single quotes; POSIX shells do not. A quote
+        // followed by a combining mark is one Swift Character, so it must still be escaped.
+        for path in [#"/Users/some one/work\b's $(x) `y`"#, "/tmp/'\u{0301}; printf injected; #"] {
+            try assertEveryShellReadsBack(path)
+        }
+
+        let plain = try XCTUnwrap(AgentSessionHandle(agent: "claude", sessionID: "abc"))
+        XCTAssertEqual(AgentSessionResume.command(for: plain, name: #"Fix C:\build"#),
+                       #"claude --resume 'abc' --name 'Fix C:'\\'build'"#)
+        XCTAssertEqual(AgentSessionResume.command(for: plain, name: "a'\u{0301}; b"),
+                       "claude --resume 'abc' --name 'a'\\''\u{0301}; b'")
+    }
+
+    private func assertEveryShellReadsBack(_ path: String) throws {
         let handle = try XCTUnwrap(AgentSessionHandle(
             agent: "claude", sessionID: "abc",
             claudeConfiguration: .directory(URL(fileURLWithPath: path, isDirectory: true))
@@ -89,10 +101,6 @@ final class AgentSessionRecoveryTests: XCTestCase {
             let read = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
             XCTAssertEqual(read.trimmingCharacters(in: .newlines), path, shell)
         }
-
-        let plain = try XCTUnwrap(AgentSessionHandle(agent: "claude", sessionID: "abc"))
-        XCTAssertEqual(AgentSessionResume.command(for: plain, name: #"Fix C:\build"#),
-                       #"claude --resume 'abc' --name 'Fix C:'\\'build'"#)
     }
 
     func testTheProfileSurvivesSavedStateAndOlderStateHasNone() throws {

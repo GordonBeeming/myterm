@@ -144,12 +144,14 @@ public enum AgentSessionResume {
     /// literal inside single quotes but fish reads `\\` and `\'` there as escapes, so leaving both
     /// characters outside the quotes is the one form sh, bash, zsh and fish all read the same.
     private static func shellQuoted(_ value: String) -> String {
+        // Scalars, not characters: a quote followed by a combining mark is one Character, and
+        // matching characters would let that quote through unescaped and end the quoting early.
         var quoted = "'"
-        for character in value {
-            switch character {
+        for scalar in value.unicodeScalars {
+            switch scalar {
             case "'": quoted += #"'\''"#
             case "\\": quoted += #"'\\'"#
-            default: quoted.append(character)
+            default: quoted.unicodeScalars.append(scalar)
             }
         }
         return quoted + "'"
