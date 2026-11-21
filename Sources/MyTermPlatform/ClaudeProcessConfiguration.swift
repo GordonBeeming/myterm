@@ -13,16 +13,18 @@ enum ClaudeProcessConfiguration {
     /// A bound on the processes inspected, so a pane running a large build stays cheap to ask.
     static let maximumProcesses = 512
 
-    /// The configuration of the outermost `claude` below `shellProcessID`. A Claude started from
-    /// inside another one belongs to that conversation, not to the pane, which the hook also
-    /// ignores. Nil when no `claude` runs there or its environment cannot be read.
+    /// The configuration of the outermost `claude` below `shellProcessID` that is in the terminal's
+    /// foreground process group. A Claude started from inside another one belongs to that
+    /// conversation, not to the pane, which the hook also ignores; a background Claude may run under
+    /// another sign-in, so it never answers for the pane. Nil when no such `claude` runs there or its
+    /// arguments cannot be read.
     static func configuration(belowShell shellProcessID: pid_t) -> ClaudeConfiguration? {
-        guard shellProcessID > 1, let claude = outermostClaude(below: shellProcessID),
-              let environment = environment(of: claude) else { return nil }
-        return ClaudeConfiguration(environmentValue: environment["CLAUDE_CONFIG_DIR"])
+        guard shellProcessID > 1, let foregroundGroup = terminalForegroundGroup(of: shellProcessID),
+              let claude = outermostClaude(below: shellProcessID, inGroup: foregroundGroup) else { return nil }
+        return ClaudeConfiguration(environmentValue: claude.environment["CLAUDE_CONFIG_DIR"])
     }
 
-    private static func outermostClaude(below root: pid_t) -> pid_t? {
+    private static func outermostClaude(below root: pid_t, inGroup group: pid_t) -> ProcessArguments? {
         var level = [root]
         var inspected = 0
         for _ in 0..<maximumDepth {
@@ -31,7 +33,10 @@ enum ClaudeProcessConfiguration {
                 for child in children(of: parent) {
                     inspected += 1
                     guard inspected <= maximumProcesses else { return nil }
-                    if name(of: child) == "claude" { return child }
+                    if processGroup(of: child) == group, let arguments = arguments(of: child),
+                       arguments.isClaude {
+                        return arguments
+                    }
                     next.append(child)
                 }
             }
@@ -39,6 +44,23 @@ enum ClaudeProcessConfiguration {
             level = next
         }
         return nil
+    }
+
+    /// The process group in front of the shell's terminal. Nil when the shell has no terminal.
+    private static func terminalForegroundGroup(of processID: pid_t) -> pid_t? {
+        guard let info = bsdInfo(of: processID), info.e_tpgid > 0 else { return nil }
+        return pid_t(info.e_tpgid)
+    }
+
+    private static func processGroup(of processID: pid_t) -> pid_t? {
+        bsdInfo(of: processID).map { pid_t($0.pbi_pgid) }
+    }
+
+    private static func bsdInfo(of processID: pid_t) -> proc_bsdinfo? {
+        var info = proc_bsdinfo()
+        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+        guard proc_pidinfo(processID, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
+        return info
     }
 
     private static func children(of parent: pid_t) -> [pid_t] {
@@ -56,26 +78,30 @@ enum ClaudeProcessConfiguration {
         return []
     }
 
-    private static func name(of processID: pid_t) -> String? {
-        var buffer = [CChar](repeating: 0, count: Int(MAXCOMLEN) * 2 + 1)
-        let length = buffer.withUnsafeMutableBytes { proc_name(processID, $0.baseAddress, UInt32($0.count)) }
-        guard length > 0 else { return nil }
-        return String(decoding: buffer.prefix(Int(length)).map { UInt8(bitPattern: $0) }, as: UTF8.self)
-    }
-
-    private static func environment(of processID: pid_t) -> [String: String]? {
+    private static func arguments(of processID: pid_t) -> ProcessArguments? {
         var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, processID]
         var size = 0
         guard sysctl(&mib, UInt32(mib.count), nil, &size, nil, 0) == 0, size > 0 else { return nil }
         var bytes = [UInt8](repeating: 0, count: size)
         guard sysctl(&mib, UInt32(mib.count), &bytes, &size, nil, 0) == 0 else { return nil }
-        return environment(fromProcArgs: Data(bytes.prefix(size)))
+        return arguments(fromProcArgs: Data(bytes.prefix(size)))
+    }
+
+    /// What `KERN_PROCARGS2` says about a process.
+    struct ProcessArguments: Equatable {
+        /// The path the process was started from, as given to exec. For Claude Code that is the
+        /// `claude` link, while the kernel's process name is the versioned file it points at.
+        let executablePath: String
+        let environment: [String: String]
+
+        /// Matches the name the hook looks for, the last part of the path the process was started as.
+        var isClaude: Bool { (executablePath as NSString).lastPathComponent == "claude" }
     }
 
     /// Parses a `KERN_PROCARGS2` buffer: a native `Int32` argument count, the executable path, NUL
     /// padding, that many NUL-terminated arguments, then NUL-terminated `NAME=value` entries up to an
     /// empty one or the end. Nil when the buffer is too short to hold what it claims.
-    static func environment(fromProcArgs data: Data) -> [String: String]? {
+    static func arguments(fromProcArgs data: Data) -> ProcessArguments? {
         let bytes = [UInt8](data)
         let countSize = MemoryLayout<Int32>.size
         guard bytes.count >= countSize else { return nil }
@@ -83,8 +109,8 @@ enum ClaudeProcessConfiguration {
         guard argumentCount >= 0 else { return nil }
 
         var index = countSize
-        // The executable path.
-        guard let pathEnd = bytes[index...].firstIndex(of: 0) else { return nil }
+        guard let pathEnd = bytes[index...].firstIndex(of: 0), pathEnd > index else { return nil }
+        let executablePath = String(decoding: bytes[index..<pathEnd], as: UTF8.self)
         index = pathEnd
         // Padding after the path.
         while index < bytes.count, bytes[index] == 0 { index += 1 }
@@ -108,6 +134,6 @@ enum ClaudeProcessConfiguration {
             }
             index = end + 1
         }
-        return environment
+        return ProcessArguments(executablePath: executablePath, environment: environment)
     }
 }

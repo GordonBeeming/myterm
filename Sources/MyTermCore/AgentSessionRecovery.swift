@@ -44,8 +44,7 @@ public struct AgentSessionHandle: Codable, Equatable, Hashable, Sendable {
         switch configuration {
         case .standard: .standard
         case .directory(let directory):
-            directory.isFileURL && AgentSessionResume.isQuotableInEveryShell(directory.path)
-                ? ClaudeConfiguration(environmentValue: directory.path) : nil
+            directory.isFileURL ? ClaudeConfiguration(environmentValue: directory.path) : nil
         }
     }
 
@@ -129,7 +128,7 @@ public enum AgentSessionResume {
     /// assignment covers this one command and leaves the shell's environment alone. The standard
     /// sign-in needs nothing: the hook reports it only when the variable was unset.
     private static func claudeResume(_ sessionID: String, name: String?) -> String {
-        if let name, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, isQuotableInEveryShell(name) {
+        if let name, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             "claude --resume \(shellQuoted(sessionID)) --name \(shellQuoted(name))"
         } else {
             "claude --resume \(shellQuoted(sessionID))"
@@ -141,14 +140,18 @@ public enum AgentSessionResume {
         return "CLAUDE_CONFIG_DIR=\(shellQuoted(directory.path)) "
     }
 
-    /// The quoting below is POSIX single quoting. fish reads `\\` and `\'` as escapes even inside
-    /// single quotes, so a backslash would unbalance the command in a fish pane. A value with one is
-    /// left out of the command rather than quoted per shell: the pane's shell is not known here.
-    static func isQuotableInEveryShell(_ value: String) -> Bool {
-        !value.contains("\\")
-    }
-
+    /// Single quotes, with a quote or backslash written outside them. POSIX shells keep a backslash
+    /// literal inside single quotes but fish reads `\\` and `\'` there as escapes, so leaving both
+    /// characters outside the quotes is the one form sh, bash, zsh and fish all read the same.
     private static func shellQuoted(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        var quoted = "'"
+        for character in value {
+            switch character {
+            case "'": quoted += #"'\''"#
+            case "\\": quoted += #"'\\'"#
+            default: quoted.append(character)
+            }
+        }
+        return quoted + "'"
     }
 }

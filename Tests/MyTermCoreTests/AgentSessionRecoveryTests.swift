@@ -64,17 +64,35 @@ final class AgentSessionRecoveryTests: XCTestCase {
         XCTAssertEqual(AgentSessionResume.command(for: try XCTUnwrap(control)), "claude --resume 'abc'")
     }
 
-    func testAValueFishCannotQuoteIsLeftOutOfTheCommand() throws {
-        // fish reads a backslash as an escape inside single quotes, so it would unbalance the line.
-        let slashed = try XCTUnwrap(AgentSessionHandle(
+    func testEveryShellReadsTheProfileBackExactly() throws {
+        // fish reads `\\` and `\'` as escapes inside single quotes; POSIX shells do not.
+        let path = #"/Users/some one/work\b's $(x) `y`"#
+        let handle = try XCTUnwrap(AgentSessionHandle(
             agent: "claude", sessionID: "abc",
-            claudeConfiguration: .directory(URL(fileURLWithPath: #"/Users/someone/work\'s"#, isDirectory: true))
+            claudeConfiguration: .directory(URL(fileURLWithPath: path, isDirectory: true))
         ))
-        XCTAssertNil(slashed.claudeConfiguration, "the profile goes, the conversation stays")
+        let command = try XCTUnwrap(AgentSessionResume.command(for: handle))
+        let suffix = " claude --resume 'abc'"
+        XCTAssertTrue(command.hasSuffix(suffix))
+        let probe = command.dropLast(suffix.count) + " /usr/bin/printenv CLAUDE_CONFIG_DIR"
+        let shells = ["/bin/sh", "/bin/bash", "/bin/zsh", "/opt/homebrew/bin/fish", "/usr/local/bin/fish"]
+            .filter { FileManager.default.isExecutableFile(atPath: $0) }
+        XCTAssertFalse(shells.isEmpty)
+        for shell in shells {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: shell)
+            process.arguments = ["-c", String(probe)]
+            let output = Pipe()
+            process.standardOutput = output
+            try process.run()
+            process.waitUntilExit()
+            let read = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            XCTAssertEqual(read.trimmingCharacters(in: .newlines), path, shell)
+        }
+
         let plain = try XCTUnwrap(AgentSessionHandle(agent: "claude", sessionID: "abc"))
-        XCTAssertEqual(AgentSessionResume.command(for: plain, name: #"Fix C:\build"#), "claude --resume 'abc'")
-        XCTAssertEqual(AgentSessionResume.command(for: plain, name: "Ship it's fix"),
-                       #"claude --resume 'abc' --name 'Ship it'\''s fix'"#)
+        XCTAssertEqual(AgentSessionResume.command(for: plain, name: #"Fix C:\build"#),
+                       #"claude --resume 'abc' --name 'Fix C:'\\'build'"#)
     }
 
     func testTheProfileSurvivesSavedStateAndOlderStateHasNone() throws {
