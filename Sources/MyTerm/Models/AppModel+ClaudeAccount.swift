@@ -53,6 +53,20 @@ extension AppModel {
         }
     }
 
+    /// The profile a hook reported for this conversation before, as the pane saved it.
+    func savedClaudeConfiguration(
+        for report: AgentActivityReport,
+        workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
+        tabID: TabID
+    ) -> ClaudeConfiguration? {
+        guard let sessionID = report.sessionID,
+              let saved = tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)?
+                  .terminalSession?.agentSession,
+              saved.agent == report.agent, saved.sessionID == sessionID else { return nil }
+        return saved.claudeConfiguration
+    }
+
     func forgetClaudeAccount(forTab tabID: TabID) {
         claudeAccountTabs.removeValue(forKey: tabID)
         claudeAccountSessionIDs.removeValue(forKey: tabID)

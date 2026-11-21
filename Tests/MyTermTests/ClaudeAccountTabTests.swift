@@ -174,6 +174,39 @@ final class ClaudeAccountTabTests: XCTestCase {
         XCTAssertEqual(model.claudeAccount(forTab: tabID)?.configuration, .directory(work))
     }
 
+    func testASavedProfileBeatsAnotherClaudeRunningBelowTheSameShell() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("myterm-claude-account-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        let engine = AccountEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory.appending(path: "support", directoryHint: .isDirectory),
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let home = directory.appending(path: "home", directoryHint: .isDirectory)
+        model.claudeAccountHome = home
+        let first = home.appending(path: ".claude-accounts/work-a", directoryHint: .isDirectory)
+        let second = home.appending(path: ".claude-accounts/work-b", directoryHint: .isDirectory)
+        let workspace = model.selectedWorkspace
+        let group = try XCTUnwrap(workspace.focusedTabGroup)
+        let session = try XCTUnwrap(engine.sessions.first)
+        session.activeForegroundProcessName = "claude"
+
+        session.emit(.agentActivity(AgentActivityReport(
+            agent: "claude", activity: .working, sessionID: "abc", claudeConfiguration: .directory(first))))
+        // A background Claude on another sign-in is the one the process lookup would find.
+        session.foregroundClaudeConfiguration = .directory(second)
+        session.emit(.restoredAgentActivity(AgentActivityReport(agent: "claude", activity: .finished, sessionID: "abc")))
+
+        let saved = model.tab(workspaceID: workspace.id, tabGroupID: group.id, tabID: group.selectedTabID)?
+            .terminalSession?.agentSession
+        XCTAssertEqual(saved?.claudeConfiguration, .directory(first))
+        XCTAssertEqual(model.claudeAccount(forTab: group.selectedTabID)?.configuration, .directory(first))
+    }
+
     private func makeModel() throws -> (AppModel, URL) {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("myterm-claude-account-\(UUID().uuidString)", isDirectory: true)
@@ -210,6 +243,7 @@ private final class AccountEngine: TerminalEngine {
 @MainActor
 private final class AccountSession: TerminalProcessSession {
     var isRunning = false
+    var activeForegroundProcessName: String?
     var foregroundClaudeConfiguration: ClaudeConfiguration?
     var onEvent: (@MainActor (TerminalSessionEvent) -> Void)?
 
