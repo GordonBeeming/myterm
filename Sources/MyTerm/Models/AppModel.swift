@@ -2711,6 +2711,13 @@ final class AppModel {
             }
         case .agentActivity(let incomingReport), .restoredAgentActivity(let incomingReport):
             var report = incomingReport
+            // A session host older than the account marker replays reports without it after a
+            // relaunch, and the account would be forgotten until Claude's next hook. The running
+            // process still knows which sign-in it was started with.
+            if report.agent == AgentIdentity.claude.rawValue, report.claudeConfiguration == nil,
+               let configuration = terminalSessions[sessionID]?.foregroundClaudeConfiguration {
+                report = report.replacingClaudeConfiguration(configuration)
+            }
             let isRestoration: Bool
             if case .restoredAgentActivity = event { isRestoration = true }
             else { isRestoration = false }

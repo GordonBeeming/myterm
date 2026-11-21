@@ -18,13 +18,20 @@ extension AppModel {
         return claudeAccount(forTab: tabID)
     }
 
-    /// The badge is for the account that is not the usual one. Every Claude tab still names its
-    /// account when hovered.
+    /// The badge is for the account that is not the usual one, unless the usual one is asked for
+    /// too. Every Claude tab still names its account when hovered.
     func showsClaudeAccountBadge(forWorkspace workspaceID: WorkspaceID) -> ClaudeAccount? {
         _ = stateVersion
-        guard store.globalSettings.showsClaudeAccount,
-              let account = claudeAccount(forWorkspace: workspaceID), !account.isDefault else { return nil }
+        let settings = store.globalSettings
+        guard settings.showsClaudeAccount,
+              let account = claudeAccount(forWorkspace: workspaceID),
+              !account.isDefault || settings.showsDefaultClaudeAccount else { return nil }
         return account
+    }
+
+    /// What the badge, and anything read aloud for it, calls an account.
+    func claudeAccountLabel(for account: ClaudeAccount) -> String {
+        account.label(store.globalSettings.claudeAccountLabel)
     }
 
     func recordClaudeAccount(_ report: AgentActivityReport, tabID: TabID) {

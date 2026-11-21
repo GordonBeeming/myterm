@@ -5,9 +5,11 @@ import SwiftUI
 /// Names the Claude account a workspace's Claude Code runs as, beside its agent icon.
 struct ClaudeAccountBadge: View {
     let account: ClaudeAccount
+    /// The name the settings chose: the organization or the profile folder.
+    let label: String
 
     var body: some View {
-        Text(account.shortName)
+        Text(label)
             .font(Theme.Font.ui(10.5, weight: .medium))
             .lineLimit(1)
             .truncationMode(.middle)

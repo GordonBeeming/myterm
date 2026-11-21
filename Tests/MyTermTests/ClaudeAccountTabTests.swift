@@ -1,5 +1,7 @@
+import AppKit
 import Foundation
 import MyTermCore
+import MyTermPlatform
 import XCTest
 @testable import MyTerm
 
@@ -91,6 +93,87 @@ final class ClaudeAccountTabTests: XCTestCase {
         XCTAssertNil(model.claudeAccount(forTab: tabID), "without session IDs nothing shows it is the same conversation")
     }
 
+    func testTheDefaultAccountIsBadgedOnlyWhenAskedFor() throws {
+        let (model, home) = try makeModel()
+        try writeProfile(#"{"oauthAccount": {"emailAddress": "me@home.example", "organizationName": "Home Org"}}"#,
+                         to: home.appending(path: ".claude.json"))
+        let workspace = model.selectedWorkspace
+        let group = try XCTUnwrap(workspace.focusedTabGroup)
+        model.recordAgentPresence(
+            AgentActivityReport(agent: "claude", activity: .ready, claudeConfiguration: .standard),
+            workspaceID: workspace.id, tabGroupID: group.id, tabID: group.selectedTabID
+        )
+        XCTAssertNil(model.showsClaudeAccountBadge(forWorkspace: workspace.id))
+
+        model.updateGlobalSettings { $0.showsDefaultClaudeAccount = true }
+        let account = try XCTUnwrap(model.showsClaudeAccountBadge(forWorkspace: workspace.id))
+        XCTAssertEqual(model.claudeAccountLabel(for: account), "Home Org")
+        model.updateGlobalSettings { $0.claudeAccountLabel = .profile }
+        XCTAssertEqual(model.claudeAccountLabel(for: account), "Default")
+
+        model.updateGlobalSettings { $0.showsClaudeAccount = false }
+        XCTAssertNil(model.showsClaudeAccountBadge(forWorkspace: workspace.id), "the main switch still hides every badge")
+    }
+
+    func testTheProfileLabelTellsApartTwoSignInsOfOneOrganization() throws {
+        let (model, home) = try makeModel()
+        let first = home.appending(path: ".claude-accounts/work-a", directoryHint: .isDirectory)
+        let second = home.appending(path: ".claude-accounts/work-b", directoryHint: .isDirectory)
+        for folder in [first, second] {
+            try writeProfile(#"{"oauthAccount": {"organizationName": "Shared Org"}}"#, to: folder.appending(path: ".claude.json"))
+        }
+        let workspace = model.selectedWorkspace
+        let group = try XCTUnwrap(workspace.focusedTabGroup)
+        func label(_ folder: URL) throws -> String {
+            model.recordAgentPresence(
+                AgentActivityReport(agent: "claude", activity: .ready, claudeConfiguration: .directory(folder)),
+                workspaceID: workspace.id, tabGroupID: group.id, tabID: group.selectedTabID
+            )
+            return model.claudeAccountLabel(for: try XCTUnwrap(model.showsClaudeAccountBadge(forWorkspace: workspace.id)))
+        }
+
+        XCTAssertEqual(try label(first), "Shared Org")
+        XCTAssertEqual(try label(second), "Shared Org")
+        model.updateGlobalSettings { $0.claudeAccountLabel = .profile }
+        XCTAssertEqual(try label(first), "work-a")
+        XCTAssertEqual(try label(second), "work-b")
+    }
+
+    func testAReplayedReportWithoutAnAccountTakesItFromTheRunningClaude() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("myterm-claude-account-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        let engine = AccountEngine()
+        let model = try AppModel(
+            channel: .development,
+            applicationSupportDirectory: directory.appending(path: "support", directoryHint: .isDirectory),
+            terminalEngine: engine,
+            startsTerminalProcesses: true
+        )
+        let home = directory.appending(path: "home", directoryHint: .isDirectory)
+        model.claudeAccountHome = home
+        let work = home.appending(path: ".claude-work", directoryHint: .isDirectory)
+        try writeProfile(#"{"oauthAccount": {"organizationName": "Company Audits"}}"#, to: work.appending(path: ".claude.json"))
+        let workspace = model.selectedWorkspace
+        let tabID = try XCTUnwrap(workspace.focusedTabGroup).selectedTabID
+        let session = try XCTUnwrap(engine.sessions.first)
+
+        // A session host built before the account marker replays the last report without it.
+        session.emit(.restoredAgentActivity(AgentActivityReport(agent: "claude", activity: .finished, sessionID: "old")))
+        XCTAssertNil(model.claudeAccount(forTab: tabID), "nothing to go on, so nothing is named")
+
+        session.foregroundClaudeConfiguration = .directory(work)
+        session.emit(.restoredAgentActivity(AgentActivityReport(agent: "claude", activity: .finished, sessionID: "old")))
+        XCTAssertEqual(model.showsClaudeAccountBadge(forWorkspace: workspace.id)?.shortName, "Company Audits")
+
+        // A report that names its account is believed over the process lookup.
+        session.foregroundClaudeConfiguration = .standard
+        session.emit(.agentActivity(AgentActivityReport(agent: "claude", activity: .working, sessionID: "old",
+                                                        claudeConfiguration: .directory(work))))
+        XCTAssertEqual(model.claudeAccount(forTab: tabID)?.configuration, .directory(work))
+    }
+
     private func makeModel() throws -> (AppModel, URL) {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("myterm-claude-account-\(UUID().uuidString)", isDirectory: true)
@@ -111,4 +194,29 @@ final class ClaudeAccountTabTests: XCTestCase {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data(text.utf8).write(to: url)
     }
+}
+
+@MainActor
+private final class AccountEngine: TerminalEngine {
+    private(set) var sessions: [AccountSession] = []
+
+    func makeSession(configuration: TerminalSessionConfiguration) throws -> any TerminalProcessSession {
+        let session = AccountSession()
+        sessions.append(session)
+        return session
+    }
+}
+
+@MainActor
+private final class AccountSession: TerminalProcessSession {
+    var isRunning = false
+    var foregroundClaudeConfiguration: ClaudeConfiguration?
+    var onEvent: (@MainActor (TerminalSessionEvent) -> Void)?
+
+    func terminalView() -> NSView { NSView() }
+    func start() throws { isRunning = true }
+    func resize(columns: Int, rows: Int) {}
+    func focus() {}
+    func terminate() { isRunning = false }
+    func emit(_ event: TerminalSessionEvent) { onEvent?(event) }
 }

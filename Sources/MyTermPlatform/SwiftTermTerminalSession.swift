@@ -49,6 +49,12 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         )
     }
 
+    public var foregroundClaudeConfiguration: ClaudeConfiguration? {
+        guard isRunning else { return nil }
+        let shell = persistentConnection?.attachment.pid ?? terminal.process.shellPid
+        return ClaudeProcessConfiguration.configuration(belowShell: shell)
+    }
+
     private let configuration: TerminalSessionConfiguration
     private var runtimeConfiguration: TerminalRuntimeConfiguration
     private let terminal: MyTermLocalProcessTerminalView

@@ -16,6 +16,9 @@ public protocol TerminalProcessSession: AnyObject {
     var isStarting: Bool { get }
     var survivesApplicationTermination: Bool { get }
     var activeForegroundProcessName: String? { get }
+    /// The sign-in of the Claude Code running in this terminal, read from the process. Nil when no
+    /// Claude runs here or the engine cannot see its processes.
+    var foregroundClaudeConfiguration: ClaudeConfiguration? { get }
     var onEvent: (@MainActor (TerminalSessionEvent) -> Void)? { get set }
 
     /// Returns the stable native view for this session. Calling this must never create a process.
@@ -110,6 +113,7 @@ public extension TerminalProcessSession {
     var isStarting: Bool { false }
     var survivesApplicationTermination: Bool { false }
     var activeForegroundProcessName: String? { nil }
+    var foregroundClaudeConfiguration: ClaudeConfiguration? { nil }
 
     func showFind() {}
 

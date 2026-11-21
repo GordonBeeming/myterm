@@ -10,6 +10,27 @@ public enum ClaudeConfiguration: Codable, Hashable, Sendable {
     case standard
     /// `CLAUDE_CONFIG_DIR` names this folder.
     case directory(URL)
+
+    /// The configuration a `CLAUDE_CONFIG_DIR` value names, read the way the hook reads it: unset or
+    /// empty is the standard sign-in. Nil for a value the hook would not report, such as a relative
+    /// path, so a doubtful reading never names an account.
+    public init?(environmentValue value: String?) {
+        guard let value, !value.isEmpty else {
+            self = .standard
+            return
+        }
+        guard value.hasPrefix("/"), value.utf8.count <= 4096,
+              value.rangeOfCharacter(from: .controlCharacters) == nil else { return nil }
+        self = .directory(URL(fileURLWithPath: value, isDirectory: true).standardizedFileURL)
+    }
+}
+
+/// What a Claude account badge is called.
+public enum ClaudeAccountLabel: String, Codable, CaseIterable, Equatable, Hashable, Sendable {
+    /// The organization, or the email of a personal account.
+    case organization
+    /// The `CLAUDE_CONFIG_DIR` folder's name.
+    case profile
 }
 
 /// The Claude Code sign-in a session runs as.
@@ -62,12 +83,26 @@ public struct ClaudeAccount: Equatable, Hashable, Sendable {
     public var shortName: String {
         if let organization, !isPersonalOrganization(organization) { return organization }
         if let email { return email }
+        return profileName
+    }
+
+    /// The configuration folder's name, which is what tells two sign-ins of one organization apart.
+    /// The standard sign-in has no folder of its own to be named after.
+    public var profileName: String {
         switch configuration {
         case .standard:
             return "Default"
         case .directory(let directory):
             let folder = directory.lastPathComponent
-            return folder.hasPrefix(".") ? String(folder.dropFirst()) : folder
+            let name = folder.hasPrefix(".") ? String(folder.dropFirst()) : folder
+            return name.isEmpty ? directory.path : name
+        }
+    }
+
+    public func label(_ style: ClaudeAccountLabel) -> String {
+        switch style {
+        case .organization: shortName
+        case .profile: profileName
         }
     }
 
