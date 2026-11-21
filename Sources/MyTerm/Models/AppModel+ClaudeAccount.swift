@@ -18,13 +18,20 @@ extension AppModel {
         return claudeAccount(forTab: tabID)
     }
 
-    /// The badge is for the account that is not the usual one. Every Claude tab still names its
-    /// account when hovered.
+    /// The badge is for the account that is not the usual one, unless the usual one is asked for
+    /// too. Every Claude tab still names its account when hovered.
     func showsClaudeAccountBadge(forWorkspace workspaceID: WorkspaceID) -> ClaudeAccount? {
         _ = stateVersion
-        guard store.globalSettings.showsClaudeAccount,
-              let account = claudeAccount(forWorkspace: workspaceID), !account.isDefault else { return nil }
+        let settings = store.globalSettings
+        guard settings.showsClaudeAccount,
+              let account = claudeAccount(forWorkspace: workspaceID),
+              !account.isDefault || settings.showsDefaultClaudeAccount else { return nil }
         return account
+    }
+
+    /// What the badge, and anything read aloud for it, calls an account.
+    func claudeAccountLabel(for account: ClaudeAccount) -> String {
+        account.label(store.globalSettings.claudeAccountLabel)
     }
 
     func recordClaudeAccount(_ report: AgentActivityReport, tabID: TabID) {
@@ -44,6 +51,20 @@ extension AppModel {
         if claudeAccountTabs[tabID] != account {
             claudeAccountTabs[tabID] = account
         }
+    }
+
+    /// The profile a hook reported for this conversation before, as the pane saved it.
+    func savedClaudeConfiguration(
+        for report: AgentActivityReport,
+        workspaceID: WorkspaceID,
+        tabGroupID: TabGroupID,
+        tabID: TabID
+    ) -> ClaudeConfiguration? {
+        guard let sessionID = report.sessionID,
+              let saved = tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)?
+                  .terminalSession?.agentSession,
+              saved.agent == report.agent, saved.sessionID == sessionID else { return nil }
+        return saved.claudeConfiguration
     }
 
     func forgetClaudeAccount(forTab tabID: TabID) {

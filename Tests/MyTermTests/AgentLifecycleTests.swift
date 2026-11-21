@@ -764,6 +764,24 @@ final class AgentLifecycleTests: XCTestCase {
         XCTAssertEqual(relaunched.displayTitle, "Terminal")
     }
 
+    func testAClaudeConversationComesBackUnderTheProfileItRanIn() throws {
+        let fixture = try makeFixture(isActive: false)
+        let profile = URL(fileURLWithPath: "/Users/someone/.claude-accounts/work-b", isDirectory: true)
+        fixture.session.activeForegroundProcessName = "claude"
+        fixture.session.emit(.agentActivity(AgentActivityReport(
+            agent: "claude", activity: .ready, sessionID: "abc", claudeConfiguration: .directory(profile))))
+        // A report that cannot name its profile, such as one from an older hook, keeps the saved one.
+        fixture.emit(.working, session: "abc")
+        XCTAssertEqual(fixture.savedSession?.claudeConfiguration, .directory(profile))
+        fixture.model.persistTerminalSnapshots()
+        fixture.model.persistWorkspaceStore()
+
+        let relaunched = try makeFixture(in: fixture.directory, isActive: false)
+
+        XCTAssertEqual(relaunched.engine.configurations.first?.initialCommand,
+                       "CLAUDE_CONFIG_DIR='/Users/someone/.claude-accounts/work-b' claude --resume 'abc'")
+    }
+
     func testAConversationComesBackNamedAndReadyRatherThanWorking() throws {
         let fixture = try makeFixture(isActive: false)
         fixture.session.activeForegroundProcessName = "claude"

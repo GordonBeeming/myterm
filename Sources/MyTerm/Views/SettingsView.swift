@@ -435,9 +435,28 @@ struct SettingsView: View {
                 GlobalSettingRow(
                     model: model,
                     title: "Show which Claude account is in use",
-                    caption: "A workspace running Claude Code as an account other than the one in ~/.claude, for example through CLAUDE_CONFIG_DIR set by direnv, shows that account in the sidebar. Hovering a Claude tab always names its account. This needs the hooks above.",
+                    caption: "A workspace running Claude Code as another account, for example through CLAUDE_CONFIG_DIR set by direnv, shows that account in the sidebar. Hovering a Claude tab always names its account. This needs the hooks above.",
                     setting: \.showsClaudeAccount
                 )
+                GlobalSettingRow(
+                    model: model,
+                    title: "Show the default account too",
+                    caption: "Also badge workspaces signed in through ~/.claude, so every Claude workspace says who it runs as.",
+                    setting: \.showsDefaultClaudeAccount
+                )
+                .disabled(!model.store.globalSettings.showsClaudeAccount)
+                Picker("Name the account by", selection: Binding(
+                    get: { model.store.globalSettings.claudeAccountLabel },
+                    set: { label in model.updateGlobalSettings { $0.claudeAccountLabel = label } }
+                )) {
+                    ForEach(ClaudeAccountLabel.allCases, id: \.self) { label in
+                        Text(Self.title(for: label)).tag(label)
+                    }
+                }
+                .disabled(!model.store.globalSettings.showsClaudeAccount)
+                Text("Profile name uses the CLAUDE_CONFIG_DIR folder, which tells apart two sign-ins in the same organization. The default sign-in is called Default.")
+                    .font(Theme.Font.ui(12))
+                    .foregroundStyle(Theme.textSecondary)
                 HStack(spacing: 8) {
                     AgentIdentityIcon(identity: .claude).frame(width: 16, height: 16)
                     Text("Claude Code")
@@ -1436,6 +1455,15 @@ private struct SettingsSelectableButtonStyle: ButtonStyle {
         private var fill: Color {
             if isSelected || configuration.isPressed { return Theme.selectedFill }
             return isHovering ? Theme.hoverFill : .clear
+        }
+    }
+}
+
+private extension SettingsView {
+    static func title(for label: ClaudeAccountLabel) -> String {
+        switch label {
+        case .organization: "Organization"
+        case .profile: "Profile name"
         }
     }
 }

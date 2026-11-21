@@ -45,7 +45,8 @@ extension AppModel {
             guard let reported = AgentSessionHandle(
                 agent: report.agent, sessionID: report.sessionID,
                 workingDirectory: report.workingDirectory ?? continued?.workingDirectory,
-                codexLauncher: report.codexLauncher ?? continued?.codexLauncher
+                codexLauncher: report.codexLauncher ?? continued?.codexLauncher,
+                claudeConfiguration: report.claudeConfiguration ?? continued?.claudeConfiguration
             ),
                   AgentSessionResume.canResume(reported) else { return }
             // Moving to another conversation puts the current one in the left set. A rejoined one

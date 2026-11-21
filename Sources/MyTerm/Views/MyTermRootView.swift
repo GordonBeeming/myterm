@@ -787,7 +787,7 @@ private struct WorkspaceSidebarRow: View {
             ? "Pinned workspace \(workspace.displayTitle)"
             : "Workspace \(workspace.displayTitle)"
         let flagged = hasTerminalNotice ? "\(pinned), terminal needs attention" : pinned
-        let name = claudeAccount.map { "\(flagged), Claude account \($0.shortName)" } ?? flagged
+        let name = claudeAccount.map { "\(flagged), Claude account \(model.claudeAccountLabel(for: $0))" } ?? flagged
         if let agentAttention, agentAttention.showsCook {
             return "\(name), \(agentAttention.attentionDescription)"
         }
@@ -823,7 +823,7 @@ private struct WorkspaceSidebarRow: View {
             }
             Spacer(minLength: 0)
             if let claudeAccount {
-                ClaudeAccountBadge(account: claudeAccount)
+                ClaudeAccountBadge(account: claudeAccount, label: model.claudeAccountLabel(for: claudeAccount))
             }
             AgentSlot(
                 attention: agentAttention,

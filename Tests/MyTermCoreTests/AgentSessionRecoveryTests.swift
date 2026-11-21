@@ -29,6 +29,99 @@ final class AgentSessionRecoveryTests: XCTestCase {
         XCTAssertFalse(AgentSessionResume.canResume(other))
     }
 
+    func testAClaudeConversationResumesUnderTheProfileItRanIn() throws {
+        func command(_ path: String, name: String? = nil) throws -> String? {
+            let handle = try XCTUnwrap(AgentSessionHandle(
+                agent: "claude", sessionID: "abc-123",
+                claudeConfiguration: .directory(URL(fileURLWithPath: path, isDirectory: true))
+            ))
+            return AgentSessionResume.command(for: handle, name: name)
+        }
+        XCTAssertEqual(try command("/Users/someone/.claude-accounts/work-b"),
+                       "CLAUDE_CONFIG_DIR='/Users/someone/.claude-accounts/work-b' claude --resume 'abc-123'")
+        XCTAssertEqual(try command("/Users/someone/.claude-accounts/work-b", name: "Fix the build"),
+                       "CLAUDE_CONFIG_DIR='/Users/someone/.claude-accounts/work-b' claude --resume 'abc-123' --name 'Fix the build'")
+        XCTAssertEqual(try command("/Users/some one/it's"),
+                       #"CLAUDE_CONFIG_DIR='/Users/some one/it'\''s' claude --resume 'abc-123'"#)
+
+        let standard = try XCTUnwrap(AgentSessionHandle(agent: "claude", sessionID: "abc-123", claudeConfiguration: .standard))
+        XCTAssertEqual(AgentSessionResume.command(for: standard), "claude --resume 'abc-123'",
+                       "the standard sign-in was reported only with the variable unset")
+    }
+
+    func testOnlyClaudeKeepsAProfileAndAnUnsafeOneIsDropped() throws {
+        let folder = ClaudeConfiguration.directory(URL(fileURLWithPath: "/Users/someone/.claude-work", isDirectory: true))
+        for agent in ["codex", "grok", "antigravity"] {
+            XCTAssertNil(AgentSessionHandle(agent: agent, sessionID: "abc", claudeConfiguration: folder)?.claudeConfiguration)
+        }
+        let relative = AgentSessionHandle(agent: "claude", sessionID: "abc",
+                                          claudeConfiguration: .directory(try XCTUnwrap(URL(string: "relative/.claude"))))
+        XCTAssertEqual(relative?.sessionID, "abc", "a bad profile must not cost the conversation")
+        XCTAssertNil(relative?.claudeConfiguration)
+        let control = AgentSessionHandle(agent: "claude", sessionID: "abc",
+                                         claudeConfiguration: .directory(URL(fileURLWithPath: "/Users/x/\n.claude")))
+        XCTAssertNil(control?.claudeConfiguration)
+        XCTAssertEqual(AgentSessionResume.command(for: try XCTUnwrap(control)), "claude --resume 'abc'")
+    }
+
+    func testEveryShellReadsTheProfileBackExactly() throws {
+        // fish reads `\\` and `\'` as escapes inside single quotes; POSIX shells do not. A quote
+        // followed by a combining mark is one Swift Character, so it must still be escaped.
+        for path in [#"/Users/some one/work\b's $(x) `y`"#, "/tmp/'\u{0301}; printf injected; #"] {
+            try assertEveryShellReadsBack(path)
+        }
+
+        let plain = try XCTUnwrap(AgentSessionHandle(agent: "claude", sessionID: "abc"))
+        XCTAssertEqual(AgentSessionResume.command(for: plain, name: #"Fix C:\build"#),
+                       #"claude --resume 'abc' --name 'Fix C:'\\'build'"#)
+        XCTAssertEqual(AgentSessionResume.command(for: plain, name: "a'\u{0301}; b"),
+                       "claude --resume 'abc' --name 'a'\\''\u{0301}; b'")
+    }
+
+    private func assertEveryShellReadsBack(_ path: String) throws {
+        let handle = try XCTUnwrap(AgentSessionHandle(
+            agent: "claude", sessionID: "abc",
+            claudeConfiguration: .directory(URL(fileURLWithPath: path, isDirectory: true))
+        ))
+        let command = try XCTUnwrap(AgentSessionResume.command(for: handle))
+        let suffix = " claude --resume 'abc'"
+        XCTAssertTrue(command.hasSuffix(suffix))
+        let probe = command.dropLast(suffix.count) + " /usr/bin/printenv CLAUDE_CONFIG_DIR"
+        let shells = ["/bin/sh", "/bin/bash", "/bin/zsh", "/opt/homebrew/bin/fish", "/usr/local/bin/fish"]
+            .filter { FileManager.default.isExecutableFile(atPath: $0) }
+        XCTAssertFalse(shells.isEmpty)
+        for shell in shells {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: shell)
+            process.arguments = ["-c", String(probe)]
+            let output = Pipe()
+            process.standardOutput = output
+            try process.run()
+            process.waitUntilExit()
+            let read = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            XCTAssertEqual(read.trimmingCharacters(in: .newlines), path, shell)
+        }
+    }
+
+    func testTheProfileSurvivesSavedStateAndOlderStateHasNone() throws {
+        let folder = ClaudeConfiguration.directory(URL(fileURLWithPath: "/Users/someone/.claude-work", isDirectory: true))
+        let handle = try XCTUnwrap(AgentSessionHandle(agent: "claude", sessionID: "abc", claudeConfiguration: folder))
+        let decoded = try JSONDecoder().decode(AgentSessionHandle.self, from: JSONEncoder().encode(handle))
+        XCTAssertEqual(decoded, handle)
+
+        let older = try JSONDecoder().decode(AgentSessionHandle.self, from: Data(#"{"agent":"claude","sessionID":"abc"}"#.utf8))
+        XCTAssertNil(older.claudeConfiguration)
+
+        let tampered = try JSONDecoder().decode(AgentSessionHandle.self, from: Data(
+            #"{"agent":"claude","sessionID":"abc","claudeConfiguration":{"directory":{"_0":"relative/path"}}}"#.utf8))
+        XCTAssertEqual(tampered.sessionID, "abc")
+        XCTAssertNil(tampered.claudeConfiguration)
+
+        let garbage = try JSONDecoder().decode(AgentSessionHandle.self, from: Data(
+            #"{"agent":"claude","sessionID":"abc","claudeConfiguration":42}"#.utf8))
+        XCTAssertNil(garbage.claudeConfiguration, "an unreadable profile costs the profile, never the conversation")
+    }
+
     func testCodexResumesTheSessionEvenWhenThePaneHasACustomName() throws {
         let codex = try XCTUnwrap(AgentSessionHandle(agent: "codex", sessionID: "019a020e-0dbd-7000-8000-000000000001"))
 

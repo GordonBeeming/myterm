@@ -102,6 +102,13 @@ public struct AgentActivityReport: Codable, Equatable, Hashable, Sendable {
              claudeConfiguration: claudeConfiguration)
     }
 
+    public func replacingClaudeConfiguration(_ claudeConfiguration: ClaudeConfiguration?) -> Self {
+        Self(agent: agent, activity: activity, sessionID: sessionID, workingDirectory: workingDirectory,
+             codexLauncher: codexLauncher, toolRequestID: toolRequestID, sessionTitle: sessionTitle,
+             turnID: turnID, beginsTurn: beginsTurn, isStatusSnapshot: isStatusSnapshot, isWorkStart: isWorkStart,
+             toolCallID: toolCallID, capturedAt: capturedAt, claudeConfiguration: claudeConfiguration)
+    }
+
     public func replacingTurnID(_ turnID: String?) -> Self {
         Self(agent: agent, activity: activity, sessionID: sessionID, workingDirectory: workingDirectory,
              codexLauncher: codexLauncher, toolRequestID: toolRequestID, sessionTitle: sessionTitle,

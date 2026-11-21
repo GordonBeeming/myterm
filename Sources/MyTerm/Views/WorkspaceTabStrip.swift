@@ -178,6 +178,7 @@ struct WorkspaceTabStrip: View {
             agentAttention: model.agentAttention(forTab: tab.id),
             agentIdentity: model.agentIdentity(forTab: tab.id),
             claudeAccount: model.claudeAccount(forTab: tab.id),
+            claudeAccountLabel: model.claudeAccount(forTab: tab.id).map(model.claudeAccountLabel(for:)),
             showsIdleIdentity: model.showsIdleAgentIcon(forWorkspace: workspaceID),
             tabWidth: tabWidth,
             select: { model.selectTab(tab.id, in: tabGroup.id) },
@@ -354,6 +355,7 @@ private struct WorkspaceTabItem: View {
     let agentAttention: AgentActivity?
     let agentIdentity: AgentIdentity?
     let claudeAccount: ClaudeAccount?
+    let claudeAccountLabel: String?
     let showsIdleIdentity: Bool
     let tabWidth: CGFloat
     let select: () -> Void
@@ -377,7 +379,7 @@ private struct WorkspaceTabItem: View {
         } else {
             value = state
         }
-        return claudeAccount.map { "\(value), Claude account \($0.shortName)" } ?? value
+        return claudeAccountLabel.map { "\(value), Claude account \($0)" } ?? value
     }
 
     private var helpText: String {

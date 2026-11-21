@@ -35,6 +35,38 @@ final class ClaudeAccountTests: XCTestCase {
         }
     }
 
+    func testReplacingTheConfigurationKeepsEverythingElse() {
+        let report = AgentActivityReport(agent: "claude", activity: .finished, sessionID: "abc", turnID: "t")
+        let filled = report.replacingClaudeConfiguration(.standard)
+        XCTAssertEqual(filled.claudeConfiguration, .standard)
+        XCTAssertEqual(filled.replacingClaudeConfiguration(nil), report)
+    }
+
+    func testAnEnvironmentValueIsReadTheWayTheHookReadsIt() {
+        XCTAssertEqual(ClaudeConfiguration(environmentValue: nil), .standard)
+        XCTAssertEqual(ClaudeConfiguration(environmentValue: ""), .standard, "the hook treats an empty value as unset")
+        XCTAssertEqual(ClaudeConfiguration(environmentValue: "/Users/someone/.claude-work/"),
+                       .directory(URL(fileURLWithPath: "/Users/someone/.claude-work", isDirectory: true)))
+        XCTAssertNil(ClaudeConfiguration(environmentValue: "relative/.claude"))
+        XCTAssertNil(ClaudeConfiguration(environmentValue: "~/.claude-work"), "the hook would not report an unexpanded path")
+        XCTAssertNil(ClaudeConfiguration(environmentValue: "/Users/someone/\n.claude"))
+    }
+
+    func testTheLabelIsTheOrganizationOrTheProfileFolder() {
+        let folder = URL(fileURLWithPath: "/Users/someone/.claude-accounts/work-b", isDirectory: true)
+        let named = ClaudeAccount(configuration: .directory(folder), email: "me@company.example", organization: "Company Audits")
+        XCTAssertEqual(named.label(.organization), "Company Audits")
+        XCTAssertEqual(named.label(.profile), "work-b")
+
+        let dotted = ClaudeAccount(configuration: .directory(URL(fileURLWithPath: "/Users/someone/.claude-work", isDirectory: true)))
+        XCTAssertEqual(dotted.label(.profile), "claude-work")
+        XCTAssertEqual(dotted.label(.organization), "claude-work", "with nothing else known the folder names it")
+
+        let personal = ClaudeAccount(configuration: .standard, email: "me@home.example", organization: "me@home.example's Organization")
+        XCTAssertEqual(personal.label(.organization), "me@home.example")
+        XCTAssertEqual(personal.label(.profile), "Default")
+    }
+
     func testReadsTheStandardProfileFromTheHomeRootAndANamedFolderFromInsideIt() throws {
         let home = try makeHome()
         try writeProfile(
