@@ -1,0 +1,171 @@
+diff --git a/Companion/Tests/RemoteBrowserProxyWebViewTests.swift b/Companion/Tests/RemoteBrowserProxyWebViewTests.swift
+index 73963cf..9f682b2 100644
+--- a/Companion/Tests/RemoteBrowserProxyWebViewTests.swift
++++ b/Companion/Tests/RemoteBrowserProxyWebViewTests.swift
+@@ -483,9 +483,21 @@ final class RemoteBrowserProxyWebViewTests: XCTestCase {
+         await bridge.stop()
+     }
+ 
+-    /// Media permission prompts must not change the proxy-boundary diagnostic.
+-    func testWebRTCProxyBoundaryDiagnosticWithoutMediaPermissions() async throws {
+-        let fixture = try BrowserHTTPFixture()
++    func testNativeProxyDisablesWebRTCInPageAndFrameEvenAfterTunnelStops() async throws {
++        let fixture = try BrowserHTTPFixture(body: """
++            <title>RTC fixture</title>
++            <script>
++            if (location.pathname === '/frame') {
++                window.rtcFixtureReady = true;
++            } else {
++                if (location.pathname === '/next') document.title = 'RTC next page';
++                const frame = document.createElement('iframe');
++                frame.id = 'rtc-frame';
++                frame.src = '/frame';
++                document.documentElement.append(frame);
++            }
++            </script>
++            """)
+         let port = try await fixture.start()
+         defer { fixture.stop() }
+         let udp = try BrowserUDPProbe()
+@@ -497,39 +509,101 @@ final class RemoteBrowserProxyWebViewTests: XCTestCase {
+         registerCleanup(browser, bridge: bridge)
+         let endpoint = try await bridge.endpoint()
+         try await startRemoteFixture(browser, endpoint: endpoint, url: try XCTUnwrap(URL(string: "http://myterm-test.invalid/page")))
+-        let deadline = Date().addingTimeInterval(15)
+-        while browser.webView?.title != "Remote fixture", browser.error == nil, Date() < deadline {
+-            try await Task.sleep(for: .milliseconds(100))
+-        }
+         let view = try XCTUnwrap(browser.webView)
+-        let script = """
+-        (() => {
+-          if (typeof RTCPeerConnection === 'undefined') return 'RTC API unavailable';
+-          const pc = new RTCPeerConnection({iceServers:[{urls:'stun:127.0.0.1:\(udpPort)'}]});
+-          window.__mytermRTCProbe = pc;
+-          pc.createDataChannel('diagnostic');
+-          pc.createOffer().then(offer => pc.setLocalDescription(offer)).catch(error => window.__mytermRTCError = String(error));
+-          return 'RTC gathering started';
+-        })()
+-        """
+-        let state: String = try await withCheckedThrowingContinuation { continuation in
+-            view.evaluateJavaScript(script) { result, error in
+-                if let error { continuation.resume(throwing: error) }
+-                else { continuation.resume(returning: result as? String ?? "Unexpected RTC result") }
++        try await waitForBrowser { view.title == "RTC fixture" && !view.isLoading }
++        try await assertWebRTCDisabled(in: view, udpPort: udpPort)
++        let nextURL = try XCTUnwrap(URL(string: "http://myterm-test.invalid/next"))
++        view.load(URLRequest(url: nextURL))
++        try await waitForBrowser { view.title == "RTC next page" && !view.isLoading }
++        try await assertWebRTCDisabled(in: view, udpPort: udpPort)
++        try await Task.sleep(for: .seconds(2))
++        XCTAssertEqual(udp.count, 0, "The loaded pages and frames must emit no direct datagrams")
++
++        let fetchProbe = """
++            try {
++                const response = await fetch('/outage-check', {cache: 'no-store', signal: AbortSignal.timeout(5000)});
++                return String(response.status);
++            } catch (error) {
++                return error.name;
+             }
+-        }
+-        try await Task.sleep(for: .seconds(4))
+-        let detail = "\(state); device-local STUN datagrams observed: \(udp.count). No media capture requested."
+-        let attachment = XCTAttachment(string: detail)
+-        attachment.name = "WebRTC proxy boundary"
+-        attachment.lifetime = .keepAlways
+-        add(attachment)
+-        print("WEBRTC_BOUNDARY: " + detail)
+-        view.evaluateJavaScript("window.__mytermRTCProbe?.close()", completionHandler: nil)
++            """
++        let connected = try await view.callAsyncJavaScript(fetchProbe, arguments: [:], in: nil, contentWorld: .page)
++        XCTAssertEqual(connected as? String, "200", "The uncached request must work before stopping the tunnel")
++        let requestsBeforeOutage = fixture.requests
++        await bridge.stop()
++        let outage = try await view.callAsyncJavaScript(fetchProbe, arguments: [:], in: nil, contentWorld: .page)
++        XCTAssertEqual(outage as? String, "TypeError", "An uncached request must fail with the tunnel stopped")
++        XCTAssertEqual(fixture.requests, requestsBeforeOutage, "The stopped tunnel must not deliver another request")
++        XCTAssertEqual(view.title, "RTC next page", "The same document must remain loaded during the outage")
++        try await assertWebRTCDisabled(in: view, udpPort: udpPort)
++        try await Task.sleep(for: .seconds(2))
++        XCTAssertEqual(udp.count, 0, "The same page and frame must stay contained during a tunnel outage")
++        print("WEBRTC_BOUNDARY: page and frame checked across navigation and a confirmed tunnel outage; client-local UDP: \(udp.count)")
++        browser.stop()
++    }
++
++    func testWebRTCObserverDetectsDirectTrafficFromOrdinaryWebKitView() async throws {
++        let fixture = try BrowserHTTPFixture()
++        let port = try await fixture.start()
++        defer { fixture.stop() }
++        let udp = try BrowserUDPProbe()
++        let udpPort = try await udp.start()
++        defer { udp.stop() }
++        let bridge = EncryptedBrowserBridge()
++        await bridge.configure(destinationPort: port)
++        let browser = NativeRemoteBrowser()
++        registerCleanup(browser, bridge: bridge)
++        let endpoint = try await bridge.endpoint()
++        try await startRemoteFixture(browser, endpoint: endpoint,
++                                     url: try XCTUnwrap(URL(string: "http://myterm-test.invalid/page")))
++        let proxiedView = try XCTUnwrap(browser.webView)
++        try await waitForBrowser { proxiedView.title == "Remote fixture" && !proxiedView.isLoading }
++
++        let configuration = WKWebViewConfiguration()
++        configuration.websiteDataStore = .nonPersistent()
++        configuration.websiteDataStore.proxyConfigurations = proxiedView.configuration.websiteDataStore.proxyConfigurations
++        let ordinaryView = WKWebView(frame: .zero, configuration: configuration)
++        let url = try XCTUnwrap(URL(string: "http://myterm-test.invalid/control"))
++        ordinaryView.load(URLRequest(url: url))
++        try await waitForBrowser { ordinaryView.title == "Remote fixture" && !ordinaryView.isLoading }
++        let state = try await ordinaryView.evaluateJavaScript(Self.webRTCProbe(udpPort: udpPort, includeFrame: false))
++        XCTAssertEqual(state as? [String], ["gathering"])
++        try await waitForBrowser { udp.count > 0 }
++        print("WEBRTC_BOUNDARY_CONTROL: ordinary proxied view emitted \(udp.count) client-local UDP datagram(s)")
++        _ = try await ordinaryView.evaluateJavaScript("window.mytermRTCProbe?.close()")
+         browser.stop()
+         await bridge.stop()
+     }
+ 
++    private func assertWebRTCDisabled(in view: WKWebView, udpPort: UInt16) async throws {
++        let state = try await view.evaluateJavaScript(Self.webRTCProbe(udpPort: udpPort, includeFrame: true))
++        XCTAssertEqual(state as? [String], ["unavailable", "unavailable"],
++                       "Both the loaded page and the loaded embedded frame must disable WebRTC")
++    }
++
++    private static func webRTCProbe(udpPort: UInt16, includeFrame: Bool) -> String {
++        """
++        (() => {
++          const probe = scope => {
++            const PeerConnection = scope.RTCPeerConnection ?? scope.webkitRTCPeerConnection;
++            if (typeof PeerConnection === 'undefined') return 'unavailable';
++            const pc = new PeerConnection({iceServers:[{urls:'stun:127.0.0.1:\(udpPort)'}]});
++            scope.mytermRTCProbe = pc;
++            pc.createDataChannel('fixture');
++            pc.createOffer().then(offer => pc.setLocalDescription(offer))
++              .catch(error => scope.mytermRTCError = String(error));
++            return 'gathering';
++          };
++          const results = [probe(window)];
++          if (\(includeFrame)) {
++            const frame = document.getElementById('rtc-frame')?.contentWindow;
++            results.push(frame?.rtcFixtureReady ? probe(frame) : 'frame not loaded');
++          }
++          return results;
++        })()
++        """
++    }
++
+     /// A remote-only hostname must resolve through the host tunnel, never on the device.
+     func testOffscreenWKWebViewLoadsRemoteHostnameThroughEncryptedProxy() async throws {
+         let fixture = try BrowserHTTPFixture()
+diff --git a/Companion/Views/RemoteBrowserView.swift b/Companion/Views/RemoteBrowserView.swift
+index 91619e0..4415013 100644
+--- a/Companion/Views/RemoteBrowserView.swift
++++ b/Companion/Views/RemoteBrowserView.swift
+@@ -48,6 +48,8 @@ final class NativeRemoteBrowser: NSObject, WKNavigationDelegate, WKUIDelegate {
+         dataStore.proxyConfigurations = [proxy]
+         let configuration = WKWebViewConfiguration()
+         configuration.websiteDataStore = dataStore
++        // WebRTC opens sockets outside WebKit's configured proxy.
++        configuration.defaultWebpagePreferences.isLockdownModeEnabled = true
+         configuration.allowsAirPlayForMediaPlayback = false
+         var filters = ["localhost\\.*[:/]", ".*\\.localhost\\.*[:/]", "\\["]
+         // Legacy IPv4 accepts decimal, octal, and hexadecimal components, including mixed forms.
