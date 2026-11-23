@@ -33,6 +33,8 @@ struct Target {
     admission: Option<String>,
     control_admission: Option<String>,
     revoked: watch::Receiver<bool>,
+    loopback_alias: bool,
+    authority_port: u16,
 }
 
 #[tokio::main]
@@ -48,14 +50,23 @@ async fn main() -> Result<(), Error> {
                 let revocation = revocation.clone();
                 tokio::spawn(announce_revocation(path.into(), revocation));
             }
+            let target_port = origin_port.parse()?;
+            let loopback_alias = env::var_os("MYTERM_FIXTURE_LOOPBACK_ALIAS").is_some();
             let target = Target {
                 hostname: hostname.clone(),
                 address: origin_ip.parse()?,
-                port: origin_port.parse()?,
+                port: target_port,
                 admission: env::var("MYTERM_FIXTURE_ADMISSION").ok(),
                 control_admission: env::var("MYTERM_FIXTURE_CONTROL_ADMISSION").ok(),
                 revoked,
+                loopback_alias,
+                authority_port: if loopback_alias { 443 } else { target_port },
             };
+            if target.loopback_alias && !target.address.is_loopback() {
+                return Err(
+                    io::Error::other("alias fixture requires an assigned loopback target").into(),
+                );
+            }
             let result = run_proxy(address, target, certificate, key).await;
             drop(revocation);
             result
@@ -238,9 +249,10 @@ async fn forward(
     }
     let allowed = request.method() == Method::CONNECT
         && request.uri().authority().is_some_and(|authority| {
-            authority.port_u16() == Some(target.port)
+            authority.port_u16() == Some(target.authority_port)
                 && (authority.host() == target.hostname
-                    || authority.host().parse::<IpAddr>().ok() == Some(target.address))
+                    || (!target.loopback_alias
+                        && authority.host().parse::<IpAddr>().ok() == Some(target.address)))
         });
     if !allowed {
         eprintln!("CONNECT fixture denied {}", request.uri());
@@ -255,6 +267,9 @@ async fn forward(
         .authority()
         .ok_or_else(|| io::Error::other("missing origin authority"))?;
     let dial = async {
+        if target.loopback_alias {
+            return TcpStream::connect(SocketAddr::new(target.address, target.port)).await;
+        }
         let resolved = tokio::net::lookup_host((authority.host(), target.port))
             .await?
             .find(|address| address.ip() == target.address)

@@ -1,0 +1,218 @@
+{
+  "native": {
+    "macOS": {
+      "browser": {
+        "clientOS": "Version 27.3 (Build 26C5047e)",
+        "finalURL": "https://app.dev.myterm.test/dashboard",
+        "literalNavigations": [
+          {
+            "appBlockedBeforeLoad": true,
+            "pageBlockedByDelegate": true,
+            "url": "http://localhost:50567/probe"
+          },
+          {
+            "appBlockedBeforeLoad": true,
+            "pageBlockedByDelegate": true,
+            "url": "http://127.0.0.1:50567/probe"
+          },
+          {
+            "appBlockedBeforeLoad": true,
+            "pageBlockedByDelegate": true,
+            "url": "http://[::1]:50568/probe"
+          }
+        ],
+        "loopbackSubresources": [
+          "blocked",
+          "blocked",
+          "blocked"
+        ],
+        "observerBrowserConnections": 0,
+        "observerConnectionsDuringNavigations": 0,
+        "observerConnectionsDuringSubresources": 0,
+        "observerControlConnections": 2,
+        "page": {
+          "color": "rgb(26, 97, 162)",
+          "embeddedWebRTC": "undefined",
+          "localStorage": "saved-at-alias",
+          "origin": "https://app.dev.myterm.test",
+          "serverHost": "app.dev.myterm.test",
+          "signedIn": true,
+          "webRTC": "undefined"
+        },
+        "scopedCertificateAccepted": true,
+        "unapprovedCertificateError": -1202,
+        "unconfiguredAliasError": -1004,
+        "unconfiguredAliasLoaded": false
+      },
+      "originLog": [
+        "2026/11/23 12:37:47 origin GET /dashboard host=app.dev.myterm.test source=loopback",
+        "2026/11/23 12:37:51 http: TLS handshake error from 127.0.0.1:39982: remote error: tls: unknown certificate",
+        "2026/11/23 12:37:51 http: TLS handshake error from 127.0.0.1:39998: remote error: tls: unknown certificate",
+        "2026/11/23 12:37:51 origin GET /login host=app.dev.myterm.test source=loopback",
+        "2026/11/23 12:37:51 origin GET /dashboard host=app.dev.myterm.test source=loopback",
+        "2026/11/23 12:37:51 origin GET /theme.css host=app.dev.myterm.test source=loopback",
+        "2026/11/23 12:37:51 origin GET /session host=app.dev.myterm.test source=loopback"
+      ],
+      "proxyLog": [
+        "proxy ready",
+        "CONNECT fixture denied unknown.dev.myterm.test:443",
+        "CONNECT fixture denied unknown.dev.myterm.test:443",
+        "CONNECT app.dev.myterm.test:443 resolved 127.0.0.1",
+        "CONNECT app.dev.myterm.test:443 resolved 127.0.0.1",
+        "CONNECT app.dev.myterm.test:443 resolved 127.0.0.1",
+        "Proxy stream: peer closed connection without sending TLS close_notify: https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
+      ]
+    },
+    "iPhoneSimulator": {
+      "browser": {
+        "clientOS": "Version 27.0 (Build 24A5408d)",
+        "finalURL": "https://app.dev.myterm.test/dashboard",
+        "literalNavigations": [
+          {
+            "appBlockedBeforeLoad": true,
+            "pageBlockedByDelegate": true,
+            "url": "http://localhost:50827/probe"
+          },
+          {
+            "appBlockedBeforeLoad": true,
+            "pageBlockedByDelegate": true,
+            "url": "http://127.0.0.1:50827/probe"
+          },
+          {
+            "appBlockedBeforeLoad": true,
+            "pageBlockedByDelegate": true,
+            "url": "http://[::1]:50828/probe"
+          }
+        ],
+        "loopbackSubresources": [
+          "blocked",
+          "blocked",
+          "blocked"
+        ],
+        "observerBrowserConnections": 0,
+        "observerConnectionsDuringNavigations": 0,
+        "observerConnectionsDuringSubresources": 0,
+        "observerControlConnections": 2,
+        "page": {
+          "color": "rgb(26, 97, 162)",
+          "embeddedWebRTC": "undefined",
+          "localStorage": "saved-at-alias",
+          "origin": "https://app.dev.myterm.test",
+          "serverHost": "app.dev.myterm.test",
+          "signedIn": true,
+          "webRTC": "undefined"
+        },
+        "scopedCertificateAccepted": true,
+        "unapprovedCertificateError": -1202,
+        "unconfiguredAliasError": -1004,
+        "unconfiguredAliasLoaded": false
+      },
+      "originLog": [
+        "2026/11/23 12:38:05 origin GET /dashboard host=app.dev.myterm.test source=loopback",
+        "2026/11/23 12:38:32 http: TLS handshake error from 127.0.0.1:43138: remote error: tls: unknown certificate",
+        "2026/11/23 12:38:32 http: TLS handshake error from 127.0.0.1:43144: remote error: tls: unknown certificate",
+        "2026/11/23 12:38:33 origin GET /login host=app.dev.myterm.test source=loopback",
+        "2026/11/23 12:38:33 origin GET /dashboard host=app.dev.myterm.test source=loopback",
+        "2026/11/23 12:38:33 origin GET /theme.css host=app.dev.myterm.test source=loopback",
+        "2026/11/23 12:38:33 origin GET /session host=app.dev.myterm.test source=loopback"
+      ],
+      "proxyLog": [
+        "proxy ready",
+        "CONNECT fixture denied unknown.dev.myterm.test:443",
+        "CONNECT fixture denied unknown.dev.myterm.test:443",
+        "CONNECT app.dev.myterm.test:443 resolved 127.0.0.1",
+        "Proxy stream: stream error received: not a result of an error",
+        "CONNECT app.dev.myterm.test:443 resolved 127.0.0.1",
+        "Proxy stream: stream error received: not a result of an error",
+        "CONNECT app.dev.myterm.test:443 resolved 127.0.0.1",
+        "Proxy stream: peer closed connection without sending TLS close_notify: https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
+      ]
+    },
+    "iPadSimulator": {
+      "browser": {
+        "clientOS": "Version 27.0 (Build 24A5408d)",
+        "finalURL": "https://app.dev.myterm.test/dashboard",
+        "literalNavigations": [
+          {
+            "appBlockedBeforeLoad": true,
+            "pageBlockedByDelegate": true,
+            "url": "http://localhost:51158/probe"
+          },
+          {
+            "appBlockedBeforeLoad": true,
+            "pageBlockedByDelegate": true,
+            "url": "http://127.0.0.1:51158/probe"
+          },
+          {
+            "appBlockedBeforeLoad": true,
+            "pageBlockedByDelegate": true,
+            "url": "http://[::1]:51159/probe"
+          }
+        ],
+        "loopbackSubresources": [
+          "blocked",
+          "blocked",
+          "blocked"
+        ],
+        "observerBrowserConnections": 0,
+        "observerConnectionsDuringNavigations": 0,
+        "observerConnectionsDuringSubresources": 0,
+        "observerControlConnections": 2,
+        "page": {
+          "color": "rgb(26, 97, 162)",
+          "embeddedWebRTC": "undefined",
+          "localStorage": "saved-at-alias",
+          "origin": "https://app.dev.myterm.test",
+          "serverHost": "app.dev.myterm.test",
+          "signedIn": true,
+          "webRTC": "undefined"
+        },
+        "scopedCertificateAccepted": true,
+        "unapprovedCertificateError": -1202,
+        "unconfiguredAliasError": -1004,
+        "unconfiguredAliasLoaded": false
+      },
+      "originLog": [
+        "2026/11/23 12:38:51 origin GET /dashboard host=app.dev.myterm.test source=loopback",
+        "2026/11/23 12:39:18 http: TLS handshake error from 127.0.0.1:43712: remote error: tls: unknown certificate",
+        "2026/11/23 12:39:18 http: TLS handshake error from 127.0.0.1:43716: remote error: tls: unknown certificate",
+        "2026/11/23 12:39:19 origin GET /login host=app.dev.myterm.test source=loopback",
+        "2026/11/23 12:39:19 origin GET /dashboard host=app.dev.myterm.test source=loopback",
+        "2026/11/23 12:39:19 origin GET /theme.css host=app.dev.myterm.test source=loopback",
+        "2026/11/23 12:39:19 origin GET /session host=app.dev.myterm.test source=loopback"
+      ],
+      "proxyLog": [
+        "proxy ready",
+        "CONNECT fixture denied unknown.dev.myterm.test:443",
+        "CONNECT fixture denied unknown.dev.myterm.test:443",
+        "CONNECT app.dev.myterm.test:443 resolved 127.0.0.1",
+        "Proxy stream: stream error received: not a result of an error",
+        "CONNECT app.dev.myterm.test:443 resolved 127.0.0.1",
+        "Proxy stream: stream error received: not a result of an error",
+        "CONNECT app.dev.myterm.test:443 resolved 127.0.0.1",
+        "Proxy stream: peer closed connection without sending TLS close_notify: https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
+      ]
+    }
+  },
+  "macContentRulesOnly": {
+    "literalNavigations": [
+      {
+        "errorCode": 104,
+        "finished": false,
+        "url": "http://localhost:62125/probe"
+      },
+      {
+        "errorCode": 104,
+        "finished": false,
+        "url": "http://127.0.0.1:62125/probe"
+      },
+      {
+        "errorCode": 104,
+        "finished": false,
+        "url": "http://[::1]:62125/probe"
+      }
+    ],
+    "observerBrowserConnections": 3,
+    "observerControlConnections": 1
+  }
+}
