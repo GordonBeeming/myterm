@@ -1,0 +1,45 @@
+--- a/claude-mod/hooks/register.js
++++ b/claude-mod/hooks/register.js
+@@ -3,6 +3,7 @@
+ const observer = __MYTERM_OBSERVER__;
+ const capture = __MYTERM_CAPTURE__;
+ let activeTurn;
++const abandonedResults = new Map();
+ const observerFailures = [];
+
+ function noteFailure($, message) {
+@@ -55,7 +56,9 @@
+     return next(event);
+   });
+   on('turn.complete', async ($, event, next) => {
+-    await record($, 'mod.turn.complete', event);
++    const abandonedToolResults = abandonedResults.get(event.turnId) ?? 0;
++    abandonedResults.delete(event.turnId);
++    await record($, 'mod.turn.complete', event, { abandoned_tool_results: abandonedToolResults });
+     if (!event.agentId && activeTurn === event.turnId) activeTurn = undefined;
+     return next(event);
+   });
+@@ -74,7 +77,10 @@
+     await record($, 'mod.tool.start', event, { turn_id: ownerTurn });
+     try {
+       const result = await next(event);
+-      await record($, 'mod.tool.complete', event, {
++      if (next.signal?.aborted && ownerTurn && !event.agentId && activeTurn === ownerTurn) {
++        // The host has abandoned this tool event. The main turn owns final settlement.
++        abandonedResults.set(ownerTurn, (abandonedResults.get(ownerTurn) ?? 0) + 1);
++      } else await record($, 'mod.tool.complete', event, {
+         result_keys: Object.keys(result ?? {}),
+         is_error: result?.isError === true,
+         denied: typeof result?.deny === 'string',
+@@ -82,7 +88,10 @@
+       });
+       return result;
+     } catch (error) {
+-      await record($, 'mod.tool.rejected', event, { turn_id: ownerTurn });
++      if (next.signal?.aborted && ownerTurn && !event.agentId && activeTurn === ownerTurn) {
++        // The host has abandoned this tool event. The main turn owns final settlement.
++        abandonedResults.set(ownerTurn, (abandonedResults.get(ownerTurn) ?? 0) + 1);
++      } else await record($, 'mod.tool.rejected', event, { turn_id: ownerTurn });
+       throw error;
+     }
+   });
