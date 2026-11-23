@@ -10,6 +10,7 @@ import (
 	"crypto/x509/pkix"
 	"flag"
 	"fmt"
+	"html"
 	"log"
 	"math/big"
 	"net"
@@ -82,7 +83,7 @@ func makeTestCertificate(issueRoot bool) (tls.Certificate, error) {
 	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}, nil
 }
 
-func run(issueRoot, useHTTP3 bool, certificateFile, keyFile string) error {
+func run(issueRoot, useHTTP3 bool, certificateFile, keyFile, label string) error {
 	var certificate tls.Certificate
 	var err error
 	if certificateFile == "" && keyFile == "" {
@@ -126,7 +127,7 @@ func run(issueRoot, useHTTP3 bool, certificateFile, keyFile string) error {
 				return
 			}
 		}
-		body := "<!doctype html><title>RELAY_FIXTURE</title>"
+		body := "<!doctype html><title>" + html.EscapeString(label) + "</title>"
 		if _, err := fmt.Fprintf(w, "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: %d\r\n\r\n%s", len(body), body); err != nil {
 			log.Print(err)
 			return
@@ -174,8 +175,9 @@ func main() {
 	useHTTP3 := flag.Bool("http3", false, "serve the fixture over HTTP/3")
 	certificate := flag.String("cert", "", "optional PEM certificate chain for default-trust experiments")
 	key := flag.String("key", "", "optional PEM key for a local fixture")
+	label := flag.String("label", "RELAY_FIXTURE", "title identifying the responding fixture")
 	flag.Parse()
-	if err := run(*issueRoot, *useHTTP3, *certificate, *key); err != nil {
+	if err := run(*issueRoot, *useHTTP3, *certificate, *key, *label); err != nil {
 		log.Fatal(err)
 	}
 }

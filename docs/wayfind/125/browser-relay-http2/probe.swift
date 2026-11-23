@@ -170,7 +170,8 @@ private final class STUNObserver: @unchecked Sendable {
 @MainActor struct Probe {
     static func run(relayPort: UInt16, status: String, expectedCertificate: Data?,
                     domainMatching: String = "explicit", transport: String = "http2",
-                    relayHost: String = "127.0.0.1", probeWebRTC: Bool = false) async throws -> Data {
+                    relayHost: String = "127.0.0.1", probeWebRTC: Bool = false,
+                    secondaryRelayPort: UInt16? = nil) async throws -> Data {
         let origin = try Fixture()
         let originPort = try await origin.start()
         defer { origin.stop() }
@@ -253,7 +254,15 @@ private final class STUNObserver: @unchecked Sendable {
                 directRTC = ["navigationError": navigation.error?.code ?? 0]
             }
         }
-        let output: [String: Any] = ["scope": "offscreen WKWebView secure relay routing fixture; no Rust server or E2EE", "os": ProcessInfo.processInfo.operatingSystemVersionString, "relayState": status, "domainMatching": domainMatching, "relayHost": relayHost, "webRTC": rtc, "webRTCDirectControl": directRTC, "results": results]
+        var profiles: [String: Any] = [:]
+        if status == "running", let secondaryRelayPort {
+            let host = relayHost == "127.0.0.1" ? "localhost" : "myterm-route-probe.invalid"
+            if let url = URL(string: "http://\(host):\(originPort)/profile-probe") {
+                profiles = try await ProfileProbe.run(url: url, relayHost: relayHost, primary: relayPort,
+                                                     secondary: secondaryRelayPort)
+            }
+        }
+        let output: [String: Any] = ["scope": "offscreen WKWebView secure relay routing fixture; no Rust server or E2EE", "os": ProcessInfo.processInfo.operatingSystemVersionString, "relayState": status, "domainMatching": domainMatching, "relayHost": relayHost, "webRTC": rtc, "webRTCDirectControl": directRTC, "profiles": profiles, "results": results]
         return try JSONSerialization.data(withJSONObject: output, options: [.prettyPrinted, .sortedKeys])
     }
 }
@@ -293,14 +302,28 @@ final class ProbeScene: UIResponder, UIWindowSceneDelegate {
                 let environment = ProcessInfo.processInfo.environment
                 guard let rawPort = environment["MYTERM_PROBE_PORT"], let port = UInt16(rawPort),
                       let status = environment["MYTERM_PROBE_STATE"],
-                      ["running", "stopped"].contains(status) else {
+                      ["running", "stopped", "profile-reopen"].contains(status) else {
                     throw NSError(domain: "Missing simulator fixture configuration", code: 2)
                 }
-                let domainMatching = environment["MYTERM_PROBE_DOMAINS"] ?? "explicit"
-                let data = try await Probe.run(relayPort: port, status: status, expectedCertificate: nil,
-                                               domainMatching: domainMatching,
+                let data: Data
+                if status == "profile-reopen",
+                   let rawURL = environment["MYTERM_PROBE_PROFILE_URL"], let url = URL(string: rawURL),
+                   let rawID = environment["MYTERM_PROBE_PROFILE_ID"], let identifier = UUID(uuidString: rawID),
+                   let secondary = environment["MYTERM_PROBE_SECONDARY_PORT"].flatMap(UInt16.init) {
+                    let state = try await ProfileProbe.reopen(url: url, relayHost: "127.0.0.1",
+                                                              port: secondary, identifier: identifier)
+                    data = try JSONSerialization.data(withJSONObject: ["relayState": status, "profileAfterRestart": state],
+                                                      options: [.prettyPrinted, .sortedKeys])
+                } else {
+                    guard status != "profile-reopen" else {
+                        throw NSError(domain: "Missing profile reopen parameters", code: 2)
+                    }
+                    data = try await Probe.run(relayPort: port, status: status, expectedCertificate: nil,
+                                               domainMatching: environment["MYTERM_PROBE_DOMAINS"] ?? "explicit",
                                                transport: environment["MYTERM_PROBE_TRANSPORT"] ?? "http2",
-                                               probeWebRTC: environment["MYTERM_PROBE_WEBRTC"] == "1")
+                                               probeWebRTC: environment["MYTERM_PROBE_WEBRTC"] == "1",
+                                               secondaryRelayPort: environment["MYTERM_PROBE_SECONDARY_PORT"].flatMap(UInt16.init))
+                }
                 try data.write(to: path, options: .atomic)
             } catch {
                 let errorData = try? JSONSerialization.data(withJSONObject: ["probeError": String(describing: error)])
@@ -322,7 +345,8 @@ final class ProbeScene: UIResponder, UIWindowSceneDelegate {
             let data = try await Probe.run(relayPort: port, status: status, expectedCertificate: certificate,
                                            domainMatching: environment["MYTERM_PROBE_DOMAINS"] ?? "explicit",
                                            transport: environment["MYTERM_PROBE_TRANSPORT"] ?? "http2",
-                                           relayHost: relayHost, probeWebRTC: environment["MYTERM_PROBE_WEBRTC"] == "1")
+                                           relayHost: relayHost, probeWebRTC: environment["MYTERM_PROBE_WEBRTC"] == "1",
+                                               secondaryRelayPort: environment["MYTERM_PROBE_SECONDARY_PORT"].flatMap(UInt16.init))
             print(String(decoding: data, as: UTF8.self))
         } catch {
             fputs("Probe failed: \(error)\n", stderr)

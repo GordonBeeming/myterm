@@ -1,0 +1,183 @@
+{
+  "macOS": {
+    "os": "Version 27.3 (Build 26C5047e)",
+    "profiles": {
+      "firstAfterDeletion": {
+        "cookie": "",
+        "local": "",
+        "origin": "http://myterm-route-probe.invalid:62114",
+        "session": "",
+        "title": "RELAY_FIXTURE"
+      },
+      "firstAfterReopen": {
+        "cookie": "myterm_profile=A",
+        "local": "A",
+        "origin": "http://myterm-route-probe.invalid:62114",
+        "session": "",
+        "title": "RELAY_FIXTURE"
+      },
+      "firstAfterSecondWrite": {
+        "cookie": "myterm_profile=A",
+        "local": "A",
+        "origin": "http://myterm-route-probe.invalid:62114",
+        "session": "A",
+        "title": "RELAY_FIXTURE"
+      },
+      "secondAfterFirstDeletion": {
+        "cookie": "myterm_profile=B",
+        "local": "B",
+        "origin": "http://myterm-route-probe.invalid:62114",
+        "session": "",
+        "title": "SECONDARY_RELAY_FIXTURE"
+      },
+      "secondAfterWrite": {
+        "cookie": "myterm_profile=B",
+        "local": "B",
+        "origin": "http://myterm-route-probe.invalid:62114",
+        "session": "",
+        "title": "SECONDARY_RELAY_FIXTURE"
+      },
+      "secondBeforeWrite": {
+        "cookie": "",
+        "local": "",
+        "origin": "http://myterm-route-probe.invalid:62114",
+        "session": "",
+        "title": "SECONDARY_RELAY_FIXTURE"
+      },
+      "url": "http://myterm-route-probe.invalid:62114/profile-probe"
+    }
+  },
+  "iPhoneSimulator": {
+    "os": "Version 27.0 (Build 24A5408d)",
+    "profiles": {
+      "firstAfterDeletion": {
+        "cookie": "",
+        "local": "",
+        "origin": "http://localhost:57233",
+        "session": "",
+        "title": "RELAY_FIXTURE"
+      },
+      "firstAfterReopen": {
+        "cookie": "myterm_profile=A",
+        "local": "A",
+        "origin": "http://localhost:57233",
+        "session": "",
+        "title": "RELAY_FIXTURE"
+      },
+      "firstAfterSecondWrite": {
+        "cookie": "myterm_profile=A",
+        "local": "A",
+        "origin": "http://localhost:57233",
+        "session": "A",
+        "title": "RELAY_FIXTURE"
+      },
+      "preRestartCookies": [
+        {
+          "name": "myterm_profile",
+          "sessionOnly": "false",
+          "value": "B"
+        },
+        {
+          "name": "myterm_native_profile",
+          "sessionOnly": "false",
+          "value": "B"
+        }
+      ],
+      "secondAfterFirstDeletion": {
+        "cookie": "myterm_profile=B",
+        "local": "B",
+        "origin": "http://localhost:57233",
+        "session": "",
+        "title": "SECONDARY_RELAY_FIXTURE"
+      },
+      "secondAfterWrite": {
+        "cookie": "myterm_profile=B",
+        "local": "B",
+        "origin": "http://localhost:57233",
+        "session": "",
+        "title": "SECONDARY_RELAY_FIXTURE"
+      },
+      "secondaryStoreID": "4EBF3DFA-A465-46DB-919A-919688C61508",
+      "secondBeforeWrite": {
+        "cookie": "",
+        "local": "",
+        "origin": "http://localhost:57233",
+        "session": "",
+        "title": "SECONDARY_RELAY_FIXTURE"
+      },
+      "url": "http://localhost:57233/profile-probe"
+    },
+    "profileAfterRestart": {
+      "cookie": "",
+      "local": "B",
+      "origin": "http://localhost:57233",
+      "session": "",
+      "title": "SECONDARY_RELAY_FIXTURE"
+    }
+  },
+  "iPadSimulator": {
+    "os": "Version 27.0 (Build 24A5408d)",
+    "profiles": {
+      "firstAfterDeletion": {
+        "cookie": "",
+        "local": "",
+        "origin": "http://localhost:55631",
+        "session": "",
+        "title": "RELAY_FIXTURE"
+      },
+      "firstAfterReopen": {
+        "cookie": "myterm_profile=A",
+        "local": "A",
+        "origin": "http://localhost:55631",
+        "session": "",
+        "title": "RELAY_FIXTURE"
+      },
+      "firstAfterSecondWrite": {
+        "cookie": "myterm_profile=A",
+        "local": "A",
+        "origin": "http://localhost:55631",
+        "session": "A",
+        "title": "RELAY_FIXTURE"
+      },
+      "secondAfterFirstDeletion": {
+        "cookie": "myterm_profile=B",
+        "local": "B",
+        "origin": "http://localhost:55631",
+        "session": "",
+        "title": "SECONDARY_RELAY_FIXTURE"
+      },
+      "secondAfterWrite": {
+        "cookie": "myterm_profile=B",
+        "local": "B",
+        "origin": "http://localhost:55631",
+        "session": "",
+        "title": "SECONDARY_RELAY_FIXTURE"
+      },
+      "secondaryStoreID": "82666A22-22F2-4EE9-BC6D-C04838C9DAF5",
+      "secondBeforeWrite": {
+        "cookie": "",
+        "local": "",
+        "origin": "http://localhost:55631",
+        "session": "",
+        "title": "SECONDARY_RELAY_FIXTURE"
+      },
+      "url": "http://localhost:55631/profile-probe"
+    },
+    "profileAfterRestart": {
+      "cookie": "",
+      "local": "B",
+      "origin": "http://localhost:55631",
+      "session": "",
+      "title": "SECONDARY_RELAY_FIXTURE"
+    }
+  },
+  "originaliPhoneRestart": {
+    "profileAfterRestart": {
+      "cookie": "",
+      "local": "B",
+      "origin": "http://localhost:55749",
+      "session": "",
+      "title": "SECONDARY_RELAY_FIXTURE"
+    }
+  }
+}
