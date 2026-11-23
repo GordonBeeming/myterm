@@ -13,6 +13,8 @@ The loopback-only Go fixture generates its own certificate in memory and writes 
 
 The [earlier HTTP CONNECT probe](https://github.com/GordonBeeming/myterm/issues/160#issuecomment-6875187932) reached its proxy for the remote-only control and reproduced the same direct loopback route. Keep Companion's loopback block until a replacement can prove that all supported routes reach the assigned server and fail closed. A follow-up HTTP/2 or HTTP/3 experiment needs a trusted relay and a successful non-loopback control before testing native parity.
 
+The [WebRTC Lockdown comparison](webrtc-lockdown.md) verifies the public setting on Mac and both mobile simulators and records the site API trade-off. The [closure audit](closure-audit.md) records what remains against the agreed browser contract.
+
 ## Repeat
 
 Run on a Mac with Go, Xcode and jq available. The runner uses two disposable local listeners, prints JSON to stdout and leaves the scratch path on stderr with the relay log. It opens no windows. The tool sandbox denied offscreen WebKit access to helper services, so the recorded run used host access.

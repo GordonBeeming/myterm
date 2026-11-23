@@ -186,6 +186,9 @@ private enum TransferFixtureError: Error {
         store.proxyConfigurations = [proxy]
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = store
+        if ProcessInfo.processInfo.environment["MYTERM_PROBE_LOCKDOWN"] == "1" {
+            configuration.defaultWebpagePreferences.isLockdownModeEnabled = true
+        }
         let browser = WKWebView(frame: .zero, configuration: configuration)
         browser.navigationDelegate = inspector
         browser.uiDelegate = inspector

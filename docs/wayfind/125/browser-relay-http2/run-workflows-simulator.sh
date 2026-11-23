@@ -63,6 +63,7 @@ for mode in navigation transfers; do
     SIMCTL_CHILD_MYTERM_WORKFLOW_RELAY_PORT="$relay_port" SIMCTL_CHILD_MYTERM_WORKFLOW_ORIGIN_PORT="$origin_port" \
         SIMCTL_CHILD_MYTERM_WORKFLOW_MODE="$mode" \
         SIMCTL_CHILD_MYTERM_WORKFLOW_DIRECT_DOWNLOAD="${MYTERM_WORKFLOW_DIRECT_DOWNLOAD:-0}" \
+        SIMCTL_CHILD_MYTERM_PROBE_LOCKDOWN="${MYTERM_PROBE_LOCKDOWN:-0}" \
         xcrun simctl launch --terminate-running-process "$device_id" "$bundle" >&2
     path="$app_data/Documents/workflow-$mode.json"
     for _ in {1..280}; do

@@ -112,24 +112,39 @@ private final class STUNObserver: @unchecked Sendable {
     func stop() { listener.cancel() }
 }
 
-@MainActor private func observeWebRTC(in browser: WKWebView) async throws -> [String: Any] {
+@MainActor private func observeWebRTC(in browser: WKWebView, embedded: Bool = false) async throws -> [String: Any] {
     let observer = try STUNObserver()
     let port = try await observer.start()
     defer { observer.stop() }
     let script = """
-        (() => {
-          if (typeof RTCPeerConnection === 'undefined') return "API unavailable";
-          let connection = new RTCPeerConnection({
-            iceServers: [{urls: "stun:127.0.0.1:\(port)"}]
-          });
-          window.fixturePeerConnection = connection;
-          connection.createDataChannel("fixture");
-          connection.createOffer().then(offer => connection.setLocalDescription(offer))
-            .catch(error => { window.fixtureRTCError = String(error); });
-          return "ICE gathering requested";
-        })();
+        let scope = window;
+        if (embedded) {
+            const frame = document.createElement('iframe');
+            const ready = new Promise(resolve => {
+                frame.onload = () => resolve(true);
+                setTimeout(() => resolve(false), 1000);
+            });
+            frame.srcdoc = '<!doctype html><title>RTC fixture frame</title>';
+            document.body.append(frame);
+            if (!(await ready) || !frame.contentWindow) return 'frame unavailable';
+            scope = frame.contentWindow;
+        }
+        if (typeof scope.RTCPeerConnection === 'undefined') return 'API unavailable';
+        try {
+            const connection = new scope.RTCPeerConnection({iceServers: [{urls: 'stun:127.0.0.1:' + port}]});
+            window.fixturePeerConnection = connection;
+            window.fixtureRTCError = '';
+            connection.createDataChannel('fixture');
+            connection.createOffer().then(offer => connection.setLocalDescription(offer))
+                .catch(error => { window.fixtureRTCError = String(error); });
+            return 'ICE gathering requested';
+        } catch (error) {
+            window.fixtureRTCError = String(error);
+            return 'setup rejected';
+        }
         """
-    let activation = try await browser.evaluateJavaScript(script) as? String ?? ""
+    let activation = try await browser.callAsyncJavaScript(script, arguments: ["embedded": embedded, "port": Int(port)],
+                                                           in: nil, contentWorld: .page) as? String ?? ""
     try await Task.sleep(for: .seconds(4))
     let error = try await browser.evaluateJavaScript("window.fixtureRTCError || ''") as? String ?? ""
     _ = try await browser.evaluateJavaScript("window.fixturePeerConnection?.close()")
@@ -171,12 +186,19 @@ private final class STUNObserver: @unchecked Sendable {
     static func run(relayPort: UInt16, status: String, expectedCertificate: Data?,
                     domainMatching: String = "explicit", transport: String = "http2",
                     relayHost: String = "127.0.0.1", probeWebRTC: Bool = false,
-                    secondaryRelayPort: UInt16? = nil) async throws -> Data {
+                    secondaryRelayPort: UInt16? = nil, lockdownMode: Bool = false,
+                    webRTCOutage: Bool = false) async throws -> Data {
+        let compatibilityMode = ProcessInfo.processInfo.environment["MYTERM_PROBE_MAX_COMPAT"] == "1"
+        if lockdownMode && compatibilityMode {
+            throw NSError(domain: "Choose one WebKit restriction mode", code: 6)
+        }
         let origin = try Fixture()
         let originPort = try await origin.start()
         defer { origin.stop() }
         var results: [[String: Any]] = []
         var rtc: [String: Any] = [:]
+        var embeddedRTC: [String: Any] = [:]
+        var outageRTC: [String: Any] = [:]
         var directRTC: [String: Any] = [:]
         let tls = NWProtocolTLS.Options()
         if let expectedCertificate {
@@ -213,6 +235,15 @@ private final class STUNObserver: @unchecked Sendable {
             store.proxyConfigurations = [config]
             let configuration = WKWebViewConfiguration()
             configuration.websiteDataStore = store
+            if lockdownMode {
+                configuration.defaultWebpagePreferences.isLockdownModeEnabled = true
+            } else if compatibilityMode {
+                if #available(macOS 26.4, iOS 26.4, *) {
+                    configuration.defaultWebpagePreferences.securityRestrictionMode = .maximizeCompatibility
+                } else {
+                    throw NSError(domain: "WebKit security restriction mode unavailable", code: 6)
+                }
+            }
             let browser = WKWebView(frame: .zero, configuration: configuration)
             let navigation = Navigation(expectedCertificate: expectedCertificate ?? Data())
             browser.navigationDelegate = navigation
@@ -232,6 +263,17 @@ private final class STUNObserver: @unchecked Sendable {
             ])
             if probeWebRTC, host == "myterm-route-probe.invalid", navigation.finished {
                 rtc = try await observeWebRTC(in: browser)
+                if lockdownMode {
+                    embeddedRTC = try await observeWebRTC(in: browser, embedded: true)
+                }
+                if webRTCOutage, status == "running" {
+                    try await waitForRelayStop()
+                    outageRTC["topLevel"] = try await observeWebRTC(in: browser)
+                    outageRTC["embedded"] = try await observeWebRTC(in: browser, embedded: true)
+                    browser.stopLoading()
+                    browser.navigationDelegate = nil
+                    break
+                }
             }
             browser.stopLoading()
             browser.navigationDelegate = nil
@@ -262,8 +304,24 @@ private final class STUNObserver: @unchecked Sendable {
                                                      secondary: secondaryRelayPort)
             }
         }
-        let output: [String: Any] = ["scope": "offscreen WKWebView secure relay routing fixture; no Rust server or E2EE", "os": ProcessInfo.processInfo.operatingSystemVersionString, "relayState": status, "domainMatching": domainMatching, "relayHost": relayHost, "webRTC": rtc, "webRTCDirectControl": directRTC, "profiles": profiles, "results": results]
+        let output: [String: Any] = ["scope": "offscreen WKWebView secure relay routing fixture; no Rust server or E2EE", "os": ProcessInfo.processInfo.operatingSystemVersionString, "relayState": status, "domainMatching": domainMatching, "relayHost": relayHost, "lockdownMode": lockdownMode, "maximizeCompatibility": compatibilityMode, "webRTC": rtc, "webRTCEmbedded": embeddedRTC, "webRTCDuringOutage": outageRTC, "webRTCDirectControl": directRTC, "profiles": profiles, "results": results]
         return try JSONSerialization.data(withJSONObject: output, options: [.prettyPrinted, .sortedKeys])
+    }
+
+    private static func waitForRelayStop() async throws {
+        #if os(iOS)
+        let directory = URL.documentsDirectory
+        #else
+        let directory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+        #endif
+        try Data("ready\n".utf8).write(to: directory.appendingPathComponent("rtc-outage-ready"), options: .atomic)
+        let stopped = directory.appendingPathComponent("rtc-relay-stopped").path
+        let deadline = ContinuousClock.now + .seconds(6)
+        while ContinuousClock.now < deadline {
+            if FileManager.default.fileExists(atPath: stopped) { return }
+            try await Task.sleep(for: .milliseconds(40))
+        }
+        throw NSError(domain: "Missing WebRTC relay-stop signal", code: 5)
     }
 }
 
@@ -326,7 +384,9 @@ final class ProbeScene: UIResponder, UIWindowSceneDelegate {
                                                domainMatching: environment["MYTERM_PROBE_DOMAINS"] ?? "explicit",
                                                transport: environment["MYTERM_PROBE_TRANSPORT"] ?? "http2",
                                                probeWebRTC: environment["MYTERM_PROBE_WEBRTC"] == "1",
-                                               secondaryRelayPort: environment["MYTERM_PROBE_SECONDARY_PORT"].flatMap(UInt16.init))
+                                               secondaryRelayPort: environment["MYTERM_PROBE_SECONDARY_PORT"].flatMap(UInt16.init),
+                                               lockdownMode: environment["MYTERM_PROBE_LOCKDOWN"] == "1",
+                                               webRTCOutage: environment["MYTERM_PROBE_WEBRTC_OUTAGE"] == "1")
                 }
                 try data.write(to: path, options: .atomic)
             } catch {
@@ -350,7 +410,9 @@ final class ProbeScene: UIResponder, UIWindowSceneDelegate {
                                            domainMatching: environment["MYTERM_PROBE_DOMAINS"] ?? "explicit",
                                            transport: environment["MYTERM_PROBE_TRANSPORT"] ?? "http2",
                                            relayHost: relayHost, probeWebRTC: environment["MYTERM_PROBE_WEBRTC"] == "1",
-                                               secondaryRelayPort: environment["MYTERM_PROBE_SECONDARY_PORT"].flatMap(UInt16.init))
+                                               secondaryRelayPort: environment["MYTERM_PROBE_SECONDARY_PORT"].flatMap(UInt16.init),
+                                               lockdownMode: environment["MYTERM_PROBE_LOCKDOWN"] == "1",
+                                               webRTCOutage: environment["MYTERM_PROBE_WEBRTC_OUTAGE"] == "1")
             print(String(decoding: data, as: UTF8.self))
         } catch {
             fputs("Probe failed: \(error)\n", stderr)

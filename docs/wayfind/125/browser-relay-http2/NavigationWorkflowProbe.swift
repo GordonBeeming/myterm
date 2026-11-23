@@ -67,6 +67,7 @@ private enum NavigationWorkflowError: Error {
         guard let corsResult = cors as? [String: Any] else { throw NavigationWorkflowError.invalidScriptResult }
 
         let webSockets = try await exerciseWebSockets(opener, destination: secondary)
+        let webFeatures = try await exerciseWebFeatures(opener)
 
         _ = try await opener.evaluateJavaScript("document.getElementById('popup').click(); 'clicked';")
         try await waitFor("popup creation") { openerInspector.popup != nil }
@@ -99,6 +100,7 @@ private enum NavigationWorkflowError: Error {
             "independentView": ["title": independentTitle, "canGoBack": independentCanGoBack, "loginProof": independentCookieProof],
             "cors": corsResult,
             "webSockets": webSockets,
+            "webFeatures": webFeatures,
             "popup": ["url": popupURL, "sharedWebsiteDataStore": openerInspector.sharesWebsiteDataStore,
                       "messageOrigin": postedFrom, "returnedToOpener": returnedToOpener],
             "history": ["back": historyBackURL, "forward": historyForwardURL],
@@ -106,6 +108,39 @@ private enum NavigationWorkflowError: Error {
                 ($0["usedException"] as? Bool) == true ? $0["host"] as? String : nil
             })).sorted()
         ]
+    }
+
+    private static func exerciseWebFeatures(_ browser: WKWebView) async throws -> [String: Any] {
+        let result = try await browser.callAsyncJavaScript("""
+            const features = { file: typeof File, fileReader: typeof FileReader,
+                indexedDB: typeof indexedDB, serviceWorker: typeof navigator.serviceWorker };
+            if (typeof indexedDB === 'undefined') {
+                features.indexedDBRoundTrip = false;
+                return features;
+            }
+            features.indexedDBRoundTrip = await Promise.race([
+                new Promise(resolve => {
+                    const opened = indexedDB.open('myterm-fixture', 1);
+                    opened.onupgradeneeded = () => opened.result.createObjectStore('session');
+                    opened.onerror = () => resolve(false);
+                    opened.onsuccess = () => {
+                        const db = opened.result;
+                        const update = db.transaction('session', 'readwrite');
+                        update.objectStore('session').put('fixture-session', 'token');
+                        update.onerror = () => { db.close(); resolve(false); };
+                        update.oncomplete = () => {
+                            const read = db.transaction('session', 'readonly').objectStore('session').get('token');
+                            read.onsuccess = () => { db.close(); resolve(read.result === 'fixture-session'); };
+                            read.onerror = () => { db.close(); resolve(false); };
+                        };
+                    };
+                }),
+                new Promise(resolve => setTimeout(() => resolve(false), 2000))
+            ]);
+            return features;
+            """, arguments: [:], in: nil, contentWorld: .page)
+        guard let features = result as? [String: Any] else { throw NavigationWorkflowError.invalidScriptResult }
+        return features
     }
 
     private static func exerciseWebSockets(_ browser: WKWebView, destination: URL) async throws -> [String: Any] {
@@ -165,6 +200,9 @@ private enum NavigationWorkflowError: Error {
         store.proxyConfigurations = [proxy]
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = store
+        if ProcessInfo.processInfo.environment["MYTERM_PROBE_LOCKDOWN"] == "1" {
+            configuration.defaultWebpagePreferences.isLockdownModeEnabled = true
+        }
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
         let browser = WKWebView(frame: .zero, configuration: configuration)
         browser.navigationDelegate = inspector

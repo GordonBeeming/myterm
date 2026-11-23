@@ -96,12 +96,20 @@ launch_probe() {
     local mode="$1"
     SIMCTL_CHILD_MYTERM_PROBE_PORT="$relay_port" SIMCTL_CHILD_MYTERM_PROBE_STATE="$mode" \
         SIMCTL_CHILD_MYTERM_PROBE_DOMAINS="$domain_matching" SIMCTL_CHILD_MYTERM_PROBE_TRANSPORT="$transport" \
-        SIMCTL_CHILD_MYTERM_PROBE_WEBRTC="${MYTERM_PROBE_WEBRTC:-0}" \
+        SIMCTL_CHILD_MYTERM_PROBE_WEBRTC="${MYTERM_PROBE_WEBRTC:-0}" SIMCTL_CHILD_MYTERM_PROBE_LOCKDOWN="${MYTERM_PROBE_LOCKDOWN:-0}" \
+        SIMCTL_CHILD_MYTERM_PROBE_WEBRTC_OUTAGE="${MYTERM_PROBE_WEBRTC_OUTAGE:-0}" \
         SIMCTL_CHILD_MYTERM_PROBE_SECONDARY_PORT="$secondary_port" \
         SIMCTL_CHILD_MYTERM_PROBE_PROFILE_URL="$profile_url" SIMCTL_CHILD_MYTERM_PROBE_PROFILE_ID="$profile_id" \
         SIMCTL_CHILD_MYTERM_PROBE_RESTORED_COOKIE="$restored_cookie" \
         xcrun simctl launch --terminate-running-process "$device_id" "$bundle" >&2
-    for _ in {1..100}; do
+    for _ in {1..120}; do
+        if [[ "$mode" == running && "${MYTERM_PROBE_WEBRTC_OUTAGE:-0}" == 1 && -n "$relay_pid" &&
+              -s "$app_data/Documents/rtc-outage-ready" ]]; then
+            kill "$relay_pid"
+            wait "$relay_pid" 2>/dev/null || true
+            relay_pid=""
+            : > "$app_data/Documents/rtc-relay-stopped"
+        fi
         if [[ -s "$result" ]] && jq -e 'has("probeError")' "$result" >/dev/null; then
             cat "$result" >&2
             return 1
@@ -133,9 +141,11 @@ if [[ -n "$secondary_port" ]]; then
         launch_probe profile-restore
     fi
 fi
-kill "$relay_pid"
-wait "$relay_pid" 2>/dev/null || true
-relay_pid=""
+if [[ -n "$relay_pid" ]]; then
+    kill "$relay_pid"
+    wait "$relay_pid" 2>/dev/null || true
+    relay_pid=""
+fi
 launch_probe stopped
 
 if [[ -f profile-restore.json ]]; then

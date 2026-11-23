@@ -1,0 +1,939 @@
+{
+  "activeOutage": {
+    "macOS": [
+      {
+        "domainMatching": "explicit",
+        "lockdownMode": true,
+        "os": "Version 27.3 (Build 26C5047e)",
+        "profiles": {},
+        "relayHost": "probe.localhost.direct",
+        "relayState": "running",
+        "results": [
+          {
+            "clientOriginRequests": [],
+            "errorCode": 0,
+            "errorDomain": "",
+            "finished": true,
+            "proxy": "relayHTTP3",
+            "title": "RELAY_FIXTURE",
+            "underlyingErrorCode": 0,
+            "underlyingErrorDomain": "",
+            "url": "http://myterm-route-probe.invalid:62120/routing-probe"
+          }
+        ],
+        "scope": "offscreen WKWebView secure relay routing fixture; no Rust server or E2EE",
+        "webRTC": {
+          "clientSTUNDatagrams": 0,
+          "setupError": "",
+          "start": "API unavailable"
+        },
+        "webRTCDirectControl": {
+          "clientSTUNDatagrams": 5,
+          "setupError": "",
+          "start": "ICE gathering requested"
+        },
+        "webRTCDuringOutage": {
+          "embedded": {
+            "clientSTUNDatagrams": 0,
+            "setupError": "",
+            "start": "API unavailable"
+          },
+          "topLevel": {
+            "clientSTUNDatagrams": 0,
+            "setupError": "",
+            "start": "API unavailable"
+          }
+        },
+        "webRTCEmbedded": {
+          "clientSTUNDatagrams": 0,
+          "setupError": "",
+          "start": "API unavailable"
+        }
+      },
+      {
+        "domainMatching": "explicit",
+        "lockdownMode": true,
+        "os": "Version 27.3 (Build 26C5047e)",
+        "profiles": {},
+        "relayHost": "probe.localhost.direct",
+        "relayState": "stopped",
+        "results": [
+          {
+            "clientOriginRequests": [],
+            "errorCode": -1004,
+            "errorDomain": "NSURLErrorDomain",
+            "finished": false,
+            "proxy": "relayHTTP3",
+            "title": "",
+            "underlyingErrorCode": 61,
+            "underlyingErrorDomain": "NSPOSIXErrorDomain",
+            "url": "http://myterm-route-probe.invalid:62121/routing-probe"
+          },
+          {
+            "clientOriginRequests": [
+              "GET /routing-probe HTTP/1.1"
+            ],
+            "errorCode": 0,
+            "errorDomain": "",
+            "finished": true,
+            "proxy": "relayHTTP3",
+            "title": "CLIENT_LOCAL_FIXTURE",
+            "underlyingErrorCode": 0,
+            "underlyingErrorDomain": "",
+            "url": "http://localhost:62121/routing-probe"
+          },
+          {
+            "clientOriginRequests": [
+              "GET /routing-probe HTTP/1.1"
+            ],
+            "errorCode": 0,
+            "errorDomain": "",
+            "finished": true,
+            "proxy": "relayHTTP3",
+            "title": "CLIENT_LOCAL_FIXTURE",
+            "underlyingErrorCode": 0,
+            "underlyingErrorDomain": "",
+            "url": "http://127.0.0.1:62121/routing-probe"
+          },
+          {
+            "clientOriginRequests": [
+              "GET /routing-probe HTTP/1.1"
+            ],
+            "errorCode": 0,
+            "errorDomain": "",
+            "finished": true,
+            "proxy": "relayHTTP3",
+            "title": "CLIENT_LOCAL_FIXTURE",
+            "underlyingErrorCode": 0,
+            "underlyingErrorDomain": "",
+            "url": "http://[::1]:62121/routing-probe"
+          }
+        ],
+        "scope": "offscreen WKWebView secure relay routing fixture; no Rust server or E2EE",
+        "webRTC": {},
+        "webRTCDirectControl": {},
+        "webRTCDuringOutage": {},
+        "webRTCEmbedded": {}
+      }
+    ],
+    "iPhoneSimulator": [
+      {
+        "domainMatching": "explicit",
+        "lockdownMode": true,
+        "os": "Version 27.0 (Build 24A5408d)",
+        "profiles": {},
+        "relayHost": "127.0.0.1",
+        "relayState": "running",
+        "results": [
+          {
+            "clientOriginRequests": [],
+            "errorCode": 0,
+            "errorDomain": "",
+            "finished": true,
+            "proxy": "relayHTTP3",
+            "title": "RELAY_FIXTURE",
+            "underlyingErrorCode": 0,
+            "underlyingErrorDomain": "",
+            "url": "http://myterm-route-probe.invalid:53216/routing-probe"
+          }
+        ],
+        "scope": "offscreen WKWebView secure relay routing fixture; no Rust server or E2EE",
+        "webRTC": {
+          "clientSTUNDatagrams": 0,
+          "setupError": "",
+          "start": "API unavailable"
+        },
+        "webRTCDirectControl": {
+          "clientSTUNDatagrams": 0,
+          "setupError": "",
+          "start": "ICE gathering requested"
+        },
+        "webRTCDuringOutage": {
+          "embedded": {
+            "clientSTUNDatagrams": 0,
+            "setupError": "",
+            "start": "API unavailable"
+          },
+          "topLevel": {
+            "clientSTUNDatagrams": 0,
+            "setupError": "",
+            "start": "API unavailable"
+          }
+        },
+        "webRTCEmbedded": {
+          "clientSTUNDatagrams": 0,
+          "setupError": "",
+          "start": "API unavailable"
+        }
+      },
+      {
+        "domainMatching": "explicit",
+        "lockdownMode": true,
+        "os": "Version 27.0 (Build 24A5408d)",
+        "profiles": {},
+        "relayHost": "127.0.0.1",
+        "relayState": "stopped",
+        "results": [
+          {
+            "clientOriginRequests": [],
+            "errorCode": -1004,
+            "errorDomain": "NSURLErrorDomain",
+            "finished": false,
+            "proxy": "relayHTTP3",
+            "title": "",
+            "underlyingErrorCode": 61,
+            "underlyingErrorDomain": "NSPOSIXErrorDomain",
+            "url": "http://myterm-route-probe.invalid:53338/routing-probe"
+          },
+          {
+            "clientOriginRequests": [],
+            "errorCode": -1004,
+            "errorDomain": "NSURLErrorDomain",
+            "finished": false,
+            "proxy": "relayHTTP3",
+            "title": "",
+            "underlyingErrorCode": 61,
+            "underlyingErrorDomain": "NSPOSIXErrorDomain",
+            "url": "http://localhost:53338/routing-probe"
+          },
+          {
+            "clientOriginRequests": [],
+            "errorCode": -1005,
+            "errorDomain": "NSURLErrorDomain",
+            "finished": false,
+            "proxy": "relayHTTP3",
+            "title": "",
+            "underlyingErrorCode": 96,
+            "underlyingErrorDomain": "NSPOSIXErrorDomain",
+            "url": "http://127.0.0.1:53338/routing-probe"
+          },
+          {
+            "clientOriginRequests": [],
+            "errorCode": -1005,
+            "errorDomain": "NSURLErrorDomain",
+            "finished": false,
+            "proxy": "relayHTTP3",
+            "title": "",
+            "underlyingErrorCode": 96,
+            "underlyingErrorDomain": "NSPOSIXErrorDomain",
+            "url": "http://[::1]:53338/routing-probe"
+          }
+        ],
+        "scope": "offscreen WKWebView secure relay routing fixture; no Rust server or E2EE",
+        "webRTC": {},
+        "webRTCDirectControl": {},
+        "webRTCDuringOutage": {},
+        "webRTCEmbedded": {}
+      }
+    ],
+    "iPadSimulator": [
+      {
+        "domainMatching": "explicit",
+        "lockdownMode": true,
+        "maximizeCompatibility": false,
+        "os": "Version 27.0 (Build 24A5408d)",
+        "profiles": {},
+        "relayHost": "127.0.0.1",
+        "relayState": "running",
+        "results": [
+          {
+            "clientOriginRequests": [],
+            "errorCode": 0,
+            "errorDomain": "",
+            "finished": true,
+            "proxy": "relayHTTP3",
+            "title": "RELAY_FIXTURE",
+            "underlyingErrorCode": 0,
+            "underlyingErrorDomain": "",
+            "url": "http://myterm-route-probe.invalid:53596/routing-probe"
+          }
+        ],
+        "scope": "offscreen WKWebView secure relay routing fixture; no Rust server or E2EE",
+        "webRTC": {
+          "clientSTUNDatagrams": 0,
+          "setupError": "",
+          "start": "API unavailable"
+        },
+        "webRTCDirectControl": {
+          "clientSTUNDatagrams": 0,
+          "setupError": "",
+          "start": "ICE gathering requested"
+        },
+        "webRTCDuringOutage": {
+          "embedded": {
+            "clientSTUNDatagrams": 0,
+            "setupError": "",
+            "start": "API unavailable"
+          },
+          "topLevel": {
+            "clientSTUNDatagrams": 0,
+            "setupError": "",
+            "start": "API unavailable"
+          }
+        },
+        "webRTCEmbedded": {
+          "clientSTUNDatagrams": 0,
+          "setupError": "",
+          "start": "API unavailable"
+        }
+      },
+      {
+        "domainMatching": "explicit",
+        "lockdownMode": true,
+        "maximizeCompatibility": false,
+        "os": "Version 27.0 (Build 24A5408d)",
+        "profiles": {},
+        "relayHost": "127.0.0.1",
+        "relayState": "stopped",
+        "results": [
+          {
+            "clientOriginRequests": [],
+            "errorCode": -1004,
+            "errorDomain": "NSURLErrorDomain",
+            "finished": false,
+            "proxy": "relayHTTP3",
+            "title": "",
+            "underlyingErrorCode": 61,
+            "underlyingErrorDomain": "NSPOSIXErrorDomain",
+            "url": "http://myterm-route-probe.invalid:53732/routing-probe"
+          },
+          {
+            "clientOriginRequests": [],
+            "errorCode": -1004,
+            "errorDomain": "NSURLErrorDomain",
+            "finished": false,
+            "proxy": "relayHTTP3",
+            "title": "",
+            "underlyingErrorCode": 61,
+            "underlyingErrorDomain": "NSPOSIXErrorDomain",
+            "url": "http://localhost:53732/routing-probe"
+          },
+          {
+            "clientOriginRequests": [],
+            "errorCode": -1005,
+            "errorDomain": "NSURLErrorDomain",
+            "finished": false,
+            "proxy": "relayHTTP3",
+            "title": "",
+            "underlyingErrorCode": 96,
+            "underlyingErrorDomain": "NSPOSIXErrorDomain",
+            "url": "http://127.0.0.1:53732/routing-probe"
+          },
+          {
+            "clientOriginRequests": [],
+            "errorCode": -1005,
+            "errorDomain": "NSURLErrorDomain",
+            "finished": false,
+            "proxy": "relayHTTP3",
+            "title": "",
+            "underlyingErrorCode": 96,
+            "underlyingErrorDomain": "NSPOSIXErrorDomain",
+            "url": "http://[::1]:53732/routing-probe"
+          }
+        ],
+        "scope": "offscreen WKWebView secure relay routing fixture; no Rust server or E2EE",
+        "webRTC": {},
+        "webRTCDirectControl": {},
+        "webRTCDuringOutage": {},
+        "webRTCEmbedded": {}
+      }
+    ]
+  },
+  "macLockdownLoopback": [
+    {
+      "domainMatching": "explicit",
+      "lockdownMode": true,
+      "os": "Version 27.3 (Build 26C5047e)",
+      "profiles": {},
+      "relayHost": "probe.localhost.direct",
+      "relayState": "running",
+      "results": [
+        {
+          "clientOriginRequests": [],
+          "errorCode": 0,
+          "errorDomain": "",
+          "finished": true,
+          "proxy": "relayHTTP3",
+          "title": "RELAY_FIXTURE",
+          "underlyingErrorCode": 0,
+          "underlyingErrorDomain": "",
+          "url": "http://myterm-route-probe.invalid:62118/routing-probe"
+        },
+        {
+          "clientOriginRequests": [
+            "GET /routing-probe HTTP/1.1"
+          ],
+          "errorCode": 0,
+          "errorDomain": "",
+          "finished": true,
+          "proxy": "relayHTTP3",
+          "title": "CLIENT_LOCAL_FIXTURE",
+          "underlyingErrorCode": 0,
+          "underlyingErrorDomain": "",
+          "url": "http://localhost:62118/routing-probe"
+        },
+        {
+          "clientOriginRequests": [
+            "GET /routing-probe HTTP/1.1"
+          ],
+          "errorCode": 0,
+          "errorDomain": "",
+          "finished": true,
+          "proxy": "relayHTTP3",
+          "title": "CLIENT_LOCAL_FIXTURE",
+          "underlyingErrorCode": 0,
+          "underlyingErrorDomain": "",
+          "url": "http://127.0.0.1:62118/routing-probe"
+        },
+        {
+          "clientOriginRequests": [
+            "GET /routing-probe HTTP/1.1"
+          ],
+          "errorCode": 0,
+          "errorDomain": "",
+          "finished": true,
+          "proxy": "relayHTTP3",
+          "title": "CLIENT_LOCAL_FIXTURE",
+          "underlyingErrorCode": 0,
+          "underlyingErrorDomain": "",
+          "url": "http://[::1]:62118/routing-probe"
+        }
+      ],
+      "scope": "offscreen WKWebView secure relay routing fixture; no Rust server or E2EE",
+      "webRTC": {
+        "clientSTUNDatagrams": 0,
+        "setupError": "",
+        "start": "API unavailable"
+      },
+      "webRTCDirectControl": {
+        "clientSTUNDatagrams": 5,
+        "setupError": "",
+        "start": "ICE gathering requested"
+      },
+      "webRTCEmbedded": {
+        "clientSTUNDatagrams": 0,
+        "setupError": "",
+        "start": "API unavailable"
+      }
+    },
+    {
+      "domainMatching": "explicit",
+      "lockdownMode": true,
+      "os": "Version 27.3 (Build 26C5047e)",
+      "profiles": {},
+      "relayHost": "probe.localhost.direct",
+      "relayState": "stopped",
+      "results": [
+        {
+          "clientOriginRequests": [],
+          "errorCode": -1004,
+          "errorDomain": "NSURLErrorDomain",
+          "finished": false,
+          "proxy": "relayHTTP3",
+          "title": "",
+          "underlyingErrorCode": 61,
+          "underlyingErrorDomain": "NSPOSIXErrorDomain",
+          "url": "http://myterm-route-probe.invalid:62119/routing-probe"
+        },
+        {
+          "clientOriginRequests": [
+            "GET /routing-probe HTTP/1.1"
+          ],
+          "errorCode": 0,
+          "errorDomain": "",
+          "finished": true,
+          "proxy": "relayHTTP3",
+          "title": "CLIENT_LOCAL_FIXTURE",
+          "underlyingErrorCode": 0,
+          "underlyingErrorDomain": "",
+          "url": "http://localhost:62119/routing-probe"
+        },
+        {
+          "clientOriginRequests": [
+            "GET /routing-probe HTTP/1.1"
+          ],
+          "errorCode": 0,
+          "errorDomain": "",
+          "finished": true,
+          "proxy": "relayHTTP3",
+          "title": "CLIENT_LOCAL_FIXTURE",
+          "underlyingErrorCode": 0,
+          "underlyingErrorDomain": "",
+          "url": "http://127.0.0.1:62119/routing-probe"
+        },
+        {
+          "clientOriginRequests": [
+            "GET /routing-probe HTTP/1.1"
+          ],
+          "errorCode": 0,
+          "errorDomain": "",
+          "finished": true,
+          "proxy": "relayHTTP3",
+          "title": "CLIENT_LOCAL_FIXTURE",
+          "underlyingErrorCode": 0,
+          "underlyingErrorDomain": "",
+          "url": "http://[::1]:62119/routing-probe"
+        }
+      ],
+      "scope": "offscreen WKWebView secure relay routing fixture; no Rust server or E2EE",
+      "webRTC": {},
+      "webRTCDirectControl": {},
+      "webRTCEmbedded": {}
+    }
+  ],
+  "macMaxCompatibility": {
+    "domainMatching": "explicit",
+    "lockdownMode": false,
+    "maximizeCompatibility": true,
+    "os": "Version 27.3 (Build 26C5047e)",
+    "profiles": {},
+    "relayHost": "probe.localhost.direct",
+    "relayState": "running",
+    "results": [
+      {
+        "clientOriginRequests": [],
+        "errorCode": 0,
+        "errorDomain": "",
+        "finished": true,
+        "proxy": "relayHTTP3",
+        "title": "RELAY_FIXTURE",
+        "underlyingErrorCode": 0,
+        "underlyingErrorDomain": "",
+        "url": "http://myterm-route-probe.invalid:62122/routing-probe"
+      },
+      {
+        "clientOriginRequests": [
+          "GET /routing-probe HTTP/1.1"
+        ],
+        "errorCode": 0,
+        "errorDomain": "",
+        "finished": true,
+        "proxy": "relayHTTP3",
+        "title": "CLIENT_LOCAL_FIXTURE",
+        "underlyingErrorCode": 0,
+        "underlyingErrorDomain": "",
+        "url": "http://localhost:62122/routing-probe"
+      },
+      {
+        "clientOriginRequests": [
+          "GET /routing-probe HTTP/1.1"
+        ],
+        "errorCode": 0,
+        "errorDomain": "",
+        "finished": true,
+        "proxy": "relayHTTP3",
+        "title": "CLIENT_LOCAL_FIXTURE",
+        "underlyingErrorCode": 0,
+        "underlyingErrorDomain": "",
+        "url": "http://127.0.0.1:62122/routing-probe"
+      },
+      {
+        "clientOriginRequests": [
+          "GET /routing-probe HTTP/1.1"
+        ],
+        "errorCode": 0,
+        "errorDomain": "",
+        "finished": true,
+        "proxy": "relayHTTP3",
+        "title": "CLIENT_LOCAL_FIXTURE",
+        "underlyingErrorCode": 0,
+        "underlyingErrorDomain": "",
+        "url": "http://[::1]:62122/routing-probe"
+      }
+    ],
+    "scope": "offscreen WKWebView secure relay routing fixture; no Rust server or E2EE",
+    "webRTC": {
+      "clientSTUNDatagrams": 5,
+      "setupError": "",
+      "start": "ICE gathering requested"
+    },
+    "webRTCDirectControl": {
+      "clientSTUNDatagrams": 5,
+      "setupError": "",
+      "start": "ICE gathering requested"
+    },
+    "webRTCDuringOutage": {},
+    "webRTCEmbedded": {}
+  },
+  "compatibility": {
+    "macOrdinary": {
+      "approvedCertificateHosts": [
+        "myterm-route-probe.invalid",
+        "other-route-probe.invalid"
+      ],
+      "cors": {
+        "allowed": "CROSS_ORIGIN_FIXTURE",
+        "denied": true
+      },
+      "finalLoginURL": "https://myterm-route-probe.invalid:52301/login-complete",
+      "history": {
+        "back": "https://myterm-route-probe.invalid:52301/navigation",
+        "forward": "https://myterm-route-probe.invalid:52301/login-complete"
+      },
+      "independentView": {
+        "canGoBack": false,
+        "loginProof": {
+          "body": "SIGNED_OUT",
+          "status": 401
+        },
+        "title": "NAVIGATION_HOME"
+      },
+      "initialURL": "https://myterm-route-probe.invalid:52301/navigation",
+      "loginProof": {
+        "body": "SIGNED_IN",
+        "status": 200
+      },
+      "popup": {
+        "messageOrigin": "https://other-route-probe.invalid:52301",
+        "returnedToOpener": true,
+        "sharedWebsiteDataStore": true,
+        "url": "https://other-route-probe.invalid:52301/popup"
+      },
+      "webFeatures": {
+        "file": "function",
+        "fileReader": "function",
+        "indexedDB": "object",
+        "indexedDBRoundTrip": true,
+        "serviceWorker": "object"
+      },
+      "webSockets": {
+        "error": "",
+        "messages": [
+          "hot-reload-1",
+          "hot-reload-2"
+        ]
+      }
+    },
+    "macLockdown": {
+      "approvedCertificateHosts": [
+        "myterm-route-probe.invalid",
+        "other-route-probe.invalid"
+      ],
+      "cors": {
+        "allowed": "CROSS_ORIGIN_FIXTURE",
+        "denied": true
+      },
+      "finalLoginURL": "https://myterm-route-probe.invalid:52319/login-complete",
+      "history": {
+        "back": "https://myterm-route-probe.invalid:52319/navigation",
+        "forward": "https://myterm-route-probe.invalid:52319/login-complete"
+      },
+      "independentView": {
+        "canGoBack": false,
+        "loginProof": {
+          "body": "SIGNED_OUT",
+          "status": 401
+        },
+        "title": "NAVIGATION_HOME"
+      },
+      "initialURL": "https://myterm-route-probe.invalid:52319/navigation",
+      "loginProof": {
+        "body": "SIGNED_IN",
+        "status": 200
+      },
+      "popup": {
+        "messageOrigin": "https://other-route-probe.invalid:52319",
+        "returnedToOpener": true,
+        "sharedWebsiteDataStore": true,
+        "url": "https://other-route-probe.invalid:52319/popup"
+      },
+      "webFeatures": {
+        "file": "function",
+        "fileReader": "undefined",
+        "indexedDB": "undefined",
+        "indexedDBRoundTrip": false,
+        "serviceWorker": "undefined"
+      },
+      "webSockets": {
+        "error": "",
+        "messages": [
+          "hot-reload-1",
+          "hot-reload-2"
+        ]
+      }
+    },
+    "macLockdownTransfers": {
+      "download-broken": {
+        "downloadAuthChallenges": 0,
+        "downloadErrorCode": -1005,
+        "finished": false,
+        "navigationErrorCode": 102,
+        "partialFileCleaned": true,
+        "published": false,
+        "receivedBytes": 32768,
+        "sha256": "b78aabbda3b7179baac5a4c9cfda66a6d6a40697bacc1eedf5c1935ca2491893",
+        "suggestedFilename": "fixture.bin"
+      },
+      "download-cancel": {
+        "bytesBeforeCancel": 65536,
+        "cancelCallback": true,
+        "downloadAuthChallenges": 0,
+        "downloadErrorCode": 0,
+        "finished": false,
+        "finishedBeforeCancel": false,
+        "navigationErrorCode": 102,
+        "partialFileCleaned": true,
+        "published": false,
+        "receivedBytes": 65536,
+        "sha256": "944044fe482bc4e91085c15c5a923a1b9e02eac98d3bce04997d6dbecd2a5b8d",
+        "suggestedFilename": "fixture.bin"
+      },
+      "download-success": {
+        "downloadAuthChallenges": 0,
+        "downloadErrorCode": 0,
+        "finished": true,
+        "navigationErrorCode": 102,
+        "partialFileCleaned": true,
+        "published": true,
+        "receivedBytes": 8388608,
+        "sha256": "7014ae0f2fc0fee42a440b97859207efb72ffee09d4864f7433f1bf756a17aca",
+        "suggestedFilename": "fixture.bin"
+      },
+      "downloadInitiation": "navigationResponse",
+      "fixtureBytes": 8388608,
+      "fixtureSHA256": "7014ae0f2fc0fee42a440b97859207efb72ffee09d4864f7433f1bf756a17aca",
+      "upload-accept": {
+        "pickerCallbacks": 1,
+        "reply": {
+          "bytes": 8388608,
+          "sha256": "7014ae0f2fc0fee42a440b97859207efb72ffee09d4864f7433f1bf756a17aca",
+          "status": 200
+        }
+      },
+      "upload-cancel": {
+        "pickerCallbacks": 1,
+        "reply": {}
+      },
+      "upload-reject": {
+        "pickerCallbacks": 1,
+        "reply": {
+          "bytes": 8388608,
+          "sha256": "7014ae0f2fc0fee42a440b97859207efb72ffee09d4864f7433f1bf756a17aca",
+          "status": 422
+        }
+      }
+    },
+    "iPhoneOrdinary": {
+      "navigation": {
+        "approvedCertificateHosts": [
+          "myterm-route-probe.invalid",
+          "other-route-probe.invalid"
+        ],
+        "cors": {
+          "allowed": "CROSS_ORIGIN_FIXTURE",
+          "denied": true
+        },
+        "finalLoginURL": "https://myterm-route-probe.invalid:53832/login-complete",
+        "history": {
+          "back": "https://myterm-route-probe.invalid:53832/navigation",
+          "forward": "https://myterm-route-probe.invalid:53832/login-complete"
+        },
+        "independentView": {
+          "canGoBack": false,
+          "loginProof": {
+            "body": "SIGNED_OUT",
+            "status": 401
+          },
+          "title": "NAVIGATION_HOME"
+        },
+        "initialURL": "https://myterm-route-probe.invalid:53832/navigation",
+        "loginProof": {
+          "body": "SIGNED_IN",
+          "status": 200
+        },
+        "popup": {
+          "messageOrigin": "https://other-route-probe.invalid:53832",
+          "returnedToOpener": true,
+          "sharedWebsiteDataStore": true,
+          "url": "https://other-route-probe.invalid:53832/popup"
+        },
+        "webFeatures": {
+          "file": "function",
+          "fileReader": "function",
+          "indexedDB": "object",
+          "indexedDBRoundTrip": true,
+          "serviceWorker": "undefined"
+        },
+        "webSockets": {
+          "error": "",
+          "messages": [
+            "hot-reload-1",
+            "hot-reload-2"
+          ]
+        }
+      },
+      "transfers": {
+        "download-broken": {
+          "downloadAuthChallenges": 1,
+          "downloadErrorCode": -1005,
+          "finished": false,
+          "navigationErrorCode": 0,
+          "partialFileCleaned": true,
+          "published": false,
+          "receivedBytes": 32768,
+          "sha256": "b78aabbda3b7179baac5a4c9cfda66a6d6a40697bacc1eedf5c1935ca2491893",
+          "suggestedFilename": "fixture.bin"
+        },
+        "download-cancel": {
+          "bytesBeforeCancel": 32768,
+          "cancelCallback": true,
+          "downloadAuthChallenges": 1,
+          "downloadErrorCode": 0,
+          "finished": false,
+          "finishedBeforeCancel": false,
+          "navigationErrorCode": 0,
+          "partialFileCleaned": true,
+          "published": false,
+          "receivedBytes": 43433,
+          "sha256": "e01f56f7687a1643dfbeddd91a9a62f7fcecc1fb13022cd3529e7d69cce0df6e",
+          "suggestedFilename": "fixture.bin"
+        },
+        "download-success": {
+          "downloadAuthChallenges": 1,
+          "downloadErrorCode": 0,
+          "finished": true,
+          "navigationErrorCode": 0,
+          "partialFileCleaned": true,
+          "published": true,
+          "receivedBytes": 8388608,
+          "sha256": "7014ae0f2fc0fee42a440b97859207efb72ffee09d4864f7433f1bf756a17aca",
+          "suggestedFilename": "fixture.bin"
+        },
+        "downloadInitiation": "startDownload",
+        "fixtureBytes": 8388608,
+        "fixtureSHA256": "7014ae0f2fc0fee42a440b97859207efb72ffee09d4864f7433f1bf756a17aca",
+        "upload-accept": {
+          "pickerCallbacks": 1,
+          "reply": {
+            "bytes": 8388608,
+            "sha256": "7014ae0f2fc0fee42a440b97859207efb72ffee09d4864f7433f1bf756a17aca",
+            "status": 200
+          }
+        },
+        "upload-cancel": {
+          "pickerCallbacks": 1,
+          "reply": {}
+        },
+        "upload-reject": {
+          "pickerCallbacks": 1,
+          "reply": {
+            "bytes": 8388608,
+            "sha256": "7014ae0f2fc0fee42a440b97859207efb72ffee09d4864f7433f1bf756a17aca",
+            "status": 422
+          }
+        }
+      }
+    },
+    "iPhoneLockdown": {
+      "navigation": {
+        "approvedCertificateHosts": [
+          "myterm-route-probe.invalid",
+          "other-route-probe.invalid"
+        ],
+        "cors": {
+          "allowed": "CROSS_ORIGIN_FIXTURE",
+          "denied": true
+        },
+        "finalLoginURL": "https://myterm-route-probe.invalid:54183/login-complete",
+        "history": {
+          "back": "https://myterm-route-probe.invalid:54183/navigation",
+          "forward": "https://myterm-route-probe.invalid:54183/login-complete"
+        },
+        "independentView": {
+          "canGoBack": false,
+          "loginProof": {
+            "body": "SIGNED_OUT",
+            "status": 401
+          },
+          "title": "NAVIGATION_HOME"
+        },
+        "initialURL": "https://myterm-route-probe.invalid:54183/navigation",
+        "loginProof": {
+          "body": "SIGNED_IN",
+          "status": 200
+        },
+        "popup": {
+          "messageOrigin": "https://other-route-probe.invalid:54183",
+          "returnedToOpener": true,
+          "sharedWebsiteDataStore": true,
+          "url": "https://other-route-probe.invalid:54183/popup"
+        },
+        "webFeatures": {
+          "file": "function",
+          "fileReader": "undefined",
+          "indexedDB": "undefined",
+          "indexedDBRoundTrip": false,
+          "serviceWorker": "undefined"
+        },
+        "webSockets": {
+          "error": "",
+          "messages": [
+            "hot-reload-1",
+            "hot-reload-2"
+          ]
+        }
+      },
+      "transfers": {
+        "download-broken": {
+          "downloadAuthChallenges": 1,
+          "downloadErrorCode": -1005,
+          "finished": false,
+          "navigationErrorCode": 0,
+          "partialFileCleaned": true,
+          "published": false,
+          "receivedBytes": 32768,
+          "sha256": "b78aabbda3b7179baac5a4c9cfda66a6d6a40697bacc1eedf5c1935ca2491893",
+          "suggestedFilename": "fixture.bin"
+        },
+        "download-cancel": {
+          "bytesBeforeCancel": 98304,
+          "cancelCallback": true,
+          "downloadAuthChallenges": 1,
+          "downloadErrorCode": 0,
+          "finished": false,
+          "finishedBeforeCancel": false,
+          "navigationErrorCode": 0,
+          "partialFileCleaned": true,
+          "published": false,
+          "receivedBytes": 98304,
+          "sha256": "9bc22b608d26fd897a83b72afd3d4500e8ec9693c4325ae682d854deab11a18e",
+          "suggestedFilename": "fixture.bin"
+        },
+        "download-success": {
+          "downloadAuthChallenges": 1,
+          "downloadErrorCode": 0,
+          "finished": true,
+          "navigationErrorCode": 0,
+          "partialFileCleaned": true,
+          "published": true,
+          "receivedBytes": 8388608,
+          "sha256": "7014ae0f2fc0fee42a440b97859207efb72ffee09d4864f7433f1bf756a17aca",
+          "suggestedFilename": "fixture.bin"
+        },
+        "downloadInitiation": "startDownload",
+        "fixtureBytes": 8388608,
+        "fixtureSHA256": "7014ae0f2fc0fee42a440b97859207efb72ffee09d4864f7433f1bf756a17aca",
+        "upload-accept": {
+          "pickerCallbacks": 1,
+          "reply": {
+            "bytes": 8388608,
+            "sha256": "7014ae0f2fc0fee42a440b97859207efb72ffee09d4864f7433f1bf756a17aca",
+            "status": 200
+          }
+        },
+        "upload-cancel": {
+          "pickerCallbacks": 1,
+          "reply": {}
+        },
+        "upload-reject": {
+          "pickerCallbacks": 1,
+          "reply": {
+            "bytes": 8388608,
+            "sha256": "7014ae0f2fc0fee42a440b97859207efb72ffee09d4864f7433f1bf756a17aca",
+            "status": 422
+          }
+        }
+      }
+    }
+  }
+}

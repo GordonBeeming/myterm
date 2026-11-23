@@ -22,7 +22,9 @@ if [[ "${MYTERM_PROBE_TRANSPORT:-http2}" == http3 ]]; then relay_options+=(--htt
 ./relay ${relay_options[@]+"${relay_options[@]}"} > relay.port 2> relay.log &
 relay_pid=$!
 secondary_pid=""
+probe_pid=""
 cleanup() {
+    if [[ -n "$probe_pid" ]]; then kill "$probe_pid" 2>/dev/null || true; fi
     if [[ -n "$relay_pid" ]]; then kill "$relay_pid" 2>/dev/null || true; fi
     if [[ -n "$secondary_pid" ]]; then kill "$secondary_pid" 2>/dev/null || true; fi
 }
@@ -31,7 +33,6 @@ for _ in {1..50}; do
     if [[ -s relay.port ]]; then break; fi
     if ! kill -0 "$relay_pid" 2>/dev/null; then
         cat relay.log >&2
-if [[ -n "$secondary_pid" ]]; then cat secondary/relay.log >&2; fi
         exit 1
     fi
     sleep 0.1
@@ -58,11 +59,27 @@ if [[ "${MYTERM_PROBE_PROFILES:-0}" == 1 ]]; then
     [[ -n "$MYTERM_PROBE_SECONDARY_PORT" ]] || exit 1
     export MYTERM_PROBE_SECONDARY_PORT
 fi
-./probe "$relay_port" running > running.json
+if [[ "${MYTERM_PROBE_WEBRTC_OUTAGE:-0}" == 1 ]]; then
+    ./probe "$relay_port" running > running.json &
+    probe_pid="$!"
+    for _ in {1..220}; do
+        if [[ -s rtc-outage-ready ]]; then break; fi
+        if ! kill -0 "$probe_pid" 2>/dev/null; then exit 1; fi
+        sleep 0.1
+    done
+    [[ -s rtc-outage-ready ]] || exit 1
+else
+    ./probe "$relay_port" running > running.json
+fi
 
 kill "$relay_pid"
 wait "$relay_pid" 2>/dev/null || true
 relay_pid=""
+if [[ -n "$probe_pid" ]]; then
+    : > rtc-relay-stopped
+    wait "$probe_pid"
+    probe_pid=""
+fi
 ./probe "$relay_port" stopped > stopped.json
 
 jq -s . running.json stopped.json
