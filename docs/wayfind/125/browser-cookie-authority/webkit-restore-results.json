@@ -1,0 +1,50 @@
+{
+  "iPhoneSimulator": [
+    {
+      "profileAfterRestart": {
+        "cookie": "",
+        "local": "B",
+        "observedByOrigin": "",
+        "origin": "http://localhost:52582",
+        "session": "",
+        "title": "SECONDARY_RELAY_FIXTURE"
+      },
+      "relayState": "profile-reopen"
+    },
+    {
+      "profileAfterRestart": {
+        "cookie": "myterm_profile=B",
+        "local": "B",
+        "observedByOrigin": "yes",
+        "origin": "http://localhost:52582",
+        "session": "",
+        "title": "SECONDARY_RELAY_FIXTURE"
+      },
+      "relayState": "profile-restore"
+    }
+  ],
+  "iPadSimulator": [
+    {
+      "profileAfterRestart": {
+        "cookie": "",
+        "local": "B",
+        "observedByOrigin": "",
+        "origin": "http://localhost:53522",
+        "session": "",
+        "title": "SECONDARY_RELAY_FIXTURE"
+      },
+      "relayState": "profile-reopen"
+    },
+    {
+      "profileAfterRestart": {
+        "cookie": "myterm_profile=B",
+        "local": "B",
+        "observedByOrigin": "yes",
+        "origin": "http://localhost:53522",
+        "session": "",
+        "title": "SECONDARY_RELAY_FIXTURE"
+      },
+      "relayState": "profile-restore"
+    }
+  ]
+}

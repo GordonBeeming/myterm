@@ -302,20 +302,24 @@ final class ProbeScene: UIResponder, UIWindowSceneDelegate {
                 let environment = ProcessInfo.processInfo.environment
                 guard let rawPort = environment["MYTERM_PROBE_PORT"], let port = UInt16(rawPort),
                       let status = environment["MYTERM_PROBE_STATE"],
-                      ["running", "stopped", "profile-reopen"].contains(status) else {
+                      ["running", "stopped", "profile-reopen", "profile-restore"].contains(status) else {
                     throw NSError(domain: "Missing simulator fixture configuration", code: 2)
                 }
                 let data: Data
-                if status == "profile-reopen",
+                if status == "profile-reopen" || status == "profile-restore",
                    let rawURL = environment["MYTERM_PROBE_PROFILE_URL"], let url = URL(string: rawURL),
                    let rawID = environment["MYTERM_PROBE_PROFILE_ID"], let identifier = UUID(uuidString: rawID),
                    let secondary = environment["MYTERM_PROBE_SECONDARY_PORT"].flatMap(UInt16.init) {
+                    let value = status == "profile-restore" ? environment["MYTERM_PROBE_RESTORED_COOKIE"] : nil
+                    guard status != "profile-restore" || value?.isEmpty == false else {
+                        throw NSError(domain: "Missing Rust cookie fixture snapshot", code: 1)
+                    }
                     let state = try await ProfileProbe.reopen(url: url, relayHost: "127.0.0.1",
-                                                              port: secondary, identifier: identifier)
+                                                              port: secondary, identifier: identifier, restoredValue: value)
                     data = try JSONSerialization.data(withJSONObject: ["relayState": status, "profileAfterRestart": state],
                                                       options: [.prettyPrinted, .sortedKeys])
                 } else {
-                    guard status != "profile-reopen" else {
+                    guard status != "profile-reopen", status != "profile-restore" else {
                         throw NSError(domain: "Missing profile reopen parameters", code: 2)
                     }
                     data = try await Probe.run(relayPort: port, status: status, expectedCertificate: nil,

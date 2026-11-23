@@ -42,6 +42,7 @@ secondary_pid=""
 secondary_port=""
 profile_url=""
 profile_id=""
+restored_cookie=""
 cleanup() {
     if [[ -n "$device_id" ]]; then
         xcrun simctl shutdown "$device_id" >/dev/null 2>&1 || true
@@ -98,6 +99,7 @@ launch_probe() {
         SIMCTL_CHILD_MYTERM_PROBE_WEBRTC="${MYTERM_PROBE_WEBRTC:-0}" \
         SIMCTL_CHILD_MYTERM_PROBE_SECONDARY_PORT="$secondary_port" \
         SIMCTL_CHILD_MYTERM_PROBE_PROFILE_URL="$profile_url" SIMCTL_CHILD_MYTERM_PROBE_PROFILE_ID="$profile_id" \
+        SIMCTL_CHILD_MYTERM_PROBE_RESTORED_COOKIE="$restored_cookie" \
         xcrun simctl launch --terminate-running-process "$device_id" "$bundle" >&2
     for _ in {1..100}; do
         if [[ -s "$result" ]] && jq -e 'has("probeError")' "$result" >/dev/null; then
@@ -121,14 +123,24 @@ if [[ -n "$secondary_port" ]]; then
     profile_url="$(jq -er '.profiles.url' running.json)"
     profile_id="$(jq -er '.profiles.secondaryStoreID' running.json)"
     if [[ "$profile_idle" != 0 ]]; then sleep "$profile_idle"; fi
+    if [[ -n "${MYTERM_PROBE_COOKIE_FIXTURE:-}" ]]; then
+        "$MYTERM_PROBE_COOKIE_FIXTURE" write cookie-state "$profile_id" \
+            "$(jq -er '.profiles.secondAfterFirstDeletion.cookie' running.json)"
+    fi
     launch_probe profile-reopen
+    if [[ -n "${MYTERM_PROBE_COOKIE_FIXTURE:-}" ]]; then
+        restored_cookie="$("$MYTERM_PROBE_COOKIE_FIXTURE" read cookie-state "$profile_id")"
+        launch_probe profile-restore
+    fi
 fi
 kill "$relay_pid"
 wait "$relay_pid" 2>/dev/null || true
 relay_pid=""
 launch_probe stopped
 
-if [[ -n "$secondary_port" ]]; then
+if [[ -f profile-restore.json ]]; then
+    jq -s . running.json profile-reopen.json profile-restore.json stopped.json
+elif [[ -n "$secondary_port" ]]; then
     jq -s . running.json profile-reopen.json stopped.json
 else
     jq -s . running.json stopped.json

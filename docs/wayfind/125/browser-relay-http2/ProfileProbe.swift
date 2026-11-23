@@ -14,8 +14,17 @@ enum ProfileProbe {
         return snapshot
     }
 
-    static func reopen(url: URL, relayHost: String, port: UInt16, identifier: UUID) async throws -> [String: String] {
+    static func reopen(url: URL, relayHost: String, port: UInt16, identifier: UUID,
+                       restoredValue: String? = nil) async throws -> [String: String] {
         let profile = try store(relayHost: relayHost, port: port, identifier: identifier)
+        if let restoredValue {
+            guard restoredValue == "B", url.host == "localhost",
+                  let restored = HTTPCookie(properties: [
+                      .name: "myterm_profile", .value: restoredValue, .domain: "localhost",
+                      .path: "/", .expires: Date().addingTimeInterval(300)
+                  ]) else { throw NSError(domain: "Rust cookie fixture", code: 5) }
+            await profile.httpCookieStore.setCookie(restored)
+        }
         return try await snapshot(open(url, store: profile))
     }
 
@@ -114,7 +123,8 @@ enum ProfileProbe {
               origin: location.origin,
               cookie: document.cookie,
               local: localStorage.getItem('myterm_profile') || '',
-              session: sessionStorage.getItem('myterm_profile') || ''
+              session: sessionStorage.getItem('myterm_profile') || '',
+              observedByOrigin: document.querySelector('meta[name="fixture-cookie-received"]')?.content || ''
             })
             """
         guard let state = try await browser.evaluateJavaScript(script) as? [String: String] else {

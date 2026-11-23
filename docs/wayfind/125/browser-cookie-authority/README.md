@@ -14,6 +14,8 @@ Seven Rust tests passed on macOS. They check bidirectional publication to two mo
 
 Existing implementations also passed the targeted cookie regressions. The Mac run passed 16 browser profile tests, one native WebKit jar isolation test and 17 cookie protocol tests. The iPhone Simulator passed all eight Companion cookie reconciliation tests. These suites exercise the current Mac-based sync model and wire validation. They are separate from the Rust state model.
 
+The [native WebKit restore follow-up](webkit-restore.md) transfers one generated cookie through the Rust state fixture and verifies the assigned HTTP request after relaunch on both mobile simulators.
+
 ## Repeat
 
 ```sh

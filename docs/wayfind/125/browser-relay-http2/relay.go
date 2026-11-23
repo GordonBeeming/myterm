@@ -17,6 +17,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/quic-go/quic-go/http3"
@@ -173,14 +174,24 @@ func run(issueRoot, useHTTP3 bool, certificateFile, keyFile, label string, fixtu
 			return
 		}
 		log.Printf("Tunnel request %q", line)
+		observedCookie := false
 		for line != "\r\n" {
 			line, err = reader.ReadString('\n')
 			if err != nil {
 				log.Print(err)
 				return
 			}
+			name, value, ok := strings.Cut(line, ":")
+			if ok && strings.EqualFold(name, "Cookie") {
+				for _, item := range strings.Split(value, ";") {
+					observedCookie = observedCookie || strings.TrimSpace(item) == "myterm_profile=B"
+				}
+			}
 		}
 		body := "<!doctype html><title>" + html.EscapeString(label) + "</title>"
+		if observedCookie {
+			body += `<meta name="fixture-cookie-received" content="yes">`
+		}
 		if _, err := fmt.Fprintf(w, "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: %d\r\n\r\n%s", len(body), body); err != nil {
 			log.Print(err)
 			return
