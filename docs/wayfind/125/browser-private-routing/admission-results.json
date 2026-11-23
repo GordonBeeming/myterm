@@ -1,0 +1,372 @@
+{
+  "iPhoneRun": {
+    "linuxPlatform": "Linux aarch64",
+    "directSourceStatus": 403,
+    "macOS": {
+      "clientOS": "Version 27.3 (Build 26C5047e)",
+      "routes": [
+        {
+          "error": 0,
+          "finished": true,
+          "httpStatus": 200,
+          "target": "private-name",
+          "title": "RUST_PRIVATE_ORIGIN",
+          "underlyingError": 0
+        },
+        {
+          "error": 0,
+          "finished": true,
+          "httpStatus": 200,
+          "target": "private-ip",
+          "title": "RUST_PRIVATE_ORIGIN",
+          "underlyingError": 0
+        },
+        {
+          "error": -1004,
+          "finished": false,
+          "httpStatus": 0,
+          "target": "unapproved-name",
+          "title": "",
+          "underlyingError": 61
+        },
+        {
+          "error": -1004,
+          "finished": false,
+          "httpStatus": 0,
+          "target": "missing-admission",
+          "title": "",
+          "underlyingError": 61
+        },
+        {
+          "error": -1004,
+          "finished": false,
+          "httpStatus": 0,
+          "target": "wrong-admission",
+          "title": "",
+          "underlyingError": 61
+        }
+      ]
+    },
+    "macOSWithoutProxy": {
+      "clientOS": "Version 27.3 (Build 26C5047e)",
+      "routes": [
+        {
+          "error": -1004,
+          "finished": false,
+          "httpStatus": 0,
+          "target": "private-name",
+          "title": "",
+          "underlyingError": 61
+        },
+        {
+          "error": -1004,
+          "finished": false,
+          "httpStatus": 0,
+          "target": "private-ip",
+          "title": "",
+          "underlyingError": 61
+        },
+        {
+          "error": -1004,
+          "finished": false,
+          "httpStatus": 0,
+          "target": "unapproved-name",
+          "title": "",
+          "underlyingError": 61
+        },
+        {
+          "error": -1004,
+          "finished": false,
+          "httpStatus": 0,
+          "target": "missing-admission",
+          "title": "",
+          "underlyingError": 61
+        },
+        {
+          "error": -1004,
+          "finished": false,
+          "httpStatus": 0,
+          "target": "wrong-admission",
+          "title": "",
+          "underlyingError": 61
+        }
+      ]
+    },
+    "iOSSimulator": {
+      "clientOS": "Version 27.0 (Build 24A5408d)",
+      "routes": [
+        {
+          "error": 0,
+          "finished": true,
+          "httpStatus": 200,
+          "target": "private-name",
+          "title": "RUST_PRIVATE_ORIGIN",
+          "underlyingError": 0
+        },
+        {
+          "error": 0,
+          "finished": true,
+          "httpStatus": 200,
+          "target": "private-ip",
+          "title": "RUST_PRIVATE_ORIGIN",
+          "underlyingError": 0
+        },
+        {
+          "error": -1004,
+          "finished": false,
+          "httpStatus": 0,
+          "target": "unapproved-name",
+          "title": "",
+          "underlyingError": 61
+        },
+        {
+          "error": -1004,
+          "finished": false,
+          "httpStatus": 0,
+          "target": "missing-admission",
+          "title": "",
+          "underlyingError": 61
+        },
+        {
+          "error": -1004,
+          "finished": false,
+          "httpStatus": 0,
+          "target": "wrong-admission",
+          "title": "",
+          "underlyingError": 61
+        }
+      ]
+    },
+    "macOSHasPrivateDNSAnswer": false,
+    "proxyLog": [
+      "proxy ready",
+      "CONNECT fixture admitted",
+      "CONNECT private-origin.myterm.test:8192 resolved 10.253.160.20",
+      "CONNECT fixture admitted",
+      "CONNECT 10.253.160.20:8192 resolved 10.253.160.20",
+      "CONNECT fixture admitted",
+      "CONNECT fixture denied not-approved.myterm.test:8192",
+      "CONNECT fixture admitted",
+      "CONNECT fixture denied not-approved.myterm.test:8192",
+      "CONNECT fixture denied admission",
+      "CONNECT fixture denied admission",
+      "CONNECT fixture denied admission",
+      "CONNECT fixture denied admission",
+      "CONNECT fixture admitted",
+      "CONNECT private-origin.myterm.test:8192 resolved 10.253.160.20",
+      "CONNECT fixture admitted",
+      "CONNECT 10.253.160.20:8192 resolved 10.253.160.20",
+      "CONNECT fixture admitted",
+      "CONNECT fixture denied not-approved.myterm.test:8192",
+      "CONNECT fixture admitted",
+      "CONNECT fixture denied not-approved.myterm.test:8192",
+      "CONNECT fixture denied admission",
+      "CONNECT fixture denied admission",
+      "CONNECT fixture denied admission",
+      "CONNECT fixture denied admission"
+    ],
+    "originLog": [
+      "origin ready",
+      "origin permitted=false source=10.253.160.2 received_admission_header=false",
+      "origin permitted=true source=10.253.160.10 received_admission_header=false",
+      "origin permitted=true source=10.253.160.10 received_admission_header=false",
+      "origin permitted=true source=10.253.160.10 received_admission_header=false",
+      "origin permitted=true source=10.253.160.10 received_admission_header=false"
+    ],
+    "observerLog": [
+      "observer sent=2944 received=5602 fixture_marker=false",
+      "observer sent=2986 received=5602 fixture_marker=false"
+    ]
+  },
+  "iPadRun": {
+    "linuxPlatform": "Linux aarch64",
+    "directSourceStatus": 403,
+    "macOS": {
+      "clientOS": "Version 27.3 (Build 26C5047e)",
+      "routes": [
+        {
+          "error": 0,
+          "finished": true,
+          "httpStatus": 200,
+          "target": "private-name",
+          "title": "RUST_PRIVATE_ORIGIN",
+          "underlyingError": 0
+        },
+        {
+          "error": 0,
+          "finished": true,
+          "httpStatus": 200,
+          "target": "private-ip",
+          "title": "RUST_PRIVATE_ORIGIN",
+          "underlyingError": 0
+        },
+        {
+          "error": -1004,
+          "finished": false,
+          "httpStatus": 0,
+          "target": "unapproved-name",
+          "title": "",
+          "underlyingError": 61
+        },
+        {
+          "error": -1004,
+          "finished": false,
+          "httpStatus": 0,
+          "target": "missing-admission",
+          "title": "",
+          "underlyingError": 61
+        },
+        {
+          "error": -1004,
+          "finished": false,
+          "httpStatus": 0,
+          "target": "wrong-admission",
+          "title": "",
+          "underlyingError": 61
+        }
+      ]
+    },
+    "macOSWithoutProxy": {
+      "clientOS": "Version 27.3 (Build 26C5047e)",
+      "routes": [
+        {
+          "error": -1004,
+          "finished": false,
+          "httpStatus": 0,
+          "target": "private-name",
+          "title": "",
+          "underlyingError": 61
+        },
+        {
+          "error": -1004,
+          "finished": false,
+          "httpStatus": 0,
+          "target": "private-ip",
+          "title": "",
+          "underlyingError": 61
+        },
+        {
+          "error": -1004,
+          "finished": false,
+          "httpStatus": 0,
+          "target": "unapproved-name",
+          "title": "",
+          "underlyingError": 61
+        },
+        {
+          "error": -1004,
+          "finished": false,
+          "httpStatus": 0,
+          "target": "missing-admission",
+          "title": "",
+          "underlyingError": 61
+        },
+        {
+          "error": -1004,
+          "finished": false,
+          "httpStatus": 0,
+          "target": "wrong-admission",
+          "title": "",
+          "underlyingError": 61
+        }
+      ]
+    },
+    "iOSSimulator": {
+      "clientOS": "Version 27.0 (Build 24A5408d)",
+      "routes": [
+        {
+          "error": 0,
+          "finished": true,
+          "httpStatus": 200,
+          "target": "private-name",
+          "title": "RUST_PRIVATE_ORIGIN",
+          "underlyingError": 0
+        },
+        {
+          "error": 0,
+          "finished": true,
+          "httpStatus": 200,
+          "target": "private-ip",
+          "title": "RUST_PRIVATE_ORIGIN",
+          "underlyingError": 0
+        },
+        {
+          "error": -1004,
+          "finished": false,
+          "httpStatus": 0,
+          "target": "unapproved-name",
+          "title": "",
+          "underlyingError": 61
+        },
+        {
+          "error": -1004,
+          "finished": false,
+          "httpStatus": 0,
+          "target": "missing-admission",
+          "title": "",
+          "underlyingError": 61
+        },
+        {
+          "error": -1004,
+          "finished": false,
+          "httpStatus": 0,
+          "target": "wrong-admission",
+          "title": "",
+          "underlyingError": 61
+        }
+      ]
+    },
+    "macOSHasPrivateDNSAnswer": false,
+    "proxyLog": [
+      "proxy ready",
+      "CONNECT fixture admitted",
+      "CONNECT private-origin.myterm.test:8192 resolved 10.253.160.20",
+      "CONNECT fixture admitted",
+      "CONNECT private-origin.myterm.test:8192 resolved 10.253.160.20",
+      "CONNECT fixture admitted",
+      "CONNECT 10.253.160.20:8192 resolved 10.253.160.20",
+      "Proxy stream: user error: inactive stream",
+      "CONNECT fixture admitted",
+      "CONNECT fixture denied not-approved.myterm.test:8192",
+      "CONNECT fixture admitted",
+      "CONNECT fixture denied not-approved.myterm.test:8192",
+      "CONNECT fixture denied admission",
+      "CONNECT fixture denied admission",
+      "CONNECT fixture denied admission",
+      "CONNECT fixture denied admission",
+      "CONNECT fixture admitted",
+      "CONNECT private-origin.myterm.test:8192 resolved 10.253.160.20",
+      "CONNECT fixture admitted",
+      "CONNECT 10.253.160.20:8192 resolved 10.253.160.20",
+      "CONNECT fixture admitted",
+      "CONNECT fixture denied not-approved.myterm.test:8192",
+      "CONNECT fixture admitted",
+      "CONNECT fixture denied not-approved.myterm.test:8192",
+      "CONNECT fixture denied admission",
+      "CONNECT fixture denied admission",
+      "CONNECT fixture denied admission",
+      "CONNECT fixture denied admission"
+    ],
+    "originLog": [
+      "origin ready",
+      "origin permitted=false source=10.253.160.2 received_admission_header=false",
+      "origin permitted=true source=10.253.160.10 received_admission_header=false",
+      "Origin request failed: invalid fixture request",
+      "origin permitted=true source=10.253.160.10 received_admission_header=false",
+      "origin permitted=true source=10.253.160.10 received_admission_header=false",
+      "origin permitted=true source=10.253.160.10 received_admission_header=false"
+    ],
+    "observerLog": [
+      "observer sent=3001 received=5634 fixture_marker=false",
+      "observer sent=2944 received=5602 fixture_marker=false"
+    ]
+  },
+  "initialiPhoneNameTimeout": {
+    "error": -1001,
+    "finished": false,
+    "httpStatus": 200,
+    "target": "private-name",
+    "title": "",
+    "underlyingError": 0
+  }
+}

@@ -14,6 +14,8 @@ The two containers execute native ARM64 Linux binaries in an OrbStack VM. Only t
 
 See [the two runs](route-results.json) for native navigation outcomes and the proxy's DNS and source observations. The original [loopback mismatch](../browser-relay-http2/transport-comparison.md) is separate. The successful numeric IPv4 result here used an address outside loopback.
 
+The [native admission follow-up](admission.md) checks scoped fixture header delivery, rejects missing and wrong admission values, and observes a raw forwarding hop without a TLS key.
+
 ## Repeat
 
 The script expects a local OrbStack Docker engine, Xcode and a Rust fixture registry cache. Use the local development certificate setup in [trusted transport comparison](../browser-relay-http2/transport-comparison.md). The private network, Docker port, and simulator are disposable. Set a different unused RFC 1918 subnet prefix with `MYTERM_PRIVATE_SUBNET_PREFIX` if the default three-octet prefix is in use.

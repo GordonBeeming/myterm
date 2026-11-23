@@ -39,12 +39,22 @@ import AppKit
     }
 
     var results: [[String: Any]] = []
-    for (kind, host) in [("private-name", privateName), ("private-ip", privateIP),
-                         ("unapproved-name", "not-approved.myterm.test")] {
+    let credential = environment["MYTERM_FIXTURE_ADMISSION"]
+    var scenarios: [(String, String, String?)] = [
+        ("private-name", privateName, credential), ("private-ip", privateIP, credential),
+        ("unapproved-name", "not-approved.myterm.test", credential)
+    ]
+    if credential != nil {
+        scenarios.append(("missing-admission", privateName, nil))
+        scenarios.append(("wrong-admission", privateName, "unapproved-fixture-value"))
+    }
+    for (kind, host, credential) in scenarios {
         guard let target = URL(string: "http://\(host):\(originPort)/private-route") else {
             throw NSError(domain: "Invalid fixture address", code: 2)
         }
-        var relay = ProxyConfiguration(relayHops: [.init(http2RelayEndpoint: .url(endpoint))])
+        let headers = credential.map { ["X-MyTerm-Fixture-Admission": $0] } ?? [:]
+        let hop = ProxyConfiguration.RelayHop(http2RelayEndpoint: .url(endpoint), additionalHTTPHeaderFields: headers)
+        var relay = ProxyConfiguration(relayHops: [hop])
         relay.allowFailover = false
         let store = WKWebsiteDataStore.nonPersistent()
         store.proxyConfigurations = [relay]

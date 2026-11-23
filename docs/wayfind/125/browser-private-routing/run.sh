@@ -24,8 +24,18 @@ docker_cmd=(docker --context orbstack)
 proxy_launched=false
 origin_launched=false
 network_created=false
+observer_pid=""
+
+stop_observer() {
+    if [[ -n "$observer_pid" ]]; then
+        kill "$observer_pid" 2>/dev/null || true
+        wait "$observer_pid" 2>/dev/null || true
+        observer_pid=""
+    fi
+}
 
 cleanup() {
+    stop_observer
     if [[ -n "$device" ]]; then
         xcrun simctl shutdown "$device" >/dev/null 2>&1 || true
         xcrun simctl delete "$device" >/dev/null 2>&1 || true
@@ -50,7 +60,11 @@ network_created=true
     "$image" /bin-fixture/myterm-private-route-fixture origin "0.0.0.0:$origin_port" "$proxy_ip" >/dev/null
 origin_launched=true
 
-"${docker_cmd[@]}" run --rm --detach --name "$proxy" --network "$network" --ip "$proxy_ip" \
+if [[ "${MYTERM_PRIVATE_CHECK_ADMISSION:-0}" == 1 ]]; then
+    export MYTERM_FIXTURE_ADMISSION
+    MYTERM_FIXTURE_ADMISSION="$(uuidgen)"
+fi
+"${docker_cmd[@]}" run --rm --detach --name "$proxy" -e MYTERM_FIXTURE_ADMISSION --network "$network" --ip "$proxy_ip" \
     --publish 127.0.0.1::8443 -v "$build_dir/debug:/bin-fixture:ro" \
     -v "$MYTERM_RELAY_CERT:/fixture-chain.pem:ro" -v "$MYTERM_RELAY_KEY:/fixture-key.pem:ro" \
     "$image" /bin-fixture/myterm-private-route-fixture proxy 0.0.0.0:8443 "$host" "$origin_ip" "$origin_port" \
@@ -66,6 +80,23 @@ for _ in {1..60}; do
 done
 proxy_port="$("${docker_cmd[@]}" port "$proxy" 8443/tcp)"
 proxy_port="${proxy_port##*:}"
+if [[ "${MYTERM_PRIVATE_CHECK_ADMISSION:-0}" == 1 ]]; then
+    observer_build="${MYTERM_PRIVATE_OBSERVER_BUILD:-$run_dir/observer-build}"
+    TMPDIR="$run_dir" CARGO_HOME="${MYTERM_RUST_REGISTRY%/registry}" CARGO_TARGET_DIR="$observer_build" \
+        cargo build --locked --offline --manifest-path "$source_dir/Cargo.toml" >&2
+    "$observer_build/debug/myterm-private-route-fixture" observe 127.0.0.1:0 "127.0.0.1:$proxy_port" \
+        > observer.port 2> observer.log &
+    observer_pid="$!"
+    for _ in {1..60}; do
+        if [[ -s observer.port ]]; then break; fi
+        if ! kill -0 "$observer_pid" 2>/dev/null; then cat observer.log >&2; exit 1; fi
+        sleep 0.1
+    done
+    proxy_port="$(cat observer.port)"
+    [[ -n "$proxy_port" ]] || exit 1
+else
+    : > observer.log
+fi
 export MYTERM_PRIVATE_PROXY="https://$MYTERM_RELAY_HOST:$proxy_port"
 export MYTERM_PRIVATE_NAME="$host" MYTERM_PRIVATE_IP="$origin_ip" MYTERM_PRIVATE_ORIGIN_PORT="$origin_port"
 
@@ -92,6 +123,9 @@ if [[ -n "${MYTERM_PRIVATE_SIMULATOR_TYPE:-}" ]]; then
     xcrun simctl bootstatus "$device" -b > boot.log 2>&1
     xcrun simctl install "$device" "$run_dir/Probe.app"
     app_data="$(xcrun simctl get_app_container "$device" "$bundle" data)"
+    if [[ "${MYTERM_PRIVATE_CHECK_ADMISSION:-0}" == 1 ]]; then
+        export SIMCTL_CHILD_MYTERM_FIXTURE_ADMISSION="$MYTERM_FIXTURE_ADMISSION"
+    fi
     SIMCTL_CHILD_MYTERM_PRIVATE_PROXY="$MYTERM_PRIVATE_PROXY" SIMCTL_CHILD_MYTERM_PRIVATE_NAME="$host" \
         SIMCTL_CHILD_MYTERM_PRIVATE_IP="$origin_ip" SIMCTL_CHILD_MYTERM_PRIVATE_ORIGIN_PORT="$origin_port" \
         xcrun simctl launch "$device" "$bundle" >&2
@@ -105,6 +139,7 @@ fi
 "${docker_cmd[@]}" logs "$proxy" > proxy.log 2>&1
 "${docker_cmd[@]}" stop "$proxy" >/dev/null
 proxy_launched=false
+stop_observer
 ./private-route-probe > mac-offline.json
 client_has_dns_answer=false
 if dscacheutil -q host -a name "$host" | grep -q 'ip_address:'; then client_has_dns_answer=true; fi
@@ -116,8 +151,9 @@ else
     simulator_record=/dev/null
 fi
 jq -n --arg direct "$direct_origin_status" --argjson clientDNS "$client_has_dns_answer" --rawfile platform server-os \
-    --slurpfile mac mac.json --slurpfile offline mac-offline.json --slurpfile sim "$simulator_record" --rawfile proxy proxy.log --rawfile origin origin.log \
+    --slurpfile mac mac.json --slurpfile offline mac-offline.json --slurpfile sim "$simulator_record" --rawfile proxy proxy.log --rawfile origin origin.log --rawfile observer observer.log \
     '{linuxPlatform:($platform|rtrimstr("\n")),directSourceStatus:($direct|tonumber),
       macOS:$mac[0],macOSWithoutProxy:$offline[0],iOSSimulator:$sim[0],macOSHasPrivateDNSAnswer:$clientDNS,
       proxyLog:($proxy|split("\n")|map(select(length>0))),
-      originLog:($origin|split("\n")|map(select(length>0)))}'
+      originLog:($origin|split("\n")|map(select(length>0))),
+      observerLog:($observer|split("\n")|map(select(length>0)))}'

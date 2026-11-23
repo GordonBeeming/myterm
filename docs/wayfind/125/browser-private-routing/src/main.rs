@@ -1,5 +1,7 @@
 //! Disposable local route fixture. It forwards only the two forms of one generated origin.
 
+mod observer;
+
 use bytes::Bytes;
 use h2::{server, RecvStream, SendStream};
 use http::{Method, Request, Response, StatusCode};
@@ -26,6 +28,7 @@ struct Target {
     hostname: String,
     address: IpAddr,
     port: u16,
+    admission: Option<String>,
 }
 
 #[tokio::main]
@@ -40,8 +43,13 @@ async fn main() -> Result<(), Error> {
                 hostname: hostname.clone(),
                 address: origin_ip.parse()?,
                 port: origin_port.parse()?,
+                admission: env::var("MYTERM_FIXTURE_ADMISSION").ok(),
             };
             run_proxy(address, target, certificate, key).await
+        }
+        [mode, listen, next] if mode == "observe" => {
+            let marker = env::var("MYTERM_FIXTURE_ADMISSION")?;
+            observer::run(listen.parse()?, next.parse()?, &marker).await
         }
         _ => Err(io::Error::other(
             "use origin LISTEN PROXY_IP or proxy LISTEN DNS_NAME ORIGIN_IP ORIGIN_PORT CERT KEY",
@@ -79,7 +87,12 @@ async fn respond_to_origin(
         }
         request.extend_from_slice(&chunk[..length]);
     }
-    let permitted = peer.ip() == expected;
+    let headers = std::str::from_utf8(&request)?;
+    let leaked_admission = headers
+        .lines()
+        .filter_map(|line| line.split_once(':'))
+        .any(|(name, _)| name.eq_ignore_ascii_case("x-myterm-fixture-admission"));
+    let permitted = peer.ip() == expected && !leaked_admission;
     let (status, marker) = if permitted {
         ("200 OK", "RUST_PRIVATE_ORIGIN")
     } else {
@@ -93,7 +106,10 @@ async fn respond_to_origin(
     stream.write_all(header.as_bytes()).await?;
     stream.write_all(body.as_bytes()).await?;
     stream.shutdown().await?;
-    eprintln!("origin permitted={permitted} source={}", peer.ip());
+    eprintln!(
+        "origin permitted={permitted} source={} received_admission_header={leaked_admission}",
+        peer.ip()
+    );
     Ok(())
 }
 
@@ -146,6 +162,24 @@ async fn forward(
     mut respond: server::SendResponse<Bytes>,
     target: &Target,
 ) -> Result<(), Error> {
+    if let Some(expected) = &target.admission {
+        let mut values = request
+            .headers()
+            .get_all("x-myterm-fixture-admission")
+            .iter();
+        let matches = values
+            .next()
+            .is_some_and(|value| value.as_bytes() == expected.as_bytes());
+        if !matches || values.next().is_some() {
+            eprintln!("CONNECT fixture denied admission");
+            respond.send_response(
+                Response::builder().status(StatusCode::FORBIDDEN).body(())?,
+                true,
+            )?;
+            return Ok(());
+        }
+        eprintln!("CONNECT fixture admitted");
+    }
     let allowed = request.method() == Method::CONNECT
         && request.uri().authority().is_some_and(|authority| {
             authority.port_u16() == Some(target.port)
