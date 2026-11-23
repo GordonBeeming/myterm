@@ -9,6 +9,11 @@ case "$domain_matching" in
     explicit|default) ;;
     *) printf 'MYTERM_PROBE_DOMAINS must be explicit or default.\n' >&2; exit 2 ;;
 esac
+profile_idle="${MYTERM_PROBE_PROFILE_IDLE:-0}"
+if [[ ! "$profile_idle" =~ ^[0-9]{1,2}$ ]]; then
+    printf 'MYTERM_PROBE_PROFILE_IDLE must be 0 to 99 seconds.\n' >&2
+    exit 2
+fi
 transport="${MYTERM_PROBE_TRANSPORT:-http2}"
 case "$transport" in
     http2|http3) ;;
@@ -115,6 +120,7 @@ launch_probe running
 if [[ -n "$secondary_port" ]]; then
     profile_url="$(jq -er '.profiles.url' running.json)"
     profile_id="$(jq -er '.profiles.secondaryStoreID' running.json)"
+    if [[ "$profile_idle" != 0 ]]; then sleep "$profile_idle"; fi
     launch_probe profile-reopen
 fi
 kill "$relay_pid"

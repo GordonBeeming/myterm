@@ -179,5 +179,27 @@
       "session": "",
       "title": "SECONDARY_RELAY_FIXTURE"
     }
+  },
+  "iPhoneRestartAfterIdle": {
+    "idleSeconds": 20,
+    "preRestartCookies": [
+      {
+        "name": "myterm_profile",
+        "sessionOnly": "false",
+        "value": "B"
+      },
+      {
+        "name": "myterm_native_profile",
+        "sessionOnly": "false",
+        "value": "B"
+      }
+    ],
+    "profileAfterRestart": {
+      "cookie": "",
+      "local": "B",
+      "origin": "http://localhost:61197",
+      "session": "",
+      "title": "SECONDARY_RELAY_FIXTURE"
+    }
   }
 }
