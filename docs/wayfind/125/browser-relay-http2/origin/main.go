@@ -17,6 +17,7 @@ import (
 )
 
 func main() {
+	log.SetFlags(log.LstdFlags | log.LUTC)
 	if err := run(); err != nil {
 		log.Fatal(err)
 	}
@@ -53,10 +54,7 @@ func run() error {
 			Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: key}},
 		},
 		ReadHeaderTimeout: 4 * time.Second,
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "text/html")
-			fmt.Fprint(w, "<!doctype html><title>ORIGIN_TLS_FIXTURE</title>")
-		}),
+		Handler:           http.HandlerFunc(handleOrigin),
 	}
 	fmt.Println(listener.Addr().(*net.TCPAddr).Port)
 	return server.ServeTLS(listener, "", "")

@@ -6,14 +6,14 @@ import WebKit
 
 private enum OriginFixtureError: Error { case invalidArguments }
 
-private struct ApprovedOrigin {
+struct ApprovedOrigin {
     let server: String
     let host: String
     let port: Int
     let certificate: SecCertificate
 }
 
-@MainActor private final class Inspector: NSObject, WKNavigationDelegate {
+@MainActor class Inspector: NSObject, WKNavigationDelegate {
     let server: String
     let exception: ApprovedOrigin?
     var finished = false
@@ -90,6 +90,13 @@ private struct ApprovedOrigin {
             }
             let host = "myterm-route-probe.invalid"
             let exception = ApprovedOrigin(server: "A", host: host, port: Int(port), certificate: pin)
+            if ProcessInfo.processInfo.environment["MYTERM_PROBE_TRANSFERS"] == "1" {
+                let results = try await TransferProbe.run(relayHost: relayHost, relayPort: primary,
+                                                          port: port, exception: exception)
+                let data = try JSONSerialization.data(withJSONObject: results, options: [.prettyPrinted, .sortedKeys])
+                print(String(decoding: data, as: UTF8.self))
+                return
+            }
             let wrongLeaf = ApprovedOrigin(server: "A", host: host, port: Int(port), certificate: otherPin)
             let scenarios: [(String, String, UInt16, String, UInt16, ApprovedOrigin?)] = [
                 ("default", "A", primary, host, port, nil),

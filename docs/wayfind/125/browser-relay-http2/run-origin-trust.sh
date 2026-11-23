@@ -14,7 +14,7 @@ export CLANG_MODULE_CACHE_PATH="$run_dir/clang-cache"
 
 go -C "$source_dir" build -mod=readonly -o "$run_dir/relay" relay.go
 go -C "$source_dir" build -mod=readonly -o "$run_dir/origin-fixture" ./origin
-swiftc -parse-as-library "$source_dir/OriginTrustProbe.swift" -o probe \
+swiftc -parse-as-library "$source_dir/OriginTrustProbe.swift" "$source_dir/TransferProbe.swift" -o probe \
     -framework AppKit -framework WebKit -framework Network -framework Security
 
 pids=()
@@ -45,4 +45,4 @@ for label in primary secondary; do
     await_port "$label.port" "$!" >/dev/null
 done
 ./probe "$MYTERM_RELAY_HOST" "$(cat primary.port)" "$(cat secondary.port)" "$origin_port"
-cat primary.log secondary.log >&2
+cat primary.log secondary.log origin.log >&2

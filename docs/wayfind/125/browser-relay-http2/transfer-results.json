@@ -1,0 +1,59 @@
+{
+  "download-broken" : {
+    "downloadErrorCode" : -1005,
+    "finished" : false,
+    "navigationErrorCode" : 102,
+    "partialFileCleaned" : true,
+    "published" : false,
+    "receivedBytes" : 32768,
+    "sha256" : "b78aabbda3b7179baac5a4c9cfda66a6d6a40697bacc1eedf5c1935ca2491893",
+    "suggestedFilename" : "fixture.bin"
+  },
+  "download-cancel" : {
+    "bytesBeforeCancel" : 98304,
+    "cancelCallback" : true,
+    "downloadErrorCode" : 0,
+    "finished" : false,
+    "finishedBeforeCancel" : false,
+    "navigationErrorCode" : 102,
+    "partialFileCleaned" : true,
+    "published" : false,
+    "receivedBytes" : 98304,
+    "sha256" : "9bc22b608d26fd897a83b72afd3d4500e8ec9693c4325ae682d854deab11a18e",
+    "suggestedFilename" : "fixture.bin"
+  },
+  "download-success" : {
+    "downloadErrorCode" : 0,
+    "finished" : true,
+    "navigationErrorCode" : 102,
+    "partialFileCleaned" : true,
+    "published" : true,
+    "receivedBytes" : 8388608,
+    "sha256" : "7014ae0f2fc0fee42a440b97859207efb72ffee09d4864f7433f1bf756a17aca",
+    "suggestedFilename" : "fixture.bin"
+  },
+  "fixtureBytes" : 8388608,
+  "fixtureSHA256" : "7014ae0f2fc0fee42a440b97859207efb72ffee09d4864f7433f1bf756a17aca",
+  "upload-accept" : {
+    "pickerCallbacks" : 1,
+    "reply" : {
+      "bytes" : 8388608,
+      "sha256" : "7014ae0f2fc0fee42a440b97859207efb72ffee09d4864f7433f1bf756a17aca",
+      "status" : 200
+    }
+  },
+  "upload-cancel" : {
+    "pickerCallbacks" : 1,
+    "reply" : {
+
+    }
+  },
+  "upload-reject" : {
+    "pickerCallbacks" : 1,
+    "reply" : {
+      "bytes" : 8388608,
+      "sha256" : "7014ae0f2fc0fee42a440b97859207efb72ffee09d4864f7433f1bf756a17aca",
+      "status" : 422
+    }
+  }
+}
