@@ -10,6 +10,7 @@ export GOCACHE="$run_dir/go-cache"
 export GOTOOLCHAIN=local
 
 go build -o relay "$source_dir/relay.go"
+go build -o tls-control "$source_dir/control.go"
 swiftc -parse-as-library -swift-version 5 "$source_dir/probe.swift" -o probe \
     -framework AppKit -framework WebKit -framework Network -framework Security
 
@@ -25,6 +26,7 @@ for _ in {1..50}; do
     sleep 0.1
 done
 relay_port="$(cat relay.port)"
+./tls-control "$relay_port" >&2
 ./probe "$relay_port" running > running.json
 
 kill "$relay_pid"
