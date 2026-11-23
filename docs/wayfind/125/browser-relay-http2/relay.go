@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"html"
+	"io"
 	"log"
 	"math/big"
 	"net"
@@ -83,7 +84,53 @@ func makeTestCertificate(issueRoot bool) (tls.Certificate, error) {
 	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}, nil
 }
 
-func run(issueRoot, useHTTP3 bool, certificateFile, keyFile, label string) error {
+func forwardOrigin(w http.ResponseWriter, r *http.Request, fixturePort int) error {
+	host, _, err := net.SplitHostPort(r.Host)
+	if err != nil || (host != "myterm-route-probe.invalid" && host != "other-route-probe.invalid") {
+		http.Error(w, "origin missing from test fixture", http.StatusBadRequest)
+		return nil
+	}
+	server, err := net.DialTimeout("tcp4", fmt.Sprintf("127.0.0.1:%d", fixturePort), 4*time.Second)
+	if err != nil {
+		http.Error(w, "test fixture unavailable", http.StatusBadGateway)
+		return err
+	}
+	defer server.Close()
+	defer r.Body.Close()
+	if err := server.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		return err
+	}
+	w.WriteHeader(http.StatusOK)
+	controller := http.NewResponseController(w)
+	if err := controller.Flush(); err != nil {
+		return err
+	}
+	go func() {
+		if _, err := io.Copy(server, r.Body); err != nil && r.Context().Err() == nil {
+			log.Printf("origin request stream: %v", err)
+		}
+	}()
+	buffer := make([]byte, 32*1024)
+	for {
+		length, readErr := server.Read(buffer)
+		if length > 0 {
+			if _, err := w.Write(buffer[:length]); err != nil {
+				return err
+			}
+			if err := controller.Flush(); err != nil {
+				return err
+			}
+		}
+		if readErr == io.EOF {
+			return nil
+		}
+		if readErr != nil {
+			return readErr
+		}
+	}
+}
+
+func run(issueRoot, useHTTP3 bool, certificateFile, keyFile, label string, fixturePort int) error {
 	var certificate tls.Certificate
 	var err error
 	if certificateFile == "" && keyFile == "" {
@@ -106,6 +153,12 @@ func run(issueRoot, useHTTP3 bool, certificateFile, keyFile, label string) error
 		}
 		if r.Method != http.MethodConnect || r.ProtoMajor < 2 {
 			http.Error(w, "HTTP/2 or HTTP/3 CONNECT required", http.StatusMethodNotAllowed)
+			return
+		}
+		if fixturePort != 0 {
+			if err := forwardOrigin(w, r, fixturePort); err != nil {
+				log.Printf("origin tunnel to %s: %v", r.Host, err)
+			}
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -176,8 +229,9 @@ func main() {
 	certificate := flag.String("cert", "", "optional PEM certificate chain for default-trust experiments")
 	key := flag.String("key", "", "optional PEM key for a local fixture")
 	label := flag.String("label", "RELAY_FIXTURE", "title identifying the responding fixture")
+	originPort := flag.Int("origin-fixture-port", 0, "forward only to a loopback TLS fixture")
 	flag.Parse()
-	if err := run(*issueRoot, *useHTTP3, *certificate, *key, *label); err != nil {
+	if err := run(*issueRoot, *useHTTP3, *certificate, *key, *label, *originPort); err != nil {
 		log.Fatal(err)
 	}
 }

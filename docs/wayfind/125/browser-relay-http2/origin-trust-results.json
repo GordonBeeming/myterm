@@ -1,0 +1,111 @@
+[
+  {
+    "challenges" : [
+      {
+        "host" : "myterm-route-probe.invalid",
+        "port" : 59705,
+        "usedException" : false
+      },
+      {
+        "host" : "myterm-route-probe.invalid",
+        "port" : 59705,
+        "usedException" : false
+      }
+    ],
+    "errorCode" : -1202,
+    "finished" : false,
+    "scenario" : "default",
+    "title" : "",
+    "url" : "https:\/\/myterm-route-probe.invalid:59705\/origin-trust"
+  },
+  {
+    "challenges" : [
+      {
+        "host" : "myterm-route-probe.invalid",
+        "port" : 59705,
+        "usedException" : true
+      }
+    ],
+    "errorCode" : 0,
+    "finished" : true,
+    "scenario" : "approved",
+    "title" : "ORIGIN_TLS_FIXTURE",
+    "url" : "https:\/\/myterm-route-probe.invalid:59705\/origin-trust"
+  },
+  {
+    "challenges" : [
+      {
+        "host" : "myterm-route-probe.invalid",
+        "port" : 59705,
+        "usedException" : false
+      },
+      {
+        "host" : "myterm-route-probe.invalid",
+        "port" : 59705,
+        "usedException" : false
+      }
+    ],
+    "errorCode" : -1202,
+    "finished" : false,
+    "scenario" : "different-server",
+    "title" : "",
+    "url" : "https:\/\/myterm-route-probe.invalid:59705\/origin-trust"
+  },
+  {
+    "challenges" : [
+      {
+        "host" : "other-route-probe.invalid",
+        "port" : 59705,
+        "usedException" : false
+      },
+      {
+        "host" : "other-route-probe.invalid",
+        "port" : 59705,
+        "usedException" : false
+      }
+    ],
+    "errorCode" : -1202,
+    "finished" : false,
+    "scenario" : "different-host",
+    "title" : "",
+    "url" : "https:\/\/other-route-probe.invalid:59705\/origin-trust"
+  },
+  {
+    "challenges" : [
+      {
+        "host" : "myterm-route-probe.invalid",
+        "port" : 59706,
+        "usedException" : false
+      },
+      {
+        "host" : "myterm-route-probe.invalid",
+        "port" : 59706,
+        "usedException" : false
+      }
+    ],
+    "errorCode" : -1202,
+    "finished" : false,
+    "scenario" : "different-port",
+    "title" : "",
+    "url" : "https:\/\/myterm-route-probe.invalid:59706\/origin-trust"
+  },
+  {
+    "challenges" : [
+      {
+        "host" : "myterm-route-probe.invalid",
+        "port" : 59705,
+        "usedException" : false
+      },
+      {
+        "host" : "myterm-route-probe.invalid",
+        "port" : 59705,
+        "usedException" : false
+      }
+    ],
+    "errorCode" : -1202,
+    "finished" : false,
+    "scenario" : "different-leaf",
+    "title" : "",
+    "url" : "https:\/\/myterm-route-probe.invalid:59705\/origin-trust"
+  }
+]
