@@ -11,13 +11,15 @@ use std::{
     future::poll_fn,
     io,
     net::{IpAddr, SocketAddr},
+    path::PathBuf,
     sync::Arc,
     time::Duration,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
-    time::timeout,
+    sync::watch,
+    time::{sleep, timeout},
 };
 use tokio_rustls::{rustls, TlsAcceptor};
 
@@ -29,6 +31,8 @@ struct Target {
     address: IpAddr,
     port: u16,
     admission: Option<String>,
+    control_admission: Option<String>,
+    revoked: watch::Receiver<bool>,
 }
 
 #[tokio::main]
@@ -39,13 +43,22 @@ async fn main() -> Result<(), Error> {
             run_origin(address, expected_peer.parse()?).await
         }
         [mode, address, hostname, origin_ip, origin_port, certificate, key] if mode == "proxy" => {
+            let (revocation, revoked) = watch::channel(false);
+            if let Some(path) = env::var_os("MYTERM_FIXTURE_REVOCATION_FILE") {
+                let revocation = revocation.clone();
+                tokio::spawn(announce_revocation(path.into(), revocation));
+            }
             let target = Target {
                 hostname: hostname.clone(),
                 address: origin_ip.parse()?,
                 port: origin_port.parse()?,
                 admission: env::var("MYTERM_FIXTURE_ADMISSION").ok(),
+                control_admission: env::var("MYTERM_FIXTURE_CONTROL_ADMISSION").ok(),
+                revoked,
             };
-            run_proxy(address, target, certificate, key).await
+            let result = run_proxy(address, target, certificate, key).await;
+            drop(revocation);
+            result
         }
         [mode, listen, next] if mode == "observe" => {
             let marker = env::var("MYTERM_FIXTURE_ADMISSION")?;
@@ -93,6 +106,10 @@ async fn respond_to_origin(
         .filter_map(|line| line.split_once(':'))
         .any(|(name, _)| name.eq_ignore_ascii_case("x-myterm-fixture-admission"));
     let permitted = peer.ip() == expected && !leaked_admission;
+    if permitted && headers.starts_with("GET /revocation-stream ") {
+        stream_revocation_fixture(stream).await?;
+        return Ok(());
+    }
     let (status, marker) = if permitted {
         ("200 OK", "RUST_PRIVATE_ORIGIN")
     } else {
@@ -111,6 +128,35 @@ async fn respond_to_origin(
         peer.ip()
     );
     Ok(())
+}
+
+async fn stream_revocation_fixture(mut stream: TcpStream) -> Result<(), Error> {
+    stream.write_all(
+        b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\nCache-Control: no-store\r\n\r\n",
+    ).await?;
+    for _ in 0..150 {
+        stream.write_all(b"5\r\ntick\n\r\n").await?;
+        sleep(Duration::from_millis(50)).await;
+    }
+    stream.write_all(b"0\r\n\r\n").await?;
+    Ok(())
+}
+
+async fn announce_revocation(path: PathBuf, publisher: watch::Sender<bool>) {
+    while !path.exists() {
+        sleep(Duration::from_millis(20)).await;
+    }
+    publisher.send_replace(true);
+    eprintln!("fixture admission revoked");
+}
+
+async fn wait_for_revocation(revocation: &mut Option<watch::Receiver<bool>>) {
+    if let Some(revocation) = revocation {
+        if revocation.wait_for(|committed| *committed).await.is_ok() {
+            return;
+        }
+    }
+    std::future::pending::<()>().await;
 }
 
 async fn run_proxy(listen: &str, target: Target, cert: &str, key: &str) -> Result<(), Error> {
@@ -162,21 +208,31 @@ async fn forward(
     mut respond: server::SendResponse<Bytes>,
     target: &Target,
 ) -> Result<(), Error> {
+    let mut revocation = None;
     if let Some(expected) = &target.admission {
         let mut values = request
             .headers()
             .get_all("x-myterm-fixture-admission")
             .iter();
-        let matches = values
-            .next()
-            .is_some_and(|value| value.as_bytes() == expected.as_bytes());
-        if !matches || values.next().is_some() {
+        let value = values.next().map(http::HeaderValue::as_bytes);
+        let control = target
+            .control_admission
+            .as_ref()
+            .is_some_and(|control| value == Some(control.as_bytes()));
+        let matches = value == Some(expected.as_bytes());
+        if (!matches && !control)
+            || values.next().is_some()
+            || (matches && *target.revoked.borrow())
+        {
             eprintln!("CONNECT fixture denied admission");
             respond.send_response(
                 Response::builder().status(StatusCode::FORBIDDEN).body(())?,
                 true,
             )?;
             return Ok(());
+        }
+        if matches {
+            revocation = Some(target.revoked.clone());
         }
         eprintln!("CONNECT fixture admitted");
     }
@@ -198,21 +254,29 @@ async fn forward(
         .uri()
         .authority()
         .ok_or_else(|| io::Error::other("missing origin authority"))?;
-    let resolved = tokio::net::lookup_host((authority.host(), target.port))
-        .await?
-        .find(|address| address.ip() == target.address)
-        .ok_or_else(|| io::Error::other("fixture origin resolved outside its assigned address"))?;
-    let socket = match TcpStream::connect(resolved).await {
-        Ok(socket) => socket,
-        Err(error) => {
-            eprintln!("Unable to reach the fixture origin: {error}");
-            respond.send_response(
-                Response::builder()
-                    .status(StatusCode::BAD_GATEWAY)
-                    .body(())?,
-                true,
-            )?;
+    let dial = async {
+        let resolved = tokio::net::lookup_host((authority.host(), target.port))
+            .await?
+            .find(|address| address.ip() == target.address)
+            .ok_or_else(|| {
+                io::Error::other("fixture origin resolved outside its assigned address")
+            })?;
+        TcpStream::connect(resolved).await
+    };
+    let socket = tokio::select! {
+        biased;
+        _ = wait_for_revocation(&mut revocation) => {
+            eprintln!("CONNECT fixture denied admission before opening tunnel");
+            respond.send_response(Response::builder().status(StatusCode::FORBIDDEN).body(())?, true)?;
             return Ok(());
+        }
+        result = dial => match result {
+            Ok(socket) => socket,
+            Err(error) => {
+                eprintln!("Unable to reach the fixture origin: {error}");
+                respond.send_response(Response::builder().status(StatusCode::BAD_GATEWAY).body(())?, true)?;
+                return Ok(());
+            }
         }
     };
     eprintln!(
@@ -224,32 +288,47 @@ async fn forward(
     let mut request = request.into_body();
     let (mut upstream_read, mut upstream_write) = socket.into_split();
 
-    let send_request = async {
-        while let Some(chunk) = request.data().await {
-            let chunk = chunk?;
-            upstream_write.write_all(&chunk).await?;
-            request.flow_control().release_capacity(chunk.len())?;
-        }
-        upstream_write.shutdown().await?;
-        Ok::<_, Error>(())
-    };
-    let send_response = async {
-        let mut buffer = [0; 4096];
-        loop {
-            let length = upstream_read.read(&mut buffer).await?;
-            if length == 0 {
-                response.send_data(Bytes::new(), true)?;
-                return Ok::<_, Error>(());
+    let revoked = {
+        let send_request = async {
+            while let Some(chunk) = request.data().await {
+                let chunk = chunk?;
+                upstream_write.write_all(&chunk).await?;
+                request.flow_control().release_capacity(chunk.len())?;
             }
-            send_data(&mut response, &buffer[..length]).await?;
+            upstream_write.shutdown().await?;
+            Ok::<_, Error>(())
+        };
+        let send_response = async {
+            let mut buffer = [0; 4096];
+            loop {
+                let length = upstream_read.read(&mut buffer).await?;
+                if length == 0 {
+                    response.send_data(Bytes::new(), true)?;
+                    return Ok::<_, Error>(());
+                }
+                send_data(&mut response, &buffer[..length]).await?;
+            }
+        };
+
+        tokio::pin!(send_request);
+        tokio::pin!(send_response);
+        tokio::select! {
+            biased;
+            _ = wait_for_revocation(&mut revocation) => true,
+            result = &mut send_request => {
+                result?;
+                tokio::select! {
+                    biased;
+                    _ = wait_for_revocation(&mut revocation) => true,
+                    result = &mut send_response => { result?; false }
+                }
+            }
+            result = &mut send_response => { result?; false }
         }
     };
-
-    tokio::pin!(send_request);
-    tokio::pin!(send_response);
-    tokio::select! {
-        result = &mut send_request => { result?; send_response.await?; }
-        result = &mut send_response => { result?; }
+    if revoked {
+        response.send_reset(h2::Reason::CANCEL);
+        eprintln!("CONNECT fixture reset an active stream after revocation");
     }
     Ok(())
 }
@@ -257,9 +336,14 @@ async fn forward(
 async fn send_data(response: &mut SendStream<Bytes>, mut bytes: &[u8]) -> Result<(), Error> {
     response.reserve_capacity(bytes.len());
     while !bytes.is_empty() {
-        let capacity = poll_fn(|context| response.poll_capacity(context))
-            .await
-            .ok_or_else(|| io::Error::other("HTTP/2 stream ended before forwarding"))??;
+        let assigned = response.capacity();
+        let capacity = if assigned > 0 {
+            assigned
+        } else {
+            poll_fn(|context| response.poll_capacity(context))
+                .await
+                .ok_or_else(|| io::Error::other("HTTP/2 stream ended before forwarding"))??
+        };
         let length = capacity.min(bytes.len());
         if length > 0 {
             response.send_data(Bytes::copy_from_slice(&bytes[..length]), false)?;
@@ -267,4 +351,61 @@ async fn send_data(response: &mut SendStream<Bytes>, mut bytes: &[u8]) -> Result
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn forwarding_uses_http2_credit_already_assigned_to_the_stream() {
+        let (client_io, server_io) = tokio::io::duplex(32 * 1024);
+        let server = tokio::spawn(async move {
+            let mut connection = server::handshake(server_io).await.unwrap();
+            let (_, mut respond) = connection.accept().await.unwrap().unwrap();
+            let response = respond.send_response(Response::new(()), false).unwrap();
+            let send = tokio::spawn(async move {
+                let mut response = response;
+                response.reserve_capacity(512);
+                let assigned = poll_fn(|cx| response.poll_capacity(cx))
+                    .await
+                    .unwrap()
+                    .unwrap();
+                assert!(assigned > 0);
+                send_data(&mut response, b"origin body").await.unwrap();
+                response.send_data(Bytes::new(), true).unwrap();
+            });
+            tokio::select! {
+                _ = connection.accept() => {}
+                _ = send => {
+                    // Poll the connection to flush the queued response frames and observe client closure.
+                    let _ = connection.accept().await;
+                }
+            }
+        });
+        let (mut sender, connection) = h2::client::handshake(client_io).await.unwrap();
+        let client = tokio::spawn(connection);
+        let (response, _) = sender
+            .send_request(
+                Request::builder()
+                    .uri("https://fixture.test")
+                    .body(())
+                    .unwrap(),
+                true,
+            )
+            .unwrap();
+        let received = timeout(Duration::from_secs(1), async move {
+            let mut body = response.await.unwrap().into_body();
+            let mut received = Vec::new();
+            while let Some(bytes) = body.data().await {
+                received.extend(bytes.unwrap());
+            }
+            received
+        })
+        .await
+        .unwrap();
+        assert_eq!(received, b"origin body");
+        client.abort();
+        server.abort();
+    }
 }

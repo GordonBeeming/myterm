@@ -16,6 +16,8 @@ See [the two runs](route-results.json) for native navigation outcomes and the pr
 
 The [native admission follow-up](admission.md) checks scoped fixture header delivery, rejects missing and wrong admission values, and observes a raw forwarding hop without a TLS key.
 
+The [live revocation follow-up](revocation.md) verifies that Rust can reset an established stream and refuse its next request while another native view keeps receiving data.
+
 ## Repeat
 
 The script expects a local OrbStack Docker engine, Xcode and a Rust fixture registry cache. Use the local development certificate setup in [trusted transport comparison](../browser-relay-http2/transport-comparison.md). The private network, Docker port, and simulator are disposable. Set a different unused RFC 1918 subnet prefix with `MYTERM_PRIVATE_SUBNET_PREFIX` if the default three-octet prefix is in use.

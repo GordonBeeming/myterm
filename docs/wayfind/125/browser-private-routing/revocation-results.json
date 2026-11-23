@@ -1,0 +1,244 @@
+{
+  "revocation": {
+    "macOSIPv4": {
+      "native": {
+        "controlAfter": {
+          "bytes": 35,
+          "outcome": "running"
+        },
+        "controlAtRevocation": {
+          "bytes": 20,
+          "outcome": "running"
+        },
+        "controlBefore": {
+          "bytes": 10,
+          "outcome": "running"
+        },
+        "newRequestControl": "loaded",
+        "newRequestRevoked": "interrupted",
+        "revokedAfter": {
+          "bytes": 15,
+          "outcome": "interrupted"
+        },
+        "revokedBefore": {
+          "bytes": 10,
+          "outcome": "running"
+        },
+        "targetForm": "private-ip"
+      },
+      "proxyLog": [
+        "proxy ready",
+        "CONNECT fixture admitted",
+        "CONNECT 10.253.160.20:8192 resolved 10.253.160.20",
+        "CONNECT fixture admitted",
+        "CONNECT 10.253.160.20:8192 resolved 10.253.160.20",
+        "CONNECT fixture admitted",
+        "CONNECT 10.253.160.20:8192 resolved 10.253.160.20",
+        "CONNECT fixture admitted",
+        "CONNECT 10.253.160.20:8192 resolved 10.253.160.20",
+        "fixture admission revoked",
+        "CONNECT fixture reset an active stream after revocation",
+        "CONNECT fixture denied admission",
+        "CONNECT fixture admitted",
+        "CONNECT 10.253.160.20:8192 resolved 10.253.160.20",
+        "Proxy stream: peer closed connection without sending TLS close_notify: https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
+      ]
+    },
+    "iPhoneIPv4": {
+      "native": {
+        "controlAfter": {
+          "bytes": 100,
+          "outcome": "running"
+        },
+        "controlAtRevocation": {
+          "bytes": 85,
+          "outcome": "running"
+        },
+        "controlBefore": {
+          "bytes": 10,
+          "outcome": "running"
+        },
+        "newRequestControl": "loaded",
+        "newRequestRevoked": "interrupted",
+        "revokedAfter": {
+          "bytes": 15,
+          "outcome": "interrupted"
+        },
+        "revokedBefore": {
+          "bytes": 10,
+          "outcome": "running"
+        },
+        "targetForm": "private-ip"
+      },
+      "proxyLog": [
+        "proxy ready",
+        "CONNECT fixture admitted",
+        "CONNECT 10.253.160.20:8192 resolved 10.253.160.20",
+        "CONNECT fixture admitted",
+        "CONNECT 10.253.160.20:8192 resolved 10.253.160.20",
+        "CONNECT fixture admitted",
+        "CONNECT fixture admitted",
+        "CONNECT 10.253.160.20:8192 resolved 10.253.160.20",
+        "CONNECT 10.253.160.20:8192 resolved 10.253.160.20",
+        "fixture admission revoked",
+        "CONNECT fixture reset an active stream after revocation",
+        "CONNECT fixture denied admission",
+        "CONNECT fixture admitted",
+        "CONNECT 10.253.160.20:8192 resolved 10.253.160.20",
+        "Proxy stream: stream error received: not a result of an error"
+      ]
+    },
+    "iPadIPv4": {
+      "native": {
+        "controlAfter": {
+          "bytes": 90,
+          "outcome": "running"
+        },
+        "controlAtRevocation": {
+          "bytes": 75,
+          "outcome": "running"
+        },
+        "controlBefore": {
+          "bytes": 10,
+          "outcome": "running"
+        },
+        "newRequestControl": "loaded",
+        "newRequestRevoked": "interrupted",
+        "revokedAfter": {
+          "bytes": 15,
+          "outcome": "interrupted"
+        },
+        "revokedBefore": {
+          "bytes": 10,
+          "outcome": "running"
+        },
+        "targetForm": "private-ip"
+      },
+      "proxyLog": [
+        "proxy ready",
+        "CONNECT fixture admitted",
+        "CONNECT 10.253.160.20:8192 resolved 10.253.160.20",
+        "CONNECT fixture admitted",
+        "CONNECT 10.253.160.20:8192 resolved 10.253.160.20",
+        "CONNECT fixture admitted",
+        "CONNECT 10.253.160.20:8192 resolved 10.253.160.20",
+        "CONNECT fixture admitted",
+        "CONNECT 10.253.160.20:8192 resolved 10.253.160.20",
+        "fixture admission revoked",
+        "CONNECT fixture reset an active stream after revocation",
+        "CONNECT fixture denied admission",
+        "CONNECT fixture admitted",
+        "CONNECT 10.253.160.20:8192 resolved 10.253.160.20",
+        "Proxy stream: stream error received: not a result of an error"
+      ]
+    },
+    "iPhoneDNS": {
+      "native": {
+        "controlAfter": {
+          "bytes": 40,
+          "outcome": "running"
+        },
+        "controlAtRevocation": {
+          "bytes": 25,
+          "outcome": "running"
+        },
+        "controlBefore": {
+          "bytes": 10,
+          "outcome": "running"
+        },
+        "newRequestControl": "loaded",
+        "newRequestRevoked": "interrupted",
+        "revokedAfter": {
+          "bytes": 15,
+          "outcome": "interrupted"
+        },
+        "revokedBefore": {
+          "bytes": 10,
+          "outcome": "running"
+        },
+        "targetForm": "private-name"
+      },
+      "proxyLog": [
+        "proxy ready",
+        "CONNECT fixture admitted",
+        "CONNECT private-origin.myterm.test:8192 resolved 10.253.160.20",
+        "CONNECT fixture admitted",
+        "CONNECT private-origin.myterm.test:8192 resolved 10.253.160.20",
+        "CONNECT fixture admitted",
+        "CONNECT private-origin.myterm.test:8192 resolved 10.253.160.20",
+        "CONNECT fixture admitted",
+        "CONNECT private-origin.myterm.test:8192 resolved 10.253.160.20",
+        "fixture admission revoked",
+        "CONNECT fixture reset an active stream after revocation",
+        "CONNECT fixture denied admission",
+        "CONNECT fixture admitted",
+        "CONNECT private-origin.myterm.test:8192 resolved 10.253.160.20",
+        "Proxy stream: stream error received: not a result of an error"
+      ]
+    },
+    "iPadDNS": {
+      "native": {
+        "controlAfter": {
+          "bytes": 45,
+          "outcome": "running"
+        },
+        "controlAtRevocation": {
+          "bytes": 30,
+          "outcome": "running"
+        },
+        "controlBefore": {
+          "bytes": 10,
+          "outcome": "running"
+        },
+        "newRequestControl": "loaded",
+        "newRequestRevoked": "interrupted",
+        "revokedAfter": {
+          "bytes": 20,
+          "outcome": "interrupted"
+        },
+        "revokedBefore": {
+          "bytes": 15,
+          "outcome": "running"
+        },
+        "targetForm": "private-name"
+      },
+      "proxyLog": [
+        "proxy ready",
+        "CONNECT fixture admitted",
+        "CONNECT private-origin.myterm.test:8192 resolved 10.253.160.20",
+        "CONNECT fixture admitted",
+        "CONNECT private-origin.myterm.test:8192 resolved 10.253.160.20",
+        "CONNECT fixture admitted",
+        "CONNECT private-origin.myterm.test:8192 resolved 10.253.160.20",
+        "CONNECT fixture admitted",
+        "CONNECT private-origin.myterm.test:8192 resolved 10.253.160.20",
+        "fixture admission revoked",
+        "CONNECT fixture reset an active stream after revocation",
+        "CONNECT fixture denied admission",
+        "CONNECT fixture admitted",
+        "CONNECT private-origin.myterm.test:8192 resolved 10.253.160.20",
+        "Proxy stream: stream error received: not a result of an error"
+      ]
+    }
+  },
+  "priorFlowControl": "timed out in the preassigned-credit control",
+  "correctedFlowControl": "passed",
+  "macRoutingAfterFix": [
+    {
+      "error": 0,
+      "finished": true,
+      "httpStatus": 200,
+      "target": "private-name",
+      "title": "RUST_PRIVATE_ORIGIN",
+      "underlyingError": 0
+    },
+    {
+      "error": 0,
+      "finished": true,
+      "httpStatus": 200,
+      "target": "private-ip",
+      "title": "RUST_PRIVATE_ORIGIN",
+      "underlyingError": 0
+    }
+  ]
+}

@@ -103,10 +103,18 @@ final class PrivateRouteScene: UIResponder, UIWindowSceneDelegate {
         Task {
             let output = URL.documentsDirectory.appendingPathComponent("private-routes.json")
             do {
-                let data = try await measure()
+                let data: Data
+                if ProcessInfo.processInfo.environment["MYTERM_PRIVATE_CHECK_REVOCATION"] == "1" {
+                    data = try await RevocationProbe.run(signalDirectory: .documentsDirectory)
+                } else {
+                    data = try await measure()
+                }
                 try data.write(to: output, options: .atomic)
             } catch {
                 fputs("Private route fixture failed: \(error)\n", stderr)
+                if let data = try? JSONSerialization.data(withJSONObject: ["fixtureError": String(describing: error)]) {
+                    try? data.write(to: output, options: .atomic)
+                }
             }
         }
     }
@@ -117,7 +125,12 @@ final class PrivateRouteScene: UIResponder, UIWindowSceneDelegate {
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
         do {
-            let data = try await measure()
+            let data: Data
+            if ProcessInfo.processInfo.environment["MYTERM_PRIVATE_CHECK_REVOCATION"] == "1" {
+                data = try await RevocationProbe.run()
+            } else {
+                data = try await measure()
+            }
             print(String(decoding: data, as: UTF8.self))
         } catch {
             fputs("Private route fixture failed: \(error)\n", stderr)
