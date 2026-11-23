@@ -1,5 +1,7 @@
 # WebKit loopback routing with an HTTP/2 relay
 
+See the [trusted iOS Simulator follow-up](trusted-simulator.md) for exact `localhost` routing with a working WebKit relay. The results below are from the macOS probe.
+
 WebKit sent literal loopback requests to the client with a per-web-view HTTP/2 relay configured and failover disabled. Both runs returned the client fixture page for `localhost`, `127.0.0.1`, and `[::1]`, including after the relay was stopped. The non-loopback control failed earlier in the connection, so a working tunnel with a trusted relay certificate remains untested.
 
 | Target | Relay listening | Relay stopped |

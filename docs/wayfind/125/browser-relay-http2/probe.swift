@@ -1,5 +1,9 @@
 // Throwaway native WebKit routing test. No windows, persistent data or user network settings.
+#if os(iOS)
+import UIKit
+#else
 import AppKit
+#endif
 import Foundation
 import Network
 import Security
@@ -96,23 +100,14 @@ final class Fixture: @unchecked Sendable {
     }
 }
 
-@main struct Probe {
-    @MainActor static func main() async {
-        _ = NSApplication.shared
-        NSApp.setActivationPolicy(.prohibited)
-        do {
-            let origin = try Fixture()
-            let originPort = try await origin.start()
-            defer { origin.stop() }
-            var results: [[String: Any]] = []
-            guard CommandLine.arguments.count == 3, let relayPort = UInt16(CommandLine.arguments[1]),
-                  ["running", "stopped"].contains(CommandLine.arguments[2]) else {
-                fputs("usage: probe RELAY_PORT running|stopped\n", stderr)
-                exit(2)
-            }
-            let status = CommandLine.arguments[2]
-            let expectedCertificate = try Data(contentsOf: URL(fileURLWithPath: "relay.der"))
-            let tls = NWProtocolTLS.Options()
+@MainActor struct Probe {
+    static func run(relayPort: UInt16, status: String, expectedCertificate: Data?) async throws -> Data {
+        let origin = try Fixture()
+        let originPort = try await origin.start()
+        defer { origin.stop() }
+        var results: [[String: Any]] = []
+        let tls = NWProtocolTLS.Options()
+        if let expectedCertificate {
             sec_protocol_options_set_verify_block(tls.securityProtocolOptions, { _, trust, complete in
                 fputs("Relay verify callback\n", stderr)
                 let trust = sec_trust_copy_ref(trust).takeRetainedValue()
@@ -123,47 +118,110 @@ final class Fixture: @unchecked Sendable {
                 }
                 complete((SecCertificateCopyData(leaf) as Data) == expectedCertificate)
             }, .global())
-            guard let relayURL = URL(string: "https://127.0.0.1:\(relayPort)") else {
-                throw NSError(domain: "Probe", code: 3)
+        }
+        guard let relayURL = URL(string: "https://127.0.0.1:\(relayPort)") else {
+            throw NSError(domain: "Probe", code: 3)
+        }
+        let kind = "relayHTTP2"
+        for host in ["myterm-route-probe.invalid", "localhost", "127.0.0.1", "[::1]"] {
+            let beforeOrigin = origin.snapshot().count
+            let store = WKWebsiteDataStore.nonPersistent()
+            guard let url = URL(string: "http://\(host):\(originPort)/routing-probe") else {
+                throw NSError(domain: "Probe", code: 2)
             }
-            let kind = "relayHTTP2"
-            for host in ["myterm-route-probe.invalid", "localhost", "127.0.0.1", "[::1]"] {
-                let beforeOrigin = origin.snapshot().count
-                let store = WKWebsiteDataStore.nonPersistent()
-                guard let url = URL(string: "http://\(host):\(originPort)/routing-probe") else {
-                    throw NSError(domain: "Probe", code: 2)
-                }
-                let hop = ProxyConfiguration.RelayHop(http2RelayEndpoint: .url(relayURL), tlsOptions: tls)
-                var config = ProxyConfiguration(relayHops: [hop])
-                config.allowFailover = false
-                config.matchDomains = ["localhost", "127.0.0.1", "::1", ""]
-                config.excludedDomains = []
-                store.proxyConfigurations = [config]
-                let configuration = WKWebViewConfiguration()
-                configuration.websiteDataStore = store
-                let browser = WKWebView(frame: .zero, configuration: configuration)
-                let navigation = Navigation(expectedCertificate: expectedCertificate)
-                browser.navigationDelegate = navigation
-                browser.load(URLRequest(url: url, timeoutInterval: 5))
-                let deadline = Date().addingTimeInterval(8)
-                while !navigation.finished && navigation.error == nil && Date() < deadline {
-                    try await Task.sleep(for: .milliseconds(50))
-                }
-                results.append([
-                    "url": url.absoluteString, "proxy": kind,
-                    "title": browser.title ?? "", "finished": navigation.finished,
-                    "errorDomain": navigation.error?.domain ?? "",
-                    "errorCode": navigation.error?.code ?? 0,
-                    "underlyingErrorCode": (navigation.error?.userInfo[NSUnderlyingErrorKey] as? NSError)?.code ?? 0,
-                    "clientOriginRequests": Array(origin.snapshot().dropFirst(beforeOrigin))
-                ])
-                browser.stopLoading()
-                browser.navigationDelegate = nil
+            let hop = ProxyConfiguration.RelayHop(http2RelayEndpoint: .url(relayURL), tlsOptions: tls)
+            var config = ProxyConfiguration(relayHops: [hop])
+            config.allowFailover = false
+            config.matchDomains = ["localhost", "127.0.0.1", "::1", ""]
+            config.excludedDomains = []
+            store.proxyConfigurations = [config]
+            let configuration = WKWebViewConfiguration()
+            configuration.websiteDataStore = store
+            let browser = WKWebView(frame: .zero, configuration: configuration)
+            let navigation = Navigation(expectedCertificate: expectedCertificate ?? Data())
+            browser.navigationDelegate = navigation
+            browser.load(URLRequest(url: url, timeoutInterval: 5))
+            let deadline = Date().addingTimeInterval(8)
+            while !navigation.finished && navigation.error == nil && Date() < deadline {
+                try await Task.sleep(for: .milliseconds(50))
             }
-            let output: [String: Any] = ["scope": "offscreen macOS WKWebView HTTP/2 relay routing fixture; no Rust server or E2EE", "os": ProcessInfo.processInfo.operatingSystemVersionString, "relayState": status, "results": results]
-            let data = try JSONSerialization.data(withJSONObject: output, options: [.prettyPrinted, .sortedKeys])
-            print(String(decoding: data, as: UTF8.self))
-            exit(0)
-        } catch { fputs("Probe failed: \(error)\n", stderr); exit(1) }
+            results.append([
+                "url": url.absoluteString, "proxy": kind,
+                "title": browser.title ?? "", "finished": navigation.finished,
+                "errorDomain": navigation.error?.domain ?? "",
+                "errorCode": navigation.error?.code ?? 0,
+                "underlyingErrorCode": (navigation.error?.userInfo[NSUnderlyingErrorKey] as? NSError)?.code ?? 0,
+                "clientOriginRequests": Array(origin.snapshot().dropFirst(beforeOrigin))
+            ])
+            browser.stopLoading()
+            browser.navigationDelegate = nil
+        }
+        let output: [String: Any] = ["scope": "offscreen WKWebView HTTP/2 relay routing fixture; no Rust server or E2EE", "os": ProcessInfo.processInfo.operatingSystemVersionString, "relayState": status, "results": results]
+        return try JSONSerialization.data(withJSONObject: output, options: [.prettyPrinted, .sortedKeys])
     }
 }
+
+
+@MainActor private func arguments() throws -> (UInt16, String) {
+    guard CommandLine.arguments.count == 3,
+          let port = UInt16(CommandLine.arguments[1]),
+          ["running", "stopped"].contains(CommandLine.arguments[2]) else {
+        throw NSError(domain: "usage: probe RELAY_PORT running|stopped", code: 2)
+    }
+    return (port, CommandLine.arguments[2])
+}
+
+#if os(iOS)
+@main final class ProbeApplication: UIResponder, UIApplicationDelegate {
+    func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession,
+                     options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        let configuration = UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
+        configuration.delegateClass = ProbeScene.self
+        return configuration
+    }
+}
+
+final class ProbeScene: UIResponder, UIWindowSceneDelegate {
+    var window: UIWindow?
+    func scene(_ scene: UIScene, willConnectTo session: UISceneSession,
+               options connectionOptions: UIScene.ConnectionOptions) {
+        guard let scene = scene as? UIWindowScene else { return }
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = UIViewController()
+        self.window = window
+        window.makeKeyAndVisible()
+        Task {
+            let path = URL.documentsDirectory.appendingPathComponent("routing-result.json")
+            do {
+                let environment = ProcessInfo.processInfo.environment
+                guard let rawPort = environment["MYTERM_PROBE_PORT"], let port = UInt16(rawPort),
+                      let status = environment["MYTERM_PROBE_STATE"],
+                      ["running", "stopped"].contains(status) else {
+                    throw NSError(domain: "Missing simulator fixture configuration", code: 2)
+                }
+                let data = try await Probe.run(relayPort: port, status: status, expectedCertificate: nil)
+                try data.write(to: path, options: .atomic)
+            } catch {
+                let errorData = try? JSONSerialization.data(withJSONObject: ["probeError": String(describing: error)])
+                try? errorData?.write(to: path, options: .atomic)
+            }
+        }
+    }
+}
+#else
+@main struct DesktopProbe {
+    @MainActor static func main() async {
+        _ = NSApplication.shared
+        NSApp.setActivationPolicy(.prohibited)
+        do {
+            let (port, status) = try arguments()
+            let certificate = try Data(contentsOf: URL(fileURLWithPath: "relay.der"))
+            let data = try await Probe.run(relayPort: port, status: status, expectedCertificate: certificate)
+            print(String(decoding: data, as: UTF8.self))
+        } catch {
+            fputs("Probe failed: \(error)\n", stderr)
+            exit(1)
+        }
+    }
+}
+#endif
