@@ -86,7 +86,7 @@ func makeTestCertificate(issueRoot bool) (tls.Certificate, error) {
 
 func forwardOrigin(w http.ResponseWriter, r *http.Request, fixturePort int) error {
 	host, _, err := net.SplitHostPort(r.Host)
-	if err != nil || (host != "myterm-route-probe.invalid" && host != "other-route-probe.invalid") {
+	if err != nil || (host != "myterm-route-probe.invalid" && host != "other-route-probe.invalid" && host != "outage-origin.localhost.direct") {
 		http.Error(w, "origin missing from test fixture", http.StatusBadRequest)
 		return nil
 	}
@@ -97,7 +97,7 @@ func forwardOrigin(w http.ResponseWriter, r *http.Request, fixturePort int) erro
 	}
 	defer server.Close()
 	defer r.Body.Close()
-	if err := server.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
+	if err := server.SetDeadline(time.Now().Add(45 * time.Second)); err != nil {
 		return err
 	}
 	w.WriteHeader(http.StatusOK)
@@ -130,7 +130,7 @@ func forwardOrigin(w http.ResponseWriter, r *http.Request, fixturePort int) erro
 	}
 }
 
-func run(issueRoot, useHTTP3 bool, certificateFile, keyFile, label string, fixturePort int) error {
+func run(issueRoot, useHTTP3 bool, certificateFile, keyFile, label string, fixturePort, listenPort int) error {
 	var certificate tls.Certificate
 	var err error
 	if certificateFile == "" && keyFile == "" {
@@ -197,7 +197,7 @@ func run(issueRoot, useHTTP3 bool, certificateFile, keyFile, label string, fixtu
 		}
 	})
 	if useHTTP3 {
-		listener, err := net.ListenPacket("udp4", "127.0.0.1:0")
+		listener, err := net.ListenPacket("udp4", fmt.Sprintf("127.0.0.1:%d", listenPort))
 		if err != nil {
 			return err
 		}
@@ -206,7 +206,7 @@ func run(issueRoot, useHTTP3 bool, certificateFile, keyFile, label string, fixtu
 		fmt.Println(listener.LocalAddr().(*net.UDPAddr).Port)
 		return server.Serve(listener)
 	}
-	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	listener, err := net.Listen("tcp4", fmt.Sprintf("127.0.0.1:%d", listenPort))
 	if err != nil {
 		return err
 	}
@@ -230,8 +230,9 @@ func main() {
 	key := flag.String("key", "", "optional PEM key for a local fixture")
 	label := flag.String("label", "RELAY_FIXTURE", "title identifying the responding fixture")
 	originPort := flag.Int("origin-fixture-port", 0, "forward only to a loopback TLS fixture")
+	listenPort := flag.Int("bind-port", 0, "loopback listener port for the outage fixture")
 	flag.Parse()
-	if err := run(*issueRoot, *useHTTP3, *certificate, *key, *label, *originPort); err != nil {
+	if err := run(*issueRoot, *useHTTP3, *certificate, *key, *label, *originPort, *listenPort); err != nil {
 		log.Fatal(err)
 	}
 }

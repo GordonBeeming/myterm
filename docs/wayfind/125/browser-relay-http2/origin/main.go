@@ -31,7 +31,7 @@ func run() error {
 	leaf := &x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		Subject:      pkix.Name{CommonName: "Disposable origin fixture"},
-		DNSNames:     []string{"myterm-route-probe.invalid", "other-route-probe.invalid"},
+		DNSNames:     []string{"myterm-route-probe.invalid", "other-route-probe.invalid", "outage-origin.localhost.direct"},
 		NotBefore:    time.Now().Add(-time.Minute),
 		NotAfter:     time.Now().Add(time.Hour),
 		KeyUsage:     x509.KeyUsageDigitalSignature,

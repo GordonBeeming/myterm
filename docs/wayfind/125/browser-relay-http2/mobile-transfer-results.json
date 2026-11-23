@@ -1,0 +1,185 @@
+{
+  "iPhoneExplicitDownload": {
+    "download-broken": {
+      "downloadAuthChallenges": 1,
+      "downloadErrorCode": -1005,
+      "finished": false,
+      "navigationErrorCode": 0,
+      "partialFileCleaned": true,
+      "published": false,
+      "receivedBytes": 32768,
+      "sha256": "b78aabbda3b7179baac5a4c9cfda66a6d6a40697bacc1eedf5c1935ca2491893",
+      "suggestedFilename": "fixture.bin"
+    },
+    "download-cancel": {
+      "bytesBeforeCancel": 32768,
+      "cancelCallback": true,
+      "downloadAuthChallenges": 1,
+      "downloadErrorCode": 0,
+      "finished": false,
+      "finishedBeforeCancel": false,
+      "navigationErrorCode": 0,
+      "partialFileCleaned": true,
+      "published": false,
+      "receivedBytes": 65536,
+      "sha256": "944044fe482bc4e91085c15c5a923a1b9e02eac98d3bce04997d6dbecd2a5b8d",
+      "suggestedFilename": "fixture.bin"
+    },
+    "download-success": {
+      "downloadAuthChallenges": 1,
+      "downloadErrorCode": 0,
+      "finished": true,
+      "navigationErrorCode": 0,
+      "partialFileCleaned": true,
+      "published": true,
+      "receivedBytes": 8388608,
+      "sha256": "7014ae0f2fc0fee42a440b97859207efb72ffee09d4864f7433f1bf756a17aca",
+      "suggestedFilename": "fixture.bin"
+    },
+    "downloadInitiation": "startDownload",
+    "fixtureBytes": 8388608,
+    "fixtureSHA256": "7014ae0f2fc0fee42a440b97859207efb72ffee09d4864f7433f1bf756a17aca",
+    "upload-accept": {
+      "pickerCallbacks": 1,
+      "reply": {
+        "bytes": 8388608,
+        "sha256": "7014ae0f2fc0fee42a440b97859207efb72ffee09d4864f7433f1bf756a17aca",
+        "status": 200
+      }
+    },
+    "upload-cancel": {
+      "pickerCallbacks": 1,
+      "reply": {}
+    },
+    "upload-reject": {
+      "pickerCallbacks": 1,
+      "reply": {
+        "bytes": 8388608,
+        "sha256": "7014ae0f2fc0fee42a440b97859207efb72ffee09d4864f7433f1bf756a17aca",
+        "status": 422
+      }
+    }
+  },
+  "iPadExplicitDownload": {
+    "download-broken": {
+      "downloadAuthChallenges": 1,
+      "downloadErrorCode": -1005,
+      "finished": false,
+      "navigationErrorCode": 0,
+      "partialFileCleaned": true,
+      "published": false,
+      "receivedBytes": 32768,
+      "sha256": "b78aabbda3b7179baac5a4c9cfda66a6d6a40697bacc1eedf5c1935ca2491893",
+      "suggestedFilename": "fixture.bin"
+    },
+    "download-cancel": {
+      "bytesBeforeCancel": 65536,
+      "cancelCallback": true,
+      "downloadAuthChallenges": 1,
+      "downloadErrorCode": 0,
+      "finished": false,
+      "finishedBeforeCancel": false,
+      "navigationErrorCode": 0,
+      "partialFileCleaned": true,
+      "published": false,
+      "receivedBytes": 80945,
+      "sha256": "b7da2a966c20f4075d7a8d61a064431a7ca69f5e5f0e05a24b756f6166780621",
+      "suggestedFilename": "fixture.bin"
+    },
+    "download-success": {
+      "downloadAuthChallenges": 1,
+      "downloadErrorCode": 0,
+      "finished": true,
+      "navigationErrorCode": 0,
+      "partialFileCleaned": true,
+      "published": true,
+      "receivedBytes": 8388608,
+      "sha256": "7014ae0f2fc0fee42a440b97859207efb72ffee09d4864f7433f1bf756a17aca",
+      "suggestedFilename": "fixture.bin"
+    },
+    "downloadInitiation": "startDownload",
+    "fixtureBytes": 8388608,
+    "fixtureSHA256": "7014ae0f2fc0fee42a440b97859207efb72ffee09d4864f7433f1bf756a17aca",
+    "upload-accept": {
+      "pickerCallbacks": 1,
+      "reply": {
+        "bytes": 8388608,
+        "sha256": "7014ae0f2fc0fee42a440b97859207efb72ffee09d4864f7433f1bf756a17aca",
+        "status": 200
+      }
+    },
+    "upload-cancel": {
+      "pickerCallbacks": 1,
+      "reply": {}
+    },
+    "upload-reject": {
+      "pickerCallbacks": 1,
+      "reply": {
+        "bytes": 8388608,
+        "sha256": "7014ae0f2fc0fee42a440b97859207efb72ffee09d4864f7433f1bf756a17aca",
+        "status": 422
+      }
+    }
+  },
+  "iPhoneResponseConversion": {
+    "download-broken": {
+      "downloadAuthChallenges": 0,
+      "downloadErrorCode": 0,
+      "finished": false,
+      "navigationErrorCode": -1005,
+      "partialFileCleaned": true,
+      "published": false,
+      "receivedBytes": 0,
+      "sha256": "",
+      "suggestedFilename": ""
+    },
+    "download-cancel": {
+      "downloadAuthChallenges": 0,
+      "downloadErrorCode": 0,
+      "finished": false,
+      "navigationErrorCode": -1005,
+      "partialFileCleaned": true,
+      "published": false,
+      "receivedBytes": 0,
+      "sha256": "",
+      "suggestedFilename": ""
+    },
+    "download-success": {
+      "downloadAuthChallenges": 0,
+      "downloadErrorCode": 0,
+      "finished": false,
+      "navigationErrorCode": -1005,
+      "partialFileCleaned": true,
+      "published": false,
+      "receivedBytes": 0,
+      "sha256": "",
+      "suggestedFilename": ""
+    },
+    "downloadInitiation": "navigationResponse",
+    "fixtureBytes": 8388608,
+    "fixtureSHA256": "7014ae0f2fc0fee42a440b97859207efb72ffee09d4864f7433f1bf756a17aca",
+    "upload-accept": {
+      "pickerCallbacks": 1,
+      "reply": {
+        "bytes": 8388608,
+        "sha256": "7014ae0f2fc0fee42a440b97859207efb72ffee09d4864f7433f1bf756a17aca",
+        "status": 200
+      }
+    },
+    "upload-cancel": {
+      "pickerCallbacks": 1,
+      "reply": {}
+    },
+    "upload-reject": {
+      "pickerCallbacks": 1,
+      "reply": {
+        "bytes": 8388608,
+        "sha256": "7014ae0f2fc0fee42a440b97859207efb72ffee09d4864f7433f1bf756a17aca",
+        "status": 422
+      }
+    }
+  },
+  "iPadParallelUploadCancellationFailure": {
+    "code": "-1005"
+  }
+}

@@ -1,0 +1,156 @@
+{
+  "macOS": {
+    "approvedCertificateHosts": [
+      "myterm-route-probe.invalid",
+      "other-route-probe.invalid"
+    ],
+    "cors": {
+      "allowed": "CROSS_ORIGIN_FIXTURE",
+      "denied": true
+    },
+    "finalLoginURL": "https://myterm-route-probe.invalid:56064/login-complete",
+    "history": {
+      "back": "https://myterm-route-probe.invalid:56064/navigation",
+      "forward": "https://myterm-route-probe.invalid:56064/login-complete"
+    },
+    "independentView": {
+      "canGoBack": false,
+      "loginProof": {
+        "body": "SIGNED_OUT",
+        "status": 401
+      },
+      "title": "NAVIGATION_HOME"
+    },
+    "initialURL": "https://myterm-route-probe.invalid:56064/navigation",
+    "loginProof": {
+      "body": "SIGNED_IN",
+      "status": 200
+    },
+    "popup": {
+      "messageOrigin": "https://other-route-probe.invalid:56064",
+      "returnedToOpener": true,
+      "sharedWebsiteDataStore": true,
+      "url": "https://other-route-probe.invalid:56064/popup"
+    },
+    "webSockets": {
+      "error": "",
+      "messages": [
+        "hot-reload-1",
+        "hot-reload-2"
+      ]
+    }
+  },
+  "iPhoneSimulator": {
+    "approvedCertificateHosts": [
+      "myterm-route-probe.invalid",
+      "other-route-probe.invalid"
+    ],
+    "cors": {
+      "allowed": "CROSS_ORIGIN_FIXTURE",
+      "denied": true
+    },
+    "finalLoginURL": "https://myterm-route-probe.invalid:57004/login-complete",
+    "history": {
+      "back": "https://myterm-route-probe.invalid:57004/navigation",
+      "forward": "https://myterm-route-probe.invalid:57004/login-complete"
+    },
+    "independentView": {
+      "canGoBack": false,
+      "loginProof": {
+        "body": "SIGNED_OUT",
+        "status": 401
+      },
+      "title": "NAVIGATION_HOME"
+    },
+    "initialURL": "https://myterm-route-probe.invalid:57004/navigation",
+    "loginProof": {
+      "body": "SIGNED_IN",
+      "status": 200
+    },
+    "popup": {
+      "messageOrigin": "https://other-route-probe.invalid:57004",
+      "returnedToOpener": true,
+      "sharedWebsiteDataStore": true,
+      "url": "https://other-route-probe.invalid:57004/popup"
+    },
+    "webSockets": {
+      "error": "",
+      "messages": [
+        "hot-reload-1",
+        "hot-reload-2"
+      ]
+    }
+  },
+  "iPadSimulator": {
+    "approvedCertificateHosts": [
+      "myterm-route-probe.invalid",
+      "other-route-probe.invalid"
+    ],
+    "cors": {
+      "allowed": "CROSS_ORIGIN_FIXTURE",
+      "denied": true
+    },
+    "finalLoginURL": "https://myterm-route-probe.invalid:59680/login-complete",
+    "history": {
+      "back": "https://myterm-route-probe.invalid:59680/navigation",
+      "forward": "https://myterm-route-probe.invalid:59680/login-complete"
+    },
+    "independentView": {
+      "canGoBack": false,
+      "loginProof": {
+        "body": "SIGNED_OUT",
+        "status": 401
+      },
+      "title": "NAVIGATION_HOME"
+    },
+    "initialURL": "https://myterm-route-probe.invalid:59680/navigation",
+    "loginProof": {
+      "body": "SIGNED_IN",
+      "status": 200
+    },
+    "popup": {
+      "messageOrigin": "https://other-route-probe.invalid:59680",
+      "returnedToOpener": true,
+      "sharedWebsiteDataStore": true,
+      "url": "https://other-route-probe.invalid:59680/popup"
+    },
+    "webSockets": {
+      "error": "",
+      "messages": [
+        "hot-reload-1",
+        "hot-reload-2"
+      ]
+    }
+  },
+  "macOSOutage": {
+    "clientConnectionsDuringOutage": 0,
+    "clientConnectionsTotal": 0,
+    "during": {
+      "errorCode": -1004,
+      "finished": false,
+      "requestedURL": "https://outage-origin.localhost.direct:62117/outage-proof?phase=during",
+      "title": "ORIGIN_TLS_FIXTURE"
+    },
+    "initial": {
+      "errorCode": 0,
+      "finished": true,
+      "requestedURL": "https://outage-origin.localhost.direct:62117/outage-proof?phase=initial",
+      "title": "ORIGIN_TLS_FIXTURE"
+    },
+    "observerPositiveControlConnections": 1,
+    "recovered": {
+      "errorCode": 0,
+      "finished": true,
+      "requestedURL": "https://outage-origin.localhost.direct:62117/outage-proof?phase=recovered",
+      "title": "ORIGIN_TLS_FIXTURE"
+    }
+  },
+  "intermittentSimulatorHistory": {
+    "iPhone": {
+      "code": "-1005"
+    },
+    "iPad": {
+      "code": "-1005"
+    }
+  }
+}

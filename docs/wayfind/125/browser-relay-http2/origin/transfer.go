@@ -15,6 +15,9 @@ import (
 const transferSize = 8 * 1024 * 1024
 
 func handleOrigin(w http.ResponseWriter, r *http.Request) {
+	if handleNavigation(w, r) {
+		return
+	}
 	switch r.URL.Path {
 	case "/transfer":
 		w.Header().Set("Content-Type", "text/html")
@@ -33,6 +36,11 @@ document.getElementById('file').addEventListener('change', async (event) => {
 		handleUpload(w, r)
 	case "/download":
 		handleDownload(w, r)
+	case "/outage-proof":
+		log.Printf("outage fixture request phase=%s", r.URL.Query().Get("phase"))
+		w.Header().Set("Content-Type", "text/html")
+		w.Header().Set("Cache-Control", "no-store")
+		fmt.Fprint(w, "<!doctype html><title>ORIGIN_TLS_FIXTURE</title>")
 	default:
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprint(w, "<!doctype html><title>ORIGIN_TLS_FIXTURE</title>")

@@ -1,4 +1,6 @@
+#if os(macOS)
 import AppKit
+#endif
 import Foundation
 import Network
 import Security
@@ -15,18 +17,27 @@ struct ApprovedOrigin {
 
 @MainActor class Inspector: NSObject, WKNavigationDelegate {
     let server: String
-    let exception: ApprovedOrigin?
+    let exceptions: [ApprovedOrigin]
     var finished = false
     var failure: NSError?
     var challenges: [[String: Any]] = []
 
-    init(server: String, exception: ApprovedOrigin?) {
+    convenience init(server: String, exception: ApprovedOrigin?) {
+        self.init(server: server, exceptions: exception.map { [$0] } ?? [])
+    }
+
+    init(server: String, exceptions: [ApprovedOrigin]) {
         self.server = server
-        self.exception = exception
+        self.exceptions = exceptions
     }
 
     func webView(_ webView: WKWebView, didReceive challenge: URLAuthenticationChallenge,
                  completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+        respondToChallenge(challenge, completionHandler: completionHandler)
+    }
+
+    func respondToChallenge(_ challenge: URLAuthenticationChallenge,
+                            completionHandler: (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
         let space = challenge.protectionSpace
         guard space.authenticationMethod == NSURLAuthenticationMethodServerTrust,
               let trust = space.serverTrust else {
@@ -43,8 +54,9 @@ struct ApprovedOrigin {
     }
 
     private func approvedTrust(for space: URLProtectionSpace, actualTrust: SecTrust) -> SecTrust? {
-        guard let exception, server == exception.server, space.host == exception.host,
-              space.port == exception.port else { return nil }
+        guard let exception = exceptions.first(where: {
+            server == $0.server && space.host == $0.host && space.port == $0.port
+        }) else { return nil }
         _ = SecTrustEvaluateWithError(actualTrust, nil)
         guard let chain = SecTrustCopyCertificateChain(actualTrust) as? [SecCertificate], let leaf = chain.first,
               SecCertificateCopyData(leaf) as Data == SecCertificateCopyData(exception.certificate) as Data else {
@@ -70,6 +82,7 @@ struct ApprovedOrigin {
     }
 }
 
+#if os(macOS)
 @main struct OriginTrustProbe {
     @MainActor static func main() async {
         _ = NSApplication.shared
@@ -93,6 +106,19 @@ struct ApprovedOrigin {
             if ProcessInfo.processInfo.environment["MYTERM_PROBE_TRANSFERS"] == "1" {
                 let results = try await TransferProbe.run(relayHost: relayHost, relayPort: primary,
                                                           port: port, exception: exception)
+                let data = try JSONSerialization.data(withJSONObject: results, options: [.prettyPrinted, .sortedKeys])
+                print(String(decoding: data, as: UTF8.self))
+                return
+            }
+            if ProcessInfo.processInfo.environment["MYTERM_PROBE_NAVIGATION"] == "1" {
+                let results = try await NavigationWorkflowProbe.run(relayHost: relayHost, relayPort: primary,
+                                                                    port: port, exception: exception)
+                let data = try JSONSerialization.data(withJSONObject: results, options: [.prettyPrinted, .sortedKeys])
+                print(String(decoding: data, as: UTF8.self))
+                return
+            }
+            if ProcessInfo.processInfo.environment["MYTERM_PROBE_OUTAGE"] == "1" {
+                let results = try await OutageProbe.run(relayHost: relayHost, relayPort: primary, certificate: pin)
                 let data = try JSONSerialization.data(withJSONObject: results, options: [.prettyPrinted, .sortedKeys])
                 print(String(decoding: data, as: UTF8.self))
                 return
@@ -152,3 +178,4 @@ struct ApprovedOrigin {
         return result
     }
 }
+#endif
