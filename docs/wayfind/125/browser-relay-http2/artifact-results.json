@@ -1,0 +1,49 @@
+{
+  "fileBoundaries" : {
+    "denied" : {
+      "\/linked.txt" : 404,
+      "\/outside.txt" : 404
+    },
+    "write" : 405
+  },
+  "firstLoad" : {
+    "error" : 0,
+    "finished" : true,
+    "status" : 200,
+    "title" : "ARTIFACT_A"
+  },
+  "firstPage" : {
+    "color" : "rgb(26, 97, 162)",
+    "origin" : "http:\/\/e8036e38-d602-4c36-843f-e64ccbf0adad.myterm-artifact.invalid",
+    "scriptRan" : ""
+  },
+  "otherStillGranted" : {
+    "error" : 0,
+    "finished" : true,
+    "status" : 200,
+    "title" : "ARTIFACT_B"
+  },
+  "revoked" : {
+    "error" : -1004,
+    "finished" : false,
+    "status" : 0,
+    "title" : "ARTIFACT_A"
+  },
+  "secondLoad" : {
+    "error" : 0,
+    "finished" : true,
+    "status" : 200,
+    "title" : "ARTIFACT_B"
+  },
+  "secondPage" : {
+    "color" : "rgb(26, 97, 162)",
+    "origin" : "http:\/\/e8036e38-d602-4c36-843f-e64ccbf0adad.myterm-artifact.invalid",
+    "scriptRan" : "yes"
+  },
+  "unregistered" : {
+    "error" : -1009,
+    "finished" : false,
+    "status" : 403,
+    "title" : ""
+  }
+}

@@ -84,9 +84,9 @@ func makeTestCertificate(issueRoot bool) (tls.Certificate, error) {
 	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}, nil
 }
 
-func forwardOrigin(w http.ResponseWriter, r *http.Request, fixturePort int) error {
+func forwardOrigin(w http.ResponseWriter, r *http.Request, fixturePort int, artifactHost string) error {
 	host, _, err := net.SplitHostPort(r.Host)
-	if err != nil || (host != "myterm-route-probe.invalid" && host != "other-route-probe.invalid" && host != "outage-origin.localhost.direct") {
+	if err != nil || (host != "myterm-route-probe.invalid" && host != "other-route-probe.invalid" && host != "outage-origin.localhost.direct" && (artifactHost == "" || host != artifactHost)) {
 		http.Error(w, "origin missing from test fixture", http.StatusBadRequest)
 		return nil
 	}
@@ -130,7 +130,7 @@ func forwardOrigin(w http.ResponseWriter, r *http.Request, fixturePort int) erro
 	}
 }
 
-func run(issueRoot, useHTTP3 bool, certificateFile, keyFile, label string, fixturePort, listenPort int) error {
+func run(issueRoot, useHTTP3 bool, certificateFile, keyFile, label string, fixturePort, listenPort int, artifactHost string) error {
 	var certificate tls.Certificate
 	var err error
 	if certificateFile == "" && keyFile == "" {
@@ -156,7 +156,7 @@ func run(issueRoot, useHTTP3 bool, certificateFile, keyFile, label string, fixtu
 			return
 		}
 		if fixturePort != 0 {
-			if err := forwardOrigin(w, r, fixturePort); err != nil {
+			if err := forwardOrigin(w, r, fixturePort, artifactHost); err != nil {
 				log.Printf("origin tunnel to %s: %v", r.Host, err)
 			}
 			return
@@ -229,10 +229,11 @@ func main() {
 	certificate := flag.String("cert", "", "optional PEM certificate chain for default-trust experiments")
 	key := flag.String("key", "", "optional PEM key for a local fixture")
 	label := flag.String("label", "RELAY_FIXTURE", "title identifying the responding fixture")
-	originPort := flag.Int("origin-fixture-port", 0, "forward only to a loopback TLS fixture")
+	originPort := flag.Int("origin-fixture-port", 0, "forward only to a loopback fixture")
 	listenPort := flag.Int("bind-port", 0, "loopback listener port for the outage fixture")
+	artifactHost := flag.String("artifact-fixture-host", "", "additional exact host for a local artifact probe")
 	flag.Parse()
-	if err := run(*issueRoot, *useHTTP3, *certificate, *key, *label, *originPort, *listenPort); err != nil {
+	if err := run(*issueRoot, *useHTTP3, *certificate, *key, *label, *originPort, *listenPort, *artifactHost); err != nil {
 		log.Fatal(err)
 	}
 }
