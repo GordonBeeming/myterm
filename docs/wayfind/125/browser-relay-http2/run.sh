@@ -9,12 +9,17 @@ export CLANG_MODULE_CACHE_PATH="$run_dir/clang-cache"
 export GOCACHE="$run_dir/go-cache"
 export GOTOOLCHAIN=local
 
-go build -o relay "$source_dir/relay.go"
-go build -o tls-control "$source_dir/control.go"
+go -C "$source_dir" build -mod=readonly -o "$run_dir/relay" relay.go
+go -C "$source_dir" build -mod=readonly -o "$run_dir/tls-control" ./control
 swiftc -parse-as-library -swift-version 5 "$source_dir/probe.swift" -o probe \
     -framework AppKit -framework WebKit -framework Network -framework Security
 
-./relay > relay.port 2> relay.log &
+relay_options=()
+if [[ -n "${MYTERM_RELAY_HOST:-}" ]]; then
+    relay_options+=(--cert "${MYTERM_RELAY_CERT:?Provide a PEM certificate chain}" --key "${MYTERM_RELAY_KEY:?Provide a PEM fixture key}")
+fi
+if [[ "${MYTERM_PROBE_TRANSPORT:-http2}" == http3 ]]; then relay_options+=(--http3); fi
+./relay ${relay_options[@]+"${relay_options[@]}"} > relay.port 2> relay.log &
 relay_pid=$!
 trap 'kill "$relay_pid" 2>/dev/null || true' EXIT
 for _ in {1..50}; do
@@ -26,7 +31,9 @@ for _ in {1..50}; do
     sleep 0.1
 done
 relay_port="$(cat relay.port)"
-./tls-control "$relay_port" >&2
+if [[ -z "${MYTERM_RELAY_HOST:-}" && "${MYTERM_PROBE_TRANSPORT:-http2}" == http2 ]]; then
+    ./tls-control "$relay_port" >&2
+fi
 ./probe "$relay_port" running > running.json
 
 kill "$relay_pid"

@@ -69,6 +69,73 @@ final class Fixture: @unchecked Sendable {
     }
 }
 
+private final class STUNObserver: @unchecked Sendable {
+    private let listener: NWListener
+    private let lock = NSLock()
+    private var datagrams = 0
+
+    init() throws {
+        let parameters = NWParameters.udp
+        parameters.acceptLocalOnly = true
+        listener = try NWListener(using: parameters, on: .any)
+    }
+
+    func start() async throws -> UInt16 {
+        listener.newConnectionHandler = { [weak self] connection in
+            connection.start(queue: .global())
+            connection.receiveMessage { [weak self] data, _, _, _ in
+                if let self, let data, data.count >= 20,
+                   data.dropFirst(4).prefix(4).elementsEqual([0x21, 0x12, 0xa4, 0x42]) {
+                    self.lock.withLock { self.datagrams += 1 }
+                }
+                connection.cancel()
+            }
+        }
+        return try await withCheckedThrowingContinuation { continuation in
+            listener.stateUpdateHandler = { [listener] state in
+                switch state {
+                case .ready:
+                    listener.stateUpdateHandler = nil
+                    if let port = listener.port { continuation.resume(returning: port.rawValue) }
+                    else { continuation.resume(throwing: NSError(domain: "STUN observer", code: 1)) }
+                case .failed(let error):
+                    listener.stateUpdateHandler = nil
+                    continuation.resume(throwing: error)
+                default: break
+                }
+            }
+            listener.start(queue: .global())
+        }
+    }
+
+    func snapshot() -> Int { lock.withLock { datagrams } }
+    func stop() { listener.cancel() }
+}
+
+@MainActor private func observeWebRTC(in browser: WKWebView) async throws -> [String: Any] {
+    let observer = try STUNObserver()
+    let port = try await observer.start()
+    defer { observer.stop() }
+    let script = """
+        (() => {
+          if (typeof RTCPeerConnection === 'undefined') return "API unavailable";
+          let connection = new RTCPeerConnection({
+            iceServers: [{urls: "stun:127.0.0.1:\(port)"}]
+          });
+          window.fixturePeerConnection = connection;
+          connection.createDataChannel("fixture");
+          connection.createOffer().then(offer => connection.setLocalDescription(offer))
+            .catch(error => { window.fixtureRTCError = String(error); });
+          return "ICE gathering requested";
+        })();
+        """
+    let activation = try await browser.evaluateJavaScript(script) as? String ?? ""
+    try await Task.sleep(for: .seconds(4))
+    let error = try await browser.evaluateJavaScript("window.fixtureRTCError || ''") as? String ?? ""
+    _ = try await browser.evaluateJavaScript("window.fixturePeerConnection?.close()")
+    return ["start": activation, "setupError": error, "clientSTUNDatagrams": observer.snapshot()]
+}
+
 @MainActor final class Navigation: NSObject, WKNavigationDelegate {
     var finished = false
     let expectedCertificate: Data
@@ -101,11 +168,15 @@ final class Fixture: @unchecked Sendable {
 }
 
 @MainActor struct Probe {
-    static func run(relayPort: UInt16, status: String, expectedCertificate: Data?) async throws -> Data {
+    static func run(relayPort: UInt16, status: String, expectedCertificate: Data?,
+                    domainMatching: String = "explicit", transport: String = "http2",
+                    relayHost: String = "127.0.0.1", probeWebRTC: Bool = false) async throws -> Data {
         let origin = try Fixture()
         let originPort = try await origin.start()
         defer { origin.stop() }
         var results: [[String: Any]] = []
+        var rtc: [String: Any] = [:]
+        var directRTC: [String: Any] = [:]
         let tls = NWProtocolTLS.Options()
         if let expectedCertificate {
             sec_protocol_options_set_verify_block(tls.securityProtocolOptions, { _, trust, complete in
@@ -119,21 +190,25 @@ final class Fixture: @unchecked Sendable {
                 complete((SecCertificateCopyData(leaf) as Data) == expectedCertificate)
             }, .global())
         }
-        guard let relayURL = URL(string: "https://127.0.0.1:\(relayPort)") else {
+        guard let relayURL = URL(string: "https://\(relayHost):\(relayPort)") else {
             throw NSError(domain: "Probe", code: 3)
         }
-        let kind = "relayHTTP2"
+        let kind = transport == "http3" ? "relayHTTP3" : "relayHTTP2"
         for host in ["myterm-route-probe.invalid", "localhost", "127.0.0.1", "[::1]"] {
             let beforeOrigin = origin.snapshot().count
             let store = WKWebsiteDataStore.nonPersistent()
             guard let url = URL(string: "http://\(host):\(originPort)/routing-probe") else {
                 throw NSError(domain: "Probe", code: 2)
             }
-            let hop = ProxyConfiguration.RelayHop(http2RelayEndpoint: .url(relayURL), tlsOptions: tls)
+            let hop = transport == "http3"
+                ? ProxyConfiguration.RelayHop(http3RelayEndpoint: .url(relayURL), tlsOptions: tls)
+                : ProxyConfiguration.RelayHop(http2RelayEndpoint: .url(relayURL), tlsOptions: tls)
             var config = ProxyConfiguration(relayHops: [hop])
             config.allowFailover = false
-            config.matchDomains = ["localhost", "127.0.0.1", "::1", ""]
-            config.excludedDomains = []
+            if domainMatching == "explicit" {
+                config.matchDomains = ["localhost", "127.0.0.1", "::1", ""]
+                config.excludedDomains = []
+            }
             store.proxyConfigurations = [config]
             let configuration = WKWebViewConfiguration()
             configuration.websiteDataStore = store
@@ -150,13 +225,35 @@ final class Fixture: @unchecked Sendable {
                 "title": browser.title ?? "", "finished": navigation.finished,
                 "errorDomain": navigation.error?.domain ?? "",
                 "errorCode": navigation.error?.code ?? 0,
+                "underlyingErrorDomain": (navigation.error?.userInfo[NSUnderlyingErrorKey] as? NSError)?.domain ?? "",
                 "underlyingErrorCode": (navigation.error?.userInfo[NSUnderlyingErrorKey] as? NSError)?.code ?? 0,
                 "clientOriginRequests": Array(origin.snapshot().dropFirst(beforeOrigin))
             ])
+            if probeWebRTC, host == "myterm-route-probe.invalid", navigation.finished {
+                rtc = try await observeWebRTC(in: browser)
+            }
             browser.stopLoading()
             browser.navigationDelegate = nil
         }
-        let output: [String: Any] = ["scope": "offscreen WKWebView HTTP/2 relay routing fixture; no Rust server or E2EE", "os": ProcessInfo.processInfo.operatingSystemVersionString, "relayState": status, "results": results]
+        if probeWebRTC, status == "running",
+           let url = URL(string: "http://localhost:\(originPort)/webrtc-control") {
+            let configuration = WKWebViewConfiguration()
+            configuration.websiteDataStore = .nonPersistent()
+            let browser = WKWebView(frame: .zero, configuration: configuration)
+            let navigation = Navigation(expectedCertificate: Data())
+            browser.navigationDelegate = navigation
+            browser.loadHTMLString("<!doctype html><title>DIRECT_RTC_CONTROL</title>", baseURL: url)
+            let deadline = Date().addingTimeInterval(8)
+            while !navigation.finished && navigation.error == nil && Date() < deadline {
+                try await Task.sleep(for: .milliseconds(50))
+            }
+            if navigation.finished {
+                directRTC = try await observeWebRTC(in: browser)
+            } else {
+                directRTC = ["navigationError": navigation.error?.code ?? 0]
+            }
+        }
+        let output: [String: Any] = ["scope": "offscreen WKWebView secure relay routing fixture; no Rust server or E2EE", "os": ProcessInfo.processInfo.operatingSystemVersionString, "relayState": status, "domainMatching": domainMatching, "relayHost": relayHost, "webRTC": rtc, "webRTCDirectControl": directRTC, "results": results]
         return try JSONSerialization.data(withJSONObject: output, options: [.prettyPrinted, .sortedKeys])
     }
 }
@@ -199,7 +296,11 @@ final class ProbeScene: UIResponder, UIWindowSceneDelegate {
                       ["running", "stopped"].contains(status) else {
                     throw NSError(domain: "Missing simulator fixture configuration", code: 2)
                 }
-                let data = try await Probe.run(relayPort: port, status: status, expectedCertificate: nil)
+                let domainMatching = environment["MYTERM_PROBE_DOMAINS"] ?? "explicit"
+                let data = try await Probe.run(relayPort: port, status: status, expectedCertificate: nil,
+                                               domainMatching: domainMatching,
+                                               transport: environment["MYTERM_PROBE_TRANSPORT"] ?? "http2",
+                                               probeWebRTC: environment["MYTERM_PROBE_WEBRTC"] == "1")
                 try data.write(to: path, options: .atomic)
             } catch {
                 let errorData = try? JSONSerialization.data(withJSONObject: ["probeError": String(describing: error)])
@@ -215,8 +316,13 @@ final class ProbeScene: UIResponder, UIWindowSceneDelegate {
         NSApp.setActivationPolicy(.prohibited)
         do {
             let (port, status) = try arguments()
-            let certificate = try Data(contentsOf: URL(fileURLWithPath: "relay.der"))
-            let data = try await Probe.run(relayPort: port, status: status, expectedCertificate: certificate)
+            let environment = ProcessInfo.processInfo.environment
+            let relayHost = environment["MYTERM_RELAY_HOST"] ?? "127.0.0.1"
+            let certificate = relayHost == "127.0.0.1" ? try Data(contentsOf: URL(fileURLWithPath: "relay.der")) : nil
+            let data = try await Probe.run(relayPort: port, status: status, expectedCertificate: certificate,
+                                           domainMatching: environment["MYTERM_PROBE_DOMAINS"] ?? "explicit",
+                                           transport: environment["MYTERM_PROBE_TRANSPORT"] ?? "http2",
+                                           relayHost: relayHost, probeWebRTC: environment["MYTERM_PROBE_WEBRTC"] == "1")
             print(String(decoding: data, as: UTF8.self))
         } catch {
             fputs("Probe failed: \(error)\n", stderr)

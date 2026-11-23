@@ -1,0 +1,820 @@
+{
+  "mobileHTTP2": [
+    {
+      "domainMatching": "default",
+      "os": "Version 27.0 (Build 24A5408d)",
+      "relayState": "running",
+      "results": [
+        {
+          "clientOriginRequests": [],
+          "errorCode": 0,
+          "errorDomain": "",
+          "finished": true,
+          "proxy": "relayHTTP2",
+          "title": "RELAY_FIXTURE",
+          "underlyingErrorCode": 0,
+          "url": "http://myterm-route-probe.invalid:58108/routing-probe"
+        },
+        {
+          "clientOriginRequests": [],
+          "errorCode": 0,
+          "errorDomain": "",
+          "finished": true,
+          "proxy": "relayHTTP2",
+          "title": "RELAY_FIXTURE",
+          "underlyingErrorCode": 0,
+          "url": "http://localhost:58108/routing-probe"
+        },
+        {
+          "clientOriginRequests": [],
+          "errorCode": -1005,
+          "errorDomain": "NSURLErrorDomain",
+          "finished": false,
+          "proxy": "relayHTTP2",
+          "title": "",
+          "underlyingErrorCode": 96,
+          "url": "http://127.0.0.1:58108/routing-probe"
+        },
+        {
+          "clientOriginRequests": [],
+          "errorCode": -1005,
+          "errorDomain": "NSURLErrorDomain",
+          "finished": false,
+          "proxy": "relayHTTP2",
+          "title": "",
+          "underlyingErrorCode": 96,
+          "url": "http://[::1]:58108/routing-probe"
+        }
+      ],
+      "scope": "offscreen WKWebView HTTP/2 relay routing fixture; no Rust server or E2EE"
+    },
+    {
+      "domainMatching": "default",
+      "os": "Version 27.0 (Build 24A5408d)",
+      "relayState": "stopped",
+      "results": [
+        {
+          "clientOriginRequests": [],
+          "errorCode": -1004,
+          "errorDomain": "NSURLErrorDomain",
+          "finished": false,
+          "proxy": "relayHTTP2",
+          "title": "",
+          "underlyingErrorCode": 61,
+          "url": "http://myterm-route-probe.invalid:58192/routing-probe"
+        },
+        {
+          "clientOriginRequests": [],
+          "errorCode": -1004,
+          "errorDomain": "NSURLErrorDomain",
+          "finished": false,
+          "proxy": "relayHTTP2",
+          "title": "",
+          "underlyingErrorCode": 61,
+          "url": "http://localhost:58192/routing-probe"
+        },
+        {
+          "clientOriginRequests": [],
+          "errorCode": -1005,
+          "errorDomain": "NSURLErrorDomain",
+          "finished": false,
+          "proxy": "relayHTTP2",
+          "title": "",
+          "underlyingErrorCode": 96,
+          "url": "http://127.0.0.1:58192/routing-probe"
+        },
+        {
+          "clientOriginRequests": [],
+          "errorCode": -1005,
+          "errorDomain": "NSURLErrorDomain",
+          "finished": false,
+          "proxy": "relayHTTP2",
+          "title": "",
+          "underlyingErrorCode": 96,
+          "url": "http://[::1]:58192/routing-probe"
+        }
+      ],
+      "scope": "offscreen WKWebView HTTP/2 relay routing fixture; no Rust server or E2EE"
+    }
+  ],
+  "mobileHTTP3": [
+    {
+      "domainMatching": "default",
+      "os": "Version 27.0 (Build 24A5408d)",
+      "relayState": "running",
+      "results": [
+        {
+          "clientOriginRequests": [],
+          "errorCode": 0,
+          "errorDomain": "",
+          "finished": true,
+          "proxy": "relayHTTP3",
+          "title": "RELAY_FIXTURE",
+          "underlyingErrorCode": 0,
+          "underlyingErrorDomain": "",
+          "url": "http://myterm-route-probe.invalid:59970/routing-probe"
+        },
+        {
+          "clientOriginRequests": [],
+          "errorCode": 0,
+          "errorDomain": "",
+          "finished": true,
+          "proxy": "relayHTTP3",
+          "title": "RELAY_FIXTURE",
+          "underlyingErrorCode": 0,
+          "underlyingErrorDomain": "",
+          "url": "http://localhost:59970/routing-probe"
+        },
+        {
+          "clientOriginRequests": [],
+          "errorCode": -1005,
+          "errorDomain": "NSURLErrorDomain",
+          "finished": false,
+          "proxy": "relayHTTP3",
+          "title": "",
+          "underlyingErrorCode": 96,
+          "underlyingErrorDomain": "NSPOSIXErrorDomain",
+          "url": "http://127.0.0.1:59970/routing-probe"
+        },
+        {
+          "clientOriginRequests": [],
+          "errorCode": -1005,
+          "errorDomain": "NSURLErrorDomain",
+          "finished": false,
+          "proxy": "relayHTTP3",
+          "title": "",
+          "underlyingErrorCode": 96,
+          "underlyingErrorDomain": "NSPOSIXErrorDomain",
+          "url": "http://[::1]:59970/routing-probe"
+        }
+      ],
+      "scope": "offscreen WKWebView secure relay routing fixture; no Rust server or E2EE"
+    },
+    {
+      "domainMatching": "default",
+      "os": "Version 27.0 (Build 24A5408d)",
+      "relayState": "stopped",
+      "results": [
+        {
+          "clientOriginRequests": [],
+          "errorCode": -1004,
+          "errorDomain": "NSURLErrorDomain",
+          "finished": false,
+          "proxy": "relayHTTP3",
+          "title": "",
+          "underlyingErrorCode": 61,
+          "underlyingErrorDomain": "NSPOSIXErrorDomain",
+          "url": "http://myterm-route-probe.invalid:60063/routing-probe"
+        },
+        {
+          "clientOriginRequests": [],
+          "errorCode": -1004,
+          "errorDomain": "NSURLErrorDomain",
+          "finished": false,
+          "proxy": "relayHTTP3",
+          "title": "",
+          "underlyingErrorCode": 61,
+          "underlyingErrorDomain": "NSPOSIXErrorDomain",
+          "url": "http://localhost:60063/routing-probe"
+        },
+        {
+          "clientOriginRequests": [],
+          "errorCode": -1005,
+          "errorDomain": "NSURLErrorDomain",
+          "finished": false,
+          "proxy": "relayHTTP3",
+          "title": "",
+          "underlyingErrorCode": 96,
+          "underlyingErrorDomain": "NSPOSIXErrorDomain",
+          "url": "http://127.0.0.1:60063/routing-probe"
+        },
+        {
+          "clientOriginRequests": [],
+          "errorCode": -1005,
+          "errorDomain": "NSURLErrorDomain",
+          "finished": false,
+          "proxy": "relayHTTP3",
+          "title": "",
+          "underlyingErrorCode": 96,
+          "underlyingErrorDomain": "NSPOSIXErrorDomain",
+          "url": "http://[::1]:60063/routing-probe"
+        }
+      ],
+      "scope": "offscreen WKWebView secure relay routing fixture; no Rust server or E2EE"
+    }
+  ],
+  "desktopHTTP2": [
+    {
+      "domainMatching": "default",
+      "os": "Version 27.3 (Build 26C5047e)",
+      "relayHost": "probe.localhost.direct",
+      "relayState": "running",
+      "results": [
+        {
+          "clientOriginRequests": [],
+          "errorCode": 0,
+          "errorDomain": "",
+          "finished": true,
+          "proxy": "relayHTTP2",
+          "title": "RELAY_FIXTURE",
+          "underlyingErrorCode": 0,
+          "underlyingErrorDomain": "",
+          "url": "http://myterm-route-probe.invalid:62105/routing-probe"
+        },
+        {
+          "clientOriginRequests": [
+            "GET /routing-probe HTTP/1.1"
+          ],
+          "errorCode": 0,
+          "errorDomain": "",
+          "finished": true,
+          "proxy": "relayHTTP2",
+          "title": "CLIENT_LOCAL_FIXTURE",
+          "underlyingErrorCode": 0,
+          "underlyingErrorDomain": "",
+          "url": "http://localhost:62105/routing-probe"
+        },
+        {
+          "clientOriginRequests": [
+            "GET /routing-probe HTTP/1.1"
+          ],
+          "errorCode": 0,
+          "errorDomain": "",
+          "finished": true,
+          "proxy": "relayHTTP2",
+          "title": "CLIENT_LOCAL_FIXTURE",
+          "underlyingErrorCode": 0,
+          "underlyingErrorDomain": "",
+          "url": "http://127.0.0.1:62105/routing-probe"
+        },
+        {
+          "clientOriginRequests": [
+            "GET /routing-probe HTTP/1.1"
+          ],
+          "errorCode": 0,
+          "errorDomain": "",
+          "finished": true,
+          "proxy": "relayHTTP2",
+          "title": "CLIENT_LOCAL_FIXTURE",
+          "underlyingErrorCode": 0,
+          "underlyingErrorDomain": "",
+          "url": "http://[::1]:62105/routing-probe"
+        }
+      ],
+      "scope": "offscreen WKWebView secure relay routing fixture; no Rust server or E2EE"
+    },
+    {
+      "domainMatching": "default",
+      "os": "Version 27.3 (Build 26C5047e)",
+      "relayHost": "probe.localhost.direct",
+      "relayState": "stopped",
+      "results": [
+        {
+          "clientOriginRequests": [],
+          "errorCode": -1004,
+          "errorDomain": "NSURLErrorDomain",
+          "finished": false,
+          "proxy": "relayHTTP2",
+          "title": "",
+          "underlyingErrorCode": 61,
+          "underlyingErrorDomain": "NSPOSIXErrorDomain",
+          "url": "http://myterm-route-probe.invalid:62106/routing-probe"
+        },
+        {
+          "clientOriginRequests": [
+            "GET /routing-probe HTTP/1.1"
+          ],
+          "errorCode": 0,
+          "errorDomain": "",
+          "finished": true,
+          "proxy": "relayHTTP2",
+          "title": "CLIENT_LOCAL_FIXTURE",
+          "underlyingErrorCode": 0,
+          "underlyingErrorDomain": "",
+          "url": "http://localhost:62106/routing-probe"
+        },
+        {
+          "clientOriginRequests": [
+            "GET /routing-probe HTTP/1.1"
+          ],
+          "errorCode": 0,
+          "errorDomain": "",
+          "finished": true,
+          "proxy": "relayHTTP2",
+          "title": "CLIENT_LOCAL_FIXTURE",
+          "underlyingErrorCode": 0,
+          "underlyingErrorDomain": "",
+          "url": "http://127.0.0.1:62106/routing-probe"
+        },
+        {
+          "clientOriginRequests": [
+            "GET /routing-probe HTTP/1.1"
+          ],
+          "errorCode": 0,
+          "errorDomain": "",
+          "finished": true,
+          "proxy": "relayHTTP2",
+          "title": "CLIENT_LOCAL_FIXTURE",
+          "underlyingErrorCode": 0,
+          "underlyingErrorDomain": "",
+          "url": "http://[::1]:62106/routing-probe"
+        }
+      ],
+      "scope": "offscreen WKWebView secure relay routing fixture; no Rust server or E2EE"
+    }
+  ],
+  "desktopHTTP3": [
+    {
+      "domainMatching": "explicit",
+      "os": "Version 27.3 (Build 26C5047e)",
+      "relayHost": "probe.localhost.direct",
+      "relayState": "running",
+      "results": [
+        {
+          "clientOriginRequests": [],
+          "errorCode": 0,
+          "errorDomain": "",
+          "finished": true,
+          "proxy": "relayHTTP3",
+          "title": "RELAY_FIXTURE",
+          "underlyingErrorCode": 0,
+          "underlyingErrorDomain": "",
+          "url": "http://myterm-route-probe.invalid:62107/routing-probe"
+        },
+        {
+          "clientOriginRequests": [
+            "GET /routing-probe HTTP/1.1"
+          ],
+          "errorCode": 0,
+          "errorDomain": "",
+          "finished": true,
+          "proxy": "relayHTTP3",
+          "title": "CLIENT_LOCAL_FIXTURE",
+          "underlyingErrorCode": 0,
+          "underlyingErrorDomain": "",
+          "url": "http://localhost:62107/routing-probe"
+        },
+        {
+          "clientOriginRequests": [
+            "GET /routing-probe HTTP/1.1"
+          ],
+          "errorCode": 0,
+          "errorDomain": "",
+          "finished": true,
+          "proxy": "relayHTTP3",
+          "title": "CLIENT_LOCAL_FIXTURE",
+          "underlyingErrorCode": 0,
+          "underlyingErrorDomain": "",
+          "url": "http://127.0.0.1:62107/routing-probe"
+        },
+        {
+          "clientOriginRequests": [
+            "GET /routing-probe HTTP/1.1"
+          ],
+          "errorCode": 0,
+          "errorDomain": "",
+          "finished": true,
+          "proxy": "relayHTTP3",
+          "title": "CLIENT_LOCAL_FIXTURE",
+          "underlyingErrorCode": 0,
+          "underlyingErrorDomain": "",
+          "url": "http://[::1]:62107/routing-probe"
+        }
+      ],
+      "scope": "offscreen WKWebView secure relay routing fixture; no Rust server or E2EE"
+    },
+    {
+      "domainMatching": "explicit",
+      "os": "Version 27.3 (Build 26C5047e)",
+      "relayHost": "probe.localhost.direct",
+      "relayState": "stopped",
+      "results": [
+        {
+          "clientOriginRequests": [],
+          "errorCode": -1004,
+          "errorDomain": "NSURLErrorDomain",
+          "finished": false,
+          "proxy": "relayHTTP3",
+          "title": "",
+          "underlyingErrorCode": 61,
+          "underlyingErrorDomain": "NSPOSIXErrorDomain",
+          "url": "http://myterm-route-probe.invalid:62108/routing-probe"
+        },
+        {
+          "clientOriginRequests": [
+            "GET /routing-probe HTTP/1.1"
+          ],
+          "errorCode": 0,
+          "errorDomain": "",
+          "finished": true,
+          "proxy": "relayHTTP3",
+          "title": "CLIENT_LOCAL_FIXTURE",
+          "underlyingErrorCode": 0,
+          "underlyingErrorDomain": "",
+          "url": "http://localhost:62108/routing-probe"
+        },
+        {
+          "clientOriginRequests": [
+            "GET /routing-probe HTTP/1.1"
+          ],
+          "errorCode": 0,
+          "errorDomain": "",
+          "finished": true,
+          "proxy": "relayHTTP3",
+          "title": "CLIENT_LOCAL_FIXTURE",
+          "underlyingErrorCode": 0,
+          "underlyingErrorDomain": "",
+          "url": "http://127.0.0.1:62108/routing-probe"
+        },
+        {
+          "clientOriginRequests": [
+            "GET /routing-probe HTTP/1.1"
+          ],
+          "errorCode": 0,
+          "errorDomain": "",
+          "finished": true,
+          "proxy": "relayHTTP3",
+          "title": "CLIENT_LOCAL_FIXTURE",
+          "underlyingErrorCode": 0,
+          "underlyingErrorDomain": "",
+          "url": "http://[::1]:62108/routing-probe"
+        }
+      ],
+      "scope": "offscreen WKWebView secure relay routing fixture; no Rust server or E2EE"
+    }
+  ],
+  "webRTC": {
+    "desktopHTTP3": [
+      {
+        "domainMatching": "explicit",
+        "os": "Version 27.3 (Build 26C5047e)",
+        "relayHost": "probe.localhost.direct",
+        "relayState": "running",
+        "results": [
+          {
+            "clientOriginRequests": [],
+            "errorCode": 0,
+            "errorDomain": "",
+            "finished": true,
+            "proxy": "relayHTTP3",
+            "title": "RELAY_FIXTURE",
+            "underlyingErrorCode": 0,
+            "underlyingErrorDomain": "",
+            "url": "http://myterm-route-probe.invalid:62111/routing-probe"
+          },
+          {
+            "clientOriginRequests": [
+              "GET /routing-probe HTTP/1.1"
+            ],
+            "errorCode": 0,
+            "errorDomain": "",
+            "finished": true,
+            "proxy": "relayHTTP3",
+            "title": "CLIENT_LOCAL_FIXTURE",
+            "underlyingErrorCode": 0,
+            "underlyingErrorDomain": "",
+            "url": "http://localhost:62111/routing-probe"
+          },
+          {
+            "clientOriginRequests": [
+              "GET /routing-probe HTTP/1.1"
+            ],
+            "errorCode": 0,
+            "errorDomain": "",
+            "finished": true,
+            "proxy": "relayHTTP3",
+            "title": "CLIENT_LOCAL_FIXTURE",
+            "underlyingErrorCode": 0,
+            "underlyingErrorDomain": "",
+            "url": "http://127.0.0.1:62111/routing-probe"
+          },
+          {
+            "clientOriginRequests": [
+              "GET /routing-probe HTTP/1.1"
+            ],
+            "errorCode": 0,
+            "errorDomain": "",
+            "finished": true,
+            "proxy": "relayHTTP3",
+            "title": "CLIENT_LOCAL_FIXTURE",
+            "underlyingErrorCode": 0,
+            "underlyingErrorDomain": "",
+            "url": "http://[::1]:62111/routing-probe"
+          }
+        ],
+        "scope": "offscreen WKWebView secure relay routing fixture; no Rust server or E2EE",
+        "webRTC": {
+          "clientSTUNDatagrams": 5,
+          "setupError": "",
+          "start": "ICE gathering requested"
+        },
+        "webRTCDirectControl": {
+          "clientSTUNDatagrams": 5,
+          "setupError": "",
+          "start": "ICE gathering requested"
+        }
+      },
+      {
+        "domainMatching": "explicit",
+        "os": "Version 27.3 (Build 26C5047e)",
+        "relayHost": "probe.localhost.direct",
+        "relayState": "stopped",
+        "results": [
+          {
+            "clientOriginRequests": [],
+            "errorCode": -1004,
+            "errorDomain": "NSURLErrorDomain",
+            "finished": false,
+            "proxy": "relayHTTP3",
+            "title": "",
+            "underlyingErrorCode": 61,
+            "underlyingErrorDomain": "NSPOSIXErrorDomain",
+            "url": "http://myterm-route-probe.invalid:62112/routing-probe"
+          },
+          {
+            "clientOriginRequests": [
+              "GET /routing-probe HTTP/1.1"
+            ],
+            "errorCode": 0,
+            "errorDomain": "",
+            "finished": true,
+            "proxy": "relayHTTP3",
+            "title": "CLIENT_LOCAL_FIXTURE",
+            "underlyingErrorCode": 0,
+            "underlyingErrorDomain": "",
+            "url": "http://localhost:62112/routing-probe"
+          },
+          {
+            "clientOriginRequests": [
+              "GET /routing-probe HTTP/1.1"
+            ],
+            "errorCode": 0,
+            "errorDomain": "",
+            "finished": true,
+            "proxy": "relayHTTP3",
+            "title": "CLIENT_LOCAL_FIXTURE",
+            "underlyingErrorCode": 0,
+            "underlyingErrorDomain": "",
+            "url": "http://127.0.0.1:62112/routing-probe"
+          },
+          {
+            "clientOriginRequests": [
+              "GET /routing-probe HTTP/1.1"
+            ],
+            "errorCode": 0,
+            "errorDomain": "",
+            "finished": true,
+            "proxy": "relayHTTP3",
+            "title": "CLIENT_LOCAL_FIXTURE",
+            "underlyingErrorCode": 0,
+            "underlyingErrorDomain": "",
+            "url": "http://[::1]:62112/routing-probe"
+          }
+        ],
+        "scope": "offscreen WKWebView secure relay routing fixture; no Rust server or E2EE",
+        "webRTC": {},
+        "webRTCDirectControl": {}
+      }
+    ],
+    "mobileHTTP2": [
+      {
+        "domainMatching": "default",
+        "os": "Version 27.0 (Build 24A5408d)",
+        "relayHost": "127.0.0.1",
+        "relayState": "running",
+        "results": [
+          {
+            "clientOriginRequests": [],
+            "errorCode": 0,
+            "errorDomain": "",
+            "finished": true,
+            "proxy": "relayHTTP2",
+            "title": "RELAY_FIXTURE",
+            "underlyingErrorCode": 0,
+            "underlyingErrorDomain": "",
+            "url": "http://myterm-route-probe.invalid:64792/routing-probe"
+          },
+          {
+            "clientOriginRequests": [],
+            "errorCode": 0,
+            "errorDomain": "",
+            "finished": true,
+            "proxy": "relayHTTP2",
+            "title": "RELAY_FIXTURE",
+            "underlyingErrorCode": 0,
+            "underlyingErrorDomain": "",
+            "url": "http://localhost:64792/routing-probe"
+          },
+          {
+            "clientOriginRequests": [],
+            "errorCode": -1005,
+            "errorDomain": "NSURLErrorDomain",
+            "finished": false,
+            "proxy": "relayHTTP2",
+            "title": "",
+            "underlyingErrorCode": 96,
+            "underlyingErrorDomain": "NSPOSIXErrorDomain",
+            "url": "http://127.0.0.1:64792/routing-probe"
+          },
+          {
+            "clientOriginRequests": [],
+            "errorCode": -1005,
+            "errorDomain": "NSURLErrorDomain",
+            "finished": false,
+            "proxy": "relayHTTP2",
+            "title": "",
+            "underlyingErrorCode": 96,
+            "underlyingErrorDomain": "NSPOSIXErrorDomain",
+            "url": "http://[::1]:64792/routing-probe"
+          }
+        ],
+        "scope": "offscreen WKWebView secure relay routing fixture; no Rust server or E2EE",
+        "webRTC": {
+          "clientSTUNDatagrams": 0,
+          "setupError": "",
+          "start": "ICE gathering requested"
+        },
+        "webRTCDirectControl": {
+          "clientSTUNDatagrams": 0,
+          "setupError": "",
+          "start": "ICE gathering requested"
+        }
+      },
+      {
+        "domainMatching": "default",
+        "os": "Version 27.0 (Build 24A5408d)",
+        "relayHost": "127.0.0.1",
+        "relayState": "stopped",
+        "results": [
+          {
+            "clientOriginRequests": [],
+            "errorCode": -1004,
+            "errorDomain": "NSURLErrorDomain",
+            "finished": false,
+            "proxy": "relayHTTP2",
+            "title": "",
+            "underlyingErrorCode": 61,
+            "underlyingErrorDomain": "NSPOSIXErrorDomain",
+            "url": "http://myterm-route-probe.invalid:65116/routing-probe"
+          },
+          {
+            "clientOriginRequests": [],
+            "errorCode": -1004,
+            "errorDomain": "NSURLErrorDomain",
+            "finished": false,
+            "proxy": "relayHTTP2",
+            "title": "",
+            "underlyingErrorCode": 61,
+            "underlyingErrorDomain": "NSPOSIXErrorDomain",
+            "url": "http://localhost:65116/routing-probe"
+          },
+          {
+            "clientOriginRequests": [],
+            "errorCode": -1005,
+            "errorDomain": "NSURLErrorDomain",
+            "finished": false,
+            "proxy": "relayHTTP2",
+            "title": "",
+            "underlyingErrorCode": 96,
+            "underlyingErrorDomain": "NSPOSIXErrorDomain",
+            "url": "http://127.0.0.1:65116/routing-probe"
+          },
+          {
+            "clientOriginRequests": [],
+            "errorCode": -1005,
+            "errorDomain": "NSURLErrorDomain",
+            "finished": false,
+            "proxy": "relayHTTP2",
+            "title": "",
+            "underlyingErrorCode": 96,
+            "underlyingErrorDomain": "NSPOSIXErrorDomain",
+            "url": "http://[::1]:65116/routing-probe"
+          }
+        ],
+        "scope": "offscreen WKWebView secure relay routing fixture; no Rust server or E2EE",
+        "webRTC": {},
+        "webRTCDirectControl": {}
+      }
+    ],
+    "mobileHTTP3": [
+      {
+        "domainMatching": "default",
+        "os": "Version 27.0 (Build 24A5408d)",
+        "relayHost": "127.0.0.1",
+        "relayState": "running",
+        "results": [
+          {
+            "clientOriginRequests": [],
+            "errorCode": 0,
+            "errorDomain": "",
+            "finished": true,
+            "proxy": "relayHTTP3",
+            "title": "RELAY_FIXTURE",
+            "underlyingErrorCode": 0,
+            "underlyingErrorDomain": "",
+            "url": "http://myterm-route-probe.invalid:64735/routing-probe"
+          },
+          {
+            "clientOriginRequests": [],
+            "errorCode": 0,
+            "errorDomain": "",
+            "finished": true,
+            "proxy": "relayHTTP3",
+            "title": "RELAY_FIXTURE",
+            "underlyingErrorCode": 0,
+            "underlyingErrorDomain": "",
+            "url": "http://localhost:64735/routing-probe"
+          },
+          {
+            "clientOriginRequests": [],
+            "errorCode": -1005,
+            "errorDomain": "NSURLErrorDomain",
+            "finished": false,
+            "proxy": "relayHTTP3",
+            "title": "",
+            "underlyingErrorCode": 96,
+            "underlyingErrorDomain": "NSPOSIXErrorDomain",
+            "url": "http://127.0.0.1:64735/routing-probe"
+          },
+          {
+            "clientOriginRequests": [],
+            "errorCode": -1005,
+            "errorDomain": "NSURLErrorDomain",
+            "finished": false,
+            "proxy": "relayHTTP3",
+            "title": "",
+            "underlyingErrorCode": 96,
+            "underlyingErrorDomain": "NSPOSIXErrorDomain",
+            "url": "http://[::1]:64735/routing-probe"
+          }
+        ],
+        "scope": "offscreen WKWebView secure relay routing fixture; no Rust server or E2EE",
+        "webRTC": {
+          "clientSTUNDatagrams": 0,
+          "setupError": "",
+          "start": "ICE gathering requested"
+        },
+        "webRTCDirectControl": {
+          "clientSTUNDatagrams": 0,
+          "setupError": "",
+          "start": "ICE gathering requested"
+        }
+      },
+      {
+        "domainMatching": "default",
+        "os": "Version 27.0 (Build 24A5408d)",
+        "relayHost": "127.0.0.1",
+        "relayState": "stopped",
+        "results": [
+          {
+            "clientOriginRequests": [],
+            "errorCode": -1004,
+            "errorDomain": "NSURLErrorDomain",
+            "finished": false,
+            "proxy": "relayHTTP3",
+            "title": "",
+            "underlyingErrorCode": 61,
+            "underlyingErrorDomain": "NSPOSIXErrorDomain",
+            "url": "http://myterm-route-probe.invalid:65087/routing-probe"
+          },
+          {
+            "clientOriginRequests": [],
+            "errorCode": -1004,
+            "errorDomain": "NSURLErrorDomain",
+            "finished": false,
+            "proxy": "relayHTTP3",
+            "title": "",
+            "underlyingErrorCode": 61,
+            "underlyingErrorDomain": "NSPOSIXErrorDomain",
+            "url": "http://localhost:65087/routing-probe"
+          },
+          {
+            "clientOriginRequests": [],
+            "errorCode": -1005,
+            "errorDomain": "NSURLErrorDomain",
+            "finished": false,
+            "proxy": "relayHTTP3",
+            "title": "",
+            "underlyingErrorCode": 96,
+            "underlyingErrorDomain": "NSPOSIXErrorDomain",
+            "url": "http://127.0.0.1:65087/routing-probe"
+          },
+          {
+            "clientOriginRequests": [],
+            "errorCode": -1005,
+            "errorDomain": "NSURLErrorDomain",
+            "finished": false,
+            "proxy": "relayHTTP3",
+            "title": "",
+            "underlyingErrorCode": 96,
+            "underlyingErrorDomain": "NSPOSIXErrorDomain",
+            "url": "http://[::1]:65087/routing-probe"
+          }
+        ],
+        "scope": "offscreen WKWebView secure relay routing fixture; no Rust server or E2EE",
+        "webRTC": {},
+        "webRTCDirectControl": {}
+      }
+    ]
+  }
+}

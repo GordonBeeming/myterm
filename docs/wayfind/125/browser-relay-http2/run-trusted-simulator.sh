@@ -4,6 +4,16 @@ set -euo pipefail
 source_dir="$(cd "$(dirname "$0")" && pwd)"
 device_type="${1:-com.apple.CoreSimulator.SimDeviceType.iPhone-11}"
 runtime="${2:-com.apple.CoreSimulator.SimRuntime.iOS-27-0}"
+domain_matching="${MYTERM_PROBE_DOMAINS:-explicit}"
+case "$domain_matching" in
+    explicit|default) ;;
+    *) printf 'MYTERM_PROBE_DOMAINS must be explicit or default.\n' >&2; exit 2 ;;
+esac
+transport="${MYTERM_PROBE_TRANSPORT:-http2}"
+case "$transport" in
+    http2|http3) ;;
+    *) printf 'MYTERM_PROBE_TRANSPORT must be http2 or http3.\n' >&2; exit 2 ;;
+esac
 run_dir="$(mktemp -d /private/tmp/myterm-browser-trusted.XXXXXX)"
 printf 'Run directory: %s\n' "$run_dir" >&2
 cd "$run_dir"
@@ -12,7 +22,7 @@ export GOTOOLCHAIN=local
 export CLANG_MODULE_CACHE_PATH="$run_dir/clang-cache"
 bundle=com.gordonbeeming.myterm.wayfind.proxyprobe
 
-go build -o relay "$source_dir/relay.go"
+go -C "$source_dir" build -mod=readonly -o "$run_dir/relay" relay.go
 mkdir Probe.app
 cp "$source_dir/SimulatorInfo.plist" Probe.app/Info.plist
 xcrun --sdk iphonesimulator swiftc -parse-as-library -swift-version 5 \
@@ -31,7 +41,9 @@ cleanup() {
     if [[ -n "$relay_pid" ]]; then kill "$relay_pid" 2>/dev/null || true; fi
 }
 trap cleanup EXIT
-./relay --issue-root > relay.port 2> relay.log &
+http3=false
+if [[ "$transport" == http3 ]]; then http3=true; fi
+./relay --issue-root --http3="$http3" > relay.port 2> relay.log &
 relay_pid=$!
 for _ in {1..50}; do
     if [[ -s relay.port ]]; then break; fi
@@ -51,6 +63,8 @@ result="$app_data/Documents/routing-result.json"
 launch_probe() {
     local mode="$1"
     SIMCTL_CHILD_MYTERM_PROBE_PORT="$relay_port" SIMCTL_CHILD_MYTERM_PROBE_STATE="$mode" \
+        SIMCTL_CHILD_MYTERM_PROBE_DOMAINS="$domain_matching" SIMCTL_CHILD_MYTERM_PROBE_TRANSPORT="$transport" \
+        SIMCTL_CHILD_MYTERM_PROBE_WEBRTC="${MYTERM_PROBE_WEBRTC:-0}" \
         xcrun simctl launch --terminate-running-process "$device_id" "$bundle" >&2
     for _ in {1..100}; do
         if [[ -s "$result" ]] && jq -e 'has("probeError")' "$result" >/dev/null; then
