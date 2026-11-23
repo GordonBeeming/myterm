@@ -1,0 +1,108 @@
+[
+  {
+    "os": "Version 27.3 (Build 26C5047e)",
+    "relayState": "running",
+    "results": [
+      {
+        "clientOriginRequests": [],
+        "errorCode": -1202,
+        "errorDomain": "NSURLErrorDomain",
+        "finished": false,
+        "proxy": "relayHTTP2",
+        "title": "",
+        "underlyingErrorCode": -9808,
+        "url": "http://myterm-route-probe.invalid:62097/routing-probe"
+      },
+      {
+        "clientOriginRequests": [
+          "GET /routing-probe HTTP/1.1"
+        ],
+        "errorCode": 0,
+        "errorDomain": "",
+        "finished": true,
+        "proxy": "relayHTTP2",
+        "title": "CLIENT_LOCAL_FIXTURE",
+        "underlyingErrorCode": 0,
+        "url": "http://localhost:62097/routing-probe"
+      },
+      {
+        "clientOriginRequests": [
+          "GET /routing-probe HTTP/1.1"
+        ],
+        "errorCode": 0,
+        "errorDomain": "",
+        "finished": true,
+        "proxy": "relayHTTP2",
+        "title": "CLIENT_LOCAL_FIXTURE",
+        "underlyingErrorCode": 0,
+        "url": "http://127.0.0.1:62097/routing-probe"
+      },
+      {
+        "clientOriginRequests": [
+          "GET /routing-probe HTTP/1.1"
+        ],
+        "errorCode": 0,
+        "errorDomain": "",
+        "finished": true,
+        "proxy": "relayHTTP2",
+        "title": "CLIENT_LOCAL_FIXTURE",
+        "underlyingErrorCode": 0,
+        "url": "http://[::1]:62097/routing-probe"
+      }
+    ],
+    "scope": "offscreen macOS WKWebView HTTP/2 relay routing fixture; no Rust server or E2EE"
+  },
+  {
+    "os": "Version 27.3 (Build 26C5047e)",
+    "relayState": "stopped",
+    "results": [
+      {
+        "clientOriginRequests": [],
+        "errorCode": -1004,
+        "errorDomain": "NSURLErrorDomain",
+        "finished": false,
+        "proxy": "relayHTTP2",
+        "title": "",
+        "underlyingErrorCode": 61,
+        "url": "http://myterm-route-probe.invalid:62098/routing-probe"
+      },
+      {
+        "clientOriginRequests": [
+          "GET /routing-probe HTTP/1.1"
+        ],
+        "errorCode": 0,
+        "errorDomain": "",
+        "finished": true,
+        "proxy": "relayHTTP2",
+        "title": "CLIENT_LOCAL_FIXTURE",
+        "underlyingErrorCode": 0,
+        "url": "http://localhost:62098/routing-probe"
+      },
+      {
+        "clientOriginRequests": [
+          "GET /routing-probe HTTP/1.1"
+        ],
+        "errorCode": 0,
+        "errorDomain": "",
+        "finished": true,
+        "proxy": "relayHTTP2",
+        "title": "CLIENT_LOCAL_FIXTURE",
+        "underlyingErrorCode": 0,
+        "url": "http://127.0.0.1:62098/routing-probe"
+      },
+      {
+        "clientOriginRequests": [
+          "GET /routing-probe HTTP/1.1"
+        ],
+        "errorCode": 0,
+        "errorDomain": "",
+        "finished": true,
+        "proxy": "relayHTTP2",
+        "title": "CLIENT_LOCAL_FIXTURE",
+        "underlyingErrorCode": 0,
+        "url": "http://[::1]:62098/routing-probe"
+      }
+    ],
+    "scope": "offscreen macOS WKWebView HTTP/2 relay routing fixture; no Rust server or E2EE"
+  }
+]
