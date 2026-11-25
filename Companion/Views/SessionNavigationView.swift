@@ -14,6 +14,7 @@ struct CompanionSessionNavigationView: View {
         return SessionNavigationItem.items(in: projection, query: query, prioritizeAttention: inbox,
                                            recentTabIDs: scene.recentSessionTabIDs)
             .filter { !inbox || $0.tab.kind == .terminal }
+            .filter { !inbox || !scene.isInboxRowDismissed($0.tab) }
     }
 
     var body: some View {
@@ -31,34 +32,59 @@ struct CompanionSessionNavigationView: View {
                         Task { await open(item) }
                     } label: {
                         HStack {
+                            if inbox {
+                                // Unread, the way Messages shows it: the dot goes once the row is opened.
+                                Circle().fill(isUnread(item) ? Color.blue : Color.clear)
+                                    .frame(width: 10, height: 10)
+                                    .accessibilityHidden(true)
+                            }
                             Image(systemName: item.tab.agentActivity == .awaitingInput ? "questionmark.circle" :
                                     item.tab.kind == .browser ? "globe" : "terminal")
+                                .frame(width: 26)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(item.tab.title).foregroundStyle(.primary)
+                                    .fontWeight(inbox && isUnread(item) ? .semibold : .regular)
                                 Text(item.subtitleWithFolderCount).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                                     .accessibilityLabel(item.accessibleSubtitle)
                             }
                             Spacer()
-                            if inbox {
-                                Text(status(for: item.tab.agentActivity))
-                                    .font(.caption).foregroundStyle(.secondary)
+                            if inbox, let status = status(for: item.tab.agentActivity) {
+                                Text(status).font(.caption).foregroundStyle(.secondary)
                             }
                         }
                     }
                     .accessibilityIdentifier("session-destination-\(item.id.rawValue)")
+                    .accessibilityValue(inbox && isUnread(item) ? "Unread" : "")
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        if inbox {
+                            Button("Dismiss", systemImage: "xmark", role: .destructive) {
+                                dismiss(item)
+                            }
+                            .accessibilityIdentifier("session-dismiss-\(item.id.rawValue)")
+                        }
+                    }
+                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                        if inbox && isUnread(item) {
+                            Button("Mark read", systemImage: "envelope.open") {
+                                Task { await markRead(item) }
+                            }
+                            .tint(.blue)
+                            .accessibilityIdentifier("session-mark-read-\(item.id.rawValue)")
+                        }
+                    }
                 }
                 if items.isEmpty {
-                    ContentUnavailableView(inbox ? "No terminal sessions" : "No matching tabs",
+                    ContentUnavailableView(inbox ? "Inbox empty" : "No matching tabs",
                                            systemImage: inbox ? "tray" : "magnifyingglass")
                 }
             } header: {
                 if inbox {
-                    let count = items.filter { $0.tab.agentActivity?.needsAttention == true }.count
-                    Text(count == 0 ? "All caught up" : "\(count) need attention")
+                    let count = items.filter(isUnread).count
+                    Text(count == 0 ? "All caught up" : "\(count) unread")
                 }
             } footer: {
                 if inbox {
-                    Text("This Mac only. Newest attention first. Questions stay until the agent continues. Choose another Mac to see its inbox.")
+                    Text("This Mac only. Newest attention first. A blue dot means unread. Swipe left to dismiss a row until the agent does something new. Choose another Mac to see its inbox.")
                 }
             }
         }
@@ -66,13 +92,19 @@ struct CompanionSessionNavigationView: View {
         .accessibilityIdentifier(inbox ? "session-inbox" : "session-quick-jump")
     }
 
-    private func status(for activity: AgentActivity?) -> String {
-        switch activity {
-        case .awaitingInput: "Needs reply"
-        case .finished: "Finished"
-        case .working: "Working"
-        case .ready, .exited, nil: "Read / idle"
-        }
+    /// The dot carries finished and unanswered work, so only states it cannot show get text.
+    private func status(for activity: AgentActivity?) -> String? {
+        activity == .working ? "Working" : nil
+    }
+
+    private func isUnread(_ item: SessionNavigationItem) -> Bool {
+        item.tab.agentActivity?.needsAttention == true &&
+            !scene.isInboxRowRead(item.tab)
+    }
+
+    private func dismiss(_ item: SessionNavigationItem) {
+        scene.dismissInboxRow(item.tab)
+        Task { await markRead(item) }
     }
 
     private func open(_ item: SessionNavigationItem) async {
@@ -92,16 +124,28 @@ struct CompanionSessionNavigationView: View {
                 tabID: item.id.rawValue, title: item.tab.title, url: item.tab.browserURL))]
         }
         didOpen()
-        // Read clears finished work, while the host retains an unanswered question. A failure
-        // leaves the authoritative state untouched and will be retried by ordinary navigation.
-        if scene.connectionPhase == .online {
-            do {
-                _ = try await scene.command(.markRead, metadata: MessageMetadata(hostID: connection.hostID,
-                    sessionID: item.tab.terminalSessionID?.rawValue,
-                    workspaceID: item.workspaceID.rawValue, groupID: item.groupID.rawValue,
-                    tabID: item.id.rawValue),
-                    payload: JSONEncoder().encode(RemoteEmptyPayload()))
-            } catch { scene.errorMessage = "Opened the tab, but could not mark it read: \(error.localizedDescription)" }
+        await markRead(item)
+    }
+
+    /// Read clears finished work, while the host retains an unanswered question. The dot goes
+    /// at once. If the host does not take the read, the dot comes back, so a finished tab does
+    /// not look read here while the host still has it unread.
+    private func markRead(_ item: SessionNavigationItem) async {
+        guard let connection = scene.selectedConnectionID else { return }
+        scene.markInboxRowRead(item.tab)
+        guard scene.connectionPhase == .online else {
+            scene.clearInboxRowRead(item.tab, connection: connection)
+            return
+        }
+        do {
+            _ = try await scene.command(.markRead, metadata: MessageMetadata(hostID: connection.hostID,
+                sessionID: item.tab.terminalSessionID?.rawValue,
+                workspaceID: item.workspaceID.rawValue, groupID: item.groupID.rawValue,
+                tabID: item.id.rawValue),
+                payload: JSONEncoder().encode(RemoteEmptyPayload()))
+        } catch {
+            scene.clearInboxRowRead(item.tab, connection: connection)
+            scene.errorMessage = "Could not mark the tab read: \(error.localizedDescription)"
         }
     }
 }

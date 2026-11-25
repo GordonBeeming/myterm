@@ -48,6 +48,7 @@
 		81C9CDBDA50FD131B89AE251 /* BrowserProfileStoresTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EF30BA3093DF0C35FB09326 /* BrowserProfileStoresTests.swift */; };
 		82ED387387B7D1D869DDF44B /* CompanionWorkspaceToolbarTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DA35862C17F0B3B27003EA9 /* CompanionWorkspaceToolbarTests.swift */; };
 		8FD92ED5F4F7DF7794C3D1A9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97E4B3C98E1DE16DF3D63DEE /* Assets.xcassets */; };
+		581950306D230DF037AC0226 /* InboxMarkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F7CF41432821233D314793E /* InboxMarkTests.swift */; };
 		941ECD6CF20B3D428F38FDC0 /* SceneStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C16667DB8CC7675CEFC6E88 /* SceneStateTests.swift */; };
 		9EA720FD47B0AE1947B7D69E /* BrowserContextHandoffView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 478AC578363DA10107B88199 /* BrowserContextHandoffView.swift */; };
 		A2EDC285AF6DEBF292A4253F /* CompanionTouchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C898CD4E394628E363B26B77 /* CompanionTouchTests.swift */; };
@@ -131,6 +132,7 @@
 		45BC265E6E6119FC4D4E5A78 /* BrowserCookieReconcilerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserCookieReconcilerTests.swift; sourceTree = "<group>"; };
 		478AC578363DA10107B88199 /* BrowserContextHandoffView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserContextHandoffView.swift; sourceTree = "<group>"; };
 		49195F1FC20A11FB4375866B /* TerminalComposerDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalComposerDraft.swift; sourceTree = "<group>"; };
+		2F7CF41432821233D314793E /* InboxMarkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxMarkTests.swift; sourceTree = "<group>"; };
 		4C16667DB8CC7675CEFC6E88 /* SceneStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneStateTests.swift; sourceTree = "<group>"; };
 		4E8E6E39688D735FBB9DCCC2 /* SwiftTerm */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SwiftTerm; path = ../Vendor/SwiftTerm; sourceTree = SOURCE_ROOT; };
 		4FA4675623DF3E1DFDD6B478 /* TerminalExperienceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalExperienceTests.swift; sourceTree = "<group>"; };
@@ -336,6 +338,7 @@
 				7C06C69D3EAC48C20C32C255 /* RemoteBrowserTests.swift */,
 				BFA88151878C429986196266 /* RemoteSettingsDraftTests.swift */,
 				20D76B37F282486AE3707E08 /* ReservedRegionSplitLayoutTests.swift */,
+				2F7CF41432821233D314793E /* InboxMarkTests.swift */,
 				4C16667DB8CC7675CEFC6E88 /* SceneStateTests.swift */,
 				21AC7E3FC5A5E5C0DBC0AEE4 /* TerminalDraftStoreTests.swift */,
 				4FA4675623DF3E1DFDD6B478 /* TerminalExperienceTests.swift */,
@@ -589,6 +592,7 @@
 				F6D7CC9485F41B40AD646203 /* RemoteBrowserTests.swift in Sources */,
 				C3E364CB2489742AC305E98E /* RemoteSettingsDraftTests.swift in Sources */,
 				5D54A071E87E451B0E2B1B48 /* ReservedRegionSplitLayoutTests.swift in Sources */,
+				581950306D230DF037AC0226 /* InboxMarkTests.swift in Sources */,
 				941ECD6CF20B3D428F38FDC0 /* SceneStateTests.swift in Sources */,
 				3462F39D2A0C7225443E1279 /* TerminalDraftStoreTests.swift in Sources */,
 				539F4D9A61C7A9B49E66E966 /* TerminalExperienceTests.swift in Sources */,

@@ -350,6 +350,63 @@ final class SceneModel {
         guard let connection = selectedConnectionID else { return [] }
         return recentSessionDestinations[connection] ?? []
     }
+    /// Inbox rows the user read or swiped away, with the tab's activity and activity date then.
+    /// The host keeps an unanswered question as it is after a read, so the phone remembers the
+    /// read itself. A mark ends when the agent does something new: a newer date, or a move to
+    /// working or to a different attention state. A move to a quiet state does not end it,
+    /// because a read itself turns a finished tab ready. The state check covers `.working`,
+    /// which does not move the date, and older hosts, which send no date.
+    private struct InboxMark {
+        let activity: AgentActivity?
+        let date: Date?
+
+        init(_ tab: RemoteTabProjection) {
+            activity = tab.agentActivity
+            date = tab.agentActivityDate
+        }
+
+        func applies(to tab: RemoteTabProjection) -> Bool {
+            if (tab.agentActivityDate ?? .distantPast) > (date ?? .distantPast) { return false }
+            switch tab.agentActivity {
+            case .ready, .exited, nil: return true
+            case .working, .finished, .awaitingInput: return tab.agentActivity == activity
+            }
+        }
+    }
+    private var readInboxRows: [SavedConnectionID: [TabID: InboxMark]] = [:]
+    private var dismissedInboxRows: [SavedConnectionID: [TabID: InboxMark]] = [:]
+    func markInboxRowRead(_ tab: RemoteTabProjection) {
+        guard let connection = selectedConnectionID else { return }
+        readInboxRows[connection, default: [:]][tab.id] = InboxMark(tab)
+    }
+    /// Undoes a read the host did not accept, so the dot matches what the host will send later.
+    func clearInboxRowRead(_ tab: RemoteTabProjection, connection: SavedConnectionID) {
+        guard let mark = readInboxRows[connection]?[tab.id], mark.applies(to: tab) else { return }
+        readInboxRows[connection]?[tab.id] = nil
+    }
+    func dismissInboxRow(_ tab: RemoteTabProjection) {
+        guard let connection = selectedConnectionID else { return }
+        dismissedInboxRows[connection, default: [:]][tab.id] = InboxMark(tab)
+    }
+    /// A mark that stopped applying once must not apply again when the tab goes back to the
+    /// same state, so ended marks are dropped as each projection arrives.
+    func pruneInboxMarks(in projection: RemoteWorkspaceProjection, connection: SavedConnectionID) {
+        let tabs = Dictionary(projection.workspaces.flatMap { $0.groups.flatMap(\.tabs) }.map { ($0.id, $0) },
+                              uniquingKeysWith: { first, _ in first })
+        func keep(_ marks: [TabID: InboxMark]?) -> [TabID: InboxMark]? {
+            marks?.filter { id, mark in tabs[id].map(mark.applies) ?? false }
+        }
+        readInboxRows[connection] = keep(readInboxRows[connection])
+        dismissedInboxRows[connection] = keep(dismissedInboxRows[connection])
+    }
+    func isInboxRowRead(_ tab: RemoteTabProjection) -> Bool {
+        guard let connection = selectedConnectionID else { return false }
+        return readInboxRows[connection]?[tab.id]?.applies(to: tab) == true
+    }
+    func isInboxRowDismissed(_ tab: RemoteTabProjection) -> Bool {
+        guard let connection = selectedConnectionID else { return false }
+        return dismissedInboxRows[connection]?[tab.id]?.applies(to: tab) == true
+    }
     var sheet: CompanionSheet?
     var selectedConnectionID: SavedConnectionID?
     var selectedHostID: UUID? { selectedConnectionID?.hostID }
@@ -361,7 +418,13 @@ final class SceneModel {
     var terminalAttachmentConnectionID: UUID? {
         connectionPhase == .online ? connectionID : nil
     }
-    var projection: RemoteWorkspaceProjection?
+    var projection: RemoteWorkspaceProjection? {
+        didSet {
+            if let projection, let connection = selectedConnectionID {
+                pruneInboxMarks(in: projection, connection: connection)
+            }
+        }
+    }
     /// Process-wide, not per scene: the one-live-view-per-profile rule only means anything if every
     /// browser view in the app consults the same cache, and the companion supports multiple scenes.
     @ObservationIgnored var browserProfileStores: BrowserProfileStores { .shared }
