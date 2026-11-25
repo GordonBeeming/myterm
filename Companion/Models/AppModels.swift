@@ -350,6 +350,30 @@ final class SceneModel {
         guard let connection = selectedConnectionID else { return [] }
         return recentSessionDestinations[connection] ?? []
     }
+    /// Inbox rows the user read or swiped away, with the activity date they had then. The host
+    /// keeps an unanswered question as it is after a read, so the phone remembers the read
+    /// itself. A newer activity date means the agent did something since, so the row is new again.
+    private var readInboxRows: [SavedConnectionID: [TabID: Date]] = [:]
+    private var dismissedInboxRows: [SavedConnectionID: [TabID: Date]] = [:]
+    func markInboxRowRead(_ tabID: TabID, activityDate: Date?) {
+        guard let connection = selectedConnectionID else { return }
+        readInboxRows[connection, default: [:]][tabID] = activityDate ?? .distantPast
+    }
+    func dismissInboxRow(_ tabID: TabID, activityDate: Date?) {
+        guard let connection = selectedConnectionID else { return }
+        dismissedInboxRows[connection, default: [:]][tabID] = activityDate ?? .distantPast
+    }
+    func isInboxRowRead(_ tabID: TabID, activityDate: Date?) -> Bool {
+        Self.isCurrent(readInboxRows, tabID, activityDate, connection: selectedConnectionID)
+    }
+    func isInboxRowDismissed(_ tabID: TabID, activityDate: Date?) -> Bool {
+        Self.isCurrent(dismissedInboxRows, tabID, activityDate, connection: selectedConnectionID)
+    }
+    private static func isCurrent(_ marks: [SavedConnectionID: [TabID: Date]], _ tabID: TabID,
+                                  _ activityDate: Date?, connection: SavedConnectionID?) -> Bool {
+        guard let connection, let markedAt = marks[connection]?[tabID] else { return false }
+        return (activityDate ?? .distantPast) <= markedAt
+    }
     var sheet: CompanionSheet?
     var selectedConnectionID: SavedConnectionID?
     var selectedHostID: UUID? { selectedConnectionID?.hostID }
