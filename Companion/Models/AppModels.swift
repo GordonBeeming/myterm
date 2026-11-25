@@ -1547,6 +1547,8 @@ final class TerminalSurfaceState {
     private(set) var isControlRequestPending = false
     var activity: String?
     var fontSize: CGFloat = 13
+    /// The key bar's sticky ctrl. The terminal view applies it to the next typed key, then clears it.
+    var controlModifier = false
     private(set) var isAwaitingCheckpoint = true
     /// Why this terminal is not showing anything, when the answer is not "a checkpoint is on its
     /// way". Set when the Mac reports an attach it cannot complete, or when a restore runs out of
