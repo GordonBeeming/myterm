@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import MyTermCore
 import MyTermRemote
 
 /// Paired Macs for UI tests, so the machine list can be driven on a simulator without a relay.
@@ -35,4 +36,32 @@ enum MachineUITestFixture {
             notificationSigningPublicKey: P256.Signing.PrivateKey().publicKey.x963Representation
         )
     }
+
+    /// Two folders and one unfiled workspace, for `UITestConfiguration.showsWorkspaceListFixture`.
+    static let workspaceList: RemoteWorkspaceProjection = {
+        let clients = WorkspaceFolderID(rawValue: fixtureUUID(0x20))
+        let personal = WorkspaceFolderID(rawValue: fixtureUUID(0x21))
+        let workspaces: [(String, WorkspaceFolderID?)] = [
+            ("api", clients), ("web", clients), ("infra", clients),
+            ("dotfiles", personal), ("blog", personal),
+            ("scratch", nil)
+        ]
+        return RemoteWorkspaceProjection(
+            folders: [
+                RemoteFolderProjection(id: clients, title: "Clients", color: .blue),
+                RemoteFolderProjection(id: personal, title: "Personal", color: .green)
+            ],
+            workspaces: workspaces.enumerated().map { index, entry in
+                let byte = UInt8(0x30 + index)
+                let tab = RemoteTabProjection(
+                    id: TabID(rawValue: fixtureUUID(byte + 0x20)), title: "zsh", kind: .terminal,
+                    terminalSessionID: TerminalSessionID(rawValue: fixtureUUID(byte + 0x40)))
+                let group = RemoteTabGroupProjection(
+                    id: TabGroupID(rawValue: fixtureUUID(byte + 0x60)), selectedTabID: tab.id, tabs: [tab])
+                return RemoteWorkspaceItem(
+                    id: WorkspaceID(rawValue: fixtureUUID(byte)), title: entry.0, folderID: entry.1,
+                    isPinned: false, color: nil, emoji: nil, focusedGroupID: group.id, groups: [group])
+            }
+        )
+    }()
 }
