@@ -271,7 +271,7 @@ struct CompanionTerminalPane: View {
                 } retry: {
                     Task { await scene.retryTerminal(currentRoute) }
                 }
-                RemoteTerminalView(state: state, showTerminalKeys: showTerminalKeys,
+                RemoteTerminalView(state: state,
                                    requestsKeyboardFocus: requestsKeyboardFocus && scene.sheet == nil,
                                    onToggleMaximise: onToggleMaximise) { data in
                     Task { await scene.sendInput(data, route: currentRoute) }
@@ -299,7 +299,7 @@ struct CompanionTerminalPane: View {
                     }
                 }
                 if showTerminalKeys {
-                    TerminalAccessoryBar { bytes in
+                    TerminalAccessoryBar(state: state) { bytes in
                         Task { await scene.sendInput(bytes, route: currentRoute) }
                     }
                     .disabled(!state.ownsControl)
@@ -384,7 +384,6 @@ private struct TerminalControlBar: View {
 struct RemoteTerminalView: UIViewRepresentable {
     private static let logger = Logger(subsystem: AppConfiguration.bundleIdentifier, category: "TerminalRendering")
     let state: TerminalSurfaceState
-    let showTerminalKeys: Bool
     var requestsKeyboardFocus = true
     var onToggleMaximise: (() -> Void)?
     let onInput: (Data) -> Void
@@ -417,8 +416,11 @@ struct RemoteTerminalView: UIViewRepresentable {
             coordinator?.synchronizeViewport(from: view)
         }
         view.accessibilityIdentifier = "remote-terminal"
-        context.coordinator.defaultInputAccessoryView = view.inputAccessoryView
-        if !showTerminalKeys { view.inputAccessoryView = nil }
+        // The pane's own TerminalAccessoryBar carries the extra keys. SwiftTerm's accessory
+        // spans the whole screen on iPad, so it would cover the sidebar and the other columns.
+        view.inputAccessoryView = nil
+        context.coordinator.observeControlModifierReset(on: view)
+        state.keyInput = view
         return view
     }
 
@@ -429,6 +431,10 @@ struct RemoteTerminalView: UIViewRepresentable {
         view.onFollowOutputChanged = nil
         view.onViewportChanged = nil
         view.terminalDelegate = nil
+        if coordinator.parent.state.keyInput === view { coordinator.parent.state.keyInput = nil }
+        if let observer = coordinator.controlModifierObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
         view.updateUiClosed()
     }
 
@@ -437,10 +443,8 @@ struct RemoteTerminalView: UIViewRepresentable {
         if let clipboardView = view as? ClipboardTerminalView {
             clipboardView.canMaximise = onToggleMaximise != nil
         }
-        let accessory = showTerminalKeys ? context.coordinator.defaultInputAccessoryView : nil
-        if view.inputAccessoryView !== accessory {
-            view.inputAccessoryView = accessory
-            view.reloadInputViews()
+        if view.controlModifier != state.controlModifier {
+            view.controlModifier = state.controlModifier
         }
         let gainedControl = !view.acceptsUserInput && state.ownsControl
         let gainedFocus = requestsKeyboardFocus && !context.coordinator.requestedFocus
@@ -559,7 +563,7 @@ struct RemoteTerminalView: UIViewRepresentable {
 
     final class Coordinator: NSObject, TerminalViewDelegate, @unchecked Sendable {
         var parent: RemoteTerminalView
-        var defaultInputAccessoryView: UIView?
+        var controlModifierObserver: NSObjectProtocol?
         var requestedFocus = false
         var resignRequested = false
         var checkpointRevision = -1
@@ -575,6 +579,16 @@ struct RemoteTerminalView: UIViewRepresentable {
         var isDismantled = false
 
         init(parent: RemoteTerminalView) { self.parent = parent }
+
+        /// SwiftTerm clears its control modifier after it applies it to one key, so the
+        /// bar's ctrl key must clear too.
+        @MainActor func observeControlModifierReset(on view: TerminalView) {
+            controlModifierObserver = NotificationCenter.default.addObserver(
+                forName: .terminalViewControlModifierReset, object: view, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.parent.state.controlModifier = false }
+            }
+        }
 
         @MainActor func finishViewportCapture(from view: TerminalView) {
             isDismantled = true
@@ -660,18 +674,25 @@ enum TerminalLinks {
 }
 
 private struct TerminalAccessoryBar: View {
+    let state: TerminalSurfaceState
     let send: (Data) -> Void
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 key("esc", [0x1b])
+                controlKey
                 key("ctrl-c", [0x03])
                 key("tab", [0x09])
-                key("↑", [0x1b, 0x5b, 0x41])
-                key("↓", [0x1b, 0x5b, 0x42])
-                key("←", [0x1b, 0x5b, 0x44])
-                key("→", [0x1b, 0x5b, 0x43])
+                text("~")
+                text("|")
+                text("/")
+                text("-")
+                arrow("↑", 0x41)
+                arrow("↓", 0x42)
+                arrow("←", 0x44)
+                arrow("→", 0x43)
+                functionKeys
                 Button("Paste") {
                     if let text = UIPasteboard.general.string { send(Data(text.utf8)) }
                 }
@@ -683,8 +704,61 @@ private struct TerminalAccessoryBar: View {
         .background(.bar)
     }
 
+    /// A sticky modifier: SwiftTerm applies it to the next key typed on the keyboard.
+    @ViewBuilder private var controlKey: some View {
+        let isOn = state.controlModifier
+        Button("ctrl") { state.controlModifier.toggle() }
+            .fontWeight(isOn ? .bold : .regular)
+            .background(Capsule().fill(isOn ? Color.accentColor.opacity(0.35) : .clear))
+            .accessibilityLabel("Control modifier")
+            .accessibilityValue(isOn ? "On" : "Off")
+            .accessibilityIdentifier("terminal-key-ctrl")
+    }
+
+    private var functionKeys: some View {
+        Menu("Fn") {
+            ForEach(Self.functionKeySequences, id: \.title) { entry in
+                Button(entry.title) { send(Data(entry.bytes)) }
+                    .accessibilityLabel("Send \(entry.title)")
+            }
+        }
+        .accessibilityLabel("Function keys")
+    }
+
+    /// xterm sequences, the same ones SwiftTerm's own accessory sends.
+    private static let functionKeySequences: [(title: String, bytes: [UInt8])] = [
+        ("F1", [0x1b, 0x4f, 0x50]), ("F2", [0x1b, 0x4f, 0x51]),
+        ("F3", [0x1b, 0x4f, 0x52]), ("F4", [0x1b, 0x4f, 0x53]),
+        ("F5", Array("\u{1b}[15~".utf8)), ("F6", Array("\u{1b}[17~".utf8)),
+        ("F7", Array("\u{1b}[18~".utf8)), ("F8", Array("\u{1b}[19~".utf8)),
+        ("F9", Array("\u{1b}[20~".utf8)), ("F10", Array("\u{1b}[21~".utf8)),
+    ]
+
     private func key(_ title: String, _ bytes: [UInt8]) -> some View {
         Button(title) { send(Data(bytes)) }.accessibilityLabel("Send \(title)")
+    }
+
+    /// Printable keys go through SwiftTerm's text input, which applies the negotiated keyboard
+    /// protocol and keeps its composition state correct.
+    private func text(_ character: String) -> some View {
+        Button(character) {
+            if let view = state.keyInput {
+                view.insertTextFromAccessory(character)
+            } else {
+                send(Data(character.utf8))
+            }
+        }
+        .accessibilityLabel("Send \(character)")
+    }
+
+    /// Applications that turn on application-cursor mode (DECCKM) expect `ESC O` arrows.
+    private func arrow(_ title: String, _ final: UInt8) -> some View {
+        Button(title) {
+            let applicationCursor = state.keyInput?.getTerminal().applicationCursor ?? false
+            send(Data([0x1b, applicationCursor ? 0x4f : 0x5b, final]))
+        }
+        .accessibilityLabel("Send \(title)")
+        .buttonRepeatBehavior(.enabled)
     }
 }
 

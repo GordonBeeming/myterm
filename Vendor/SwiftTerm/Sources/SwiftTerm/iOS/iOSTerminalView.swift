@@ -2125,7 +2125,7 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         queuePendingDisplay()
     }
 
-    func insertTextFromAccessory(_ text: String) {
+    public func insertTextFromAccessory(_ text: String) {
         commitTextInput(text, applyModifiers: false)
     }
 

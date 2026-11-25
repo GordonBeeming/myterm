@@ -17,6 +17,7 @@ The myterm additions provide a bounded, versioned terminal checkpoint and native
 - `resizeToFit()` reapplies the view's current geometry after it gains control.
 - `TerminalViewDelegate.terminalResizeRequested` lets an asynchronous transport defer native and font-driven grid changes. `applyTerminalGeometry` applies the authoritative change without resetting terminal modes, and `fittedTerminalGeometry` calculates the requested native grid without mutating the emulator. The default delegate keeps immediate local resizing.
 - On iOS, `usesIndependentViewport` lets a viewer follow output within its own visible height. `captureViewport()`, `restoreViewport(_:)`, and `followOutput()` preserve local reading intent across checkpoint imports. `onViewportChanged` and `onFollowOutputChanged` report local scrolling changes.
+- On iOS, `insertTextFromAccessory(_:)` is public, so a host's own key bar can type printable keys through the same input path as SwiftTerm's accessory.
 - The iOS `coalescesInteractiveOutput` option keeps remote echo on the normal display timer while typing, so separate output chunks can be drawn together. It defaults to `false`.
 
 Checkpoint preparation validates fallible state before replacing the destination. It preserves the receiving terminal's delegates and registered callbacks. Wire limits, parser-state tests, image tests, and same-suffix equivalence tests live in `Tests/MyTermPlatformTests/TerminalCheckpointTests.swift` in the parent repository.

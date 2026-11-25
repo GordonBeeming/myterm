@@ -339,7 +339,7 @@ final class TerminalExperienceTests: XCTestCase {
     }
 
     private func viewportCoordinator(_ state: TerminalSurfaceState) -> RemoteTerminalView.Coordinator {
-        let parent = RemoteTerminalView(state: state, showTerminalKeys: false,
+        let parent = RemoteTerminalView(state: state,
             onInput: { _ in }, onPasteImage: { _ in }, onResize: { _, _ in }, onResync: { _ in })
         let coordinator = parent.makeCoordinator()
         coordinator.checkpointRevision = 0
