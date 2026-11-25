@@ -420,6 +420,7 @@ struct RemoteTerminalView: UIViewRepresentable {
         // spans the whole screen on iPad, so it would cover the sidebar and the other columns.
         view.inputAccessoryView = nil
         context.coordinator.observeControlModifierReset(on: view)
+        state.keyInput = view
         return view
     }
 
@@ -430,6 +431,7 @@ struct RemoteTerminalView: UIViewRepresentable {
         view.onFollowOutputChanged = nil
         view.onViewportChanged = nil
         view.terminalDelegate = nil
+        if coordinator.parent.state.keyInput === view { coordinator.parent.state.keyInput = nil }
         if let observer = coordinator.controlModifierObserver {
             NotificationCenter.default.removeObserver(observer)
         }
@@ -682,14 +684,14 @@ private struct TerminalAccessoryBar: View {
                 controlKey
                 key("ctrl-c", [0x03])
                 key("tab", [0x09])
-                key("~", Array("~".utf8))
-                key("|", Array("|".utf8))
-                key("/", Array("/".utf8))
-                key("-", Array("-".utf8))
-                arrow("↑", [0x1b, 0x5b, 0x41])
-                arrow("↓", [0x1b, 0x5b, 0x42])
-                arrow("←", [0x1b, 0x5b, 0x44])
-                arrow("→", [0x1b, 0x5b, 0x43])
+                text("~")
+                text("|")
+                text("/")
+                text("-")
+                arrow("↑", 0x41)
+                arrow("↓", 0x42)
+                arrow("←", 0x44)
+                arrow("→", 0x43)
                 functionKeys
                 Button("Paste") {
                     if let text = UIPasteboard.general.string { send(Data(text.utf8)) }
@@ -736,8 +738,27 @@ private struct TerminalAccessoryBar: View {
         Button(title) { send(Data(bytes)) }.accessibilityLabel("Send \(title)")
     }
 
-    private func arrow(_ title: String, _ bytes: [UInt8]) -> some View {
-        key(title, bytes).buttonRepeatBehavior(.enabled)
+    /// Printable keys go through SwiftTerm's text input, which applies the negotiated keyboard
+    /// protocol and keeps its composition state correct.
+    private func text(_ character: String) -> some View {
+        Button(character) {
+            if let view = state.keyInput {
+                view.insertTextFromAccessory(character)
+            } else {
+                send(Data(character.utf8))
+            }
+        }
+        .accessibilityLabel("Send \(character)")
+    }
+
+    /// Applications that turn on application-cursor mode (DECCKM) expect `ESC O` arrows.
+    private func arrow(_ title: String, _ final: UInt8) -> some View {
+        Button(title) {
+            let applicationCursor = state.keyInput?.getTerminal().applicationCursor ?? false
+            send(Data([0x1b, applicationCursor ? 0x4f : 0x5b, final]))
+        }
+        .accessibilityLabel("Send \(title)")
+        .buttonRepeatBehavior(.enabled)
     }
 }
 

@@ -1549,6 +1549,9 @@ final class TerminalSurfaceState {
     var fontSize: CGFloat = 13
     /// The key bar's sticky ctrl. The terminal view applies it to the next typed key, then clears it.
     var controlModifier = false
+    /// The live terminal view, while one is on screen. The key bar types through it so that
+    /// keys follow the emulator's current modes.
+    @ObservationIgnored weak var keyInput: TerminalView?
     private(set) var isAwaitingCheckpoint = true
     /// Why this terminal is not showing anything, when the answer is not "a checkpoint is on its
     /// way". Set when the Mac reports an attach it cannot complete, or when a restore runs out of
