@@ -1,0 +1,2904 @@
+{
+  "generated_at": "2026-11-16T04:14:44.156376+00:00",
+  "status": "passed",
+  "cases": [
+    {
+      "name": "initial native mutual TLS handshake",
+      "passed": true
+    },
+    {
+      "name": "duplicate server channel ID cannot replace original context",
+      "passed": true
+    },
+    {
+      "name": "duplicate client channel ID cannot replace original context",
+      "passed": true
+    },
+    {
+      "name": "badServerPin rejects candidate with certificate verification failure",
+      "passed": true
+    },
+    {
+      "name": "badServerPin preserves original TLS context",
+      "passed": true
+    },
+    {
+      "name": "badClientPin rejects candidate with certificate verification failure",
+      "passed": true
+    },
+    {
+      "name": "badClientPin preserves original TLS context",
+      "passed": true
+    },
+    {
+      "name": "withheld handshake leaves candidate unready",
+      "passed": true
+    },
+    {
+      "name": "stalled preserves original TLS context",
+      "passed": true
+    },
+    {
+      "name": "lost handshake leaves candidate unready",
+      "passed": true
+    },
+    {
+      "name": "lost preserves original TLS context",
+      "passed": true
+    },
+    {
+      "name": "tampered encrypted handshake fails record authentication",
+      "passed": true
+    },
+    {
+      "name": "tampered preserves original TLS context",
+      "passed": true
+    },
+    {
+      "name": "separate candidate authenticates without replacing original",
+      "passed": true
+    },
+    {
+      "name": "authenticated candidate integrity failure discards its own context",
+      "passed": true
+    },
+    {
+      "name": "authenticated candidate failure preserves original TLS context",
+      "passed": true
+    },
+    {
+      "name": "cycle 0: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 0: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 0: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 0: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 0: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 0: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 0: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 1: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 1: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 1: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 1: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 1: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 1: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 1: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 2: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 2: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 2: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 2: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 2: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 2: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 2: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 3: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 3: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 3: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 3: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 3: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 3: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 3: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 4: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 4: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 4: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 4: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 4: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 4: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 4: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 5: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 5: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 5: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 5: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 5: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 5: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 5: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 6: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 6: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 6: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 6: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 6: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 6: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 6: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 7: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 7: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 7: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 7: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 7: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 7: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 7: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 8: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 8: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 8: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 8: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 8: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 8: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 8: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 9: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 9: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 9: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 9: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 9: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 9: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 9: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 10: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 10: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 10: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 10: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 10: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 10: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 10: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 11: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 11: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 11: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 11: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 11: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 11: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 11: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 12: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 12: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 12: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 12: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 12: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 12: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 12: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 13: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 13: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 13: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 13: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 13: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 13: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 13: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 14: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 14: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 14: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 14: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 14: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 14: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 14: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 15: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 15: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 15: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 15: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 15: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 15: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 15: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 16: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 16: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 16: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 16: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 16: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 16: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 16: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 17: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 17: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 17: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 17: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 17: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 17: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 17: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 18: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 18: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 18: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 18: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 18: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 18: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 18: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 19: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 19: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 19: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 19: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 19: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 19: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 19: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 20: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 20: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 20: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 20: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 20: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 20: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 20: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 21: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 21: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 21: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 21: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 21: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 21: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 21: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 22: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 22: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 22: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 22: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 22: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 22: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 22: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 23: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 23: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 23: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 23: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 23: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 23: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 23: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 24: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 24: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 24: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 24: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 24: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 24: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 24: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 25: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 25: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 25: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 25: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 25: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 25: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 25: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 26: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 26: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 26: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 26: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 26: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 26: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 26: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 27: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 27: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 27: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 27: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 27: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 27: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 27: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 28: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 28: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 28: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 28: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 28: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 28: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 28: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 29: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 29: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 29: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 29: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 29: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 29: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 29: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 30: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 30: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 30: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 30: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 30: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 30: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 30: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 31: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 31: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 31: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 31: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 31: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 31: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 31: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 32: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 32: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 32: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 32: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 32: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 32: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 32: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 33: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 33: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 33: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 33: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 33: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 33: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 33: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 34: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 34: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 34: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 34: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 34: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 34: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 34: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 35: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 35: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 35: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 35: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 35: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 35: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 35: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 36: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 36: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 36: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 36: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 36: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 36: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 36: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 37: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 37: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 37: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 37: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 37: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 37: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 37: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 38: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 38: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 38: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 38: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 38: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 38: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 38: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 39: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 39: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 39: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 39: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 39: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 39: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 39: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 40: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 40: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 40: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 40: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 40: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 40: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 40: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 41: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 41: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 41: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 41: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 41: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 41: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 41: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 42: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 42: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 42: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 42: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 42: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 42: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 42: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 43: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 43: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 43: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 43: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 43: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 43: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 43: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 44: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 44: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 44: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 44: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 44: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 44: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 44: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 45: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 45: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 45: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 45: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 45: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 45: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 45: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 46: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 46: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 46: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 46: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 46: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 46: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 46: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 47: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 47: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 47: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 47: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 47: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 47: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 47: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 48: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 48: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 48: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 48: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 48: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 48: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 48: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 49: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 49: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 49: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 49: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 49: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 49: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 49: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 50: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 50: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 50: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 50: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 50: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 50: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 50: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 51: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 51: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 51: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 51: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 51: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 51: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 51: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 52: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 52: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 52: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 52: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 52: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 52: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 52: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 53: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 53: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 53: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 53: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 53: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 53: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 53: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 54: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 54: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 54: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 54: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 54: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 54: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 54: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 55: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 55: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 55: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 55: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 55: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 55: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 55: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 56: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 56: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 56: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 56: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 56: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 56: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 56: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 57: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 57: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 57: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 57: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 57: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 57: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 57: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 58: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 58: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 58: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 58: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 58: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 58: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 58: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 59: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 59: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 59: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 59: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 59: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 59: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 59: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 60: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 60: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 60: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 60: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 60: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 60: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 60: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 61: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 61: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 61: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 61: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 61: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 61: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 61: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 62: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 62: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 62: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 62: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 62: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 62: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 62: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 63: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 63: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 63: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 63: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 63: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 63: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 63: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 64: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 64: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 64: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 64: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 64: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 64: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 64: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 65: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 65: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 65: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 65: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 65: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 65: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 65: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 66: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 66: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 66: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 66: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 66: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 66: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 66: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 67: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 67: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 67: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 67: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 67: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 67: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 67: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 68: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 68: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 68: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 68: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 68: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 68: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 68: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 69: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 69: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 69: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 69: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 69: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 69: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 69: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 70: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 70: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 70: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 70: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 70: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 70: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 70: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 71: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 71: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 71: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 71: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 71: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 71: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 71: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 72: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 72: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 72: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 72: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 72: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 72: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 72: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 73: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 73: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 73: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 73: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 73: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 73: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 73: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 74: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 74: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 74: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 74: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 74: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 74: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 74: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 75: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 75: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 75: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 75: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 75: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 75: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 75: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 76: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 76: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 76: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 76: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 76: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 76: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 76: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 77: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 77: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 77: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 77: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 77: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 77: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 77: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 78: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 78: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 78: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 78: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 78: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 78: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 78: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 79: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 79: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 79: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 79: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 79: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 79: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 79: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 80: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 80: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 80: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 80: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 80: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 80: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 80: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 81: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 81: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 81: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 81: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 81: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 81: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 81: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 82: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 82: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 82: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 82: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 82: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 82: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 82: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 83: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 83: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 83: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 83: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 83: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 83: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 83: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 84: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 84: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 84: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 84: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 84: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 84: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 84: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 85: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 85: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 85: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 85: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 85: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 85: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 85: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 86: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 86: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 86: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 86: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 86: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 86: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 86: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 87: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 87: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 87: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 87: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 87: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 87: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 87: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 88: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 88: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 88: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 88: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 88: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 88: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 88: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 89: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 89: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 89: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 89: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 89: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 89: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 89: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 90: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 90: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 90: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 90: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 90: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 90: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 90: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 91: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 91: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 91: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 91: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 91: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 91: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 91: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 92: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 92: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 92: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 92: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 92: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 92: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 92: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 93: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 93: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 93: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 93: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 93: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 93: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 93: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 94: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 94: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 94: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 94: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 94: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 94: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 94: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 95: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 95: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 95: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 95: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 95: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 95: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 95: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 96: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 96: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 96: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 96: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 96: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 96: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 96: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 97: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 97: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 97: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 97: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 97: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 97: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 97: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 98: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 98: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 98: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 98: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 98: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 98: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 98: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "cycle 99: queue client KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 99: queue server KeyUpdate",
+      "passed": true
+    },
+    {
+      "name": "cycle 99: native callbacks observe both sent/received updates",
+      "passed": true
+    },
+    {
+      "name": "cycle 99: failed replacement rejected before switch",
+      "passed": true
+    },
+    {
+      "name": "cycle 99: candidate authenticated before fixture switches",
+      "passed": true
+    },
+    {
+      "name": "cycle 99: fresh matching exporter observation",
+      "passed": true
+    },
+    {
+      "name": "cycle 99: same server-owned shell PID",
+      "passed": true
+    },
+    {
+      "name": "tampered active record fails authentication",
+      "passed": true
+    },
+    {
+      "name": "failed active context is not reused as fallback",
+      "passed": true
+    },
+    {
+      "name": "fresh authenticated channel recovers after active integrity failure",
+      "passed": true
+    }
+  ],
+  "cycles": 100,
+  "harness_sha256": "048c7f409afdec90909d0b17dfa57d7bab9edb15f4b6f31986d98ec4ace306c1",
+  "limitations": [
+    "Disposable multi-context Swift/Rust probe using a shared pinned BoringSSL core on macOS only.",
+    "Python explicitly selects the active connection; no production handover, scheduler, control lease or attach protocol.",
+    "Opaque pipe forwarding with injected stalls, loss and tampering; no real network, relay or mobile device.",
+    "Shell uses pipes and synchronous complete-line echoes; no PTY, autonomous concurrent output or backlog replay.",
+    "Peer membership pins are fixtures; no revocation integration or mandatory cryptographic-limit enforcement.",
+    "Dropping contexts frees them locally; close_notify, fatal-alert forwarding and transport EOF remain unimplemented.",
+    "Any authenticated candidate may send complete-line shell input; selected-channel authorization and cross-channel partial-line isolation are not implemented.",
+    "Malformed fixture commands and allocation failure can terminate a native process; isolation claims cover only executed TLS failure cases.",
+    "Only the detecting peer discards an active integrity failure automatically; the fixture explicitly drops the other peer's context.",
+    "A KeyUpdate record-authentication failure aborts that connection; only failed separate candidates preserve the old channel.",
+    "Short accelerated regression workload cannot establish long-term failure rates, safe production intervals or full protocol security."
+  ],
+  "passed": 719,
+  "total": 719,
+  "exact_echoes": 814,
+  "payload_digest_sha256": "6ae80a0f8e8ef0bd446f337828ae67d5b1b448c0c6dae278253b1e71df55e927",
+  "elapsed_seconds": 2.9731673329952173,
+  "fixture_echo_median_ms": 0.5398125,
+  "fixture_echo_max_ms": 7.489375
+}

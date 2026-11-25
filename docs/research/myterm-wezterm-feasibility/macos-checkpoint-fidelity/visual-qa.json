@@ -1,0 +1,129 @@
+{
+  "errors": [],
+  "checks": [
+    {
+      "width": 1920,
+      "tab": "gate",
+      "overflow": false
+    },
+    {
+      "width": 1920,
+      "tab": "before",
+      "case": "scrollback-resize",
+      "overflow": false
+    },
+    {
+      "width": 1920,
+      "tab": "before",
+      "case": "modes-and-hyperlink",
+      "overflow": false
+    },
+    {
+      "width": 1920,
+      "tab": "before",
+      "case": "margins-tabs-insert",
+      "overflow": false
+    },
+    {
+      "width": 1920,
+      "tab": "before",
+      "case": "combining-after-reconnect",
+      "overflow": false
+    },
+    {
+      "width": 1920,
+      "tab": "before",
+      "case": "saved-wrap-mode",
+      "overflow": false
+    },
+    {
+      "width": 1920,
+      "tab": "before",
+      "case": "cursor-style",
+      "overflow": false
+    },
+    {
+      "width": 1920,
+      "tab": "before",
+      "case": "dense-80x24",
+      "overflow": false
+    },
+    {
+      "width": 1920,
+      "tab": "graphics",
+      "overflow": false
+    },
+    {
+      "width": 1920,
+      "tab": "scope",
+      "overflow": false
+    },
+    {
+      "width": 800,
+      "tab": "gate",
+      "overflow": false
+    },
+    {
+      "width": 800,
+      "tab": "before",
+      "case": "scrollback-resize",
+      "overflow": false
+    },
+    {
+      "width": 800,
+      "tab": "before",
+      "case": "modes-and-hyperlink",
+      "overflow": false
+    },
+    {
+      "width": 800,
+      "tab": "before",
+      "case": "margins-tabs-insert",
+      "overflow": false
+    },
+    {
+      "width": 800,
+      "tab": "before",
+      "case": "combining-after-reconnect",
+      "overflow": false
+    },
+    {
+      "width": 800,
+      "tab": "before",
+      "case": "saved-wrap-mode",
+      "overflow": false
+    },
+    {
+      "width": 800,
+      "tab": "before",
+      "case": "cursor-style",
+      "overflow": false
+    },
+    {
+      "width": 800,
+      "tab": "before",
+      "case": "dense-80x24",
+      "overflow": false
+    },
+    {
+      "width": 800,
+      "tab": "graphics",
+      "overflow": false
+    },
+    {
+      "width": 800,
+      "tab": "scope",
+      "overflow": false
+    }
+  ],
+  "mojibake": [],
+  "contrast": {
+    "#0f172a/#f8fafc": 17.06293397131733,
+    "#0f172a/#ffffff": 17.85253496299567,
+    "#0f172a/#ecfeff": 17.16163998544374,
+    "#155e75/#ffffff": 7.266842816941486,
+    "#ffffff/#0e7490": 5.3577549124490425,
+    "#0e7490/#ffffff": 5.3577549124490425
+  },
+  "nativeImageStripes": 12
+}

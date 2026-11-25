@@ -1,0 +1,10 @@
+{
+  "source_hashes_match_current_files": true,
+  "harness_hashes_match": true,
+  "binary_hashes_match_tested_binaries": true,
+  "review_scope": "Independent model source and claims review; reviewer read matching recorded hashes but could not execute hashing commands. Lead verified current source and binary hashes. Not a specialist cryptographic audit.",
+  "artifact_sha256": {
+    "candidate.html": "dcf6f34e80281efc380684332c4231d43be30edde8a59f3217d67e3d249d70be",
+    "refresh.html": "06c5b2329ecdf8e9fad598779f0c7880c8d7e8d382d86eaab7287613f94ef156"
+  }
+}

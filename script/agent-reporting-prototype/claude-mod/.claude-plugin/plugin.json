@@ -1,0 +1,5 @@
+{
+  "name": "myterm-agent-lifecycle-prototype",
+  "version": "0.0.1",
+  "description": "Disposable passive native lifecycle observer for MyTerm"
+}

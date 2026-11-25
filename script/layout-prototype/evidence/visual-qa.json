@@ -1,0 +1,457 @@
+{
+  "results": [
+    {
+      "width": 1920,
+      "title": "Two clients edit",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 1920,
+      "title": "Offline close",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 1920,
+      "title": "Queue expires",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 1920,
+      "title": "Unseen new terminal",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 1920,
+      "title": "Unknown process",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 1920,
+      "title": "Stale layout",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 1920,
+      "title": "Removed server",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 1920,
+      "title": "Stale client returns",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 1920,
+      "title": "Crash and restart",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 1920,
+      "title": "Invalid structure",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 1920,
+      "title": "Partial cleanup",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 1920,
+      "title": "Out-of-order delivery",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 1920,
+      "title": "Late conflict recovery",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 1920,
+      "title": "Invalid input",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 1920,
+      "title": "Fork recovery policy",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 800,
+      "title": "Two clients edit",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 800,
+      "title": "Offline close",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 800,
+      "title": "Queue expires",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 800,
+      "title": "Unseen new terminal",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 800,
+      "title": "Unknown process",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 800,
+      "title": "Stale layout",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 800,
+      "title": "Removed server",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 800,
+      "title": "Stale client returns",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 800,
+      "title": "Crash and restart",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 800,
+      "title": "Invalid structure",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 800,
+      "title": "Partial cleanup",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 800,
+      "title": "Out-of-order delivery",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 800,
+      "title": "Late conflict recovery",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 800,
+      "title": "Invalid input",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 800,
+      "title": "Fork recovery policy",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 390,
+      "title": "Two clients edit",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 390,
+      "title": "Offline close",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 390,
+      "title": "Queue expires",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 390,
+      "title": "Unseen new terminal",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 390,
+      "title": "Unknown process",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 390,
+      "title": "Stale layout",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 390,
+      "title": "Removed server",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 390,
+      "title": "Stale client returns",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 390,
+      "title": "Crash and restart",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 390,
+      "title": "Invalid structure",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 390,
+      "title": "Partial cleanup",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 390,
+      "title": "Out-of-order delivery",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 390,
+      "title": "Late conflict recovery",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 390,
+      "title": "Invalid input",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    },
+    {
+      "width": 390,
+      "title": "Fork recovery policy",
+      "complete": true,
+      "horizontal": false,
+      "mojibake": false,
+      "clipped": false,
+      "computedContrastFailures": []
+    }
+  ],
+  "contrast": [
+    {
+      "fg": "0f172a",
+      "bg": "ffffff",
+      "ratio": 17.85253496299567
+    },
+    {
+      "fg": "0f172a",
+      "bg": "f8fafc",
+      "ratio": 17.062933971317335
+    },
+    {
+      "fg": "0f172a",
+      "bg": "f1f5f9",
+      "ratio": 16.295987899750777
+    },
+    {
+      "fg": "64748b",
+      "bg": "ffffff",
+      "ratio": 4.758842787868666
+    },
+    {
+      "fg": "64748b",
+      "bg": "f8fafc",
+      "ratio": 4.548363604249587
+    },
+    {
+      "fg": "155e75",
+      "bg": "ffffff",
+      "ratio": 7.266842816941486
+    },
+    {
+      "fg": "155e75",
+      "bg": "ecfeff",
+      "ratio": 6.9856152369204505
+    },
+    {
+      "fg": "164e63",
+      "bg": "ffffff",
+      "ratio": 9.114421861537426
+    },
+    {
+      "fg": "ffffff",
+      "bg": "0e7490",
+      "ratio": 5.3577549124490425
+    }
+  ],
+  "errors": []
+}

@@ -1,0 +1,19 @@
+{
+  "stage": "native question open before cancellation",
+  "candidateActivity": "awaiting_input",
+  "pendingCount": 1,
+  "screenExcerpts": [
+    "\u276f Use only your built-in AskUserQuestion tool to ask Alpha or Beta and wait. After I answer, reply COMPLETE. If I cancel, end the turn without retrying. Do not",
+    "\u23bf \u00a0\u00b7 Which option do you want: Alpha or Beta? (Alpha / Beta)",
+    "\u276f Use only your built-in AskUserQuestion tool to ask Alpha or Beta and wait. After I answer, reply COMPLETE. If I cancel, end the turn without retrying. Do not",
+    "read or write files, use other tools, or delegate.Use only your built-in AskUserQuestion tool to ask Alpha or Beta and wait. After I answer, reply COMPLETE.",
+    "Which option do you want: Alpha or Beta?",
+    "\u276f 1. Alpha",
+    "Choose Alpha.",
+    "2. Beta",
+    "Choose Beta.",
+    "Enter to select \u00b7 \u2191/\u2193 to navigate \u00b7 Esc to cancel"
+  ],
+  "rawPrefixSHA256": "19d8c6c0f3ac1f957da295789fbf576363b56d635529b43514ca79cc877baf03",
+  "rawByteOffset": 149098
+}

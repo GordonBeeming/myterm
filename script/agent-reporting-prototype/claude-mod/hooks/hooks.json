@@ -1,0 +1,4 @@
+{
+  "description": "Invocation-only MyTerm lifecycle prototype",
+  "modules": ["./register.js"]
+}

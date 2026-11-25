@@ -1,0 +1,22 @@
+{
+  "status": "accepted-bounded-macos-feasibility",
+  "summary": "Gordon accepted the bounded macOS feasibility direction after independent review. The 47-case native gate passes. Known fidelity gaps and production/platform acceptance are tracked in linked follow-up issues.",
+  "reviewLimits": "Reviewer ran its own native fixtures and checked hashes, but did not rebuild or rerun the complete gate. This is a model review of macOS feasibility, not production acceptance or an audit.",
+  "knownDivergences": [
+    "Scrolled-off Kitty placement records are lost by the importer although cached pixels remain.",
+    "Virtual and parent/relative Kitty placements can diverge and are not exhaustively rejected.",
+    "A full 20-column line followed by carriage return and shrink to 10 columns has a native engine cell difference."
+  ],
+  "acceptanceLimits": [
+    "Only the default native view geometry was validated.",
+    "PTY routing is imposed by the harness; production client reply suppression/enforcement remains open.",
+    "Multi-Mac, iPhone/iPad integration, native Linux/Windows, resource budgets, error contracts and full graphics behavior remain unvalidated."
+  ],
+  "followups": {
+    "Preserve scrolled-off Kitty placement records across reconnect": "https://github.com/GordonBeeming/myterm/issues/186",
+    "Resolve virtual and parent Kitty placement fidelity": "https://github.com/GordonBeeming/myterm/issues/187",
+    "Align column-zero shrink reflow with native SwiftTerm": "https://github.com/GordonBeeming/myterm/issues/188",
+    "Validate production terminal checkpoints and native SwiftTerm reconnect": "https://github.com/GordonBeeming/myterm/issues/189",
+    "Validate Linux and Windows terminal state and reconnect fidelity": "https://github.com/GordonBeeming/myterm/issues/190"
+  }
+}

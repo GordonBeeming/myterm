@@ -1,0 +1,21 @@
+diff --git a/GLOSSARY.md b/GLOSSARY.md
+index 1c874e6..c6f1e7a 100644
+--- a/GLOSSARY.md
++++ b/GLOSSARY.md
+@@ -5,9 +5,15 @@ MyTerm connects a person's clients to workspaces on their servers.
+ ## Language
+ 
+ **Personal account**:
+-One person's directory of their MyTerm servers. Workspaces and sessions belong to the servers.
++One person's directory of their MyTerm servers, located on a relay. Independently created accounts are separate; moving an account to another relay preserves its identity. Workspaces and sessions belong to the servers.
+ _Avoid_: Team, organization
+ 
++**MyTerm relay**:
++A hosted or self-hosted service through which personal accounts discover their servers and connect clients to them. Each relay has its own accounts.
++
++**Account move**:
++The transfer of an existing personal account to another relay. The source relay retains a temporary forwarding record so returning clients and servers can find the account's new location.
++
+ **MyTerm server**:
+ An independently running instance of MyTerm that belongs to one personal account and owns workspaces and their sessions. One machine can run multiple MyTerm servers.
+ _Avoid_: Mac host

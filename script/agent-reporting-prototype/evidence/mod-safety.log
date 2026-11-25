@@ -1,0 +1,11 @@
+PASS: A child turn cannot replace the main call owner
+PASS: A child completion cannot clear main ownership
+PASS: A sink failure does not re-execute or change a tool result
+PASS: A sink failure cannot weaken a permission denial
+PASS: A sink failure does not replace the original tool error
+PASS: An aborted native turn passes through unchanged
+PASS: A null tool result passes through unchanged
+PASS: An undefined tool result passes through unchanged
+PASS: An undefined permission result passes through unchanged
+PASS: Failure of both observer sinks preserves a denial
+10 mocked API safety checks passed

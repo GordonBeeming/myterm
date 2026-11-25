@@ -1,0 +1,81 @@
+{
+  "errors": [],
+  "checks": [
+    {
+      "tab": "protocol",
+      "overflow": false
+    },
+    {
+      "tab": "cases",
+      "overflow": false
+    },
+    {
+      "tab": "failures",
+      "case": "scrollback-resize",
+      "overflow": false
+    },
+    {
+      "tab": "failures",
+      "case": "modes-and-hyperlink",
+      "overflow": false
+    },
+    {
+      "tab": "failures",
+      "case": "margins-tabs-insert",
+      "overflow": false
+    },
+    {
+      "tab": "failures",
+      "case": "combining-after-reconnect",
+      "overflow": false
+    },
+    {
+      "tab": "failures",
+      "case": "saved-wrap-mode",
+      "overflow": false
+    },
+    {
+      "tab": "failures",
+      "case": "cursor-style",
+      "overflow": false
+    },
+    {
+      "tab": "failures",
+      "case": "dense-80x24",
+      "overflow": false
+    },
+    {
+      "tab": "limits",
+      "overflow": false
+    },
+    {
+      "tab": "protocol",
+      "width": 800,
+      "overflow": false
+    },
+    {
+      "tab": "cases",
+      "width": 800,
+      "overflow": false
+    },
+    {
+      "tab": "failures",
+      "width": 800,
+      "overflow": false
+    },
+    {
+      "tab": "limits",
+      "width": 800,
+      "overflow": false
+    }
+  ],
+  "mojibake": [],
+  "contrast": {
+    "#0f172a/#f8fafc": 17.06293397131733,
+    "#0f172a/#ffffff": 17.85253496299567,
+    "#0f172a/#ecfeff": 17.16163998544374,
+    "#155e75/#ffffff": 7.266842816941486,
+    "#ffffff/#0e7490": 5.3577549124490425,
+    "#0e7490/#ffffff": 5.3577549124490425
+  }
+}

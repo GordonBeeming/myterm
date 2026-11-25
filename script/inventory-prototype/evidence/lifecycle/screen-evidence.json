@@ -1,0 +1,72 @@
+[
+  {
+    "name": "codex-blocking-question",
+    "captureName": "codex-question",
+    "byteOffset": 39760,
+    "terminalColumns": 160,
+    "terminalRows": 48,
+    "screenExcerpts": [
+      "Question 1/1 (1 unanswered)",
+      "For the MyTerm lifecycle test, choose Alpha or Beta.",
+      "\u203a 1. Alpha              Choose Alpha for the lifecycle test.",
+      "2. Beta               Choose Beta for the lifecycle test.",
+      "3. None of the above  Optionally, add details in notes (tab)",
+      "tab to add notes | enter to submit answer | esc to interrupt"
+    ],
+    "nativeActivities": [
+      "ready",
+      "working",
+      "working",
+      "working",
+      "finished",
+      "working"
+    ],
+    "lastNativeActivity": "working",
+    "followingNativeActivities": [
+      "working",
+      "finished",
+      "exited"
+    ],
+    "totalCapturedMarkers": 9,
+    "rawSHA256": "f592b97257acab30ed53bdc91f89df9793ca966d9e28926270522cf520c079ef",
+    "captureEndIncludedExitMarker": true,
+    "source": "Terminal cell reconstruction of captured PTY bytes; not a native GUI screenshot.",
+    "intervalStartUTC": "2026-11-15T12:01:47.910Z",
+    "intervalEndUTC": "2026-11-15T12:03:12.527Z",
+    "intervalSeconds": 84.617,
+    "nativeTranscriptSHA256": "54e5048117fdfdf25c9e4be36036af4fcb6b845edae9585dfc9270b744389a18"
+  },
+  {
+    "name": "claude-cancelled-question",
+    "captureName": "claude-question",
+    "byteOffset": 22464,
+    "terminalColumns": 160,
+    "terminalRows": 48,
+    "screenExcerpts": [
+      "\u23fa\u00a0User declined to answer questions",
+      "\u276f"
+    ],
+    "nativeActivities": [
+      "ready",
+      "working",
+      "awaiting_input",
+      "finished",
+      "working",
+      "awaiting_input"
+    ],
+    "lastNativeActivity": "awaiting_input",
+    "followingNativeActivities": [
+      "working",
+      "finished",
+      "exited"
+    ],
+    "totalCapturedMarkers": 9,
+    "rawSHA256": "70a22323eba2e95302953dca7c9582a17bd3c2276afb5d47083907b3aa8be5ef",
+    "captureEndIncludedExitMarker": true,
+    "source": "Terminal cell reconstruction of captured PTY bytes; not a native GUI screenshot.",
+    "intervalStartUTC": "2026-11-15T12:00:11.068Z",
+    "intervalEndUTC": "2026-11-15T12:03:12.416Z",
+    "intervalSeconds": 181.348,
+    "nativeTranscriptSHA256": "fe8a0da6122daaea29b67e36501f525badda6d780ee616e114d96d04973fa24b"
+  }
+]

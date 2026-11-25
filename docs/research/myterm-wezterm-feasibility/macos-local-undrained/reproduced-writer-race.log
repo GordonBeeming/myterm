@@ -1,0 +1,21 @@
+
+running 2 tests
+test tests::dependency_does_not_return_writer_failure ... ok
+test tests::detached_server_answers_queries_once ... FAILED
+
+failures:
+
+---- tests::detached_server_answers_queries_once stdout ----
+
+thread 'tests::detached_server_answers_queries_once' (4330094) panicked at /Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-crisp-kakapo/script/wezterm-feasibility/main.rs:128:9:
+assertion `left == right` failed
+  left: [27, 91, 51, 59, 55, 82]
+ right: [27, 91, 51, 59, 55, 82, 27, 91, 48, 110]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tests::detached_server_answers_queries_once
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

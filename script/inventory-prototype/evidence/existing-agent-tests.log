@@ -1,0 +1,561 @@
+Building for debugging...
+[Computing dependencies]
+[Pre-planning 1 / 619]
+[Planning deferred tasks]
+warning: missing creator for mutated node: ('/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-crisp-kakapo/.build/out/Products/Debug/SwiftTerm_SwiftTerm.bundle/Contents/MacOS')
+[137 / 310]
+[139 / 310] SwiftTerm_SwiftTerm
+[140 / 310] SwiftTerm_SwiftTerm
+[143 / 310]
+[146 / 313] MyTermCore
+[156 / 391]
+[171 / 480]
+[179 / 480]
+[188 / 480]
+[193 / 480]
+[200 / 480]
+[208 / 480]
+[214 / 480]
+[223 / 480]
+[224 / 480]
+[230 / 480]
+[231 / 480]
+[251 / 480] MyTermCore
+[252 / 480] MyTermRemote
+[253 / 480]
+[264 / 480] MyTermCore
+[270 / 480]
+[273 / 480]
+[274 / 480]
+[278 / 480]
+[280 / 480] MyTermRemote
+[280 / 480] MyTermCore
+[293 / 480] MyTermRemote
+[295 / 480] MyTermRemote
+[300 / 480] MyTermCore
+[309 / 483] MyTermRemote
+/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-crisp-kakapo/Packages/MyTermRemote/Sources/MyTermRemote/SecureStorage.swift:50:22: warning: 'SecKeychainGetUserInteractionAllowed' was deprecated in macOS 10.10: SecKeychain is deprecated [#DeprecatedDeclaration]
+ 48 |     func interactionAllowed() throws -> Bool {
+ 49 |         var allowed = DarwinBoolean(false)
+ 50 |         let status = SecKeychainGetUserInteractionAllowed(&allowed)
+    |                      `- warning: 'SecKeychainGetUserInteractionAllowed' was deprecated in macOS 10.10: SecKeychain is deprecated [#DeprecatedDeclaration]
+ 51 |         guard status == errSecSuccess else { throw KeychainError(status: status) }
+ 52 |         return allowed.boolValue
+
+/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-crisp-kakapo/Packages/MyTermRemote/Sources/MyTermRemote/SecureStorage.swift:55:22: warning: 'SecKeychainSetUserInteractionAllowed' was deprecated in macOS 10.10: SecKeychain is deprecated [#DeprecatedDeclaration]
+ 53 |     }
+ 54 |     func setInteractionAllowed(_ allowed: Bool) throws {
+ 55 |         let status = SecKeychainSetUserInteractionAllowed(allowed)
+    |                      `- warning: 'SecKeychainSetUserInteractionAllowed' was deprecated in macOS 10.10: SecKeychain is deprecated [#DeprecatedDeclaration]
+ 56 |         guard status == errSecSuccess else { throw KeychainError(status: status) }
+ 57 |     }
+
+/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-crisp-kakapo/Packages/MyTermRemote/Sources/MyTermRemote/SecureStorage.swift:166:83: warning: 'kSecUseAuthenticationUIFail' was deprecated in macOS 11.0: Instead of kSecUseAuthenticationUI, use kSecUseAuthenticationContext and set LAContext.interactionNotAllowed property [#DeprecatedDeclaration]
+164 |         ]
+165 |         if let accessGroup { query[kSecAttrAccessGroup as String] = accessGroup }
+166 |         if authenticationUI == .fail { query[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail }
+    |                                                                                   `- warning: 'kSecUseAuthenticationUIFail' was deprecated in macOS 11.0: Instead of kSecUseAuthenticationUI, use kSecUseAuthenticationContext and set LAContext.interactionNotAllowed property [#DeprecatedDeclaration]
+167 |         return query
+168 |     }
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-crisp-kakapo/Sources/MyTermCore/WorkspaceStore.swift:1499:19: warning: variable 'repairedSettings' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+1497 |               let originalSettings = originalSnapshot["globalSettings"] as? [String: Any],
+1498 |               var repairedSnapshot = repaired as? [String: Any],
+1499 |               var repairedSettings = repairedSnapshot["globalSettings"] as? [String: Any] else {
+     |                   `- warning: variable 'repairedSettings' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+1500 |             return
+1501 |         }
+
+[#VariableNeverMutated]: <https://docs.swift.org/compiler/documentation/diagnostics/variable-never-mutated>
+[309 / 483] MyTermContinuity
+[323 / 494] MyTermUI
+[349 / 532]
+[357 / 534]
+[368 / 534] SwiftTerm
+/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-crisp-kakapo/Sources/MyTermUpdating/UpdateStartupTrial.swift:98:16: warning: 'init(cString:)' is deprecated: Use String(decoding: array, as: UTF8.self) instead, after truncating the null termination. [#DeprecatedDeclaration]
+ 96 |         var path = [CChar](repeating: 0, count: 4096)
+ 97 |         guard proc_pidpath(receipt.pid, &path, UInt32(path.count)) > 0 else { return false }
+ 98 |         return String(cString: path) == plan.target.appendingPathComponent("Contents/MacOS/myterm").path
+    |                `- warning: 'init(cString:)' is deprecated: Use String(decoding: array, as: UTF8.self) instead, after truncating the null termination. [#DeprecatedDeclaration]
+ 99 |     }
+100 | 
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[372 / 534] SwiftTerm
+[378 / 563] MyTermUpdateAgent-product
+[391 / 563] SwiftTerm
+[397 / 563] SwiftTerm
+[399 / 563] MyTermUpdateAgent-product
+/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-crisp-kakapo/Sources/MyTermUpdating/ApplicationUpdate.swift:214:28: warning: 'init(cString:)' is deprecated: Use String(decoding: array, as: UTF8.self) instead, after truncating the null termination. [#DeprecatedDeclaration]
+212 |                 return
+213 |             }
+214 |             running.append(String(cString: path))
+    |                            `- warning: 'init(cString:)' is deprecated: Use String(decoding: array, as: UTF8.self) instead, after truncating the null termination. [#DeprecatedDeclaration]
+215 |         }
+216 |         guard let directories = try? files.contentsOfDirectory(at: app.deletingLastPathComponent(), includingPropertiesForKeys: nil) else { return }
+
+/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-crisp-kakapo/Sources/MyTermUpdating/ApplicationUpdate.swift:292:16: warning: 'init(cString:)' is deprecated: Use String(decoding: array, as: UTF8.self) instead, after truncating the null termination. [#DeprecatedDeclaration]
+290 |                 return
+291 |             }
+292 |             if String(cString: path).hasPrefix(plan.directory.path + "/") { return }
+    |                `- warning: 'init(cString:)' is deprecated: Use String(decoding: array, as: UTF8.self) instead, after truncating the null termination. [#DeprecatedDeclaration]
+293 |         }
+294 |         try FileManager.default.removeItem(at: plan.directory)
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[399 / 563] MyTermUpdating
+[407 / 563] MyTermContinuity
+[409 / 563] SwiftTerm
+[411 / 563] MyTermUpdateAgent
+[422 / 563] MyTermUpdateAgent-product
+[431 / 563] SwiftTerm
+[436 / 563] MyTermUI
+[440 / 563] SwiftTerm-product
+[447 / 563] MyTermCoreTests-product
+[448 / 563] MyTermCoreTests-product
+[450 / 563] MyTermCoreTests-product
+[461 / 563] MyTermCoreTests-product
+[464 / 563]
+/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-crisp-kakapo/Vendor/SwiftTerm/Sources/SwiftTerm/Apple/Metal/MetalTerminalRenderer.swift:1744:22: warning: result of call to 'withUnsafeBytes' is unused [#NoUsage]
+1742 |                 return nil
+1743 |             }
+1744 |             vertices.withUnsafeBytes { raw in
+     |                      `- warning: result of call to 'withUnsafeBytes' is unused [#NoUsage]
+1745 |                 memcpy(buffer.contents(), raw.baseAddress!, byteCount)
+1746 |             }
+
+/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-crisp-kakapo/Vendor/SwiftTerm/Sources/SwiftTerm/Apple/Metal/MetalTerminalRenderer.swift:1950:18: warning: result of call to 'withUnsafeBytes' is unused [#NoUsage]
+1948 |             return (nil, 0)
+1949 |         }
+1950 |         vertices.withUnsafeBytes { raw in
+     |                  `- warning: result of call to 'withUnsafeBytes' is unused [#NoUsage]
+1951 |             memcpy(buffer.contents(), raw.baseAddress!, byteCount)
+1952 |         }
+
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>
+[471 / 565]
+[473 / 566] MyTermCoreTests-product
+[473 / 566] MyTermSessionHost-product
+[477 / 574]
+[490 / 612]
+[504 / 612]
+[506 / 612] SwiftTerm
+[511 / 612] MyTermSessionHost
+[518 / 612]
+[536 / 612] MyTermPlatform
+/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-crisp-kakapo/Sources/MyTermPlatform/ProcessWorkingDirectory.swift:70:43: warning: 'weak' ownership of capture 'self' differs from implicitly-captured strong reference in outer scope [#ImplicitStrongCapture]
+ 58 | 
+ 59 |     func start(initialDirectory: URL?) {
+ 60 |         performOnQueue {
+    |                        |- note: 'self' implicitly strongly captured here
+    |                        `- note: add 'self' as a capture list item to silence
+ 61 |             guard self.timer == nil, !self.isStopped else { return }
+ 62 | 
+    :
+ 68 |                 leeway: .milliseconds(100)
+ 69 |             )
+ 70 |             timer.setEventHandler { [weak self] in
+    |                                           |- warning: 'weak' ownership of capture 'self' differs from implicitly-captured strong reference in outer scope [#ImplicitStrongCapture]
+    |                                           `- note: explicitly assign the capture list item to silence
+ 71 |                 self?.poll()
+ 72 |             }
+
+[#ImplicitStrongCapture]: <https://docs.swift.org/compiler/documentation/diagnostics/implicit-strong-capture>
+[538 / 612] MyTermPlatform
+[542 / 612] MyTermSessionHost-product
+[546 / 613] MyTermPlatform
+[558 / 615] MyTermPlatform
+[562 / 619] MyTermContinuityTests-product
+[567 / 619] MyTerm-product
+[584 / 658] MyTerm-product
+[586 / 658] MyTermPlatform
+[591 / 658] MyTerm-product
+[592 / 658] MyTerm-product
+[593 / 658] MyTerm-product
+[593 / 658] MyTermContinuityTests-product
+[595 / 658] MyTerm-product
+[597 / 658] MyTerm-product
+[599 / 658] MyTerm-product
+[601 / 658] MyTerm-product
+[602 / 658] MyTerm-product
+[604 / 658] MyTerm
+[604 / 658] MyTerm-product
+[606 / 658] MyTerm
+[614 / 658] MyTerm
+[615 / 658] MyTermTests-product
+[616 / 658] MyTerm-product
+[623 / 658] MyTermPlatform-product
+/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-crisp-kakapo/Sources/MyTerm/Companion/NativeBrowserDestinationPolicy.swift:120:16: warning: 'init(cString:)' is deprecated: Use String(decoding: array, as: UTF8.self) instead, after truncating the null termination. [#DeprecatedDeclaration]
+118 |         var buffer = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+119 |         guard getnameinfo(address, length, &buffer, socklen_t(buffer.count), nil, 0, NI_NUMERICHOST) == 0 else { return nil }
+120 |         return String(cString: buffer)
+    |                `- warning: 'init(cString:)' is deprecated: Use String(decoding: array, as: UTF8.self) instead, after truncating the null termination. [#DeprecatedDeclaration]
+121 |     }
+122 | 
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[625 / 659]
+[628 / 659] MyTerm
+[628 / 659] MyTermPlatformTests-product
+/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-crisp-kakapo/Sources/MyTerm/Companion/NativeBrowserDestinationPolicy.swift:120:16: warning: 'init(cString:)' is deprecated: Use String(decoding: array, as: UTF8.self) instead, after truncating the null termination. [#DeprecatedDeclaration]
+118 |         var buffer = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+119 |         guard getnameinfo(address, length, &buffer, socklen_t(buffer.count), nil, 0, NI_NUMERICHOST) == 0 else { return nil }
+120 |         return String(cString: buffer)
+    |                `- warning: 'init(cString:)' is deprecated: Use String(decoding: array, as: UTF8.self) instead, after truncating the null termination. [#DeprecatedDeclaration]
+121 |     }
+122 | 
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[635 / 678] MyTermPlatformTests-product
+[639 / 678] MyTermPlatformTests-product
+[648 / 678] MyTermPlatformTests-product
+[650 / 678] MyTermPlatformTests-product
+[652 / 678] MyTermPlatformTests-product
+[652 / 678] MyTerm
+[652 / 678] MyTermPlatformTests-product
+[654 / 678] MyTermPlatformTests-product
+[658 / 678] MyTerm
+[658 / 678] MyTerm-product
+[660 / 678] MyTerm
+[662 / 678] MyTerm-product
+[668 / 679] MyTermTests-product
+[687 / 698] MyTermTests-product
+/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-crisp-kakapo/Tests/MyTermTests/WebLinkRoutingTests.swift:187:18: warning: 'isActive' mutated after capture by sendable closure
+152 |         let directory = try makeTemporaryDirectory()
+153 |         defer { try? FileManager.default.removeItem(at: directory) }
+154 |         var isActive = true
+    |             `- note: variable defined here
+155 |         var activations: [Bool] = []
+156 |         let model = try AppModel(
+    :
+163 |                 return true
+164 |             },
+165 |             isApplicationActive: { isActive }
+    |                                  | `- note: capturing use
+    |                                  `- note: variable captured by sendable closure
+166 |         )
+167 |         model.updateGlobalSettings {
+    :
+185 |         isActive = true
+186 |         model.open([try route(to: backgroundWorkspaceID)])
+187 |         isActive = false
+    |                  `- warning: 'isActive' mutated after capture by sendable closure
+188 |         model.open([try route(to: backgroundWorkspaceID)])
+189 | 
+/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-crisp-kakapo/Tests/MyTermTests/UpdateControllerTests.swift:430:21: warning: 'diskVersion' mutated after capture by sendable closure
+414 | 
+415 |     func testANewerReleaseCanInstallBeforeRestartingAnEarlierUpgrade() async throws {
+416 |         var diskVersion = "0.24"
+    |             `- note: variable defined here
+417 |         let calls = Counter()
+418 |         let controller = UpdateController(
+419 |             currentVersion: "0.23", upgradeRoute: .homebrew(command: "unused"), defaults: try defaults(),
+420 |             fetch: { [json = releaseJSON(tag: "v0.24")] _ in json },
+421 |             runUpgrade: { _, _ in await calls.increment(); return 0 }, installedVersion: { diskVersion }
+    |                                                                                          | `- note: capturing use
+    |                                                                                          `- note: variable captured by sendable closure
+422 |         )
+423 |         await controller.check()
+    :
+428 |         XCTAssertEqual(controller.installation(for: first), .installed)
+429 |         XCTAssertEqual(controller.installation(for: newer), .ready)
+430 |         diskVersion = "0.25"
+    |                     `- warning: 'diskVersion' mutated after capture by sendable closure
+431 |         await controller.install(release: newer)
+432 |         XCTAssertEqual(controller.installation(for: newer), .installed)
+
+/Users/gordonbeeming/Developer/worktrees/gordonbeeming/myterm/20261108-crisp-kakapo/Tests/MyTermTests/UpdateControllerTests.swift:457:21: warning: 'diskVersion' mutated after capture by sendable closure
+437 | 
+438 |     func testFailedNewerUpgradeKeepsEarlierUpdateRestartableButVerifiesDiskAgain() async throws {
+439 |         var diskVersion = "0.24"
+    |             `- note: variable defined here
+440 |         let calls = Counter()
+441 |         let controller = UpdateController(
+    :
+443 |             fetch: { [json = releaseJSON(tag: "v0.24")] _ in json },
+444 |             runUpgrade: { _, _ in await calls.increment(); return await calls.value == 1 ? 0 : 1 },
+445 |             installedVersion: { diskVersion }
+    |                               | `- note: capturing use
+    |                               `- note: variable captured by sendable closure
+446 |         )
+447 |         await controller.check()
+    :
+455 |         XCTAssertTrue(controller.canRestartAfterUpdate)
+456 |         XCTAssertNoThrow(try controller.validateRestart())
+457 |         diskVersion = "0.23"
+    |                     `- warning: 'diskVersion' mutated after capture by sendable closure
+458 |         XCTAssertThrowsError(try controller.validateRestart())
+459 |     }
+[692 / 698] MyTermTests-product
+[694 / 698] MyTermTests-product
+Build complete! (28.61 sec.)
+Test Suite 'Selected tests' started at 2026-11-15 21:15:57.606.
+Test Suite 'MyTermTests.xctest' started at 2026-11-15 21:15:57.607.
+Test Suite 'AgentAttentionPermutationTests' started at 2026-11-15 21:15:57.607.
+Test Case '-[MyTermTests.AgentAttentionPermutationTests testAHiddenTabsCookAndBellNeverDisagree]' started.
+Test Case '-[MyTermTests.AgentAttentionPermutationTests testAHiddenTabsCookAndBellNeverDisagree]' passed (0.073 seconds).
+Test Case '-[MyTermTests.AgentAttentionPermutationTests testTheSelectedTabBehindAnotherAppIsFiledAndPostedThenReadOnReturn]' started.
+Test Case '-[MyTermTests.AgentAttentionPermutationTests testTheSelectedTabBehindAnotherAppIsFiledAndPostedThenReadOnReturn]' passed (0.058 seconds).
+Test Case '-[MyTermTests.AgentAttentionPermutationTests testTheTabInFrontNeverRingsTheBellOrPostsABanner]' started.
+Test Case '-[MyTermTests.AgentAttentionPermutationTests testTheTabInFrontNeverRingsTheBellOrPostsABanner]' passed (0.040 seconds).
+Test Suite 'AgentAttentionPermutationTests' passed at 2026-11-15 21:15:57.778.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.171 (0.172) seconds
+Test Suite 'AgentAttentionTests' started at 2026-11-15 21:15:57.778.
+Test Case '-[MyTermTests.AgentAttentionTests testAQuestionSurvivesBeingReadUntilTheAgentMovesOn]' started.
+Test Case '-[MyTermTests.AgentAttentionTests testAQuestionSurvivesBeingReadUntilTheAgentMovesOn]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AgentAttentionTests testATabTheUserCannotSeeIsMarkedUntilTheyReachIt]' started.
+Test Case '-[MyTermTests.AgentAttentionTests testATabTheUserCannotSeeIsMarkedUntilTheyReachIt]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AgentAttentionTests testAWorkspaceRowShowsItsMostUrgentTab]' started.
+Test Case '-[MyTermTests.AgentAttentionTests testAWorkspaceRowShowsItsMostUrgentTab]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentAttentionTests testClosingAMarkedTabForgetsIt]' started.
+Test Case '-[MyTermTests.AgentAttentionTests testClosingAMarkedTabForgetsIt]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AgentAttentionTests testTheSelectedTabIsStillMarkedWhileTheAppIsBehindAnother]' started.
+Test Case '-[MyTermTests.AgentAttentionTests testTheSelectedTabIsStillMarkedWhileTheAppIsBehindAnother]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentAttentionTests testTheTabInFrontOfTheUserIsReadAsItArrives]' started.
+Test Case '-[MyTermTests.AgentAttentionTests testTheTabInFrontOfTheUserIsReadAsItArrives]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentAttentionTests testUpdateRestartCountsHiddenWorkingAgentsAndUnansweredQuestions]' started.
+Test Case '-[MyTermTests.AgentAttentionTests testUpdateRestartCountsHiddenWorkingAgentsAndUnansweredQuestions]' passed (0.003 seconds).
+Test Suite 'AgentAttentionTests' passed at 2026-11-15 21:15:57.795.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.016 (0.017) seconds
+Test Suite 'AgentLifecycleTests' started at 2026-11-15 21:15:57.795.
+Test Case '-[MyTermTests.AgentLifecycleTests testAConversationComesBackNamedAndReadyRatherThanWorking]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAConversationComesBackNamedAndReadyRatherThanWorking]' passed (0.013 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAHookThatArrivesAfterTheTabClosedTouchesNothing]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAHookThatArrivesAfterTheTabClosedTouchesNothing]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAHookThatArrivesAfterTheTabMovedLandsOnThePaneTheTabIsInNow]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAHookThatArrivesAfterTheTabMovedLandsOnThePaneTheTabIsInNow]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAHookThatArrivesAfterTheWorkspaceWasDeletedTouchesNothing]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAHookThatArrivesAfterTheWorkspaceWasDeletedTouchesNothing]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAKilledAgentsPaneDoesNotTakeTheShellsTitle]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAKilledAgentsPaneDoesNotTakeTheShellsTitle]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testALateSessionEndFromTheConversationBeforeLeavesTheCurrentOneAlone]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testALateSessionEndFromTheConversationBeforeLeavesTheCurrentOneAlone]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testALateSessionEndFromTheLastConversationLeavesTheNewOnesName]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testALateSessionEndFromTheLastConversationLeavesTheNewOnesName]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testALateSessionStartFromTheConversationBeforeLeavesTheCurrentOneAlone]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testALateSessionStartFromTheConversationBeforeLeavesTheCurrentOneAlone]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testANamedPaneWithNothingToResumeComesBackToItsPlainLabel]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testANamedPaneWithNothingToResumeComesBackToItsPlainLabel]' passed (0.004 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAnotherAgentCannotSpeakForAPendingRejoin]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAnotherAgentCannotSpeakForAPendingRejoin]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAnUnrelatedForegroundProcessDoesNotBorrowTheSavedAgentsIcon]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAnUnrelatedForegroundProcessDoesNotBorrowTheSavedAgentsIcon]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAPaneRestoredWithoutItsResumeCommandHasNoConversationToKeep]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAPaneRestoredWithoutItsResumeCommandHasNoConversationToKeep]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAPromptWithNoSessionStartStillAdoptsTheConversation]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAPromptWithNoSessionStartStillAdoptsTheConversation]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAReportQueuedBehindTheShellsExitTouchesNothing]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAReportQueuedBehindTheShellsExitTouchesNothing]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAResumeInTheSamePaneMovesTheTabToTheNewConversation]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAResumeInTheSamePaneMovesTheTabToTheNewConversation]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testASecondSessionStartWithoutAnEndStillFollowsTheNewIdentifier]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testASecondSessionStartWithoutAnEndStillFollowsTheNewIdentifier]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testASessionEndStillInFlightFromTheEarlierLifeCannotEndTheRejoinedOne]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testASessionEndStillInFlightFromTheEarlierLifeCannotEndTheRejoinedOne]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testASessionEndThatArrivesAsTheAppQuitsCannotForgetTheConversation]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testASessionEndThatArrivesAsTheAppQuitsCannotForgetTheConversation]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testASessionEndWithNoSessionStartChangesNothing]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testASessionEndWithNoSessionStartChangesNothing]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAShellThatWasHungUpKeepsItsConversationForTheNextLaunch]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAShellThatWasHungUpKeepsItsConversationForTheNextLaunch]' passed (0.005 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAShutdownKeepsEveryConversationWhateverItsHooksReport]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAShutdownKeepsEveryConversationWhateverItsHooksReport]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAStaleSessionEndWithNoIdentifierCannotEndAPendingRejoin]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAStaleSessionEndWithNoIdentifierCannotEndAPendingRejoin]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAStopBeforeANotificationLeavesTheQuestionStanding]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAStopBeforeANotificationLeavesTheQuestionStanding]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testATerminalFailureIsShownOnItsPaneAndFlagsOnlyItsWorkspace]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testATerminalFailureIsShownOnItsPaneAndFlagsOnlyItsWorkspace]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testAThirdConversationInThePaneBecomesTheCurrentOne]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testAThirdConversationInThePaneBecomesTheCurrentOne]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testBothAgentsKeepTheConversationAcrossTurnsAndResumeAfterQuit]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testBothAgentsKeepTheConversationAcrossTurnsAndResumeAfterQuit]' passed (0.008 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testBothAgentsLeaveNothingToResumeAfterAnExplicitExitOrReturnToShell]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testBothAgentsLeaveNothingToResumeAfterAnExplicitExitOrReturnToShell]' passed (0.010 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testBothCodexClientsResumeFromTheConversationDirectoryAfterMultipleLaunches]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testBothCodexClientsResumeFromTheConversationDirectoryAfterMultipleLaunches]' passed (0.010 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testClaudeAndCodexPanesResumeTheirOwnConversationsTogether]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testClaudeAndCodexPanesResumeTheirOwnConversationsTogether]' passed (0.004 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testClosingAPaneDiscardsItsNotice]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testClosingAPaneDiscardsItsNotice]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testCodexEndingCannotDiscardAClaudeConversationInTheSamePane]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testCodexEndingCannotDiscardAClaudeConversationInTheSamePane]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testCodexToolCompletionClearsThePermissionQuestionDuringTheTurn]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testCodexToolCompletionClearsThePermissionQuestionDuringTheTurn]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testCompletingAnotherToolDoesNotClearAnOutstandingCodexPermission]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testCompletingAnotherToolDoesNotClearAnOutstandingCodexPermission]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testForegroundDetectionDoesNotBlockARejoinedSessionsStartHook]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testForegroundDetectionDoesNotBlockARejoinedSessionsStartHook]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testRejoiningAConversationThePaneLeftIsNotAStaleReport]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testRejoiningAConversationThePaneLeftIsNotAStaleReport]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testRestoredFinishedSnapshotDoesNotReopenReadCompletionOrChangeHistory]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testRestoredFinishedSnapshotDoesNotReopenReadCompletionOrChangeHistory]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testRestoredFinishedSnapshotPreservesExistingUnreadEventIdentity]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testRestoredFinishedSnapshotPreservesExistingUnreadEventIdentity]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testRestoredPendingPermissionsRebuildStateWithoutFilingFreshQuestions]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testRestoredPendingPermissionsRebuildStateWithoutFilingFreshQuestions]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testResumedCodexShowsItsIdentityBeforeItsFirstHook]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testResumedCodexShowsItsIdentityBeforeItsFirstHook]' passed (0.006 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testRuntimeNoticesAndExitStatusesAreShownOnThePane]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testRuntimeNoticesAndExitStatusesAreShownOnThePane]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testStartupCommandWarningShowsItsMessageWithoutEndingTheTerminal]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testStartupCommandWarningShowsItsMessageWithoutEndingTheTerminal]' passed (0.001 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testTheRestoreSettingIsReadAtRelaunchNotAtQuit]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testTheRestoreSettingIsReadAtRelaunchNotAtQuit]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testTheSameConversationInTwoPanesIsKeptByBoth]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testTheSameConversationInTwoPanesIsKeptByBoth]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testTheShellComingBackInFrontRetiresTheAgentTheHooksNeverSaidLeft]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testTheShellComingBackInFrontRetiresTheAgentTheHooksNeverSaidLeft]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testTheShellExitingTakesTheAgentAndItsConversationWithIt]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testTheShellExitingTakesTheAgentAndItsConversationWithIt]' passed (0.003 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testTheShellInFrontOfAPaneWithNoAgentChangesNothing]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testTheShellInFrontOfAPaneWithNoAgentChangesNothing]' passed (0.002 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testTwoNotificationsWithNoStopBetweenThemKeepOneRow]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testTwoNotificationsWithNoStopBetweenThemKeepOneRow]' passed (0.005 seconds).
+Test Case '-[MyTermTests.AgentLifecycleTests testUpdatingLaunchDetailsDoesNotRetireTheCurrentConversation]' started.
+Test Case '-[MyTermTests.AgentLifecycleTests testUpdatingLaunchDetailsDoesNotRetireTheCurrentConversation]' passed (0.002 seconds).
+Test Suite 'AgentLifecycleTests' passed at 2026-11-15 21:15:57.943.
+	 Executed 48 tests, with 0 failures (0 unexpected) in 0.146 (0.148) seconds
+Test Suite 'NativeAgentHooksTests' started at 2026-11-15 21:15:57.943.
+Test Case '-[MyTermTests.NativeAgentHooksTests testAntigravityUsesNativeNamedGroupsAndRestoresTheOriginalStatusObject]' started.
+Test Case '-[MyTermTests.NativeAgentHooksTests testAntigravityUsesNativeNamedGroupsAndRestoresTheOriginalStatusObject]' passed (0.005 seconds).
+Test Case '-[MyTermTests.NativeAgentHooksTests testAutomaticHookRefreshPreservesDisabledCallbackAndItsCurrentOptions]' started.
+Test Case '-[MyTermTests.NativeAgentHooksTests testAutomaticHookRefreshPreservesDisabledCallbackAndItsCurrentOptions]' passed (0.003 seconds).
+Test Case '-[MyTermTests.NativeAgentHooksTests testGrokUsesItsOwnFileWithNotificationMatchersAndCancellationEvents]' started.
+Test Case '-[MyTermTests.NativeAgentHooksTests testGrokUsesItsOwnFileWithNotificationMatchersAndCancellationEvents]' passed (0.001 seconds).
+Test Case '-[MyTermTests.NativeAgentHooksTests testMalformedCallbackIsNeverOverwritten]' started.
+Test Case '-[MyTermTests.NativeAgentHooksTests testMalformedCallbackIsNeverOverwritten]' passed (0.001 seconds).
+Test Case '-[MyTermTests.NativeAgentHooksTests testRefreshingOwnedLegacyCallbackUpgradesExecWithoutLosingTheOriginalCommand]' started.
+Test Case '-[MyTermTests.NativeAgentHooksTests testRefreshingOwnedLegacyCallbackUpgradesExecWithoutLosingTheOriginalCommand]' passed (0.003 seconds).
+Test Case '-[MyTermTests.NativeAgentHooksTests testRemovingANewCallbackRestoresAbsenceAndPreservesLaterUserEdits]' started.
+Test Case '-[MyTermTests.NativeAgentHooksTests testRemovingANewCallbackRestoresAbsenceAndPreservesLaterUserEdits]' passed (0.003 seconds).
+Test Case '-[MyTermTests.NativeAgentHooksTests testSlowReporterCannotHoldTheExistingStatusCommandOrItsOutputPipe]' started.
+Test Case '-[MyTermTests.NativeAgentHooksTests testSlowReporterCannotHoldTheExistingStatusCommandOrItsOutputPipe]' passed (0.059 seconds).
+Test Case '-[MyTermTests.NativeAgentHooksTests testStatusWrapperPreservesThePreviousCommandsInputAndOutput]' started.
+Test Case '-[MyTermTests.NativeAgentHooksTests testStatusWrapperPreservesThePreviousCommandsInputAndOutput]' passed (0.020 seconds).
+Test Case '-[MyTermTests.NativeAgentHooksTests testUnresponsiveStatusReporterAndItsChildAreTerminated]' started.
+CoreData: error: Unable to create token NSXPCConnection.  NSXPCStoreServerEndpointFactory 0x7be1528eb0 -newEndpointWithError returned error Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.contactsd.persistence" UserInfo={NSDebugDescription=connection to service named com.apple.contactsd.persistence}
+CoreData: error: NSXPCStoreConnectionManager failed to initialize any connections for store at [local AddressBook path redacted] with error = Error Domain=NSCocoaErrorDomain Code=4097 "Couldn’t communicate with a helper application." UserInfo={NSUnderlyingError=0x7be05009c0 {Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.contactsd.persistence" UserInfo={NSDebugDescription=connection to service named com.apple.contactsd.persistence}}}
+Test Case '-[MyTermTests.NativeAgentHooksTests testUnresponsiveStatusReporterAndItsChildAreTerminated]' passed (2.099 seconds).
+Test Suite 'NativeAgentHooksTests' passed at 2026-11-15 21:16:00.136.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 2.192 (2.193) seconds
+Test Suite 'MyTermTests.xctest' passed at 2026-11-15 21:16:00.136.
+	 Executed 67 tests, with 0 failures (0 unexpected) in 2.526 (2.530) seconds
+Test Suite 'Selected tests' passed at 2026-11-15 21:16:00.136.
+	 Executed 67 tests, with 0 failures (0 unexpected) in 2.526 (2.530) seconds
+Test Suite 'Selected tests' started at 2026-11-15 21:16:00.264.
+Test Suite 'MyTermPlatformTests.xctest' started at 2026-11-15 21:16:00.264.
+Test Suite 'MyTermPlatformTests.xctest' passed at 2026-11-15 21:16:00.264.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-11-15 21:16:00.265.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+Test Suite 'Selected tests' started at 2026-11-15 21:16:00.335.
+Test Suite 'MyTermCoreTests.xctest' started at 2026-11-15 21:16:00.336.
+Test Suite 'AgentActivityMarkerTests' started at 2026-11-15 21:16:00.336.
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testAcceptsTheEventNamesOtherTerminalsUse]' started.
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testAcceptsTheEventNamesOtherTerminalsUse]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testConversationDirectoryAndLauncherAreCapturedWithoutUsingTheTitle]' started.
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testConversationDirectoryAndLauncherAreCapturedWithoutUsingTheTitle]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testDecodedReportsKeepValidMetadataAndOptionalFieldCompatibility]' started.
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testDecodedReportsKeepValidMetadataAndOptionalFieldCompatibility]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testDecodedReportsValidateRecoveryIdentifiers]' started.
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testDecodedReportsValidateRecoveryIdentifiers]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testEmptyOptionalHookMetadataPreservesConversationIdentity]' started.
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testEmptyOptionalHookMetadataPreservesConversationIdentity]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testIgnoresCaseSpacingAndUnknownFields]' started.
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testIgnoresCaseSpacingAndUnknownFields]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testIgnoresPayloadsThatAreNotAReport]' started.
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testIgnoresPayloadsThatAreNotAReport]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testReportsTheAgentAndWhatItIsDoing]' started.
+Test Case '-[MyTermCoreTests.AgentActivityMarkerTests testReportsTheAgentAndWhatItIsDoing]' passed (0.000 seconds).
+Test Suite 'AgentActivityMarkerTests' passed at 2026-11-15 21:16:00.338.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
+Test Suite 'AgentAttentionStateTests' started at 2026-11-15 21:16:00.338.
+Test Case '-[MyTermCoreTests.AgentAttentionStateTests testAQuestionOutranksAFinishWhichOutranksWork]' started.
+Test Case '-[MyTermCoreTests.AgentAttentionStateTests testAQuestionOutranksAFinishWhichOutranksWork]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentAttentionStateTests testOnlyAFinishOrAQuestionAsksForAnything]' started.
+Test Case '-[MyTermCoreTests.AgentAttentionStateTests testOnlyAFinishOrAQuestionAsksForAnything]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentAttentionStateTests testReadingATabClearsAFinishButNotAQuestion]' started.
+Test Case '-[MyTermCoreTests.AgentAttentionStateTests testReadingATabClearsAFinishButNotAQuestion]' passed (0.000 seconds).
+Test Suite 'AgentAttentionStateTests' passed at 2026-11-15 21:16:00.338.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'AgentNotificationInboxClockTests' started at 2026-11-15 21:16:00.338.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testAClockStepDoesNotStopTheLatestReportFromSupersedingTheUnreadOne]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testAClockStepDoesNotStopTheLatestReportFromSupersedingTheUnreadOne]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testAClockThatStepsBackAnHourFilesTheNewerEventBelowTheOlderOne]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testAClockThatStepsBackAnHourFilesTheNewerEventBelowTheOlderOne]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testAnEightHourGapIsJustAnOlderEntry]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testAnEightHourGapIsJustAnOlderEntry]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testAnUnreadEntryIsNeverEvictedForAReadOneWhateverTheClockSays]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testAnUnreadEntryIsNeverEvictedForAReadOneWhateverTheClockSays]' passed (0.001 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testDatesAreStoredWithSubMillisecondPrecision]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testDatesAreStoredWithSubMillisecondPrecision]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testEvictionAfterAClockStepDropsTheOldestReadEntryByPosition]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testEvictionAfterAClockStepDropsTheOldestReadEntryByPosition]' passed (0.001 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testTwoEntriesInTheSameInstantAreOrderedByArrivalAndSurviveARoundTrip]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxClockTests testTwoEntriesInTheSameInstantAreOrderedByArrivalAndSurviveARoundTrip]' passed (0.000 seconds).
+Test Suite 'AgentNotificationInboxClockTests' passed at 2026-11-15 21:16:00.341.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
+Test Suite 'AgentNotificationInboxLoadTests' started at 2026-11-15 21:16:00.341.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxLoadTests testAHistoryAtTheCapLoadsWhole]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxLoadTests testAHistoryAtTheCapLoadsWhole]' passed (0.002 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxLoadTests testAHistoryFileInTheWrongOrderIsPutInOrderOnLoad]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxLoadTests testAHistoryFileInTheWrongOrderIsPutInOrderOnLoad]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxLoadTests testAHistoryLongerThanTheCapIsCutToTheCapOnLoadKeepingTheNewest]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxLoadTests testAHistoryLongerThanTheCapIsCutToTheCapOnLoadKeepingTheNewest]' passed (0.004 seconds).
+Test Suite 'AgentNotificationInboxLoadTests' passed at 2026-11-15 21:16:00.347.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.006 (0.006) seconds
+Test Suite 'AgentNotificationInboxTests' started at 2026-11-15 21:16:00.347.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAFiledEntryRemembersWhereItPointsTo]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAFiledEntryRemembersWhereItPointsTo]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAFinishedAgentInAHiddenTabIsFiled]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAFinishedAgentInAHiddenTabIsFiled]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAFinishedTurnAfterAnUnansweredQuestionSupersedesTheQuestion]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAFinishedTurnAfterAnUnansweredQuestionSupersedesTheQuestion]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAnAgentInTheTabInFrontOfTheUserIsFiledAlreadyRead]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAnAgentInTheTabInFrontOfTheUserIsFiledAlreadyRead]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAnAgentThatStartsWorkingAgainTakesItsRowBack]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAnAgentThatStartsWorkingAgainTakesItsRowBack]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAnEmptyHistoryFileIsAnEmptyHistory]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAnEmptyHistoryFileIsAnEmptyHistory]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAnEntryFiledReadKeepsItsPlaceInTheHistoryWhenTheTabNeedsTheUserAgain]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAnEntryFiledReadKeepsItsPlaceInTheHistoryWhenTheTabNeedsTheUserAgain]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAQuestionAfterAFinishedTurnSupersedesTheFinishedTurn]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testAQuestionAfterAFinishedTurnSupersedesTheFinishedTurn]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testATabReportingAgainNeverGrowsTheHistoryWhileItIsUnread]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testATabReportingAgainNeverGrowsTheHistoryWhileItIsUnread]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testATabThatNeedsTheUserAgainIsANewEntryAndTheReadOneStays]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testATabThatNeedsTheUserAgainIsANewEntryAndTheReadOneStays]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testClearingReadsTheWholeBacklog]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testClearingReadsTheWholeBacklog]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testOneTabKeepsOneRowAndTheLatestTime]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testOneTabKeepsOneRowAndTheLatestTime]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testReadingReadsOnlyTheTabsThatWereRead]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testReadingReadsOnlyTheTabsThatWereRead]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheCapCountsReadAndUnreadTogether]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheCapCountsReadAndUnreadTogether]' passed (0.001 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheHistoryFileKeepsTheOrderItWasSavedIn]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheHistoryFileKeepsTheOrderItWasSavedIn]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheHistoryFileWrittenByThisVersionStillDecodes]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheHistoryFileWrittenByThisVersionStillDecodes]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheHistoryForgetsTheOldestReadEntriesFirst]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheHistoryForgetsTheOldestReadEntriesFirst]' passed (0.003 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheInboxSurvivesEncoding]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheInboxSurvivesEncoding]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheLatestReportIsWhatTheTabSays]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheLatestReportIsWhatTheTabSays]' passed (0.000 seconds).
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheNewestEntryComesFirst]' started.
+Test Case '-[MyTermCoreTests.AgentNotificationInboxTests testTheNewestEntryComesFirst]' passed (0.000 seconds).
+Test Suite 'AgentNotificationInboxTests' passed at 2026-11-15 21:16:00.355.
+	 Executed 20 tests, with 0 failures (0 unexpected) in 0.007 (0.008) seconds
+Test Suite 'MyTermCoreTests.xctest' passed at 2026-11-15 21:16:00.355.
+	 Executed 41 tests, with 0 failures (0 unexpected) in 0.018 (0.019) seconds
+Test Suite 'Selected tests' passed at 2026-11-15 21:16:00.355.
+	 Executed 41 tests, with 0 failures (0 unexpected) in 0.018 (0.020) seconds
+Test Suite 'Selected tests' started at 2026-11-15 21:16:00.426.
+Test Suite 'MyTermContinuityTests.xctest' started at 2026-11-15 21:16:00.427.
+Test Suite 'MyTermContinuityTests.xctest' passed at 2026-11-15 21:16:00.427.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-11-15 21:16:00.427.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds

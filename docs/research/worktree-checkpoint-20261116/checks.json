@@ -1,0 +1,38 @@
+{
+  "capturedAtUtc": "2026-11-16T04:16:35.558727+00:00",
+  "scope": "Headless checkpoint checks; WIP preservation, not product acceptance. No native agent turns, GUI control, service installation, deployment or credential mutation.",
+  "results": {
+    "agentProtocolFixtures": {
+      "passed": 8
+    },
+    "agentModMocks": {
+      "passed": 10
+    },
+    "agentNativeEventReplay": {
+      "passed": 23
+    },
+    "inventoryModel": {
+      "passed": 56
+    },
+    "layoutModel": {
+      "passed": 123
+    },
+    "accountMoveModel": {
+      "passed": 82
+    },
+    "relayLifecycleModel": {
+      "passed": 21
+    },
+    "serviceProbeUnitTests": {
+      "passed": 7
+    },
+    "tlsRefreshNative": {
+      "passed": 719,
+      "cycles": 100
+    },
+    "browserRouting": {
+      "fixtureLoadsCompleted": 4,
+      "candidateContract": "fails localhost routing requirement as previously documented"
+    }
+  }
+}

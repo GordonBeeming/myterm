@@ -1,0 +1,47 @@
+{
+  "captured_at_utc": "2026-11-08T19:24:25.933937+00:00",
+  "platform": "macOS 27.3 ARM64",
+  "rustc": "rustc 1.89.0 (29483883e 2025-08-04)",
+  "binary_sha256": "518514e7661048ab5399e4d8519e1eba197cce750e0837cf71e6bba32fd21df9",
+  "source_sha256": "fbdef089adf0dc4db04e40a11b1e4fd9d62853a6b7ace9038a08db3455cb986d",
+  "local_regression_tests_passed": 7,
+  "login_launchagent_lifecycle": "passed; temporary registration unloaded",
+  "unattended_daemon_context_key_retrieval": "passed under UID 501",
+  "logged_out_console_uid": 0,
+  "logged_out_key_samples": 23,
+  "logged_out_sample_span_seconds": 111,
+  "same_instance_and_key_through_logout_and_reboot": true,
+  "post_reboot_pid": 611,
+  "key_access_failures_in_examined_samples": 0,
+  "screen_lock": "Gordon reports completing lock/unlock; process and key continuity observed, exact lock interval not independently timestamped",
+  "remaining": [
+    "daemon restart while logged out",
+    "cold boot with disks unlocked before owner login",
+    "denied/locked/corrupt key stores",
+    "production signing and ACL upgrade continuity",
+    "second OS user denial",
+    "protected-folder and encrypted-volume failures",
+    "real installer approval/background-item behavior",
+    "PTY child cleanup",
+    "actual update deferral and race handling",
+    "phone and account transport workflows"
+  ],
+  "acceptance": "Native feasibility prototype complete for beta implementation/packaging. Production acceptance is deferred to the linked follow-up; unrun cases are not claimed as passed. Source remains uncommitted.",
+  "cleanup": {
+    "at_utc": "2026-11-08T19:25:44.624950+00:00",
+    "system_job_absent": true,
+    "system_plist_absent": true,
+    "installed_payload_absent": true,
+    "instance_state_and_evidence_retained": true,
+    "disposable_key": "retained by uninstall policy; not read during cleanup verification"
+  },
+  "deferred_by_gordon": [
+    {
+      "check": "restart while locked",
+      "reason": "Deferred until later product validation; not considered critical for the current beta prototype."
+    }
+  ],
+  "operator_sequence_clarification": "Gordon logged out, then signed back in to initiate reboot. Evidence establishes continued operation during the observed logout interval and retrieval after reboot; it does not establish a new process starting or obtaining keys while logged out.",
+  "resolution_url": "https://github.com/GordonBeeming/myterm/issues/168#issuecomment-6726081766",
+  "product_followup_url": "https://github.com/GordonBeeming/myterm/issues/173"
+}

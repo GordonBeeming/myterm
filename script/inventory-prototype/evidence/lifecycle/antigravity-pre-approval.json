@@ -1,0 +1,130 @@
+{
+  "agent": "antigravity",
+  "version": "1.5.9",
+  "pid": 81785,
+  "actions": [
+    {
+      "label": "Startup observed",
+      "observedAfterSeconds": 0.196,
+      "bytes": 643,
+      "markerCount": 0,
+      "processExitCode": null
+    },
+    {
+      "target": "awaiting_input",
+      "satisfied": true,
+      "timeoutSeconds": 25,
+      "startByteOffset": 1348,
+      "markersBefore": 3,
+      "markersAfter": 4,
+      "sentKeysSHA256": "9d1e0e2d9459d06523ad13e28a4093c2316baafe7aec5b25f30eba2e113599c4"
+    },
+    {
+      "label": "Trust owned scratch directory and wait for command permission",
+      "observedAfterSeconds": 104.517,
+      "bytes": 3979,
+      "markerCount": 4,
+      "processExitCode": null
+    },
+    {
+      "target": null,
+      "satisfied": false,
+      "timeoutSeconds": 2,
+      "startByteOffset": 4313,
+      "markersBefore": 5,
+      "markersAfter": 5,
+      "sentKeysSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "Retain pre-approval filesystem proof and permission screen",
+      "observedAfterSeconds": 206.169,
+      "bytes": 4313,
+      "markerCount": 5,
+      "processExitCode": null
+    }
+  ],
+  "markers": [
+    {
+      "byteOffset": 643,
+      "agent": "antigravity",
+      "activity": "ready",
+      "sessionHash": "f4b0bc2b6af93dee",
+      "turn": "",
+      "request": "",
+      "call": "",
+      "captured": "355627.371285",
+      "snapshot": ""
+    },
+    {
+      "byteOffset": 827,
+      "agent": "antigravity",
+      "activity": "working",
+      "sessionHash": "f4b0bc2b6af93dee",
+      "turn": "",
+      "request": "",
+      "call": "",
+      "captured": "355627.488503",
+      "snapshot": ""
+    },
+    {
+      "byteOffset": 1014,
+      "agent": "antigravity",
+      "activity": "awaiting_input",
+      "sessionHash": "f4b0bc2b6af93dee",
+      "turn": "",
+      "request": "3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50",
+      "call": "",
+      "captured": "355639.059560",
+      "snapshot": "1"
+    },
+    {
+      "byteOffset": 3645,
+      "agent": "antigravity",
+      "activity": "awaiting_input",
+      "sessionHash": "f4b0bc2b6af93dee",
+      "turn": "",
+      "request": "3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50",
+      "call": "",
+      "captured": "355728.526694",
+      "snapshot": "1"
+    },
+    {
+      "byteOffset": 3979,
+      "agent": "antigravity",
+      "activity": "awaiting_input",
+      "sessionHash": "f4b0bc2b6af93dee",
+      "turn": "",
+      "request": "3d929fb7db635b2d45dab7bb8f8343ebd2e16459e60487dedbf462fd12f12f50",
+      "call": "",
+      "captured": "355728.824502",
+      "snapshot": "1"
+    }
+  ],
+  "processExitCode": null,
+  "rawOutputSHA256": "15ded7403d5a633882b232a2547efb67ebbeab16d35ba4563092541bfb318381",
+  "signInWarningObserved": true,
+  "proofFiles": {
+    "myterm-permission-proof.txt": {
+      "exists": false
+    },
+    "myterm-permission-a.txt": {
+      "exists": false
+    },
+    "myterm-permission-b.txt": {
+      "exists": false
+    }
+  },
+  "screenExcerpts": [
+    "> In this scratch directory, create only myterm-permission-proof.txt containing APPROVED using the shell command printf APPROVED > myterm-permission-proof.txt.",
+    "\u25cf Ran (printf APPROVED > myterm-permission-proof.txt) (ctrl+o to expand)",
+    "Requesting permission for:",
+    "printf APPROVED > myterm-permission-proof.txt",
+    "Run this command?",
+    "> 1. Yes, run command",
+    "2. Yes, and always allow in this conversation for commands that start with 'printf APPROVED > myterm-permission-proof.txt'",
+    "3. Yes, and always allow for commands that start with 'printf APPROVED > myterm-permission-proof.txt' (Persist to settings.json)",
+    "4. No, cancel"
+  ],
+  "screenByteOffset": 4313,
+  "rawPrefixSHA256": "15ded7403d5a633882b232a2547efb67ebbeab16d35ba4563092541bfb318381"
+}

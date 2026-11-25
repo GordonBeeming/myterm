@@ -1,0 +1,41 @@
+{
+  "timeUTC": "2026-11-16T00:43:04.847036+00:00",
+  "nativeVersions": {
+    "codex": "0.160.0",
+    "claude": "2.1.325"
+  },
+  "stateCheckpoints": 23,
+  "protocolFixtures": 8,
+  "mockedSafetyChecks": 10,
+  "nativeEvents": 60,
+  "baseline": "captured old-report replay remains red; production source not changed",
+  "visualViews": 72,
+  "viewports": [
+    [
+      1100,
+      654
+    ],
+    [
+      390,
+      844
+    ]
+  ],
+  "minimumCheckedTextContrast": 4.697112144822063,
+  "scope": "Native-source feasibility prototype. Real MyTerm UI, installation, recovery, full permissions and platforms remain unverified.",
+  "sourceSHA256": {
+    "script/agent-reporting-prototype/check_mod.mjs": "f017be5d57ed061703e36c97023bf693877f770e3ac1c39879e2306fa52e35f1",
+    "script/agent-reporting-prototype/README.md": "e0da141b6c19a68f2305df9d5dd8f61d3dc25cf1573be93728b6d484f986e6a1",
+    "script/agent-reporting-prototype/export_evidence.py": "a69140c7cba8ae2b012389d4e12b152efe3317e75434513e740c4240335aa96b",
+    "script/agent-reporting-prototype/native_probe.py": "28445f1bd3677f8094f5bb1dd90e48080c082b653b1e8f38d0b5e1eace30f735",
+    "script/agent-reporting-prototype/observe.py": "f3b994d28aee4c633310d3e8e79b58cbd4d6e5a5ad76c8bc93033b0e0773ed4c",
+    "script/agent-reporting-prototype/check_state.py": "42efd12e449a5df58c1565baae5d7f738795771054f686a3b6abff547cc2e44d",
+    "script/agent-reporting-prototype/candidate.py": "a7e2bca3414d89eb3e88708b57c3389f304df5cb555d8009122da608ec0b6cae",
+    "script/agent-reporting-prototype/verify.py": "a1e6a15f3b2030203eb3a3703ca492535ba3b3d3bc1ff3829470294b21339761",
+    "script/agent-reporting-prototype/build_review.py": "837a8d95d0229aa35c3c75c0057400a459590c17306b331cbe8b2e3eb1dc6097",
+    "script/agent-reporting-prototype/claude-mod/hooks/register.js": "cfbc9cf61ed6b1bf078c4279ec4fc7b62ce7f12c58a5b6dfb8959aaa14826160",
+    "script/agent-reporting-prototype/claude-mod/hooks/hooks.json": "043f16bc5a835e93226741bf1506b44efb6c6cc4c75f707beba746a2b00a92d7",
+    "script/agent-reporting-prototype/claude-mod/.claude-plugin/plugin.json": "f145a22591518e78f6ba6f8baba00d7b6f6d93b1256a6083ef05494621ac6e3d"
+  },
+  "reportSHA256": "2e77be4ccde8fd68f81a3745d8d0a350d7fa0d43915998f8fe12ddae22278ff3",
+  "checkpointURL": "https://github.com/GordonBeeming/myterm/issues/185#issuecomment-6904205471"
+}

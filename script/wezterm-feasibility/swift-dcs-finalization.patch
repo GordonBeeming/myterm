@@ -1,0 +1,15 @@
+--- a/Sources/SwiftTerm/EscapeSequenceParser.swift
++++ b/Sources/SwiftTerm/EscapeSequenceParser.swift
+@@ -778,9 +778,10 @@
+                 if let d = dcsHandler {
+                     if ~dcs != 0 {
+                         d.put (data: data[dcs..<i])
+-                        d.unhook ()
+-                        dcsHandler = nil
+                     }
++                    // The terminating chunk may contain no additional payload.
++                    d.unhook ()
++                    dcsHandler = nil
+                 }
+                 if code == 0x1b {
+                     transition |= ParserState.escape.rawValue

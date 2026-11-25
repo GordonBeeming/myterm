@@ -1,0 +1,589 @@
+{
+  "desktop": {
+    "viewport": [
+      1920,
+      1080
+    ],
+    "images": true,
+    "states": [
+      {
+        "overflow": false,
+        "scenario": "Find existing work",
+        "step": 0
+      },
+      {
+        "scenario": "Find existing work",
+        "overflow": false,
+        "step": 1
+      },
+      {
+        "scenario": "Find existing work",
+        "overflow": false,
+        "step": 2
+      },
+      {
+        "overflow": false,
+        "scenario": "Find existing work",
+        "step": 3
+      },
+      {
+        "overflow": false,
+        "scenario": "Find existing work",
+        "step": 4
+      },
+      {
+        "overflow": false,
+        "scenario": "Find existing work",
+        "step": 5
+      },
+      {
+        "scenario": "Find existing work",
+        "overflow": false,
+        "step": 6
+      },
+      {
+        "overflow": false,
+        "scenario": "Read an older turn",
+        "step": 0
+      },
+      {
+        "scenario": "Read an older turn",
+        "overflow": false,
+        "step": 1
+      },
+      {
+        "overflow": false,
+        "step": 2,
+        "scenario": "Read an older turn"
+      },
+      {
+        "step": 3,
+        "scenario": "Read an older turn",
+        "overflow": false
+      },
+      {
+        "overflow": false,
+        "scenario": "Read an older turn",
+        "step": 4
+      },
+      {
+        "step": 5,
+        "scenario": "Read an older turn",
+        "overflow": false
+      },
+      {
+        "step": 6,
+        "scenario": "Read an older turn",
+        "overflow": false
+      },
+      {
+        "scenario": "Read an older turn",
+        "step": 7,
+        "overflow": false
+      },
+      {
+        "overflow": false,
+        "scenario": "Two input requests",
+        "step": 0
+      },
+      {
+        "scenario": "Two input requests",
+        "overflow": false,
+        "step": 1
+      },
+      {
+        "overflow": false,
+        "step": 2,
+        "scenario": "Two input requests"
+      },
+      {
+        "overflow": false,
+        "step": 3,
+        "scenario": "Two input requests"
+      },
+      {
+        "overflow": false,
+        "step": 4,
+        "scenario": "Two input requests"
+      },
+      {
+        "overflow": false,
+        "scenario": "Two input requests",
+        "step": 5
+      },
+      {
+        "overflow": false,
+        "scenario": "Two input requests",
+        "step": 6
+      },
+      {
+        "overflow": false,
+        "step": 7,
+        "scenario": "Two input requests"
+      },
+      {
+        "overflow": false,
+        "step": 8,
+        "scenario": "Two input requests"
+      },
+      {
+        "overflow": false,
+        "step": 0,
+        "scenario": "Quiet and disconnected"
+      },
+      {
+        "scenario": "Quiet and disconnected",
+        "step": 1,
+        "overflow": false
+      },
+      {
+        "step": 2,
+        "overflow": false,
+        "scenario": "Quiet and disconnected"
+      },
+      {
+        "scenario": "Quiet and disconnected",
+        "overflow": false,
+        "step": 3
+      },
+      {
+        "overflow": false,
+        "step": 4,
+        "scenario": "Quiet and disconnected"
+      },
+      {
+        "overflow": false,
+        "scenario": "Quiet and disconnected",
+        "step": 5
+      },
+      {
+        "step": 6,
+        "scenario": "Quiet and disconnected",
+        "overflow": false
+      },
+      {
+        "overflow": false,
+        "scenario": "Quiet and disconnected",
+        "step": 7
+      },
+      {
+        "step": 8,
+        "scenario": "Quiet and disconnected",
+        "overflow": false
+      },
+      {
+        "scenario": "Returning stale client",
+        "overflow": false,
+        "step": 0
+      },
+      {
+        "scenario": "Returning stale client",
+        "overflow": false,
+        "step": 1
+      },
+      {
+        "scenario": "Returning stale client",
+        "overflow": false,
+        "step": 2
+      },
+      {
+        "scenario": "Returning stale client",
+        "step": 3,
+        "overflow": false
+      },
+      {
+        "scenario": "Returning stale client",
+        "overflow": false,
+        "step": 4
+      },
+      {
+        "scenario": "Returning stale client",
+        "overflow": false,
+        "step": 5
+      },
+      {
+        "overflow": false,
+        "scenario": "Returning stale client",
+        "step": 6
+      },
+      {
+        "overflow": false,
+        "step": 0,
+        "scenario": "Missing activity signals"
+      },
+      {
+        "overflow": false,
+        "scenario": "Missing activity signals",
+        "step": 1
+      },
+      {
+        "step": 2,
+        "scenario": "Missing activity signals",
+        "overflow": false
+      },
+      {
+        "step": 3,
+        "scenario": "Missing activity signals",
+        "overflow": false
+      },
+      {
+        "step": 4,
+        "scenario": "Missing activity signals",
+        "overflow": false
+      },
+      {
+        "step": 0,
+        "scenario": "Reordered request events",
+        "overflow": false
+      },
+      {
+        "step": 1,
+        "overflow": false,
+        "scenario": "Reordered request events"
+      },
+      {
+        "overflow": false,
+        "scenario": "Reordered request events",
+        "step": 2
+      },
+      {
+        "scenario": "Reordered request events",
+        "step": 3,
+        "overflow": false
+      },
+      {
+        "step": 4,
+        "overflow": false,
+        "scenario": "Reordered request events"
+      },
+      {
+        "step": 0,
+        "overflow": false,
+        "scenario": "Confirmed loss stays ended"
+      },
+      {
+        "overflow": false,
+        "step": 1,
+        "scenario": "Confirmed loss stays ended"
+      },
+      {
+        "overflow": false,
+        "step": 2,
+        "scenario": "Confirmed loss stays ended"
+      },
+      {
+        "step": 3,
+        "scenario": "Confirmed loss stays ended",
+        "overflow": false
+      }
+    ],
+    "mojibake": false
+  },
+  "mobile": {
+    "mojibake": false,
+    "states": [
+      {
+        "scenario": "Find existing work",
+        "step": 0,
+        "overflow": false
+      },
+      {
+        "scenario": "Find existing work",
+        "step": 1,
+        "overflow": false
+      },
+      {
+        "scenario": "Find existing work",
+        "step": 2,
+        "overflow": false
+      },
+      {
+        "scenario": "Find existing work",
+        "overflow": false,
+        "step": 3
+      },
+      {
+        "scenario": "Find existing work",
+        "overflow": false,
+        "step": 4
+      },
+      {
+        "scenario": "Find existing work",
+        "overflow": false,
+        "step": 5
+      },
+      {
+        "scenario": "Find existing work",
+        "overflow": false,
+        "step": 6
+      },
+      {
+        "scenario": "Read an older turn",
+        "step": 0,
+        "overflow": false
+      },
+      {
+        "scenario": "Read an older turn",
+        "overflow": false,
+        "step": 1
+      },
+      {
+        "step": 2,
+        "overflow": false,
+        "scenario": "Read an older turn"
+      },
+      {
+        "step": 3,
+        "overflow": false,
+        "scenario": "Read an older turn"
+      },
+      {
+        "step": 4,
+        "overflow": false,
+        "scenario": "Read an older turn"
+      },
+      {
+        "step": 5,
+        "overflow": false,
+        "scenario": "Read an older turn"
+      },
+      {
+        "step": 6,
+        "overflow": false,
+        "scenario": "Read an older turn"
+      },
+      {
+        "step": 7,
+        "overflow": false,
+        "scenario": "Read an older turn"
+      },
+      {
+        "step": 0,
+        "overflow": false,
+        "scenario": "Two input requests"
+      },
+      {
+        "step": 1,
+        "overflow": false,
+        "scenario": "Two input requests"
+      },
+      {
+        "step": 2,
+        "overflow": false,
+        "scenario": "Two input requests"
+      },
+      {
+        "step": 3,
+        "overflow": false,
+        "scenario": "Two input requests"
+      },
+      {
+        "step": 4,
+        "overflow": false,
+        "scenario": "Two input requests"
+      },
+      {
+        "step": 5,
+        "overflow": false,
+        "scenario": "Two input requests"
+      },
+      {
+        "step": 6,
+        "overflow": false,
+        "scenario": "Two input requests"
+      },
+      {
+        "step": 7,
+        "overflow": false,
+        "scenario": "Two input requests"
+      },
+      {
+        "step": 8,
+        "overflow": false,
+        "scenario": "Two input requests"
+      },
+      {
+        "step": 0,
+        "overflow": false,
+        "scenario": "Quiet and disconnected"
+      },
+      {
+        "step": 1,
+        "overflow": false,
+        "scenario": "Quiet and disconnected"
+      },
+      {
+        "step": 2,
+        "overflow": false,
+        "scenario": "Quiet and disconnected"
+      },
+      {
+        "step": 3,
+        "overflow": false,
+        "scenario": "Quiet and disconnected"
+      },
+      {
+        "step": 4,
+        "overflow": false,
+        "scenario": "Quiet and disconnected"
+      },
+      {
+        "step": 5,
+        "overflow": false,
+        "scenario": "Quiet and disconnected"
+      },
+      {
+        "step": 6,
+        "overflow": false,
+        "scenario": "Quiet and disconnected"
+      },
+      {
+        "step": 7,
+        "overflow": false,
+        "scenario": "Quiet and disconnected"
+      },
+      {
+        "step": 8,
+        "overflow": false,
+        "scenario": "Quiet and disconnected"
+      },
+      {
+        "step": 0,
+        "overflow": false,
+        "scenario": "Returning stale client"
+      },
+      {
+        "step": 1,
+        "overflow": false,
+        "scenario": "Returning stale client"
+      },
+      {
+        "step": 2,
+        "overflow": false,
+        "scenario": "Returning stale client"
+      },
+      {
+        "step": 3,
+        "overflow": false,
+        "scenario": "Returning stale client"
+      },
+      {
+        "step": 4,
+        "overflow": false,
+        "scenario": "Returning stale client"
+      },
+      {
+        "step": 5,
+        "overflow": false,
+        "scenario": "Returning stale client"
+      },
+      {
+        "step": 6,
+        "overflow": false,
+        "scenario": "Returning stale client"
+      },
+      {
+        "step": 0,
+        "overflow": false,
+        "scenario": "Missing activity signals"
+      },
+      {
+        "step": 1,
+        "overflow": false,
+        "scenario": "Missing activity signals"
+      },
+      {
+        "step": 2,
+        "overflow": false,
+        "scenario": "Missing activity signals"
+      },
+      {
+        "step": 3,
+        "overflow": false,
+        "scenario": "Missing activity signals"
+      },
+      {
+        "step": 4,
+        "overflow": false,
+        "scenario": "Missing activity signals"
+      },
+      {
+        "step": 0,
+        "overflow": false,
+        "scenario": "Reordered request events"
+      },
+      {
+        "step": 1,
+        "overflow": false,
+        "scenario": "Reordered request events"
+      },
+      {
+        "step": 2,
+        "overflow": false,
+        "scenario": "Reordered request events"
+      },
+      {
+        "step": 3,
+        "overflow": false,
+        "scenario": "Reordered request events"
+      },
+      {
+        "step": 4,
+        "overflow": false,
+        "scenario": "Reordered request events"
+      },
+      {
+        "step": 0,
+        "overflow": false,
+        "scenario": "Confirmed loss stays ended"
+      },
+      {
+        "step": 1,
+        "overflow": false,
+        "scenario": "Confirmed loss stays ended"
+      },
+      {
+        "step": 2,
+        "overflow": false,
+        "scenario": "Confirmed loss stays ended"
+      },
+      {
+        "step": 3,
+        "overflow": false,
+        "scenario": "Confirmed loss stays ended"
+      }
+    ],
+    "images": true,
+    "viewport": [
+      390,
+      842
+    ]
+  },
+  "textContrast": [
+    {
+      "contrast": 17.85253496299567,
+      "background": "#ffffff",
+      "foreground": "#0f172a"
+    },
+    {
+      "contrast": 7.577663953533317,
+      "foreground": "#475569",
+      "background": "#ffffff"
+    },
+    {
+      "foreground": "#ffffff",
+      "background": "#0e7490",
+      "contrast": 5.3577549124490425
+    },
+    {
+      "foreground": "#155e75",
+      "contrast": 6.9856152369204505,
+      "background": "#ecfeff"
+    },
+    {
+      "contrast": 13.981703505432394,
+      "foreground": "#1e293b",
+      "background": "#f8fafc"
+    }
+  ]
+}

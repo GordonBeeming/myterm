@@ -1,0 +1,6859 @@
+[
+  {
+    "detail" : "Duplicate names have distinct server IDs. Opening a result navigates without taking control.",
+    "frames" : [
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Initial state",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "No agent",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-a",
+              "sequence" : 0,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Search for Build",
+        "query" : "Build",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "No agent",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-a",
+              "sequence" : 0,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "terminal",
+        "label" : "Open existing tab",
+        "query" : "Build",
+        "selected" : "build",
+        "selectedPane" : "pane-main",
+        "selectedTab" : "tab-build",
+        "selectedWorkspace" : "workspace-release",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "No agent",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-a",
+              "sequence" : 0,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "mac-b",
+        "focus" : "terminal",
+        "label" : "Filter second Studio",
+        "query" : "",
+        "selected" : "build",
+        "selectedPane" : "pane-main",
+        "selectedTab" : "tab-build",
+        "selectedWorkspace" : "workspace-release",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "No agent",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-a",
+              "sequence" : 0,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "mac-b",
+        "focus" : "terminal",
+        "label" : "Rename second server",
+        "query" : "",
+        "selected" : "build",
+        "selectedPane" : "pane-main",
+        "selectedTab" : "tab-build",
+        "selectedWorkspace" : "workspace-release",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "No agent",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-a",
+              "sequence" : 0,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Travel",
+              "nameOperation" : "client-b\/rename-1",
+              "nameRevision" : 1,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "mac-b",
+        "focus" : "terminal",
+        "label" : "Search browser title",
+        "query" : "guide",
+        "selected" : "build",
+        "selectedPane" : "pane-main",
+        "selectedTab" : "tab-build",
+        "selectedWorkspace" : "workspace-release",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "No agent",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-a",
+              "sequence" : 0,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Travel",
+              "nameOperation" : "client-b\/rename-1",
+              "nameRevision" : 1,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "mac-b",
+        "focus" : "browser",
+        "label" : "Open existing browser tab",
+        "query" : "guide",
+        "selected" : "web",
+        "selectedPane" : "pane-main",
+        "selectedTab" : "tab-web",
+        "selectedWorkspace" : "workspace-release",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "No agent",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-a",
+              "sequence" : 0,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Travel",
+              "nameOperation" : "client-b\/rename-1",
+              "nameRevision" : 1,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      }
+    ],
+    "name" : "Find existing work"
+  },
+  {
+    "detail" : "Reading one completion clears its attention across clients. A delayed read cannot clear a later turn.",
+    "frames" : [
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Initial state",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "No agent",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-a",
+              "sequence" : 0,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Agent is ready",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Ready",
+              "agent" : "Claude Code",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:01 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 1,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Start turn",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Working",
+              "agent" : "Claude Code",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:02 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 2,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Finish turn A",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Finished",
+              "agent" : "Claude Code",
+              "completion" : "build\/pty-a\/3",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:03 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 3,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "terminal",
+        "label" : "Read turn A",
+        "query" : "",
+        "selected" : "build",
+        "selectedPane" : "pane-main",
+        "selectedTab" : "tab-build",
+        "selectedWorkspace" : "workspace-release",
+        "state" : {
+          "acknowledgments" : [
+            "build\/pty-a\/3"
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Finished",
+              "agent" : "Claude Code",
+              "completion" : "build\/pty-a\/3",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:03 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 3,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "terminal",
+        "label" : "Finish turn B",
+        "query" : "",
+        "selected" : "build",
+        "selectedPane" : "pane-main",
+        "selectedTab" : "tab-build",
+        "selectedWorkspace" : "workspace-release",
+        "state" : {
+          "acknowledgments" : [
+            "build\/pty-a\/3"
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Finished",
+              "agent" : "Claude Code",
+              "completion" : "build\/pty-a\/4",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:04 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 4,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-b",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "terminal",
+        "label" : "Deliver delayed read of A",
+        "query" : "",
+        "selected" : "build",
+        "selectedPane" : "pane-main",
+        "selectedTab" : "tab-build",
+        "selectedWorkspace" : "workspace-release",
+        "state" : {
+          "acknowledgments" : [
+            "build\/pty-a\/3"
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Finished",
+              "agent" : "Claude Code",
+              "completion" : "build\/pty-a\/4",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:04 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 4,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-b",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "terminal",
+        "label" : "Deliver delayed activity",
+        "query" : "",
+        "selected" : "build",
+        "selectedPane" : "pane-main",
+        "selectedTab" : "tab-build",
+        "selectedWorkspace" : "workspace-release",
+        "state" : {
+          "acknowledgments" : [
+            "build\/pty-a\/3"
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Finished",
+              "agent" : "Claude Code",
+              "completion" : "build\/pty-a\/4",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:04 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 4,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-b",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      }
+    ],
+    "name" : "Read an older turn"
+  },
+  {
+    "detail" : "Reading never answers a request. Completing one of two concurrent requests leaves the other visible.",
+    "frames" : [
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Initial state",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "No agent",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-a",
+              "sequence" : 0,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Working",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Working",
+              "agent" : "Claude Code",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:01 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 1,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Permission A",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Working",
+              "agent" : "Claude Code",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:02 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 2,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+                "permission-a"
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Permission B",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Working",
+              "agent" : "Claude Code",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:03 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 3,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+                "permission-b",
+                "permission-a"
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "terminal",
+        "label" : "Read waiting terminal",
+        "query" : "",
+        "selected" : "build",
+        "selectedPane" : "pane-main",
+        "selectedTab" : "tab-build",
+        "selectedWorkspace" : "workspace-release",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Working",
+              "agent" : "Claude Code",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:03 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 3,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+                "permission-b",
+                "permission-a"
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "terminal",
+        "label" : "Resolve B first",
+        "query" : "",
+        "selected" : "build",
+        "selectedPane" : "pane-main",
+        "selectedTab" : "tab-build",
+        "selectedWorkspace" : "workspace-release",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Working",
+              "agent" : "Claude Code",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:04 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 4,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+                "permission-a"
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "terminal",
+        "label" : "Unrelated working report",
+        "query" : "",
+        "selected" : "build",
+        "selectedPane" : "pane-main",
+        "selectedTab" : "tab-build",
+        "selectedWorkspace" : "workspace-release",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Working",
+              "agent" : "Claude Code",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:05 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 5,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+                "permission-a"
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "terminal",
+        "label" : "Resolve A",
+        "query" : "",
+        "selected" : "build",
+        "selectedPane" : "pane-main",
+        "selectedTab" : "tab-build",
+        "selectedWorkspace" : "workspace-release",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Working",
+              "agent" : "Claude Code",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:06 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 6,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "terminal",
+        "label" : "Agent exits",
+        "query" : "",
+        "selected" : "build",
+        "selectedPane" : "pane-main",
+        "selectedTab" : "tab-build",
+        "selectedWorkspace" : "workspace-release",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "No agent",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:07 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+                "agent-a"
+              ],
+              "runtime" : "pty-a",
+              "sequence" : 7,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      }
+    ],
+    "name" : "Two input requests"
+  },
+  {
+    "detail" : "Quiet Working stays Working. A reconnect stays stale until server reconciliation, even with a durable snapshot.",
+    "frames" : [
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Initial state",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "No agent",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-a",
+              "sequence" : 0,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Working",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Working",
+              "agent" : "Claude Code",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:01 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 1,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Quiet healthy connection",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Working",
+              "agent" : "Claude Code",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:01 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 1,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Server disconnects",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Working",
+              "agent" : "Claude Code",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:01 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 1,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : false,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : false
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "terminal",
+        "label" : "Open unavailable item",
+        "query" : "",
+        "selected" : "build",
+        "selectedPane" : "pane-main",
+        "selectedTab" : "tab-build",
+        "selectedWorkspace" : "workspace-release",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Working",
+              "agent" : "Claude Code",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:01 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 1,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : false,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : false
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "terminal",
+        "label" : "Transport reconnects",
+        "query" : "",
+        "selected" : "build",
+        "selectedPane" : "pane-main",
+        "selectedTab" : "tab-build",
+        "selectedWorkspace" : "workspace-release",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Working",
+              "agent" : "Claude Code",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:01 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 1,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : false
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "terminal",
+        "label" : "Server state reconciles",
+        "query" : "",
+        "selected" : "build",
+        "selectedPane" : "pane-main",
+        "selectedTab" : "tab-build",
+        "selectedWorkspace" : "workspace-release",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Working",
+              "agent" : "Claude Code",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:01 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 1,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "terminal",
+        "label" : "Server confirms loss",
+        "query" : "",
+        "selected" : "build",
+        "selectedPane" : "pane-main",
+        "selectedTab" : "tab-build",
+        "selectedWorkspace" : "workspace-release",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "No agent",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:01 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-a",
+              "sequence" : 1,
+              "server" : "mac-a",
+              "terminal" : "Ended",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "terminal",
+        "label" : "Explicitly replace session",
+        "query" : "",
+        "selected" : "replacement-build",
+        "selectedPane" : "pane-main",
+        "selectedTab" : "tab-replacement-build",
+        "selectedWorkspace" : "workspace-release",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "replacement-build" : {
+              "activity" : "No agent",
+              "id" : "replacement-build",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "new-replacement-build",
+              "sequence" : 0,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+            "build"
+          ]
+        }
+      }
+    ],
+    "name" : "Quiet and disconnected"
+  },
+  {
+    "detail" : "Current state and deletion records outlive pending commands. A stale client cannot resurrect a closed identity.",
+    "frames" : [
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Initial state",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "No agent",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-a",
+              "sequence" : 0,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Finish turn",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Finished",
+              "agent" : "Claude Code",
+              "completion" : "build\/pty-a\/1",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:01 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 1,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Acknowledge from another client",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+            "build\/pty-a\/1"
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Finished",
+              "agent" : "Claude Code",
+              "completion" : "build\/pty-a\/1",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:01 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 1,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Terminal exits; tab stays",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+            "build\/pty-a\/1"
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Finished",
+              "agent" : "Claude Code",
+              "completion" : "build\/pty-a\/1",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:01 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 1,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:01 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 1,
+              "server" : "mac-b",
+              "terminal" : "Exited",
+              "title" : "Review docs",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Close build tab",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+            "build\/pty-a\/1"
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:01 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 1,
+              "server" : "mac-b",
+              "terminal" : "Exited",
+              "title" : "Review docs",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+            "build"
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Return stale client snapshot",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+            "build\/pty-a\/1"
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:01 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 1,
+              "server" : "mac-b",
+              "terminal" : "Exited",
+              "title" : "Review docs",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+            "build"
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Close exited tab",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+            "build\/pty-a\/1"
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+            "build",
+            "docs"
+          ]
+        }
+      }
+    ],
+    "name" : "Returning stale client"
+  },
+  {
+    "detail" : "Agent identity alone reports Unknown. Agent exit returns to No agent while the terminal stays running.",
+    "frames" : [
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Initial state",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "No agent",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-a",
+              "sequence" : 0,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Detect Claude Code",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Unknown",
+              "agent" : "Claude Code",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:01 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 1,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Receive Ready",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Ready",
+              "agent" : "Claude Code",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:02 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 2,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Agent exits",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "No agent",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:03 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+                "agent-a"
+              ],
+              "runtime" : "pty-a",
+              "sequence" : 3,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Detect unsupported agent version",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Unknown",
+              "agent" : "Grok",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:04 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+                "agent-a"
+              ],
+              "run" : "grok-a",
+              "runtime" : "pty-a",
+              "sequence" : 4,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      }
+    ],
+    "name" : "Missing activity signals"
+  },
+  {
+    "detail" : "The server assigns ordered report numbers. A missing report pauses application of later deltas until the gap arrives.",
+    "frames" : [
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Initial state",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "No agent",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-a",
+              "sequence" : 0,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Permission A",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "No agent",
+              "agent" : "Claude Code",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:01 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 1,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+                "permission-a"
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Permission B",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "No agent",
+              "agent" : "Claude Code",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:02 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 2,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+                "permission-b",
+                "permission-a"
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Report 4 arrives before 3",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+            "build" : {
+              "4" : {
+                "agent" : "Claude Code",
+                "item" : "build",
+                "kind" : "resolved",
+                "request" : "permission-b",
+                "run" : "agent-a",
+                "runtime" : "pty-a",
+                "sequence" : 4,
+                "server" : "mac-a",
+                "turn" : "turn-a"
+              }
+            }
+          },
+          "items" : {
+            "build" : {
+              "activity" : "No agent",
+              "agent" : "Claude Code",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:02 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 2,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+                "permission-b",
+                "permission-a"
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Report 3 arrives; apply both",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+            "build" : {
+
+            }
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Working",
+              "agent" : "Claude Code",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:04 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 4,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      }
+    ],
+    "name" : "Reordered request events"
+  },
+  {
+    "detail" : "A late peer snapshot cannot reverse server-confirmed loss of this exact runtime. Replacement remains an explicit action.",
+    "frames" : [
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Initial state",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "No agent",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-a",
+              "sequence" : 0,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Working",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "Working",
+              "agent" : "Claude Code",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:01 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "run" : "agent-a",
+              "runtime" : "pty-a",
+              "sequence" : 1,
+              "server" : "mac-a",
+              "terminal" : "Running",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Server confirms loss",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "No agent",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:01 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-a",
+              "sequence" : 1,
+              "server" : "mac-a",
+              "terminal" : "Ended",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      },
+      {
+        "controller" : "None",
+        "filter" : "",
+        "focus" : "search",
+        "label" : "Merge stale peer activity",
+        "query" : "",
+        "selected" : "None",
+        "selectedPane" : "None",
+        "selectedTab" : "None",
+        "selectedWorkspace" : "None",
+        "state" : {
+          "acknowledgments" : [
+
+          ],
+          "buffered" : {
+
+          },
+          "items" : {
+            "build" : {
+              "activity" : "No agent",
+              "id" : "build",
+              "kind" : "Terminal",
+              "observed" : "15 Nov 2026, 21:00:02 AEST (fixture)",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-a",
+              "sequence" : 2,
+              "server" : "mac-a",
+              "terminal" : "Ended",
+              "title" : "Build app",
+              "turn" : "turn-a",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "docs" : {
+              "activity" : "No agent",
+              "id" : "docs",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-b",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Review docs",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            },
+            "shell" : {
+              "activity" : "No agent",
+              "id" : "shell",
+              "kind" : "Terminal",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "pty-c",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Shell",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Research",
+              "workspaceID" : "workspace-research"
+            },
+            "web" : {
+              "activity" : "No agent",
+              "id" : "web",
+              "kind" : "Browser",
+              "observed" : "Not observed",
+              "paneID" : "pane-main",
+              "retiredRuns" : [
+
+              ],
+              "runtime" : "browser-a",
+              "sequence" : 0,
+              "server" : "mac-b",
+              "terminal" : "Running",
+              "title" : "Developer guide",
+              "turn" : "",
+              "waits" : [
+
+              ],
+              "workspace" : "Release",
+              "workspaceID" : "workspace-release"
+            }
+          },
+          "servers" : {
+            "mac-a" : {
+              "connected" : true,
+              "id" : "mac-a",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            },
+            "mac-b" : {
+              "connected" : true,
+              "id" : "mac-b",
+              "name" : "Studio",
+              "nameOperation" : "initial",
+              "nameRevision" : 0,
+              "reconciled" : true
+            }
+          },
+          "tombstones" : [
+
+          ]
+        }
+      }
+    ],
+    "name" : "Confirmed loss stays ended"
+  }
+]

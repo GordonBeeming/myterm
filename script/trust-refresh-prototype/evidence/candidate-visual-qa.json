@@ -1,0 +1,53 @@
+{
+  "checks": [
+    {
+      "width": 1920,
+      "case": "approval",
+      "overflow": false
+    },
+    {
+      "width": 1920,
+      "case": "enrollment",
+      "overflow": false
+    },
+    {
+      "width": 1920,
+      "case": "removal",
+      "overflow": false
+    },
+    {
+      "width": 1920,
+      "case": "expiry",
+      "overflow": false
+    },
+    {
+      "width": 800,
+      "case": "approval",
+      "overflow": false
+    },
+    {
+      "width": 800,
+      "case": "enrollment",
+      "overflow": false
+    },
+    {
+      "width": 800,
+      "case": "removal",
+      "overflow": false
+    },
+    {
+      "width": 800,
+      "case": "expiry",
+      "overflow": false
+    }
+  ],
+  "errors": [],
+  "mojibake": [],
+  "contrast": {
+    "#0f172a/#f8fafc": 17.06293397131733,
+    "#0f172a/#ffffff": 17.85253496299567,
+    "#155e75/#ecfeff": 6.9856152369204505,
+    "#164e63/#ffffff": 9.114421861537428,
+    "#ffffff/#0e7490": 5.3577549124490425
+  }
+}

@@ -1,0 +1,346 @@
+{
+  "runAt": "2026-11-16T04:13:55.660Z",
+  "runtime": "v24.14.0",
+  "platform": "darwin",
+  "arch": "arm64",
+  "passed": 82,
+  "total": 82,
+  "checks": [
+    {
+      "name": "normal move commits and activates exactly one next location",
+      "passed": true
+    },
+    {
+      "name": "destination passkey required",
+      "passed": true
+    },
+    {
+      "name": "source passkey required on normal path",
+      "passed": true
+    },
+    {
+      "name": "endpoint approval required independently of both passkeys",
+      "passed": true
+    },
+    {
+      "name": "occupied destination rejected without changing source location",
+      "passed": true
+    },
+    {
+      "name": "incompatible destination rejected before reservation",
+      "passed": true
+    },
+    {
+      "name": "destination must stage before commit",
+      "passed": true
+    },
+    {
+      "name": "no activation before ordered commit",
+      "passed": true
+    },
+    {
+      "name": "source-loss path requires explicit fallback selection",
+      "passed": true
+    },
+    {
+      "name": "source-loss fallback still requires ordering server",
+      "passed": true
+    },
+    {
+      "name": "source-loss path preserves account anchor and advances location epoch",
+      "passed": true
+    },
+    {
+      "name": "missing-content fallback pauses until explicit acknowledgement",
+      "passed": true
+    },
+    {
+      "name": "prepared move can abort before commit",
+      "passed": true
+    },
+    {
+      "name": "abort waits for authority; no unsafe local reservation release",
+      "passed": true
+    },
+    {
+      "name": "committed move cannot abort",
+      "passed": true
+    },
+    {
+      "name": "lost activation acknowledgement retries same commit",
+      "passed": true
+    },
+    {
+      "name": "retry activation does not extend source TTL",
+      "passed": true
+    },
+    {
+      "name": "delayed initial activation does not extend source TTL",
+      "passed": true
+    },
+    {
+      "name": "expired uncommitted ticket cannot commit",
+      "passed": true
+    },
+    {
+      "name": "concurrent stale predecessor cannot commit",
+      "passed": true
+    },
+    {
+      "name": "forwarding follows active chain before expiry",
+      "passed": true
+    },
+    {
+      "name": "earlier forwarding expiry remains independent of later move",
+      "passed": true
+    },
+    {
+      "name": "expired forwarding blocks automatic discovery",
+      "passed": true
+    },
+    {
+      "name": "manual verified discovery works after forwarding expiry",
+      "passed": true
+    },
+    {
+      "name": "final manifest confirmation is separate from export authorization",
+      "passed": true
+    },
+    {
+      "name": "returning old source remains fenced after fallback",
+      "passed": true
+    },
+    {
+      "name": "source stays fenced during authority outage after prepare",
+      "passed": true
+    },
+    {
+      "name": "original source remains fenced after starting a later move",
+      "passed": true
+    },
+    {
+      "name": "ordered abort resumes writes at original source",
+      "passed": true
+    },
+    {
+      "name": "prepared source is fenced while authority is reachable",
+      "passed": true
+    },
+    {
+      "name": "moving back to original origin still advances returning endpoint checkpoint",
+      "passed": true
+    },
+    {
+      "name": "acknowledged missing-content fallback can complete",
+      "passed": true
+    },
+    {
+      "name": "loss acknowledgement cannot override missing security state",
+      "passed": true
+    },
+    {
+      "name": "changed transfer invalidates content-loss acknowledgement and final approval",
+      "passed": true
+    },
+    {
+      "name": "ordinary source-online path cannot acknowledge incomplete content",
+      "passed": true
+    },
+    {
+      "name": "cancelled ticket does not carry content-loss consent to a new reservation",
+      "passed": true
+    },
+    {
+      "name": "committed transfer cannot be changed by missing-content toggle",
+      "passed": true
+    },
+    {
+      "name": "restaging preserves source fence until ordered abort",
+      "passed": true
+    },
+    {
+      "name": "security-state change invalidates content-loss acknowledgement",
+      "passed": true
+    },
+    {
+      "name": "all guided scenarios execute without exceptions",
+      "passed": true
+    },
+    {
+      "name": "actions do not mutate preceding state",
+      "passed": true
+    },
+    {
+      "name": "phase-one export grant signs exact ticket and predecessor",
+      "passed": true
+    },
+    {
+      "name": "phase-one export grant cannot be substituted onto another ticket",
+      "passed": true
+    },
+    {
+      "name": "phase-one export grant has an independently checked expiry",
+      "passed": true
+    },
+    {
+      "name": "real Ed25519 signatures verify bound ticket, approval and prepared receipt",
+      "passed": true
+    },
+    {
+      "name": "ticket tampering rejected: anchor",
+      "passed": true
+    },
+    {
+      "name": "ticket tampering rejected: destination",
+      "passed": true
+    },
+    {
+      "name": "ticket tampering rejected: destinationAccount",
+      "passed": true
+    },
+    {
+      "name": "ticket tampering rejected: expires",
+      "passed": true
+    },
+    {
+      "name": "ticket tampering rejected: features",
+      "passed": true
+    },
+    {
+      "name": "ticket tampering rejected: id",
+      "passed": true
+    },
+    {
+      "name": "ticket tampering rejected: previous",
+      "passed": true
+    },
+    {
+      "name": "ticket tampering rejected: purpose",
+      "passed": true
+    },
+    {
+      "name": "ticket tampering rejected: relayKey",
+      "passed": true
+    },
+    {
+      "name": "ticket tampering rejected: source",
+      "passed": true
+    },
+    {
+      "name": "ticket tampering rejected: transferKey",
+      "passed": true
+    },
+    {
+      "name": "unknown ticket fields rejected",
+      "passed": true
+    },
+    {
+      "name": "attacker signature cannot replace destination identity",
+      "passed": true
+    },
+    {
+      "name": "valid destination signature cannot substitute account context",
+      "passed": true
+    },
+    {
+      "name": "ticket expiry checked separately from cryptographic validity",
+      "passed": true
+    },
+    {
+      "name": "approval from different ticket rejected",
+      "passed": true
+    },
+    {
+      "name": "prepared manifest substitution rejected",
+      "passed": true
+    },
+    {
+      "name": "authority signs commit binding ticket, approval and prepared receipt",
+      "passed": true
+    },
+    {
+      "name": "same request replay returns same signed commit without advancing epoch",
+      "passed": true
+    },
+    {
+      "name": "committed retry survives original ticket expiry",
+      "passed": true
+    },
+    {
+      "name": "same ticket cannot silently retry a different transfer manifest",
+      "passed": true
+    },
+    {
+      "name": "second valid competing destination cannot use consumed predecessor",
+      "passed": true
+    },
+    {
+      "name": "authority checks clock independently of signed ticket validity",
+      "passed": true
+    },
+    {
+      "name": "authority rejects a fully signed bundle for another account",
+      "passed": true
+    },
+    {
+      "name": "authority rejects a fully signed bundle naming wrong source",
+      "passed": true
+    },
+    {
+      "name": "destination ticket pins its actual signer key",
+      "passed": true
+    },
+    {
+      "name": "approval issuer is explicit and checked",
+      "passed": true
+    },
+    {
+      "name": "authority rechecks current fixture membership",
+      "passed": true
+    },
+    {
+      "name": "nested values cannot silently lose signed fields",
+      "passed": true
+    },
+    {
+      "name": "commit content tampering fails actual authority signature",
+      "passed": true
+    },
+    {
+      "name": "wrong authority signature rejected",
+      "passed": true
+    },
+    {
+      "name": "returning endpoint verifies actual authority and destination activation signatures",
+      "passed": true
+    },
+    {
+      "name": "forwarding cannot substitute an unknown authority",
+      "passed": true
+    },
+    {
+      "name": "forwarding cannot replay a stale checkpoint extension",
+      "passed": true
+    },
+    {
+      "name": "forwarding cannot substitute activation from another commit",
+      "passed": true
+    },
+    {
+      "name": "discovery rejects committed relay-key substitution",
+      "passed": true
+    },
+    {
+      "name": "forwarding cannot fake destination activation",
+      "passed": true
+    }
+  ],
+  "sourceHash": "161bfcd11ec1e98400810ccb005ca1ce888d1f32226f534d0477f075b6c69080",
+  "harnessHash": "97769caf8be49ecdaab855e010b92d007e7caf120275fc5e0d4750abb2a8fa62",
+  "limits": [
+    "In-memory reference model; no crash persistence or real distributed relay transaction",
+    "Real Ed25519 signatures only; passkey assertions, transfer encryption and native transports are fixtures; membership is a fixed-key set",
+    "No real terminal process, endpoint membership integration or complete wire-parser validation",
+    "Missing-content fallback accepted with explicit acknowledgement; security-state gate is a fixture, not credential reconciliation; no production security claim"
+  ]
+}

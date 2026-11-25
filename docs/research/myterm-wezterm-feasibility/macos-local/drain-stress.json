@@ -1,0 +1,6 @@
+{
+  "testSuiteRepetitions": 50,
+  "traceRunRepetitions": 20,
+  "passed": true,
+  "replyBarrierLeaked": false
+}

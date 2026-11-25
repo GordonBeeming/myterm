@@ -1,0 +1,519 @@
+{
+  "generatedAt": "2026-11-13T04:32:58.825Z",
+  "environment": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "node": "v24.14.0"
+  },
+  "sources": {
+    "model.js": "5d764370c8f1943a228d2cd07aeb310725ab8cc2ce8d40fcdb4dfdb02442007a",
+    "scenarios.js": "52ff4fcf3debdc5bc201bcaae61da1f2189b966ad87e9a62df489b8f93c14282",
+    "checks.cjs": "a2706992d083b05903d8377a108762a2df5d302f9cb5917e077386c213a9060d",
+    "build.py": "e50a4518a2458c5932e15d3ec0b83700f49908ea0da2430a3a464e468128cc4c",
+    "candidate.html": "33aa0dd260c062f4aad49d239b91b38c3b4cec7519cb59348634f032de9a3a52",
+    "visual-qa.cjs": "540eb769a8c23c492dfdf7fcc5b16d856e90dc93b08d9e1d135b47a58aedf79d",
+    "README.md": "87a4d57dbe378e4087c7001c83856dec82c39ef4d2bd651e70af082d16fbe6c4"
+  },
+  "passed": 123,
+  "total": 123,
+  "checks": [
+    {
+      "name": "All stable entity levels exist",
+      "passed": true
+    },
+    {
+      "name": "Concurrent delivery permutation 1 converges",
+      "passed": true
+    },
+    {
+      "name": "Concurrent delivery permutation 2 converges",
+      "passed": true
+    },
+    {
+      "name": "Concurrent delivery permutation 3 converges",
+      "passed": true
+    },
+    {
+      "name": "Concurrent delivery permutation 4 converges",
+      "passed": true
+    },
+    {
+      "name": "Concurrent delivery permutation 5 converges",
+      "passed": true
+    },
+    {
+      "name": "Concurrent delivery permutation 6 converges",
+      "passed": true
+    },
+    {
+      "name": "Concurrent delivery permutation 7 converges",
+      "passed": true
+    },
+    {
+      "name": "Concurrent delivery permutation 8 converges",
+      "passed": true
+    },
+    {
+      "name": "Concurrent delivery permutation 9 converges",
+      "passed": true
+    },
+    {
+      "name": "Concurrent delivery permutation 10 converges",
+      "passed": true
+    },
+    {
+      "name": "Concurrent delivery permutation 11 converges",
+      "passed": true
+    },
+    {
+      "name": "Concurrent delivery permutation 12 converges",
+      "passed": true
+    },
+    {
+      "name": "Concurrent delivery permutation 13 converges",
+      "passed": true
+    },
+    {
+      "name": "Concurrent delivery permutation 14 converges",
+      "passed": true
+    },
+    {
+      "name": "Concurrent delivery permutation 15 converges",
+      "passed": true
+    },
+    {
+      "name": "Concurrent delivery permutation 16 converges",
+      "passed": true
+    },
+    {
+      "name": "Concurrent delivery permutation 17 converges",
+      "passed": true
+    },
+    {
+      "name": "Concurrent delivery permutation 18 converges",
+      "passed": true
+    },
+    {
+      "name": "Concurrent delivery permutation 19 converges",
+      "passed": true
+    },
+    {
+      "name": "Concurrent delivery permutation 20 converges",
+      "passed": true
+    },
+    {
+      "name": "Concurrent delivery permutation 21 converges",
+      "passed": true
+    },
+    {
+      "name": "Concurrent delivery permutation 22 converges",
+      "passed": true
+    },
+    {
+      "name": "Concurrent delivery permutation 23 converges",
+      "passed": true
+    },
+    {
+      "name": "Concurrent delivery permutation 24 converges",
+      "passed": true
+    },
+    {
+      "name": "Identical duplicate is a no-op",
+      "passed": true
+    },
+    {
+      "name": "Issuer equivocation is diagnosed",
+      "passed": true
+    },
+    {
+      "name": "Merge detects issuer equivocation and blocks destructive reconciliation",
+      "passed": true
+    },
+    {
+      "name": "Unsigned forgery cannot freeze an issuer",
+      "passed": true
+    },
+    {
+      "name": "A frozen issuer cannot append new edits",
+      "passed": true
+    },
+    {
+      "name": "Logical-clock inflation is rejected",
+      "passed": true
+    },
+    {
+      "name": "Reject wrong account",
+      "passed": true
+    },
+    {
+      "name": "Reject wrong epoch",
+      "passed": true
+    },
+    {
+      "name": "Reject wrong issuer",
+      "passed": true
+    },
+    {
+      "name": "Invalid signature adapter result is rejected",
+      "passed": true
+    },
+    {
+      "name": "Missing dependencies do not get durable acknowledgment",
+      "passed": true
+    },
+    {
+      "name": "Causal edit supersedes without conflict",
+      "passed": true
+    },
+    {
+      "name": "Delete wins over stale edit and retains it for recovery",
+      "passed": true
+    },
+    {
+      "name": "Deleting a workspace enumerates both servers exactly",
+      "passed": true
+    },
+    {
+      "name": "Deleted focus gets a surviving local selection and processes keep running",
+      "passed": true
+    },
+    {
+      "name": "Remote rename preserves each client selection",
+      "passed": true
+    },
+    {
+      "name": "Attachment waits for reconciliation",
+      "passed": true
+    },
+    {
+      "name": "Deleted content cannot attach after cleanup",
+      "passed": true
+    },
+    {
+      "name": "A failed sync cannot enable attachment",
+      "passed": true
+    },
+    {
+      "name": "Failed delivery survives client restart",
+      "passed": true
+    },
+    {
+      "name": "Queue expires at seven days while durable current state survives",
+      "passed": true
+    },
+    {
+      "name": "An expired queue cannot prevent direct reconciliation",
+      "passed": true
+    },
+    {
+      "name": "Cleanup preserves processes for {\"connected\":false}",
+      "passed": true
+    },
+    {
+      "name": "Cleanup preserves processes for {\"authorized\":false}",
+      "passed": true
+    },
+    {
+      "name": "Cleanup preserves processes for {\"complete\":false}",
+      "passed": true
+    },
+    {
+      "name": "Cleanup preserves processes for {\"rollback\":true}",
+      "passed": true
+    },
+    {
+      "name": "Cleanup preserves processes for {\"nonce\":\"\"}",
+      "passed": true
+    },
+    {
+      "name": "Cleanup preserves processes for {\"account\":\"other\"}",
+      "passed": true
+    },
+    {
+      "name": "Cleanup preserves processes for {\"epoch\":0}",
+      "passed": true
+    },
+    {
+      "name": "Cleanup preserves processes for {\"serverMember\":false}",
+      "passed": true
+    },
+    {
+      "name": "Snapshot absence with no explicit delete cannot terminate",
+      "passed": true
+    },
+    {
+      "name": "A new runtime incarnation is protected from an old delete",
+      "passed": true
+    },
+    {
+      "name": "A removed server retains its process",
+      "passed": true
+    },
+    {
+      "name": "A known revoked issuer cannot authorize cleanup",
+      "passed": true
+    },
+    {
+      "name": "Known stale membership epoch cannot authorize cleanup",
+      "passed": true
+    },
+    {
+      "name": "Duplicate cleanup creates exactly one receipt per runtime",
+      "passed": true
+    },
+    {
+      "name": "Confirmation required for {\"status\":\"working\",\"fresh\":true}",
+      "passed": true
+    },
+    {
+      "name": "Confirmation required for {\"status\":\"idle\",\"fresh\":false}",
+      "passed": true
+    },
+    {
+      "name": "Confirmation required for {\"status\":\"unknown\",\"fresh\":false}",
+      "passed": true
+    },
+    {
+      "name": "Fresh idle shell closes immediately",
+      "passed": true
+    },
+    {
+      "name": "A disconnected server invalidates a previously idle report",
+      "passed": true
+    },
+    {
+      "name": "Walkthrough expected final cleanup: Offline close",
+      "passed": true
+    },
+    {
+      "name": "Walkthrough expected final cleanup: Queue expires",
+      "passed": true
+    },
+    {
+      "name": "Walkthrough expected final cleanup: Partial cleanup",
+      "passed": true
+    },
+    {
+      "name": "Crash before transaction leaves layout and outbox unchanged",
+      "passed": true
+    },
+    {
+      "name": "App restart does not terminate sessions",
+      "passed": true
+    },
+    {
+      "name": "App restart requires reconciliation before attachment",
+      "passed": true
+    },
+    {
+      "name": "Unseen concurrent terminal survives in recovered structure",
+      "passed": true
+    },
+    {
+      "name": "Invalid structural edit is recoverable without a kill",
+      "passed": true
+    },
+    {
+      "name": "Self-parent cycle is repaired without termination",
+      "passed": true
+    },
+    {
+      "name": "Uncheckpointed losing conflicts remain pinned after 30 days",
+      "passed": true
+    },
+    {
+      "name": "Checkpointed losing values can expire while tombstones remain",
+      "passed": true
+    },
+    {
+      "name": "Old offline conflict starts retention at local observation",
+      "passed": true
+    },
+    {
+      "name": "Out-of-order causal operations retry after dependencies arrive",
+      "passed": true
+    },
+    {
+      "name": "Hostile identifier is rejected: constructor",
+      "passed": true
+    },
+    {
+      "name": "Hostile identifier is rejected: __proto__",
+      "passed": true
+    },
+    {
+      "name": "Hostile identifier is rejected: prototype",
+      "passed": true
+    },
+    {
+      "name": "Malformed fields rejected: string",
+      "passed": true
+    },
+    {
+      "name": "Malformed fields rejected: object",
+      "passed": true
+    },
+    {
+      "name": "Malformed fields rejected: object",
+      "passed": true
+    },
+    {
+      "name": "Malformed fields rejected: object",
+      "passed": true
+    },
+    {
+      "name": "Null parent is rejected",
+      "passed": true
+    },
+    {
+      "name": "Stale-epoch payload is retained for explicit reapproval",
+      "passed": true
+    },
+    {
+      "name": "A valid older delete remains usable after another delete issuer is revoked",
+      "passed": true
+    },
+    {
+      "name": "Reconnected channels cannot reuse earlier attachment readiness",
+      "passed": true
+    },
+    {
+      "name": "An unavailable second server is not cleaned up by the first connection",
+      "passed": true
+    },
+    {
+      "name": "A failed retry preserves earlier relay acceptance",
+      "passed": true
+    },
+    {
+      "name": "A local close does not write another client selection",
+      "passed": true
+    },
+    {
+      "name": "A normal rename followed by close is not a concurrent conflict",
+      "passed": true
+    },
+    {
+      "name": "A signed delete cannot target another runtime incarnation than its entity",
+      "passed": true
+    },
+    {
+      "name": "Creation collisions retain both records and block attachment",
+      "passed": true
+    },
+    {
+      "name": "A frozen stream blocks attachment",
+      "passed": true
+    },
+    {
+      "name": "Unauthenticated payload flooding consumes no recovery budget",
+      "passed": true
+    },
+    {
+      "name": "Unknown self-signed issuers cannot occupy recovery storage",
+      "passed": true
+    },
+    {
+      "name": "Recovery quarantine deduplicates identical rejected records",
+      "passed": true
+    },
+    {
+      "name": "Dependency buffers have a separate per-issuer item limit",
+      "passed": true
+    },
+    {
+      "name": "A buffered equivocation freezes immediately",
+      "passed": true
+    },
+    {
+      "name": "A second account root is rejected by this schema",
+      "passed": true
+    },
+    {
+      "name": "A mid-transaction budget failure rolls back the whole close",
+      "passed": true
+    },
+    {
+      "name": "Byte budget fails closure atomically",
+      "passed": true
+    },
+    {
+      "name": "Walkthrough: Two clients edit",
+      "passed": true
+    },
+    {
+      "name": "Walkthrough: Offline close",
+      "passed": true
+    },
+    {
+      "name": "Walkthrough: Queue expires",
+      "passed": true
+    },
+    {
+      "name": "Walkthrough: Unseen new terminal",
+      "passed": true
+    },
+    {
+      "name": "Walkthrough: Unknown process",
+      "passed": true
+    },
+    {
+      "name": "Walkthrough: Stale layout",
+      "passed": true
+    },
+    {
+      "name": "Walkthrough: Removed server",
+      "passed": true
+    },
+    {
+      "name": "Walkthrough: Stale client returns",
+      "passed": true
+    },
+    {
+      "name": "Walkthrough: Crash and restart",
+      "passed": true
+    },
+    {
+      "name": "Walkthrough: Invalid structure",
+      "passed": true
+    },
+    {
+      "name": "Walkthrough: Partial cleanup",
+      "passed": true
+    },
+    {
+      "name": "Walkthrough: Out-of-order delivery",
+      "passed": true
+    },
+    {
+      "name": "Walkthrough: Late conflict recovery",
+      "passed": true
+    },
+    {
+      "name": "Walkthrough: Invalid input",
+      "passed": true
+    },
+    {
+      "name": "Walkthrough: Fork recovery policy",
+      "passed": true
+    },
+    {
+      "name": "Real Ed25519 signature verifies the typed operation bytes",
+      "passed": true
+    },
+    {
+      "name": "Changed signed operation is rejected",
+      "passed": true
+    },
+    {
+      "name": "Another signing identity is rejected",
+      "passed": true
+    }
+  ],
+  "limits": [
+    "Deterministic in-memory reference model; no native app, relay, real process or power-loss test",
+    "Security adapter decisions are fixtures; Ed25519 byte-binding test is separate",
+    "No encryption, HPKE key distribution or membership ledger integration",
+    "No destructive history garbage collection, measured production limits or globally fresh account-state proof"
+  ]
+}

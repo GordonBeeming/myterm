@@ -1,0 +1,209 @@
+[
+  {
+    "filteredStates" : [
+      "ready",
+      "working",
+      "awaitingInput",
+      "finished",
+      "working",
+      "awaitingInput",
+      "working",
+      "finished",
+      "exited"
+    ],
+    "name" : "claude-question",
+    "parsedReports" : 9,
+    "pendingRequests" : 0,
+    "scope" : "Recorded native bytes through current production parser\/filter. Parsing success is not a lifecycle contract pass."
+  },
+  {
+    "filteredStates" : [
+      "ready",
+      "working",
+      "working",
+      "working",
+      "finished",
+      "working",
+      "working",
+      "finished",
+      "exited"
+    ],
+    "name" : "codex-question",
+    "parsedReports" : 9,
+    "pendingRequests" : 0,
+    "scope" : "Recorded native bytes through current production parser\/filter. Parsing success is not a lifecycle contract pass."
+  },
+  {
+    "filteredStates" : [
+      "ready",
+      "working",
+      "awaitingInput",
+      "working",
+      "working",
+      "working",
+      "working",
+      "finished",
+      "working",
+      "working",
+      "working",
+      "working",
+      "awaitingInput",
+      "working",
+      "working",
+      "working",
+      "working",
+      "working",
+      "working",
+      "finished",
+      "finished",
+      "finished",
+      "finished",
+      "finished"
+    ],
+    "name" : "antigravity-question",
+    "parsedReports" : 26,
+    "pendingRequests" : 0,
+    "scope" : "Recorded native bytes through current production parser\/filter. Parsing success is not a lifecycle contract pass."
+  },
+  {
+    "filteredStates" : [
+      "ready",
+      "working",
+      "working",
+      "awaitingInput",
+      "working",
+      "finished",
+      "finished",
+      "working",
+      "working",
+      "awaitingInput",
+      "finished",
+      "finished",
+      "working",
+      "working",
+      "working",
+      "working",
+      "working",
+      "exited",
+      "working"
+    ],
+    "name" : "grok-question",
+    "parsedReports" : 19,
+    "pendingRequests" : 0,
+    "scope" : "Recorded native bytes through current production parser\/filter. Parsing success is not a lifecycle contract pass."
+  },
+  {
+    "filteredStates" : [
+      "ready",
+      "working",
+      "awaitingInput",
+      "working",
+      "awaitingInput",
+      "exited"
+    ],
+    "name" : "claude-permission",
+    "parsedReports" : 6,
+    "pendingRequests" : 0,
+    "scope" : "Recorded native bytes through current production parser\/filter. Parsing success is not a lifecycle contract pass."
+  },
+  {
+    "filteredStates" : [
+      "ready",
+      "working",
+      "awaitingInput",
+      "awaitingInput",
+      "awaitingInput",
+      "awaitingInput",
+      "finished",
+      "finished",
+      "finished",
+      "finished",
+      "finished",
+      "working",
+      "working",
+      "working",
+      "working",
+      "working",
+      "working",
+      "working",
+      "awaitingInput",
+      "working",
+      "working",
+      "working",
+      "working",
+      "finished",
+      "working",
+      "finished",
+      "finished",
+      "finished",
+      "finished"
+    ],
+    "name" : "antigravity-permission",
+    "parsedReports" : 32,
+    "pendingRequests" : 0,
+    "scope" : "Recorded native bytes through current production parser\/filter. Parsing success is not a lifecycle contract pass."
+  },
+  {
+    "filteredStates" : [
+      "ready",
+      "working",
+      "working",
+      "working",
+      "finished",
+      "finished",
+      "exited"
+    ],
+    "name" : "grok-command",
+    "parsedReports" : 7,
+    "pendingRequests" : 0,
+    "scope" : "Recorded native bytes through current production parser\/filter. Parsing success is not a lifecycle contract pass."
+  },
+  {
+    "filteredStates" : [
+      "ready",
+      "working",
+      "awaitingInput",
+      "working",
+      "finished",
+      "exited"
+    ],
+    "name" : "codex-command",
+    "parsedReports" : 6,
+    "pendingRequests" : 0,
+    "scope" : "Recorded native bytes through current production parser\/filter. Parsing success is not a lifecycle contract pass."
+  },
+  {
+    "filteredStates" : [
+      "ready",
+      "working",
+      "awaitingInput",
+      "awaitingInput",
+      "exited"
+    ],
+    "name" : "claude-parallel",
+    "parsedReports" : 5,
+    "pendingRequests" : 0,
+    "scope" : "Recorded native bytes through current production parser\/filter. Parsing success is not a lifecycle contract pass."
+  },
+  {
+    "filteredStates" : [
+      "ready",
+      "working",
+      "awaitingInput",
+      "awaitingInput",
+      "awaitingInput",
+      "working",
+      "working",
+      "working",
+      "finished",
+      "finished",
+      "finished",
+      "finished",
+      "finished"
+    ],
+    "name" : "antigravity-write-approval",
+    "parsedReports" : 16,
+    "pendingRequests" : 0,
+    "scope" : "Recorded native bytes through current production parser\/filter. Parsing success is not a lifecycle contract pass."
+  }
+]

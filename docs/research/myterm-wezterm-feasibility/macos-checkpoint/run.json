@@ -1,0 +1,22 @@
+{
+  "timestampUtc": "2026-11-09T13:05:56.566922+00:00",
+  "os": "macOS-27.3-arm64-arm-64bit-Mach-O",
+  "wezterm": "458a100c1bf4134d36cb5c42dd90e4c8266d9e1a",
+  "finl": "a1892f26245529f2ef3877a9ebd610c96cec07a6",
+  "scope": "scratch checkpoint bridge; tested subset only; not release acceptance",
+  "sources": {
+    "checkpoint.py": "66a61980b3c3dfc564675bd66832a4cba8d33b913e1c0a0f6f2ce1b0ef5ddc6f",
+    "checkpoint-state.rs": "30b6ba0484b10be94bf341a623e8f1c1e500d1e2e76b4ae46fa5152b521b6176",
+    "CheckpointBridge.swift": "8a3e6b57cb139d5de106239996198ec5ca71c009dd417b7ac0c127b8c7bdd86e",
+    "checkpoint-driver.swift": "dab89d4304736bbc2dd854f5d2e62ba34abf9a1c9444b5c426c12f9cb684609f",
+    "checkpoint_checks.py": "6ce922179a690c01104544c566614cb854741b92fea4e8df75697f856a27b18d",
+    "checkpoint-stream.rs": "80772d79771907f3ec4659eb3f3f2489339cef437ddd06d4af328e7c244d3962",
+    "main.rs": "6f40bd8f975b4f710c211ac3b0ccc7b7ee131f2db4350bc24024e1ea2f6ad872",
+    "wezterm-compatibility.patch": "ba1d0c313a04d735c003391990cf37b49f4ecc62bfb05368e2fa8397df6796fb",
+    "swift-dcs-finalization.patch": "dac9c3124237bbbafd0eb873330cd35cec27b9c1684259db66b96d32273016d8",
+    "Cargo.toml.in": "619adbde0a4aa4637784668b98bcb0f35434fb4c7f94b3d5cf8ab6b2c28c4fbb",
+    "Cargo.lock": "dbce14947cd32170fce0c90fe855ceba4a956c774df8c021a75312f05924801a",
+    "checkpoint_report.py": "4526e829a29f219a35422ab381e56d39ec391ce2724ee659e6cdce66365fbd3e"
+  },
+  "baselineDriverSha256": "e57c636da9c16e4f44b2db7b582713909baadadc7397f8de9697c12623ee229a"
+}

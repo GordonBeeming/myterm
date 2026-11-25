@@ -1,0 +1,22 @@
+{
+  "agent": "claude",
+  "version": "2.1.325 (Claude Code)",
+  "scope": "Actual CLI foreground process group and live zsh return. No MyTerm UI assertion or native agent marker is fabricated.",
+  "shellGroup": 43437,
+  "agentGroup": 43449,
+  "foregroundExecutables": [
+    "claude"
+  ],
+  "inputScreenObserved": true,
+  "returnedToSameShell": true,
+  "shellProducedPostKillOutput": true,
+  "expectedShellPID": 43437,
+  "outputMatchedAfterByteOffset": 1825,
+  "killedForegroundGroupEmpty": true,
+  "result": "pass",
+  "cleanup": {
+    "leaderReaped": true,
+    "ownedForegroundGroupEmpty": true,
+    "scope": "Owned foreground group only; separate/shared provider daemons are outside this check."
+  }
+}
