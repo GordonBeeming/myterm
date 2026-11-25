@@ -14,7 +14,7 @@ struct CompanionSessionNavigationView: View {
         return SessionNavigationItem.items(in: projection, query: query, prioritizeAttention: inbox,
                                            recentTabIDs: scene.recentSessionTabIDs)
             .filter { !inbox || $0.tab.kind == .terminal }
-            .filter { !inbox || !scene.isInboxRowDismissed($0.id, activityDate: $0.tab.agentActivityDate) }
+            .filter { !inbox || !scene.isInboxRowDismissed($0.tab) }
     }
 
     var body: some View {
@@ -99,11 +99,11 @@ struct CompanionSessionNavigationView: View {
 
     private func isUnread(_ item: SessionNavigationItem) -> Bool {
         item.tab.agentActivity?.needsAttention == true &&
-            !scene.isInboxRowRead(item.id, activityDate: item.tab.agentActivityDate)
+            !scene.isInboxRowRead(item.tab)
     }
 
     private func dismiss(_ item: SessionNavigationItem) {
-        scene.dismissInboxRow(item.id, activityDate: item.tab.agentActivityDate)
+        scene.dismissInboxRow(item.tab)
         Task { await markRead(item) }
     }
 
@@ -127,17 +127,25 @@ struct CompanionSessionNavigationView: View {
         await markRead(item)
     }
 
-    /// Read clears finished work, while the host retains an unanswered question. A failure
-    /// leaves the authoritative state untouched and will be retried by ordinary navigation.
+    /// Read clears finished work, while the host retains an unanswered question. The dot goes
+    /// at once. If the host does not take the read, the dot comes back, so a finished tab does
+    /// not look read here while the host still has it unread.
     private func markRead(_ item: SessionNavigationItem) async {
-        scene.markInboxRowRead(item.id, activityDate: item.tab.agentActivityDate)
-        guard let connection = scene.selectedConnectionID, scene.connectionPhase == .online else { return }
+        guard let connection = scene.selectedConnectionID else { return }
+        scene.markInboxRowRead(item.tab)
+        guard scene.connectionPhase == .online else {
+            scene.clearInboxRowRead(item.tab, connection: connection)
+            return
+        }
         do {
             _ = try await scene.command(.markRead, metadata: MessageMetadata(hostID: connection.hostID,
                 sessionID: item.tab.terminalSessionID?.rawValue,
                 workspaceID: item.workspaceID.rawValue, groupID: item.groupID.rawValue,
                 tabID: item.id.rawValue),
                 payload: JSONEncoder().encode(RemoteEmptyPayload()))
-        } catch { scene.errorMessage = "Could not mark the tab read: \(error.localizedDescription)" }
+        } catch {
+            scene.clearInboxRowRead(item.tab, connection: connection)
+            scene.errorMessage = "Could not mark the tab read: \(error.localizedDescription)"
+        }
     }
 }
