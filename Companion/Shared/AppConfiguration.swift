@@ -71,6 +71,16 @@ enum UITestConfiguration {
         #endif
     }
 
+    /// Gives a chosen fixture Mac a workspace list with folders instead of a relay connection,
+    /// so folder sections can be driven on a simulator.
+    static var showsWorkspaceListFixture: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-MyTermUITestWorkspaceListFixture")
+        #else
+        false
+        #endif
+    }
+
     /// Seeds two paired Macs so the machine list can be driven without a relay.
     static var showsMachineFixture: Bool {
         #if DEBUG

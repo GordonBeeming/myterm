@@ -448,6 +448,11 @@ final class SceneModel {
         prepareNavigation(replacing: activeHost?.connectionID, with: host.connectionID)
         activeHost = host
         self.services = services
+        if UITestConfiguration.showsWorkspaceListFixture {
+            projection = MachineUITestFixture.workspaceList
+            connectionPhase = .online
+            return
+        }
         let generation = UUID()
         connectionGeneration = generation
         eventTask?.cancel()

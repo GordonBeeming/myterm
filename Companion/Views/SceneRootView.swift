@@ -167,6 +167,12 @@ struct SceneRootView: View {
     /// made, so it cannot pull the user off a list they are using.
     private func offerAutoSelect() {
         guard !hasOfferedAutoSelect, !services.isLoading, scene.selectedConnectionID == nil else { return }
+        // The workspace-list fixture opens straight onto a Mac, so it can be shown without a tap.
+        if UITestConfiguration.showsWorkspaceListFixture, let host = services.savedHosts.last {
+            hasOfferedAutoSelect = true
+            scene.selectedConnectionID = host.connectionID
+            return
+        }
         switch MachineAutoSelection.choice(hosts: services.savedHosts,
                                            statuses: services.hostStatuses,
                                            isStarred: services.isStarred) {
@@ -359,7 +365,21 @@ private struct WorkspaceColumn: View {
     @State private var isCreating = false
     @AppStorage("showsSessionInbox") private var showsSessionInbox = true
     @State private var showsQuickJump = false
+    /// Folder IDs this device keeps collapsed, comma-separated. Collapse state is a per-client
+    /// display preference, so it is not sent to the Mac. Folder IDs are UUIDs, so one list
+    /// serves every paired Mac.
+    @AppStorage("collapsedWorkspaceFolderIDs") private var collapsedFolderIDsRaw = ""
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var collapsedFolderIDs: Set<UUID> {
+        Set(collapsedFolderIDsRaw.split(separator: ",").compactMap { UUID(uuidString: String($0)) })
+    }
+
+    private func toggleFolder(_ id: UUID) {
+        var ids = collapsedFolderIDs
+        if ids.remove(id) == nil { ids.insert(id) }
+        collapsedFolderIDsRaw = ids.map(\.uuidString).sorted().joined(separator: ",")
+    }
 
     var body: some View {
         @Bindable var scene = scene
@@ -389,19 +409,36 @@ private struct WorkspaceColumn: View {
                     }
                     ForEach(projection.folders, id: \.id) { folder in
                         let folderWorkspaces = projection.workspaces.filter { $0.folderID == folder.id }
+                        let isCollapsed = collapsedFolderIDs.contains(folder.id.rawValue)
                         Section {
-                            ForEach(folderWorkspaces, id: \.id) {
-                                workspaceRow($0)
+                            if !isCollapsed {
+                                ForEach(folderWorkspaces, id: \.id) {
+                                    workspaceRow($0)
+                                }
                             }
                         } header: {
                             HStack {
-                                Text(folder.title)
-                                Text("\(folderWorkspaces.count)")
-                                    .font(.caption)
-                                    .monospacedDigit()
-                                    .foregroundStyle(.secondary)
-                                    .fixedSize()
-                                    .accessibilityLabel("Workspaces: \(folderWorkspaces.count)")
+                                Button {
+                                    withAnimation { toggleFolder(folder.id.rawValue) }
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "chevron.right")
+                                            .font(.caption.weight(.semibold))
+                                            .rotationEffect(.degrees(isCollapsed ? 0 : 90))
+                                        Text(folder.title)
+                                        Text("\(folderWorkspaces.count)")
+                                            .font(.caption)
+                                            .monospacedDigit()
+                                            .foregroundStyle(.secondary)
+                                            .fixedSize()
+                                    }
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("\(folder.title), \(folderWorkspaces.count) workspaces")
+                                .accessibilityValue(isCollapsed ? "Collapsed" : "Expanded")
+                                .accessibilityHint(isCollapsed ? "Shows the folder's workspaces" : "Hides the folder's workspaces")
+                                .accessibilityIdentifier("folder-toggle-\(folder.id.rawValue)")
                                 Spacer()
                                 Button("Add workspace in \(folder.title)", systemImage: "plus") {
                                     Task { await create(workspace: true, folderID: folder.id) }
@@ -421,6 +458,7 @@ private struct WorkspaceColumn: View {
                         }
                     }
                 }
+                .accessibilityIdentifier("workspace-list")
             } else {
                 ProgressView("Loading workspaces")
             }
