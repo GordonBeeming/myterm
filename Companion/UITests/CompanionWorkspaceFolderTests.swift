@@ -14,6 +14,11 @@ final class CompanionWorkspaceFolderTests: XCTestCase {
         app.launch()
 
         // The fixture opens straight onto a Mac's workspace list.
+        // Workspace names are looked up inside the list only: on a regular-width iPad the first
+        // workspace is selected, and its title in the detail column would match an app-wide query.
+        let list = workspaceList(in: app)
+        XCTAssertTrue(list.waitForExistence(timeout: 5),
+                      "Without the list, the absence checks below would pass for the wrong reason")
         let toggle = app.buttons[clientsToggle]
         XCTAssertTrue(toggle.waitForExistence(timeout: 5))
         XCTAssertTrue(toggle.isHittable, "The folder header must take taps, not the row under it")
@@ -21,28 +26,35 @@ final class CompanionWorkspaceFolderTests: XCTestCase {
         // Collapse state is kept on the device, so an earlier run can leave Clients collapsed.
         if toggle.value as? String == "Collapsed" {
             toggle.tap()
-            XCTAssertTrue(app.staticTexts["api"].waitForExistence(timeout: 3))
+            XCTAssertTrue(list.staticTexts["api"].waitForExistence(timeout: 3))
         }
         XCTAssertEqual(toggle.value as? String, "Expanded")
-        XCTAssertTrue(app.staticTexts["web"].exists)
+        XCTAssertTrue(list.staticTexts["web"].exists)
         attachScreenshot(app, name: "folders-expanded")
 
         toggle.tap()
-        XCTAssertTrue(waitForAbsence(of: app.staticTexts["api"]), "Collapsing hides the folder's workspaces")
+        XCTAssertTrue(waitForAbsence(of: list.staticTexts["api"]), "Collapsing hides the folder's workspaces")
         XCTAssertEqual(toggle.value as? String, "Collapsed")
-        XCTAssertFalse(app.staticTexts["web"].exists)
-        XCTAssertTrue(app.staticTexts["dotfiles"].exists, "Other folders stay open")
-        XCTAssertTrue(app.staticTexts["scratch"].exists, "Unfiled workspaces stay visible")
+        XCTAssertFalse(list.staticTexts["web"].exists)
+        XCTAssertTrue(list.staticTexts["dotfiles"].exists, "Other folders stay open")
+        XCTAssertTrue(list.staticTexts["scratch"].exists, "Unfiled workspaces stay visible")
         attachScreenshot(app, name: "folders-clients-collapsed")
 
         // The choice survives a relaunch.
         app.terminate()
         app.launch()
+        let relaunchedList = workspaceList(in: app)
+        XCTAssertTrue(relaunchedList.waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons[clientsToggle].waitForExistence(timeout: 5))
         XCTAssertEqual(app.buttons[clientsToggle].value as? String, "Collapsed")
 
         app.buttons[clientsToggle].tap()
-        XCTAssertTrue(app.staticTexts["api"].waitForExistence(timeout: 3), "Expanding shows them again")
+        XCTAssertTrue(relaunchedList.staticTexts["api"].waitForExistence(timeout: 3), "Expanding shows them again")
+    }
+
+    @MainActor
+    private func workspaceList(in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(identifier: "workspace-list").firstMatch
     }
 
     @MainActor

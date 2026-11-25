@@ -458,6 +458,7 @@ private struct WorkspaceColumn: View {
                         }
                     }
                 }
+                .accessibilityIdentifier("workspace-list")
             } else {
                 ProgressView("Loading workspaces")
             }
