@@ -9,7 +9,17 @@ public final class SessionHostServerAuthentication {
     private let requiresHardenedRuntime: Bool
     private let permitsTestLauncher: Bool
 
-    public init(environment: [String: String] = [:], helperURL: URL? = nil) throws {
+    public convenience init(environment: [String: String] = [:], helperURL: URL? = nil) throws {
+        try self.init(environment: environment, helperURL: helperURL, rustDevelopmentServer: false)
+    }
+
+    #if DEBUG
+    public static func localRustDevelopmentServer() throws -> SessionHostServerAuthentication {
+        try SessionHostServerAuthentication(environment: [:], helperURL: nil, rustDevelopmentServer: true)
+    }
+    #endif
+
+    private init(environment: [String: String], helperURL: URL?, rustDevelopmentServer: Bool) throws {
         var ownCode: SecCode?
         var ownStatic: SecStaticCode?
         var rawInfo: CFDictionary?
@@ -23,6 +33,19 @@ public final class SessionHostServerAuthentication {
             throw SessionHostError.untrustedHost
         }
         let production = identifier == "com.gordonbeeming.myterm"
+        #if DEBUG
+        if rustDevelopmentServer {
+            guard identifier == "com.gordonbeeming.myterm.dev",
+                  let team = info[kSecCodeInfoTeamIdentifier as String] as? String else {
+                throw SessionHostError.untrustedHost
+            }
+            permitsTestLauncher = false
+            requiresHardenedRuntime = true
+            requirement = try SessionHostClientAuthentication.signingRequirement(
+                identifier: identifier + ".local-terminal", team: team, production: false)
+            return
+        }
+        #endif
         if production || identifier == "com.gordonbeeming.myterm.dev" {
             permitsTestLauncher = false
             requiresHardenedRuntime = production

@@ -111,8 +111,14 @@ public final class SessionHostClientAuthentication {
     }
 
     static func signingRequirement(identifier: String, team: String, production: Bool) throws -> SecRequirement {
-        guard ["com.gordonbeeming.myterm", "com.gordonbeeming.myterm.dev",
-               "com.gordonbeeming.myterm.session-host", "com.gordonbeeming.myterm.dev.session-host"].contains(identifier),
+        let sessionHostIdentifiers = ["com.gordonbeeming.myterm", "com.gordonbeeming.myterm.dev",
+                                      "com.gordonbeeming.myterm.session-host", "com.gordonbeeming.myterm.dev.session-host"]
+        #if DEBUG
+        let allowedIdentifiers = sessionHostIdentifiers + ["com.gordonbeeming.myterm.dev.local-terminal"]
+        #else
+        let allowedIdentifiers = sessionHostIdentifiers
+        #endif
+        guard allowedIdentifiers.contains(identifier),
               !team.isEmpty, team.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) }) else {
             throw SessionHostError.untrustedController
         }

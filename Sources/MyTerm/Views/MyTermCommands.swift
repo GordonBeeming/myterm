@@ -1,6 +1,7 @@
 import AppKit
 import MyTermCore
 import SwiftUI
+import MyTermPlatform
 
 extension KeyChord {
     var keyEquivalent: KeyEquivalent { KeyEquivalent(key) }
@@ -186,6 +187,13 @@ struct MyTermCommands: Commands {
             // The popover hangs off the bell, so without the bell there is nothing to show.
             .disabled(startup.model?.showsAgentNotificationBell != true)
         }
+
+        #if DEBUG && MYTERM_LOCAL_RUST_TERMINAL
+        CommandMenu("Development") {
+            Button("Local Rust Terminal…") { openWindow(id: LocalRustTerminalView.windowID) }
+                .disabled(startup.model == nil)
+        }
+        #endif
 
         CommandMenu("Tabs") {
             Button("Saved Prompts and Commands…") {

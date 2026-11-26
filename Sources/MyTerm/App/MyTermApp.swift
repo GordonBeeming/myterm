@@ -48,6 +48,20 @@ struct MyTermApp: App {
         .windowResizability(.contentMinSize)
         // The main scene owns the Global Settings command and its scope selection.
         .commandsRemoved()
+
+        #if DEBUG && MYTERM_LOCAL_RUST_TERMINAL
+        Window("Local Rust Terminal", id: LocalRustTerminalView.windowID) {
+            if let executable = LocalRustTerminalView.bundledExecutable {
+                LocalRustTerminalView(namespace: startup.localRustTerminalNamespace, executable: executable)
+                    .frame(minWidth: 580, minHeight: 340)
+            } else {
+                Text("The local Rust server executable is missing from this development bundle.")
+                    .padding()
+            }
+        }
+        .defaultSize(width: 860, height: 530)
+        .commandsRemoved()
+        #endif
     }
 }
 
@@ -357,6 +371,12 @@ final class MyTermStartup {
     let coordinator: SingleInstanceCoordinator
     private(set) var lease: SingleInstanceLease?
     private let supportDirectory: URL
+    #if DEBUG && MYTERM_LOCAL_RUST_TERMINAL
+    var localRustTerminalNamespace: URL {
+        supportDirectory.appendingPathComponent(MyTermChannel.active.displayName, isDirectory: true)
+            .appendingPathComponent("rust-terminal", isDirectory: true)
+    }
+    #endif
     private var startupTrial: ApplicationUpdatePlan?
     private var didConfirmStartup = false
     private var pendingUpdateNoticeURL: URL?

@@ -3,15 +3,19 @@ set -euo pipefail
 
 CHANNEL="development"
 MODE="run"
+LOCAL_RUST_TERMINAL=0
 
 usage() {
-  echo "usage: $0 [--prod] [--bundle|--debug|--logs|--telemetry|--verify|--print-plan]" >&2
+  echo "usage: $0 [--prod|--local-rust-terminal] [--bundle|--debug|--logs|--telemetry|--verify|--print-plan]" >&2
 }
 
 while (($#)); do
   case "$1" in
     --prod)
       CHANNEL="production"
+      ;;
+    --local-rust-terminal)
+      LOCAL_RUST_TERMINAL=1
       ;;
     --bundle|--debug|--logs|--telemetry|--verify|--print-plan)
       if [[ "$MODE" != "run" ]]; then
@@ -82,6 +86,14 @@ if [[ "$DISTRIBUTION" != "0" && "$DISTRIBUTION" != "1" ]]; then
   exit 2
 fi
 
+if [[ "$LOCAL_RUST_TERMINAL" == "1" && ( "$CHANNEL" != "development" || "$DISTRIBUTION" != "0" ) ]]; then
+  echo "The local Rust terminal is available only in development bundles." >&2
+  exit 2
+fi
+if [[ "$LOCAL_RUST_TERMINAL" == "1" ]]; then
+  BUILD_ARGS+=(-Xswiftc -DMYTERM_LOCAL_RUST_TERMINAL)
+fi
+
 if [[ "$MODE" == "--print-plan" ]]; then
   printf 'channel=%s\n' "$CHANNEL"
   printf 'app_name=%s\n' "$APP_NAME"
@@ -90,11 +102,16 @@ if [[ "$MODE" == "--print-plan" ]]; then
   printf 'workspace_state_path=%s\n' "$WORKSPACE_STATE_PATH"
   printf 'instance_policy=focus-existing\n'
   printf 'build_configuration=%s\n' "$BUILD_CONFIGURATION"
+  if [[ "$LOCAL_RUST_TERMINAL" == "1" ]]; then printf 'local_rust_terminal=1\n'; fi
   exit 0
 fi
 
 source "$ROOT_DIR/script/select_signing_identity.sh"
 SIGNING_IDENTITY="$(myterm_select_signing_identity "$DISTRIBUTION")"
+if [[ "$LOCAL_RUST_TERMINAL" == "1" && "$SIGNING_IDENTITY" == "-" ]]; then
+  echo "The local Rust terminal requires an Apple-issued signing identity." >&2
+  exit 2
+fi
 
 cd "$ROOT_DIR"
 swift build --product MyTerm "${BUILD_ARGS[@]}"
@@ -105,6 +122,11 @@ RESOURCE_BUNDLE="$(dirname "$BUILD_BINARY")/SwiftTerm_SwiftTerm.bundle"
 if [[ ! -d "$RESOURCE_BUNDLE" ]]; then
   echo "SwiftTerm's compiled resource bundle is missing: $RESOURCE_BUNDLE" >&2
   exit 1
+fi
+if [[ "$LOCAL_RUST_TERMINAL" == "1" ]]; then
+  RUST_TARGET_DIR="$ROOT_DIR/.build/local-rust-terminal"
+  MACOSX_DEPLOYMENT_TARGET="$MIN_SYSTEM_VERSION" cargo build --locked --release \
+    --manifest-path "$ROOT_DIR/Services/local-terminal/Cargo.toml" --target-dir "$RUST_TARGET_DIR"
 fi
 
 rm -rf "$APP_BUNDLE"
@@ -148,6 +170,8 @@ bash "$ROOT_DIR/script/configure_url_handlers.sh" "$CHANNEL" "$BUNDLE_ID" "$INFO
 CODESIGN_ARGS=(--force --sign "$SIGNING_IDENTITY" --identifier "$BUNDLE_ID")
 if [[ "$DISTRIBUTION" == "1" ]]; then
   CODESIGN_ARGS+=(--options runtime --timestamp)
+elif [[ "$LOCAL_RUST_TERMINAL" == "1" ]]; then
+  CODESIGN_ARGS+=(--options runtime)
 fi
 if [[ -f "$ENTITLEMENTS_PATH" ]]; then
   CODESIGN_ARGS+=(--entitlements "$ENTITLEMENTS_PATH")
@@ -160,6 +184,11 @@ codesign "${HOST_CODESIGN_ARGS[@]}" "$APP_MACOS/MyTermSessionHost"
 UPDATE_CODESIGN_ARGS=(--force --sign "$SIGNING_IDENTITY" --identifier "$BUNDLE_ID.update-agent")
 if [[ "$DISTRIBUTION" == "1" ]]; then UPDATE_CODESIGN_ARGS+=(--options runtime --timestamp); fi
 codesign "${UPDATE_CODESIGN_ARGS[@]}" "$APP_MACOS/MyTermUpdateAgent"
+if [[ "$LOCAL_RUST_TERMINAL" == "1" ]]; then
+  cp "$RUST_TARGET_DIR/release/myterm-local-terminal" "$APP_MACOS/myterm-local-terminal"
+  codesign --force --sign "$SIGNING_IDENTITY" --identifier "$BUNDLE_ID.local-terminal" \
+    --options runtime "$APP_MACOS/myterm-local-terminal"
+fi
 codesign "${CODESIGN_ARGS[@]}" "$APP_BUNDLE"
 
 open_app() {
