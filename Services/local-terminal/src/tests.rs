@@ -107,6 +107,9 @@ fn receive_output(socket: &mut UnixStream, expected: &str) -> io::Result<()> {
     let mut output = Vec::new();
     while !String::from_utf8_lossy(&output).contains(expected) {
         let (kind, bytes) = receive(socket)?;
+        if kind == 0x88 {
+            continue;
+        }
         assert_eq!(kind, 0x82, "{}", String::from_utf8_lossy(&bytes));
         output.extend(bytes);
         assert!(output.len() < 65_536);
@@ -444,5 +447,359 @@ fn an_abrupt_detach_is_seen_while_terminal_input_is_backpressured() -> io::Resul
     let (kind, payload) = receive(&mut reattached)?;
     assert_eq!(kind, 0x81, "{}", String::from_utf8_lossy(&payload));
     assert_eq!(payload, identity);
+    Ok(())
+}
+
+#[test]
+fn independent_configured_ptys_reattach_and_stop_without_affecting_each_other() -> io::Result<()> {
+    let server = TestServer::new()?;
+    let directory = TestDirectory::new()?;
+    let mut alpha = server.connect()?;
+    let mut beta = server.connect()?;
+    let alpha_id = [[31; 16], [32; 16]].concat();
+    let beta_id = [[33; 16], [32; 16]].concat();
+    let mut launch = alpha_id.clone();
+    launch.extend(
+        format!(
+            r#"{{"shell":"/bin/sh","arguments":["-i"],"cwd":"{}","columns":90,"rows":36,"environment":{{"MYTERM_TEST_PROFILE":"expected-profile","MYTERM_STARTUP_PARENT_PID":"123"}}}}"#,
+            directory.0.display()
+        )
+        .as_bytes(),
+    );
+    send(&mut alpha, 5, &launch)?;
+    assert_eq!(receive(&mut alpha)?.0, 0x81);
+    assert_eq!(receive(&mut alpha)?.0, 0x84);
+    send(&mut beta, 5, &beta_id)?;
+    let (kind, beta_identity) = receive(&mut beta)?;
+    assert_eq!(kind, 0x81);
+    assert_eq!(receive(&mut beta)?.0, 0x84);
+
+    send(&mut beta, 4, &[0, 120, 0, 50])?;
+    send(
+        &mut beta,
+        3,
+        b"counter=40; printf 'beta geometry=%s\\n' \"$(stty size)\"\n",
+    )?;
+    receive_output(&mut beta, "beta geometry=50 120\r\n")?;
+    send(
+        &mut alpha,
+        3,
+        b"printf 'profile=%s cwd=%s size=%s counter=%s\\n' \"$MYTERM_TEST_PROFILE\" \"$PWD\" \"$(stty size)\" \"$counter\"\n",
+    )?;
+    let canonical_directory = directory.0.canonicalize()?;
+    // Darwin can report the logical /tmp path or its physical /private/tmp spelling.
+    receive_output(
+        &mut alpha,
+        &format!(
+            "{} size=36 90 counter=\r\n",
+            canonical_directory.file_name().unwrap().to_string_lossy()
+        ),
+    )?;
+    send(
+        &mut alpha,
+        3,
+        b"printf 'profile=%s\\n' \"$MYTERM_TEST_PROFILE\"\n",
+    )?;
+    receive_output(&mut alpha, "profile=expected-profile\r\n")?;
+
+    send(&mut beta, 10, &[])?;
+    receive_frame(&mut beta, 0x83)?;
+    let mut reattached = server.connect()?;
+    send(&mut reattached, 6, &beta_id)?;
+    assert_eq!(receive(&mut reattached)?, (0x81, beta_identity));
+    assert_eq!(receive(&mut reattached)?.0, 0x84);
+    send(
+        &mut reattached,
+        3,
+        b"printf 'reattached counter=%s\\n' \"$((counter+2))\"\n",
+    )?;
+    receive_output(&mut reattached, "reattached counter=42\r\n")?;
+
+    send(&mut alpha, 9, &[])?;
+    let payload = receive_frame(&mut alpha, 0x83)?;
+    assert!(String::from_utf8_lossy(&payload).contains("stopped"));
+    let mut stale = server.connect()?;
+    send(&mut stale, 6, &alpha_id)?;
+    assert_eq!(
+        receive(&mut stale)?,
+        (
+            0x83,
+            b"No live terminal session matches this identifier".to_vec()
+        ),
+    );
+    let mut retry = server.connect()?;
+    send(&mut retry, 5, &launch)?;
+    assert_eq!(
+        receive(&mut retry)?,
+        (
+            0x83,
+            b"This terminal session identifier has already ended".to_vec()
+        ),
+    );
+    send(
+        &mut reattached,
+        3,
+        b"printf 'beta still live: %s\\n' \"$(stty size)\"\n",
+    )?;
+    receive_output(&mut reattached, "beta still live: 50 120\r\n")?;
+    Ok(())
+}
+
+fn receive_frame(socket: &mut UnixStream, expected: u8) -> io::Result<Vec<u8>> {
+    let mut ignored_output = 0;
+    while ignored_output < 65_536 {
+        let (kind, payload) = receive(socket)?;
+        if kind == expected {
+            return Ok(payload);
+        }
+        assert_eq!(
+            kind,
+            0x82,
+            "Unexpected frame {kind:#x} before {expected:#x}: {:?}",
+            String::from_utf8_lossy(&payload)
+        );
+        ignored_output += payload.len();
+    }
+    Err(io::Error::other(format!(
+        "Expected frame {expected:#x} did not arrive"
+    )))
+}
+
+fn control(owner: [u8; 16], revision: u64, connected: bool) -> Vec<u8> {
+    [&owner[..], &revision.to_be_bytes(), &[u8::from(connected)]].concat()
+}
+
+#[test]
+fn viewer_requires_explicit_current_revision_to_control_and_resize() -> io::Result<()> {
+    let server = TestServer::new()?;
+    let session = [35; 16];
+    let alice = [36; 16];
+    let bob = [37; 16];
+    let mut owner = server.connect()?;
+    send(&mut owner, 5, &[session, alice].concat())?;
+    let (kind, identity) = receive(&mut owner)?;
+    assert_eq!(kind, 0x81);
+    let first = control(alice, 1, true);
+    assert_eq!(receive(&mut owner)?, (0x84, first.clone()));
+
+    let mut viewer = server.connect()?;
+    send(&mut viewer, 6, &[session, bob].concat())?;
+    assert_eq!(receive(&mut viewer)?, (0x81, identity.clone()));
+    assert_eq!(receive_frame(&mut viewer, 0x84)?, first);
+
+    for (kind, payload) in [(3, &b"counter=wrong\n"[..]), (4, &[0, 92, 0, 35]), (9, &[])] {
+        send(&mut viewer, kind, payload)?;
+        assert_eq!(receive_frame(&mut viewer, 0x85)?, first);
+    }
+    send(
+        &mut owner,
+        3,
+        b"printf 'unchanged=%s, geometry=%s\\n' \"$counter\" \"$(stty size)\"\n",
+    )?;
+    receive_output(&mut viewer, "unchanged=, geometry=24 80\r\n")?;
+    drop(owner);
+    assert_eq!(receive_frame(&mut viewer, 0x84)?, control(alice, 1, false));
+
+    send(&mut viewer, 7, &control(alice, 0, false)[..24])?;
+    assert_eq!(receive_frame(&mut viewer, 0x85)?, control(alice, 1, false));
+    send(&mut viewer, 7, &first[..24])?;
+    let second = control(bob, 2, true);
+    assert_eq!(receive_frame(&mut viewer, 0x84)?, second);
+
+    let mut displaced = server.connect()?;
+    send(&mut displaced, 6, &[session, alice].concat())?;
+    assert_eq!(receive(&mut displaced)?, (0x81, identity));
+    assert_eq!(receive_frame(&mut displaced, 0x84)?, second);
+    send(&mut displaced, 3, b"counter=still-wrong\n")?;
+    assert_eq!(receive_frame(&mut displaced, 0x85)?, second);
+    send(&mut viewer, 4, &[0, 110, 0, 44])?;
+    assert_eq!(receive_frame(&mut displaced, 0x88)?, [0, 110, 0, 44]);
+    send(
+        &mut viewer,
+        3,
+        b"printf 'new-geometry=%s, counter=%s\\n' \"$(stty size)\" \"$counter\"\n",
+    )?;
+    receive_output(&mut displaced, "new-geometry=44 110, counter=\r\n")?;
+    send(&mut viewer, 8, &second[..24])?;
+    let released = control([0; 16], 3, false);
+    assert_eq!(receive_frame(&mut displaced, 0x84)?, released);
+    assert_eq!(receive_frame(&mut viewer, 0x88)?, [0, 110, 0, 44]);
+    assert_eq!(receive_frame(&mut viewer, 0x84)?, released);
+    send(&mut displaced, 7, &released[..24])?;
+    assert_eq!(
+        receive_frame(&mut displaced, 0x84)?,
+        control(alice, 4, true)
+    );
+    Ok(())
+}
+
+#[test]
+fn separate_authenticated_stop_reaches_a_shell_with_backpressured_input() -> io::Result<()> {
+    let server = TestServer::new()?;
+    let session = [39; 16];
+    let owner = [40; 16];
+    let mut terminal = server.connect()?;
+    terminal.set_write_timeout(Some(Duration::from_millis(250)))?;
+    send(&mut terminal, 5, &[session, owner].concat())?;
+    let ready = receive(&mut terminal)?;
+    assert_eq!(ready.0, 0x81);
+    let owner_state = control(owner, 1, true);
+    assert_eq!(receive(&mut terminal)?, (0x84, owner_state.clone()));
+    send(
+        &mut terminal,
+        3,
+        b"stty raw -echo; printf 'blocked-ready\\r\\n'; sleep 30\n",
+    )?;
+    receive_output(&mut terminal, "blocked-ready\r\n")?;
+    let block = vec![b'x'; 65_536];
+    let error = (0..32)
+        .try_for_each(|_| send(&mut terminal, 3, &block))
+        .expect_err("test must apply input backpressure");
+    assert!(matches!(
+        error.kind(),
+        io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+    ));
+
+    let mut viewer_stop = server.connect()?;
+    send(
+        &mut viewer_stop,
+        14,
+        &[&session[..], &[41; 16], &owner_state[..24]].concat(),
+    )?;
+    assert_eq!(
+        receive(&mut viewer_stop)?,
+        (
+            0x83,
+            b"Terminal control changed. Refresh and try again.".to_vec()
+        ),
+    );
+    let mut stale_stop = server.connect()?;
+    send(
+        &mut stale_stop,
+        14,
+        &[&session[..], &owner, &control(owner, 0, true)[..24]].concat(),
+    )?;
+    assert_eq!(
+        receive(&mut stale_stop)?,
+        (
+            0x83,
+            b"Terminal control changed. Refresh and try again.".to_vec()
+        ),
+    );
+    let mut stop = server.connect()?;
+    send(
+        &mut stop,
+        14,
+        &[&session[..], &owner, &owner_state[..24]].concat(),
+    )?;
+    assert_eq!(
+        receive(&mut stop)?,
+        (0x83, b"Terminal session stopped".to_vec())
+    );
+    assert_eq!(
+        receive_frame(&mut terminal, 0x83)?,
+        b"Terminal session stopped"
+    );
+    let pid = libc::pid_t::from_be_bytes(ready.1[4..].try_into().unwrap());
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    while unsafe { libc::kill(pid, 0) } == 0 {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "stopped shell was not reaped"
+        );
+        thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(io::Error::last_os_error().raw_os_error(), Some(libc::ESRCH));
+    Ok(())
+}
+
+#[test]
+fn explicit_environment_clears_daemon_variables_and_preserves_terminal_defaults() -> io::Result<()>
+{
+    let server = TestServer::new()?;
+    let mut client = server.connect()?;
+    let mut payload = [[42; 16], [43; 16]].concat();
+    payload.extend(
+        br#"{"shell":"/usr/bin/env","arguments":[],"environment":{"MYTERM_TEST_ENV":"expected"}}"#,
+    );
+    send(&mut client, 5, &payload)?;
+    assert_eq!(receive(&mut client)?.0, 0x81);
+    assert_eq!(receive(&mut client)?.0, 0x84);
+    let mut output = Vec::new();
+    loop {
+        let (kind, payload) = receive(&mut client)?;
+        if kind == 0x83 {
+            assert!(String::from_utf8_lossy(&payload).contains("exit status: 0"));
+            break;
+        }
+        assert_eq!(kind, 0x82);
+        output.extend(payload);
+    }
+    let text = String::from_utf8(output).expect("environment output is ASCII");
+    let mut lines: Vec<_> = text.lines().collect();
+    lines.sort_unstable();
+    assert_eq!(
+        lines,
+        [
+            "MYTERM_TEST_ENV=expected",
+            "SHELL=/usr/bin/env",
+            "TERM=xterm-256color"
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn resize_burst_preserves_the_controller_when_output_queue_is_full() -> io::Result<()> {
+    let server = TestServer::new()?;
+    let mut client = server.connect()?;
+    client.set_write_timeout(Some(Duration::from_secs(1)))?;
+    send(&mut client, 5, &[[45; 16], [46; 16]].concat())?;
+    assert_eq!(receive(&mut client)?.0, 0x81);
+    assert_eq!(receive(&mut client)?.0, 0x84);
+    send(
+        &mut client,
+        3,
+        b"head -c 1048576 /dev/zero; printf 'prompt-after-stream\\n'\n",
+    )?;
+    thread::sleep(Duration::from_millis(200));
+
+    let mut resizes = Vec::new();
+    for columns in 100..500u16 {
+        resizes.extend([4, 0, 0, 0, 4]);
+        resizes.extend(columns.to_be_bytes());
+        resizes.extend([0, 35]);
+    }
+    client.write_all(&resizes)?;
+    send(
+        &mut client,
+        3,
+        b"printf 'final-size=%s\\n' \"$(stty size)\"\n",
+    )?;
+    let marker = b"final-size=35 499\r\n";
+    let mut output = Vec::new();
+    let mut last_geometry = Vec::new();
+    loop {
+        let (kind, payload) = receive(&mut client)?;
+        match kind {
+            0x88 => last_geometry = payload,
+            0x82 => {
+                let start = output.len().saturating_sub(marker.len() - 1);
+                output.extend(payload);
+                assert!(output.len() <= 1024 * 1024 + 4096);
+                if output[start..]
+                    .windows(marker.len())
+                    .any(|window| window == marker)
+                {
+                    break;
+                }
+            }
+            _ => panic!(
+                "Unexpected frame {kind:#x}: {:?}",
+                String::from_utf8_lossy(&payload)
+            ),
+        }
+    }
+    assert_eq!(last_geometry, [1, 243, 0, 35]);
     Ok(())
 }

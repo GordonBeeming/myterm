@@ -1,3 +1,5 @@
+use serde::Deserialize;
+use std::collections::BTreeMap;
 use std::ffi::CStr;
 use std::fs::File;
 use std::io;
@@ -6,6 +8,71 @@ use std::os::unix::{ffi::OsStrExt, process::CommandExt};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
+
+#[derive(Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LaunchOptions {
+    shell: Option<PathBuf>,
+    cwd: Option<PathBuf>,
+    arguments: Option<Vec<String>>,
+    columns: Option<u16>,
+    rows: Option<u16>,
+    environment: Option<BTreeMap<String, String>>,
+}
+
+impl LaunchOptions {
+    pub fn parse(payload: &[u8]) -> io::Result<Self> {
+        if payload.is_empty() {
+            return Ok(Self::default());
+        }
+        let options: Self = serde_json::from_slice(payload).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Invalid terminal launch settings",
+            )
+        })?;
+        for path in [&options.shell, &options.cwd].into_iter().flatten() {
+            if !path.is_absolute() || path.as_os_str().as_bytes().contains(&0) {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "Terminal shell and working directory must use absolute paths",
+                ));
+            }
+        }
+        if options.arguments.as_ref().is_some_and(|arguments| {
+            arguments.len() > 128 || arguments.iter().any(|argument| argument.contains('\0'))
+        }) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Invalid terminal shell arguments",
+            ));
+        }
+        if options.environment.as_ref().is_some_and(|environment| {
+            environment.len() > 256
+                || environment.iter().any(|(key, value)| {
+                    key.is_empty() || key.contains(['=', '\0']) || value.contains('\0')
+                })
+        }) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Invalid terminal environment",
+            ));
+        }
+        options.geometry()?;
+        Ok(options)
+    }
+
+    fn geometry(&self) -> io::Result<(u16, u16)> {
+        match (self.columns, self.rows) {
+            (None, None) => Ok((80, 24)),
+            (Some(columns), Some(rows)) if columns > 0 && rows > 0 => Ok((columns, rows)),
+            _ => Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Both initial terminal dimensions must be nonzero",
+            )),
+        }
+    }
+}
 
 pub struct Shell {
     executable: PathBuf,
@@ -65,10 +132,11 @@ impl Shell {
         }
     }
 
-    pub fn start(&self, id: [u8; 16]) -> io::Result<Session> {
+    pub fn start(&self, mut options: LaunchOptions) -> io::Result<Session> {
         let mut master_fd = -1;
         let mut slave_fd = -1;
-        let mut size = window_size(80, 24);
+        let (columns, rows) = options.geometry()?;
+        let mut size = window_size(columns, rows);
         // openpty creates both descriptors on success. Ownership moves to the Files below.
         if unsafe {
             libc::openpty(
@@ -88,17 +156,39 @@ impl Shell {
         check(unsafe { libc::fcntl(slave_fd, libc::F_SETFD, libc::FD_CLOEXEC) })?;
         check(unsafe { libc::fcntl(master_fd, libc::F_SETFL, libc::O_NONBLOCK) })?;
 
-        let mut command = Command::new(&self.executable);
-        if self.login {
-            command.arg("-l");
+        let executable = options.shell.as_ref().unwrap_or(&self.executable);
+        let mut command = Command::new(executable);
+        if let Some(mut environment) = options.environment.take() {
+            if let Some(parent) = environment.get_mut("MYTERM_STARTUP_PARENT_PID") {
+                *parent = std::process::id().to_string();
+            }
+            environment
+                .entry("TERM".into())
+                .or_insert_with(|| "xterm-256color".into());
+            command.env_clear();
+            if let Some(home) = &self.directory {
+                command.env("HOME", home);
+            }
+            command.envs(environment);
+        } else {
+            command.env("TERM", "xterm-256color");
+            if let Some(home) = &self.directory {
+                command.env("HOME", home);
+            }
         }
-        if let Some(directory) = &self.directory {
-            command.current_dir(directory).env("HOME", directory);
+        if let Some(arguments) = options.arguments {
+            command.args(arguments);
+        } else {
+            if self.login {
+                command.arg("-l");
+            }
+            command.arg("-i");
+        }
+        if let Some(directory) = options.cwd.as_ref().or(self.directory.as_ref()) {
+            command.current_dir(directory);
         }
         command
-            .arg("-i")
-            .env("TERM", "xterm-256color")
-            .env("SHELL", &self.executable)
+            .env("SHELL", executable)
             .stdin(Stdio::from(slave.try_clone()?))
             .stdout(Stdio::from(slave.try_clone()?))
             .stderr(Stdio::from(slave));
@@ -112,44 +202,22 @@ impl Shell {
             });
         }
         let child = command.spawn()?;
-        Ok(Session { id, master, child })
+        Ok(Session { master, child })
     }
 }
 
 pub struct Session {
-    pub id: [u8; 16],
     pub master: File,
     pub child: Child,
 }
 
 impl Session {
-    pub fn stop(self) -> io::Result<()> {
-        let Session {
-            master, mut child, ..
-        } = self;
+    pub fn begin_stop(self) -> StoppingShell {
+        let Session { master, child } = self;
         // Closing the controlling PTY hangs up its foreground job, which can use
         // a different group from the shell. Signal only the shell's own group.
         drop(master);
-        if child.try_wait()?.is_some() {
-            return Ok(());
-        }
-        let group = libc::pid_t::try_from(child.id())
-            .map_err(|_| io::Error::other("Invalid terminal shell process group"))?;
-        let hangup = signal_group(group, libc::SIGHUP);
-        let deadline = Instant::now() + Duration::from_millis(250);
-        loop {
-            if child.try_wait()?.is_some() {
-                return hangup;
-            }
-            if Instant::now() >= deadline {
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        // The child remains unreaped, so its PID cannot be reused for a new group.
-        signal_group(group, libc::SIGKILL)?;
-        child.wait()?;
-        hangup
+        StoppingShell::new(child)
     }
 
     pub fn resize(&self, columns: u16, rows: u16) -> io::Result<()> {
@@ -162,6 +230,80 @@ impl Session {
         let size = window_size(columns, rows);
         check(unsafe { libc::ioctl(self.master.as_raw_fd(), libc::TIOCSWINSZ, &size) })
     }
+}
+
+pub struct StoppingShell {
+    child: Child,
+    deadline: Instant,
+    wait_error_logged: bool,
+    kill_error_logged: bool,
+    kill_sent: bool,
+}
+
+impl StoppingShell {
+    fn new(mut child: Child) -> Self {
+        let deadline = Instant::now() + Duration::from_millis(250);
+        let result = child.try_wait().and_then(|status| {
+            if status.is_some() {
+                return Ok(());
+            }
+            signal_group(shell_group(&child)?, libc::SIGHUP)
+        });
+        if let Err(error) = result {
+            eprintln!("Could not hang up local terminal shell: {error}");
+        }
+        Self {
+            child,
+            deadline,
+            wait_error_logged: false,
+            kill_error_logged: false,
+            kill_sent: false,
+        }
+    }
+
+    pub fn reaped(&mut self) -> bool {
+        match self.child.try_wait() {
+            Ok(Some(_)) => return true,
+            // The kernel no longer has a waitable child. Its PID can be reused.
+            Err(error) if error.raw_os_error() == Some(libc::ECHILD) => return true,
+            Err(error) => {
+                if !self.wait_error_logged {
+                    eprintln!(
+                        "Could not wait for local terminal shell {}: {error}",
+                        self.child.id()
+                    );
+                    self.wait_error_logged = true;
+                }
+                return false;
+            }
+            Ok(None) => {}
+        }
+        if !self.kill_sent && Instant::now() >= self.deadline {
+            // An unreaped child pins its PID so the signal cannot hit a reused group.
+            let result = shell_group(&self.child)
+                .and_then(|group| signal_group(group, libc::SIGKILL))
+                .or_else(|_| self.child.kill());
+            match result {
+                Ok(()) => self.kill_sent = true,
+                Err(error) => {
+                    if !self.kill_error_logged {
+                        eprintln!(
+                            "Could not kill local terminal shell {}: {error}",
+                            self.child.id()
+                        );
+                        self.kill_error_logged = true;
+                    }
+                    self.deadline = Instant::now() + Duration::from_secs(1);
+                }
+            }
+        }
+        false
+    }
+}
+
+fn shell_group(child: &Child) -> io::Result<libc::pid_t> {
+    libc::pid_t::try_from(child.id())
+        .map_err(|_| io::Error::other("Invalid terminal shell process group"))
 }
 
 fn signal_group(group: libc::pid_t, signal: libc::c_int) -> io::Result<()> {
