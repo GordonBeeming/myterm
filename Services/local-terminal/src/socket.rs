@@ -1,15 +1,20 @@
 use crate::session::check;
+use std::ffi::{CString, OsString};
 use std::fs::{self, File, Metadata, OpenOptions};
-use std::io;
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::ptr;
+use std::time::UNIX_EPOCH;
+
+type SocketIdentity = [u8; 28];
 
 pub struct Socket {
     path: PathBuf,
-    metadata: Metadata,
+    identity: SocketIdentity,
     pub listener: UnixListener,
     _lock: File,
 }
@@ -25,9 +30,9 @@ impl Socket {
         let parent = path
             .parent()
             .ok_or_else(|| io::Error::other("Local terminal socket directory is missing"))?;
-        let parent = fs::symlink_metadata(parent)?;
+        let directory = fs::symlink_metadata(parent)?;
         let uid = unsafe { libc::geteuid() };
-        if !parent.is_dir() || parent.uid() != uid || parent.mode() & 0o077 != 0 {
+        if !directory.is_dir() || directory.uid() != uid || directory.mode() & 0o077 != 0 {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
                 "Local terminal socket directory must be private and owned by this user",
@@ -38,7 +43,7 @@ impl Socket {
         // allow two launchers to flock different inodes while replacing the same socket.
         let mut lock_path = path.as_os_str().to_os_string();
         lock_path.push(".lock");
-        let lock = OpenOptions::new()
+        let mut lock = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
@@ -55,24 +60,36 @@ impl Socket {
         }
         check(unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) })?;
 
-        clear_stale_socket(path, uid)?;
-        let listener = UnixListener::bind(path)?;
-        let socket = Self {
+        clear_stale_socket(path, uid, &mut lock)?;
+
+        // Publish only after persisting the staged inode's identity. If the
+        // process dies before publication, the advertised path stays empty.
+        let staging = StagingSocket::new(parent)?;
+        let listener = UnixListener::bind(&staging.path)?;
+        fs::set_permissions(&staging.path, fs::Permissions::from_mode(0o600))?;
+        listener.set_nonblocking(true)?;
+        let identity = socket_identity(&fs::symlink_metadata(&staging.path)?)?;
+        lock.set_len(0)?;
+        lock.seek(SeekFrom::Start(0))?;
+        lock.write_all(&identity)?;
+        lock.sync_data()?;
+        staging.publish(path)?;
+
+        Ok(Self {
             path: path.to_owned(),
-            metadata: fs::symlink_metadata(path)?,
+            identity,
             listener,
             _lock: lock,
-        };
-        fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
-        socket.listener.set_nonblocking(true)?;
-        Ok(socket)
+        })
     }
 }
 
 impl Drop for Socket {
     fn drop(&mut self) {
         match fs::symlink_metadata(&self.path) {
-            Ok(current) if same_inode(&current, &self.metadata) => {
+            Ok(current)
+                if socket_identity(&current).is_ok_and(|identity| identity == self.identity) =>
+            {
                 if let Err(error) = fs::remove_file(&self.path) {
                     eprintln!("Could not remove local terminal socket: {error}");
                 }
@@ -86,38 +103,87 @@ impl Drop for Socket {
     }
 }
 
-fn clear_stale_socket(path: &Path, uid: u32) -> io::Result<()> {
+fn clear_stale_socket(path: &Path, uid: u32, lock: &mut File) -> io::Result<()> {
     let existing = match fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
         Err(error) => return Err(error),
     };
-    if !existing.file_type().is_socket() || existing.uid() != uid {
-        return Err(io::Error::new(
+    let occupied = || {
+        io::Error::new(
             io::ErrorKind::AddrInUse,
-            "Local terminal socket path belongs to another file",
-        ));
+            "Local terminal socket path is occupied by a file this service does not own",
+        )
+    };
+    let mut recorded = SocketIdentity::default();
+    if !existing.file_type().is_socket()
+        || existing.uid() != uid
+        || lock.metadata()?.len() != recorded.len() as u64
+    {
+        return Err(occupied());
     }
-    match UnixStream::connect(path) {
-        Ok(_) => Err(io::Error::new(
-            io::ErrorKind::AddrInUse,
-            "Local terminal socket is already listening",
-        )),
-        Err(error) if error.kind() == io::ErrorKind::ConnectionRefused => {
-            if !same_inode(&existing, &fs::symlink_metadata(path)?) {
-                return Err(io::Error::new(
-                    io::ErrorKind::AddrInUse,
-                    "Local terminal socket changed during startup",
-                ));
-            }
-            fs::remove_file(path)
+    lock.read_exact(&mut recorded)?;
+    // The exclusive lock rules out a running owner of a recorded socket. A
+    // connection probe could mistake a full backlog for an unlistened socket.
+    if socket_identity(&existing)? != recorded
+        || socket_identity(&fs::symlink_metadata(path)?)? != recorded
+    {
+        return Err(occupied());
+    }
+    fs::remove_file(path)
+}
+
+fn socket_identity(metadata: &Metadata) -> io::Result<SocketIdentity> {
+    let created = metadata
+        .created()?
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    let mut identity = SocketIdentity::default();
+    identity[..8].copy_from_slice(&metadata.dev().to_be_bytes());
+    identity[8..16].copy_from_slice(&metadata.ino().to_be_bytes());
+    identity[16..24].copy_from_slice(&created.as_secs().to_be_bytes());
+    identity[24..].copy_from_slice(&created.subsec_nanos().to_be_bytes());
+    Ok(identity)
+}
+
+struct StagingSocket {
+    directory: PathBuf,
+    path: PathBuf,
+}
+
+impl StagingSocket {
+    fn new(parent: &Path) -> io::Result<Self> {
+        let template = parent.join(".s.XXXXXX");
+        let mut template = CString::new(template.as_os_str().as_bytes())?.into_bytes_with_nul();
+        if unsafe { libc::mkdtemp(template.as_mut_ptr().cast()) }.is_null() {
+            return Err(io::Error::last_os_error());
         }
-        Err(error) => Err(error),
+        template.pop();
+        let directory = PathBuf::from(OsString::from_vec(template));
+        Ok(Self {
+            path: directory.join("s"),
+            directory,
+        })
+    }
+
+    fn publish(&self, path: &Path) -> io::Result<()> {
+        let source = CString::new(self.path.as_os_str().as_bytes())?;
+        let destination = CString::new(path.as_os_str().as_bytes())?;
+        check(unsafe { libc::renamex_np(source.as_ptr(), destination.as_ptr(), libc::RENAME_EXCL) })
     }
 }
 
-fn same_inode(first: &Metadata, second: &Metadata) -> bool {
-    first.dev() == second.dev() && first.ino() == second.ino()
+impl Drop for StagingSocket {
+    fn drop(&mut self) {
+        if let Err(error) = fs::remove_file(&self.path) {
+            if error.kind() != io::ErrorKind::NotFound {
+                eprintln!("Could not remove staged local terminal socket: {error}");
+            }
+        }
+        if let Err(error) = fs::remove_dir(&self.directory) {
+            eprintln!("Could not remove local terminal socket staging directory: {error}");
+        }
+    }
 }
 
 pub struct PeerEvents(OwnedFd);

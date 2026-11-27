@@ -1,8 +1,9 @@
 use super::*;
 use std::fs;
 use std::io::{self, Read, Write};
+use std::os::fd::AsRawFd;
 use std::os::unix::fs::DirBuilderExt;
-use std::os::unix::net::UnixStream;
+use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::sync::{
     atomic::{AtomicBool, AtomicU32, Ordering},
@@ -11,10 +12,10 @@ use std::sync::{
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-struct TestDirectory(PathBuf);
+pub(crate) struct TestDirectory(pub(crate) PathBuf);
 
 impl TestDirectory {
-    fn new() -> io::Result<Self> {
+    pub(crate) fn new() -> io::Result<Self> {
         static NEXT: AtomicU32 = AtomicU32::new(0);
         let path = PathBuf::from(format!(
             "/tmp/myterm-local-{}-{}",
@@ -86,13 +87,13 @@ impl Drop for TestServer {
     }
 }
 
-fn send(socket: &mut UnixStream, kind: u8, payload: &[u8]) -> io::Result<()> {
+pub(crate) fn send(socket: &mut UnixStream, kind: u8, payload: &[u8]) -> io::Result<()> {
     socket.write_all(&[kind])?;
     socket.write_all(&(payload.len() as u32).to_be_bytes())?;
     socket.write_all(payload)
 }
 
-fn receive(socket: &mut UnixStream) -> io::Result<(u8, Vec<u8>)> {
+pub(crate) fn receive(socket: &mut UnixStream) -> io::Result<(u8, Vec<u8>)> {
     let mut header = [0; 5];
     socket.read_exact(&mut header)?;
     let size = u32::from_be_bytes(header[1..].try_into().unwrap());
@@ -223,8 +224,13 @@ fn an_unexpected_same_uid_client_cannot_start_a_shell() -> io::Result<()> {
 fn reclaims_a_stale_socket_but_preserves_a_live_socket_and_other_files() -> io::Result<()> {
     let directory = TestDirectory::new()?;
     let path = directory.0.join("s");
-    let stale = std::os::unix::net::UnixListener::bind(&path)?;
+    let stale = crate::socket::Socket::bind(&path)?;
+    // Move the published inode aside during normal cleanup to reproduce the
+    // path and ownership record an interrupted daemon leaves behind.
+    let orphan = directory.0.join("orphan");
+    fs::rename(&path, &orphan)?;
     drop(stale);
+    fs::rename(orphan, &path)?;
     let authenticate = |_: &UnixStream| Ok(());
 
     let server = Server::bind(&path, authenticate, Shell::for_test())?;
@@ -237,6 +243,37 @@ fn reclaims_a_stale_socket_but_preserves_a_live_socket_and_other_files() -> io::
     fs::write(&path, b"keep")?;
     assert!(Server::bind(&path, authenticate, Shell::for_test()).is_err());
     assert_eq!(fs::read(&path)?, b"keep");
+    Ok(())
+}
+
+#[test]
+fn preserves_an_external_live_listener_even_with_a_full_accept_queue() -> io::Result<()> {
+    let directory = TestDirectory::new()?;
+    let path = directory.0.join("s");
+    let listener = UnixListener::bind(&path)?;
+    crate::session::check(unsafe { libc::listen(listener.as_raw_fd(), 1) })?;
+    let authenticate = |_: &UnixStream| Ok(());
+
+    let unoccupied_backlog = Server::bind(&path, authenticate, Shell::for_test());
+    assert!(matches!(unoccupied_backlog, Err(error) if error.kind() == io::ErrorKind::AddrInUse));
+
+    let queued = UnixStream::connect(&path)?;
+    let full_backlog = UnixStream::connect(&path).expect_err("Darwin backlog should be full");
+    assert_eq!(full_backlog.kind(), io::ErrorKind::ConnectionRefused);
+    let candidate = Server::bind(&path, authenticate, Shell::for_test());
+    assert!(matches!(candidate, Err(error) if error.kind() == io::ErrorKind::AddrInUse));
+
+    let accepted = listener.accept()?;
+    drop(accepted);
+    drop(queued);
+    UnixStream::connect(&path)?;
+    drop(listener);
+    let unrecorded = Server::bind(&path, authenticate, Shell::for_test());
+    assert!(matches!(unrecorded, Err(error) if error.kind() == io::ErrorKind::AddrInUse));
+    fs::write(directory.0.join("s.lock"), b"incomplete")?;
+    let incomplete = Server::bind(&path, authenticate, Shell::for_test());
+    assert!(matches!(incomplete, Err(error) if error.kind() == io::ErrorKind::AddrInUse));
+    assert!(path.exists());
     Ok(())
 }
 

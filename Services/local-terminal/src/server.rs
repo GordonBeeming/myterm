@@ -133,7 +133,10 @@ impl<Authenticate: Fn(&UnixStream) -> io::Result<()>> Server<Authenticate> {
             }
             Err(error) => return Err(error),
         };
-        stream.set_nonblocking(true)?;
+        if let Err(error) = stream.set_nonblocking(true) {
+            eprintln!("Could not configure local terminal client socket: {error}");
+            return Ok(());
+        }
         if let Err(error) = (self.authenticate)(&stream) {
             eprintln!("Rejected local terminal peer: {error}");
             send_rejection(stream, "Untrusted local terminal client");
@@ -143,7 +146,10 @@ impl<Authenticate: Fn(&UnixStream) -> io::Result<()>> Server<Authenticate> {
             send_rejection(stream, "A local terminal client is already connected");
             return Ok(());
         }
-        self.connection = Some(Connection::new(stream)?);
+        match Connection::new(stream) {
+            Ok(client) => self.connection = Some(client),
+            Err(error) => eprintln!("Could not initialize local terminal client: {error}"),
+        }
         Ok(())
     }
 
@@ -154,6 +160,9 @@ impl<Authenticate: Fn(&UnixStream) -> io::Result<()>> Server<Authenticate> {
             return Ok(false);
         }
         if client.closing.is_none() {
+            if client.handshake_expired() {
+                return Ok(false);
+            }
             self.parse_messages(client);
             if !client.input_blocked && client.closing.is_none() && events & libc::POLLIN != 0 {
                 let mut bytes = [0; READ_SIZE];
@@ -162,6 +171,9 @@ impl<Authenticate: Fn(&UnixStream) -> io::Result<()>> Server<Authenticate> {
                     Ok(count) => client.incoming.extend_from_slice(&bytes[..count]),
                     Err(error) if retryable(&error) => {}
                     Err(error) => return Err(error),
+                }
+                if client.handshake_expired() {
+                    return Ok(false);
                 }
                 self.parse_messages(client);
             }
@@ -173,7 +185,7 @@ impl<Authenticate: Fn(&UnixStream) -> io::Result<()>> Server<Authenticate> {
                 matches!(closing, Closing::Rejecting(deadline) if Instant::now() >= *deadline);
             return Ok(!client.outgoing.is_empty() && !expired);
         }
-        Ok(client.attached || Instant::now() < client.handshake_deadline)
+        Ok(!client.handshake_expired())
     }
 
     fn parse_messages(&mut self, client: &mut Connection) {
@@ -186,9 +198,14 @@ impl<Authenticate: Fn(&UnixStream) -> io::Result<()>> Server<Authenticate> {
                 client.reject("Local terminal frame is too large");
                 break;
             }
-            // Leave the next input frame in the socket or decoder until the PTY
-            // can accept it. A subsequent resize must keep its place in the stream.
-            if client.attached && kind == INPUT && length > MAX_QUEUE - client.pending_input.len() {
+            // Preserve ordered PTY operations, including resizes behind input
+            // bytes that the server has decoded but has not written yet.
+            let waiting_for_pty = match kind {
+                INPUT => length > MAX_QUEUE - client.pending_input.len(),
+                RESIZE => !client.pending_input.is_empty(),
+                _ => false,
+            };
+            if client.attached && waiting_for_pty {
                 client.input_blocked = true;
                 break;
             }
@@ -387,6 +404,10 @@ impl Connection {
         })
     }
 
+    fn handshake_expired(&self) -> bool {
+        !self.attached && Instant::now() >= self.handshake_deadline
+    }
+
     fn queue(&mut self, kind: u8, bytes: &[u8]) {
         queue_frame(&mut self.outgoing, kind, bytes);
     }
@@ -453,3 +474,7 @@ fn retryable(error: &io::Error) -> bool {
         io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
     )
 }
+
+#[cfg(test)]
+#[path = "server_tests.rs"]
+mod tests;
