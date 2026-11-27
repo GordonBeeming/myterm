@@ -1302,7 +1302,11 @@ extension TerminalView {
                 virtualPlacementsByImageId[record.imageId, default: []].append(record)
             }
         }
+        for id in Array(virtualPlacementsByImageId.keys) {
+            virtualPlacementsByImageId[id]?.sort { $0.placementId < $1.placementId }
+        }
         var placeholderImageCache: [UInt32: TTImage] = [:]
+        let hiddenKitty = terminal.kittyPlacementsHiddenByVirtualParents()
 
         #if os(macOS)
         // Clear the invalidated region before painting. We fill only cells that carry
@@ -1386,6 +1390,8 @@ extension TerminalView {
                         continue
                     }
                     if image.kittyIsKitty {
+                        if let id = image.kittyImageId, let placement = image.kittyPlacementId,
+                           hiddenKitty.contains(KittyPlacementKey(imageId: id, placementId: placement)) { continue }
                         if image.kittyZIndex < 0 {
                             underTextImages.append(image)
                         } else {
@@ -2388,6 +2394,12 @@ extension TerminalView {
         queuePendingDisplay()
     }
     
+    /// Native focus and mouse reports must not move the user's scrollback position.
+    public func sendUserReport(source: Terminal, data: ArraySlice<UInt8>) {
+        guard acceptsUserInput else { return }
+        terminalDelegate?.send(source: self, data: data)
+    }
+
     /**
      * Sends the specified slice of byte arrays to the program running under the terminal emulator
      * - Parameter data: the slice of an array to send to the client
@@ -2489,6 +2501,33 @@ extension TerminalView {
 
     /// Materializes image values restored by `Terminal.importCheckpoint`, then
     /// refreshes native layout, scroll state, renderer caches, and cursor state.
+    private func materializeCheckpointImage(_ image: TerminalImage) throws -> TerminalImage {
+    guard let checkpointImage = image as? RestoredTerminalImage else {
+        return image
+    }
+    guard let nativeImage = TTImage(data: checkpointImage.encodedImage) else {
+        throw TerminalCheckpointError.corrupt("checkpoint image could not be decoded")
+    }
+    let appleImage = AppleImage(
+        image: nativeImage,
+        width: checkpointImage.pixelWidth,
+        height: checkpointImage.pixelHeight,
+        onCol: checkpointImage.col
+    )
+    appleImage.kittyIsKitty = checkpointImage.kittyIsKitty
+    appleImage.kittyImageId = checkpointImage.kittyImageId
+    appleImage.kittyImageNumber = checkpointImage.kittyImageNumber
+    appleImage.kittyPlacementId = checkpointImage.kittyPlacementId
+    appleImage.kittyZIndex = checkpointImage.kittyZIndex
+    appleImage.kittyCol = checkpointImage.kittyCol
+    appleImage.kittyRow = checkpointImage.kittyRow
+    appleImage.kittyCols = checkpointImage.kittyCols
+    appleImage.kittyRows = checkpointImage.kittyRows
+    appleImage.kittyPixelOffsetX = checkpointImage.kittyPixelOffsetX
+    appleImage.kittyPixelOffsetY = checkpointImage.kittyPixelOffsetY
+    return appleImage
+    }
+
     public func invalidateAfterCheckpointImport() throws {
         var preparedLines: [(BufferLine, [TerminalImage])] = []
         for buffer in [terminal.normalBuffer, terminal.altBuffer] {
@@ -2498,41 +2537,22 @@ extension TerminalView {
                 var restored: [TerminalImage] = []
                 restored.reserveCapacity(images.count)
                 for image in images {
-                    guard let checkpointImage = image as? RestoredTerminalImage else {
-                        restored.append(image)
-                        continue
-                    }
-                    guard let nativeImage = TTImage(data: checkpointImage.encodedImage) else {
-                        throw TerminalCheckpointError.corrupt("checkpoint image could not be decoded")
-                    }
-                    let appleImage = AppleImage(
-                        image: nativeImage,
-                        width: checkpointImage.pixelWidth,
-                        height: checkpointImage.pixelHeight,
-                        onCol: checkpointImage.col
-                    )
-                    appleImage.kittyIsKitty = checkpointImage.kittyIsKitty
-                    appleImage.kittyImageId = checkpointImage.kittyImageId
-                    appleImage.kittyImageNumber = checkpointImage.kittyImageNumber
-                    appleImage.kittyPlacementId = checkpointImage.kittyPlacementId
-                    appleImage.kittyZIndex = checkpointImage.kittyZIndex
-                    appleImage.kittyCol = checkpointImage.kittyCol
-                    appleImage.kittyRow = checkpointImage.kittyRow
-                    appleImage.kittyCols = checkpointImage.kittyCols
-                    appleImage.kittyRows = checkpointImage.kittyRows
-                    appleImage.kittyPixelOffsetX = checkpointImage.kittyPixelOffsetX
-                    appleImage.kittyPixelOffsetY = checkpointImage.kittyPixelOffsetY
-                    restored.append(appleImage)
+                    restored.append(try materializeCheckpointImage(image))
                 }
                 preparedLines.append((line, restored))
             }
         }
+        let preparedRelative = try terminal.kittyGraphicsState.relativeStripes.mapValues { images in
+            try images.map { try materializeCheckpointImage($0) }
+        }
+        terminal.kittyGraphicsState.relativeStripes = preparedRelative
         for (line, images) in preparedLines {
             line.images = images
         }
         for buffer in [terminal.normalBuffer, terminal.altBuffer] {
             buffer.recalculateLinesWithImagesCount()
         }
+        terminal.updateKittyRelativePlacementsForCurrentBuffer(force: true)
 #if os(iOS) || os(visionOS)
         mouseModeChanged(source: terminal)
 #endif

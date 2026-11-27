@@ -6,7 +6,14 @@ import Observation
 @MainActor
 @Observable
 final class DesktopTerminalSnippetStore {
-    static let shared = DesktopTerminalSnippetStore()
+    static let shared: DesktopTerminalSnippetStore = {
+        #if DEBUG && MYTERM_RUST_WORKSPACES
+        if let defaults = UserDefaults(suiteName: "com.gordonbeeming.myterm.dev.rust-workspaces") {
+            return DesktopTerminalSnippetStore(defaults: defaults)
+        }
+        #endif
+        return DesktopTerminalSnippetStore()
+    }()
     private(set) var snippets: [TerminalSnippet]
     @ObservationIgnored private let defaults: UserDefaults
     private static let storageKey = "terminalSnippets.v1"

@@ -62,6 +62,52 @@ final class LocalRustTerminalConnectionTests: XCTestCase {
         }
     }
 
+    func testWorkspaceAttachmentReceivesControllerAndAuthoritativeGeometry() async throws {
+        let (connection, peer) = try makeConnection()
+        defer { connection.disconnect() }
+        let client = UUID()
+
+        try connection.beginWorkspace(sessionID: UUID(), clientID: client, launch: nil)
+        let request = try XCTUnwrap(peer.read(upToCount: 37))
+        XCTAssertEqual(request.prefix(5), Data([6, 0, 0, 0, 32]))
+
+        try peer.write(contentsOf: Self.frame(0x81, payload: Data([0, 0, 0, 12, 0, 0, 0, 34])))
+        var rawClient = client.uuid
+        var control = withUnsafeBytes(of: &rawClient) { Data($0) }
+        control.append(contentsOf: [0, 0, 0, 0, 0, 0, 0, 7, 1])
+        try peer.write(contentsOf: Self.frame(0x84, payload: control))
+        try peer.write(contentsOf: Self.frame(0x88, payload: Data([0, 101, 0, 38])))
+
+        let attachment = try await connection.workspaceAttachment()
+        XCTAssertEqual(attachment.shellPID, 34)
+        XCTAssertEqual(attachment.control.owner, client)
+        XCTAssertEqual(attachment.control.revision, 7)
+        guard case .geometry(let columns, let rows, _) = try await connection.nextWorkspaceEvent() else {
+            return XCTFail("The client did not receive the size applied by the server")
+        }
+        XCTAssertEqual(columns, 101)
+        XCTAssertEqual(rows, 38)
+    }
+
+    func testCheckpointChunksPrecedeAnExplicitAppliedAcknowledgement() async throws {
+        let (connection, peer) = try makeConnection()
+        defer { connection.disconnect() }
+        try connection.beginWorkspace(sessionID: UUID(), clientID: UUID(), launch: nil, checkpoint: true)
+        XCTAssertEqual(try peer.read(upToCount: 37)?.prefix(5), Data([12, 0, 0, 0, 32]))
+
+        try peer.write(contentsOf: Self.frame(0x81, payload: Data([0, 0, 0, 12, 0, 0, 0, 34, 1])))
+        try peer.write(contentsOf: Self.frame(0x84, payload: Data(count: 25)))
+        try peer.write(contentsOf: Self.frame(0x86, payload: Data([0, 0, 0, 0, 0, 0, 0, 42, 0, 0, 0, 5])))
+        try peer.write(contentsOf: Self.frame(0x87, payload: Data([1, 2])))
+        try peer.write(contentsOf: Self.frame(0x87, payload: Data([3, 4, 5])))
+        let checkpoint = try await connection.workspaceAttachment().checkpoint
+        XCTAssertEqual(checkpoint?.sequence, 42)
+        XCTAssertEqual(checkpoint?.bytes, Data([1, 2, 3, 4, 5]))
+
+        try connection.acknowledgeWorkspaceCheckpoint(sequence: 42)
+        XCTAssertEqual(try peer.read(upToCount: 13), Data([13, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 42]))
+    }
+
     private func makeConnection() throws -> (LocalRustTerminalConnection, FileHandle) {
         var descriptors: [Int32] = [-1, -1]
         guard socketpair(AF_UNIX, SOCK_STREAM, 0, &descriptors) == 0 else {

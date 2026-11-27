@@ -49,7 +49,7 @@ struct MyTermApp: App {
         // The main scene owns the Global Settings command and its scope selection.
         .commandsRemoved()
 
-        #if DEBUG && MYTERM_LOCAL_RUST_TERMINAL
+        #if DEBUG && MYTERM_LOCAL_RUST_TERMINAL && !MYTERM_RUST_WORKSPACES
         Window("Local Rust Terminal", id: LocalRustTerminalView.windowID) {
             if let executable = LocalRustTerminalView.bundledExecutable {
                 LocalRustTerminalView(namespace: startup.localRustTerminalNamespace, executable: executable)
@@ -377,6 +377,19 @@ final class MyTermStartup {
             .appendingPathComponent("rust-terminal", isDirectory: true)
     }
     #endif
+
+    private func makeAppModel() throws -> AppModel {
+        #if DEBUG && MYTERM_RUST_WORKSPACES
+        let engine = LocalRustWorkspaceTerminalEngine(
+            namespace: localRustTerminalNamespace.appendingPathComponent("workspaces", isDirectory: true),
+            executable: LocalRustTerminalView.bundledExecutable
+        )
+        return try AppModel(channel: MyTermChannel.active, applicationSupportDirectory: supportDirectory, terminalEngine: engine)
+        #else
+        return try AppModel(channel: MyTermChannel.active, applicationSupportDirectory: supportDirectory)
+        #endif
+    }
+
     private var startupTrial: ApplicationUpdatePlan?
     private var didConfirmStartup = false
     private var pendingUpdateNoticeURL: URL?
@@ -511,12 +524,19 @@ final class MyTermStartup {
     /// Resolve this installation’s profile and acquire ownership before constructing its application model.
     init() {
         let channel = MyTermChannel.active
+        let baseSupportDirectory: URL
         if let override = ProcessInfo.processInfo.environment["MYTERM_APPLICATION_SUPPORT_DIRECTORY"], !override.isEmpty {
-            supportDirectory = URL(fileURLWithPath: override, isDirectory: true).standardizedFileURL
+            baseSupportDirectory = URL(fileURLWithPath: override, isDirectory: true).standardizedFileURL
         } else {
-            supportDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
+            baseSupportDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
                 .first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
         }
+        #if DEBUG && MYTERM_RUST_WORKSPACES
+        supportDirectory = baseSupportDirectory.appendingPathComponent("MyTerm Rust Workspaces Development", isDirectory: true)
+        setenv("MYTERM_USER_DEFAULTS_SUITE", "com.gordonbeeming.myterm.dev.rust-workspaces", 1)
+        #else
+        supportDirectory = baseSupportDirectory
+        #endif
         coordinator = SingleInstanceCoordinator(configuration: SingleInstanceConfiguration(
             profile: channel.bundleIdentifier,
             directory: supportDirectory.appendingPathComponent(channel.displayName, isDirectory: true)
@@ -597,12 +617,12 @@ final class MyTermStartup {
             if releaseChannel == .stable {
                 let config = ChannelConfigurationStore(directory: directory, preferencesDomain: preferencesDomain)
                 let (loaded, notice) = try config.loadStable {
-                    try AppModel(channel: MyTermChannel.active, applicationSupportDirectory: supportDirectory)
+                    try makeAppModel()
                 }
                 instance = loaded
                 if let notice { updateNotices.append(notice) }
             } else {
-                instance = try AppModel(channel: MyTermChannel.active, applicationSupportDirectory: supportDirectory)
+                instance = try makeAppModel()
             }
             let notices = updateNotices + hookFailures
             if !notices.isEmpty { instance.errorDescription = notices.joined(separator: "\n") }

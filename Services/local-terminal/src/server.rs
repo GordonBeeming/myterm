@@ -1,5 +1,7 @@
+use crate::checkpoint_stream::{LiveTerminalState, SnapshotDelivery};
 use crate::session::{check, LaunchOptions, Session, Shell, StoppingShell};
 use crate::socket::{PeerEvents, Socket};
+use myterm_terminal_state::{Geometry, MAXIMUM_CHECKPOINT_BYTES};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::io::{self, Read, Write};
 use std::os::fd::{AsRawFd, RawFd};
@@ -12,8 +14,11 @@ const MAX_CONNECTIONS: usize = 128;
 const FD_HEADROOM: usize = 32;
 const ACCEPT_BACKOFF: Duration = Duration::from_millis(250);
 const MAX_USED_IDENTIFIERS: usize = 65_536;
-const MAX_FRAME: usize = 65_536;
+pub(crate) const MAX_FRAME: usize = 65_536;
 const MAX_QUEUE: usize = 256 * 1024;
+const MAX_SNAPSHOT_BYTES: usize = 2 * MAXIMUM_CHECKPOINT_BYTES;
+const MAX_PENDING_REPLIES: usize = 256 * 1024;
+const CHECKPOINT_TIMEOUT: Duration = Duration::from_secs(15);
 const CONTROL_RESERVE: usize = 512;
 const READ_SIZE: usize = 16 * 1024;
 const HEADER_SIZE: usize = 5;
@@ -28,7 +33,11 @@ const TAKE_CONTROL: u8 = 7;
 const RELEASE_CONTROL: u8 = 8;
 const STOP: u8 = 9;
 const DETACH: u8 = 10;
+const CHECKPOINT_LAUNCH: u8 = 11;
+const CHECKPOINT_ATTACH: u8 = 12;
+const CHECKPOINT_APPLIED: u8 = 13;
 const STOP_SESSION: u8 = 14;
+const QUERY_CONTROL: u8 = 15;
 const READY: u8 = 0x81;
 const OUTPUT: u8 = 0x82;
 const END: u8 = 0x83;
@@ -220,6 +229,12 @@ impl<Authenticate: Fn(&UnixStream) -> io::Result<()>> Server<Authenticate> {
         {
             return Ok(false);
         }
+        if client
+            .checkpoint_ack
+            .is_some_and(|(_, deadline)| Instant::now() >= deadline)
+        {
+            return Ok(false);
+        }
         if client.closing.is_none() {
             if client.handshake_expired() {
                 return Ok(false);
@@ -240,12 +255,12 @@ impl<Authenticate: Fn(&UnixStream) -> io::Result<()>> Server<Authenticate> {
             }
         }
 
-        flush(&mut client.outgoing, &mut client.stream)?;
+        client.flush()?;
         if client.outgoing.len() < GEOMETRY_FRAME_SIZE {
             client.tail_geometry = false;
         }
         if let Some(deadline) = client.closing {
-            return Ok(!client.outgoing.is_empty() && Instant::now() < deadline);
+            return Ok(client.has_pending_frames() && Instant::now() < deadline);
         }
         Ok(!client.handshake_expired())
     }
@@ -300,7 +315,7 @@ impl<Authenticate: Fn(&UnixStream) -> io::Result<()>> Server<Authenticate> {
             return false;
         }
         match kind {
-            INPUT => length > MAX_QUEUE - session.pending_input.len(),
+            INPUT => length > MAX_QUEUE.saturating_sub(session.pending_input.len()),
             RESIZE => !session.pending_input.is_empty(),
             _ => false,
         }
@@ -312,6 +327,9 @@ impl<Authenticate: Fn(&UnixStream) -> io::Result<()>> Server<Authenticate> {
         kind: u8,
         payload: &[u8],
     ) -> io::Result<()> {
+        if kind == QUERY_CONTROL {
+            return self.query_control(client, payload);
+        }
         let (attachment, launch) = Attachment::parse(kind, payload)?;
         let id = attachment.session;
         // Reserve a separate command socket even when the workspace fills its
@@ -322,7 +340,7 @@ impl<Authenticate: Fn(&UnixStream) -> io::Result<()>> Server<Authenticate> {
         ) {
             return Err(io::Error::other("Local terminal descriptor budget reached"));
         }
-        if let Some(options) = launch {
+        let initial_snapshot = if let Some(options) = launch {
             if self.sessions.contains_key(&id) {
                 return Err(io::Error::other(
                     "A terminal session with this identifier is already running",
@@ -341,6 +359,14 @@ impl<Authenticate: Fn(&UnixStream) -> io::Result<()>> Server<Authenticate> {
                     "Local terminal lifetime launch limit reached",
                 ));
             }
+            let state = options
+                .checkpoint_settings(attachment.checkpoint)?
+                .map(|(geometry, scrollback)| LiveTerminalState::new(geometry, scrollback))
+                .transpose()?;
+            let snapshot = state
+                .as_ref()
+                .map(|terminal| self.prepare_snapshot(terminal))
+                .transpose()?;
             let pty = self.shell.start(options).map_err(|error| {
                 eprintln!("Could not start local terminal shell {id:x?}: {error}");
                 io::Error::other("Could not start terminal shell. Check the configured shell and working directory.")
@@ -351,15 +377,32 @@ impl<Authenticate: Fn(&UnixStream) -> io::Result<()>> Server<Authenticate> {
                     pty,
                     controller: Controller::new(attachment.client),
                     pending_input: VecDeque::new(),
+                    reply_overflow_logged: false,
+                    state,
                 },
             );
             self.used_identifiers.insert(id);
-        }
+            snapshot
+        } else {
+            None
+        };
         let session = self
             .sessions
             .get(&id)
-            .filter(|session| session.controller.is_legacy() == attachment.client.is_none())
+            .filter(|session| {
+                session.controller.is_legacy() == attachment.client.is_none()
+                    && session.state.is_some() == attachment.checkpoint
+            })
             .ok_or_else(|| io::Error::other("No live terminal session matches this identifier"))?;
+        let snapshot = if let Some(snapshot) = initial_snapshot {
+            Some(snapshot)
+        } else {
+            session
+                .state
+                .as_ref()
+                .map(|terminal| self.prepare_snapshot(terminal))
+                .transpose()?
+        };
         if let Some((&fd, _)) = self
             .connections
             .iter()
@@ -370,14 +413,52 @@ impl<Authenticate: Fn(&UnixStream) -> io::Result<()>> Server<Authenticate> {
             self.connections.remove(&fd);
         }
         client.attachment = Some(attachment);
-        let mut identity = [0; 8];
+        let mut identity = [0; 9];
         identity[..4].copy_from_slice(&std::process::id().to_be_bytes());
-        identity[4..].copy_from_slice(&session.pty.child.id().to_be_bytes());
-        client.queue(READY, &identity);
+        identity[4..8].copy_from_slice(&session.pty.child.id().to_be_bytes());
+        identity[8] = u8::from(attachment.checkpoint);
+        client.queue(READY, &identity[..8 + usize::from(attachment.checkpoint)]);
         if attachment.client.is_some() {
             client.control(CONTROL, self.control_state(attachment, Some(client)));
         }
+        if let Some((sequence, bytes)) = snapshot {
+            client.snapshot = Some(SnapshotDelivery::new(
+                sequence,
+                bytes,
+                std::mem::take(&mut client.outgoing),
+            ));
+            client.checkpoint_ack = Some((sequence, Instant::now() + CHECKPOINT_TIMEOUT));
+        }
         Ok(())
+    }
+
+    fn query_control(&self, client: &mut Connection, payload: &[u8]) -> io::Result<()> {
+        let (mut attachment, _) = Attachment::parse(VIEW_ATTACH, payload)?;
+        let session = self
+            .sessions
+            .get(&attachment.session)
+            .filter(|session| !session.controller.is_legacy())
+            .ok_or_else(|| io::Error::other("No live terminal session matches this identifier"))?;
+        attachment.checkpoint = session.state.is_some();
+        client.control(CONTROL, self.control_state(attachment, None));
+        client.end("Local terminal control status sent");
+        Ok(())
+    }
+
+    fn prepare_snapshot(&self, terminal: &LiveTerminalState) -> io::Result<(u64, Vec<u8>)> {
+        let retained: usize = self
+            .connections
+            .values()
+            .filter_map(|client| client.snapshot.as_ref())
+            .map(SnapshotDelivery::retained_bytes)
+            .sum();
+        let snapshot = terminal.snapshot()?;
+        if snapshot.1.len() > MAX_SNAPSHOT_BYTES.saturating_sub(retained) {
+            return Err(io::Error::other(
+                "Local terminal checkpoint delivery is busy. Try reattaching.",
+            ));
+        }
+        Ok(snapshot)
     }
 
     fn stop_session_request(&mut self, client: &mut Connection, payload: &[u8]) -> io::Result<()> {
@@ -418,6 +499,20 @@ impl<Authenticate: Fn(&UnixStream) -> io::Result<()>> Server<Authenticate> {
         kind: u8,
         payload: &[u8],
     ) -> io::Result<()> {
+        if let Some((sequence, _)) = client.checkpoint_ack {
+            if kind == CHECKPOINT_APPLIED
+                && client.snapshot.is_none()
+                && payload == sequence.to_be_bytes()
+            {
+                client.checkpoint_ack = None;
+                return Ok(());
+            }
+            if !matches!(kind, DETACH | STOP) {
+                return Err(io::Error::other(
+                    "Apply the terminal checkpoint before sending requests",
+                ));
+            }
+        }
         let id = attachment.session;
         let session = self
             .sessions
@@ -434,7 +529,7 @@ impl<Authenticate: Fn(&UnixStream) -> io::Result<()>> Server<Authenticate> {
             }
             (STOP, [], Some(_)) => self.stop_session(client, id),
             (INPUT, _, _) => session.pending_input.extend(payload),
-            (RESIZE, [a, b, c, d], _) => {
+            (RESIZE, [a, b, c, d], _) if !attachment.checkpoint => {
                 session
                     .pty
                     .resize(u16::from_be_bytes([*a, *b]), u16::from_be_bytes([*c, *d]))?;
@@ -443,6 +538,30 @@ impl<Authenticate: Fn(&UnixStream) -> io::Result<()>> Server<Authenticate> {
                     for viewer in self.active_attachments(id) {
                         viewer.geometry(payload);
                     }
+                }
+            }
+            (RESIZE, [a, b, c, d, e, f, g, h], _) if attachment.checkpoint => {
+                let geometry = Geometry {
+                    columns: u16::from_be_bytes([*a, *b]),
+                    rows: u16::from_be_bytes([*c, *d]),
+                    cell_width: u16::from_be_bytes([*e, *f]),
+                    cell_height: u16::from_be_bytes([*g, *h]),
+                };
+                geometry.validate()?;
+                let state = session
+                    .state
+                    .as_mut()
+                    .ok_or_else(|| io::Error::other("Terminal state is unavailable"))?;
+                session.pty.resize_with_pixels(
+                    geometry.columns,
+                    geometry.rows,
+                    geometry.columns * geometry.cell_width,
+                    geometry.rows * geometry.cell_height,
+                )?;
+                state.resize(geometry)?;
+                client.queue_bounded(GEOMETRY, payload);
+                for viewer in self.active_attachments(id) {
+                    viewer.queue_bounded(GEOMETRY, payload);
                 }
             }
             (TAKE_CONTROL | RELEASE_CONTROL, _, Some(requester)) => {
@@ -466,6 +585,7 @@ impl<Authenticate: Fn(&UnixStream) -> io::Result<()>> Server<Authenticate> {
         let target = Attachment {
             session: attachment.session,
             client: controller.owner,
+            checkpoint: attachment.checkpoint,
         };
         let connected = controller.owner.is_some()
             && current
@@ -507,15 +627,18 @@ impl<Authenticate: Fn(&UnixStream) -> io::Result<()>> Server<Authenticate> {
         if events & libc::POLLNVAL != 0 {
             return Err(io::Error::other("Terminal PTY descriptor is unavailable"));
         }
+        if status.is_none() && events & libc::POLLOUT != 0 && events & libc::POLLHUP == 0 {
+            flush(&mut session.pending_input, &mut session.pty.master)?;
+            if session.pending_input.is_empty() {
+                session.reply_overflow_logged = false;
+            }
+        }
         if events & (libc::POLLIN | libc::POLLHUP | libc::POLLERR) != 0 || status.is_some() {
             let drained = self.read_output(id, session)?;
             if let Some(status) = status.filter(|_| drained) {
                 self.finish_session(id, &format!("Terminal shell ended ({status})"));
                 return Ok(false);
             }
-        }
-        if status.is_none() && events & libc::POLLOUT != 0 && events & libc::POLLHUP == 0 {
-            flush(&mut session.pending_input, &mut session.pty.master)?;
         }
         Ok(true)
     }
@@ -530,6 +653,19 @@ impl<Authenticate: Fn(&UnixStream) -> io::Result<()>> Server<Authenticate> {
             match session.pty.master.read(&mut bytes[..capacity]) {
                 Ok(0) => return Ok(true),
                 Ok(count) => {
+                    if let Some(state) = &mut session.state {
+                        let budget = (MAX_QUEUE + MAX_PENDING_REPLIES)
+                            .saturating_sub(session.pending_input.len());
+                        let replies = state.advance(&bytes[..count], budget)?;
+                        session.pending_input.extend(replies.bytes);
+                        if replies.overflow && !session.reply_overflow_logged {
+                            // Pausing reads here can deadlock a process writing queries
+                            // before it reads replies. Keep the display current and
+                            // report deliberate loss of replies past the hard bound.
+                            eprintln!("Local terminal session {id:x?} exceeded its reply budget; some query replies were dropped");
+                            session.reply_overflow_logged = true;
+                        }
+                    }
                     for client in self.active_attachments(id) {
                         let packet = &bytes[..count];
                         let reserve = if client
@@ -631,6 +767,8 @@ struct ManagedSession {
     pty: Session,
     controller: Controller,
     pending_input: VecDeque<u8>,
+    reply_overflow_logged: bool,
+    state: Option<LiveTerminalState>,
 }
 
 struct Controller {
@@ -681,6 +819,7 @@ impl Controller {
 struct Attachment {
     session: Identifier,
     client: Option<Identifier>,
+    checkpoint: bool,
 }
 
 impl Attachment {
@@ -697,17 +836,18 @@ impl Attachment {
                     Self {
                         session,
                         client: None,
+                        checkpoint: false,
                     },
                     launch,
                 ))
             }
-            LAUNCH | VIEW_ATTACH => {
+            LAUNCH | VIEW_ATTACH | CHECKPOINT_LAUNCH | CHECKPOINT_ATTACH => {
                 let (session, payload) = payload.split_first_chunk::<16>().ok_or_else(invalid)?;
                 let (client, settings) = payload.split_first_chunk::<16>().ok_or_else(invalid)?;
                 if *client == NO_OWNER || *session == NO_OWNER {
                     return Err(invalid());
                 }
-                let launch = if kind == LAUNCH {
+                let launch = if matches!(kind, LAUNCH | CHECKPOINT_LAUNCH) {
                     Some(LaunchOptions::parse(settings)?)
                 } else if settings.is_empty() {
                     None
@@ -720,6 +860,7 @@ impl Attachment {
                     Self {
                         session: *session,
                         client: Some(*client),
+                        checkpoint: matches!(kind, CHECKPOINT_LAUNCH | CHECKPOINT_ATTACH),
                     },
                     launch,
                 ))
@@ -740,6 +881,8 @@ struct Connection {
     attachment: Option<Attachment>,
     observed_control: Option<[u8; 25]>,
     handshake_deadline: Instant,
+    snapshot: Option<SnapshotDelivery>,
+    checkpoint_ack: Option<(u64, Instant)>,
     closing: Option<Instant>,
     tail_geometry: bool,
 }
@@ -755,6 +898,8 @@ impl Connection {
             attachment: None,
             observed_control: None,
             handshake_deadline: Instant::now() + HANDSHAKE_TIMEOUT,
+            snapshot: None,
+            checkpoint_ack: None,
             closing: None,
             tail_geometry: false,
         })
@@ -765,10 +910,24 @@ impl Connection {
         if self.closing.is_none() && !self.input_blocked {
             events |= libc::POLLIN;
         }
-        if !self.outgoing.is_empty() {
+        if self.has_pending_frames() {
             events |= libc::POLLOUT;
         }
         poll_descriptor(self.stream.as_raw_fd(), events)
+    }
+
+    fn has_pending_frames(&self) -> bool {
+        self.snapshot.is_some() || !self.outgoing.is_empty()
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        if let Some(snapshot) = &mut self.snapshot {
+            if !snapshot.flush(&mut self.stream)? {
+                return Ok(());
+            }
+            self.snapshot = None;
+        }
+        flush(&mut self.outgoing, &mut self.stream)
     }
 
     fn handshake_expired(&self) -> bool {
@@ -777,7 +936,7 @@ impl Connection {
 
     fn queue(&mut self, kind: u8, bytes: &[u8]) {
         queue_frame(&mut self.outgoing, kind, bytes);
-        self.tail_geometry = kind == GEOMETRY;
+        self.tail_geometry = kind == GEOMETRY && bytes.len() == 4;
     }
 
     fn can_queue(&self, length: usize) -> bool {
@@ -823,7 +982,7 @@ fn send_rejection(mut stream: UnixStream, message: &str) {
     }
 }
 
-fn queue_frame(outgoing: &mut VecDeque<u8>, kind: u8, bytes: &[u8]) {
+pub(crate) fn queue_frame(outgoing: &mut VecDeque<u8>, kind: u8, bytes: &[u8]) {
     outgoing.push_back(kind);
     outgoing.extend((bytes.len() as u32).to_be_bytes());
     outgoing.extend(bytes);
@@ -837,7 +996,7 @@ fn poll_descriptor(fd: RawFd, events: i16) -> libc::pollfd {
     }
 }
 
-fn flush(queue: &mut VecDeque<u8>, writer: &mut impl Write) -> io::Result<()> {
+pub(crate) fn flush(queue: &mut VecDeque<u8>, writer: &mut impl Write) -> io::Result<()> {
     while !queue.is_empty() {
         match writer.write(queue.as_slices().0) {
             Ok(0) => return Err(io::ErrorKind::WriteZero.into()),

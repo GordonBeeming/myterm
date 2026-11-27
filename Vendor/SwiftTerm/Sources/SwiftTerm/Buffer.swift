@@ -422,6 +422,7 @@ public final class Buffer {
     
     public func resize (newCols : Int, newRows : Int)
     {
+        if marginRight == cols - 1 && marginLeft == 0 { marginRight = newCols - 1 }
         if marginRight > newCols - 1 {
             marginRight = newCols - 1
         }
@@ -430,6 +431,11 @@ public final class Buffer {
         }
         let newMaxLength = getCorrectBufferLength(newRows)
         if newMaxLength > lines.maxLength {
+            lines.maxLength = newMaxLength
+        }
+        if lines.count == 0 {
+            // Unused alternate buffers must obey the same no-history capacity as
+            // populated buffers, including when resized before their first use.
             lines.maxLength = newMaxLength
         }
         if lines.count > 0 {

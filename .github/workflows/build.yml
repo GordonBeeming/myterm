@@ -140,8 +140,28 @@ jobs:
           done
           test "$missing" -eq 0
 
+  verify-rust-workspaces:
+    runs-on: xcode-27
+    name: Verify Local Rust Terminal
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+
+      - name: Install the pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: '1.99.1'
+
+      - name: Install the matching Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
+
+      - name: Verify Rust PTYs and native SwiftTerm checkpoint import
+        run: bash Services/terminal-state/check.sh
+
   release:
-    needs: [build-and-test, verify-bundle]
+    needs: [build-and-test, verify-bundle, verify-rust-workspaces]
     if: inputs.beta_version != '' || (github.event_name == 'release' && !github.event.release.prerelease)
     runs-on: xcode-27
     name: Sign, Notarize & Release

@@ -19,6 +19,7 @@ struct ActiveProcessClosePrompt: Equatable {
     let confirmButtonTitle: String
     let processNames: [String]
     var informativeText: String? = nil
+    var hasUnverifiedTerminals = false
 }
 
 typealias TextFileOpenCommandRunner = @MainActor (
@@ -215,7 +216,9 @@ final class AppModel {
         makeAgentNotificationPoster: @escaping @MainActor () -> any AgentNotificationPosting = { AgentNotificationPosterFactory.make() },
         isApplicationActive: @escaping @MainActor () -> Bool = { NSApp?.isActive ?? false },
         makeCompanionHost: @escaping CompanionHostFactory = { model, channel, namespace in
-            CompanionHostModel(appModel: model, channel: channel, storageNamespace: namespace)
+            let defaults = ProcessInfo.processInfo.environment["MYTERM_USER_DEFAULTS_SUITE"]
+                .flatMap(UserDefaults.init(suiteName:)) ?? .standard
+            return CompanionHostModel(appModel: model, channel: channel, storageNamespace: namespace, defaults: defaults)
         }
     ) throws {
         self.channel = channel
@@ -256,7 +259,13 @@ final class AppModel {
         self.makeAgentNotificationPoster = makeAgentNotificationPoster
         self.isApplicationActive = isApplicationActive
         self.makeCompanionHost = makeCompanionHost
-        browserDataProfileResolver = BrowserDataProfileResolver(channel: channel)
+        let isolatedBrowserProfile: String?
+        #if DEBUG
+        isolatedBrowserProfile = terminalEngine is LocalRustWorkspaceTerminalEngine ? companionStorageNamespace : nil
+        #else
+        isolatedBrowserProfile = nil
+        #endif
+        browserDataProfileResolver = BrowserDataProfileResolver(channel: channel, isolatedProfile: isolatedBrowserProfile)
         self.updates = updates ?? UpdateController(channel: channel, configurationDirectory: terminalContinuityDirectory)
         if browserLauncherURL == nil {
             // Without the launcher every pane starts with an empty MyTerm environment, so BROWSER,
@@ -453,6 +462,10 @@ final class AppModel {
                 applyResolvedRuntimeSettings(to: [workspaceID])
             }
         }
+    }
+
+    var companionDiagnosticsDirectory: URL {
+        terminalContinuityDirectory.appending(path: "companion-diagnostics", directoryHint: .isDirectory)
     }
 
     static func applicationSupportDirectory(
@@ -855,8 +868,8 @@ final class AppModel {
             errorDescription = AppModelError.workspaceUnavailable(workspaceID).localizedDescription
             return
         }
-        guard confirmClose(
-            processNames: activeProcessNames(in: workspace),
+        guard confirmTerminalClose(
+            tabs: workspace.allTabs,
             title: "Close \(workspace.displayTitle)?",
             confirmButtonTitle: "Close Workspace"
         ) else { return }
@@ -1607,8 +1620,8 @@ final class AppModel {
             errorDescription = AppModelError.tabUnavailable(tabID).localizedDescription
             return
         }
-        guard confirmClose(
-            processNames: activeProcessNames(in: tab),
+        guard confirmTerminalClose(
+            tabs: [tab],
             title: "Close \(tab.customTitle ?? tab.automaticDisplayTitle)?",
             confirmButtonTitle: "Close Tab"
         ) else { return }
@@ -1629,8 +1642,8 @@ final class AppModel {
             return
         }
         let tab = group.selectedTab
-        guard confirmClose(
-            processNames: activeProcessNames(in: tab),
+        guard confirmTerminalClose(
+            tabs: [tab],
             title: "Close this pane?",
             confirmButtonTitle: "Close Pane"
         ) else { return }
@@ -2664,6 +2677,11 @@ final class AppModel {
                 tabID: tabID,
                 message: error.localizedDescription
             )
+        case .transportAttached:
+            guard let remote = terminalSessions[sessionID] as? any TerminalRemoteSession else { return }
+            companionHost.observe(session: remote, workspaceID: workspaceID, groupID: tabGroupID,
+                                  tabID: tabID, sessionID: sessionID)
+            companionHost.workspaceDidChange()
         case .idleShellStarted:
             guard liveAgentTabs[tabID] == nil else { return }
             forgetAgent(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID, sessionID: sessionID)
@@ -2688,7 +2706,13 @@ final class AppModel {
             // the foreground poll that would have noticed an agent killed before it has stopped.
             // Markers are forwarded asynchronously, so one can still be queued behind this event;
             // dropping the callback keeps it from putting an agent back into a dead pane.
+            #if DEBUG
+            if (terminalSessions[sessionID] as? SwiftTermTerminalSession)?.rustRecovery == nil {
+                terminalSessions[sessionID]?.onEvent = nil
+            }
+            #else
             terminalSessions[sessionID]?.onEvent = nil
+            #endif
             // A shell that was hung up or killed took its agent with it, but the agent never left
             // its conversation; only a shell that exited by itself has nothing to resume.
             if Self.shellWasStopped(exitCode: exitCode) || isSystemPoweringOff {
@@ -2857,6 +2881,12 @@ final class AppModel {
             let directory = terminalContinuityDirectory
             Task { @MainActor [weak self] in
                 do {
+                    #if DEBUG
+                    if let engine = self?.terminalEngine as? LocalRustWorkspaceTerminalEngine {
+                        try await engine.stopExisting(paneID: sessionID.rawValue)
+                        return
+                    }
+                    #endif
                     try await PersistentTerminalRuntime.stopExistingAsync(identifier: sessionID.rawValue, directory: directory)
                 } catch {
                     Logger(subsystem: "com.gordonbeeming.myterm", category: "terminal-continuity")
@@ -3157,23 +3187,47 @@ final class AppModel {
         return [processName]
     }
 
-    private func activeProcessNames(in workspace: Workspace) -> [String] {
-        workspace.allTabs.flatMap(activeProcessNames(in:))
+    private func confirmTerminalClose(tabs: [Tab], title: String, confirmButtonTitle: String) -> Bool {
+        confirmClose(
+            processNames: tabs.flatMap(activeProcessNames(in:)),
+            title: title,
+            confirmButtonTitle: confirmButtonTitle,
+            hasUnverifiedTerminals: tabs.contains(where: hasUnverifiedSavedRustShell(in:))
+        )
+    }
+
+    private func hasUnverifiedSavedRustShell(in tab: Tab) -> Bool {
+        #if DEBUG
+        guard let sessionID = tab.terminalSession?.id,
+              let rustEngine = terminalEngine as? LocalRustWorkspaceTerminalEngine else { return false }
+        if let process = terminalSessions[sessionID] as? SwiftTermTerminalSession,
+           process.isRunning || process.rustRecovery?.action == .startNewShell {
+            return false
+        }
+        // Closing can stop a server-owned shell even when this pane has
+        // no runtime object. A saved selection only establishes the identity.
+        do { return try rustEngine.hasSavedSelection(paneID: sessionID.rawValue) }
+        catch { return true }
+        #else
+        return false
+        #endif
     }
 
     private func confirmClose(
         processNames: [String],
         title: String,
         confirmButtonTitle: String,
-        informativeText: String? = nil
+        informativeText: String? = nil,
+        hasUnverifiedTerminals: Bool = false
     ) -> Bool {
-        guard !processNames.isEmpty else { return true }
+        guard !processNames.isEmpty || hasUnverifiedTerminals else { return true }
         return confirmClosingActiveProcesses(
             ActiveProcessClosePrompt(
                 title: title,
                 confirmButtonTitle: confirmButtonTitle,
                 processNames: processNames,
-                informativeText: informativeText
+                informativeText: informativeText,
+                hasUnverifiedTerminals: hasUnverifiedTerminals
             )
         )
     }
@@ -3187,7 +3241,17 @@ final class AppModel {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = prompt.title
-        alert.informativeText = prompt.informativeText ?? "The following process\(prompt.processNames.count == 1 ? " is" : "es are") still running: \(groupedNames.joined(separator: ", ")). Closing will terminate \(prompt.processNames.count == 1 ? "it" : "them")."
+        var detail = [String]()
+        if let informativeText = prompt.informativeText {
+            detail.append(informativeText)
+        } else if !groupedNames.isEmpty {
+            let multiple = prompt.processNames.count > 1
+            detail.append("The following process\(multiple ? "es are" : " is") still running: \(groupedNames.joined(separator: ", ")). Closing will terminate \(multiple ? "them" : "it").")
+        }
+        if prompt.hasUnverifiedTerminals {
+            detail.append("Foreground activity could not be verified for every saved terminal. Closing will stop any of their shells that are still running.")
+        }
+        alert.informativeText = detail.joined(separator: "\n\n")
         alert.addButton(withTitle: prompt.confirmButtonTitle)
         alert.buttons.first?.hasDestructiveAction = true
         alert.addButton(withTitle: "Cancel")
@@ -3316,7 +3380,7 @@ final class AppModel {
         guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
             throw AppModelError.workspaceUnavailable(workspaceID)
         }
-        guard confirmedActiveProcesses || activeProcessNames(in: workspace).isEmpty else {
+        guard confirmedActiveProcesses || companionCloseProcessNames(in: workspace.allTabs).isEmpty else {
             throw CompanionCommandError.activeProcessRequiresDesktopConfirmation
         }
         try performCompanionMutation {
@@ -3337,7 +3401,7 @@ final class AppModel {
         guard let tab = tab(workspaceID: workspaceID, tabGroupID: groupID, tabID: tabID) else {
             throw AppModelError.tabUnavailable(tabID)
         }
-        guard confirmedActiveProcesses || activeProcessNames(in: tab).isEmpty else {
+        guard confirmedActiveProcesses || companionCloseProcessNames(in: [tab]).isEmpty else {
             throw CompanionCommandError.activeProcessRequiresDesktopConfirmation
         }
         try performCompanionMutation {
@@ -3354,7 +3418,7 @@ final class AppModel {
         guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
             throw AppModelError.workspaceUnavailable(workspaceID)
         }
-        return activeProcessNames(in: workspace)
+        return companionCloseProcessNames(in: workspace.allTabs)
     }
 
     func companionTabProcessInfo(
@@ -3365,7 +3429,16 @@ final class AppModel {
         guard let tab = tab(workspaceID: workspaceID, tabGroupID: groupID, tabID: tabID) else {
             throw AppModelError.tabUnavailable(tabID)
         }
-        return (activeProcessNames(in: tab), tab.terminalSession?.id)
+        return (companionCloseProcessNames(in: [tab]), tab.terminalSession?.id)
+    }
+
+    private func companionCloseProcessNames(in tabs: [Tab]) -> [String] {
+        tabs.flatMap { tab in
+            if hasUnverifiedSavedRustShell(in: tab) {
+                return ["Saved terminal shell (foreground activity unknown)"]
+            }
+            return activeProcessNames(in: tab)
+        }
     }
 
     func moveCompanionTab(

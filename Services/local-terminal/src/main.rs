@@ -1,4 +1,5 @@
 mod authentication;
+mod checkpoint_stream;
 mod server;
 mod session;
 mod socket;

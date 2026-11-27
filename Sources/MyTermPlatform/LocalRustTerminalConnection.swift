@@ -7,6 +7,7 @@ import os
 
 enum LocalRustTerminalError: LocalizedError {
     case missingServer, launch(String), invalidMessage, disconnected, backpressure, server(String)
+    case missingSession, sessionEnded(String), checkpointUnavailable, controlChanged
 
     var errorDescription: String? {
         switch self {
@@ -15,13 +16,17 @@ enum LocalRustTerminalError: LocalizedError {
         case .invalidMessage: "The local Rust server sent an invalid message."
         case .disconnected: "The local Rust server disconnected. Try reattaching to the saved shell."
         case .backpressure: "The local terminal input queue is full."
-        case let .server(message): message
+        case let .server(message), let .sessionEnded(message): message
+        case .missingSession: "The saved shell is no longer running. Start a new shell when you’re ready."
+        case .checkpointUnavailable: "The server could not restore this terminal’s state. Its shell was left running."
+        case .controlChanged: "Terminal control changed. Refresh and try again."
         }
     }
 }
 
 struct LocalRustTerminalEndpoint: Sendable {
     static let executableName = "myterm-local-terminal"
+    private static let serviceConnections = DispatchQueue(label: "myterm.rust-terminal.service", qos: .userInitiated)
     let namespace: URL
     let bundledExecutable: URL
     let socketDirectory: URL
@@ -39,7 +44,7 @@ struct LocalRustTerminalEndpoint: Sendable {
 
     func connect(starting: Bool) async throws -> LocalRustTerminalConnection {
         try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
+            Self.serviceConnections.async {
                 continuation.resume(with: Result { try connectOnWorker(starting: starting) })
             }
         }
@@ -155,11 +160,54 @@ final class LocalRustTerminalConnection: Sendable {
     }
 
     private enum Request: UInt8 {
-        case start = 1, attach, input, resize
+        case start = 1, attach = 2, input = 3, resize = 4
+        case workspaceLaunch = 5, workspaceAttach = 6, takeControl = 7
+        case checkpointLaunch = 11, checkpointAttach = 12, checkpointApplied = 13
+        case stopExisting = 14, readControl = 15
     }
 
     private enum Reply: UInt8 {
-        case ready = 0x81, output, ended
+        case ready = 0x81, output, ended, control, controlRejected, checkpointBegin, checkpointChunk, geometry
+    }
+
+    struct WorkspaceLaunch: Encodable, Sendable {
+        let shell: String
+        let arguments: [String]
+        let cwd: String
+        let environment: [String: String]
+        let columns: Int
+        let rows: Int
+        let cellWidth: UInt16?
+        let cellHeight: UInt16?
+        let scrollback: Int?
+    }
+
+    struct CellPixels: Equatable, Sendable {
+        let width: UInt16
+        let height: UInt16
+    }
+
+    struct Controller: Sendable {
+        let owner: UUID?
+        let revision: UInt64
+        let ownerConnected: Bool
+    }
+
+    struct Checkpoint: Sendable {
+        let sequence: UInt64
+        let bytes: Data
+    }
+
+    struct WorkspaceAttachment: Sendable {
+        let shellPID: pid_t
+        let control: Controller
+        let checkpoint: Checkpoint?
+    }
+
+    enum WorkspaceEvent: Sendable {
+        case output(Data)
+        case geometry(columns: Int, rows: Int, cellPixels: CellPixels?)
+        case control(Controller, rejected: Bool)
     }
 
     private struct WriteBudget {
@@ -168,6 +216,7 @@ final class LocalRustTerminalConnection: Sendable {
     }
 
     private static let maximumFrameLength = 65_536
+    private static let maximumCheckpointLength = 32 * 1_024 * 1_024
     private static let maximumQueuedInputBytes = 4 * 1_024 * 1_024
     private let descriptor: Int32
     private let peerPID: UInt32
@@ -192,6 +241,175 @@ final class LocalRustTerminalConnection: Sendable {
         }
     }
 
+    func beginWorkspace(sessionID: UUID, clientID: UUID, launch: WorkspaceLaunch?, checkpoint: Bool = false) throws {
+        var bytes = Self.uuidBytes(sessionID)
+        bytes.append(Self.uuidBytes(clientID))
+        if let launch { bytes.append(try JSONEncoder().encode(launch)) }
+        guard bytes.count <= Self.maximumFrameLength else {
+            throw LocalRustTerminalError.launch("The shell launch settings exceed the local protocol limit.")
+        }
+        let payload = bytes
+        let request: Request
+        switch (launch != nil, checkpoint) {
+        case (true, false): request = .workspaceLaunch
+        case (false, false): request = .workspaceAttach
+        case (true, true): request = .checkpointLaunch
+        case (false, true): request = .checkpointAttach
+        }
+        guard enqueue(payload.count, write: { try $0.send(request, bytes: payload) }) else {
+            throw LocalRustTerminalError.backpressure
+        }
+    }
+
+    func workspaceAttachment() async throws -> WorkspaceAttachment {
+        try await receive { connection in
+            let (kind, ready) = try connection.readFrame()
+            if kind == .ended { throw Self.workspaceFailure(ready) }
+            guard kind == .ready, [8, 9].contains(ready.count),
+                  Self.uint32(ready.prefix(4)) == connection.peerPID,
+                  let shellPID = pid_t(exactly: Self.uint32(ready.dropFirst(4).prefix(4))), shellPID > 1,
+                  ready.count == 8 || ready.last == 1 else { throw LocalRustTerminalError.invalidMessage }
+
+            let (controlKind, control) = try connection.readFrame()
+            if controlKind == .ended { throw Self.workspaceFailure(control) }
+            guard controlKind == .control else { throw LocalRustTerminalError.invalidMessage }
+            let initialControl = try Self.controller(control)
+            let checkpoint = ready.count == 9 ? try connection.readCheckpoint() : nil
+            try connection.clearTimeout(SO_RCVTIMEO)
+            return WorkspaceAttachment(shellPID: shellPID, control: initialControl, checkpoint: checkpoint)
+        }
+    }
+
+    func nextWorkspaceEvent() async throws -> WorkspaceEvent {
+        try await receive { connection in
+            let (kind, data) = try connection.readFrame()
+            switch kind {
+            case .output where !data.isEmpty:
+                return .output(data)
+            case .geometry where data.count == 4 || data.count == 8:
+                let columns = Int(Self.uint32(data.prefix(2)))
+                let rows = Int(Self.uint32(data.dropFirst(2).prefix(2)))
+                guard (2...1_024).contains(columns), (1...1_024).contains(rows),
+                      columns * rows <= SessionHostGeometry.maximumCellsPerBuffer else {
+                    throw LocalRustTerminalError.invalidMessage
+                }
+                let cellPixels: CellPixels?
+                if data.count == 8 {
+                    let width = UInt16(Self.uint32(data.dropFirst(4).prefix(2)))
+                    let height = UInt16(Self.uint32(data.suffix(2)))
+                    guard width > 0, height > 0 else { throw LocalRustTerminalError.invalidMessage }
+                    cellPixels = CellPixels(width: width, height: height)
+                } else {
+                    cellPixels = nil
+                }
+                return .geometry(columns: columns, rows: rows, cellPixels: cellPixels)
+            case .control, .controlRejected:
+                return .control(try Self.controller(data), rejected: kind == .controlRejected)
+            case .ended:
+                throw Self.workspaceFailure(data)
+            default:
+                throw LocalRustTerminalError.invalidMessage
+            }
+        }
+    }
+
+    func takeWorkspaceControl(observed: Controller) throws {
+        var revision = observed.revision.bigEndian
+        var payload = observed.owner.map(Self.uuidBytes) ?? Data(count: 16)
+        withUnsafeBytes(of: &revision) { payload.append(contentsOf: $0) }
+        let bytes = payload
+        guard enqueue(bytes.count, write: { try $0.send(.takeControl, bytes: bytes) }) else {
+            throw LocalRustTerminalError.backpressure
+        }
+    }
+
+    func acknowledgeWorkspaceCheckpoint(sequence: UInt64) throws {
+        var sequence = sequence.bigEndian
+        let bytes = withUnsafeBytes(of: &sequence) { Data($0) }
+        guard enqueue(bytes.count, write: { try $0.send(.checkpointApplied, bytes: bytes) }) else {
+            throw LocalRustTerminalError.backpressure
+        }
+    }
+
+    func workspaceControl(sessionID: UUID, clientID: UUID) async throws -> Controller {
+        try await receive { connection in
+            let bytes = Self.uuidBytes(sessionID) + Self.uuidBytes(clientID)
+            try connection.send(.readControl, bytes: bytes)
+            let (kind, payload) = try connection.readFrame()
+            if kind == .ended { throw Self.workspaceFailure(payload) }
+            guard kind == .control else { throw LocalRustTerminalError.invalidMessage }
+            return try Self.controller(payload)
+        }
+    }
+
+    func stopExistingWorkspace(sessionID: UUID, clientID: UUID, observed: Controller) async throws {
+        try await receive { connection in
+            var bytes = Self.uuidBytes(sessionID) + Self.uuidBytes(clientID)
+            bytes.append(observed.owner.map(Self.uuidBytes) ?? Data(count: 16))
+            var revision = observed.revision.bigEndian
+            withUnsafeBytes(of: &revision) { bytes.append(contentsOf: $0) }
+            try connection.send(.stopExisting, bytes: bytes)
+            let (kind, payload) = try connection.readFrame()
+            guard kind == .ended else { throw LocalRustTerminalError.invalidMessage }
+            guard payload == Data("Terminal session stopped".utf8) else { throw Self.workspaceFailure(payload) }
+        }
+    }
+
+    private static func workspaceFailure(_ data: Data) -> LocalRustTerminalError {
+        let message = String(decoding: data, as: UTF8.self)
+        if message == "No live terminal session matches this identifier" { return .missingSession }
+        if message == "Terminal control changed. Refresh and try again." { return .controlChanged }
+        if message == "Terminal session stopped" || message.hasPrefix("Terminal shell ended (") {
+            return .sessionEnded(message)
+        }
+        return .server(message)
+    }
+
+    private static func uuidBytes(_ uuid: UUID) -> Data {
+        var bytes = uuid.uuid
+        return withUnsafeBytes(of: &bytes) { Data($0) }
+    }
+
+    private static func controller(_ data: Data) throws -> Controller {
+        guard data.count == 25, let connected = data.last, connected <= 1 else {
+            throw LocalRustTerminalError.invalidMessage
+        }
+        let owner = data.prefix(16).withUnsafeBytes { UUID(uuid: $0.loadUnaligned(as: uuid_t.self)) }
+        let revision = data.dropFirst(16).prefix(8).reduce(UInt64(0)) { ($0 << 8) | UInt64($1) }
+        let unowned = data.prefix(16).allSatisfy { $0 == 0 }
+        guard !unowned || connected == 0 else { throw LocalRustTerminalError.invalidMessage }
+        return Controller(owner: unowned ? nil : owner, revision: revision, ownerConnected: connected == 1)
+    }
+
+    private func readCheckpoint() throws -> Checkpoint {
+        let (kind, header) = try readFrame()
+        if kind == .ended { throw Self.workspaceFailure(header) }
+        guard kind == .checkpointBegin, header.count == 12 else { throw LocalRustTerminalError.invalidMessage }
+        let sequence = header.prefix(8).reduce(UInt64(0)) { ($0 << 8) | UInt64($1) }
+        let size = Int(Self.uint32(header.suffix(4)))
+        guard (1...Self.maximumCheckpointLength).contains(size) else { throw LocalRustTerminalError.invalidMessage }
+        var bytes = Data()
+        bytes.reserveCapacity(size)
+        while bytes.count < size {
+            let (chunk, data) = try readFrame()
+            guard chunk == .checkpointChunk, !data.isEmpty, data.count <= size - bytes.count else {
+                throw LocalRustTerminalError.invalidMessage
+            }
+            bytes.append(data)
+        }
+        return Checkpoint(sequence: sequence, bytes: bytes)
+    }
+
+    private func receive<Value: Sendable>(
+        _ read: @escaping @Sendable (LocalRustTerminalConnection) throws -> Value
+    ) async throws -> Value {
+        try await withCheckedThrowingContinuation { continuation in
+            reads.async {
+                continuation.resume(with: Result { try read(self) })
+            }
+        }
+    }
+
     func sendInput(_ data: ArraySlice<UInt8>) -> Bool {
         guard !data.isEmpty else { return true }
         return enqueue(data.count) { connection in
@@ -204,10 +422,13 @@ final class LocalRustTerminalConnection: Sendable {
         }
     }
 
-    func resize(columns: Int, rows: Int) {
+    func resize(columns: Int, rows: Int, cellPixels: CellPixels? = nil) {
         let size = SessionHostGeometry.fit(columns: columns, rows: rows)
-        let grid = [UInt16(size.columns).bigEndian, UInt16(size.rows).bigEndian]
-        let bytes = grid.withUnsafeBytes { Data($0) }
+        var dimensions = [UInt16(size.columns).bigEndian, UInt16(size.rows).bigEndian]
+        if let cellPixels {
+            dimensions.append(contentsOf: [cellPixels.width.bigEndian, cellPixels.height.bigEndian])
+        }
+        let bytes = dimensions.withUnsafeBytes { Data($0) }
         // Keep space for the latest geometry even if a paste has filled the input budget.
         let shouldSchedule = pendingResize.withLock { pending in
             let shouldSchedule = pending == nil
@@ -278,11 +499,8 @@ final class LocalRustTerminalConnection: Sendable {
     }
 
     private func readEvent(expectingReady: Bool) throws -> Event {
-        let header = try read(exactly: 5)
-        let length = Int(Self.uint32(header.dropFirst()))
-        guard length <= Self.maximumFrameLength else { throw LocalRustTerminalError.invalidMessage }
-        let payload = try read(exactly: length)
-        switch Reply(rawValue: header[header.startIndex]) {
+        let (kind, payload) = try readFrame()
+        switch kind {
         case .ready where expectingReady && payload.count == 8:
             let serverPID = Self.uint32(payload.prefix(4))
             let shellPID = Self.uint32(payload.suffix(4))
@@ -296,6 +514,15 @@ final class LocalRustTerminalConnection: Sendable {
         default:
             throw LocalRustTerminalError.invalidMessage
         }
+    }
+
+    private func readFrame() throws -> (Reply, Data) {
+        let header = try read(exactly: 5)
+        let length = Int(Self.uint32(header.dropFirst()))
+        guard length <= Self.maximumFrameLength, let reply = Reply(rawValue: header[header.startIndex]) else {
+            throw LocalRustTerminalError.invalidMessage
+        }
+        return (reply, try read(exactly: length))
     }
 
     private func clearTimeout(_ option: Int32) throws {

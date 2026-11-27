@@ -4,9 +4,10 @@ set -euo pipefail
 CHANNEL="development"
 MODE="run"
 LOCAL_RUST_TERMINAL=0
+RUST_WORKSPACES=0
 
 usage() {
-  echo "usage: $0 [--prod|--local-rust-terminal] [--bundle|--debug|--logs|--telemetry|--verify|--print-plan]" >&2
+  echo "usage: $0 [--prod|--local-rust-terminal|--local-rust-workspaces] [--bundle|--debug|--logs|--telemetry|--verify|--print-plan]" >&2
 }
 
 while (($#)); do
@@ -16,6 +17,10 @@ while (($#)); do
       ;;
     --local-rust-terminal)
       LOCAL_RUST_TERMINAL=1
+      ;;
+    --local-rust-workspaces)
+      LOCAL_RUST_TERMINAL=1
+      RUST_WORKSPACES=1
       ;;
     --bundle|--debug|--logs|--telemetry|--verify|--print-plan)
       if [[ "$MODE" != "run" ]]; then
@@ -57,6 +62,9 @@ else
   BUILD_ARGS=(--configuration debug)
 fi
 
+if [[ "$RUST_WORKSPACES" == "1" ]]; then
+  DIST_DIR="$DIST_DIR/rust-workspaces"
+fi
 APP_BUNDLE="$DIST_DIR/$APP_NAME.app"
 APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
@@ -64,6 +72,9 @@ APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$APP_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
 APPLICATION_SUPPORT_DIRECTORY="${MYTERM_APPLICATION_SUPPORT_DIRECTORY:-$HOME/Library/Application Support}"
+if [[ "$RUST_WORKSPACES" == "1" ]]; then
+  APPLICATION_SUPPORT_DIRECTORY="$APPLICATION_SUPPORT_DIRECTORY/MyTerm Rust Workspaces Development"
+fi
 WORKSPACE_STATE_PATH="$APPLICATION_SUPPORT_DIRECTORY/$APP_NAME/workspace-state.json"
 
 if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
@@ -94,6 +105,10 @@ if [[ "$LOCAL_RUST_TERMINAL" == "1" ]]; then
   BUILD_ARGS+=(-Xswiftc -DMYTERM_LOCAL_RUST_TERMINAL)
 fi
 
+if [[ "$RUST_WORKSPACES" == "1" ]]; then
+  BUILD_ARGS+=(-Xswiftc -DMYTERM_RUST_WORKSPACES -Xswiftc -DMYTERM_WEZTERM_CHECKPOINT)
+fi
+
 if [[ "$MODE" == "--print-plan" ]]; then
   printf 'channel=%s\n' "$CHANNEL"
   printf 'app_name=%s\n' "$APP_NAME"
@@ -103,7 +118,17 @@ if [[ "$MODE" == "--print-plan" ]]; then
   printf 'instance_policy=focus-existing\n'
   printf 'build_configuration=%s\n' "$BUILD_CONFIGURATION"
   if [[ "$LOCAL_RUST_TERMINAL" == "1" ]]; then printf 'local_rust_terminal=1\n'; fi
+  if [[ "$RUST_WORKSPACES" == "1" ]]; then printf 'local_rust_workspaces=1\n'; fi
   exit 0
+fi
+
+if [[ "$LOCAL_RUST_TERMINAL" == "1" && ! -f "$ROOT_DIR/Services/terminal-state/dependencies/prepare.py" ]]; then
+  echo "The Rust terminal build requires the pinned terminal-state engine preparation script." >&2
+  exit 2
+fi
+if [[ "$RUST_WORKSPACES" == "1" && ! -f "$ROOT_DIR/Vendor/SwiftTerm/Sources/SwiftTerm/CheckpointBridge.swift" ]]; then
+  echo "Rust workspaces require the native SwiftTerm checkpoint importer." >&2
+  exit 2
 fi
 
 source "$ROOT_DIR/script/select_signing_identity.sh"
@@ -125,7 +150,8 @@ if [[ ! -d "$RESOURCE_BUNDLE" ]]; then
 fi
 if [[ "$LOCAL_RUST_TERMINAL" == "1" ]]; then
   RUST_TARGET_DIR="$ROOT_DIR/.build/local-rust-terminal"
-  MACOSX_DEPLOYMENT_TARGET="$MIN_SYSTEM_VERSION" cargo build --locked --release \
+  python3 "$ROOT_DIR/Services/terminal-state/dependencies/prepare.py"
+  MACOSX_DEPLOYMENT_TARGET="$MIN_SYSTEM_VERSION" cargo +1.99.1 build --locked --release \
     --manifest-path "$ROOT_DIR/Services/local-terminal/Cargo.toml" --target-dir "$RUST_TARGET_DIR"
 fi
 

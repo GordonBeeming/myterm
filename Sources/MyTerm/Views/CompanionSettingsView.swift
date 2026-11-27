@@ -11,6 +11,13 @@ struct CompanionSettingsView: View {
     @State private var diagnosticsError: String?
     @AppStorage(CompanionHostModel.collectConnectionLogKey) private var collectsConnectionLog = false
 
+    init(companion: CompanionHostModel) {
+        _companion = Bindable(wrappedValue: companion)
+        _collectsConnectionLog = AppStorage(
+            wrappedValue: false, CompanionHostModel.collectConnectionLogKey, store: companion.connectionLogDefaults
+        )
+    }
+
     private var showsLinkForm: Bool {
         !companion.hasLinkedRelay || isEditingConnection
     }

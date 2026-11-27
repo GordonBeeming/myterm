@@ -633,6 +633,178 @@ fn viewer_requires_explicit_current_revision_to_control_and_resize() -> io::Resu
     Ok(())
 }
 
+fn receive_checkpoint(client: &mut UnixStream) -> io::Result<(Vec<u8>, u64, Vec<u8>)> {
+    let (kind, identity) = receive(client)?;
+    assert_eq!(kind, 0x81);
+    assert_eq!(identity.len(), 9);
+    assert_eq!(identity[8], 1);
+    assert_eq!(receive(client)?.0, 0x84);
+    let (kind, begin) = receive(client)?;
+    assert_eq!(kind, 0x86);
+    assert_eq!(begin.len(), 12);
+    let sequence = u64::from_be_bytes(begin[..8].try_into().unwrap());
+    let length = u32::from_be_bytes(begin[8..].try_into().unwrap()) as usize;
+    assert!((1..=myterm_terminal_state::MAXIMUM_CHECKPOINT_BYTES).contains(&length));
+    let mut checkpoint = Vec::with_capacity(length);
+    while checkpoint.len() < length {
+        let (kind, bytes) = receive(client)?;
+        assert_eq!(kind, 0x87);
+        assert!(!bytes.is_empty() && bytes.len() <= length - checkpoint.len());
+        checkpoint.extend(bytes);
+    }
+    Ok((identity, sequence, checkpoint))
+}
+
+#[test]
+fn real_pty_checkpoint_preserves_the_shell_and_the_server_alone_replies() -> io::Result<()> {
+    let server = TestServer::new()?;
+    let mut first = server.connect()?;
+    let gate = server.path.with_file_name("resume");
+    let script = r#"
+        /bin/stty raw -echo
+        printf 'original\033[?1049h\033[Halternate\033[6'
+        while [ ! -e "$1" ]; do /bin/sleep 0.02; done
+        printf n
+        reply=$(/bin/dd bs=1 count=7 2>/dev/null)
+        [ "$reply" = "$(printf '\033[1;10R')" ] || exit 91
+        printf '\033[?1049lreply-checked=%s' "$$"
+        input=$(/bin/dd bs=1 count=1 2>/dev/null)
+        [ "$input" = x ] || exit 92
+    "#;
+    let ids = [1; 32];
+    let mut launch = ids.to_vec();
+    let options = serde_json::json!({
+        "shell": "/bin/sh", "arguments": ["-c", script, "sh", gate.to_str().unwrap()],
+        "columns": 20, "rows": 6, "cellWidth": 9, "cellHeight": 16, "scrollback": 5000,
+    });
+    launch.extend(serde_json::to_vec(&options)?);
+    send(&mut first, 11, &launch)?;
+    let (identity, sequence, _) = receive_checkpoint(&mut first)?;
+    send(&mut first, 13, &sequence.to_be_bytes())?;
+    receive_output(&mut first, "alternate\u{1b}[6")?;
+    drop(first);
+
+    let mut old_client = server.connect()?;
+    send(&mut old_client, 6, &ids)?;
+    assert_eq!(
+        receive(&mut old_client)?.0,
+        0x83,
+        "Raw attach must not bypass server query authority"
+    );
+
+    let mut probe = server.connect()?;
+    send(&mut probe, 15, &ids)?;
+    assert_eq!(
+        receive(&mut probe)?.0,
+        0x84,
+        "Metadata lookup must work without importing state"
+    );
+
+    let mut fresh = server.connect()?;
+    send(&mut fresh, 12, &ids)?;
+    let (reattached, sequence, checkpoint) = receive_checkpoint(&mut fresh)?;
+    assert_eq!(reattached, identity);
+    let value: serde_json::Value = serde_json::from_slice(&checkpoint)?;
+    assert_eq!(value["sequence"], sequence);
+    assert_eq!(value["state"]["alternateActive"], true);
+    assert_eq!(value["pending"], serde_json::json!([27, 91, 54]));
+
+    // The shell finishes its query before the new client acknowledges import.
+    fs::write(gate, [])?;
+    let mut live = Vec::new();
+    let shell_pid = u32::from_be_bytes(identity[4..8].try_into().unwrap());
+    let marker = format!("reply-checked={shell_pid}");
+    while !String::from_utf8_lossy(&live).contains(&marker) {
+        let (kind, bytes) = receive(&mut fresh)?;
+        assert_eq!(kind, 0x82);
+        live.extend(bytes);
+        assert!(live.len() < 8192);
+    }
+    assert!(live.starts_with(b"n\x1b[?1049l"));
+    send(&mut fresh, 13, &sequence.to_be_bytes())?;
+    send(&mut fresh, 3, b"x")?;
+    let (kind, ended) = receive(&mut fresh)?;
+    assert_eq!(kind, 0x83);
+    assert!(String::from_utf8_lossy(&ended).contains("exit status: 0"));
+
+    if let Some(path) = std::env::var_os("MYTERM_PTY_CHECKPOINT_FIXTURE") {
+        fs::write(path, checkpoint)?;
+    }
+    if let Some(path) = std::env::var_os("MYTERM_PTY_OUTPUT_FIXTURE") {
+        fs::write(path, live)?;
+    }
+    Ok(())
+}
+
+#[test]
+fn checkpoint_attachment_fences_input_until_import_acknowledgement() -> io::Result<()> {
+    let server = TestServer::new()?;
+    let mut client = server.connect()?;
+    let mut launch = [3; 32].to_vec();
+    launch.extend(br#"{"columns":20,"rows":6,"cellWidth":9,"cellHeight":16}"#);
+    send(&mut client, 11, &launch)?;
+    receive_checkpoint(&mut client)?;
+    send(&mut client, 3, b"echo should-not-appear\n")?;
+    loop {
+        let (kind, bytes) = receive(&mut client)?;
+        if kind == 0x83 {
+            assert_eq!(
+                bytes,
+                b"Apply the terminal checkpoint before sending requests"
+            );
+            break;
+        }
+        assert_eq!(kind, 0x82);
+        assert!(!String::from_utf8_lossy(&bytes).contains("should-not-appear"));
+    }
+    Ok(())
+}
+
+#[test]
+fn viewer_receives_controller_resize_after_snapshot_while_import_pending() -> io::Result<()> {
+    let server = TestServer::new()?;
+    let mut owner = server.connect()?;
+    let session_id = [4; 16];
+    let owner_id = [5; 16];
+    let viewer_id = [6; 16];
+    let mut launch = [session_id, owner_id].concat();
+    launch.extend(br#"{"columns":20,"rows":6,"cellWidth":9,"cellHeight":16}"#);
+    send(&mut owner, 11, &launch)?;
+    let (_, owner_cut, _) = receive_checkpoint(&mut owner)?;
+    send(&mut owner, 13, &owner_cut.to_be_bytes())?;
+
+    let mut viewer = server.connect()?;
+    send(&mut viewer, 12, &[session_id, viewer_id].concat())?;
+    let (_, viewer_cut, before) = receive_checkpoint(&mut viewer)?;
+    let before: serde_json::Value = serde_json::from_slice(&before)?;
+    assert_eq!(before["state"]["columns"], 20);
+
+    let geometry = [0, 32, 0, 8, 0, 9, 0, 16];
+    send(&mut owner, 4, &geometry)?;
+    for connection in [&mut owner, &mut viewer] {
+        loop {
+            match receive(connection)? {
+                (0x88, payload) => {
+                    assert_eq!(payload, geometry);
+                    break;
+                }
+                (0x82, _) => {}
+                unexpected => panic!("unexpected frame: {unexpected:?}"),
+            }
+        }
+    }
+    send(&mut viewer, 13, &viewer_cut.to_be_bytes())?;
+
+    let mut after = server.connect()?;
+    send(&mut after, 12, &[session_id, viewer_id].concat())?;
+    let (_, after_cut, after) = receive_checkpoint(&mut after)?;
+    assert!(after_cut > viewer_cut);
+    let after: serde_json::Value = serde_json::from_slice(&after)?;
+    assert_eq!(after["state"]["columns"], 32);
+    assert_eq!(after["state"]["rows"], 8);
+    Ok(())
+}
+
 #[test]
 fn separate_authenticated_stop_reaches_a_shell_with_backpressured_input() -> io::Result<()> {
     let server = TestServer::new()?;
@@ -801,5 +973,147 @@ fn resize_burst_preserves_the_controller_when_output_queue_is_full() -> io::Resu
         }
     }
     assert_eq!(last_geometry, [1, 243, 0, 35]);
+    Ok(())
+}
+
+#[test]
+fn unread_query_flood_preserves_the_pty_process_and_server() -> io::Result<()> {
+    let server = TestServer::new()?;
+    let mut owner = server.connect()?;
+    let id = [48; 16];
+    let client = [49; 16];
+    let mut launch = [id, client].concat();
+    let script = r#"
+        /bin/stty raw -echo
+        /usr/bin/awk 'BEGIN { for (i = 0; i < 90000; i++) printf "\033[c" }'
+        printf 'query-flood-finished=%s\n' "$$"
+        /bin/sleep 30
+    "#;
+    let options = serde_json::json!({
+        "shell": "/bin/sh", "arguments": ["-c", script],
+        "columns": 20, "rows": 6, "cellWidth": 9, "cellHeight": 16,
+    });
+    launch.extend(serde_json::to_vec(&options)?);
+    send(&mut owner, 11, &launch)?;
+    let (identity, sequence, _) = receive_checkpoint(&mut owner)?;
+    send(&mut owner, 13, &sequence.to_be_bytes())?;
+    let pid = u32::from_be_bytes(identity[4..8].try_into().unwrap());
+    let marker = format!("query-flood-finished={pid}\n");
+    assert_eq!(
+        collect_live_body(&mut owner, marker.as_bytes(), 300_000)?,
+        [b"\x1b[c".repeat(90_000), marker.into_bytes()].concat()
+    );
+
+    let mut stop = server.connect()?;
+    let revision = control(client, 1, true);
+    send(&mut stop, 14, &[&id[..], &client, &revision[..24]].concat())?;
+    assert_eq!(
+        receive(&mut stop)?,
+        (0x83, b"Terminal session stopped".to_vec())
+    );
+    Ok(())
+}
+
+fn collect_live_body(socket: &mut UnixStream, marker: &[u8], limit: usize) -> io::Result<Vec<u8>> {
+    let mut output = Vec::new();
+    loop {
+        let (kind, bytes) = receive(socket)?;
+        assert_eq!(kind, 0x82, "Unexpected frame {kind:#x}");
+        output.extend(bytes);
+        assert!(output.len() <= limit);
+        if output.ends_with(marker) {
+            return Ok(output);
+        }
+    }
+}
+
+#[test]
+fn checkpoint_controller_throttles_output_during_import_without_stalling_other_sessions(
+) -> io::Result<()> {
+    let server = TestServer::new()?;
+    let mut owner = server.connect()?;
+    let id = [50; 16];
+    let client = [51; 16];
+    let mut launch = [id, client].concat();
+    let options = serde_json::json!({
+        "shell": "/bin/sh", "arguments": ["-c", "/usr/bin/head -c 1048576 /dev/zero; printf 'owner-saw-every-byte'"],
+        "columns": 20, "rows": 6, "cellWidth": 9, "cellHeight": 16,
+    });
+    launch.extend(serde_json::to_vec(&options)?);
+    send(&mut owner, 11, &launch)?;
+    let (_, sequence, _) = receive_checkpoint(&mut owner)?;
+
+    let mut other = server.connect()?;
+    send(&mut other, 1, &[52; 16])?;
+    assert_eq!(receive(&mut other)?.0, 0x81);
+    thread::sleep(Duration::from_millis(250));
+    send(&mut other, 3, b"printf 'unrelated-is-responsive\\n'\n")?;
+    receive_output(&mut other, "unrelated-is-responsive\r\n")?;
+
+    send(&mut owner, 13, &sequence.to_be_bytes())?;
+    let marker = b"owner-saw-every-byte";
+    let output = collect_live_body(&mut owner, marker, 1024 * 1024 + marker.len())?;
+    assert_eq!(output.len(), 1024 * 1024 + marker.len());
+    assert!(output[..1024 * 1024].iter().all(|&byte| byte == 0));
+    let (kind, ended) = receive(&mut owner)?;
+    assert_eq!(kind, 0x83);
+    assert!(String::from_utf8_lossy(&ended).contains("exit status: 0"));
+    Ok(())
+}
+
+#[test]
+fn reply_budget_keeps_complete_replies_and_recovers_after_multipart_overflow() -> io::Result<()> {
+    let mut terminal =
+        myterm_terminal_state::TerminalState::new(myterm_terminal_state::Geometry {
+            columns: 20,
+            rows: 6,
+            cell_width: 9,
+            cell_height: 16,
+        })?;
+    // DSR replies with four bytes. XTVERSION starts with a two-byte DCS prefix
+    // in a separate writer call, which must not escape when the remainder fails.
+    let batch = terminal.advance_with_reply_budget(b"\x1b[5n\x1b[>q", 7)?;
+    assert!(batch.overflow);
+    assert_eq!(batch.bytes, b"\x1b[0n");
+    let recovered = terminal.advance_with_reply_budget(b"\x1b[5n", 4)?;
+    assert!(!recovered.overflow, "recovered data {:#x?}", recovered.bytes);
+    assert_eq!(recovered.bytes, b"\x1b[0n");
+    Ok(())
+}
+
+#[test]
+fn out_of_band_stop_remains_available_during_checkpoint_output_backpressure() -> io::Result<()> {
+    let server = TestServer::new()?;
+    let mut owner = server.connect()?;
+    let id = [53; 16];
+    let client = [54; 16];
+    let mut launch = [id, client].concat();
+    let options = serde_json::json!({
+        "shell": "/bin/sh", "arguments": ["-c", "exec /bin/cat /dev/zero"],
+        "columns": 20, "rows": 6, "cellWidth": 9, "cellHeight": 16,
+    });
+    launch.extend(serde_json::to_vec(&options)?);
+    send(&mut owner, 11, &launch)?;
+    let (identity, _, _) = receive_checkpoint(&mut owner)?;
+
+    // Hold the import acknowledgement and leave live bytes unread.
+    thread::sleep(Duration::from_millis(250));
+    let mut stop = server.connect()?;
+    let revision = control(client, 1, true);
+    send(&mut stop, 14, &[&id[..], &client, &revision[..24]].concat())?;
+    assert_eq!(
+        receive(&mut stop)?,
+        (0x83, b"Terminal session stopped".to_vec())
+    );
+    let pid = libc::pid_t::from_be_bytes(identity[4..8].try_into().unwrap());
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    while unsafe { libc::kill(pid, 0) } == 0 {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "stopped shell was not reaped"
+        );
+        thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(io::Error::last_os_error().raw_os_error(), Some(libc::ESRCH));
     Ok(())
 }

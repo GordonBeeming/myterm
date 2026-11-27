@@ -24,6 +24,17 @@ struct TerminalPaneView: View {
                     dismiss: { model.dismissTerminalNotice(sessionID: session.id) }
                 )
             }
+            #if DEBUG
+            if let process = model.terminalSession(for: session.id) as? SwiftTermTerminalSession,
+               let action = process.rustRecovery?.action {
+                Button(rustActionTitle(action)) {
+                    model.dismissTerminalNotice(sessionID: session.id)
+                    process.performRustRecoveryAction()
+                }
+                .accessibilityIdentifier("terminal-rust-recovery")
+                .padding(8)
+            }
+            #endif
             terminal
         }
     }
@@ -59,6 +70,16 @@ struct TerminalPaneView: View {
             .padding(6)
         }
     }
+
+    #if DEBUG
+    private func rustActionTitle(_ action: LocalRustWorkspaceRecovery.Action) -> String {
+        switch action {
+        case .reattach: "Reattach to Saved Shell"
+        case .startNewShell: "Start New Shell"
+        case .takeControl: "Take Terminal Control"
+        }
+    }
+    #endif
 
     private func select() {
         model.selectTab(tab.id, in: tabGroupID)

@@ -1,3 +1,4 @@
+use myterm_terminal_state::{Geometry, DEFAULT_SCROLLBACK};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::ffi::CStr;
@@ -17,6 +18,11 @@ pub struct LaunchOptions {
     arguments: Option<Vec<String>>,
     columns: Option<u16>,
     rows: Option<u16>,
+    #[serde(rename = "cellWidth")]
+    cell_width: Option<u16>,
+    #[serde(rename = "cellHeight")]
+    cell_height: Option<u16>,
+    scrollback: Option<usize>,
     environment: Option<BTreeMap<String, String>>,
 }
 
@@ -60,6 +66,35 @@ impl LaunchOptions {
         }
         options.geometry()?;
         Ok(options)
+    }
+
+    pub fn checkpoint_settings(&self, enabled: bool) -> io::Result<Option<(Geometry, usize)>> {
+        if !enabled {
+            if self.cell_width.is_some() || self.cell_height.is_some() || self.scrollback.is_some()
+            {
+                return Err(io::Error::other(
+                    "Terminal checkpoint settings require checkpoint launch",
+                ));
+            }
+            return Ok(None);
+        }
+        let (columns, rows) = self.geometry()?;
+        let (Some(cell_width), Some(cell_height)) = (self.cell_width, self.cell_height) else {
+            return Err(io::Error::other(
+                "Measured terminal cell geometry is required",
+            ));
+        };
+        let geometry = Geometry {
+            columns,
+            rows,
+            cell_width,
+            cell_height,
+        };
+        geometry.validate()?;
+        Ok(Some((
+            geometry,
+            self.scrollback.unwrap_or(DEFAULT_SCROLLBACK),
+        )))
     }
 
     fn geometry(&self) -> io::Result<(u16, u16)> {
@@ -136,7 +171,18 @@ impl Shell {
         let mut master_fd = -1;
         let mut slave_fd = -1;
         let (columns, rows) = options.geometry()?;
-        let mut size = window_size(columns, rows);
+        let mut size = window_size(
+            columns,
+            rows,
+            options
+                .cell_width
+                .map_or(Some(0), |width| width.checked_mul(columns))
+                .ok_or_else(|| io::Error::other("Terminal pixel width is too large"))?,
+            options
+                .cell_height
+                .map_or(Some(0), |height| height.checked_mul(rows))
+                .ok_or_else(|| io::Error::other("Terminal pixel height is too large"))?,
+        );
         // openpty creates both descriptors on success. Ownership moves to the Files below.
         if unsafe {
             libc::openpty(
@@ -221,13 +267,23 @@ impl Session {
     }
 
     pub fn resize(&self, columns: u16, rows: u16) -> io::Result<()> {
+        self.resize_with_pixels(columns, rows, 0, 0)
+    }
+
+    pub fn resize_with_pixels(
+        &self,
+        columns: u16,
+        rows: u16,
+        width: u16,
+        height: u16,
+    ) -> io::Result<()> {
         if columns == 0 || rows == 0 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "Terminal dimensions must be nonzero",
             ));
         }
-        let size = window_size(columns, rows);
+        let size = window_size(columns, rows, width, height);
         check(unsafe { libc::ioctl(self.master.as_raw_fd(), libc::TIOCSWINSZ, &size) })
     }
 }
@@ -325,12 +381,12 @@ fn password_path(value: *const libc::c_char) -> io::Result<PathBuf> {
     Ok(std::ffi::OsStr::from_bytes(path).into())
 }
 
-fn window_size(columns: u16, rows: u16) -> libc::winsize {
+fn window_size(columns: u16, rows: u16, width: u16, height: u16) -> libc::winsize {
     libc::winsize {
         ws_row: rows,
         ws_col: columns,
-        ws_xpixel: 0,
-        ws_ypixel: 0,
+        ws_xpixel: width,
+        ws_ypixel: height,
     }
 }
 

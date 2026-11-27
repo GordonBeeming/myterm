@@ -20,10 +20,26 @@ public final class SwiftTermTerminalEngine: TerminalEngine {
 public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, TerminalRemoteSession {
     public private(set) var isRunning = false
     public var isStarting: Bool { persistentStartTask != nil }
-    public var survivesApplicationTermination: Bool { persistentConnection != nil && isRunning }
+    public var survivesApplicationTermination: Bool {
+        #if DEBUG
+        if rustWorkspace != nil { return rustConnection != nil && isRunning }
+        #endif
+        return persistentConnection != nil && isRunning
+    }
     public var onEvent: (@MainActor (TerminalSessionEvent) -> Void)?
 
     public var activeForegroundProcessName: String? {
+        #if DEBUG
+        if rustWorkspace != nil {
+            guard isRunning, let shellPID = rustShellPID else { return nil }
+            var info = proc_bsdinfo()
+            let expected = Int32(MemoryLayout<proc_bsdinfo>.size)
+            guard proc_pidinfo(shellPID, PROC_PIDTBSDINFO, 0, &info, expected) == expected,
+                  let foreground = pid_t(exactly: info.e_tpgid), foreground > 0,
+                  foreground != getpgid(shellPID) else { return nil }
+            return Self.processGroupName(foreground)
+        }
+        #endif
         if persistentConnection != nil {
             // The app no longer owns the PTY. The foreground process group is reported by
             // the host rather than guessed from the helper's or shell's process name.
@@ -38,6 +54,10 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
               shellProcessGroup > 0,
               foregroundProcessGroup != shellProcessGroup else { return nil }
 
+        return Self.processGroupName(foregroundProcessGroup)
+    }
+
+    private static func processGroupName(_ foregroundProcessGroup: pid_t) -> String {
         var name = [CChar](repeating: 0, count: Int(MAXPATHLEN))
         let length = name.withUnsafeMutableBytes { buffer in
             proc_name(foregroundProcessGroup, buffer.baseAddress, UInt32(buffer.count))
@@ -51,7 +71,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
 
     public var foregroundClaudeConfiguration: ClaudeConfiguration? {
         guard isRunning else { return nil }
-        let shell = persistentConnection?.attachment.pid ?? terminal.process.shellPid
+        let shell = attachedShellPID ?? terminal.process.shellPid
         return ClaudeProcessConfiguration.configuration(belowShell: shell)
     }
 
@@ -59,6 +79,31 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
     private var runtimeConfiguration: TerminalRuntimeConfiguration
     private let terminal: MyTermLocalProcessTerminalView
     private var persistentConnection: PersistentTerminalConnection?
+    #if DEBUG
+    private var rustWorkspace: (backend: LocalRustWorkspaceBackend, paneID: UUID)?
+    public private(set) var rustRecovery: LocalRustWorkspaceRecovery?
+    private var rustConnection: LocalRustTerminalConnection?
+    private var rustShellPID: pid_t?
+    private var rustController: LocalRustTerminalConnection.Controller?
+    private var rustClientID: UUID?
+    private var rustReadTask: Task<Void, Never>?
+    private var rustCheckpointAttached = false
+    private struct RustGeometry: Equatable {
+        let columns: Int
+        let rows: Int
+        let cellPixels: LocalRustTerminalConnection.CellPixels?
+    }
+    private var rustRequestedGeometry: RustGeometry?
+    private var rustMaySendInput: Bool {
+        rustController?.ownerConnected == true && rustController?.owner == rustClientID
+    }
+    #endif
+    private var attachedShellPID: pid_t? {
+        #if DEBUG
+        if let rustShellPID { return rustShellPID }
+        #endif
+        return persistentConnection?.attachment.pid
+    }
     private var hostSequence: UInt64 = 0
     private struct RequestedHostGeometry: Equatable { let columns: Int; let rows: Int }
     private var requestedHostGeometry: RequestedHostGeometry?
@@ -136,7 +181,11 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         }
         terminal.onAgentActivity = { [weak self] report in
             Task { @MainActor [weak self] in
-                self?.onEvent?(.agentActivity(report))
+                guard let self else { return }
+                #if DEBUG
+                if self.rustWorkspace != nil, !self.isRunning { return }
+                #endif
+                self.onEvent?(.agentActivity(report))
             }
         }
         terminal.onShellReady = { [weak self] token in
@@ -165,6 +214,18 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
 
     public func start() throws {
         guard !isRunning, persistentStartTask == nil else { return }
+        #if DEBUG
+        if let rustWorkspace, let selection = try rustWorkspace.backend.selection(paneID: rustWorkspace.paneID) {
+            rustClientID = selection.clientID
+            rustRecovery?.action = .reattach
+            return
+        }
+        #endif
+        try startNewProcess(runInitialCommand: true)
+    }
+
+    private func startNewProcess(runInitialCommand: Bool) throws {
+        guard !isRunning, persistentStartTask == nil else { return }
         pendingStartDisposition = .attach
 
         didTerminate = false
@@ -186,7 +247,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         startupCommandOverdue = false
         var arguments = configuration.shellArguments
         var startupFailure: TerminalSessionFailure?
-        if configuration.initialCommand?.isEmpty == false {
+        if runInitialCommand, configuration.initialCommand?.isEmpty == false {
             startupToken = UUID().uuidString
             environment["MYTERM_STARTUP_TOKEN"] = startupToken
             environment["MYTERM_STARTUP_PARENT_PID"] = String(getpid())
@@ -223,6 +284,24 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
                 environment.removeValue(forKey: "MYTERM_STARTUP_PARENT_PID")
             }
         }
+        #if DEBUG
+        if let rustWorkspace {
+            let previous = try rustWorkspace.backend.selection(paneID: rustWorkspace.paneID)
+            let selection = try rustWorkspace.backend.recordLaunch(paneID: rustWorkspace.paneID, replacing: previous)
+            let launchEnvironment = Self.processEnvironmentValues(overrides: environment)
+            let size = SessionHostGeometry.fit(columns: terminal.getTerminal().cols, rows: terminal.getTerminal().rows)
+            let useCheckpoint = LocalRustWorkspaceBackend.usesCheckpointProtocol
+            let cellPixels = useCheckpoint ? rustCellPixels : nil
+            let launch = LocalRustTerminalConnection.WorkspaceLaunch(
+                shell: configuration.shell.path, arguments: arguments,
+                cwd: configuration.workingDirectory.path, environment: launchEnvironment,
+                columns: size.columns, rows: size.rows, cellWidth: cellPixels?.width, cellHeight: cellPixels?.height,
+                scrollback: useCheckpoint ? min(runtimeConfiguration.scrollbackLines, 100_000) : nil)
+            startRustAttachment(selection: selection, launch: launch, startupFailure: startupFailure,
+                                runInitialCommand: runInitialCommand)
+            return
+        }
+        #endif
         if let identifier = configuration.continuityIdentifier,
            let directory = configuration.continuityDirectory {
             let shell = configuration.shell
@@ -282,6 +361,258 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
             currentDirectory: configuration.workingDirectory.path)
         try finishStartup(startupFailure: startupFailure)
     }
+
+    #if DEBUG
+    func useRustWorkspaceBackend(_ backend: LocalRustWorkspaceBackend, paneID: UUID) {
+        rustWorkspace = (backend, paneID)
+        rustRecovery = LocalRustWorkspaceRecovery()
+        terminal.acceptsUserInput = false
+        terminal.onPersistentInput = { [weak self] bytes in
+            guard let self, self.isRunning, self.rustMaySendInput else { return }
+            do { try self.sendProcessInput(bytes) }
+            catch { self.onEvent?(.runtimeNotice(error.localizedDescription)) }
+        }
+        terminal.onPersistentResizeRequest = { [weak self] columns, rows in
+            guard let self, !self.remoteControllerActive else { return }
+            self.resize(columns: columns, rows: rows)
+        }
+        terminal.onPersistentResize = { [weak self] columns, rows in
+            self?.recordRemoteGeometry(columns: columns, rows: rows)
+        }
+        terminal.onPersistentImageGeometryChanged = { [weak self] in self?.resizeRustToFit() }
+    }
+
+    public func performRustRecoveryAction() {
+        guard let rustWorkspace, let action = rustRecovery?.action, persistentStartTask == nil else { return }
+        do {
+            switch action {
+            case .reattach:
+                guard let selection = try rustWorkspace.backend.selection(paneID: rustWorkspace.paneID) else {
+                    throw LocalRustTerminalError.missingSession
+                }
+                startRustAttachment(selection: selection, launch: nil, startupFailure: nil, runInitialCommand: false)
+            case .startNewShell:
+                try startNewProcess(runInitialCommand: false)
+            case .takeControl:
+                guard let rustController, let rustConnection else { return }
+                try rustConnection.takeWorkspaceControl(observed: rustController)
+                rustRecovery?.action = nil
+            }
+        } catch {
+            onEvent?(.failed(TerminalSessionFailure(message: error.localizedDescription)))
+        }
+    }
+
+    private func startRustAttachment(selection: LocalRustWorkspaceBackend.Selection,
+                                     launch: LocalRustTerminalConnection.WorkspaceLaunch?,
+                                     startupFailure: TerminalSessionFailure?, runInitialCommand: Bool) {
+        guard let rustWorkspace else { return }
+        pendingStartDisposition = .attach
+        rustRecovery?.action = nil
+        terminal.setConnectionPending(true)
+        persistentStartTask = Task { @MainActor in
+            var pendingConnection: LocalRustTerminalConnection?
+            defer {
+                pendingConnection?.disconnect()
+                self.persistentStartTask = nil
+                self.terminal.setConnectionPending(false)
+                self.updateRustInputAvailability()
+            }
+            do {
+                let connection = try await rustWorkspace.backend.connect(launch != nil)
+                pendingConnection = connection
+                if self.pendingStartDisposition == .stop {
+                    self.stopRustWorkspace(rustWorkspace)
+                    return
+                }
+                guard self.pendingStartDisposition == .attach else { return }
+                try connection.beginWorkspace(sessionID: selection.sessionID, clientID: selection.clientID, launch: launch,
+                                              checkpoint: LocalRustWorkspaceBackend.usesCheckpointProtocol)
+                let attachment = try await connection.workspaceAttachment()
+                if self.pendingStartDisposition == .stop {
+                    connection.disconnect()
+                    self.stopRustWorkspace(rustWorkspace, observed: attachment.control)
+                    return
+                }
+                guard self.pendingStartDisposition == .attach else { return }
+
+                if let checkpoint = attachment.checkpoint {
+                    #if MYTERM_WEZTERM_CHECKPOINT
+                    try self.terminal.importWezTermCheckpoint(
+                        checkpoint.bytes, expectedSequence: checkpoint.sequence, adoptingServerGeometry: true
+                    )
+                    try connection.acknowledgeWorkspaceCheckpoint(sequence: checkpoint.sequence)
+                    #else
+                    _ = checkpoint
+                    throw LocalRustTerminalError.checkpointUnavailable
+                    #endif
+                } else {
+                    guard let launch, !LocalRustWorkspaceBackend.usesCheckpointProtocol else {
+                        throw LocalRustTerminalError.checkpointUnavailable
+                    }
+                    self.terminal.getTerminal().resetToInitialState()
+                    self.terminal.applyTerminalGeometry(columns: launch.columns, rows: launch.rows)
+                    try self.terminal.invalidateAfterCheckpointImport()
+                }
+                self.rustCheckpointAttached = attachment.checkpoint != nil
+                self.terminal.sendsTerminalResponses = !self.rustCheckpointAttached
+                self.terminal.apply(runtimeConfiguration: self.runtimeConfiguration)
+                self.remoteGeneration = UUID()
+                self.remoteSequence = 0
+                self.remoteReplayBuffer.removeAll(keepingCapacity: true)
+                self.remoteReplayHead = 0
+                self.remoteReplayBytes = 0
+                self.rustConnection = connection
+                self.rustShellPID = attachment.shellPID
+                self.rustClientID = selection.clientID
+                self.isRunning = true
+                self.applyRustController(attachment.control)
+                self.onEvent?(.transportAttached)
+                self.recordRemoteGeometry(columns: self.terminal.getTerminal().cols, rows: self.terminal.getTerminal().rows)
+                try self.finishStartup(startupFailure: startupFailure, runInitialCommand: runInitialCommand)
+                let currentSession: @MainActor () -> SwiftTermTerminalSession? = { [weak self = self] in self }
+                self.rustReadTask = Task { @MainActor in
+                    await Self.readRustEvents(connection, session: currentSession)
+                }
+                pendingConnection = nil
+                if launch != nil, self.startupToken == nil, (!runInitialCommand || self.configuration.initialCommand == nil) {
+                    self.onEvent?(.idleShellStarted)
+                }
+            } catch {
+                if self.pendingStartDisposition == .stop {
+                    pendingConnection?.disconnect()
+                    self.stopRustWorkspace(rustWorkspace)
+                } else if self.pendingStartDisposition == .attach {
+                    self.rustAttachmentFailed(error)
+                }
+            }
+        }
+    }
+
+    private static func readRustEvents(_ connection: LocalRustTerminalConnection,
+                                       session: @escaping @MainActor () -> SwiftTermTerminalSession?) async {
+        do {
+            while !Task.isCancelled {
+                let event = try await connection.nextWorkspaceEvent()
+                guard let session = session(), session.rustConnection === connection else { return }
+                session.handleRustEvent(event)
+            }
+        } catch {
+            guard let session = session(), session.rustConnection === connection else { return }
+            session.rustAttachmentFailed(error)
+        }
+    }
+
+    private func handleRustEvent(_ event: LocalRustTerminalConnection.WorkspaceEvent) {
+        switch event {
+        case .output(let data):
+            terminal.dataReceived(slice: [UInt8](data)[...])
+        case .geometry(let columns, let rows, let cellPixels):
+            guard (cellPixels != nil) == rustCheckpointAttached else {
+                rustAttachmentFailed(LocalRustTerminalError.invalidMessage)
+                return
+            }
+            if let cellPixels {
+                let scale = terminal.imageRenderingGeometry.displayScale
+                let width = CGFloat(cellPixels.width) / scale
+                let height = CGFloat(cellPixels.height) / scale
+                terminal.authoritativeImageGeometry = TerminalImageGeometry(
+                    cellSize: CGSize(width: width, height: height),
+                    viewportSize: CGSize(width: width * CGFloat(columns), height: height * CGFloat(rows)),
+                    displayScale: scale
+                )
+            }
+            terminal.applyTerminalGeometry(columns: columns, rows: rows)
+            recordRemoteGeometry(columns: columns, rows: rows)
+        case .control(let controller, let rejected):
+            applyRustController(controller)
+            if rejected {
+                onEvent?(.runtimeNotice("Terminal control changed before the request was accepted."))
+            }
+        }
+    }
+
+    private func applyRustController(_ controller: LocalRustTerminalConnection.Controller) {
+        let previouslyControlled = rustMaySendInput
+        rustController = controller
+        rustRecovery?.action = rustMaySendInput ? nil : .takeControl
+        updateRustInputAvailability()
+        if rustMaySendInput && !previouslyControlled {
+            rustRequestedGeometry = nil
+            resizeRustToFit()
+        }
+    }
+
+    private var rustCellPixels: LocalRustTerminalConnection.CellPixels {
+        let metrics = terminal.imageRenderingGeometry
+        return LocalRustTerminalConnection.CellPixels(
+            width: UInt16(clamping: max(1, Int((metrics.cellSize.width * metrics.displayScale).rounded()))),
+            height: UInt16(clamping: max(1, Int((metrics.cellSize.height * metrics.displayScale).rounded())))
+        )
+    }
+
+    private func resizeRustToFit() {
+        guard !remoteControllerActive else { return }
+        let fitted = terminal.fittedTerminalGeometry()
+        resizeRustProcess(columns: fitted.columns, rows: fitted.rows)
+    }
+
+    private func resizeRustProcess(columns: Int, rows: Int) {
+        guard rustMaySendInput, let rustConnection else { return }
+        let fitted = SessionHostGeometry.fit(columns: columns, rows: rows)
+        let cellPixels = rustCheckpointAttached ? rustCellPixels : nil
+        let requested = RustGeometry(columns: fitted.columns, rows: fitted.rows, cellPixels: cellPixels)
+        guard requested != rustRequestedGeometry else { return }
+        rustRequestedGeometry = requested
+        rustConnection.resize(columns: fitted.columns, rows: fitted.rows, cellPixels: cellPixels)
+    }
+
+    private func updateRustInputAvailability() {
+        terminal.acceptsUserInput = isRunning && !isStarting && rustMaySendInput && !remoteControllerActive
+        terminal.automaticallyResizesTerminal = !remoteControllerActive && rustMaySendInput
+    }
+
+    private func rustAttachmentFailed(_ error: Error) {
+        closeRustAttachment()
+        switch error {
+        case LocalRustTerminalError.missingServer, LocalRustTerminalError.missingSession:
+            rustRecovery?.action = .startNewShell
+        case LocalRustTerminalError.sessionEnded(let message):
+            rustRecovery?.action = .startNewShell
+            emitTermination(exitCode: nil, explanation: message)
+            return
+        default:
+            rustRecovery?.action = .reattach
+        }
+        onEvent?(.failed(TerminalSessionFailure(message: error.localizedDescription)))
+    }
+
+    private func closeRustAttachment() {
+        stopWorkingDirectoryPolling()
+        rustConnection?.disconnect()
+        rustConnection = nil
+        rustReadTask?.cancel()
+        rustReadTask = nil
+        rustShellPID = nil
+        rustController = nil
+        rustCheckpointAttached = false
+        rustRequestedGeometry = nil
+        isRunning = false
+        updateRustInputAvailability()
+    }
+
+    private func stopRustWorkspace(_ workspace: (backend: LocalRustWorkspaceBackend, paneID: UUID),
+                                   observed: LocalRustTerminalConnection.Controller? = nil) {
+        Task { @MainActor in
+            do { try await workspace.backend.stopExisting(paneID: workspace.paneID, observed: observed) }
+            catch {
+                Logger(subsystem: "com.gordonbeeming.myterm", category: "terminal-continuity")
+                    .error("Could not stop Rust terminal: \(error.localizedDescription, privacy: .public)")
+                self.onEvent?(.failed(TerminalSessionFailure(message: error.localizedDescription)))
+            }
+        }
+    }
+    #endif
 
     func attachPersistentConnection(_ connection: PersistentTerminalConnection,
                                             startupFailure: TerminalSessionFailure?) throws {
@@ -358,8 +689,8 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         }
     }
 
-    private func finishStartup(startupFailure: TerminalSessionFailure?) throws {
-        guard persistentConnection != nil || terminal.process.running else {
+    private func finishStartup(startupFailure: TerminalSessionFailure?, runInitialCommand: Bool = true) throws {
+        guard attachedShellPID != nil || terminal.process.running else {
             let failure = TerminalSessionFailure(message: "The terminal process could not start.")
             onEvent?(.failed(failure))
             throw failure
@@ -367,7 +698,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         isRunning = true
         if let startupFailure {
             onEvent?(.initialCommandFailed(startupFailure))
-        } else if startupToken == nil, persistentConnection?.createdHost != false {
+        } else if runInitialCommand, startupToken == nil, persistentConnection?.createdHost != false {
             sendInitialCommand()
         } else if startupToken != nil {
             // The token stays live past the grace period. Many shells start at once after a login,
@@ -388,7 +719,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
             startupReadinessTimer = timer
         }
         workingDirectoryPoller = ProcessWorkingDirectoryPoller(
-            processID: persistentConnection?.attachment.pid ?? terminal.process.shellPid,
+            processID: attachedShellPID ?? terminal.process.shellPid,
             provider: MacOSProcessWorkingDirectoryProvider(),
             onDirectoryChanged: { [weak self] directory in
                 Task { @MainActor [weak self] in
@@ -435,6 +766,12 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
             return
         }
 
+        #if DEBUG
+        if rustWorkspace != nil {
+            resizeRustProcess(columns: columns, rows: rows)
+            return
+        }
+        #endif
         if persistentConnection != nil {
             do { try resizePersistentProcess(columns: columns, rows: rows) }
             catch { onEvent?(.failed(TerminalSessionFailure(message: error.localizedDescription))) }
@@ -466,6 +803,14 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
             return
         }
         stopWorkingDirectoryPolling()
+        #if DEBUG
+        if let rustWorkspace {
+            let observed = rustController
+            closeRustAttachment()
+            stopRustWorkspace(rustWorkspace, observed: observed)
+            return
+        }
+        #endif
         if let connection = persistentConnection {
             persistentConnection = nil
             isRunning = false
@@ -500,6 +845,12 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
             terminal.setConnectionPending(false)
             return
         }
+        #if DEBUG
+        if rustWorkspace != nil {
+            closeRustAttachment()
+            return
+        }
+        #endif
         guard let connection = persistentConnection else {
             if configuration.continuityIdentifier == nil { terminate() }
             return
@@ -542,6 +893,13 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         // It is a no-op, not a terminal protocol message.
         guard !bytes.isEmpty else { return }
         guard isRunning else { throw TerminalRemoteSessionError.notRunning }
+        #if DEBUG
+        if rustWorkspace != nil {
+            guard rustMaySendInput, let rustConnection else { throw TerminalRemoteSessionError.unavailable }
+            guard rustConnection.sendInput([UInt8](bytes)[...]) else { throw LocalRustTerminalError.backpressure }
+            return
+        }
+        #endif
         if let connection = persistentConnection {
             try connection.send(.init(kind: "input", bytes: bytes, generation: connection.attachment.generation))
         } else {
@@ -655,6 +1013,9 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
     public func apply(runtimeConfiguration: TerminalRuntimeConfiguration) {
         self.runtimeConfiguration = runtimeConfiguration
         terminal.apply(runtimeConfiguration: runtimeConfiguration)
+        #if DEBUG
+        if rustWorkspace != nil { resizeRustToFit() }
+        #endif
         if let connection = persistentConnection {
             do { try connection.send(.init(kind: "configure", generation: connection.attachment.generation, scrollbackLines: min(runtimeConfiguration.scrollbackLines, 100_000), imageGeometry: imageHostGeometry)) }
             catch { onEvent?(.initialCommandFailed(TerminalSessionFailure(message: error.localizedDescription))) }
@@ -763,6 +1124,16 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
 
     public func setRemoteControllerActive(_ active: Bool) {
         remoteControllerActive = active
+        #if DEBUG
+        if rustWorkspace != nil {
+            updateRustInputAvailability()
+            terminal.setRemoteControlBanner(active: active) { [weak self] in
+                self?.remoteTakeControlHandler?()
+            }
+            if !active { resizeRustToFit() }
+            return
+        }
+        #endif
         terminal.acceptsUserInput = !active && !isStarting
         terminal.automaticallyResizesTerminal = !active
         terminal.setRemoteControlBanner(active: active) { [weak self] in
@@ -848,6 +1219,11 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
     }
 
     private static func processEnvironment(overrides: [String: String]) -> [String] {
+        let values = processEnvironmentValues(overrides: overrides)
+        return values.keys.sorted().compactMap { key in values[key].map { "\(key)=\($0)" } }
+    }
+
+    private static func processEnvironmentValues(overrides: [String: String]) -> [String: String] {
         var values = [String: String]()
         for entry in Terminal.getEnvironmentVariables(termName: "xterm-256color") {
             let pair = entry.split(separator: "=", maxSplits: 1).map(String.init)
@@ -855,7 +1231,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
             values[pair[0]] = pair[1]
         }
         values.merge(overrides) { _, override in override }
-        return values.keys.sorted().compactMap { key in values[key].map { "\(key)=\($0)" } }
+        return values
     }
 }
 

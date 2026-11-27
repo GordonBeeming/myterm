@@ -219,6 +219,7 @@ final class CompanionHostModel {
         pairingRotation = CompanionPairingRotation(sleep: pairingSleep)
         self.makeHTTPClient = makeHTTPClient
         self.makeTransport = makeTransport
+        connectionLogDefaults = defaults
         self.authenticationSession = authenticationSession ?? CompanionAuthenticationSession()
         configuration = CompanionConfigurationStore(
             channel: channel,
@@ -237,29 +238,25 @@ final class CompanionHostModel {
         identityStore = CompanionHostIdentityStore(secrets: secrets)
         tokenStore = TokenStore(secrets: secrets)
         notificationGrantStore = CompanionNotificationGrantStore(secrets: secrets)
-        // Uploads land beside the channel's own state. Absent when the support directory cannot be
-        // resolved, in which case an upload is refused rather than written somewhere arbitrary.
-        let diagnosticsFolder = (try? AppModel.applicationSupportDirectory()).map { support in
-            CompanionDiagnosticsStore.directory(applicationSupportDirectory: support,
-                                                channelName: channel.displayName)
-        }
+        let diagnosticsFolder = appModel.companionDiagnosticsDirectory
         diagnosticsDirectory = diagnosticsFolder
-        diagnosticsStore = diagnosticsFolder.map(CompanionDiagnosticsStore.init(directory:))
+        diagnosticsStore = CompanionDiagnosticsStore(directory: diagnosticsFolder)
         pushJournalStore = CompanionPushJournalStore(secrets: secrets)
         // Filed beside what the phones send, so one folder holds both ends of a connection.
-        let ownLog = diagnosticsFolder?.appending(path: "mac-connection.log", directoryHint: .notDirectory)
+        let ownLog = diagnosticsFolder.appending(path: "mac-connection.log", directoryHint: .notDirectory)
         Task {
             await CompanionConnectionLog.shared.configure(fileURL: ownLog)
             // Read when it is applied rather than captured now: the Settings toggle can turn
             // collection off while this is still waiting, and a stale capture would turn it back on.
             await CompanionConnectionLog.shared.setEnabled(
-                UserDefaults.standard.bool(forKey: Self.collectConnectionLogKey))
+                defaults.bool(forKey: Self.collectConnectionLogKey))
         }
     }
 
     /// Off by default, like the companion's own collection: this records connection lifecycle, and
     /// nobody should be paying for it until something needs explaining.
     static let collectConnectionLogKey = "collectCompanionConnectionLog"
+    let connectionLogDefaults: UserDefaults
 
     private(set) var isSigningIn = false
     private var signInTask: Task<Void, Never>?

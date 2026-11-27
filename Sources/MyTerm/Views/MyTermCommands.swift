@@ -188,7 +188,7 @@ struct MyTermCommands: Commands {
             .disabled(startup.model?.showsAgentNotificationBell != true)
         }
 
-        #if DEBUG && MYTERM_LOCAL_RUST_TERMINAL
+        #if DEBUG && MYTERM_LOCAL_RUST_TERMINAL && !MYTERM_RUST_WORKSPACES
         CommandMenu("Development") {
             Button("Local Rust Terminal…") { openWindow(id: LocalRustTerminalView.windowID) }
                 .disabled(startup.model == nil)
