@@ -188,6 +188,7 @@ struct HostActionsView: View {
     let scene: SceneModel
     let connectionID: SavedConnectionID
     @Environment(\.dismiss) private var dismiss
+    @FocusState private var isAliasFocused: Bool
     @State private var alias = ""
     @State private var aliasRejected = false
 
@@ -198,6 +199,9 @@ struct HostActionsView: View {
                     Section("Mac") {
                         TextField("Name", text: $alias, prompt: Text(host.name))
                             .accessibilityIdentifier("machine-alias")
+                            .focused($isAliasFocused)
+                            .contentShape(Rectangle())
+                            .simultaneousGesture(TapGesture().onEnded { isAliasFocused = true })
                             .onSubmit { commitAlias() }
                         if aliasRejected {
                             Text("That name is too long. Keep it to \(MachinePreferencesStore.aliasByteLimit) bytes or fewer — emoji and accented letters each take several.")
