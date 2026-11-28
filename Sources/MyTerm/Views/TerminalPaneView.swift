@@ -84,7 +84,7 @@ struct TerminalPaneView: View {
     private func rustRecoveryStatus(_ action: LocalRustWorkspaceRecovery.Action) -> String {
         switch action {
         case .reattach: "Saved shell disconnected"
-        case .startNewShell: "Saved shell ended"
+        case .startNewShell: "Saved shell unavailable"
         case .retryStartup: "Terminal startup needs attention"
         case .takeControl: "Viewing terminal"
         }
