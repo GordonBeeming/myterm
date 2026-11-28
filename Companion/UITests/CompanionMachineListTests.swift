@@ -143,8 +143,9 @@ final class CompanionMachineListTests: XCTestCase {
         app.buttons["Manage Mac"].tap()
 
         let alias = app.textFields["machine-alias"]
-        XCTAssertTrue(alias.waitForExistence(timeout: 3))
-        alias.tap()
+        XCTAssertTrue(alias.wait(for: \.isHittable, toEqual: true, timeout: 10))
+        // Tap the visible name prompt in the Form row.
+        alias.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.5)).tap()
         alias.typeText("blastoise · prod")
         app.buttons["Done"].tap()
 
