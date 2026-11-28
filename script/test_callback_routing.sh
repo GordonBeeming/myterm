@@ -12,16 +12,34 @@ TASK_TEMP="$(mktemp -d "$HOME/.myterm-callback-test.XXXXXX")"
 REGISTER_TOOL="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 FIXTURE_PID=""
 MOUNT_PATH=""
+detach_archive_fixture() {
+  local attempt status
+  for attempt in {1..10}; do
+    if hdiutil detach "$MOUNT_PATH"; then
+      MOUNT_PATH=""
+      return 0
+    else
+      status=$?
+    fi
+    # Disk Arbitration can hold the disposable volume briefly after the move.
+    if [[ "$status" != 16 || "$attempt" == 10 ]]; then
+      return "$status"
+    fi
+    sleep 1
+  done
+}
+
 cleanup() {
   if [[ -n "$FIXTURE_PID" ]]; then
     kill "$FIXTURE_PID" >/dev/null 2>&1 || true
     wait "$FIXTURE_PID" 2>/dev/null || true
   fi
-  if [[ -n "$MOUNT_PATH" ]]; then
-    hdiutil detach "$MOUNT_PATH" >/dev/null 2>&1 || true
-  fi
   "$REGISTER_TOOL" -u "$TASK_TEMP/Old.app" >/dev/null 2>&1 || true
   "$REGISTER_TOOL" -u "$TASK_TEMP/Current.app" >/dev/null 2>&1 || true
+  if [[ -n "$MOUNT_PATH" ]] && ! detach_archive_fixture; then
+    printf 'Could not detach the archive fixture at %s\n' "$MOUNT_PATH" >&2
+    return 0
+  fi
   rm -rf "$TASK_TEMP"
 }
 trap cleanup EXIT
@@ -121,7 +139,6 @@ ditto "$TASK_TEMP/Current.app" "$MOUNT_PATH/External.app"
 bash "$ROOT_DIR/script/archive_test_app.sh" "$MOUNT_PATH/External.app" "$TASK_TEMP/CrossVolumeArchives"
 test ! -e "$MOUNT_PATH/External.app"
 test -n "$(ls "$TASK_TEMP/CrossVolumeArchives")"
-hdiutil detach "$MOUNT_PATH"
-MOUNT_PATH=""
+detach_archive_fixture
 "$REGISTER_TOOL" -u "$TASK_TEMP/Installed.app"
 echo 'Competing callback handler regression passed'
