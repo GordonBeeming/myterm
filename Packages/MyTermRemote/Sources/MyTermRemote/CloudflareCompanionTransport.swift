@@ -107,7 +107,7 @@ public actor CloudflareCompanionTransport: CompanionRelayTransport {
     public func ping() async throws { try await transport.ping() }
     public func disconnect() async { await finish(attempt: generation) }
 
-    static func connectionID(for endpointID: String) throws -> UUID {
+    public static func connectionID(for endpointID: String) throws -> UUID {
         guard CloudflareRelayFrame.isDigest(endpointID) else { throw RemoteError.invalidMessage }
         let hex = Array(endpointID.prefix(32))
         let uuid = [0..<8, 8..<12, 12..<16, 16..<20, 20..<32].map { String(hex[$0]) }.joined(separator: "-")

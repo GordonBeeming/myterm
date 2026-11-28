@@ -111,6 +111,18 @@ public struct CloudflareRelayClient: Sendable {
         self.session = session
     }
 
+    public func supportsNativeRelay() async throws -> Bool {
+        let capabilities: Capabilities
+        do { capabilities = try await send("GET", path: "v1/capabilities") }
+        catch RemoteError.server(status: 404) { return false }
+        guard capabilities.protocol == 1, capabilities.schema >= 2,
+              capabilities.features.contains("approved-endpoint-relay-v1"),
+              capabilities.features.contains("native-passkey-pkce-v1") else {
+            throw RemoteError.unsupportedVersion
+        }
+        return true
+    }
+
     public func exchange(attempt: SignInAttempt, callback: URL) async throws -> Session {
         guard attempt.relay == relay else { throw RemoteError.invalidEndpoint }
         let code = try attempt.authorizationCode(from: callback)
@@ -176,12 +188,17 @@ public struct CloudflareRelayClient: Sendable {
 
     private func post<Response: Decodable>(_ path: String, _ body: Data, bearer: String? = nil,
                                           proof: (nonce: String, signature: String)? = nil) async throws -> Response {
+        try await send("POST", path: path, body: body, bearer: bearer, proof: proof)
+    }
+
+    private func send<Response: Decodable>(_ method: String, path: String, body: Data? = nil, bearer: String? = nil,
+                                          proof: (nonce: String, signature: String)? = nil) async throws -> Response {
         let url = relay.appending(path: path)
         var request = URLRequest(url: url, timeoutInterval: 15)
-        request.httpMethod = "POST"
+        request.httpMethod = method
         request.httpShouldHandleCookies = false
         request.httpBody = body
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if body != nil { request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let bearer {
             guard Self.validCredential(bearer) else { throw RemoteError.authenticationRequired }
@@ -222,6 +239,12 @@ public struct CloudflareRelayClient: Sendable {
         let code: String
         let codeVerifier: String
         let redirectUri: String
+    }
+
+    private struct Capabilities: Decodable {
+        let `protocol`: Int
+        let schema: Int
+        let features: [String]
     }
 
     private struct ChallengeRequest: Encodable { let endpointId: String; let purpose: String }

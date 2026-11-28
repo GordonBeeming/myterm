@@ -55,6 +55,7 @@ public struct RelayAdmissionPins: Sendable {
     public let anchor: String
     public let serverSigningKey: String
     public let approverSigningKey: String
+    public let pairingURL: URL?
 }
 
 /// An approval to deliver directly to the candidate. An out-of-band transfer from the trusted
@@ -67,6 +68,7 @@ public struct RelayAdmissionApproval: Sendable {
         let anchor: String
         let serverSigningKey: String
         let approverSigningKey: String
+        let pairingURL: URL?
         let issuedAt: Int64
     }
 
@@ -77,13 +79,17 @@ public struct RelayAdmissionApproval: Sendable {
     /// Create only after the person approves the device and the Worker accepts the signed admission.
     public init(request: RelayAdmissionRequest, relay: RelayEndpoint, accountID: UUID, anchor: String,
                 serverSigningKey: Curve25519.Signing.PublicKey, approver: Curve25519.Signing.PrivateKey,
-                now: Date = .now) throws {
+                pairingURL: URL? = nil, now: Date = .now) throws {
         try request.verify(relay: relay, accountID: accountID, now: now)
         guard AdmissionEncoding.validAnchor(anchor) else { throw RemoteError.invalidMessage }
+        if let pairingURL, try PairingTicket.decode(qrURL: pairingURL, now: now).relay != relay {
+            throw RemoteError.wrongPeer
+        }
         let payload = Payload(
             origin: relay.canonicalOrigin, accountID: accountID, requestDigest: request.digest, anchor: anchor,
             serverSigningKey: serverSigningKey.rawRepresentation.base64URL,
             approverSigningKey: approver.publicKey.rawRepresentation.base64URL,
+            pairingURL: pairingURL,
             issuedAt: try AdmissionEncoding.timestamp(now)
         )
         envelope = try AdmissionEnvelope(payload: payload, signer: approver, prefix: Self.prefix)
@@ -105,8 +111,11 @@ public struct RelayAdmissionApproval: Sendable {
         try AdmissionEncoding.checkTime(payload.issuedAt, now: now)
         try envelope.verify(signer: AdmissionEncoding.publicKey(payload.approverSigningKey), prefix: Self.prefix)
         _ = try AdmissionEncoding.publicKey(payload.serverSigningKey)
+        if let pairingURL = payload.pairingURL, try PairingTicket.decode(qrURL: pairingURL, now: now).relay != relay {
+            throw RemoteError.wrongPeer
+        }
         return RelayAdmissionPins(anchor: payload.anchor, serverSigningKey: payload.serverSigningKey,
-                                  approverSigningKey: payload.approverSigningKey)
+                                  approverSigningKey: payload.approverSigningKey, pairingURL: payload.pairingURL)
     }
 }
 

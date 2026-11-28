@@ -1,7 +1,8 @@
 import CryptoKit
 import Foundation
-import MyTermRemote
 import Testing
+
+@testable import MyTermRemote
 
 @Test func relayAdmissionHandoffAuthenticatesAnExactCandidateAndServer() throws {
     let relay = try RelayEndpoint(#require(URL(string: "https://relay.example.test")))
@@ -19,9 +20,16 @@ import Testing
     #expect(request.signingKey == phone.publicKey.rawRepresentation.base64URL)
     try request.verify(relay: relay, accountID: accountID, now: now)
 
+    let ticket = PairingTicket(
+        version: 1, relay: relay, hostID: UUID(), hostName: "Fixture",
+        hostPublicKey: P256.KeyAgreement.PrivateKey().publicKey.x963Representation,
+        ticketID: UUID(), secret: Data(repeating: 8, count: 32), expiresAt: now.addingTimeInterval(120)
+    )
+    let pairingURL = try ticket.qrURL()
     let approval = try RelayAdmissionApproval(
         request: request, relay: relay, accountID: accountID, anchor: anchor,
-        serverSigningKey: server.publicKey, approver: approver, now: now.addingTimeInterval(10)
+        serverSigningKey: server.publicKey, approver: approver, pairingURL: pairingURL,
+        now: now.addingTimeInterval(10)
     )
     let imported = try RelayAdmissionApproval(code: approval.code)
     let verified = try imported.verify(request: original, relay: relay, accountID: accountID,
@@ -29,6 +37,7 @@ import Testing
     #expect(verified.anchor == anchor)
     #expect(verified.serverSigningKey == server.publicKey.rawRepresentation.base64URL)
     #expect(verified.approverSigningKey == approver.publicKey.rawRepresentation.base64URL)
+    #expect(verified.pairingURL == pairingURL)
 
     let differentRequest = try RelayAdmissionRequest(relay: relay, accountID: accountID, signer: tablet, now: now)
     #expect(throws: RemoteError.wrongPeer) {

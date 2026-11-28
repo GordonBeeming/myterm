@@ -313,7 +313,7 @@ public actor SecureRelayChannel {
     }
 
     public func send(_ message: InnerMessage, destinationConnectionID: UUID,
-                     over transport: RelayWebSocketClient) async throws {
+                     over transport: any CompanionRelayTransport) async throws {
         let sender = sender
         let previous = outboundTail
         let operation = Task {
