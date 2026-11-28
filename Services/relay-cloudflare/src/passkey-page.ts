@@ -226,6 +226,10 @@ verify.addEventListener("click", async () => {
   setup.disabled = true;
   try {
     const accepted = await verifyPasskey(publicKey, Boolean(secret), route, secret);
+    if (accepted.role !== "operator") {
+      status.textContent = "Use the operator passkey to manage invitations.";
+      return;
+    }
     session = accepted.session;
     setup.value = "";
     document.querySelector("#operator-sign-in").hidden = true;

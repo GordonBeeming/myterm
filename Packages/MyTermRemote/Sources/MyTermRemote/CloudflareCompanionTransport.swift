@@ -87,7 +87,7 @@ public actor CloudflareCompanionTransport: CompanionRelayTransport {
         let previous = outbound[destinationConnectionID]
         let transport = transport
         let operation = Task {
-            if let previous { try await previous.value }
+            if let previous { _ = await previous.result }
             for fragment in try CloudflareRelayFragments.split(payload) {
                 try Task.checkCancellation()
                 try await transport.send(destination: destination, ciphertext: fragment)

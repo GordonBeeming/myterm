@@ -196,7 +196,7 @@ async function registrationFinish(
     if (String(cause).includes("UNIQUE constraint failed")) return error(409, "registration_conflict");
     throw cause;
   }
-  return json(authorization.body, 201);
+  return json({ ...authorization.body, role: bootstrap ? "operator" : "personal" }, 201);
 }
 
 async function loginOptions(env: Env, config: Configuration, body: Record<string, unknown>): Promise<Response> {
@@ -245,7 +245,7 @@ async function loginFinish(env: Env, config: Configuration, body: Record<string,
       .bind(newCounter, passkey.credential_id, passkey.counter),
   ]);
   if (!records[0]?.meta.changes) return error(401, "passkey_verification_failed");
-  return json(authorization.body);
+  return json({ ...authorization.body, role: passkey.role });
 }
 
 async function bootstrapAllowed(env: Env, request: Request): Promise<Response | null> {

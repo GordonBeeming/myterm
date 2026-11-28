@@ -446,11 +446,13 @@ final class CompanionHostModel {
         workerPairingExpiry?.cancel()
         workerPairingExpiry = nil
         workerApprovalID = nil
-        isApprovingWorkerDevice = false
         workerApproval = nil
         workerApprovalQRCode = nil
         workerApprovalError = nil
         let ticketID = activeTicket?.ticketID ?? workerPairing?.ticket.ticketID
+        if let endpointID = workerPairing?.endpointID, let link = workerLink {
+            Task { await revokeIncompleteWorkerPairing(endpointID, link: link) }
+        }
         activeTicket = nil
         workerPairing = nil
         pairingQRCode = nil
@@ -471,20 +473,25 @@ final class CompanionHostModel {
         workerApprovalError = nil
         Task { [self] in
             defer {
+                isApprovingWorkerDevice = false
                 if workerApprovalID == approvalID {
                     workerApprovalID = nil
-                    isApprovingWorkerDevice = false
                 }
             }
             var issuedTicket: PairingTicket?
+            var admittingEndpointID: String?
             do {
                 let request = try RelayAdmissionRequest(code: requestCode)
                 let endpoint = link.relay
                 let account = try link.account
                 try request.verify(relay: endpoint, accountID: account.id, now: now())
+                guard !pairedPeers.contains(where: { $0.workerEndpointID == request.endpointID }) else {
+                    throw RemoteError.replayedMessage
+                }
                 let standard = request.signingKey.replacingOccurrences(of: "-", with: "+")
                     .replacingOccurrences(of: "_", with: "/")
                 guard let publicKey = Data(base64Encoded: standard + "=") else { throw RemoteError.invalidMessage }
+                admittingEndpointID = request.endpointID
                 let route = try await makeWorkerClient(endpoint).admit(
                     account: account, approvingKey: link.approverRoute,
                     endpointPublicKey: publicKey, kind: .client, relayEnabled: true
@@ -514,9 +521,21 @@ final class CompanionHostModel {
                 }
             } catch {
                 if let issuedTicket { await registry.cancel(ticketID: issuedTicket.ticketID) }
+                if let admittingEndpointID { await revokeIncompleteWorkerPairing(admittingEndpointID, link: link) }
                 guard workerApprovalID == approvalID, connectionFence.accepts(generation) else { return }
                 workerApprovalError = error.localizedDescription
             }
+        }
+    }
+
+    private func revokeIncompleteWorkerPairing(_ endpointID: String, link: CompanionWorkerLink) async {
+        do {
+            try await makeWorkerClient(link.relay).revoke(account: link.account, key: link.approverRoute,
+                                                        targetEndpointID: endpointID)
+        } catch RemoteError.server(status: 400) {
+            // The relay may never have received the original admission request.
+        } catch {
+            logger.error("Could not revoke an incomplete device approval: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -1214,7 +1233,8 @@ final class CompanionHostModel {
             await resumePairingModeAfterAttempt()
             throw error
         }
-        guard connectionFence.accepts(generation) else {
+        guard connectionFence.accepts(generation),
+              approvedWorkerEndpoint == nil || workerPairing?.ticket.ticketID == proposal.ticketID else {
             if response.approved {
                 do { _ = try await registry.revoke(deviceID: proposal.clientDeviceID) }
                 catch {
@@ -1233,10 +1253,23 @@ final class CompanionHostModel {
             clientPublicKey: clientKey
         )
         guard let transport else { throw RemoteError.disconnected }
-        try await transport.send(
-            destinationConnectionID: connectionID,
-            payload: RelayApplicationPacket.pairingResponse(sealedResponse).encoded()
-        )
+        let payload = try RelayApplicationPacket.pairingResponse(sealedResponse).encoded()
+        if response.approved, let approvedWorkerEndpoint, let link = workerLink {
+            // The peer is durably paired. Expiring the handoff must leave its route admitted.
+            workerPairing = nil
+            cancelPairing()
+            do {
+                try await transport.send(destinationConnectionID: connectionID, payload: payload)
+            } catch {
+                do { _ = try await registry.revoke(deviceID: proposal.clientDeviceID) }
+                catch { logger.error("Incomplete pairing rollback failed: \(error.localizedDescription, privacy: .public)") }
+                await revokeIncompleteWorkerPairing(approvedWorkerEndpoint, link: link)
+                if connectionFence.accepts(generation) { pairedPeers = await registry.pairedPeers() }
+                throw error
+            }
+            return
+        }
+        try await transport.send(destinationConnectionID: connectionID, payload: payload)
         if response.approved {
             cancelPairing()
         } else {

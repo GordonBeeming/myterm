@@ -3,6 +3,11 @@ import MyTermUI
 import SwiftUI
 
 struct CompanionSettingsView: View {
+    private struct RelayDiscovery: Equatable {
+        var choice: CompanionRelayChoice
+        var address: String
+    }
+
     @Bindable var companion: CompanionHostModel
     @State private var customRelayAddress = ""
     @State private var setupLink = ""
@@ -249,7 +254,7 @@ struct CompanionSettingsView: View {
             }
         }
         .onAppear { if relayChoice == nil { loadRelaySelection() } }
-        .task(id: showsLinkForm ? connectionInput : "") {
+        .task(id: showsLinkForm ? RelayDiscovery(choice: selectedRelay, address: connectionInput) : nil) {
             let choice = selectedRelay
             let address = connectionInput
             guard showsLinkForm, choice != .setupLink,

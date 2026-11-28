@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { base64Url, canonicalBase64, randomToken, sha256, utf8 } from "./crypto";
 import { endpointId, validSigningKey, verifyProof } from "./endpoint-proof";
-import { error, json, parseObject, RelayRequestError } from "./http";
+import { bearer, error, json, parseObject, RelayRequestError } from "./http";
 
 const challengeLifetime = 60_000;
 const proofInterval = 30_000;
@@ -21,6 +21,7 @@ type Socket = {
   authenticatedAt: number | null;
   openedAt: number;
   probe: string;
+  previousProof?: { nonce: string; signature: string };
   nextProbe: number;
   pending: Array<{ token: string; size: number }>;
 };
@@ -291,7 +292,7 @@ export class AccountRouter extends DurableObject<Env> {
 
   override fetch(request: Request): Promise<Response> {
     return this.serialize(async () => {
-      const ticket = request.headers.get("Authorization")?.slice("Bearer ".length);
+      const ticket = bearer(request);
       if (!canonicalBase64(ticket, 32)) return error(401, "connect_ticket_invalid");
       const hash = await sha256(utf8(ticket));
       const now = Date.now();
@@ -303,14 +304,16 @@ export class AccountRouter extends DurableObject<Env> {
       if (!reservation || reservation.expires_at <= now || !this.endpoint(reservation.endpoint_id)?.relay_enabled) {
         return error(401, "connect_ticket_invalid");
       }
-      if (this.ctx.getWebSockets().length >= maxSockets || this.ctx.getWebSockets(reservation.endpoint_id).length >= 2) {
+      const existing = this.ctx.getWebSockets(reservation.endpoint_id);
+      if (this.ctx.getWebSockets().length >= maxSockets || existing.length >= 2) {
         return error(503, "simultaneous_connection_limit");
       }
       const pair = new WebSocketPair();
       const server = pair[1];
       const connection: Socket = {
         endpointId: reservation.endpoint_id, flowControl: new URL(request.url).searchParams.get("flow") === "1",
-        authenticatedAt: null, openedAt: now,
+        authenticatedAt: null,
+        openedAt: Math.max(now, ...existing.map(socket => (socket.deserializeAttachment() as Socket).openedAt + 1)),
         probe: randomToken(), nextProbe: now + proofInterval, pending: [],
       };
       await this.schedule(now, state.grace_deadline, connection.nextProbe);
@@ -358,11 +361,13 @@ export class AccountRouter extends DurableObject<Env> {
       socket.serializeAttachment(frame);
       return;
     }
+    if (frame.previousProof && body.nonce === frame.previousProof.nonce && body.proof === frame.previousProof.signature) return;
     if (!frame.probe || body.nonce !== frame.probe || !canonicalBase64(body.proof, 64) ||
         !await verifyProof(this.env.RELAY_ORIGIN, anchor, endpoint.id, "liveness", frame.probe, utf8(""), endpoint.signing_key, body.proof)) {
       socket.close(4401, "liveness proof rejected");
       return;
     }
+    if (socket.readyState !== WebSocket.OPEN) return;
 
     const first = frame.authenticatedAt === null;
     const state = this.state();
@@ -371,7 +376,16 @@ export class AccountRouter extends DurableObject<Env> {
       socket.close(4403, "relay access expired");
       return;
     }
+    const peers = first ? this.ctx.getWebSockets(endpoint.id).filter((candidate) => {
+      if (candidate === socket || candidate.readyState !== WebSocket.OPEN) return false;
+      return (candidate.deserializeAttachment() as Socket).authenticatedAt !== null;
+    }) : [];
+    if (peers.some(candidate => (candidate.deserializeAttachment() as Socket).openedAt > frame.openedAt)) {
+      socket.close(4409, "relay connection replaced");
+      return;
+    }
     frame.authenticatedAt = verifiedAt;
+    frame.previousProof = { nonce: frame.probe, signature: body.proof };
     frame.probe = "";
     this.sql.exec(
       "UPDATE account_state SET last_contact = max(last_contact, ?), grace_deadline = CASE WHEN ? THEN NULL ELSE grace_deadline END WHERE singleton = 1",
@@ -379,12 +393,7 @@ export class AccountRouter extends DurableObject<Env> {
     );
     socket.serializeAttachment(frame);
     if (first) {
-      const duplicates = this.ctx.getWebSockets(endpoint.id).filter((candidate) => {
-        if (candidate === socket || candidate.readyState !== WebSocket.OPEN) return false;
-        const attached: Socket = candidate.deserializeAttachment();
-        return attached.authenticatedAt !== null && attached.openedAt <= frame.openedAt;
-      });
-      this.closeSockets(duplicates, "relay connection replaced", 4409);
+      this.closeSockets(peers, "relay connection replaced", 4409);
       socket.send(JSON.stringify({ ready: true }));
     }
     await this.schedule(now, first ? null : state.grace_deadline, frame.nextProbe);

@@ -578,6 +578,11 @@ final class SceneModel {
         await stopConnection()
     }
 
+    func disconnect(ifConnectedTo connectionID: SavedConnectionID) async {
+        guard activeHost?.connectionID == connectionID else { return }
+        await disconnect()
+    }
+
     func prepareNavigation(replacing previous: SavedConnectionID?,
                            with next: SavedConnectionID) {
         guard let previous, previous != next else { return }

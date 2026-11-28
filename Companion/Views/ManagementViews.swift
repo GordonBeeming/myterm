@@ -238,7 +238,7 @@ struct HostActionsView: View {
                         }
                         Button("Remove pairing", role: .destructive) {
                             Task {
-                                if scene.selectedConnectionID == host.connectionID { await scene.disconnect() }
+                                await scene.disconnect(ifConnectedTo: host.connectionID)
                                 await services.remove(host)
                                 if !services.savedHosts.contains(where: { $0.hostID == host.hostID }) {
                                     await scene.browserProfileStores.removeStores(hostID: host.hostID)

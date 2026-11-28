@@ -40,24 +40,23 @@ export async function exchangePasskeyCode(
     return error(400, "invalid_authorization_exchange");
   }
   const session = randomToken();
-  const now = Date.now();
-  const expiresAt = now + sessionLifetime;
   const [codeHash, verifierHash, sessionHash] = await Promise.all([
     sha256(utf8(code)),
     crypto.subtle.digest("SHA-256", utf8(codeVerifier)),
     sha256(utf8(session)),
   ]);
   const codeChallenge = base64Url(new Uint8Array(verifierHash));
+  const expiresAt = Date.now() + sessionLifetime;
   const records = await env.ACCOUNT_DB.batch<{ account_id: string }>([
     env.ACCOUNT_DB.prepare(
       "INSERT INTO login_sessions(token_hash, account_id, expires_at) " +
       "SELECT ?, account_id, ? FROM passkey_authorization_codes " +
-      "WHERE code_hash = ? AND code_challenge = ? AND redirect_uri = ? AND expires_at > ?",
-    ).bind(sessionHash, expiresAt, codeHash, codeChallenge, redirectUri, now),
+      "WHERE code_hash = ? AND code_challenge = ? AND redirect_uri = ? AND expires_at > unixepoch('subsec') * 1000",
+    ).bind(sessionHash, expiresAt, codeHash, codeChallenge, redirectUri),
     env.ACCOUNT_DB.prepare(
       "DELETE FROM passkey_authorization_codes " +
-      "WHERE code_hash = ? AND code_challenge = ? AND redirect_uri = ? AND expires_at > ? RETURNING account_id",
-    ).bind(codeHash, codeChallenge, redirectUri, now),
+      "WHERE code_hash = ? AND EXISTS (SELECT 1 FROM login_sessions WHERE token_hash = ?) RETURNING account_id",
+    ).bind(codeHash, sessionHash),
   ]);
   const accountId = records[1]?.results[0]?.account_id;
   return accountId ? json({ accountId, session, expiresAt }) : error(401, "invalid_authorization_code");

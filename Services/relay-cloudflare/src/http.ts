@@ -62,5 +62,5 @@ export async function readJson(request: Request): Promise<Record<string, unknown
 
 export function bearer(request: Request): string | undefined {
   const header = request.headers.get("Authorization");
-  return header?.match(/^Bearer ([A-Za-z0-9_-]{1,128})$/)?.[1];
+  return header?.match(/^Bearer ([A-Za-z0-9_-]{1,128})$/i)?.[1];
 }

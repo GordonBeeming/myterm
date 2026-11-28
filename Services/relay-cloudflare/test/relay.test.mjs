@@ -126,8 +126,14 @@ test("authenticated operator bootstrap issues a single-use invitation without gr
   const invitation = await request("/v1/operator/invitations", { lifetimeSeconds: 600 }, (await operator.json()).session);
   assert.equal(invitation.status, 201);
   const { token } = await invitation.json();
-  const invites = await Promise.all([0, 1].map(async () => {
-    const options = (await (await request("/v1/passkeys/register/options", { invitation: token })).json()).publicKey;
+  const optionsResponses = await Promise.all([0, 1].map(() =>
+    request("/v1/passkeys/register/options", { invitation: token }),
+  ));
+  const requests = await Promise.all(optionsResponses.map(async response => {
+    assert.equal(response.status, 200);
+    return (await response.json()).publicKey;
+  }));
+  const invites = await Promise.all(requests.map(options => {
     return request("/v1/passkeys/register/finish", {
       challenge: options.challenge,
       credential: new VirtualAuthenticator().register(options, selfOrigin),
@@ -340,6 +346,50 @@ async function exchangeEncrypted(source, recipient, sourceId, destinationId, key
   await assert.rejects(crypto.subtle.decrypt(params, alternateKey, frame.subarray(60)));
   recipient.send(JSON.stringify({ ack: frame.subarray(32, 48).toString("base64url") }));
 }
+
+test("a late older socket and a duplicate proof do not evict the active endpoint", async () => {
+  const relay = fixture();
+  await migrate(relay);
+  const { accountId, session } = await registerUser(relay);
+  const client = new Endpoint(), server = new Endpoint(), anchor = newAnchor();
+  assert.equal((await action(relay, origin, accountId, anchor, client, "genesis", {
+    anchor, signingKey: client.publicKey,
+  }, session)).status, 201);
+  assert.equal((await action(relay, origin, accountId, anchor, client, "admit", {
+    targetEndpointId: server.id, signingKey: server.publicKey, kind: "server", relayEnabled: true,
+  })).status, 201);
+
+  async function openClient() {
+    const reservation = await action(relay, origin, accountId, anchor, client, "connect");
+    assert.equal(reservation.status, 200);
+    const { ticket } = await reservation.json();
+    const response = await relay.dispatchFetch(`${origin}/v1/accounts/${accountId}/socket`, {
+      headers: { upgrade: "websocket", authorization: "bEaReR " + ticket },
+    });
+    assert.equal(response.status, 101);
+    const socket = response.webSocket;
+    const challenge = nextWebSocketEvent(socket, "message");
+    socket.accept();
+    const { nonce } = JSON.parse((await challenge).data);
+    return { socket, proof: JSON.stringify({ nonce, proof: client.signature(origin, anchor, "liveness", nonce) }) };
+  }
+
+  const older = await openClient(), newer = await openClient();
+  const ready = nextWebSocketEvent(newer.socket, "message");
+  newer.socket.send(newer.proof);
+  assert.equal(JSON.parse((await ready).data).ready, true);
+  newer.socket.send(newer.proof);
+  const rejected = nextWebSocketEvent(older.socket, "close");
+  older.socket.send(older.proof);
+  assert.equal((await rejected).code, 4409);
+
+  const host = await connect(relay, origin, accountId, anchor, server);
+  const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+  const other = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+  await exchangeEncrypted(host, newer.socket, server.id, client.id, key, other, "active route survives");
+  host.close();
+  newer.socket.close();
+});
 
 test("flow control defers a frame until the receiver can accept it without disconnecting", async () => {
   const relay = fixture();

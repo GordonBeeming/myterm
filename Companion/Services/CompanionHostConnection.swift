@@ -53,6 +53,7 @@ actor CompanionHostConnection {
     private let connectionAttempt = UUID()
     private var opened = false
     private var closing = false
+    private var closeTask: Task<Void, Never>?
     private let identity: CompanionIdentity
     private let checkpointAssembler = CheckpointAssembler()
     private var transport: (any CompanionRelayTransport)?
@@ -174,15 +175,20 @@ actor CompanionHostConnection {
     func disconnect() async { await close(error: nil) }
 
     private func close(error: Error?) async {
-        guard !closing else { return }
+        if let closeTask {
+            await closeTask.value
+            return
+        }
         closing = true
         let activeTransport = transport
         transport = nil
         finish(error: error)
-        if let activeTransport {
-            await activeTransport.disconnect()
+        let task = Task { [workerSlot, connectionAttempt] in
+            await activeTransport?.disconnect()
+            await workerSlot?.release(connectionAttempt)
         }
-        await workerSlot?.release(connectionAttempt)
+        closeTask = task
+        await task.value
     }
 
     func attach(_ route: TerminalRoute,
