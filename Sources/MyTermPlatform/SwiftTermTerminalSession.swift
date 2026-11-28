@@ -369,8 +369,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         switch startup {
         case .restore:
             if let selection = try rustWorkspace.backend.selection(paneID: rustWorkspace.paneID) {
-                rustClientID = selection.clientID
-                rustRecovery?.action = .reattach
+                startRustAttachment(selection: selection, launch: nil, startupFailure: nil, runInitialCommand: false)
             } else {
                 try startNewProcess(runInitialCommand: true)
             }

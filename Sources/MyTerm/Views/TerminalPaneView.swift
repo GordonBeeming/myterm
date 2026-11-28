@@ -27,12 +27,21 @@ struct TerminalPaneView: View {
             #if DEBUG || MYTERM_RUST_WORKSPACES
             if let process = model.terminalSession(for: session.id) as? SwiftTermTerminalSession,
                let action = process.rustRecovery?.action {
-                Button(rustActionTitle(action)) {
-                    model.dismissTerminalNotice(sessionID: session.id)
-                    process.performRustRecoveryAction()
+                HStack(spacing: 12) {
+                    Label(rustRecoveryStatus(action), systemImage: action == .takeControl ? "eye" : "terminal")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
+                    Button(rustActionTitle(action)) {
+                        model.dismissTerminalNotice(sessionID: session.id)
+                        process.performRustRecoveryAction()
+                    }
+                    .accessibilityIdentifier("terminal-rust-recovery")
                 }
-                .accessibilityIdentifier("terminal-rust-recovery")
-                .padding(8)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(.bar)
+                Divider()
             }
             #endif
             terminal
@@ -72,9 +81,18 @@ struct TerminalPaneView: View {
     }
 
     #if DEBUG || MYTERM_RUST_WORKSPACES
+    private func rustRecoveryStatus(_ action: LocalRustWorkspaceRecovery.Action) -> String {
+        switch action {
+        case .reattach: "Saved shell disconnected"
+        case .startNewShell: "Saved shell unavailable"
+        case .retryStartup: "Terminal startup needs attention"
+        case .takeControl: "Viewing terminal"
+        }
+    }
+
     private func rustActionTitle(_ action: LocalRustWorkspaceRecovery.Action) -> String {
         switch action {
-        case .reattach: "Reattach to Saved Shell"
+        case .reattach: "Reconnect"
         case .startNewShell: "Start New Shell"
         case .retryStartup: "Retry Terminal Startup"
         case .takeControl: "Take Terminal Control"
