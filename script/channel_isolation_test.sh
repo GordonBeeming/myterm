@@ -101,7 +101,7 @@ if MYTERM_DISTRIBUTION=1 "$RUN_SCRIPT" --rust-release-rehearsal --print-plan > /
 fi
 
 no_support_status=0
-MYTERM_APPLICATION_SUPPORT_DIRECTORY= "$RUN_SCRIPT" --rust-release-rehearsal > "$TEST_ROOT/missing-support.log" 2>&1 || no_support_status=$?
+MYTERM_APPLICATION_SUPPORT_DIRECTORY='' "$RUN_SCRIPT" --rust-release-rehearsal > "$TEST_ROOT/missing-support.log" 2>&1 || no_support_status=$?
 [[ "$no_support_status" == 2 ]]
 grep -Fq "Set MYTERM_APPLICATION_SUPPORT_DIRECTORY" "$TEST_ROOT/missing-support.log"
 
