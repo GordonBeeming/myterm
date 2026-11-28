@@ -113,7 +113,7 @@ private actor CredentialCatalog {
     }
 }
 
-struct WorkerHostRoute: Codable, Sendable {
+struct WorkerHostRoute: Codable, Equatable, Sendable {
     let anchor: String
     let endpointPrivateKey: Data
     let serverSigningKey: Data
@@ -200,6 +200,11 @@ final class CompanionServices {
     private struct RelayEnrollmentRequired: LocalizedError {
         var errorDescription: String? { "This relay has upgraded. Use Add Mac to pair again." }
     }
+    private struct WorkerProbe {
+        let id: UUID
+        let route: WorkerHostRoute
+        let task: Task<Void, Error>
+    }
     private let secrets: any SecretStore
     private let tokenStore: TokenStore
     private let credentialCatalog: CredentialCatalog
@@ -211,7 +216,7 @@ final class CompanionServices {
     private var tokenManagers: [TokenPartition: RelayTokenManager] = [:]
     private var loadTask: Task<Void, Never>?
     private var workerSlots: [SavedConnectionID: WorkerConnectionSlot] = [:]
-    private var workerProbes: [SavedConnectionID: Task<Void, Error>] = [:]
+    private var workerProbes: [SavedConnectionID: WorkerProbe] = [:]
     private var workerHosts: Set<SavedConnectionID> = []
 
     private(set) var savedHosts: [SavedHostDescriptor] = []
@@ -332,15 +337,16 @@ final class CompanionServices {
     func connection(for host: SavedHostDescriptor) async throws -> CompanionHostConnection {
         if let probe = workerProbes[host.connectionID] {
             // Let a status check relinquish the endpoint before opening an interactive socket.
-            _ = await probe.result
+            _ = await probe.task.result
             try Task.checkCancellation()
         }
-        return try await makeConnection(for: host)
+        let worker = try await hostCatalog.workerRoute(for: host)
+        return try await makeConnection(for: host, worker: worker)
     }
 
-    private func makeConnection(for host: SavedHostDescriptor) async throws -> CompanionHostConnection {
+    private func makeConnection(for host: SavedHostDescriptor, worker: WorkerHostRoute?) async throws -> CompanionHostConnection {
         let identity = try await identity()
-        if let worker = try await hostCatalog.workerRoute(for: host) {
+        if let worker {
             guard host.clientDeviceID == identity.localDeviceID else { throw RemoteError.wrongPeer }
             let connectionID = host.connectionID
             let slot = workerSlots[connectionID] ?? WorkerConnectionSlot()
@@ -606,22 +612,28 @@ final class CompanionServices {
         }
         for start in stride(from: 0, to: hosts.count, by: 4) {
             let end = min(start + 4, hosts.count)
-            await withTaskGroup(of: (SavedConnectionID, ConnectionPhase?).self) { group in
+            await withTaskGroup(of: (SavedConnectionID, WorkerHostRoute?, ConnectionPhase?).self) { group in
                 for host in hosts[start..<end] {
                     group.addTask { [weak self] in
-                        guard let self else { return (SavedConnectionID(host), nil) }
+                        guard let self else { return (host.connectionID, nil, nil) }
+                        let worker: WorkerHostRoute?
+                        do { worker = try await self.hostCatalog.workerRoute(for: host) }
+                        catch { return (host.connectionID, nil, .failed(error.localizedDescription)) }
                         do {
-                            try await self.probe(host)
-                            return (SavedConnectionID(host), .online)
+                            try await self.probe(host, worker: worker)
+                            return (host.connectionID, worker, .online)
+                        } catch is CancellationError {
+                            return (host.connectionID, worker, nil)
                         } catch WorkerConnectionError.inUse {
-                            return (host.connectionID, nil)
+                            return (host.connectionID, worker, nil)
                         } catch {
-                            return (SavedConnectionID(host), .failed(error.localizedDescription))
+                            return (host.connectionID, worker, .failed(error.localizedDescription))
                         }
                     }
                 }
-                for await (id, phase) in group {
-                    if let phase, savedHosts.contains(where: { $0.connectionID == id }) {
+                for await (id, worker, phase) in group {
+                    if let phase, let current = savedHosts.first(where: { $0.connectionID == id }),
+                       (try? await hostCatalog.workerRoute(for: current)) == worker {
                         hostStatuses[id] = phase
                     }
                 }
@@ -629,21 +641,29 @@ final class CompanionServices {
         }
     }
 
-    private func probe(_ host: SavedHostDescriptor) async throws {
-        guard usesWorkerRelay(host) else {
-            try await Self.probeConnection(makeConnection(for: host))
+    private func probe(_ host: SavedHostDescriptor, worker: WorkerHostRoute?) async throws {
+        guard let worker else {
+            try await Self.probeConnection(makeConnection(for: host, worker: nil))
             return
         }
         let id = host.connectionID
-        if let existing = workerProbes[id] {
-            try await existing.value
-            return
+        while true {
+            guard try await hostCatalog.workerRoute(for: host) == worker else { throw CancellationError() }
+            guard let existing = workerProbes[id] else { break }
+            if existing.route == worker {
+                try await existing.task.value
+                return
+            }
+            existing.task.cancel()
+            _ = await existing.task.result
+            if workerProbes[id]?.id == existing.id { workerProbes.removeValue(forKey: id) }
         }
+        let probeID = UUID()
         let task = Task { @MainActor in
-            try await Self.probeConnection(makeConnection(for: host))
+            try await Self.probeConnection(makeConnection(for: host, worker: worker))
         }
-        workerProbes[id] = task
-        defer { workerProbes.removeValue(forKey: id) }
+        workerProbes[id] = WorkerProbe(id: probeID, route: worker, task: task)
+        defer { if workerProbes[id]?.id == probeID { workerProbes.removeValue(forKey: id) } }
         try await task.value
     }
 

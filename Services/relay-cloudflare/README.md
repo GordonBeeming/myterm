@@ -61,6 +61,19 @@ curl --fail --silent "$relay_origin/v1/capabilities"
 
 Check the returned channel, revision and schema before enrolling endpoints. Hosted promotion and the release gates are recorded in the [relay deployment contract](../../docs/planning/myterm-next/relay-deployment-contract.md). An existing custom domain that serves the Go relay needs its own cutover.
 
+For a hostname with an existing proxied tunnel CNAME, Cloudflare can keep the DNS record and route traffic to the Worker by hostname. Confirm there is no existing Worker route for that hostname. Write the route configuration beside the generated manifest so its relative paths still resolve.
+
+```sh
+relay_host="${relay_origin#https://}"
+route_manifest="${relay_manifest%.json}-tunnel-route.json"
+jq --arg host "$relay_host" --arg zone "$relay_zone" \
+  '.routes = [{pattern: ($host + "/*"), zone_name: $zone}]' \
+  "$relay_manifest" > "$route_manifest"
+npx wrangler deploy --strict --config "$route_manifest" --secrets-file "$relay_secrets_file"
+```
+
+Verify capabilities and WebSocket traffic through the public hostname. To restore the Go relay, remove the exact Worker route in Cloudflare. Retain the proxied CNAME and tunnel ingress for rollback.
+
 ## Native passkey sign-in
 
 Open `/auth/register` or `/auth/login` in an authentication session. Query parameters are `redirect_uri`, `state`, `code_challenge` and `code_challenge_method=S256`, using the MyTerm callback allowlist. Registration accepts a one-use invitation in the `bootstrap_token` fragment, or `invitation` as its alias. The callback includes an authorization `code` and the original `state`. After validating both, exchange with `POST /v1/passkeys/session` using `{code, codeVerifier, redirectUri}`. The response contains `{accountId, session, expiresAt}`. The code expires after 90 seconds and is redeemed atomically. `expiresAt` is milliseconds since the Unix epoch.
