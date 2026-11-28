@@ -31,6 +31,9 @@ on:
       source_sha:
         type: string
         required: true
+      release_version:
+        type: string
+        required: true
       build_number:
         type: string
         required: true
@@ -180,6 +183,13 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ inputs.source_sha || github.sha }}
+      - name: Check out the uploader for historical source builds
+        if: inputs.source_sha != github.sha
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+          path: .testflight-workflow
+          persist-credentials: false
       - name: Verify actual SDK
         run: bash script/verify_companion_toolchain.sh 27.2
       - name: Install the matching Metal toolchain
@@ -200,8 +210,15 @@ jobs:
           PROVISIONING_PROFILE: ${{ secrets.PROVISIONING_PROFILE }}
           NOTIFICATION_PROVISIONING_PROFILE: ${{ secrets.NOTIFICATION_PROVISIONING_PROFILE }}
           APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
           BUILD_NUMBER: ${{ inputs.build_number }}
-        run: bash script/deploy_companion_testflight.sh
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          if [[ "$SOURCE_SHA" != "$GITHUB_SHA" ]]; then
+            bash .testflight-workflow/script/deploy_companion_testflight.sh
+          else
+            bash script/deploy_companion_testflight.sh
+          fi
       - name: Preserve exported IPA
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

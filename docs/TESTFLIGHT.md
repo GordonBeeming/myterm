@@ -56,12 +56,12 @@ Apple's [encryption documentation table](https://developer.apple.com/help/app-st
 
 The deploy job:
 
-1. Selects Xcode 27.1, verifies the iOS 27.1 SDK, and installs its matching Metal toolchain.
+1. Selects Xcode 27.2, verifies the iOS 27.2 SDK, and installs its matching Metal toolchain.
 2. Imports the distribution certificate into a new runner-only keychain.
 3. Installs the app and notification service profiles after validating their names and bundle IDs.
 4. Generates an isolated Release project and archives both targets with manual signing.
-5. Sets `CURRENT_PROJECT_VERSION` to `github.run_number`.
-6. Exports the IPA, runs `altool --validate-app`, then runs `altool --upload-app`.
+5. Uses the same release version and build number as the macOS Beta from that batch. For example, the Companion app and its notification extension both use `0.1.0` when the Mac release is `v0.1.0-beta`.
+6. Exports the IPA, checks both bundles report the expected version and build, runs `altool --validate-app`, and uploads it.
 7. Uploads the exported IPA as a 90-day GitHub artifact, including when App Store validation or upload fails after export.
 8. Removes the temporary key, certificate, profiles, and keychain on every exit path.
 
@@ -71,7 +71,7 @@ An upload success means Apple accepted the binary for processing. It does not me
 
 With automatic distribution enabled, a processed and compliance-ready build is delivered to the internal group. Without automatic distribution, select the group and add the build manually before it appears in TestFlight.
 
-To request a deployment, open **Actions → Companion → Run workflow**, select `main`, and run it. A dispatch from another branch runs no deploy job.
+To request a deployment, open **Actions → Beta → Run workflow** and select `main`. Use **rebuild_companion** to resubmit a Companion build for a published Beta. A dispatch from another branch runs no deploy job.
 
 ## Local verification
 

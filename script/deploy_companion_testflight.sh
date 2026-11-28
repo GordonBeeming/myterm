@@ -79,6 +79,7 @@ validate_public_configuration() {
   require_value NOTIFICATION_PROVISIONING_PROFILE_NAME
   require_value APP_STORE_CONNECT_API_KEY_ID
   require_value APP_STORE_CONNECT_ISSUER_ID
+  require_value RELEASE_VERSION
   require_value BUILD_NUMBER
   require_single_line CODE_SIGN_IDENTITY
   require_single_line PROVISIONING_PROFILE_NAME
@@ -97,6 +98,10 @@ validate_public_configuration() {
   }
   [[ "$BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]] || {
     echo "BUILD_NUMBER must be a positive integer." >&2
+    exit 2
+  }
+  [[ "$RELEASE_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || {
+    echo "RELEASE_VERSION must have three numeric components." >&2
     exit 2
   }
   validate_optional_push_origin
@@ -133,6 +138,7 @@ spec.fetch("packages").fetch("MyTermRemote")["path"] = File.join(root, "Packages
 spec.fetch("packages").fetch("SwiftTerm")["path"] = File.join(root, "Vendor/SwiftTerm")
 base = spec.fetch("settings").fetch("base")
 base["DEVELOPMENT_TEAM"] = ENV.fetch("APPLE_TEAM_ID")
+base["MARKETING_VERSION"] = ENV.fetch("RELEASE_VERSION")
 base["CODE_SIGN_STYLE"] = "Manual"
 base["CODE_SIGN_IDENTITY"] = ENV.fetch("CODE_SIGN_IDENTITY")
 base["MYTERM_PUSH_GATEWAY_ORIGIN"] = ENV.fetch("MYTERM_PUSH_GATEWAY_ORIGIN", "")
@@ -219,6 +225,31 @@ run_altool() {
     echo "altool $action reported an error." >&2
     return 1
   fi
+}
+
+verify_exported_versions() {
+  /usr/bin/python3 - "$IPA_PATH" "$RELEASE_VERSION" "$BUILD_NUMBER" <<'PYTHON'
+import plistlib
+import sys
+import zipfile
+
+archive_path, version, build = sys.argv[1:]
+expected = {"com.gordonbeeming.myterm.companion", "com.gordonbeeming.myterm.companion.notifications"}
+verified = set()
+with zipfile.ZipFile(archive_path) as archive:
+    for member in archive.namelist():
+        if not member.startswith("Payload/") or not member.endswith((".app/Info.plist", ".appex/Info.plist")):
+            continue
+        info = plistlib.loads(archive.read(member))
+        identifier = info.get("CFBundleIdentifier")
+        if identifier not in expected:
+            continue
+        if (info.get("CFBundleShortVersionString"), info.get("CFBundleVersion")) != (version, build):
+            sys.exit(f"Exported version or build does not match the Beta batch for {identifier}.")
+        verified.add(identifier)
+if verified != expected:
+    sys.exit("The exported IPA is missing the Companion app or its notification extension.")
+PYTHON
 }
 
 prepare_app_store_connect_key() {
@@ -361,6 +392,7 @@ RUBY
     echo "Expected exactly one exported IPA." >&2
     exit 1
   }
+  verify_exported_versions
 
   prepare_app_store_connect_key
 
@@ -370,7 +402,7 @@ RUBY
   if [[ -n "${GITHUB_ENV:-}" ]]; then
     printf 'MYTERM_IPA_PATH=%s\n' "$IPA_PATH" >> "$GITHUB_ENV"
   fi
-  echo "TestFlight upload completed for build $BUILD_NUMBER."
+  echo "TestFlight upload completed for version $RELEASE_VERSION, build $BUILD_NUMBER."
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
