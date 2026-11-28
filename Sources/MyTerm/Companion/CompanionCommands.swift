@@ -81,6 +81,29 @@ extension AppModel {
         )
     }
 
+    func performCompanionCommandAwaitingTerminalStop(
+        metadata: MessageMetadata,
+        command: CommandParameters
+    ) async throws -> Data? {
+        switch command.operation {
+        case .workspaceClose:
+            let payload: RemoteClosePayload = try decodeCompanionPayload(command.payload)
+            try await closeCompanionWorkspaceAwaitingTerminalStop(
+                try companionWorkspaceID(metadata), confirmedActiveProcesses: payload.confirmedActiveProcesses
+            )
+        case .tabClose:
+            let payload: RemoteClosePayload = try decodeCompanionPayload(command.payload)
+            let target = try companionTabTarget(metadata)
+            try await closeCompanionTabAwaitingTerminalStop(
+                workspaceID: target.workspaceID, groupID: target.groupID, tabID: target.tabID,
+                confirmedActiveProcesses: payload.confirmedActiveProcesses
+            )
+        default:
+            return try performCompanionCommand(metadata: metadata, command: command)
+        }
+        return nil
+    }
+
     func performCompanionCommand(
         metadata: MessageMetadata,
         command: CommandParameters

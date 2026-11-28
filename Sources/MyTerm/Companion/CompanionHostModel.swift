@@ -1866,7 +1866,7 @@ final class CompanionHostModel {
                 result = nil
             default:
                 guard let appModel else { throw RemoteError.offline }
-                result = try appModel.performCompanionCommand(metadata: metadata, command: command)
+                result = try await appModel.performCompanionCommandAwaitingTerminalStop(metadata: metadata, command: command)
                 workspaceRevision &+= 1
                 for connection in peersByConnection.values { connection.browserSessions.prune(model: appModel) }
             }

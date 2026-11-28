@@ -61,6 +61,7 @@ final class AppModel {
     private let externalWebOpener: ExternalWebOpener
     @ObservationIgnored private let makeCompanionHost: CompanionHostFactory
     private(set) var terminalSessions: [TerminalSessionID: any TerminalProcessSession] = [:]
+    private var rustTerminalsStopping: Set<TerminalSessionID> = []
     private(set) var browserControllers: [BrowserSessionID: BrowserSessionController] = [:]
     var browserAddressFocusRequest: BrowserAddressFocusRequest?
     var browserFindRequest: BrowserFindRequest?
@@ -884,12 +885,8 @@ final class AppModel {
             confirmButtonTitle: "Close Workspace"
         ) else { return }
 
-        perform {
-            try store.removeWorkspace(workspaceID)
-            terminalSnippetStore.removeWorkspace(workspaceID.rawValue)
-            maximizedTabGroupsByWorkspace[workspaceID] = nil
-            cleanUpRuntimeObjects(in: workspace, reason: .workspaceDeleted)
-            restoreRuntimeObjects(in: store.selectedWorkspace)
+        performClosing(tabs: workspace.allTabs) { [self] in
+            try closeWorkspace(workspace, reason: .workspaceDeleted)
         }
     }
 
@@ -1636,9 +1633,11 @@ final class AppModel {
             confirmButtonTitle: "Close Tab"
         ) else { return }
 
-        perform {
+        let workspaceID = store.selectedWorkspaceID
+        performClosing(tabs: [tab]) { [self] in
+            try validateTabForClose(tab, workspaceID: workspaceID, groupID: tabGroupID)
             try closeTab(
-                workspaceID: store.selectedWorkspaceID,
+                workspaceID: workspaceID,
                 tabGroupID: tabGroupID,
                 tabID: tabID,
                 reason: .tabClosed
@@ -1658,8 +1657,9 @@ final class AppModel {
             confirmButtonTitle: "Close Pane"
         ) else { return }
 
-        perform {
-            let workspaceID = store.selectedWorkspaceID
+        let workspaceID = store.selectedWorkspaceID
+        performClosing(tabs: [tab]) { [self] in
+            try validateTabForClose(tab, workspaceID: workspaceID, groupID: group.id)
             let terminalSession = tab.terminalSession
             let browserSession = tab.browserSession
             if let terminalSession {
@@ -2808,6 +2808,58 @@ final class AppModel {
         }
     }
 
+    private func performClosing(tabs: [Tab], mutation: @escaping @MainActor () throws -> Void) {
+        #if DEBUG || MYTERM_RUST_WORKSPACES
+        if terminalEngine is LocalRustWorkspaceTerminalEngine && tabs.contains(where: { $0.terminalSession != nil }) {
+            Task { @MainActor [self] in
+                do {
+                    try await stopRustTerminalsBeforeClosing(tabs)
+                    perform { try mutation() }
+                } catch {
+                    present(error)
+                }
+            }
+            return
+        }
+        #endif
+        perform { try mutation() }
+    }
+
+    private func stopRustTerminalsBeforeClosing(_ tabs: [Tab]) async throws {
+        #if DEBUG || MYTERM_RUST_WORKSPACES
+        guard let engine = terminalEngine as? LocalRustWorkspaceTerminalEngine else { return }
+        let ids = tabs.compactMap { $0.terminalSession?.id }
+        guard rustTerminalsStopping.isDisjoint(with: ids) else {
+            throw TerminalSessionFailure(message: "A terminal in this selection is already closing.")
+        }
+        rustTerminalsStopping.formUnion(ids)
+        defer { rustTerminalsStopping.subtract(ids) }
+        // Preserve the pane and its saved selection if the server cannot stop its shell.
+        for id in ids { try await engine.stopExisting(paneID: id.rawValue) }
+        #endif
+    }
+
+    private func closeWorkspace(_ workspace: Workspace, reason: TerminalStopReason) throws {
+        guard let current = store.workspaces.first(where: { $0.id == workspace.id }),
+              Set(current.allTabs.map(\.id)) == Set(workspace.allTabs.map(\.id)),
+              Set(current.allTabs.compactMap { $0.terminalSession?.id })
+                == Set(workspace.allTabs.compactMap { $0.terminalSession?.id }) else {
+            throw TerminalSessionFailure(message: "The workspace changed while closing. Try again.")
+        }
+        try store.removeWorkspace(workspace.id)
+        terminalSnippetStore.removeWorkspace(workspace.id.rawValue)
+        maximizedTabGroupsByWorkspace[workspace.id] = nil
+        cleanUpRuntimeObjects(in: current, reason: reason)
+        restoreRuntimeObjects(in: store.selectedWorkspace)
+    }
+
+    private func validateTabForClose(_ original: Tab, workspaceID: WorkspaceID, groupID: TabGroupID) throws {
+        guard let current = tab(workspaceID: workspaceID, tabGroupID: groupID, tabID: original.id),
+              current.terminalSession?.id == original.terminalSession?.id else {
+            throw TerminalSessionFailure(message: "The pane changed while closing. Try again.")
+        }
+    }
+
     private func cleanUpRuntimeObjects(in tab: Tab, reason: TerminalStopReason) {
         if let browser = tab.browserSession {
             browserControllers.removeValue(forKey: browser.id)?.webView.stopLoading()
@@ -3383,23 +3435,39 @@ final class AppModel {
         }
     }
 
-    func closeCompanionWorkspace(
-        _ workspaceID: WorkspaceID,
-        confirmedActiveProcesses: Bool = false
-    ) throws {
+    private func workspaceForCompanionClose(_ workspaceID: WorkspaceID, confirmed: Bool) throws -> Workspace {
         guard let workspace = store.workspaces.first(where: { $0.id == workspaceID }) else {
             throw AppModelError.workspaceUnavailable(workspaceID)
         }
-        guard confirmedActiveProcesses || companionCloseProcessNames(in: workspace.allTabs).isEmpty else {
+        guard confirmed || companionCloseProcessNames(in: workspace.allTabs).isEmpty else {
             throw CompanionCommandError.activeProcessRequiresDesktopConfirmation
         }
-        try performCompanionMutation {
-            try store.removeWorkspace(workspaceID)
-            terminalSnippetStore.removeWorkspace(workspaceID.rawValue)
-            maximizedTabGroupsByWorkspace[workspaceID] = nil
-            cleanUpRuntimeObjects(in: workspace, reason: .workspaceClosedFromCompanion)
-            restoreRuntimeObjects(in: store.selectedWorkspace)
+        return workspace
+    }
+
+    func closeCompanionWorkspace(_ workspaceID: WorkspaceID, confirmedActiveProcesses: Bool = false) throws {
+        let workspace = try workspaceForCompanionClose(workspaceID, confirmed: confirmedActiveProcesses)
+        try performCompanionMutation { try closeWorkspace(workspace, reason: .workspaceClosedFromCompanion) }
+    }
+
+    func closeCompanionWorkspaceAwaitingTerminalStop(
+        _ workspaceID: WorkspaceID,
+        confirmedActiveProcesses: Bool = false
+    ) async throws {
+        let workspace = try workspaceForCompanionClose(workspaceID, confirmed: confirmedActiveProcesses)
+        try await stopRustTerminalsBeforeClosing(workspace.allTabs)
+        try performCompanionMutation { try closeWorkspace(workspace, reason: .workspaceClosedFromCompanion) }
+    }
+
+    private func tabForCompanionClose(workspaceID: WorkspaceID, groupID: TabGroupID, tabID: TabID,
+                                      confirmed: Bool) throws -> Tab {
+        guard let tab = tab(workspaceID: workspaceID, tabGroupID: groupID, tabID: tabID) else {
+            throw AppModelError.tabUnavailable(tabID)
         }
+        guard confirmed || companionCloseProcessNames(in: [tab]).isEmpty else {
+            throw CompanionCommandError.activeProcessRequiresDesktopConfirmation
+        }
+        return tab
     }
 
     func closeCompanionTab(
@@ -3408,13 +3476,25 @@ final class AppModel {
         tabID: TabID,
         confirmedActiveProcesses: Bool = false
     ) throws {
-        guard let tab = tab(workspaceID: workspaceID, tabGroupID: groupID, tabID: tabID) else {
-            throw AppModelError.tabUnavailable(tabID)
-        }
-        guard confirmedActiveProcesses || companionCloseProcessNames(in: [tab]).isEmpty else {
-            throw CompanionCommandError.activeProcessRequiresDesktopConfirmation
-        }
+        _ = try tabForCompanionClose(workspaceID: workspaceID, groupID: groupID, tabID: tabID,
+                                     confirmed: confirmedActiveProcesses)
         try performCompanionMutation {
+            try closeTab(workspaceID: workspaceID, tabGroupID: groupID, tabID: tabID,
+                         reason: .tabClosedFromCompanion)
+        }
+    }
+
+    func closeCompanionTabAwaitingTerminalStop(
+        workspaceID: WorkspaceID,
+        groupID: TabGroupID,
+        tabID: TabID,
+        confirmedActiveProcesses: Bool = false
+    ) async throws {
+        let tab = try tabForCompanionClose(workspaceID: workspaceID, groupID: groupID, tabID: tabID,
+                                           confirmed: confirmedActiveProcesses)
+        try await stopRustTerminalsBeforeClosing([tab])
+        try performCompanionMutation {
+            try validateTabForClose(tab, workspaceID: workspaceID, groupID: groupID)
             try closeTab(workspaceID: workspaceID, tabGroupID: groupID, tabID: tabID,
                          reason: .tabClosedFromCompanion)
         }

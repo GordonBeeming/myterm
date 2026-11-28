@@ -129,6 +129,88 @@ fn checkpoint_preserves_unfinished_and_placed_graphics() -> Result<(), Box<dyn s
 }
 
 #[test]
+fn reparenting_a_kitty_placement_respects_its_retained_descendants(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut terminal = TerminalState::new(GEOMETRY)?;
+    let root = terminal.advance_with_reply_budget(
+        b"\x1b_Ga=T,f=32,s=1,v=1,i=7,p=1,c=1,r=1;/wAA/w==\x1b\\",
+        1024,
+    )?;
+    assert!(String::from_utf8(root.bytes)?.contains(";OK"));
+    for placement in 2..=33 {
+        let command = format!("\x1b_Ga=p,i=7,p={placement},P=7,Q={}\x1b\\", placement - 1);
+        let reply = terminal.advance_with_reply_budget(command.as_bytes(), 1024)?;
+        assert!(
+            String::from_utf8(reply.bytes)?.contains(";OK"),
+            "placement {placement}"
+        );
+    }
+    let separate = terminal.advance_with_reply_budget(b"\x1b_Ga=p,i=7,p=34,c=1,r=1\x1b\\", 1024)?;
+    assert!(String::from_utf8(separate.bytes)?.contains(";OK"));
+    let moved = terminal.advance_with_reply_budget(b"\x1b_Ga=p,i=7,p=1,P=7,Q=34\x1b\\", 1024)?;
+    assert!(String::from_utf8(moved.bytes)?.contains("ETOODEEP"));
+    terminal.checkpoint(1)?;
+    Ok(())
+}
+
+#[test]
+fn resizing_cell_pixels_reprojects_kitty_children_without_grid_resize(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut terminal = TerminalState::new(GEOMETRY)?;
+    let root = terminal.advance_with_reply_budget(
+        b"\x1b_Ga=T,f=32,s=1,v=1,i=7,p=1,c=1,r=1;/wAA/w==\x1b\\",
+        1024,
+    )?;
+    assert!(String::from_utf8(root.bytes)?.contains(";OK"));
+    let child =
+        terminal.advance_with_reply_budget(b"\x1b_Ga=p,i=7,p=2,P=7,Q=1,c=2,r=2\x1b\\", 1024)?;
+    assert!(String::from_utf8(child.bytes)?.contains(";OK"));
+
+    let child_size = |snapshot: &[u8]| -> Result<(u64, u64), Box<dyn std::error::Error>> {
+        let snapshot: Value = from_slice(snapshot)?;
+        let placement = snapshot["state"]["kitty"]["placementBuffers"]
+            .as_array()
+            .ok_or("missing placements")?
+            .iter()
+            .find(|item| item["placement"] == 2)
+            .ok_or("missing child placement")?;
+        Ok((
+            placement["columns"].as_u64().ok_or("missing columns")?,
+            placement["rows"].as_u64().ok_or("missing rows")?,
+        ))
+    };
+    assert_eq!(child_size(&terminal.checkpoint(1)?)?, (2, 2));
+    terminal.resize(Geometry {
+        cell_width: 18,
+        cell_height: 8,
+        ..GEOMETRY
+    })?;
+    assert_eq!(child_size(&terminal.checkpoint(2)?)?, (1, 4));
+    Ok(())
+}
+
+#[test]
+fn checkpoint_refreshes_an_ordinary_kitty_position_after_text_moves_it(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut terminal = TerminalState::new(GEOMETRY)?;
+    let root = terminal.advance_with_reply_budget(
+        b"\x1b_Ga=T,f=32,s=1,v=1,i=7,p=1,c=1,r=1;/wAA/w==\x1b\\",
+        1024,
+    )?;
+    assert!(String::from_utf8(root.bytes)?.contains(";OK"));
+    let placement_row = |snapshot: &[u8]| -> Result<i64, Box<dyn std::error::Error>> {
+        let snapshot: Value = from_slice(snapshot)?;
+        Ok(snapshot["state"]["kitty"]["placementBuffers"][0]["row"]
+            .as_i64()
+            .ok_or("missing placement row")?)
+    };
+    assert_eq!(placement_row(&terminal.checkpoint(1)?)?, 0);
+    terminal.advance(b"\x1b[H\x1b[L")?;
+    assert_eq!(placement_row(&terminal.checkpoint(2)?)?, 1);
+    Ok(())
+}
+
+#[test]
 fn configured_history_trims_only_the_snapshot() -> Result<(), Box<dyn std::error::Error>> {
     let mut terminal = TerminalState::with_scrollback(
         Geometry {

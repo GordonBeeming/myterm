@@ -281,7 +281,7 @@
 +            }
 +
 +        }
-+        self.state.prototype_update_kitty_records();
++        self.state.prototype_update_kitty_records(false);
          self.trigger_unseen_output_notif();
      }
  
@@ -599,7 +599,7 @@
 +    prototype_next_image: u32,
 +    prototype_relative_data: HashMap<(u32, Option<u32>), (Arc<ImageData>, usize, usize)>,
 +    prototype_requests: HashMap<(u32, Option<u32>), serde_json::Value>,
-+    prototype_projection_error: bool,
++    prototype_projection_errors: HashSet<(u32, Option<u32>)>,
 +    prototype_updating_placement: bool,
 +    prototype_layout_dirty: bool,
 +    prototype_cached_screen: Option<bool>,
@@ -620,13 +620,16 @@
  }
  
  impl KittyImageState {
-@@ -75,22 +103,46 @@
+@@ -75,22 +103,49 @@
          image_number: Option<u32>,
          placement: KittyImagePlacement,
          verbosity: KittyImageVerbosity,
 +        reply_image_id: Option<u32>,
      ) -> anyhow::Result<()> {
 -        let image_id = match image_id {
++        if placement.parent_image_id.is_some() {
++            self.prototype_update_kitty_records(true);
++        }
 +        // Rasterization can scroll while a replaced parent is temporarily absent.
 +        // Reproject descendants only after the new parent record is committed.
 +        self.kitty_img.prototype_updating_placement = true;
@@ -638,7 +641,7 @@
 +            reply_image_id,
 +        );
 +        self.kitty_img.prototype_updating_placement = false;
-+        self.prototype_update_kitty_records();
++        self.prototype_update_kitty_records(false);
 +        result
 +    }
 +
@@ -681,7 +684,7 @@
          };
  
          log::trace!(
-@@ -100,41 +152,353 @@
+@@ -100,41 +155,353 @@
              placement,
              verbosity
          );
@@ -1062,11 +1065,11 @@
 +        self.kitty_img
 +            .prototype_placement_buffers
 +            .retain(|key, _| placements.contains_key(key));
-+        self.prototype_update_kitty_records();
++        self.prototype_update_kitty_records(false);
          log::trace!(
              "record placement for {} (image_number {:?}) {:?}",
              image_id,
-@@ -142,19 +506,56 @@
+@@ -142,19 +509,56 @@
              placement.placement_id
          );
  
@@ -1128,7 +1131,7 @@
                  Ok(())
              }
              KittyImage::TransmitDataAndDisplay {
-@@ -164,8 +565,23 @@
+@@ -164,8 +568,23 @@
              } => {
                  log::trace!("TransmitDataAndDisplay {:#?} {:#?}", transmit, placement);
                  let image_number = transmit.image_number;
@@ -1154,7 +1157,7 @@
              }
              _ => anyhow::bail!("impossible KittImage variant"),
          }
-@@ -236,39 +652,21 @@
+@@ -236,39 +655,21 @@
                  placement,
                  verbosity,
              } => {
@@ -1208,7 +1211,7 @@
              }
              KittyImage::TransmitFrame {
                  transmit,
-@@ -295,21 +693,39 @@
+@@ -295,21 +696,42 @@
          placement_id: Option<u32>,
          info: PlacementInfo,
      ) {
@@ -1245,6 +1248,9 @@
 +        self.kitty_img.prototype_projection_states.retain(|key, _| {
 +            key.0 != image_id || (placement_id.is_some() && key.1 != placement_id)
 +        });
++        self.kitty_img.prototype_projection_errors.retain(|key| {
++            key.0 != image_id || (placement_id.is_some() && key.1 != placement_id)
++        });
 +
 +        self.kitty_img.prototype_relative_data.retain(|key, _| {
 +            key.0 != image_id || (placement_id.is_some() && key.1 != placement_id)
@@ -1258,7 +1264,7 @@
          if placement_id.is_some() {
              if let Some(info) = self.kitty_img.placements.remove(&(image_id, placement_id)) {
                  log::trace!("removed placement {} {:?}", image_id, placement_id);
-@@ -338,6 +754,13 @@
+@@ -338,6 +760,13 @@
      }
  
      pub(crate) fn kitty_remove_all_placements(&mut self, delete: bool) {
@@ -1266,13 +1272,13 @@
 +        self.kitty_img.prototype_requests.clear();
 +        self.kitty_img.prototype_projection_states.clear();
 +        self.kitty_img.prototype_layout_dirty = true;
-+        self.kitty_img.prototype_projection_error = false;
++        self.kitty_img.prototype_projection_errors.clear();
 +        self.kitty_img.prototype_records.clear();
 +        self.kitty_img.prototype_placement_buffers.clear();
          for ((image_id, p), info) in std::mem::take(&mut self.kitty_img.placements).into_iter() {
              self.kitty_remove_placement_from_model(image_id, p, info);
          }
-@@ -372,7 +795,7 @@
+@@ -372,7 +801,7 @@
  
          match (image_id, image_no) {
              (Some(id), Some(no)) => {
@@ -1281,7 +1287,7 @@
              }
              (Some(id), None) => {
                  write!(self.writer, "\x1b_Gi={};{}\x1b\\", id, message).ok();
-@@ -745,22 +1168,6 @@
+@@ -745,22 +1174,6 @@
          transmit: KittyImageTransmit,
      ) -> anyhow::Result<(u32, Option<u32>, ImageDataType)> {
          log::trace!("transmit {:?}", transmit);
@@ -1304,7 +1310,7 @@
  
          let data = transmit
              .data
-@@ -819,6 +1226,27 @@
+@@ -819,6 +1232,27 @@
              }
          };
  
@@ -1332,7 +1338,7 @@
          Ok((id, no, img))
      }
  
-@@ -827,15 +1255,23 @@
+@@ -827,15 +1261,23 @@
          transmit: KittyImageTransmit,
          verbosity: KittyImageVerbosity,
      ) -> anyhow::Result<u32> {
@@ -1357,7 +1363,7 @@
              self.kitty_send_response(
                  verbosity,
                  true,
-@@ -855,7 +1291,12 @@
+@@ -855,7 +1297,12 @@
              let mut data = vec![];
              let mut trans;
              let place;
@@ -1371,7 +1377,7 @@
  
              self.kitty_img.accumulator.push(img);
  
-@@ -889,23 +1330,25 @@
+@@ -889,23 +1336,25 @@
                  }
              }
  
@@ -1412,7 +1418,7 @@
              trans.data = KittyImageData::DirectBin(b64_decoded);
  
              if let Some(placement) = place {
-@@ -977,3 +1420,15 @@
+@@ -977,3 +1426,15 @@
      }
      Ok(())
  }
@@ -1567,15 +1573,29 @@
              screen,
              pen: CellAttributes::default(),
              cursor: CursorPosition::default(),
-@@ -970,29 +912,32 @@
+@@ -970,29 +912,46 @@
      /// We need to resize both the primary and alt screens, adjusting
      /// the cursor positions of both accordingly.
      pub fn resize(&mut self, size: TerminalSize) {
 +        if size.cols == self.screen().physical_cols && size.rows == self.screen().physical_rows {
 +            // Native text resize is a no-op at the same dimensions, including pending wrap.
++            let cols = size.cols.max(1);
++            let rows = size.rows.max(1);
++            let image_geometry_changed = self.pixel_width / cols != size.pixel_width / cols
++                || self.pixel_height / rows != size.pixel_height / rows;
 +            self.pixel_width = size.pixel_width;
 +            self.pixel_height = size.pixel_height;
 +            self.dpi = size.dpi;
++            if image_geometry_changed {
++                for screen in [&mut self.screen.screen, &mut self.screen.alt_screen] {
++                    screen.prototype_image_epoch = screen.prototype_image_epoch.wrapping_add(1);
++                }
++                let alternate = self.screen.alt_screen_is_active;
++                self.screen.alt_screen_is_active = !alternate;
++                self.prototype_update_kitty_records(false);
++                self.screen.alt_screen_is_active = alternate;
++                self.prototype_update_kitty_records(false);
++            }
 +            return;
 +        }
          self.increment_seqno();
@@ -1613,7 +1633,7 @@
          let (adjusted_cursor_main, adjusted_cursor_alt) = self.screen.resize(
              size,
              cursor_main,
-@@ -1007,30 +952,21 @@
+@@ -1007,30 +966,21 @@
          self.dpi = size.dpi;
          self.tabs.resize(size.cols);
  
@@ -1644,11 +1664,11 @@
 -            }
 -        }
 +        }
-+        self.prototype_update_kitty_records();
++        self.prototype_update_kitty_records(false);
      }
  
      pub fn get_size(&self) -> TerminalSize {
-@@ -1167,7 +1103,7 @@
+@@ -1167,7 +1117,7 @@
  
      fn scroll_up(&mut self, num_rows: usize) {
          let seqno = self.seqno;
@@ -1657,13 +1677,13 @@
          let top_and_bottom_margins = self.top_and_bottom_margins.clone();
          let left_and_right_margins = self.left_and_right_margins.clone();
          let bidi_mode = self.get_bidi_mode();
-@@ -1178,12 +1114,13 @@
+@@ -1178,12 +1128,13 @@
              seqno,
              blank_attr,
              bidi_mode,
 -        )
 +        );
-+        self.prototype_update_kitty_records();
++        self.prototype_update_kitty_records(false);
      }
  
      fn scroll_down(&mut self, num_rows: usize) {
@@ -1673,17 +1693,17 @@
          let top_and_bottom_margins = self.top_and_bottom_margins.clone();
          let left_and_right_margins = self.left_and_right_margins.clone();
          let bidi_mode = self.get_bidi_mode();
-@@ -1194,7 +1131,8 @@
+@@ -1194,7 +1145,8 @@
              seqno,
              blank_attr,
              bidi_mode,
 -        )
 +        );
-+        self.prototype_update_kitty_records();
++        self.prototype_update_kitty_records(false);
      }
  
      /// Defined by FinalTermSemanticPrompt; a fresh-line is a NOP if the
-@@ -1298,6 +1236,7 @@
+@@ -1298,6 +1250,7 @@
      }
  
      fn set_hyperlink(&mut self, link: Option<Hyperlink>) {
@@ -1691,7 +1711,7 @@
          self.pen.set_hyperlink(match link {
              Some(hyperlink) => Some(Arc::new(hyperlink)),
              None => None,
-@@ -1390,9 +1329,9 @@
+@@ -1390,9 +1343,9 @@
                  self.top_and_bottom_margins = 0..self.screen().physical_rows as i64;
                  self.left_and_right_margins = 0..self.screen().physical_cols;
                  self.left_and_right_margin_mode = false;
@@ -1703,7 +1723,7 @@
                  self.screen.saved_cursor().take();
                  self.kitty_remove_all_placements(true);
  
-@@ -1797,7 +1736,7 @@
+@@ -1797,7 +1750,7 @@
                  DecPrivateModeCode::EnableAlternateScreen,
              )) => {
                  if !self.screen.is_alt_screen_active() {
@@ -1712,7 +1732,7 @@
                      self.pen = CellAttributes::default();
                  }
              }
-@@ -1807,7 +1746,8 @@
+@@ -1807,7 +1760,8 @@
                  if self.screen.is_alt_screen_active() {
                      self.pen = CellAttributes::default();
                      self.erase_in_display(EraseInDisplay::EraseDisplay);
@@ -1722,7 +1742,7 @@
                  }
              }
  
-@@ -1815,7 +1755,7 @@
+@@ -1815,7 +1769,7 @@
                  DecPrivateModeCode::EnableAlternateScreen,
              )) => {
                  if self.screen.is_alt_screen_active() {
@@ -1731,7 +1751,7 @@
                      self.pen = CellAttributes::default();
                  }
              }
-@@ -2010,10 +1950,11 @@
+@@ -2010,10 +1964,11 @@
              Mode::SetDecPrivateMode(DecPrivateMode::Code(
                  DecPrivateModeCode::ClearAndEnableAlternateScreen,
              )) => {
@@ -1746,7 +1766,7 @@
                      self.pen = CellAttributes::default();
                      self.erase_in_display(EraseInDisplay::EraseDisplay);
                  }
-@@ -2022,7 +1963,8 @@
+@@ -2022,7 +1977,8 @@
                  DecPrivateModeCode::ClearAndEnableAlternateScreen,
              )) => {
                  if self.screen.is_alt_screen_active() {
@@ -1756,7 +1776,7 @@
                      self.dec_restore_cursor();
                  }
              }
-@@ -2225,6 +2167,7 @@
+@@ -2225,6 +2181,7 @@
      }
  
      fn erase_in_display(&mut self, erase: EraseInDisplay) {
@@ -1764,7 +1784,7 @@
          let seqno = self.seqno;
          let cy = self.cursor.y;
          let pen = self.pen.clone_sgr_only();
-@@ -2252,6 +2195,11 @@
+@@ -2252,6 +2209,11 @@
              for y in row_range {
                  screen.clear_line(y, col_range.clone(), &pen, seqno, bidi_mode);
                  let line_idx = screen.phys_row(y);
@@ -1776,7 +1796,7 @@
                  screen.line_mut(line_idx).set_single_width(seqno);
              }
          }
-@@ -2726,6 +2674,9 @@
+@@ -2726,6 +2688,9 @@
              dec_origin_mode: self.dec_origin_mode,
              g0_charset: self.g0_charset,
              g1_charset: self.g1_charset,
@@ -1786,7 +1806,7 @@
          };
          debug!(
              "saving cursor {:?} is_alt={}",
-@@ -2748,23 +2699,30 @@
+@@ -2748,23 +2713,30 @@
                  dec_origin_mode: false,
                  g0_charset: CharSet::Ascii,
                  g1_charset: CharSet::Ascii,
@@ -1819,7 +1839,7 @@
          self.shift_out = false;
          self.newline_mode = false;
      }
-@@ -2884,3 +2842,5 @@
+@@ -2884,3 +2856,5 @@
              .unwrap_or(self.keyboard_encoding)
      }
  }
@@ -1866,7 +1886,7 @@
                  self.cursor = Default::default();
 --- /dev/null
 +++ b/term/src/terminalstate/prototype-checkpoint.rs
-@@ -0,0 +1,358 @@
+@@ -0,0 +1,360 @@
 +use base64::Engine;
 +use std::convert::TryFrom;
 +use serde_json::{json, Value as BridgeValue};
@@ -2181,7 +2201,9 @@
 +            && !self.shift_out, "unsupported charset");
 +        anyhow::ensure!(self.keyboard_encoding == KeyboardEncoding::Xterm, "unsupported keyboard encoding");
 +        let omitted = self.screen.screen.scrollback_rows().saturating_sub(normal_count);
-+        let kitty = self.kitty_img.prototype_checkpoint(omitted)?;
++        let normal_positions = self.prototype_kitty_positions(false);
++        let alternate_positions = self.prototype_kitty_positions(true);
++        let kitty = self.kitty_img.prototype_checkpoint(omitted, &normal_positions, &alternate_positions)?;
 +        anyhow::ensure!(!self.reverse_video_mode && !self.enable_conpty_quirks
 +            && self.modify_other_keys.is_none() && !self.dec_ansi_mode
 +            && self.unicode_version_stack.is_empty() && self.bidi_enabled.is_none()
@@ -2427,7 +2449,7 @@
 +}
 --- /dev/null
 +++ b/term/src/terminalstate/prototype-kitty.rs
-@@ -0,0 +1,911 @@
+@@ -0,0 +1,982 @@
 +use base64::Engine;
 +use super::{CHECKPOINT_IMAGE_BYTES, CHECKPOINT_RETAINED_RASTER};
 +// Only in-progress direct transfers are rebuilt from bounded semantic records.
@@ -2441,9 +2463,14 @@
 +        })
 +    }
 +
-+    pub(super) fn prototype_checkpoint(&self, omitted: usize) -> anyhow::Result<serde_json::Value> {
++    pub(super) fn prototype_checkpoint(
++        &self,
++        omitted: usize,
++        normal_positions: &HashMap<(u32, Option<u32>), (usize, usize)>,
++        alternate_positions: &HashMap<(u32, Option<u32>), (usize, usize)>,
++    ) -> anyhow::Result<serde_json::Value> {
 +        anyhow::ensure!(
-+            !self.prototype_projection_error,
++            self.prototype_projection_errors.is_empty(),
 +            "Kitty relative projection failed"
 +        );
 +        anyhow::ensure!(
@@ -2519,6 +2546,13 @@
 +                .get(key)
 +                .ok_or_else(|| anyhow::anyhow!("missing Kitty placement record"))?
 +                .clone();
++            if !record["parentImageId"].is_number() {
++                let positions = if *alternate { alternate_positions } else { normal_positions };
++                if let Some((row, column)) = positions.get(key) {
++                    record["row"] = (*row).into();
++                    record["column"] = (*column).into();
++                }
++            }
 +            anyhow::ensure!(
 +                key.1.is_some(),
 +                "unsupported automatic Kitty placement identity"
@@ -2622,13 +2656,49 @@
 +        self.kitty_img.prototype_projection_count
 +    }
 +
-+    pub(crate) fn prototype_update_kitty_records(&mut self) {
++    pub(super) fn prototype_kitty_positions(
++        &self,
++        alternate: bool,
++    ) -> HashMap<(u32, Option<u32>), (usize, usize)> {
++        if self.kitty_img.prototype_records.is_empty() {
++            return HashMap::new();
++        }
++        let mut positions = HashMap::new();
++        let screen = if alternate { &self.screen.alt_screen } else { &self.screen.screen };
++        for (row, line) in screen
++            .lines_in_phys_range(0..screen.scrollback_rows())
++            .iter()
++            .enumerate()
++        {
++            for cell in line.visible_cells() {
++                for image in cell.attrs().images().unwrap_or_default() {
++                    if let Some(id) = image.image_id() {
++                        let key = (id, image.placement_id());
++                        if self.kitty_img.prototype_placement_buffers.get(&key)
++                            == Some(&alternate)
++                        {
++                            positions.entry(key).or_insert((row, cell.cell_index()));
++                        }
++                    }
++                }
++            }
++        }
++        positions
++    }
++
++    pub(crate) fn prototype_update_kitty_records(&mut self, refresh_roots: bool) {
 +        if self.kitty_img.prototype_updating_placement
 +            || self.kitty_img.prototype_records.is_empty()
 +        {
 +            return;
 +        }
 +        let alternate = self.screen.alt_screen_is_active;
++        if !refresh_roots && !self.kitty_img.prototype_records.iter().any(|(key, record)| {
++            record["parentImageId"].is_number()
++                && self.kitty_img.prototype_placement_buffers.get(key) == Some(&alternate)
++        }) {
++            return;
++        }
 +        let epoch = self.screen().prototype_image_epoch;
 +        let dirty = self.kitty_img.prototype_layout_dirty
 +            || self.kitty_img.prototype_cached_screen != Some(alternate)
@@ -2637,26 +2707,7 @@
 +            return;
 +        }
 +        if dirty {
-+            let mut positions = HashMap::new();
-+            let screen = self.screen();
-+            for (row, line) in screen
-+                .lines_in_phys_range(0..screen.scrollback_rows())
-+                .iter()
-+                .enumerate()
-+            {
-+                for cell in line.visible_cells() {
-+                    for image in cell.attrs().images().unwrap_or_default() {
-+                        if let Some(id) = image.image_id() {
-+                            let key = (id, image.placement_id());
-+                            if self.kitty_img.prototype_placement_buffers.get(&key)
-+                                == Some(&alternate)
-+                            {
-+                                positions.entry(key).or_insert((row, cell.cell_index()));
-+                            }
-+                        }
-+                    }
-+                }
-+            }
++            let positions = self.prototype_kitty_positions(alternate);
 +            self.kitty_img.prototype_positioned_roots = positions.keys().copied().collect();
 +            for (key, (row, column)) in positions {
 +                if let Some(record) = self.kitty_img.prototype_records.get_mut(&key) {
@@ -2727,7 +2778,9 @@
 +                        epoch,
 +                        positioned,
 +                    };
-+                    if self.kitty_img.prototype_projection_states.get(&key) == Some(&state) {
++                    if self.kitty_img.prototype_projection_states.get(&key) == Some(&state)
++                        && !self.kitty_img.prototype_projection_errors.contains(&key)
++                    {
 +                        return Ok(());
 +                    }
 +                    self.prototype_project_relative(key, desired, positioned)?;
@@ -2737,8 +2790,10 @@
 +                    Ok(())
 +                });
 +            if let Err(error) = result {
-+                self.kitty_img.prototype_projection_error = true;
++                self.kitty_img.prototype_projection_errors.insert(key);
 +                log::error!("Kitty projection: {:#}", error);
++            } else {
++                self.kitty_img.prototype_projection_errors.remove(&key);
 +            }
 +        }
 +    }
@@ -2814,6 +2869,41 @@
 +                    .zip(r["parentPlacementId"].as_u64())
 +                    .map(|(i, j)| (i as u32, Some(j as u32)))
 +            });
++        }
++        // Replacing a placement retains its descendants on the same screen.
++        // Their new depth includes the ancestors validated above.
++        if self.kitty_img.prototype_placement_buffers.get(&child)
++            == Some(&self.screen.alt_screen_is_active)
++        {
++            let mut children = HashMap::<_, Vec<_>>::new();
++            for (key, record) in &self.kitty_img.prototype_records {
++                if self.kitty_img.prototype_placement_buffers.get(key)
++                    != Some(&self.screen.alt_screen_is_active)
++                {
++                    continue;
++                }
++                if let Some((image, placement)) = record["parentImageId"]
++                    .as_u64()
++                    .zip(record["parentPlacementId"].as_u64())
++                {
++                    children
++                        .entry((image as u32, Some(placement as u32)))
++                        .or_default()
++                        .push(*key);
++                }
++            }
++            let mut pending = vec![(child, depth)];
++            while let Some((key, depth)) = pending.pop() {
++                if !seen.insert(key) {
++                    return Some("ECYCLE: cyclic placement reference".into());
++                }
++                if depth > 32 {
++                    return Some("ETOODEEP: placement chain limit".into());
++                }
++                if let Some(children) = children.get(&key) {
++                    pending.extend(children.iter().map(|child| (*child, depth + 1)));
++                }
++            }
 +        }
 +        None
 +    }
@@ -2913,6 +3003,7 @@
 +
 +impl TerminalState {
 +    fn prototype_delete_selection(&mut self, what: KittyImageDelete) {
++        self.prototype_update_kitty_records(true);
 +        let history = self
 +            .screen()
 +            .scrollback_rows()
@@ -3239,6 +3330,14 @@
 +            .get(&key)
 +            .ok_or_else(|| anyhow::anyhow!("missing relative resource"))?
 +            .clone();
++        let cw = self.pixel_width / self.screen().physical_cols;
++        let ch = self.pixel_height / self.screen().physical_rows;
++        anyhow::ensure!(
++            cw > 0 && ch > 0 && width > 0 && height > 0 && width <= 2048 && height <= 2048,
++            "relative projection geometry"
++        );
++        let rows = height.div_ceil(ch) as i64;
++        let cols = width.div_ceil(cw) as i64;
 +        let record = self
 +            .kitty_img
 +            .prototype_records
@@ -3248,17 +3347,11 @@
 +        record["column"] = desired.1.into();
 +        record["imageRow"] = desired.0.into();
 +        record["imageColumn"] = desired.1.into();
++        record["rows"] = rows.into();
++        record["columns"] = cols.into();
 +        let z = record["zIndex"].as_i64().unwrap_or(0) as i32;
 +        let left = record["pixelOffsetX"].as_u64().unwrap_or(0) as u16;
 +        let top = record["pixelOffsetY"].as_u64().unwrap_or(0) as u16;
-+        let cw = self.pixel_width / self.screen().physical_cols;
-+        let ch = self.pixel_height / self.screen().physical_rows;
-+        anyhow::ensure!(
-+            cw > 0 && ch > 0 && width > 0 && height > 0 && width <= 2048 && height <= 2048,
-+            "relative projection geometry"
-+        );
-+        let rows = height.div_ceil(ch) as i64;
-+        let cols = width.div_ceil(cw) as i64;
 +        let seqno = self.seqno;
 +        let screen = self.screen_mut();
 +        for row in 0..screen.scrollback_rows() {

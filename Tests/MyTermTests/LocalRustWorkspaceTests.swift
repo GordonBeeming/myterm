@@ -9,6 +9,31 @@ import XCTest
 
 @MainActor
 final class LocalRustWorkspaceTests: XCTestCase {
+    func testFailedRustStopKeepsThePaneAndItsSavedSelection() async throws {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("mt-" + String(UUID().uuidString.prefix(8)), isDirectory: true)
+        let selectionDirectory = directory.appendingPathComponent("selection", isDirectory: true)
+        try FileManager.default.createDirectory(at: selectionDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let engine = LocalRustWorkspaceTerminalEngine(namespace: selectionDirectory) { _ in
+            throw LocalRustTerminalError.server("Test registry is unavailable")
+        }
+        let model = try AppModel(applicationSupportDirectory: directory, terminalEngine: engine,
+                                 startsTerminalProcesses: false, confirmClosingActiveProcesses: { _ in true })
+        let tab = try XCTUnwrap(model.selectedTab)
+        let sessionID = try XCTUnwrap(tab.terminalSession?.id)
+        let selectionURL = selectionDirectory.appendingPathComponent(sessionID.rawValue.uuidString + ".json")
+        let selection = LocalRustWorkspaceBackend.Selection(sessionID: UUID(), clientID: UUID())
+        try JSONEncoder().encode(selection).write(to: selectionURL)
+
+        model.closeTab(tab.id)
+
+        try await until("the failed stop is reported") { model.errorDescription == "Test registry is unavailable" }
+        XCTAssertNotNil(model.selectedWorkspace.tab(id: tab.id))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: selectionURL.path))
+    }
+
     func testNormalTabsAndSplitsUseSeparateRustOwnedShellsAndKeepSavedOwnership() async throws {
         guard let executable = ProcessInfo.processInfo.environment["MYTERM_TEST_RUST_WORKSPACE_SERVER"] else {
             throw XCTSkip("Set MYTERM_TEST_RUST_WORKSPACE_SERVER to a private Rust test daemon.")
@@ -143,8 +168,10 @@ final class LocalRustWorkspaceTests: XCTestCase {
         guard reopened.selectedWorkspace.tab(id: companionTab.id) != nil else {
             return XCTFail("The saved tab was closed without confirmation")
         }
-        try reopened.closeCompanionTab(workspaceID: workspaceID, groupID: splitGroupID, tabID: companionTab.id,
-                                       confirmedActiveProcesses: true)
+        try await reopened.closeCompanionTabAwaitingTerminalStop(
+            workspaceID: workspaceID, groupID: splitGroupID, tabID: companionTab.id,
+            confirmedActiveProcesses: true
+        )
         try await until("the explicitly confirmed Companion close stops its saved shell") {
             kill(companionPID, 0) != 0
         }
