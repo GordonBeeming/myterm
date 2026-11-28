@@ -540,12 +540,8 @@ final class SceneModel {
         if let previousConnection { await previousConnection.disconnect() }
         guard connectionGeneration == generation else { return }
         do {
-            let tokenManager = try await services.tokenManager(for: host)
+            let connection = try await services.connection(for: host)
             guard connectionGeneration == generation else { return }
-            let identity = try await services.identity()
-            guard connectionGeneration == generation else { return }
-            let connection = CompanionHostConnection(host: host, tokenManager: tokenManager,
-                                                     identity: identity)
             self.connection = connection
             let events = try await connection.connect()
             guard connectionGeneration == generation else {

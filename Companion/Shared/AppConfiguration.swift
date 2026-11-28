@@ -5,9 +5,13 @@ enum AppConfiguration {
     #if DEBUG
     static let bundleIdentifier = "com.gordonbeeming.myterm.companion.dev"
     static let urlScheme = "myterm-companion-dev"
+    static let defaultHostedRelay: MyTermHostedRelay = .development
+    static let hostedRelays: [MyTermHostedRelay] = [.development, .beta, .production]
     #else
     static let bundleIdentifier = "com.gordonbeeming.myterm.companion"
     static let urlScheme = "myterm-companion"
+    static let defaultHostedRelay: MyTermHostedRelay = .production
+    static let hostedRelays: [MyTermHostedRelay] = [.production, .beta]
     #endif
     static let sharedKeychainGroup = Bundle.main.object(
         forInfoDictionaryKey: "MyTermKeychainAccessGroup"

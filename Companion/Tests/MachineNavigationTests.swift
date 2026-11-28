@@ -14,6 +14,38 @@ private final class InMemorySecretStore: SecretStore, @unchecked Sendable {
 }
 
 final class MachineNavigationTests: XCTestCase {
+    func testSavingAndRemovingAWorkerRoutePreservesExistingGoPairing() async throws {
+        let secrets = InMemorySecretStore()
+        let legacy = try host(named: "Legacy Mac")
+        let worker = try host(named: "Worker Mac")
+        try secrets.write(try JSONEncoder().encode([legacy]), account: "saved-hosts-v1")
+
+        let catalog = HostCatalog(secrets: secrets)
+        let legacyRecords = try await catalog.load()
+        XCTAssertEqual(legacyRecords.map(\.host), [legacy])
+        XCTAssertNil(legacyRecords.first?.worker)
+
+        let privateKey = Curve25519.Signing.PrivateKey()
+        let server = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation
+        let anchor = String(repeating: "a", count: 64)
+        try await catalog.save(worker, worker: WorkerHostRoute(
+            anchor: anchor, endpointPrivateKey: privateKey.rawRepresentation, serverSigningKey: server
+        ))
+
+        let restoredCatalog = HostCatalog(secrets: secrets)
+        let workerRoute = try await restoredCatalog.workerRoute(for: worker)
+        XCTAssertEqual(workerRoute?.anchor, anchor)
+        XCTAssertEqual(workerRoute?.endpointPrivateKey, privateKey.rawRepresentation)
+        XCTAssertEqual(workerRoute?.serverSigningKey, server)
+        let legacyDecoderInput = try XCTUnwrap(secrets.read(account: "saved-hosts-v1"))
+        XCTAssertEqual(try JSONDecoder().decode([SavedHostDescriptor].self, from: legacyDecoderInput), [legacy, worker])
+
+        try await restoredCatalog.remove(worker)
+        let remaining = try await restoredCatalog.load()
+        XCTAssertEqual(remaining.map(\.host), [legacy])
+        XCTAssertNil(remaining.first?.worker)
+    }
+
     func testOneReachableStarredMacIsOpenedWithoutAsking() throws {
         let starred = try host(named: "blastoise")
         let other = try host(named: "pikachu")

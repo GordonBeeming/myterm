@@ -156,6 +156,7 @@ struct CompanionAuthReference: Codable, Equatable {
     let relay: RelayEndpoint
     let accountID: UUID
     let deviceID: UUID
+    var usesWorker: Bool?
 }
 
 @MainActor

@@ -30,6 +30,7 @@
 		4052949354AD1631457521E5 /* PaneSelectionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 618D836601520F5E0BF78A0B /* PaneSelectionStore.swift */; };
 		4244C73558FE87B4D69117D7 /* RemoteBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27C622664DAC55550E0B02B8 /* RemoteBrowserView.swift */; };
 		4535B244FCE8884F027AC5E9 /* TerminalComposerDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49195F1FC20A11FB4375866B /* TerminalComposerDraft.swift */; };
+		4831524DF5CC65A4355F16C2 /* WorkerReconnectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59C1F6956FBD6C6CDF62F83A /* WorkerReconnectTests.swift */; };
 		4CB87775113C9E15D9802D32 /* BrowserContextHandoffTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B36E73EC57930EFE317F7E8 /* BrowserContextHandoffTests.swift */; };
 		4DDFE91F1D2F93245412A086 /* AppConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CF59BEE2EFA0B18D0715D36 /* AppConfigurationTests.swift */; };
 		539F4D9A61C7A9B49E66E966 /* TerminalExperienceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FA4675623DF3E1DFDD6B478 /* TerminalExperienceTests.swift */; };
@@ -141,6 +142,7 @@
 		53754390993C8E0539BFD7B7 /* DiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsView.swift; sourceTree = "<group>"; };
 		53A2B5E6871C55271FDA9849 /* AppModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModels.swift; sourceTree = "<group>"; };
 		5811AA28711A02FA8FBCF85D /* NotificationEnrollment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationEnrollment.swift; sourceTree = "<group>"; };
+		59C1F6956FBD6C6CDF62F83A /* WorkerReconnectTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkerReconnectTests.swift; sourceTree = "<group>"; };
 		618D836601520F5E0BF78A0B /* PaneSelectionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneSelectionStore.swift; sourceTree = "<group>"; };
 		69775211DDE86AF39BD85C5F /* RemoteSettingsEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSettingsEditor.swift; sourceTree = "<group>"; };
 		6C515C5438F75556A2FB4710 /* MyTermCompanionUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MyTermCompanionUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -343,6 +345,7 @@
 				21AC7E3FC5A5E5C0DBC0AEE4 /* TerminalDraftStoreTests.swift */,
 				4FA4675623DF3E1DFDD6B478 /* TerminalExperienceTests.swift */,
 				D60BAB7309874741C7B16211 /* TerminalTouchInteractionTests.swift */,
+				59C1F6956FBD6C6CDF62F83A /* WorkerReconnectTests.swift */,
 				BC712012DD4935B1A1E9C804 /* WorkspaceVisibilityGateTests.swift */,
 			);
 			path = Tests;
@@ -597,6 +600,7 @@
 				3462F39D2A0C7225443E1279 /* TerminalDraftStoreTests.swift in Sources */,
 				539F4D9A61C7A9B49E66E966 /* TerminalExperienceTests.swift in Sources */,
 				FD55D07F1B043F5EDB1FE758 /* TerminalTouchInteractionTests.swift in Sources */,
+				4831524DF5CC65A4355F16C2 /* WorkerReconnectTests.swift in Sources */,
 				3F261753A48CA260470CAEDB /* WorkspaceVisibilityGateTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -41,6 +41,7 @@ final class CompanionConnectionWorkQueue {
     private var items: [Item?] = []
     private var head = 0
     private var queuedItems: Int { items.count - head }
+    var hasPendingOperations: Bool { queuedItems > 0 }
     private var queuedBytes = 0
     private var worker: Task<Void, Never>?
 

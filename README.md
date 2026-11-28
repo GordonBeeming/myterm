@@ -250,9 +250,9 @@ WebAuthn requests are passed to macOS and the user's chosen credential provider,
 
 MyTerm Companion is coming to the App Store. Interested in trying it before the public release? Email [appstore@gordonbeeming.com](mailto:appstore@gordonbeeming.com) and I can look at adding you as a TestFlight tester.
 
-To host the relay, follow [the Cloudflare Tunnel and Linux proxy setup guide](docs/PROXY_SETUP.md), including separate dev and prod environments on one server.
+For hosted relay enrollment and upgrades, follow the [companion setup guide](docs/COMPANION.md#pair-after-a-hosted-relay-upgrade). Operators can deploy the [Cloudflare relay](Services/relay-cloudflare/README.md) or continue using the [self-hosted Go relay](docs/PROXY_SETUP.md).
 
-The native companion connects to your running Macs through an HTTPS relay you host. Save multiple Macs and relays, check which hosts are reachable, and open their workspaces and terminals from your phone or iPad. Each Mac remains responsible for its processes; a sleeping or closed host is unavailable.
+The native companion connects to your running Macs through a hosted or self-hosted HTTPS relay. Save multiple Macs and relays, check which hosts are reachable, and open their workspaces and terminals from your phone or iPad. Each Mac remains responsible for its processes. A sleeping or closed host is unavailable.
 
 Pairing combines relay passkey sign-in with a one-use QR code and approval on the Mac. Terminal traffic is encrypted between the devices. Wider screens mirror the Mac pane layout; narrow screens use a terminal picker. A per-device setting restores the terminal list. One connection controls input and terminal size at a time.
 

@@ -130,6 +130,17 @@ public struct PairedPeer: Codable, Equatable, Sendable {
     public let publicKey: Data
     public let notificationSigningPublicKey: Data
     public let pairedAt: Date
+    public let workerEndpointID: String?
+
+    init(deviceID: UUID, name: String, publicKey: Data, notificationSigningPublicKey: Data,
+         pairedAt: Date, workerEndpointID: String? = nil) {
+        self.deviceID = deviceID
+        self.name = name
+        self.publicKey = publicKey
+        self.notificationSigningPublicKey = notificationSigningPublicKey
+        self.pairedAt = pairedAt
+        self.workerEndpointID = workerEndpointID
+    }
 
     public func validate() throws {
         guard !name.isEmpty, name.utf8.count <= 256,
@@ -228,8 +239,10 @@ public actor PairingRegistry {
     /// cannot reuse the QR code to prompt repeatedly.
     public func authorize(_ proposal: PairingProposal, hostPublicKey: Data,
                           hostNotificationSigningPublicKey: Data,
-                          now: Date = .now, approval: PairingApproval) async throws -> PairingResponse {
+                          now: Date = .now, workerEndpointID: String? = nil,
+                          approval: PairingApproval) async throws -> PairingResponse {
         try proposal.validate()
+        guard workerEndpointID.map(CloudflareRelayFrame.isDigest) ?? true else { throw RemoteError.invalidMessage }
         do {
             _ = try P256.KeyAgreement.PublicKey(x963Representation: hostPublicKey)
             _ = try P256.Signing.PublicKey(x963Representation: hostNotificationSigningPublicKey)
@@ -242,7 +255,8 @@ public actor PairingRegistry {
                 deviceID: proposal.clientDeviceID, name: proposal.clientName,
                 publicKey: proposal.clientPublicKey,
                 notificationSigningPublicKey: proposal.clientNotificationSigningPublicKey,
-                pairedAt: now
+                pairedAt: now,
+                workerEndpointID: workerEndpointID
             )
             if let persistence { try await persistence.save(peer) }
             peers[proposal.clientDeviceID] = peer

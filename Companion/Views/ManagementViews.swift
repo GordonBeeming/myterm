@@ -11,6 +11,13 @@ struct AddHostView: View {
     @State private var isPairing = false
     @State private var pairingTask: Task<Void, Never>?
     @State private var errorMessage: String?
+    @State private var selectedRelay = AppConfiguration.defaultHostedRelay.origin
+    @State private var customRelay = ""
+    @State private var workerEnrollment: WorkerEnrollmentAttempt?
+
+    private var enrollmentRelay: String {
+        (selectedRelay.isEmpty ? customRelay : selectedRelay).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     var body: some View {
         NavigationStack {
@@ -29,14 +36,53 @@ struct AddHostView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .contentShape(Rectangle())
                     }
-                    .disabled(isPairing)
+                    .disabled(isPairing || workerEnrollment != nil)
                     .accessibilityIdentifier("pair-mac")
-                    if isPairing { ProgressView("Complete sign-in and approve this phone on your Mac.") }
                 }
                 Section {
-                    Text("Show the pairing code in MyTerm on your Mac. Sign in with your passkey if asked, then approve this phone on the Mac.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    if let workerEnrollment {
+                        ShareLink(item: workerEnrollment.request.code) {
+                            Label("Share approval request", systemImage: "square.and.arrow.up")
+                        }
+                        Button("Scan Mac approval", systemImage: "qrcode.viewfinder") {
+                            showingScanner = true
+                        }
+                        PasteButton(payloadType: String.self) { values in
+                            if let value = values.first { startPairing(value) }
+                        }
+                        .accessibilityLabel("Paste Mac approval")
+                        Button("Start over") { self.workerEnrollment = nil }
+                    } else {
+                        Picker("Relay", selection: $selectedRelay) {
+                            ForEach(AppConfiguration.hostedRelays, id: \.origin) { relay in
+                                Text(relay.title).tag(relay.origin)
+                            }
+                            Text("Self-hosted").tag("")
+                        }
+                        if selectedRelay.isEmpty {
+                            TextField("Relay address", text: $customRelay, prompt: Text("https://"))
+                                .textContentType(.URL)
+                                .keyboardType(.URL)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                        }
+                        Button("Sign in with a passkey") { startWorkerEnrollment() }
+                            .disabled(enrollmentRelay.isEmpty)
+                    }
+                } header: {
+                    Text("Sign in to a relay")
+                } footer: {
+                    if workerEnrollment != nil {
+                        Text("AirDrop the request to your Mac. Approve this device in MyTerm on the Mac, then scan or paste the approval directly from there. The request expires after five minutes.")
+                    } else {
+                        Text("Choose the same relay as your Mac.")
+                    }
+                }
+                .disabled(isPairing)
+                if isPairing {
+                    Section {
+                        ProgressView(workerEnrollment == nil ? "Signing in…" : "Pairing with your Mac…")
+                    }
                 }
             }
             .navigationTitle("Add Mac")
@@ -59,7 +105,7 @@ struct AddHostView: View {
                         showingScanner = false
                         errorMessage = message
                     }
-                    .navigationTitle("Scan pairing code")
+                    .navigationTitle(workerEnrollment == nil ? "Scan pairing code" : "Scan Mac approval")
                     .toolbar {
                         Button("Cancel", role: .cancel) {
                             scannedCode = nil
@@ -80,8 +126,31 @@ struct AddHostView: View {
         pairingTask = Task { await pair(value) }
     }
 
+    private func startWorkerEnrollment() {
+        guard !isPairing else { return }
+        isPairing = true
+        let relay = enrollmentRelay
+        pairingTask = Task {
+            defer { isPairing = false }
+            do { workerEnrollment = try await services.beginWorkerEnrollment(origin: relay) }
+            catch is CancellationError { return }
+            catch { errorMessage = error.localizedDescription }
+        }
+    }
+
     private func pair(_ value: String) async {
         guard !isPairing else { return }
+        if let workerEnrollment {
+            isPairing = true
+            defer { isPairing = false }
+            do {
+                _ = try await services.finishWorkerEnrollment(workerEnrollment, approvalCode: value)
+                dismiss()
+            } catch is CancellationError {
+                return
+            } catch { errorMessage = error.localizedDescription }
+            return
+        }
         guard let url = URL(string: value.trimmingCharacters(in: .whitespacesAndNewlines)) else {
             errorMessage = invalidPairingMessage
             return
@@ -144,20 +213,24 @@ struct HostActionsView: View {
                             Task { await scene.connect(to: host, services: services) }
                             dismiss()
                         }
-                        Button("Sign in again") {
-                            Task {
-                                do {
-                                    try await services.signInAgain(for: host)
-                                    await scene.connect(to: host, services: services)
-                                    dismiss()
-                                } catch { services.errorMessage = error.localizedDescription }
+                        if !services.usesWorkerRelay(host) {
+                            Button("Sign in again") {
+                                Task {
+                                    do {
+                                        try await services.signInAgain(for: host)
+                                        await scene.connect(to: host, services: services)
+                                        dismiss()
+                                    } catch { services.errorMessage = error.localizedDescription }
+                                }
                             }
                         }
                         Button("Remove pairing", role: .destructive) {
                             Task {
-                                await scene.disconnect()
-                                await scene.browserProfileStores.removeStores(hostID: host.hostID)
+                                if scene.selectedConnectionID == host.connectionID { await scene.disconnect() }
                                 await services.remove(host)
+                                if !services.savedHosts.contains(where: { $0.hostID == host.hostID }) {
+                                    await scene.browserProfileStores.removeStores(hostID: host.hostID)
+                                }
                                 dismiss()
                             }
                         }

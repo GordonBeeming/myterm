@@ -9,6 +9,9 @@ public enum CloudflareRelayEvent: Equatable, Sendable {
 
 /// Keeps the relay's TLS socket and signed liveness separate from application encryption.
 public actor CloudflareRelaySocket {
+    private enum DeliveryReply: Sendable { case queued, deferred, unavailable }
+    private struct PeerUnavailable: Error {}
+
     private let client: CloudflareRelayClient
     private let account: CloudflareRelayAccount
     private let key: CloudflareRelayEndpointKey
@@ -25,7 +28,7 @@ public actor CloudflareRelaySocket {
     private var pendingWrites = 0
     private var deliveryWriter: Task<Void, Error>?
     private var pendingDeliveries = 0
-    private var delivery: (destination: String, reply: AsyncStream<Bool>.Continuation)?
+    private var delivery: (destination: String, reply: AsyncStream<DeliveryReply>.Continuation)?
 
     public init(client: CloudflareRelayClient, account: CloudflareRelayAccount, key: CloudflareRelayEndpointKey) {
         self.client = client
@@ -86,7 +89,10 @@ public actor CloudflareRelaySocket {
         let attempt = generation
         let previous = deliveryWriter
         let operation = Task { [weak self] in
-            if let previous { try await previous.value }
+            if let previous {
+                do { try await previous.value }
+                catch is PeerUnavailable {}
+            }
             guard let self else { throw RemoteError.disconnected }
             try await self.deliver(payload, destination: destination, socket: socket, attempt: attempt)
         }
@@ -94,6 +100,7 @@ public actor CloudflareRelaySocket {
         pendingDeliveries += 1
         defer { if attempt == generation { pendingDeliveries -= 1 } }
         do { try await operation.value }
+        catch is PeerUnavailable { throw RemoteError.disconnected }
         catch {
             if attempt == generation { end(failure: error) }
             throw error
@@ -107,14 +114,14 @@ public actor CloudflareRelaySocket {
         while ContinuousClock.now < deadline {
             try Task.checkCancellation()
             guard attempt == generation else { throw RemoteError.disconnected }
-            let (replies, reply) = AsyncStream<Bool>.makeStream(bufferingPolicy: .bufferingOldest(1))
+            let (replies, reply) = AsyncStream<DeliveryReply>.makeStream(bufferingPolicy: .bufferingOldest(1))
             delivery = (destination, reply)
             defer {
                 reply.finish()
                 if attempt == generation { delivery = nil }
             }
             try await write(.data(payload), to: socket)
-            let accepted = try await withThrowingTaskGroup(of: Bool.self) { group in
+            let result = try await withThrowingTaskGroup(of: DeliveryReply.self) { group in
                 group.addTask {
                     for await value in replies { return value }
                     throw RemoteError.disconnected
@@ -127,8 +134,11 @@ public actor CloudflareRelaySocket {
                 guard let result = try await group.next() else { throw RemoteError.disconnected }
                 return result
             }
-            if accepted { return }
-            try await Task.sleep(for: .milliseconds(100))
+            switch result {
+            case .queued: return
+            case .unavailable: throw PeerUnavailable()
+            case .deferred: try await Task.sleep(for: .milliseconds(100))
+            }
         }
         throw RemoteError.timedOut
     }
@@ -191,18 +201,18 @@ public actor CloudflareRelaySocket {
             try yield(.ready)
         case .unavailable(let id):
             guard ready else { throw RemoteError.invalidMessage }
-            if delivery?.destination == id { try completeDelivery(to: id, accepted: true) }
+            if delivery?.destination == id { try completeDelivery(to: id, result: .unavailable) }
             try yield(.unavailable(endpointID: id))
         case .queued(let id):
-            try completeDelivery(to: id, accepted: true)
+            try completeDelivery(to: id, result: .queued)
         case .deferred(let id):
-            try completeDelivery(to: id, accepted: false)
+            try completeDelivery(to: id, result: .deferred)
         }
     }
 
-    private func completeDelivery(to destination: String, accepted: Bool) throws {
+    private func completeDelivery(to destination: String, result: DeliveryReply) throws {
         guard ready, let delivery, delivery.destination == destination,
-              case .enqueued = delivery.reply.yield(accepted) else { throw RemoteError.invalidMessage }
+              case .enqueued = delivery.reply.yield(result) else { throw RemoteError.invalidMessage }
         self.delivery = nil
     }
 

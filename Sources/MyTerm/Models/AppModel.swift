@@ -470,6 +470,10 @@ final class AppModel {
     }
     #endif
 
+    var companionWorkerAuthorityDirectory: URL {
+        terminalContinuityDirectory.appending(path: "companion-worker-authority", directoryHint: .isDirectory)
+    }
+
     var companionDiagnosticsDirectory: URL {
         terminalContinuityDirectory.appending(path: "companion-diagnostics", directoryHint: .isDirectory)
     }

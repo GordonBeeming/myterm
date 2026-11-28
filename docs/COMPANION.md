@@ -1,8 +1,19 @@
 # iPhone and iPad companion
 
-The companion connects to running myterm apps through an HTTPS relay you operate. Each Mac owns its terminal processes and workspace state. Closing myterm, sleeping the Mac, or losing its connection makes that host unavailable. The relay does not run replacement shells.
+The companion connects to a running MyTerm app through a hosted or self-hosted HTTPS relay. Each Mac owns its terminal processes and workspace state. Closing MyTerm, sleeping the Mac, or losing its connection makes that host unavailable. The relay does not run replacement shells.
 
 The app supports iOS and iPadOS 26 or later. Builds use the iOS 27.1 SDK or newer so iPhone Duo can fill the inner and outer displays, including the system's vertical navigation bars. The main Mac and workspace navigation uses a native split view, which collapses on the outer display and keeps its sidebar on the regular-width inner display. Custom terminal splits avoid active fold regions while preserving the Mac's saved proportions when the device is flat.
+
+## Pair after a hosted relay upgrade
+
+The Mac can open workspaces and terminals before relay setup. Once your hosted relay upgrades, open **Settings → Companion** on your Mac and select your relay. Use **Create an account** for your first passkey on the new relay, or **Sign in** if you already created one. An account on the earlier relay cannot sign in to the replacement.
+
+1. On the iPhone or iPad, open **Add Mac**. Choose the same relay and select **Sign in with a passkey**.
+2. Share the approval request with your Mac. Paste it into **Pair a device** in MyTerm and select **Approve device**.
+3. Scan the approval in the Companion or paste it into the requesting device. Repeat with each iPhone or iPad.
+4. After the new connection works, remove the old pairing from **Manage Mac**. Browser data shared with the current pairing stays on the device.
+
+The existing self-hosted Go relay continues to use the legacy pairing QR code. Operators of the new Cloudflare relay can follow its [deployment guide](../Services/relay-cloudflare/README.md).
 
 ## Build and test
 
