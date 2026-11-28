@@ -359,6 +359,20 @@ test("a late older socket and a duplicate proof do not evict the active endpoint
     targetEndpointId: server.id, signingKey: server.publicKey, kind: "server", relayEnabled: true,
   })).status, 201);
 
+  const challengePath = `/v1/accounts/${accountId}/endpoint-challenge`;
+  const intent = { endpointId: server.id, purpose: "connect" };
+  const outstanding = await Promise.all(Array.from({ length: 12 }, () => post(relay, challengePath, intent)));
+  assert.ok(outstanding.every(response => response.status === 200));
+  const { nonce } = await (await post(relay, challengePath, intent)).json();
+  const body = { endpointId: server.id };
+  const proof = {
+    "MyTerm-Nonce": nonce,
+    "MyTerm-Signature": server.signature(origin, anchor, "connect", nonce, JSON.stringify(body)),
+  };
+  const connectPath = `/v1/accounts/${accountId}/actions/connect`;
+  assert.equal((await post(relay, connectPath, body, proof)).status, 200);
+  assert.equal((await post(relay, connectPath, body, proof)).status, 401);
+
   async function openClient() {
     const reservation = await action(relay, origin, accountId, anchor, client, "connect");
     assert.equal(reservation.status, 200);

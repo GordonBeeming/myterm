@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { base64Url, canonicalBase64, randomToken, sha256, utf8 } from "./crypto";
+import { base64Url, canonicalBase64, fromBase64Url, randomToken, sha256, utf8 } from "./crypto";
 import { endpointId, validSigningKey, verifyProof } from "./endpoint-proof";
 import { bearer, error, json, parseObject, RelayRequestError } from "./http";
 
@@ -43,6 +43,7 @@ export class AccountRouter extends DurableObject<Env> {
   private readonly sql: SqlStorage;
   private tail: Promise<unknown> = Promise.resolve();
   private pending = 0;
+  private challengeKey?: CryptoKey;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -75,6 +76,11 @@ export class AccountRouter extends DurableObject<Env> {
       ) STRICT;
       CREATE INDEX IF NOT EXISTS endpoint_challenge_expiry ON endpoint_challenges(expires_at);
       CREATE INDEX IF NOT EXISTS endpoint_challenge_actor ON endpoint_challenges(endpoint_id);
+      CREATE TABLE IF NOT EXISTS used_endpoint_challenges (
+        nonce TEXT PRIMARY KEY,
+        expires_at INTEGER NOT NULL
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS used_endpoint_challenge_expiry ON used_endpoint_challenges(expires_at);
       CREATE TABLE IF NOT EXISTS connect_tickets (
         token_hash TEXT PRIMARY KEY,
         endpoint_id TEXT NOT NULL,
@@ -112,6 +118,29 @@ export class AccountRouter extends DurableObject<Env> {
       (state.last_contact === null || now < state.last_contact + inactivity);
   }
 
+  private async challengeTag(actor: string, purpose: EndpointPurpose, prefix: Uint8Array): Promise<Uint8Array> {
+    if (!this.challengeKey) {
+      let stored = await this.ctx.storage.get<Uint8Array<ArrayBuffer>>("endpoint-challenge-key");
+      if (!stored) {
+        stored = crypto.getRandomValues(new Uint8Array(32));
+        await this.ctx.storage.put("endpoint-challenge-key", stored);
+      }
+      this.challengeKey = await crypto.subtle.importKey("raw", stored, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    }
+    const binding = utf8(["myterm-relay-challenge-v1", this.env.RELAY_ORIGIN, actor, purpose, base64Url(prefix)].join("\n"));
+    return new Uint8Array(await crypto.subtle.sign("HMAC", this.challengeKey, binding)).subarray(0, 16);
+  }
+
+  private async signedChallengeExpiry(actor: string, purpose: EndpointPurpose, nonce: string): Promise<number | undefined> {
+    const bytes = fromBase64Url(nonce);
+    const expiry = Number(new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getBigUint64(0));
+    if (!Number.isSafeInteger(expiry) || expiry <= Date.now()) return undefined;
+    const tag = await this.challengeTag(actor, purpose, bytes.subarray(0, 16));
+    let difference = 0;
+    for (let index = 0; index < tag.length; index++) difference |= tag[index]! ^ bytes[index + 16]!;
+    return difference === 0 ? expiry : undefined;
+  }
+
   challenge(actor: string, purpose: EndpointPurpose, initialAccount: boolean): Promise<Response> {
     return this.serialize(async () => {
       const now = Date.now();
@@ -123,18 +152,12 @@ export class AccountRouter extends DurableObject<Env> {
       } else if (!state.anchor || !existing || (!existing.relay_enabled && purpose !== "relay-setting")) {
         return error(401, "endpoint_unauthorized");
       }
-      this.sql.exec("DELETE FROM endpoint_challenges WHERE expires_at <= ?", now);
-      const count = this.sql.exec<{ count: number }>(
-        "SELECT count(*) AS count FROM endpoint_challenges WHERE endpoint_id = ?", actor,
-      ).one().count;
-      const genesisCount = state.anchor === null
-        ? this.sql.exec<{ count: number }>("SELECT count(*) AS count FROM endpoint_challenges").one().count
-        : 0;
-      if (count >= 8 || genesisCount >= 8) return error(429, "endpoint_challenge_limit");
-      const nonce = randomToken();
       const expiresAt = now + challengeLifetime;
-      this.sql.exec("INSERT INTO endpoint_challenges VALUES (?, ?, ?, ?)", nonce, actor, purpose, expiresAt);
-      return json({ nonce, expiresAt });
+      // Issuing a challenge does not reserve capacity under an endpoint's identity.
+      const nonce = crypto.getRandomValues(new Uint8Array(32));
+      new DataView(nonce.buffer).setBigUint64(0, BigInt(expiresAt));
+      nonce.set(await this.challengeTag(actor, purpose, nonce.subarray(0, 16)), 16);
+      return json({ nonce: base64Url(nonce), expiresAt });
     });
   }
 
@@ -152,7 +175,11 @@ export class AccountRouter extends DurableObject<Env> {
       const reservation = this.sql.exec<Challenge>(
         "SELECT endpoint_id, purpose, expires_at FROM endpoint_challenges WHERE nonce = ?", nonce,
       ).toArray()[0];
-      if (reservation?.endpoint_id !== actor || reservation.purpose !== purpose || reservation.expires_at <= Date.now()) {
+      const expiresAt = reservation
+        ? (reservation.endpoint_id === actor && reservation.purpose === purpose ? reservation.expires_at : undefined)
+        : await this.signedChallengeExpiry(actor, purpose, nonce);
+      const alreadyUsed = this.sql.exec("SELECT nonce FROM used_endpoint_challenges WHERE nonce = ?", nonce).toArray().length > 0;
+      if (!expiresAt || expiresAt <= Date.now() || alreadyUsed) {
         return error(401, "endpoint_proof_invalid");
       }
 
@@ -168,8 +195,12 @@ export class AccountRouter extends DurableObject<Env> {
       }
 
       const now = Date.now();
-      if (reservation.expires_at <= now || !this.usable(state, now)) return error(401, "endpoint_proof_invalid");
-      this.sql.exec("DELETE FROM endpoint_challenges WHERE nonce = ?", nonce);
+      if (expiresAt <= now || !this.usable(state, now)) return error(401, "endpoint_proof_invalid");
+      this.ctx.storage.transactionSync(() => {
+        this.sql.exec("DELETE FROM endpoint_challenges WHERE expires_at <= ? OR nonce = ?", now, nonce);
+        this.sql.exec("DELETE FROM used_endpoint_challenges WHERE expires_at <= ?", now);
+        if (!reservation) this.sql.exec("INSERT INTO used_endpoint_challenges VALUES (?, ?)", nonce, expiresAt);
+      });
 
       if (purpose === "genesis") {
         await this.ctx.storage.setAlarm(now + inactivity);
@@ -278,6 +309,10 @@ export class AccountRouter extends DurableObject<Env> {
 
   suspend(suspended: boolean): Promise<Response> {
     return this.serialize(async () => {
+      if (suspended) {
+        await this.ctx.storage.delete("endpoint-challenge-key");
+        this.challengeKey = undefined;
+      }
       this.ctx.storage.transactionSync(() => {
         this.sql.exec("UPDATE account_state SET suspended = ? WHERE singleton = 1", Number(suspended));
         if (suspended) {
