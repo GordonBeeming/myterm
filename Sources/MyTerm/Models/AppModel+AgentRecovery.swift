@@ -210,7 +210,7 @@ extension AppModel {
         forgetAgentTitle(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)
     }
 
-    private func updateAgentSession(
+    func updateAgentSession(
         _ handle: AgentSessionHandle?,
         workspaceID: WorkspaceID,
         tabGroupID: TabGroupID,

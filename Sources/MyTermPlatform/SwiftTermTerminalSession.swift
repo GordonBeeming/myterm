@@ -75,6 +75,11 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         return ClaudeProcessConfiguration.configuration(belowShell: shell)
     }
 
+    public var foregroundClaudeConversation: AgentSessionHandle? {
+        guard isRunning, activeForegroundProcessName != nil else { return nil }
+        return ClaudeProcessConfiguration.conversation(belowShell: attachedShellPID ?? terminal.process.shellPid)
+    }
+
     private let configuration: TerminalSessionConfiguration
     private var runtimeConfiguration: TerminalRuntimeConfiguration
     private let terminal: MyTermLocalProcessTerminalView
@@ -225,7 +230,8 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         try startNewProcess(runInitialCommand: true)
     }
 
-    private func startNewProcess(runInitialCommand: Bool) throws {
+    private func startNewProcess(runInitialCommand: Bool,
+                                 replacingLostRustSession: (sessionID: UUID, clientID: UUID)? = nil) throws {
         guard !isRunning, persistentStartTask == nil else { return }
         pendingStartDisposition = .attach
 
@@ -287,7 +293,12 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         }
         #if DEBUG || MYTERM_RUST_WORKSPACES
         if let rustWorkspace {
-            let previous = try rustWorkspace.backend.selection(paneID: rustWorkspace.paneID)
+            let previous: LocalRustWorkspaceBackend.Selection?
+            if let replacingLostRustSession {
+                previous = .init(sessionID: replacingLostRustSession.sessionID, clientID: replacingLostRustSession.clientID)
+            } else {
+                previous = try rustWorkspace.backend.selection(paneID: rustWorkspace.paneID)
+            }
             let selection = try rustWorkspace.backend.recordLaunch(paneID: rustWorkspace.paneID, replacing: previous)
             let launchEnvironment = Self.processEnvironmentValues(overrides: environment)
             let size = SessionHostGeometry.fit(columns: terminal.getTerminal().cols, rows: terminal.getTerminal().rows)
@@ -369,7 +380,8 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         switch startup {
         case .restore:
             if let selection = try rustWorkspace.backend.selection(paneID: rustWorkspace.paneID) {
-                startRustAttachment(selection: selection, launch: nil, startupFailure: nil, runInitialCommand: false)
+                startRustAttachment(selection: selection, launch: nil, startupFailure: nil,
+                                    runInitialCommand: false, restoresLostShell: true)
             } else {
                 try startNewProcess(runInitialCommand: true)
             }
@@ -467,18 +479,30 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
 
     private func startRustAttachment(selection: LocalRustWorkspaceBackend.Selection,
                                      launch: LocalRustTerminalConnection.WorkspaceLaunch?,
-                                     startupFailure: TerminalSessionFailure?, runInitialCommand: Bool) {
+                                     startupFailure: TerminalSessionFailure?, runInitialCommand: Bool,
+                                     restoresLostShell: Bool = false) {
         guard let rustWorkspace else { return }
         pendingStartDisposition = .attach
         rustRecovery?.action = nil
         terminal.setConnectionPending(true)
         persistentStartTask = Task { @MainActor in
             var pendingConnection: LocalRustTerminalConnection?
+            var restoreWithNewShell = false
             defer {
                 pendingConnection?.disconnect()
                 self.persistentStartTask = nil
                 self.terminal.setConnectionPending(false)
                 self.updateRustInputAvailability()
+                if restoreWithNewShell, self.pendingStartDisposition == .attach {
+                    do {
+                        if try rustWorkspace.backend.selection(paneID: rustWorkspace.paneID) == selection {
+                            try self.startNewProcess(runInitialCommand: true,
+                                                     replacingLostRustSession: (selection.sessionID, selection.clientID))
+                        } else {
+                            try self.startRustWorkspace(.reattach)
+                        }
+                    } catch { self.rustAttachmentFailed(error) }
+                }
             }
             do {
                 let connection = try await rustWorkspace.backend.connect(launch != nil)
@@ -545,6 +569,29 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
                     pendingConnection?.disconnect()
                     self.stopRustWorkspace(rustWorkspace)
                 } else if self.pendingStartDisposition == .attach {
+                    if restoresLostShell {
+                        switch error {
+                        case LocalRustTerminalError.missingServer:
+                            restoreWithNewShell = true
+                        case LocalRustTerminalError.missingSession:
+                            // Old servers report a missing session for incompatible attachments too.
+                            // Query control separately to distinguish an existing shell from a dead one.
+                            do {
+                                let probe = try await rustWorkspace.backend.connect(false)
+                                defer { probe.disconnect() }
+                                _ = try await probe.workspaceControl(sessionID: selection.sessionID, clientID: selection.clientID)
+                            } catch LocalRustTerminalError.missingSession, LocalRustTerminalError.missingServer {
+                                restoreWithNewShell = true
+                            } catch { }
+                        default: break
+                        }
+                    }
+                    if self.pendingStartDisposition == .stop {
+                        pendingConnection?.disconnect()
+                        self.stopRustWorkspace(rustWorkspace)
+                        return
+                    }
+                    guard self.pendingStartDisposition == .attach, !restoreWithNewShell else { return }
                     self.rustAttachmentFailed(error)
                 }
             }

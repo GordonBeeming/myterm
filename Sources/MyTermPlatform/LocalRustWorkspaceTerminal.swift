@@ -1,5 +1,6 @@
 #if DEBUG || MYTERM_RUST_WORKSPACES
 import Foundation
+import Darwin
 import MyTermContinuity
 import Observation
 
@@ -87,8 +88,13 @@ final class LocalRustWorkspaceBackend {
     /// Record the attempt before contacting the service. If the app quits before the reply,
     /// it can use the same identity to check for the existing shell after restart.
     func recordLaunch(paneID: UUID, replacing previous: Selection?) throws -> Selection {
-        let selection = Selection(sessionID: UUID(), clientID: previous?.clientID ?? UUID())
         try SessionHostSocket.prepareDirectory(namespace)
+        let lock = try SessionHostSocket.acquireOwnership(path: selectionLockPath(paneID: paneID))
+        defer { close(lock) }
+        guard try selection(paneID: paneID) == previous else {
+            throw LocalRustTerminalError.controlChanged
+        }
+        let selection = Selection(sessionID: UUID(), clientID: previous?.clientID ?? UUID())
         try JSONEncoder().encode(selection).write(to: selectionURL(paneID: paneID), options: .atomic)
         return selection
     }
@@ -106,6 +112,8 @@ final class LocalRustWorkspaceBackend {
         } catch LocalRustTerminalError.missingSession {
             // The live daemon has no session with this identity.
         }
+        let lock = try SessionHostSocket.acquireOwnership(path: selectionLockPath(paneID: paneID))
+        defer { close(lock) }
         guard try self.selection(paneID: paneID) == selection else { return }
         try FileManager.default.removeItem(at: selectionURL(paneID: paneID))
     }
@@ -138,6 +146,10 @@ final class LocalRustWorkspaceBackend {
 
     private func selectionURL(paneID: UUID) -> URL {
         namespace.appendingPathComponent(paneID.uuidString + ".json")
+    }
+
+    private func selectionLockPath(paneID: UUID) -> String {
+        selectionURL(paneID: paneID).path + ".lock"
     }
 }
 #endif

@@ -75,8 +75,17 @@ struct LocalRustTerminalEndpoint: Sendable {
         try SessionHostSocket.prepareDirectory(socketDirectory)
         let path = socketDirectory.appendingPathComponent("terminal.sock").path
         if let connection = try existingConnection(path, verifier: verifier) { return connection }
-        guard starting else { throw LocalRustTerminalError.missingServer }
-        try startService(path: path, verifier: verifier)
+        if starting {
+            try startService(path: path, verifier: verifier)
+        } else {
+            let registration = try launchctl(["print", "gui/\(getuid())/\(serviceLabel)"])
+            if !registration.hasRunningProcess {
+                if registration.status == 0 || registration.output.contains("Could not find service") {
+                    throw LocalRustTerminalError.missingServer
+                }
+                try registration.check()
+            }
+        }
         let deadline = ProcessInfo.processInfo.systemUptime + 3
         repeat {
             if let connection = try existingConnection(path, verifier: verifier) { return connection }

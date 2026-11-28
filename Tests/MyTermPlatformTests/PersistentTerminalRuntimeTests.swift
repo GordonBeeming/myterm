@@ -94,6 +94,56 @@ final class PersistentTerminalRuntimeTests: XCTestCase {
     }
 
     @MainActor
+    func testRustStartupCannotReplaceANewerSavedSelection() throws {
+        let namespace = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: namespace) }
+        let backend = LocalRustWorkspaceBackend(namespace: namespace) { _ in
+            throw LocalRustTerminalError.disconnected
+        }
+        let pane = UUID()
+        let original = try backend.recordLaunch(paneID: pane, replacing: nil)
+        let replacement = try backend.recordLaunch(paneID: pane, replacing: original)
+        XCTAssertThrowsError(try backend.recordLaunch(paneID: pane, replacing: original)) { error in
+            guard case LocalRustTerminalError.controlChanged = error else { return XCTFail("Unexpected error: \(error)") }
+        }
+        XCTAssertEqual(try backend.selection(paneID: pane), replacement)
+    }
+
+    @MainActor
+    func testRustStartupRecreatesConfirmedLostShellWithItsSavedController() async throws {
+        let namespace = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: namespace, withIntermediateDirectories: false,
+                                                attributes: [.posixPermissions: 0o700])
+        defer { try? FileManager.default.removeItem(at: namespace) }
+        let identifier = UUID()
+        let selection = LocalRustWorkspaceBackend.Selection(sessionID: UUID(), clientID: UUID())
+        let selectionFile = namespace.appendingPathComponent(identifier.uuidString + ".json")
+        try JSONEncoder().encode(selection).write(to: selectionFile)
+        let engine = LocalRustWorkspaceTerminalEngine(namespace: namespace) { starting in
+            if starting { throw LocalRustTerminalError.server("Test reached the new-shell launch") }
+            throw LocalRustTerminalError.missingServer
+        }
+        let session = try XCTUnwrap(try engine.makeSession(configuration: .init(
+            shell: URL(fileURLWithPath: "/bin/zsh"), workingDirectory: namespace,
+            continuityIdentifier: identifier
+        )) as? SwiftTermTerminalSession)
+        let relaunched = expectation(description: "confirmed missing server triggers a new shell")
+        session.onEvent = { event in
+            if case .failed(let failure) = event, failure.localizedDescription == "Test reached the new-shell launch" {
+                relaunched.fulfill()
+            }
+        }
+
+        try session.start()
+        await fulfillment(of: [relaunched], timeout: 6)
+
+        let replacement = try JSONDecoder().decode(LocalRustWorkspaceBackend.Selection.self,
+                                                   from: Data(contentsOf: selectionFile))
+        XCTAssertNotEqual(replacement.sessionID, selection.sessionID)
+        XCTAssertEqual(replacement.clientID, selection.clientID)
+    }
+
+    @MainActor
     func testRustStartupTriesTheSavedShellAndRetryDoesNotReplaceAMissingSelection() async throws {
         let namespace = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: namespace, withIntermediateDirectories: true)
@@ -104,7 +154,7 @@ final class PersistentTerminalRuntimeTests: XCTestCase {
         try JSONEncoder().encode(selection).write(to: selectionFile)
         let engine = LocalRustWorkspaceTerminalEngine(namespace: namespace) { starting in
             XCTAssertFalse(starting, "Restoring a saved shell must not launch a replacement or start its daemon")
-            throw LocalRustTerminalError.disconnected
+            throw LocalRustTerminalError.server("unsupported hyperlink parameters")
         }
         let session = try XCTUnwrap(try engine.makeSession(configuration: .init(
             workingDirectory: namespace, continuityIdentifier: identifier
@@ -114,7 +164,7 @@ final class PersistentTerminalRuntimeTests: XCTestCase {
         session.onEvent = { event in
             if case .failed(let report) = event {
                 failure = report
-                if report.localizedDescription == LocalRustTerminalError.disconnected.localizedDescription {
+                if report.localizedDescription == "unsupported hyperlink parameters" {
                     attemptedRestore.fulfill()
                 }
             }

@@ -5,6 +5,22 @@ import XCTest
 @testable import MyTermPlatform
 
 final class ClaudeProcessConfigurationTests: XCTestCase {
+    func testLiveConversationRecordRequiresMatchingPIDAndValidConversation() throws {
+        let identifier = "5ba75b10-387d-46d0-ba1b-cbb301c1204a"
+        let record = Data("""
+        {"pid":123,"sessionId":"\(identifier)","cwd":"/tmp/demo"}
+        """.utf8)
+        let configuration = ClaudeConfiguration.directory(URL(fileURLWithPath: "/tmp/claude-demo", isDirectory: true))
+        let handle = try XCTUnwrap(ClaudeProcessConfiguration.conversation(from: record, pid: 123,
+                                                                           configuration: configuration))
+        XCTAssertEqual(handle.sessionID, identifier)
+        XCTAssertEqual(handle.workingDirectory?.path, "/tmp/demo")
+        XCTAssertEqual(handle.claudeConfiguration, configuration)
+        XCTAssertNil(ClaudeProcessConfiguration.conversation(from: record, pid: 124, configuration: configuration))
+        let invalid = Data(#"{"pid":123,"sessionId":"not-a-uuid","cwd":"relative"}"#.utf8)
+        XCTAssertNil(ClaudeProcessConfiguration.conversation(from: invalid, pid: 123, configuration: configuration))
+    }
+
     func testReadsTheEnvironmentAfterTheArguments() throws {
         let buffer = procArgs(path: "/usr/local/bin/claude", padding: 3, arguments: ["claude", "--resume", "abc"],
                               environment: ["HOME=/Users/someone", "CLAUDE_CONFIG_DIR=/Users/someone/.claude-work",
