@@ -1,6 +1,7 @@
 @preconcurrency import AVFoundation
 import MyTermCore
 import MyTermRemote
+import MyTermUI
 import SwiftUI
 
 struct AddHostView: View {
@@ -22,23 +23,6 @@ struct AddHostView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Pairing") {
-                    Menu {
-                        Button("Scan QR code", systemImage: "qrcode.viewfinder") {
-                            showingScanner = true
-                        }
-                        PasteButton(payloadType: String.self) { values in
-                            guard let value = values.first else { return }
-                            startPairing(value)
-                        }
-                    } label: {
-                        Label(isPairing ? "Pairing…" : "Pair Mac", systemImage: "qrcode.viewfinder")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                    }
-                    .disabled(isPairing || workerEnrollment != nil)
-                    .accessibilityIdentifier("pair-mac")
-                }
                 Section {
                     if let workerEnrollment {
                         ShareLink(item: workerEnrollment.request.code) {
@@ -53,11 +37,15 @@ struct AddHostView: View {
                         .accessibilityLabel("Paste Mac approval")
                         Button("Start over") { self.workerEnrollment = nil }
                     } else {
-                        Picker("Relay", selection: $selectedRelay) {
-                            ForEach(AppConfiguration.hostedRelays, id: \.origin) { relay in
-                                Text(relay.title).tag(relay.origin)
+                        LabeledContent("Relay") {
+                            Picker("Relay", selection: $selectedRelay) {
+                                ForEach(AppConfiguration.hostedRelays, id: \.origin) { relay in
+                                    Text(relay.title).tag(relay.origin)
+                                }
+                                Text("Self-hosted").tag("")
                             }
-                            Text("Self-hosted").tag("")
+                            .labelsHidden()
+                            .accessibilityIdentifier("pairing-relay-picker")
                         }
                         if selectedRelay.isEmpty {
                             TextField("Relay address", text: $customRelay, prompt: Text("https://"))
@@ -70,21 +58,41 @@ struct AddHostView: View {
                             .disabled(enrollmentRelay.isEmpty)
                     }
                 } header: {
-                    Text("Sign in to a relay")
+                    Text(workerEnrollment == nil ? "Use your relay account" : "Device approval")
+                        .foregroundStyle(Theme.textSecondary)
                 } footer: {
-                    if workerEnrollment != nil {
-                        Text("AirDrop the request to your Mac. Approve this device in MyTerm on the Mac, then scan or paste the approval directly from there. The request expires after five minutes.")
-                    } else {
-                        Text("Choose the same relay as your Mac.")
-                    }
+                    Text(workerEnrollment == nil
+                         ? "On your Mac, find your relay in Settings → Companion."
+                         : "Share the request with your Mac. Approve it there, then scan or paste the approval here.")
+                        .foregroundStyle(Theme.textSecondary)
                 }
                 .disabled(isPairing)
+                if workerEnrollment == nil {
+                    Section {
+                        Menu {
+                            Button("Scan QR code", systemImage: "qrcode.viewfinder") { showingScanner = true }
+                            PasteButton(payloadType: String.self) { values in
+                                if let value = values.first { startPairing(value) }
+                            }
+                        } label: {
+                            Label("Use a pairing code", systemImage: "qrcode.viewfinder")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                        }
+                        .disabled(isPairing)
+                        .accessibilityIdentifier("pair-mac")
+                    } footer: {
+                        Text("Use this if MyTerm on your Mac shows a pairing code.")
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                }
                 if isPairing {
                     Section {
                         ProgressView(workerEnrollment == nil ? "Signing in…" : "Pairing with your Mac…")
                     }
                 }
             }
+            .tint(Theme.accent)
             .navigationTitle("Add Mac")
             .toolbar { Button("Cancel", role: .cancel) {
                 pairingTask?.cancel()

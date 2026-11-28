@@ -416,7 +416,7 @@ struct CompanionSettingsView: View {
     private var relayDetails: some View {
         VStack(alignment: .leading, spacing: 6) {
             statusLabel
-            Text(companion.usesWorkerRelay ? "Worker relay" : "Legacy Go relay")
+            Text(URL(string: companion.relayText).flatMap { try? RelayEndpoint($0) }?.hostedRelay?.title ?? "Self-hosted")
                 .font(Theme.Font.ui(12))
                 .foregroundStyle(Theme.textSecondary)
             Text(companion.relayText)

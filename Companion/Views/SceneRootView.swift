@@ -205,7 +205,7 @@ private struct HostSidebar: View {
                 ContentUnavailableView {
                     Label("No paired Macs", systemImage: "desktopcomputer")
                 } description: {
-                    Text("On your Mac, open Settings → Companion and choose Show pairing code.")
+                    Text("Open MyTerm Settings → Companion on your Mac to get started.")
                 } actions: {
                     Button("Add Mac") { scene.sheet = .addHost }
                         .buttonStyle(.borderedProminent)

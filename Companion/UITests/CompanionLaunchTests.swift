@@ -14,6 +14,9 @@ final class CompanionLaunchTests: XCTestCase {
         XCTAssertTrue(app.buttons["add-mac"].waitForExistence(timeout: 2))
         attachScreenshot(app, name: "host-picker")
         app.buttons["add-mac"].tap()
+        XCTAssertTrue(app.buttons["pairing-relay-picker"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Sign in with a passkey"].isEnabled)
+        attachScreenshot(app, name: "relay-enrollment")
         XCTAssertFalse(app.textFields["pairing-url"].exists)
         UIPasteboard.general.string = "invalid-pairing-url"
         app.buttons["pair-mac"].tap()
