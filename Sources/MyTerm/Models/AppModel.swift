@@ -260,7 +260,7 @@ final class AppModel {
         self.isApplicationActive = isApplicationActive
         self.makeCompanionHost = makeCompanionHost
         let isolatedBrowserProfile: String?
-        #if DEBUG || MYTERM_RUST_WORKSPACES
+        #if DEBUG || MYTERM_RUST_RELEASE_REHEARSAL
         isolatedBrowserProfile = terminalEngine is LocalRustWorkspaceTerminalEngine ? companionStorageNamespace : nil
         #else
         isolatedBrowserProfile = nil
