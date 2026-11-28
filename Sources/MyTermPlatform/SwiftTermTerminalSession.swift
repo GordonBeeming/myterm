@@ -403,6 +403,11 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         }
     }
 
+    public func waitForPendingRustWorkspaceStart() async {
+        guard rustWorkspace != nil else { return }
+        while let task = persistentStartTask { await task.value }
+    }
+
     private func startRustAttachment(selection: LocalRustWorkspaceBackend.Selection,
                                      launch: LocalRustTerminalConnection.WorkspaceLaunch?,
                                      startupFailure: TerminalSessionFailure?, runInitialCommand: Bool) {

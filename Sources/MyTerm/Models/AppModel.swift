@@ -2835,7 +2835,12 @@ final class AppModel {
         rustTerminalsStopping.formUnion(ids)
         defer { rustTerminalsStopping.subtract(ids) }
         // Preserve the pane and its saved selection if the server cannot stop its shell.
-        for id in ids { try await engine.stopExisting(paneID: id.rawValue) }
+        for id in ids {
+            if let session = terminalSessions[id] as? SwiftTermTerminalSession {
+                await session.waitForPendingRustWorkspaceStart()
+            }
+            try await engine.stopExisting(paneID: id.rawValue)
+        }
         #endif
     }
 

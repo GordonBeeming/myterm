@@ -186,6 +186,13 @@ fn resizing_cell_pixels_reprojects_kitty_children_without_grid_resize(
         ..GEOMETRY
     })?;
     assert_eq!(child_size(&terminal.checkpoint(2)?)?, (1, 4));
+    terminal.advance(b"\x1b[?1049h")?;
+    terminal.resize(Geometry {
+        columns: GEOMETRY.columns + 1,
+        rows: GEOMETRY.rows + 1,
+        ..GEOMETRY
+    })?;
+    assert_eq!(child_size(&terminal.checkpoint(3)?)?, (2, 2));
     Ok(())
 }
 

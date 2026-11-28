@@ -1573,28 +1573,21 @@
              screen,
              pen: CellAttributes::default(),
              cursor: CursorPosition::default(),
-@@ -970,29 +912,46 @@
+@@ -970,29 +912,39 @@
      /// We need to resize both the primary and alt screens, adjusting
      /// the cursor positions of both accordingly.
      pub fn resize(&mut self, size: TerminalSize) {
++        let image_geometry_changed = self.pixel_width / self.screen().physical_cols.max(1)
++            != size.pixel_width / size.cols.max(1)
++            || self.pixel_height / self.screen().physical_rows.max(1)
++                != size.pixel_height / size.rows.max(1);
 +        if size.cols == self.screen().physical_cols && size.rows == self.screen().physical_rows {
 +            // Native text resize is a no-op at the same dimensions, including pending wrap.
-+            let cols = size.cols.max(1);
-+            let rows = size.rows.max(1);
-+            let image_geometry_changed = self.pixel_width / cols != size.pixel_width / cols
-+                || self.pixel_height / rows != size.pixel_height / rows;
 +            self.pixel_width = size.pixel_width;
 +            self.pixel_height = size.pixel_height;
 +            self.dpi = size.dpi;
 +            if image_geometry_changed {
-+                for screen in [&mut self.screen.screen, &mut self.screen.alt_screen] {
-+                    screen.prototype_image_epoch = screen.prototype_image_epoch.wrapping_add(1);
-+                }
-+                let alternate = self.screen.alt_screen_is_active;
-+                self.screen.alt_screen_is_active = !alternate;
-+                self.prototype_update_kitty_records(false);
-+                self.screen.alt_screen_is_active = alternate;
-+                self.prototype_update_kitty_records(false);
++                self.reproject_kitty_on_both_screens();
 +            }
 +            return;
 +        }
@@ -1633,7 +1626,7 @@
          let (adjusted_cursor_main, adjusted_cursor_alt) = self.screen.resize(
              size,
              cursor_main,
-@@ -1007,30 +966,21 @@
+@@ -1007,30 +959,36 @@
          self.dpi = size.dpi;
          self.tabs.resize(size.cols);
  
@@ -1664,11 +1657,26 @@
 -            }
 -        }
 +        }
-+        self.prototype_update_kitty_records(false);
++        if image_geometry_changed {
++            self.reproject_kitty_on_both_screens();
++        } else {
++            self.prototype_update_kitty_records(false);
++        }
      }
  
++    fn reproject_kitty_on_both_screens(&mut self) {
++        for screen in [&mut self.screen.screen, &mut self.screen.alt_screen] {
++            screen.prototype_image_epoch = screen.prototype_image_epoch.wrapping_add(1);
++        }
++        let alternate = self.screen.alt_screen_is_active;
++        self.screen.alt_screen_is_active = !alternate;
++        self.prototype_update_kitty_records(false);
++        self.screen.alt_screen_is_active = alternate;
++        self.prototype_update_kitty_records(false);
++    }
++
      pub fn get_size(&self) -> TerminalSize {
-@@ -1167,7 +1117,7 @@
+@@ -1167,7 +1125,7 @@
  
      fn scroll_up(&mut self, num_rows: usize) {
          let seqno = self.seqno;
@@ -1677,7 +1685,7 @@
          let top_and_bottom_margins = self.top_and_bottom_margins.clone();
          let left_and_right_margins = self.left_and_right_margins.clone();
          let bidi_mode = self.get_bidi_mode();
-@@ -1178,12 +1128,13 @@
+@@ -1178,12 +1136,13 @@
              seqno,
              blank_attr,
              bidi_mode,
@@ -1693,7 +1701,7 @@
          let top_and_bottom_margins = self.top_and_bottom_margins.clone();
          let left_and_right_margins = self.left_and_right_margins.clone();
          let bidi_mode = self.get_bidi_mode();
-@@ -1194,7 +1145,8 @@
+@@ -1194,7 +1153,8 @@
              seqno,
              blank_attr,
              bidi_mode,
@@ -1703,7 +1711,7 @@
      }
  
      /// Defined by FinalTermSemanticPrompt; a fresh-line is a NOP if the
-@@ -1298,6 +1250,7 @@
+@@ -1298,6 +1258,7 @@
      }
  
      fn set_hyperlink(&mut self, link: Option<Hyperlink>) {
@@ -1711,7 +1719,7 @@
          self.pen.set_hyperlink(match link {
              Some(hyperlink) => Some(Arc::new(hyperlink)),
              None => None,
-@@ -1390,9 +1343,9 @@
+@@ -1390,9 +1351,9 @@
                  self.top_and_bottom_margins = 0..self.screen().physical_rows as i64;
                  self.left_and_right_margins = 0..self.screen().physical_cols;
                  self.left_and_right_margin_mode = false;
@@ -1723,7 +1731,7 @@
                  self.screen.saved_cursor().take();
                  self.kitty_remove_all_placements(true);
  
-@@ -1797,7 +1750,7 @@
+@@ -1797,7 +1758,7 @@
                  DecPrivateModeCode::EnableAlternateScreen,
              )) => {
                  if !self.screen.is_alt_screen_active() {
@@ -1732,7 +1740,7 @@
                      self.pen = CellAttributes::default();
                  }
              }
-@@ -1807,7 +1760,8 @@
+@@ -1807,7 +1768,8 @@
                  if self.screen.is_alt_screen_active() {
                      self.pen = CellAttributes::default();
                      self.erase_in_display(EraseInDisplay::EraseDisplay);
@@ -1742,7 +1750,7 @@
                  }
              }
  
-@@ -1815,7 +1769,7 @@
+@@ -1815,7 +1777,7 @@
                  DecPrivateModeCode::EnableAlternateScreen,
              )) => {
                  if self.screen.is_alt_screen_active() {
@@ -1751,7 +1759,7 @@
                      self.pen = CellAttributes::default();
                  }
              }
-@@ -2010,10 +1964,11 @@
+@@ -2010,10 +1972,11 @@
              Mode::SetDecPrivateMode(DecPrivateMode::Code(
                  DecPrivateModeCode::ClearAndEnableAlternateScreen,
              )) => {
@@ -1766,7 +1774,7 @@
                      self.pen = CellAttributes::default();
                      self.erase_in_display(EraseInDisplay::EraseDisplay);
                  }
-@@ -2022,7 +1977,8 @@
+@@ -2022,7 +1985,8 @@
                  DecPrivateModeCode::ClearAndEnableAlternateScreen,
              )) => {
                  if self.screen.is_alt_screen_active() {
@@ -1776,7 +1784,7 @@
                      self.dec_restore_cursor();
                  }
              }
-@@ -2225,6 +2181,7 @@
+@@ -2225,6 +2189,7 @@
      }
  
      fn erase_in_display(&mut self, erase: EraseInDisplay) {
@@ -1784,7 +1792,7 @@
          let seqno = self.seqno;
          let cy = self.cursor.y;
          let pen = self.pen.clone_sgr_only();
-@@ -2252,6 +2209,11 @@
+@@ -2252,6 +2217,11 @@
              for y in row_range {
                  screen.clear_line(y, col_range.clone(), &pen, seqno, bidi_mode);
                  let line_idx = screen.phys_row(y);
@@ -1796,7 +1804,7 @@
                  screen.line_mut(line_idx).set_single_width(seqno);
              }
          }
-@@ -2726,6 +2688,9 @@
+@@ -2726,6 +2696,9 @@
              dec_origin_mode: self.dec_origin_mode,
              g0_charset: self.g0_charset,
              g1_charset: self.g1_charset,
@@ -1806,7 +1814,7 @@
          };
          debug!(
              "saving cursor {:?} is_alt={}",
-@@ -2748,23 +2713,30 @@
+@@ -2748,23 +2721,30 @@
                  dec_origin_mode: false,
                  g0_charset: CharSet::Ascii,
                  g1_charset: CharSet::Ascii,
@@ -1839,7 +1847,7 @@
          self.shift_out = false;
          self.newline_mode = false;
      }
-@@ -2884,3 +2856,5 @@
+@@ -2884,3 +2864,5 @@
              .unwrap_or(self.keyboard_encoding)
      }
  }
