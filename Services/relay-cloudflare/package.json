@@ -1,0 +1,24 @@
+{
+  "name": "myterm-relay-cloudflare",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "check": "wrangler types && tsc --noEmit",
+    "build": "WRANGLER_SEND_METRICS=false wrangler deploy --dry-run --outdir dist",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "prepare-deployment": "node script/prepare-deployment.mjs",
+    "measure": "npm run build && MYTERM_RELAY_MEASURE=1 node --test --test-name-pattern=measurement test/relay.test.mjs",
+    "dev": "WRANGLER_SEND_METRICS=false wrangler dev --local",
+    "migrate:local": "WRANGLER_SEND_METRICS=false wrangler d1 migrations apply ACCOUNT_DB --local"
+  },
+  "dependencies": {
+    "@simplewebauthn/server": "14.1.0"
+  },
+  "devDependencies": {
+    "miniflare": "5.20261123.1-beta",
+    "typescript": "5.9.3",
+    "wrangler": "4.168.0"
+  }
+}

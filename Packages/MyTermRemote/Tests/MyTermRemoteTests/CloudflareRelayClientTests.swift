@@ -58,3 +58,47 @@ import Testing
         #expect(throws: RemoteError.invalidMessage) { try CloudflareRelayControl(text: invalid) }
     }
 }
+
+@Test func cloudflareRelayExchangesOnlyTheMatchingPasskeyCallback() async throws {
+    let relay = try RelayEndpoint(#require(URL(string: "https://relay.example.com")))
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [CloudflarePasskeySessionFixture.self]
+    let client = CloudflareRelayClient(relay: relay, session: URLSession(configuration: configuration))
+    let redirect = try #require(URL(string: "myterm-dev://companion-auth/callback"))
+    let attempt = try SignInAttempt(relay: relay, redirectURI: redirect)
+    let callback = try #require(URL(string: "\(redirect.absoluteString)?state=\(attempt.state)&code=one-use-code"))
+    let session = try await client.exchange(attempt: attempt, callback: callback)
+
+    #expect(session.accountId == CloudflarePasskeySessionFixture.accountID)
+    let mismatched = try #require(URL(string: "\(redirect.absoluteString)?state=other&code=one-use-code"))
+    await #expect(throws: RemoteError.invalidCallback) {
+        try await client.exchange(attempt: attempt, callback: mismatched)
+    }
+}
+
+private final class CloudflarePasskeySessionFixture: URLProtocol, @unchecked Sendable {
+    static let accountID = UUID()
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let url = request.url, url.host == "relay.example.com", url.path == "/v1/passkeys/session",
+              request.httpMethod == "POST", request.value(forHTTPHeaderField: "Authorization") == nil,
+              let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil,
+                                             headerFields: ["Content-Type": "application/json"]) else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+        let token = Data(repeating: 5, count: 32).base64URL
+        let expires = Int64((Date().timeIntervalSince1970 + 120) * 1_000)
+        let body = """
+        {"accountId":"\(Self.accountID.uuidString)","session":"\(token)","expiresAt":\(expires)}
+        """
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(body.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
