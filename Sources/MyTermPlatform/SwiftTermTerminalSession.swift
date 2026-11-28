@@ -76,7 +76,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
     }
 
     public var foregroundClaudeConversation: AgentSessionHandle? {
-        guard isRunning, activeForegroundProcessName == "claude" else { return nil }
+        guard isRunning, activeForegroundProcessName != nil else { return nil }
         return ClaudeProcessConfiguration.conversation(belowShell: attachedShellPID ?? terminal.process.shellPid)
     }
 
