@@ -18,6 +18,9 @@ public actor CloudflareCompanionTransport: CompanionRelayTransport {
     private let hostEndpointID: String?
     private var routes: [UUID: String] = [:]
     private var pending: [Delivery] = []
+    private var fragments = CloudflareRelayFragments()
+    private var outbound: [UUID: Task<Void, Error>] = [:]
+    private var pendingSends = 0
     private var draining = false
     private var reader: Task<Void, Never>?
     private var opening = false
@@ -40,6 +43,7 @@ public actor CloudflareCompanionTransport: CompanionRelayTransport {
 
     deinit {
         reader?.cancel()
+        for task in outbound.values { task.cancel() }
         continuation?.finish()
     }
 
@@ -78,14 +82,40 @@ public actor CloudflareCompanionTransport: CompanionRelayTransport {
 
     public func send(destinationConnectionID: UUID, payload: Data) async throws {
         guard let destination = routes[destinationConnectionID] else { throw RemoteError.wrongPeer }
-        try await transport.send(destination: destination, ciphertext: payload)
+        guard pendingSends < 32 else { throw RemoteError.messageTooLarge }
+        let attempt = generation
+        let previous = outbound[destinationConnectionID]
+        let transport = transport
+        let operation = Task {
+            if let previous { try await previous.value }
+            for fragment in try CloudflareRelayFragments.split(payload) {
+                try Task.checkCancellation()
+                try await transport.send(destination: destination, ciphertext: fragment)
+            }
+        }
+        outbound[destinationConnectionID] = operation
+        pendingSends += 1
+        defer { if attempt == generation { pendingSends -= 1 } }
+        try await operation.value
     }
 
     public func acknowledgeApplication(from connectionID: UUID) async throws {
+        try await releaseApplication(from: connectionID)
+    }
+
+    public func discardApplication(from connectionID: UUID) async throws {
+        try await releaseApplication(from: connectionID)
+    }
+
+    private func releaseApplication(from connectionID: UUID) async throws {
         guard let index = pending.firstIndex(where: { $0.connectionID == connectionID && !$0.accepted }) else {
             throw RemoteError.invalidMessage
         }
         pending[index].accepted = true
+        try await drainReceipts()
+    }
+
+    private func drainReceipts() async throws {
         guard !draining else { return }
         draining = true
         let attempt = generation
@@ -115,12 +145,12 @@ public actor CloudflareCompanionTransport: CompanionRelayTransport {
         return result
     }
 
-    private func handle(_ event: CloudflareRelayEvent, attempt: UUID) throws {
+    private func handle(_ event: CloudflareRelayEvent, attempt: UUID) async throws {
         guard generation == attempt else { return }
         switch event {
         case .ready:
             try emit(.ready(RelayReady(protocolVersion: 1, connectionID: ownConnectionID, hostID: hostID,
-                                      role: role, maxFrameBytes: Self.maximumPayloadBytes + RelayFrame.headerBytes,
+                                      role: role, maxFrameBytes: RelayFrame.maximumBytes,
                                       heartbeatSeconds: 30)))
             if let hostEndpointID {
                 let peer = try remember(hostEndpointID)
@@ -130,15 +160,26 @@ public actor CloudflareCompanionTransport: CompanionRelayTransport {
             let id = try Self.connectionID(for: endpointID)
             guard routes[id] == endpointID else { return }
             let peerRole: RelayRole = role == .host ? .client : .host
-            if peerRole == .client { routes.removeValue(forKey: id) }
+            fragments.discard(peer: id)
+            if peerRole == .client {
+                routes.removeValue(forKey: id)
+                outbound.removeValue(forKey: id)
+            }
             try emit(.peer(RelayPeer(connectionID: id, role: peerRole, transportOnline: false)))
         case .frame(let frame):
             if let hostEndpointID, frame.sender != hostEndpointID {
                 throw RemoteError.wrongPeer
             }
             let id = try remember(frame.sender)
-            pending.append(Delivery(connectionID: id, receipt: frame.receipt))
-            try emit(.application(sourceConnectionID: id, payload: frame.ciphertext))
+            let packet = fragments.receive(frame.ciphertext, from: id)
+            pending.append(Delivery(connectionID: id, receipt: frame.receipt, accepted: packet == nil))
+            if let packet {
+                try emit(.application(sourceConnectionID: id, payload: packet))
+            } else {
+                // Fragment receipts release the relay's bounded queue. Only a complete packet
+                // reaches the application, which still verifies and acknowledges it separately.
+                try await drainReceipts()
+            }
         }
     }
 
@@ -167,6 +208,10 @@ public actor CloudflareCompanionTransport: CompanionRelayTransport {
         draining = false
         routes.removeAll()
         pending.removeAll()
+        fragments = CloudflareRelayFragments()
+        for task in outbound.values { task.cancel() }
+        outbound.removeAll()
+        pendingSends = 0
         continuation?.finish(throwing: error)
         continuation = nil
         await transport.disconnect()

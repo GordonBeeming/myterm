@@ -341,6 +341,46 @@ async function exchangeEncrypted(source, recipient, sourceId, destinationId, key
   recipient.send(JSON.stringify({ ack: frame.subarray(32, 48).toString("base64url") }));
 }
 
+test("flow control defers a frame until the receiver can accept it without disconnecting", async () => {
+  const relay = fixture();
+  await migrate(relay);
+  const { accountId, session } = await registerUser(relay);
+  const client = new Endpoint(), server = new Endpoint(), anchor = newAnchor();
+  assert.equal((await action(relay, origin, accountId, anchor, client, "genesis", {
+    anchor, signingKey: client.publicKey,
+  }, session)).status, 201);
+  assert.equal((await action(relay, origin, accountId, anchor, client, "admit", {
+    targetEndpointId: server.id, signingKey: server.publicKey, kind: "server", relayEnabled: true,
+  })).status, 201);
+  const source = await connect(relay, origin, accountId, anchor, server, true);
+  const receiver = await connect(relay, origin, accountId, anchor, client, true);
+  const payload = Buffer.concat([Buffer.from(client.id, "hex"), randomBytes(64 * 1024)]);
+  const send = async () => {
+    const reply = nextWebSocketEvent(source, "message");
+    source.send(payload);
+    return JSON.parse((await reply).data);
+  };
+  const receipts = [];
+  for (let frame = 0; frame < 3; frame++) {
+    const incoming = nextWebSocketEvent(receiver, "message");
+    assert.deepEqual(await send(), { queued: client.id });
+    receipts.push(Buffer.from((await incoming).data).subarray(32, 48).toString("base64url"));
+  }
+  assert.deepEqual(await send(), { deferred: client.id });
+  const resumed = nextWebSocketEvent(receiver, "message");
+  receiver.send(JSON.stringify({ ack: receipts.shift() }));
+  let reply;
+  for (let poll = 0; poll < 10; poll++) {
+    reply = await send();
+    if (reply.queued) break;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.deepEqual(reply, { queued: client.id });
+  assert.deepEqual(Buffer.from((await resumed).data).subarray(48), payload.subarray(32));
+  source.close();
+  receiver.close();
+});
+
 test("measurement: local quiet sockets, signed renewal and active round-trips", {
   skip: process.env.MYTERM_RELAY_MEASURE !== "1",
   timeout: 150_000,

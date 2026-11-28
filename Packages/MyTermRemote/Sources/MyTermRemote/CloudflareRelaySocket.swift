@@ -23,6 +23,9 @@ public actor CloudflareRelaySocket {
     private var receipts: [String] = []
     private var writer: Task<Void, Error>?
     private var pendingWrites = 0
+    private var deliveryWriter: Task<Void, Error>?
+    private var pendingDeliveries = 0
+    private var delivery: (destination: String, reply: AsyncStream<Bool>.Continuation)?
 
     public init(client: CloudflareRelayClient, account: CloudflareRelayAccount, key: CloudflareRelayEndpointKey) {
         self.client = client
@@ -36,6 +39,7 @@ public actor CloudflareRelaySocket {
     deinit {
         reader?.cancel()
         writer?.cancel()
+        deliveryWriter?.cancel()
         socket?.cancel(with: .goingAway, reason: nil)
         continuation?.finish()
         session.invalidateAndCancel()
@@ -54,6 +58,7 @@ public actor CloudflareRelaySocket {
         let path = "v1/accounts/\(account.id.uuidString.lowercased())/socket"
         var components = URLComponents(url: client.relay.appending(path: path), resolvingAgainstBaseURL: false)
         components?.scheme = "wss"
+        components?.queryItems = [URLQueryItem(name: "flow", value: "1")]
         guard let url = components?.url, client.relay.hasSameSecureAuthority(as: url) else {
             throw RemoteError.invalidEndpoint
         }
@@ -76,8 +81,56 @@ public actor CloudflareRelaySocket {
 
     public func send(destination: String, ciphertext: Data) async throws {
         guard let socket, ready else { throw RemoteError.disconnected }
+        guard pendingDeliveries < 32 else { throw RemoteError.messageTooLarge }
         let payload = try CloudflareRelayFrame.outgoing(destination: destination, ciphertext: ciphertext)
-        try await write(.data(payload), to: socket)
+        let attempt = generation
+        let previous = deliveryWriter
+        let operation = Task { [weak self] in
+            if let previous { try await previous.value }
+            guard let self else { throw RemoteError.disconnected }
+            try await self.deliver(payload, destination: destination, socket: socket, attempt: attempt)
+        }
+        deliveryWriter = operation
+        pendingDeliveries += 1
+        defer { if attempt == generation { pendingDeliveries -= 1 } }
+        do { try await operation.value }
+        catch {
+            if attempt == generation { end(failure: error) }
+            throw error
+        }
+    }
+
+    /// A deferred frame never entered the receiver's queue. Only that frame can be retried.
+    private func deliver(_ payload: Data, destination: String, socket: URLSessionWebSocketTask,
+                         attempt: UUID) async throws {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while ContinuousClock.now < deadline {
+            try Task.checkCancellation()
+            guard attempt == generation else { throw RemoteError.disconnected }
+            let (replies, reply) = AsyncStream<Bool>.makeStream(bufferingPolicy: .bufferingOldest(1))
+            delivery = (destination, reply)
+            defer {
+                reply.finish()
+                if attempt == generation { delivery = nil }
+            }
+            try await write(.data(payload), to: socket)
+            let accepted = try await withThrowingTaskGroup(of: Bool.self) { group in
+                group.addTask {
+                    for await value in replies { return value }
+                    throw RemoteError.disconnected
+                }
+                group.addTask {
+                    try await ContinuousClock().sleep(until: deadline)
+                    throw RemoteError.timedOut
+                }
+                defer { group.cancelAll() }
+                guard let result = try await group.next() else { throw RemoteError.disconnected }
+                return result
+            }
+            if accepted { return }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        throw RemoteError.timedOut
     }
 
     /// Call only once the application has authenticated and accepted the encrypted frame.
@@ -138,8 +191,19 @@ public actor CloudflareRelaySocket {
             try yield(.ready)
         case .unavailable(let id):
             guard ready else { throw RemoteError.invalidMessage }
+            if delivery?.destination == id { try completeDelivery(to: id, accepted: true) }
             try yield(.unavailable(endpointID: id))
+        case .queued(let id):
+            try completeDelivery(to: id, accepted: true)
+        case .deferred(let id):
+            try completeDelivery(to: id, accepted: false)
         }
+    }
+
+    private func completeDelivery(to destination: String, accepted: Bool) throws {
+        guard ready, let delivery, delivery.destination == destination,
+              case .enqueued = delivery.reply.yield(accepted) else { throw RemoteError.invalidMessage }
+        self.delivery = nil
     }
 
     private func yield(_ event: CloudflareRelayEvent) throws {
@@ -171,6 +235,11 @@ public actor CloudflareRelaySocket {
         ready = false
         receipts.removeAll()
         pendingWrites = 0
+        delivery?.reply.finish()
+        delivery = nil
+        pendingDeliveries = 0
+        deliveryWriter?.cancel()
+        deliveryWriter = nil
         reader?.cancel()
         reader = nil
         writer?.cancel()
@@ -190,6 +259,8 @@ enum CloudflareRelayControl: Equatable {
     case liveness(nonce: String)
     case ready
     case unavailable(String)
+    case queued(String)
+    case deferred(String)
 
     init(text: String) throws {
         guard text.utf8.count <= 512,
@@ -206,6 +277,12 @@ enum CloudflareRelayControl: Equatable {
         } else if body.count == 1, let endpoint = body["unavailable"] as? String,
                   CloudflareRelayFrame.isDigest(endpoint) {
             self = .unavailable(endpoint)
+        } else if body.count == 1, let endpoint = body["queued"] as? String,
+                  CloudflareRelayFrame.isDigest(endpoint) {
+            self = .queued(endpoint)
+        } else if body.count == 1, let endpoint = body["deferred"] as? String,
+                  CloudflareRelayFrame.isDigest(endpoint) {
+            self = .deferred(endpoint)
         } else {
             throw RemoteError.invalidMessage
         }

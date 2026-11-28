@@ -45,11 +45,12 @@ export function nextWebSocketEvent(socket, event, timeout = 5000) {
   });
 }
 
-export async function connect(relay, origin, accountId, anchor, endpoint) {
+export async function connect(relay, origin, accountId, anchor, endpoint, flowControl = false) {
   const authorized = await action(relay, origin, accountId, anchor, endpoint, "connect");
   if (authorized.status !== 200) throw new Error("Socket ticket failed: " + authorized.status);
   const { ticket } = await authorized.json();
-  const response = await relay.dispatchFetch(origin + "/v1/accounts/" + accountId + "/socket", {
+  const socketPath = "/v1/accounts/" + accountId + "/socket" + (flowControl ? "?flow=1" : "");
+  const response = await relay.dispatchFetch(origin + socketPath, {
     headers: { Upgrade: "websocket", Authorization: "Bearer " + ticket },
   });
   if (response.status !== 101 || !response.webSocket) throw new Error("Socket upgrade failed: " + response.status);

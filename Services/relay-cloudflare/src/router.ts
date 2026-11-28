@@ -17,6 +17,7 @@ type Endpoint = { id: string; signing_key: string; kind: "client" | "server"; re
 type State = { anchor: string | null; suspended: number; last_contact: number | null; grace_deadline: number | null };
 type Socket = {
   endpointId: string;
+  flowControl: boolean;
   authenticatedAt: number | null;
   openedAt: number;
   probe: string;
@@ -308,7 +309,8 @@ export class AccountRouter extends DurableObject<Env> {
       const pair = new WebSocketPair();
       const server = pair[1];
       const connection: Socket = {
-        endpointId: reservation.endpoint_id, authenticatedAt: null, openedAt: now,
+        endpointId: reservation.endpoint_id, flowControl: new URL(request.url).searchParams.get("flow") === "1",
+        authenticatedAt: null, openedAt: now,
         probe: randomToken(), nextProbe: now + proofInterval, pending: [],
       };
       await this.schedule(now, state.grace_deadline, connection.nextProbe);
@@ -413,8 +415,11 @@ export class AccountRouter extends DurableObject<Env> {
     const bytes = message.byteLength + 16;
     const outstanding = receiver.pending.reduce((total, item) => total + item.size, 0);
     if (receiver.pending.length >= maxOutstandingFrames || bytes > maxOutstandingBytes - outstanding) {
-      deliverTo.close(4429, "relay receiver is too slow");
-      socket.send(JSON.stringify({ unavailable: destination }));
+      if (frame.flowControl) {
+        socket.send(JSON.stringify({ deferred: destination }));
+        return;
+      }
+      socket.close(4429, "relay receiver has no queue capacity");
       return;
     }
 
@@ -426,6 +431,7 @@ export class AccountRouter extends DurableObject<Env> {
     receiver.pending.push({ token: base64Url(receipt), size: bytes });
     deliverTo.serializeAttachment(receiver);
     deliverTo.send(outbound);
+    if (frame.flowControl) socket.send(JSON.stringify({ queued: destination }));
   }
 
   private closeSockets(sockets: WebSocket[], reason: string, code = 4403) {

@@ -117,7 +117,8 @@ public struct CloudflareRelayClient: Sendable {
         catch RemoteError.server(status: 404) { return false }
         guard capabilities.protocol == 1, capabilities.schema >= 2,
               capabilities.features.contains("approved-endpoint-relay-v1"),
-              capabilities.features.contains("native-passkey-pkce-v1") else {
+              capabilities.features.contains("native-passkey-pkce-v1"),
+              capabilities.features.contains("frame-flow-control-v1") else {
             throw RemoteError.unsupportedVersion
         }
         return true

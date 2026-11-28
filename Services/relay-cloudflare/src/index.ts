@@ -17,7 +17,8 @@ export default {
       return error(421, "relay_origin_mismatch");
     }
     if (request.method === "GET" && url.pathname === "/v1/capabilities") {
-      return json({ protocol: 1, schema: 2, revision: config.revision, channel: config.channel, features: ["passkeys", "native-passkey-pkce-v1", "approved-endpoint-relay-v1"] });
+      return json({ protocol: 1, schema: 2, revision: config.revision, channel: config.channel,
+        features: ["passkeys", "native-passkey-pkce-v1", "approved-endpoint-relay-v1", "frame-flow-control-v1"] });
     }
     try {
       if (request.method === "GET") {

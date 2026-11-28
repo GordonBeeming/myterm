@@ -53,9 +53,33 @@ import Testing
     #expect(try CloudflareRelayControl(text: #"{"ready":true}"#) == .ready)
     #expect(try CloudflareRelayControl(text: "{\"challenge\":\"liveness\",\"nonce\":\"\(nonce)\"}") == .liveness(nonce: nonce))
     #expect(try CloudflareRelayControl(text: "{\"unavailable\":\"\(endpoint)\"}") == .unavailable(endpoint))
+    #expect(try CloudflareRelayControl(text: "{\"queued\":\"\(endpoint)\"}") == .queued(endpoint))
+    #expect(try CloudflareRelayControl(text: "{\"deferred\":\"\(endpoint)\"}") == .deferred(endpoint))
     for invalid in [#"{"ready":1}"#, #"{"ready":true,"unavailable":"ambiguous"}"#,
                     #"{"challenge":"liveness","nonce":"short"}"#] {
         #expect(throws: RemoteError.invalidMessage) { try CloudflareRelayControl(text: invalid) }
+    }
+}
+
+@Test func cloudflareRelayReassemblesLargePacketsOnlyAfterAllFragmentsArrive() throws {
+    let maximum = CloudflareRelayFragments.maximumPacketBytes
+    let payload = Data([0x4d]) + Data(repeating: 0x5b, count: maximum - 1)
+    let fragments = try CloudflareRelayFragments.split(payload)
+    #expect(fragments.allSatisfy { $0.count <= CloudflareCompanionTransport.maximumPayloadBytes })
+    var reassembly = CloudflareRelayFragments()
+    let phone = UUID(), tablet = UUID(), thirdPeer = UUID()
+    let now = ContinuousClock.now
+    for frame in fragments.dropLast() {
+        #expect(reassembly.receive(frame, from: phone, now: now) == nil)
+        #expect(reassembly.receive(frame, from: tablet, now: now) == nil)
+        #expect(reassembly.receive(frame, from: thirdPeer, now: now) == nil)
+    }
+    let last = try #require(fragments.last)
+    #expect(reassembly.receive(last, from: thirdPeer, now: now) == nil)
+    #expect(reassembly.receive(last, from: phone, now: now) == payload)
+    #expect(reassembly.receive(last, from: tablet, now: now.advanced(by: .seconds(6))) == nil)
+    #expect(throws: RemoteError.messageTooLarge) {
+        try CloudflareRelayFragments.split(Data(count: maximum + 1))
     }
 }
 

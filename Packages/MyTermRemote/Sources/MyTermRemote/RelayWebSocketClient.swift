@@ -21,11 +21,13 @@ public protocol CompanionRelayTransport: Actor {
     func reauthenticate(accessToken: String) async throws
     func ping() async throws
     func acknowledgeApplication(from connectionID: UUID) async throws
+    func discardApplication(from connectionID: UUID) async throws
     func disconnect() async
 }
 
 extension CompanionRelayTransport {
     public func acknowledgeApplication(from connectionID: UUID) async throws {}
+    public func discardApplication(from connectionID: UUID) async throws {}
 }
 
 public actor RelayWebSocketClient: CompanionRelayTransport {
