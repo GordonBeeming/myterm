@@ -44,7 +44,9 @@ concurrency:
 
 jobs:
   remote-core:
-    runs-on: macos-15
+    runs-on: xcode-27
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -59,7 +61,9 @@ jobs:
         run: bash script/test_companion_testflight_helper.sh
 
   relay-browser:
-    runs-on: macos-15
+    runs-on: xcode-27
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -112,7 +116,7 @@ jobs:
     runs-on: xcode-27
     timeout-minutes: 60
     env:
-      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
     strategy:
       fail-fast: false
       matrix:
@@ -123,7 +127,7 @@ jobs:
           ref: ${{ inputs.source_sha || github.sha }}
       - name: Verify actual SDK
         run: |
-          bash script/verify_companion_toolchain.sh 27.1
+          bash script/verify_companion_toolchain.sh 27.2
           xcrun simctl list --json runtimes
           python3 script/test_companion_simulator_selection.py
       - name: Install the matching Metal toolchain
@@ -146,7 +150,7 @@ jobs:
     needs: [remote-core, relay-browser, services, ios]
     runs-on: xcode-27
     env:
-      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
     timeout-minutes: 90
     environment: beta
     steps:
@@ -154,7 +158,7 @@ jobs:
         with:
           ref: ${{ inputs.source_sha || github.sha }}
       - name: Verify actual SDK
-        run: bash script/verify_companion_toolchain.sh 27.1
+        run: bash script/verify_companion_toolchain.sh 27.2
       - name: Install the matching Metal toolchain
         run: xcodebuild -downloadComponent MetalToolchain
       - name: Install XcodeGen

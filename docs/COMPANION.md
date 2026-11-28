@@ -2,11 +2,11 @@
 
 The companion connects to running myterm apps through an HTTPS relay you operate. Each Mac owns its terminal processes and workspace state. Closing myterm, sleeping the Mac, or losing its connection makes that host unavailable. The relay does not run replacement shells.
 
-The app supports iOS and iPadOS 26 or later. Builds use the iOS 27.1 SDK so iPhone Duo can fill the inner and outer displays, including the system's vertical navigation bars. The main Mac and workspace navigation uses a native split view, which collapses on the outer display and keeps its sidebar on the regular-width inner display. Custom terminal splits avoid active fold regions while preserving the Mac's saved proportions when the device is flat.
+The app supports iOS and iPadOS 26 or later. Builds use the iOS 27.1 SDK or newer so iPhone Duo can fill the inner and outer displays, including the system's vertical navigation bars. The main Mac and workspace navigation uses a native split view, which collapses on the outer display and keeps its sidebar on the regular-width inner display. Custom terminal splits avoid active fold regions while preserving the Mac's saved proportions when the device is flat.
 
 ## Build and test
 
-Use Xcode 27.1 or newer with its matching Metal component. CI pins Xcode 27.1 on GitHub’s [xcode-27 runner](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md), which includes the iPhone Duo simulator and iOS 27.1 runtime. Check the selected installation with:
+Use Xcode 27.1 or newer with its matching Metal component. CI pins Xcode 27.2 on GitHub’s macOS 27 runner, which includes the iPhone Duo simulator and iOS 27.2 runtime. Check the selected installation with: [GitHub runner inventory](https://github.com/actions/runner-images/blob/xcode-27-arm64/20261123.0387/images/macos/xcode-27-arm64-Readme.md)
 
 ```sh
 bash script/verify_companion_toolchain.sh 27.1
@@ -41,7 +41,7 @@ COMPANION_DEVICE_FAMILY=iPhoneDuo bash script/test_companion.sh
 
 The native interoperability tests also require Go. They compile a temporary relay fixture before starting its readiness check; the service modules declare the minimum Go version.
 
-The simulator script chooses an installed runtime matching the selected Xcode SDK’s major version, creates a dedicated device, saves an `.xcresult` under `dist`, and deletes that device afterward. The Duo suite selects the iOS 27.1 runtime and iPhone Duo device type explicitly. `COMPANION_SIMULATOR_UDID` selects an existing device, which the script never deletes. Move previous result bundles before rerunning. Set `COMPANION_KEEP_SIMULATOR=1` when an automatically created device needs further inspection.
+The simulator script chooses an installed runtime matching the selected Xcode SDK’s major version, creates a dedicated device, saves an `.xcresult` under `dist`, and deletes that device afterward. The Duo suite selects the iPhone Duo device type and an eligible iOS 27 runtime. `COMPANION_SIMULATOR_UDID` selects an existing device, which the script never deletes. Move previous result bundles before rerunning. Set `COMPANION_KEEP_SIMULATOR=1` when an automatically created device needs further inspection.
 
 ### iPhone Duo screenshots
 

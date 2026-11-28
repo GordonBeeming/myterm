@@ -33,10 +33,9 @@ on:
 
 # Every job selects the same Xcode explicitly. The image default moves on GitHub's schedule,
 # so without a pin the compiler that builds and signs a release could change without a commit.
-# Keep this in step with the companion jobs in companion.yml. The xcode-27 image is still a
-# public preview, so a runner shortage or an image change shows up here first.
+# Keep this in step with the Apple jobs in companion.yml.
 env:
-  DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
+  DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
 
 jobs:
   build-and-test:
