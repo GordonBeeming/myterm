@@ -59,6 +59,41 @@ final class PersistentTerminalRuntimeTests: XCTestCase {
     }
 
     @MainActor
+    func testRustStartupWaitsForLegacyOwnershipAfterSocketIsGone() async throws {
+        let namespace = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let identifier = UUID()
+        let socket = try PersistentTerminalConnection.socketPath(identifier: identifier, namespace: namespace)
+        defer {
+            try? FileManager.default.removeItem(at: URL(fileURLWithPath: socket).deletingLastPathComponent())
+            try? FileManager.default.removeItem(at: namespace)
+        }
+        var ownership = try SessionHostSocket.acquireOwnership(path: socket + ".lock")
+        defer { if ownership >= 0 { close(ownership) } }
+        let engine = LocalRustWorkspaceTerminalEngine(namespace: namespace) { _ in
+            let probe = try SessionHostSocket.acquireOwnership(path: socket + ".lock")
+            close(probe)
+            throw LocalRustTerminalError.server("Test reached Rust after legacy exit")
+        }
+        let session = try XCTUnwrap(try engine.makeSession(configuration: .init(
+            workingDirectory: FileManager.default.temporaryDirectory,
+            continuityIdentifier: identifier, continuityDirectory: namespace
+        )) as? SwiftTermTerminalSession)
+        let reachedRust = expectation(description: "Rust starts after ownership is released")
+        session.onEvent = { event in
+            if case .failed(let failure) = event, failure.localizedDescription == "Test reached Rust after legacy exit" {
+                reachedRust.fulfill()
+            }
+        }
+        try session.start()
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertTrue(session.isStarting)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: namespace.appendingPathComponent(identifier.uuidString + ".json").path))
+        close(ownership)
+        ownership = -1
+        await fulfillment(of: [reachedRust], timeout: 6)
+    }
+
+    @MainActor
     func testRustReattachDoesNotStartANewShellWhenSelectionDisappears() throws {
         let namespace = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: namespace, withIntermediateDirectories: true)

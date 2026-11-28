@@ -394,7 +394,8 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         }
         let socket = PersistentTerminalConnection.socketDirectory(namespace: directory)
             .appendingPathComponent(identifier.uuidString + ".sock")
-        guard FileManager.default.fileExists(atPath: socket.path) else {
+        guard FileManager.default.fileExists(atPath: socket.path)
+                || FileManager.default.fileExists(atPath: socket.path + ".lock") else {
             try startRustWorkspace(startup)
             return
         }
@@ -402,7 +403,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         terminal.setConnectionPending(true)
         persistentStartTask = Task { @MainActor in
             let result = await PersistentTerminalConnection.stopExistingAsync(identifier: identifier, namespace: directory,
-                environment: configuration.environment, helperURL: configuration.continuityHelperURL)
+                environment: configuration.environment, helperURL: configuration.continuityHelperURL, waitsForExit: true)
             persistentStartTask = nil
             terminal.setConnectionPending(false)
             if pendingStartDisposition == .stop, let rustWorkspace {

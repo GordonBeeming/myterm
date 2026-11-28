@@ -123,10 +123,15 @@ final class PersistentTerminalConnection {
         }
     }
 
-    nonisolated static func stopExistingAsync(identifier: UUID, namespace: URL, environment: [String: String] = [:], helperURL: URL? = nil) async -> Result<Void, Error> {
+    nonisolated static func stopExistingAsync(identifier: UUID, namespace: URL, environment: [String: String] = [:],
+                                              helperURL: URL? = nil, waitsForExit: Bool = false) async -> Result<Void, Error> {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
-                continuation.resume(returning: Result { try stopExisting(identifier: identifier, namespace: namespace, environment: environment, helperURL: helperURL) })
+                continuation.resume(returning: Result {
+                    let path = try socketPath(identifier: identifier, namespace: namespace)
+                    try requestStop(path: path, environment: environment, helperURL: helperURL)
+                    if waitsForExit { try waitForOwnershipRelease(path + ".lock") }
+                })
             }
         }
     }
@@ -145,6 +150,28 @@ final class PersistentTerminalConnection {
 
     nonisolated static func stopExisting(identifier: UUID, namespace: URL, environment: [String: String] = [:], helperURL: URL? = nil) throws {
         let path = try socketPath(identifier: identifier, namespace: namespace)
+        try requestStop(path: path, environment: environment, helperURL: helperURL)
+    }
+
+    nonisolated private static func waitForOwnershipRelease(_ lockPath: String) throws {
+        // The helper can unlink its socket while it still owns the process group.
+        guard FileManager.default.fileExists(atPath: lockPath) else { return }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while true {
+            do {
+                let lock = try SessionHostSocket.acquireOwnership(path: lockPath)
+                close(lock)
+                return
+            } catch SessionHostError.system("lock existing terminal host", let code) where code == EWOULDBLOCK {
+                guard ContinuousClock.now < deadline else {
+                    throw SessionHostError.system("wait for terminal host to exit", ETIMEDOUT)
+                }
+                usleep(20_000)
+            }
+        }
+    }
+
+    nonisolated private static func requestStop(path: String, environment: [String: String], helperURL: URL?) throws {
         let deadline = Date().addingTimeInterval(1)
         var authentication: SessionHostServerAuthentication?
         while true {

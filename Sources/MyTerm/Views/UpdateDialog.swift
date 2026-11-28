@@ -80,7 +80,7 @@ struct UpdateDialog: View {
         }
         .frame(minWidth: 568, minHeight: 300)
         .onChange(of: updates.status) { _, status in
-            guard installation != .running, !updates.canRestartAfterUpdate else { return }
+            guard installation != .running, !updates.canRestartAfterUpdate, !updates.isPreparingRestart else { return }
             switch status {
             case .available(let latest): release = latest
             case .upToDate: release = nil
