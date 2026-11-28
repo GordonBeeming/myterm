@@ -27,7 +27,24 @@ fn main() -> ExitCode {
 
 fn run() -> io::Result<()> {
     let mut args = std::env::args_os().skip(1);
-    let path = match (args.next(), args.next()) {
+    let first = args.next();
+    let second = args.next();
+    if first.as_deref() == Some(std::ffi::OsStr::new("enrollment")) {
+        let operation = second.and_then(|operation| operation.into_string().ok());
+        let directory = args.next();
+        if let (Some(operation), Some(directory), None) = (operation, directory, args.next()) {
+            return myterm_local_terminal::enrollment::command::run(
+                &operation,
+                &PathBuf::from(directory),
+            )
+            .map_err(io::Error::other);
+        }
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Usage: myterm-local-terminal enrollment <operation> <state-directory>",
+        ));
+    }
+    let path = match (first, second) {
         (Some(path), None) => PathBuf::from(path),
         _ => {
             return Err(io::Error::new(
