@@ -8,6 +8,7 @@ trap 'rm -r "$scratch"' EXIT
 export MYTERM_PTY_CHECKPOINT_FIXTURE="$scratch/pty-checkpoint.json"
 export MYTERM_PTY_OUTPUT_FIXTURE="$scratch/pty-continuation.bin"
 export MYTERM_DENSE_CHECKPOINT_FIXTURE="$scratch/dense-terminal-checkpoint.json"
+export MYTERM_HYPERLINK_CHECKPOINT_FIXTURE="$scratch/hyperlink-checkpoint.json"
 export MYTERM_PENDING_GRAPHICS_CHECKPOINT_FIXTURE="$scratch/pending-graphics-checkpoint.json"
 export MYTERM_RASTER_CHECKPOINT_FIXTURE="$scratch/raster-checkpoint.json"
 export MYTERM_BOUNDED_CHECKPOINT_FIXTURE="$scratch/bounded-history-checkpoint.json"

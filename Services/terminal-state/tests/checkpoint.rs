@@ -53,6 +53,24 @@ fn fresh_client_checkpoint_contains_both_buffers() -> Result<(), Box<dyn std::er
 }
 
 #[test]
+fn checkpoint_preserves_osc8_hyperlink_parameters() -> Result<(), Box<dyn std::error::Error>> {
+    let mut terminal = TerminalState::new(GEOMETRY)?;
+    terminal.advance(b"\x1b]8;id=tool-1:source=agent;https://example.test/a;b\x1b\\link\x1b]8;;\x1b\\")?;
+
+    let checkpoint = terminal.checkpoint(1)?;
+    let snapshot: Value = from_slice(&checkpoint)?;
+    assert!(snapshot["state"]["attributes"]
+        .as_array()
+        .ok_or("missing checkpoint attributes")?
+        .iter()
+        .any(|attribute| attribute["link"] == "id=tool-1:source=agent;https://example.test/a;b"));
+    if let Some(path) = std::env::var_os("MYTERM_HYPERLINK_CHECKPOINT_FIXTURE") {
+        std::fs::write(path, checkpoint)?;
+    }
+    Ok(())
+}
+
+#[test]
 fn unrepresented_palette_rejects_export_without_stopping_terminal(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut terminal = TerminalState::new(GEOMETRY)?;
