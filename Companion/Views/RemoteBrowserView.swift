@@ -310,8 +310,10 @@ struct RemoteBrowserView: View {
         VStack(spacing: 0) {
             if mode == "native" {
                 HStack {
-                    Button("Back", systemImage: "chevron.left") { native.webView?.goBack() }.disabled(!native.back)
-                    Button("Forward", systemImage: "chevron.right") { native.webView?.goForward() }.disabled(!native.forward)
+                    Button("Back", systemImage: "chevron.left") { native.webView?.goBack() }
+                        .labelStyle(.iconOnly).disabled(!native.back)
+                    Button("Forward", systemImage: "chevron.right") { native.webView?.goForward() }
+                        .labelStyle(.iconOnly).disabled(!native.forward)
                     addressField($native.address) { native.submit() }
                     Button(native.loading ? "Stop" : "Reload", systemImage: native.loading ? "xmark" : "arrow.clockwise") {
                         if native.loading { native.webView?.stopLoading() }
@@ -321,6 +323,7 @@ struct RemoteBrowserView: View {
                         else if native.webView == nil { retryID = UUID() }
                         else { native.webView?.reload() }
                     }
+                    .labelStyle(.iconOnly)
                     tabControls
                 }.padding(8)
                 if native.loading { ProgressView().progressViewStyle(.linear) }
@@ -495,6 +498,7 @@ struct RemoteBrowserView: View {
             Button("Capture browser context", systemImage: "camera.viewfinder") {
                 Task { await captureContext() }
             }
+            .labelStyle(.iconOnly)
             .disabled(isCapturingContext)
             .accessibilityIdentifier("capture-browser-context")
             accessory()
@@ -508,10 +512,13 @@ struct RemoteBrowserView: View {
     private var renderedBrowser: some View {
         VStack(spacing: 0) {
             HStack {
-                Button("Back", systemImage: "chevron.left") { send(.back) }.disabled(rendered?.canGoBack != true)
-                Button("Forward", systemImage: "chevron.right") { send(.forward) }.disabled(rendered?.canGoForward != true)
+                Button("Back", systemImage: "chevron.left") { send(.back) }
+                    .labelStyle(.iconOnly).disabled(rendered?.canGoBack != true)
+                Button("Forward", systemImage: "chevron.right") { send(.forward) }
+                    .labelStyle(.iconOnly).disabled(rendered?.canGoForward != true)
                 addressField($renderAddress) { send(.navigate, url: NativeRemoteBrowser.addressURL(renderAddress)?.absoluteString ?? renderAddress) }
                 Button("Reload", systemImage: "arrow.clockwise") { send(.reload) }
+                    .labelStyle(.iconOnly)
                 tabControls
             }.padding(8)
             if busy || rendered?.isLoading == true { ProgressView().progressViewStyle(.linear) }

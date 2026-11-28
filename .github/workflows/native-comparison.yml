@@ -35,7 +35,7 @@ jobs:
           toolchain: '1.89.0'
       - name: Select the repository Xcode toolchain
         if: runner.os == 'macOS'
-        run: echo 'DEVELOPER_DIR=/Applications/Xcode_27.1.app/Contents/Developer' >> "$GITHUB_ENV"
+        run: echo 'DEVELOPER_DIR=/Applications/Xcode_27.2.app/Contents/Developer' >> "$GITHUB_ENV"
       - name: Run native adapters and terminal traces
         shell: bash
         run: |

@@ -35,6 +35,7 @@ struct MyTermUpdateAgent {
                 guard CommandLine.arguments[3] == ApplicationUpdate.bundleIdentifier else {
                     throw ApplicationUpdateError.invalid("Only the myterm configuration domain can be checked.")
                 }
+                try ApplicationUpdate.verifyRustWorkspaceServer(besideAgent: URL(fileURLWithPath: CommandLine.arguments[0]))
                 let config = ChannelConfigurationStore(directory: directory, preferencesDomain: CommandLine.arguments[3])
                 try config.checkIncomingConfiguration(mode: CommandLine.arguments[4])
                 print("Configuration is compatible with this app's decoder.")
@@ -44,7 +45,7 @@ struct MyTermUpdateAgent {
                let channel = UpdateCheck.Channel(rawValue: CommandLine.arguments[4]) {
                 try ApplicationUpdate.validate(URL(fileURLWithPath: CommandLine.arguments[2]),
                     version: CommandLine.arguments[3], channel: channel)
-                print("Verified application signature, notarization, version, channel, and update helpers.")
+                print("Verified application signature, notarization, version, channel, and bundled executables.")
                 return
             }
             if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--watch-trial" {

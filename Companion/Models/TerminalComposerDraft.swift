@@ -131,9 +131,9 @@ enum TerminalInsertionOutcome: String, Codable {
     var message: String {
         switch self {
         case .sending: "Sending to the terminal…"
-        case .transportSent: "Sent over the connection. Check the terminal before sending again. Your draft was kept; execution is not acknowledged."
-        case .unconfirmed: "Delivery is uncertain. The text may already be in the terminal. Check there before choosing Insert again. Your draft was kept."
-        case .notInserted: "Draft was not inserted. Your draft was kept."
+        case .transportSent: "Check the terminal before sending again."
+        case .unconfirmed: "Delivery is uncertain. Check the terminal before retrying."
+        case .notInserted: "The draft wasn't inserted."
         }
     }
 }

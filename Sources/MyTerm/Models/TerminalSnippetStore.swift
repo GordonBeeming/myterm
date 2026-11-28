@@ -6,7 +6,15 @@ import Observation
 @MainActor
 @Observable
 final class DesktopTerminalSnippetStore {
-    static let shared = DesktopTerminalSnippetStore()
+    static let shared: DesktopTerminalSnippetStore = {
+        #if (DEBUG && MYTERM_RUST_WORKSPACES) || MYTERM_RUST_RELEASE_REHEARSAL
+        if let suite = ProcessInfo.processInfo.environment["MYTERM_USER_DEFAULTS_SUITE"],
+           let defaults = UserDefaults(suiteName: suite) {
+            return DesktopTerminalSnippetStore(defaults: defaults)
+        }
+        #endif
+        return DesktopTerminalSnippetStore()
+    }()
     private(set) var snippets: [TerminalSnippet]
     @ObservationIgnored private let defaults: UserDefaults
     private static let storageKey = "terminalSnippets.v1"

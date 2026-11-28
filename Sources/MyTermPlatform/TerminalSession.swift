@@ -259,6 +259,8 @@ public enum TerminalSessionEvent: Equatable, Sendable {
     case initialCommandSentAfterDelay
     case runtimeNotice(String)
     case idleShellStarted
+    /// A server-owned terminal is attached and available for companion observation.
+    case transportAttached
     /// The process in front of the pane's shell changed. `nil` means the shell has the pane
     /// back, which is the one thing an agent killed without its own hook cannot report.
     case foregroundProcessChanged(String?)

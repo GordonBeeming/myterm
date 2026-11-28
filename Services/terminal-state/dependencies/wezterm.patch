@@ -1,0 +1,3620 @@
+--- a/term/Cargo.toml
++++ b/term/Cargo.toml
+@@ -45,3 +45,9 @@
+ [dependencies.termwiz]
+ workspace = true
+ features = ["use_image"]
++
++[dependencies.serde_json]
++version = "1"
++
++[dependencies.base64]
++workspace = true
+--- a/term/src/screen.rs
++++ b/term/src/screen.rs
+@@ -45,6 +45,11 @@
+     pub dpi: u32,
+ 
+     pub(crate) saved_cursor: Option<SavedCursor>,
++    pub(crate) prototype_image_epoch: u64,
++    pub(crate) prototype_margins: [usize;4],
++    pub(crate) prototype_unsaved_y: usize,
++    pub(crate) prototype_first_wrapped: bool,
++    pub(crate) prototype_cursor: CursorPosition,
+ }
+ 
+ fn scrollback_size(config: &Arc<dyn TerminalConfiguration>, allow_scrollback: bool) -> usize {
+@@ -85,13 +90,19 @@
+             physical_cols,
+             stable_row_index_offset: 0,
+             dpi: size.dpi,
+-            keyboard_stack: vec![],
++            keyboard_stack: vec![KeyboardEncoding::Xterm],
+             saved_cursor: None,
++            prototype_image_epoch: 0,
++            prototype_margins: [0,size.rows,0,size.cols],
++            prototype_unsaved_y: 0,
++            prototype_first_wrapped: false,
++            prototype_cursor: CursorPosition::default(),
+         }
+     }
+ 
+     pub fn full_reset(&mut self) {
+-        self.keyboard_stack.clear();
++        self.prototype_first_wrapped = false;
++        self.keyboard_stack = vec![KeyboardEncoding::Xterm];
+     }
+ 
+     fn scrollback_size(&self) -> usize {
+@@ -110,9 +121,34 @@
+         let mut logical_line: Option<Line> = None;
+         let mut logical_cursor_x: Option<usize> = None;
+         let mut adjusted_cursor = (cursor_x, cursor_y);
++        let mut logical_rows = 0;
++
++        // SwiftTerm leaves the cursor's logical line for the application to redraw.
++        // Preserve its physical rows instead of reflowing them with surrounding output.
++        let mut cursor_start = cursor_y;
++        while cursor_start > 0 && self.lines[cursor_start - 1].last_cell_was_wrapped() {
++            cursor_start -= 1;
++        }
++        let mut cursor_end = cursor_y;
++        while cursor_end + 1 < self.lines.len() && self.lines[cursor_end].last_cell_was_wrapped() {
++            cursor_end += 1;
++        }
+ 
+         for (phys_idx, mut line) in self.lines.drain(..).enumerate() {
++            if (cursor_start..=cursor_end).contains(&phys_idx) {
++                if phys_idx == cursor_y {
++                    adjusted_cursor = (cursor_x.min(physical_cols - 1), rewrapped.len());
++                }
++                if physical_cols < self.physical_cols && line.len() > physical_cols {
++                    let wrapped = line.last_cell_was_wrapped();
++                    line.resize(physical_cols, seqno);
++                    line.set_last_cell_was_wrapped(wrapped, seqno);
++                }
++                rewrapped.push_back(line);
++                continue;
++            }
+             line.update_last_change_seqno(seqno);
++            logical_rows += 1;
+             let was_wrapped = line.last_cell_was_wrapped();
+ 
+             if was_wrapped {
+@@ -127,6 +163,9 @@
+                     line
+                 }
+                 Some(mut prior) => {
++                    // Wrapped predecessors occupy the old viewport width even
++                    // when a cursor-line grow left their tail unallocated.
++                    prior.resize((logical_rows - 1) * self.physical_cols, seqno);
+                     if phys_idx == cursor_y {
+                         logical_cursor_x = Some(cursor_x + prior.len());
+                     }
+@@ -150,7 +189,7 @@
+                 // line and it won't resize with the line correctly.
+                 // Put it back on the prior line. The cursor is now
+                 // technically outside of the viewport width.
+-                if adjusted_cursor.0 == 0 && adjusted_cursor.1 > 0 {
++                if x > 0 && adjusted_cursor.0 == 0 && adjusted_cursor.1 > 0 {
+                     if physical_cols < self.physical_cols {
+                         // getting smaller: preserve its original position
+                         // on the prior line
+@@ -172,8 +211,10 @@
+                     rewrapped.push_back(line);
+                 }
+             }
++            logical_rows = 0;
+         }
+         self.lines = rewrapped;
++
+ 
+         // If we resized narrower and generated additional lines,
+         // we may need to scroll the lines to make room.  However,
+@@ -198,7 +239,24 @@
+         seqno: SequenceNo,
+         is_conpty: bool,
+     ) -> CursorPosition {
++        self.prototype_image_epoch = self.prototype_image_epoch.wrapping_add(1);
++        let old_default_saved_y = self.prototype_unsaved_y;
++        let old_saved_y = self.saved_cursor.as_ref().map(|s| s.position.y);
++        let old_history = self.lines.len().saturating_sub(self.physical_rows);
++        let old_rows = self.physical_rows;
+         let physical_rows = size.rows.max(1);
++        let pulled = physical_rows.saturating_sub(old_rows).min(old_history);
++        if self.allow_scrollback {
++            self.prototype_unsaved_y = (self.prototype_unsaved_y + pulled).min(physical_rows - 1);
++        }
++        if let Some(saved) = self.saved_cursor.as_mut() {
++            if self.allow_scrollback {
++                saved.position.y = (saved.position.y + pulled as i64).min(physical_rows as i64 - 1);
++            }
++            saved.position.x = (saved.position.x + usize::from(saved.wrap_next)).min(size.cols.max(1) - 1);
++            saved.wrap_next = false;
++        }
++        self.prototype_margins = [0,physical_rows,0,size.cols];
+         let physical_cols = size.cols.max(1);
+ 
+         if physical_rows == self.physical_rows
+@@ -217,8 +275,10 @@
+         // this avoids growing the scrollback size when rapidly switching between normal and
+         // maximized states.
+         let cursor_phys = self.phys_row(cursor.y);
++        let clamp_blank_cursor = size.rows == self.physical_rows && self.allow_scrollback && self.lines.get(cursor_phys).map(Line::is_whitespace).unwrap_or(false);
+         for _ in cursor_phys + 1..self.lines.len() {
+-            if self.lines.back().map(Line::is_whitespace).unwrap_or(false) {
++            if (old_history == 0 || physical_cols == self.physical_cols)
++                && self.lines.back().map(Line::is_whitespace).unwrap_or(false) {
+                 self.lines.pop_back();
+             }
+         }
+@@ -235,13 +295,8 @@
+                 self.rewrap_lines(physical_cols, physical_rows, cursor.x, cursor_phys, seqno)
+             } else {
+                 for line in &mut self.lines {
+-                    if physical_cols < self.physical_cols {
+-                        // Do a simple prune of the lines instead
+-                        line.resize(physical_cols, seqno);
+-                    } else {
+-                        // otherwise: invalidate them
+-                        line.update_last_change_seqno(seqno);
+-                    }
++                    // Keep columns hidden by a narrower viewport for later growth.
++                    line.update_last_change_seqno(seqno);
+                 }
+                 (cursor.x, cursor_phys)
+             }
+@@ -315,10 +370,34 @@
+                 - (self.lines.len() as VisibleRowIndex - physical_rows as VisibleRowIndex);
+         }
+ 
++        if self.allow_scrollback {
++            // Terminal.resizeBuffers keeps the saved row's distance from the live cursor.
++            let delta = new_cursor_y - cursor.y;
++            self.prototype_unsaved_y = (old_default_saved_y as i64 + delta).clamp(0, physical_rows as i64 - 1) as usize;
++            if let (Some(saved), Some(old_y)) = (self.saved_cursor.as_mut(), old_saved_y) {
++                saved.position.y = (old_y + delta).clamp(0, physical_rows as i64 - 1);
++            }
++        }
++        // Shrinking a full viewport must retain only the configured history.
++        let removed = self.lines.len().saturating_sub(capacity);
++        if !self.allow_scrollback {
++            // Alternate saved rows follow top trimming, without normal-screen
++            // cursor-relative adjustment or viewport clamping.
++            self.prototype_unsaved_y = old_default_saved_y.saturating_sub(removed);
++            if let (Some(saved), Some(old_y)) = (self.saved_cursor.as_mut(), old_saved_y) {
++                saved.position.y = (old_y - removed as i64).max(0);
++            }
++        }
++        for _ in 0..removed {
++            if let Some(line) = self.lines.pop_front() {
++                self.prototype_first_wrapped = line.last_cell_was_wrapped();
++            }
++        }
++        self.stable_row_index_offset += removed;
+         self.physical_rows = physical_rows;
+         self.physical_cols = physical_cols;
+         CursorPosition {
+-            x: cursor_x,
++            x: if clamp_blank_cursor { cursor.x.min(physical_cols - 1) } else { cursor_x.min(physical_cols - 1) },
+             y: new_cursor_y,
+             shape: cursor.shape,
+             visibility: cursor.visibility,
+@@ -555,6 +634,7 @@
+         blank_attr: CellAttributes,
+         bidi_mode: BidiMode,
+     ) {
++        self.prototype_image_epoch = self.prototype_image_epoch.wrapping_add(1);
+         log::debug!(
+             "scroll_up_within_margins region:{:?} margins:{:?} rows={}",
+             scroll_region,
+@@ -706,6 +786,7 @@
+         let (to_remove, to_add) = {
+             for _ in 0..to_move {
+                 let mut line = self.lines.remove(remove_idx).unwrap();
++                if remove_idx == 0 { self.prototype_first_wrapped = line.last_cell_was_wrapped(); }
+                 let line = if default_blank == blank_attr {
+                     Line::new(seqno)
+                 } else {
+@@ -727,7 +808,9 @@
+ 
+         // Perform the removal
+         for _ in 0..to_remove {
+-            self.lines.remove(remove_idx);
++            if let Some(line) = self.lines.remove(remove_idx) {
++                if remove_idx == 0 { self.prototype_first_wrapped = line.last_cell_was_wrapped(); }
++            }
+         }
+ 
+         if remove_idx == 0 && scrollback_ok {
+@@ -764,7 +847,7 @@
+         let len = self.lines.len();
+         let to_clear = len - self.physical_rows;
+         for _ in 0..to_clear {
+-            self.lines.pop_front();
++            if let Some(line) = self.lines.pop_front() { self.prototype_first_wrapped = line.last_cell_was_wrapped(); }
+             if self.allow_scrollback {
+                 self.stable_row_index_offset += 1;
+             }
+@@ -832,6 +915,7 @@
+         blank_attr: CellAttributes,
+         bidi_mode: BidiMode,
+     ) {
++        self.prototype_image_epoch = self.prototype_image_epoch.wrapping_add(1);
+         if left_and_right_margins.start == 0 && left_and_right_margins.end == self.physical_cols {
+             return self.scroll_down(scroll_region, num_rows, seqno, blank_attr, bidi_mode);
+         }
+--- a/term/src/terminal.rs
++++ b/term/src/terminal.rs
+@@ -87,6 +87,8 @@
+     state: TerminalState,
+     /// Baseline terminal escape sequence parser
+     parser: Parser,
++    prototype_pending: Vec<u8>,
++    prototype_overflow: bool,
+ }
+ 
+ impl Deref for Terminal {
+@@ -153,6 +155,8 @@
+         Terminal {
+             state: TerminalState::new(size, config, term_program, term_version, writer),
+             parser: Parser::new(),
++            prototype_pending: vec![],
++            prototype_overflow: false,
+         }
+     }
+ 
+@@ -168,8 +172,18 @@
+ 
+             let mut performer = Performer::new(&mut self.state);
+ 
+-            self.parser.parse(bytes, |action| performer.perform(action));
+-        }
++
++            for byte in bytes {
++                if self.prototype_pending.len() < 16384 { self.prototype_pending.push(*byte); }
++                else { self.prototype_overflow = true; }
++                self.parser.parse(&[*byte], |action| performer.perform(action));
++                if self.parser.prototype_is_ground() {
++                    self.prototype_pending.clear(); self.prototype_overflow = false;
++                }
++            }
++
++        }
++        self.state.prototype_update_kitty_records(false);
+         self.trigger_unseen_output_notif();
+     }
+ 
+@@ -184,3 +198,65 @@
+         self.trigger_unseen_output_notif();
+     }
+ }
++
++impl Terminal {
++    pub fn myterm_checkpoint(&self, sequence: u64) -> anyhow::Result<Vec<u8>> {
++        anyhow::ensure!(!self.prototype_overflow, "checkpoint unfinished-token limit");
++        let p = &self.prototype_pending;
++        if !p.is_empty() {
++            let body = if p.len()>1 && p.last()==Some(&0x1b) && (p.starts_with(b"\x1b]") || p.starts_with(b"\x1bP")) {&p[..p.len()-1]} else {p.as_slice()};
++            let sixel = if body.starts_with(b"\x1bP") {
++                let header = &body[2..];
++                let final_index = header.iter().position(|b| !(0x30..=0x3f).contains(b));
++                final_index.map_or(true, |i| header[i] == b'q' && header[i+1..].iter().all(|b| (0x20..=0x7e).contains(b)))
++            } else { false };
++            let permitted = body[0] >= 0xc2 || body == b"\x1b" || body.starts_with(b"\x1b[") || body.starts_with(b"\x1b]") || sixel;
++            anyhow::ensure!(permitted && body.iter().skip(1).all(|b|*b >= 0x20),
++                "unsupported partial parser token or interleaved control");
++        }
++        let (visible_rows, mut normal_rows) = self.state.checkpoint_normal_rows();
++        loop {
++            let next = self.state.prototype_checkpoint_state(normal_rows);
++            let result = next.and_then(|state| {
++                let value = serde_json::json!({"version":3,"sequence":sequence,"state":state,"pending":p});
++                let mut bytes = CheckpointBytes::default();
++                if let Err(error) = serde_json::to_writer(&mut bytes, &value) {
++                    if bytes.exceeded {
++                        return Err(crate::terminalstate::CheckpointCapacity("checkpoint exceeds 32 MiB").into());
++                    }
++                    return Err(error.into());
++                }
++                Ok(bytes.bytes)
++            });
++            match result {
++                Err(ref error) if normal_rows > visible_rows
++                    && error.is::<crate::terminalstate::CheckpointCapacity>() => {
++                    normal_rows = visible_rows + (normal_rows - visible_rows) / 2;
++                }
++                _ => return result,
++            }
++        }
++    }
++}
++
++#[derive(Default)]
++struct CheckpointBytes {
++    bytes: Vec<u8>,
++    exceeded: bool,
++}
++
++impl std::io::Write for CheckpointBytes {
++    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
++        const LIMIT: usize = 32 * 1024 * 1024;
++        if bytes.len() > LIMIT - self.bytes.len() {
++            self.exceeded = true;
++            return Err(std::io::Error::other("checkpoint exceeds 32 MiB"));
++        }
++        self.bytes.extend_from_slice(bytes);
++        Ok(bytes.len())
++    }
++
++    fn flush(&mut self) -> std::io::Result<()> {
++        Ok(())
++    }
++}
+--- a/term/src/terminalstate/image.rs
++++ b/term/src/terminalstate/image.rs
+@@ -61,11 +61,42 @@
+     Kitty,
+ }
+ 
++pub(crate) struct PreparedImageAttach {
++    params: ImageAttachParams,
++    restore_cursor: bool,
++    saved_cursor: crate::CursorPosition,
++    seqno: wezterm_surface::SequenceNo,
++    cell_pixel_width: usize,
++    cell_pixel_height: usize,
++    cell_padding_left: u16,
++    cell_padding_top: u16,
++    draw_width: u32,
++    draw_height: u32,
++    fullcells_width: usize,
++    x_delta_divisor: u32,
++    y_delta_divisor: u32,
++    target_pixel_width: usize,
++    target_pixel_height: usize,
++    first_row: StableRowIndex,
++    ypos: NotNan<f32>,
++    start_xpos: NotNan<f32>,
++    cursor_x: usize,
++    width_in_cells: usize,
++    height_in_cells: usize,
++}
++
+ impl TerminalState {
+-    pub(crate) fn assign_image_to_cells(
+-        &mut self,
+-        params: ImageAttachParams,
+-    ) -> anyhow::Result<PlacementInfo> {
++    pub(crate) fn prepare_image_attach(
++        &self,
++        mut params: ImageAttachParams,
++    ) -> anyhow::Result<PreparedImageAttach> {
++        // Native rasterization scrolls even when Kitty restores the cursor afterwards.
++        let restore_cursor = matches!(params.style, ImageAttachStyle::Kitty)
++            && params.do_not_move_cursor;
++        let saved_cursor = self.cursor;
++        if restore_cursor {
++            params.do_not_move_cursor = false;
++        }
+         let seqno = self.seqno;
+         let physical_cols = self.screen().physical_cols;
+         let physical_rows = self.screen().physical_rows;
+@@ -155,7 +186,7 @@
+         let target_pixel_height = fullcells_height * cell_pixel_height + remainder_height_cell;
+         let first_row = self.screen().visible_row_to_stable_row(self.cursor.y);
+ 
+-        let mut ypos = NotNan::new(params.source_origin_y as f32 / params.image_height as f32)
++        let ypos = NotNan::new(params.source_origin_y as f32 / params.image_height as f32)
+             .with_context(|| format!("computing ypos {params:#?}"))?;
+         let start_xpos = NotNan::new(params.source_origin_x as f32 / params.image_width as f32)
+             .context("computing xpos")?;
+@@ -185,6 +216,67 @@
+             self.pixel_height
+         );
+ 
++        anyhow::ensure!(
++            x_delta_divisor > 0 && y_delta_divisor > 0,
++            "image texture divisor must be positive"
++        );
++        Ok(PreparedImageAttach {
++            params,
++            restore_cursor,
++            saved_cursor,
++            seqno,
++            cell_pixel_width,
++            cell_pixel_height,
++            cell_padding_left,
++            cell_padding_top,
++            draw_width,
++            draw_height,
++            fullcells_width,
++            x_delta_divisor,
++            y_delta_divisor,
++            target_pixel_width,
++            target_pixel_height,
++            first_row,
++            ypos,
++            start_xpos,
++            cursor_x,
++            width_in_cells,
++            height_in_cells,
++        })
++    }
++
++    pub(crate) fn assign_image_to_cells(
++        &mut self,
++        params: ImageAttachParams,
++    ) -> anyhow::Result<PlacementInfo> {
++        let prepared = self.prepare_image_attach(params)?;
++        Ok(self.commit_image_attach(prepared))
++    }
++
++    pub(crate) fn commit_image_attach(&mut self, prepared: PreparedImageAttach) -> PlacementInfo {
++        let PreparedImageAttach {
++            params,
++            restore_cursor,
++            saved_cursor,
++            seqno,
++            cell_pixel_width,
++            cell_pixel_height,
++            cell_padding_left,
++            cell_padding_top,
++            draw_width,
++            draw_height,
++            fullcells_width,
++            x_delta_divisor,
++            y_delta_divisor,
++            target_pixel_width,
++            target_pixel_height,
++            first_row,
++            mut ypos,
++            start_xpos,
++            cursor_x,
++            width_in_cells,
++            height_in_cells,
++        } = prepared;
+         let mut remain_y = target_pixel_height;
+         for y in 0..height_in_cells {
+             let padding_bottom = cell_pixel_height.saturating_sub(remain_y) as u16;
+@@ -241,8 +333,17 @@
+                     }
+                 };
+ 
+-                self.screen_mut()
+-                    .set_cell(cursor_x + x, cursor_y, &cell, seqno);
++                if matches!(params.style, ImageAttachStyle::Kitty) {
++                    // The cloned cell already carries existing layers. The ordinary
++                    // text setter would append them again, doubling overlaps.
++                    let row = self.screen().phys_row(cursor_y);
++                    self.screen_mut()
++                        .line_mut(row)
++                        .set_cell_clearing_image_placements(cursor_x + x, cell, seqno);
++                } else {
++                    self.screen_mut()
++                        .set_cell(cursor_x + x, cursor_y, &cell, seqno);
++                }
+                 xpos += x_delta;
+             }
+             ypos += y_delta;
+@@ -259,11 +360,16 @@
+             draw_height as usize + cell_padding_top as usize > cell_pixel_height * height_in_cells,
+         );
+         if !params.do_not_move_cursor {
+-            // Sixel places the cursor under the left corner of the image,
+-            // unless sixel_scrolls_right is enabled.
+-            // iTerm places it after the bottom right corner.
++            // Default Sixel and native iTerm/Kitty advance past the image rows.
++            // DEC mode 8452 instead leaves Sixel's cursor beside its last row.
++            if !matches!(params.style, ImageAttachStyle::Sixel) || !self.sixel_scrolls_right {
++                self.new_line(false);
++            }
++            // Kitty advances horizontally; native inline iTerm keeps its column.
++            // Sixel may explicitly request rightward movement.
+             let bottom_right = match params.style {
+-                ImageAttachStyle::Kitty | ImageAttachStyle::Iterm => true,
++                ImageAttachStyle::Kitty => true,
++                ImageAttachStyle::Iterm => false,
+                 ImageAttachStyle::Sixel => self.sixel_scrolls_right,
+             };
+ 
+@@ -275,11 +381,14 @@
+             }
+         }
+ 
+-        Ok(PlacementInfo {
++        if restore_cursor {
++            self.cursor = saved_cursor;
++        }
++        PlacementInfo {
+             first_row,
+             rows: height_in_cells,
+             cols: width_in_cells,
+-        })
++        }
+     }
+ 
+     /// cache recent images and avoid assigning a new id for repeated data!
+@@ -300,6 +409,7 @@
+ }
+ 
+ pub(crate) fn check_image_dimensions(width: u32, height: u32) -> anyhow::Result<()> {
++    anyhow::ensure!(width > 0 && height > 0, "image dimensions must be positive");
+     const MAX_IMAGE_SIZE: u32 = 100_000_000;
+     let size = width.saturating_mul(height).saturating_mul(4);
+     if size > MAX_IMAGE_SIZE {
+--- a/term/src/terminalstate/iterm.rs
++++ b/term/src/terminalstate/iterm.rs
+@@ -8,6 +8,7 @@
+ 
+ impl TerminalState {
+     pub(crate) fn set_image(&mut self, image: ITermFileData) {
++        let prototype_request = serde_json::json!({"width":format!("{}",image.width),"height":format!("{}",image.height),"preserve":image.preserve_aspect_ratio});
+         if !image.inline {
+             if let Some(handler) = &self.download_handler {
+                 handler.save_to_downloads(image.name, image.data);
+@@ -129,6 +130,7 @@
+             }
+         };
+ 
++        self.prototype_store_image_request(image_data.hash(),width,height,prototype_request);
+         if let Err(err) = self.assign_image_to_cells(ImageAttachParams {
+             image_width: width as u32,
+             image_height: height as u32,
+--- a/term/src/terminalstate/kitty.rs
++++ b/term/src/terminalstate/kitty.rs
+@@ -1,11 +1,12 @@
+ use crate::terminalstate::image::*;
+-use crate::terminalstate::{ImageAttachParams, PlacementInfo};
+-use crate::{StableRowIndex, TerminalState};
++use crate::terminalstate::{BridgeGraphics, ImageAttachParams, PlacementInfo};
++use crate::TerminalState;
+ use ::image::{
+     DynamicImage, GenericImage, GenericImageView, ImageBuffer, RgbImage, Rgba, RgbaImage,
+ };
+ use anyhow::Context;
+ use std::collections::{HashMap, HashSet};
++use std::convert::TryFrom;
+ use std::io::Write;
+ use std::sync::Arc;
+ use std::time::Duration;
+@@ -17,14 +18,41 @@
+ };
+ use wezterm_surface::change::ImageData;
+ 
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++struct PrototypeProjectionState {
++    row: i64,
++    column: i64,
++    rows: usize,
++    columns: usize,
++    epoch: u64,
++    positioned: bool,
++}
++
+ #[derive(Debug, Default)]
+ pub struct KittyImageState {
+     accumulator: Vec<KittyImage>,
++    prototype_next_placement: u32,
++    prototype_next_image: u32,
++    prototype_relative_data: HashMap<(u32, Option<u32>), (Arc<ImageData>, usize, usize)>,
++    prototype_requests: HashMap<(u32, Option<u32>), serde_json::Value>,
++    prototype_projection_errors: HashSet<(u32, Option<u32>)>,
++    prototype_updating_placement: bool,
++    prototype_layout_dirty: bool,
++    prototype_cached_screen: Option<bool>,
++    prototype_cached_epoch: u64,
++    prototype_positioned_roots: HashSet<(u32, Option<u32>)>,
++    prototype_active_relative: Vec<(u32, Option<u32>)>,
++    prototype_virtual_roots: HashSet<(u32, Option<u32>)>,
++    prototype_virtual_origins: HashMap<(u32, Option<u32>), (i64, i64)>,
++    prototype_projection_states: HashMap<(u32, Option<u32>), PrototypeProjectionState>,
++    prototype_projection_count: u64,
+     max_image_id: u32,
+     number_to_id: HashMap<u32, u32>,
+     id_to_data: HashMap<u32, Arc<ImageData>>,
+     placements: HashMap<(u32, Option<u32>), PlacementInfo>,
++    prototype_placement_buffers: HashMap<(u32, Option<u32>), bool>,
+     used_memory: usize,
++    prototype_records: HashMap<(u32, Option<u32>), serde_json::Value>,
+ }
+ 
+ impl KittyImageState {
+@@ -75,22 +103,49 @@
+         image_number: Option<u32>,
+         placement: KittyImagePlacement,
+         verbosity: KittyImageVerbosity,
++        reply_image_id: Option<u32>,
+     ) -> anyhow::Result<()> {
+-        let image_id = match image_id {
++        if placement.parent_image_id.is_some() {
++            self.prototype_update_kitty_records(true);
++        }
++        // Rasterization can scroll while a replaced parent is temporarily absent.
++        // Reproject descendants only after the new parent record is committed.
++        self.kitty_img.prototype_updating_placement = true;
++        let result = self.kitty_img_place_inner(
++            image_id,
++            image_number,
++            placement,
++            verbosity,
++            reply_image_id,
++        );
++        self.kitty_img.prototype_updating_placement = false;
++        self.prototype_update_kitty_records(false);
++        result
++    }
++
++    fn kitty_img_place_inner(
++        &mut self,
++        image_id: Option<u32>,
++        image_number: Option<u32>,
++        mut placement: KittyImagePlacement,
++        verbosity: KittyImageVerbosity,
++        reply_image_id: Option<u32>,
++    ) -> anyhow::Result<()> {
++        let requested_identity = image_id.is_some() || image_number.is_some();
++        let image_id = match image_id.or_else(|| {
++            image_number.and_then(|number| self.kitty_img.number_to_id.get(&number).copied())
++        }) {
+             Some(id) => id,
+-            None => *self
+-                .kitty_img
+-                .number_to_id
+-                .get(
+-                    &image_number
+-                        .ok_or_else(|| anyhow::anyhow!("no image_id or image_number specified!"))?,
+-                )
+-                .ok_or_else(|| {
+-                    anyhow::anyhow!(
+-                        "image_number has no matching image id {:?} in number_to_id",
+-                        image_number
+-                    )
+-                })?,
++            None => {
++                self.kitty_send_response(
++                    verbosity,
++                    false,
++                    reply_image_id,
++                    image_number,
++                    "ENOENT: image not found".into(),
++                );
++                return Ok(());
++            }
+         };
+ 
+         log::trace!(
+@@ -100,41 +155,353 @@
+             placement,
+             verbosity
+         );
++        let requested_placement = placement.placement_id;
++        let saved_cursor = self.cursor;
++        if let Some(message) = self.prototype_parent_error(image_id, &placement) {
++            self.kitty_send_response(verbosity, false, reply_image_id, image_number, message);
++            return Ok(());
++        }
++        let relative =
++            placement.parent_image_id.is_some() && placement.parent_placement_id.is_some();
++        // Refuse a new record before changing the placement table or image cells.
++        if self.kitty_img.placements.len() >= 1024
++            && !self
++                .kitty_img
++                .placements
++                .contains_key(&(image_id, placement.placement_id))
++        {
++            self.kitty_send_response(
++                verbosity,
++                false,
++                reply_image_id,
++                image_number,
++                "ENOSPC: image placement unavailable".into(),
++            );
++            return Ok(());
++        }
++        let mut img = match self.kitty_img.id_to_data.get(&image_id) {
++            Some(image) => Arc::clone(image),
++            None => {
++                self.kitty_send_response(
++                    verbosity,
++                    false,
++                    reply_image_id,
++                    image_number,
++                    "ENOENT: image not found".into(),
++                );
++                return Ok(());
++            }
++        };
++
++        let original_image = Arc::clone(&img);
++        let (mut image_width, mut image_height) = img.data().dimensions()?;
++        if !placement.virtual_placement
++            && (placement.x.unwrap_or(0) != 0
++                || placement.y.unwrap_or(0) != 0
++                || placement.w.unwrap_or(0) != 0
++                || placement.h.unwrap_or(0) != 0)
++        {
++            let x = placement.x.unwrap_or(0);
++            let y = placement.y.unwrap_or(0);
++            let w = placement
++                .w
++                .filter(|v| *v != 0)
++                .unwrap_or(image_width.saturating_sub(x))
++                .min(image_width.saturating_sub(x));
++            let h = placement
++                .h
++                .filter(|v| *v != 0)
++                .unwrap_or(image_height.saturating_sub(y))
++                .min(image_height.saturating_sub(y));
++            if w == 0 || h == 0 {
++                self.cursor = saved_cursor;
++                self.kitty_send_response(
++                    verbosity,
++                    false,
++                    reply_image_id,
++                    image_number,
++                    "EINVAL: bad crop".into(),
++                );
++                return Ok(());
++            }
++            let cropped = {
++                let data = img.data();
++                match &*data {
++                    ImageDataType::Rgba8 { data, .. } => {
++                        let mut crop = Vec::with_capacity(w as usize * h as usize * 4);
++                        for row in y..y + h {
++                            let start = ((row * image_width + x) * 4) as usize;
++                            crop.extend_from_slice(&data[start..start + w as usize * 4]);
++                        }
++                        crop
++                    }
++                    _ => anyhow::bail!("unsupported Kitty crop resource"),
++                }
++            };
++            img = Arc::new(ImageData::with_data(ImageDataType::new_single_frame(
++                w, h, cropped,
++            )));
++            image_width = w;
++            image_height = h;
++            placement.x = None;
++            placement.y = None;
++            placement.w = None;
++            placement.h = None;
++        }
++        let cell_width = self.pixel_width / self.screen().physical_cols;
++        let cell_height = self.pixel_height / self.screen().physical_rows;
++        placement.x_offset = placement
++            .x_offset
++            .map(|v| v.min(cell_width.saturating_sub(1) as u32));
++        placement.y_offset = placement
++            .y_offset
++            .map(|v| v.min(cell_height.saturating_sub(1) as u32));
++
++        let prototype_request = serde_json::json!({"width":placement.columns.map(|n|n.to_string()).unwrap_or_else(||"auto".into()),"height":placement.rows.map(|n|n.to_string()).unwrap_or_else(||"auto".into()),"preserve":true});
++        anyhow::ensure!(
++            placement.columns.map_or(true, |n| n <= 2048)
++                && placement.rows.map_or(true, |n| n <= 2048),
++            "Kitty placement dimension limit"
++        );
++        let mut target_width = placement
++            .columns
++            .map(|n| n as usize * cell_width)
++            .unwrap_or(image_width as usize);
++        let mut target_height = placement
++            .rows
++            .map(|n| n as usize * cell_height)
++            .unwrap_or(image_height as usize);
++        if placement.columns.is_some() && placement.rows.is_none() {
++            target_height = target_width * image_height as usize / image_width as usize;
++        }
++        if placement.rows.is_some() && placement.columns.is_none() {
++            target_width = target_height * image_width as usize / image_height as usize;
++        }
++        anyhow::ensure!(
++            cell_width > 0 && cell_height > 0,
++            "Kitty cell geometry limit"
++        );
++        anyhow::ensure!(
++            placement.columns.map_or(true, |n| n <= 2048)
++                && placement.rows.map_or(true, |n| n <= 2048),
++            "Kitty placement dimension limit"
++        );
++        anyhow::ensure!(
++            placement.virtual_placement || (target_width <= 2048 && target_height <= 2048),
++            "Kitty placement display limit"
++        );
++        let grid_columns = target_width.max(1).div_ceil(cell_width);
++        let grid_rows = target_height.max(1).div_ceil(cell_height);
++        target_width = grid_columns * cell_width;
++        target_height = grid_rows * cell_height;
++        if !placement.virtual_placement && (target_width > 2048 || target_height > 2048) {
++            self.kitty_send_response(
++                verbosity,
++                false,
++                reply_image_id,
++                image_number,
++                "ENOSPC: image placement unavailable".into(),
++            );
++            return Ok(());
++        }
++
++        let relative_origin = if let (Some(parent_image), Some(parent_placement)) =
++            (placement.parent_image_id, placement.parent_placement_id)
++        {
++            let (row, column) =
++                self.prototype_parent_position((parent_image, Some(parent_placement)), false)?;
++            Some((
++                row + placement.parent_offset_v as i64,
++                column + placement.parent_offset_h as i64,
++            ))
++        } else {
++            None
++        };
++        if !placement.virtual_placement && target_width * target_height * 4 > 2_097_152 {
++            self.kitty_send_response(
++                verbosity,
++                false,
++                reply_image_id,
++                image_number,
++                "ENOSPC: image placement unavailable".into(),
++            );
++            return Ok(());
++        }
++        if relative {
++            let key = (image_id, placement.placement_id);
++            let replacing = self.kitty_img.prototype_relative_data.contains_key(&key);
++            let cost = target_width * target_height * 4 + grid_rows * 4096;
++            let retained: usize = self
++                .kitty_img
++                .prototype_relative_data
++                .iter()
++                .filter(|(k, _)| **k != key)
++                .map(|(_, (_, w, h))| w * h * 4 + h.div_ceil(cell_height) * 4096)
++                .sum();
++            if (!replacing && self.kitty_img.prototype_relative_data.len() >= 128)
++                || cost + retained > 2_097_152
++            {
++                self.kitty_send_response(
++                    verbosity,
++                    false,
++                    reply_image_id,
++                    image_number,
++                    "ENOSPC: image placement unavailable".into(),
++                );
++                return Ok(());
++            }
++        }
++        let saved_next_placement = self.kitty_img.prototype_next_placement;
++        if placement.placement_id.is_none() {
++            let mut id = self.kitty_img.prototype_next_placement.max(1);
++            while self
++                .kitty_img
++                .placements
++                .keys()
++                .any(|key| key.1 == Some(id))
++            {
++                id = id.wrapping_add(1).max(1);
++            }
++            self.kitty_img.prototype_next_placement = id.wrapping_add(1).max(1);
++            placement.placement_id = Some(id);
++        }
++        let prepared = if !placement.virtual_placement && !relative {
++            match self.prepare_image_attach(ImageAttachParams {
++                image_width,
++                image_height,
++                source_width: placement.w,
++                source_height: placement.h,
++                source_origin_x: placement.x.unwrap_or(0),
++                source_origin_y: placement.y.unwrap_or(0),
++                cell_padding_left: placement.x_offset.unwrap_or(0) as u16,
++                cell_padding_top: placement.y_offset.unwrap_or(0) as u16,
++                data: Arc::clone(&img),
++                style: ImageAttachStyle::Kitty,
++                z_index: placement.z_index.unwrap_or(0),
++                columns: Some(grid_columns),
++                rows: Some(grid_rows),
++                image_id: Some(image_id),
++                placement_id: placement.placement_id,
++                do_not_move_cursor: placement.do_not_move_cursor,
++            }) {
++                Ok(prepared) => Some(prepared),
++                Err(error) => {
++                    log::debug!("Kitty preparation: {:#}", error);
++                    self.kitty_img.prototype_next_placement = saved_next_placement;
++                    self.kitty_send_response(
++                        verbosity,
++                        false,
++                        reply_image_id,
++                        image_number,
++                        "ENOSPC: image placement unavailable".into(),
++                    );
++                    return Ok(());
++                }
++            }
++        } else {
++            None
++        };
+         if image_id != 0 {
+-            self.kitty_remove_placement(image_id, placement.placement_id);
+-        }
+-        let img = Arc::clone(self.kitty_img.id_to_data.get(&image_id).ok_or_else(|| {
+-            anyhow::anyhow!(
+-                "no matching image id {} in id_to_data for image_number {:?}",
+-                image_id,
+-                image_number
+-            )
+-        })?);
+-
+-        let (image_width, image_height) = img.data().dimensions()?;
+-
+-        let info = self.assign_image_to_cells(ImageAttachParams {
+-            image_width,
+-            image_height,
+-            source_width: placement.w,
+-            source_height: placement.h,
+-            source_origin_x: placement.x.unwrap_or(0),
+-            source_origin_y: placement.y.unwrap_or(0),
+-            cell_padding_left: placement.x_offset.unwrap_or(0) as u16,
+-            cell_padding_top: placement.y_offset.unwrap_or(0) as u16,
+-            data: img,
+-            style: ImageAttachStyle::Kitty,
+-            z_index: placement.z_index.unwrap_or(0),
+-            columns: placement.columns.map(|x| x as usize),
+-            rows: placement.rows.map(|x| x as usize),
+-            image_id: Some(image_id),
+-            placement_id: placement.placement_id,
+-            do_not_move_cursor: placement.do_not_move_cursor,
+-        })?;
+-
++            let key = (image_id, placement.placement_id);
++            if self
++                .kitty_img
++                .prototype_placement_buffers
++                .get(&key)
++                .map_or(false, |alt| *alt != self.screen.alt_screen_is_active)
++            {
++                let aliases: Vec<_> = self
++                    .kitty_img
++                    .number_to_id
++                    .iter()
++                    .filter(|(_, id)| **id == image_id)
++                    .map(|(n, id)| (*n, *id))
++                    .collect();
++                self.prototype_delete_selection(KittyImageDelete::ByImageId {
++                    image_id,
++                    placement_id: placement.placement_id,
++                    delete: false,
++                });
++                if !self.kitty_img.id_to_data.contains_key(&image_id) {
++                    self.kitty_img
++                        .record_id_to_data(image_id, Arc::clone(&original_image));
++                }
++                self.kitty_img.number_to_id.extend(aliases);
++            } else {
++                self.kitty_remove_placement(image_id, placement.placement_id);
++            }
++        }
++
++        self.kitty_img
++            .prototype_requests
++            .insert((image_id, placement.placement_id), prototype_request);
++        let record_column = relative_origin.map_or(self.cursor.x as i64, |v| v.1);
++        let record_row = relative_origin.map_or(
++            self.screen()
++                .scrollback_rows()
++                .saturating_sub(self.screen().physical_rows) as i64
++                + self.cursor.y,
++            |v| v.0,
++        );
++        if relative {
++            self.kitty_img.prototype_relative_data.insert(
++                (image_id, placement.placement_id),
++                (Arc::clone(&img), target_width, target_height),
++            );
++        }
++        let info = if let Some(prepared) = prepared {
++            self.commit_image_attach(prepared)
++        } else {
++            PlacementInfo {
++                first_row: self.screen().visible_row_to_stable_row(self.cursor.y),
++                cols: if relative {
++                    grid_columns
++                } else {
++                    placement.columns.unwrap_or(0) as usize
++                },
++                rows: if relative {
++                    grid_rows
++                } else {
++                    placement.rows.unwrap_or(0) as usize
++                },
++            }
++        };
++        if relative {
++            self.cursor = saved_cursor;
++        }
++
++        self.kitty_img.prototype_layout_dirty = true;
+         self.kitty_img
+             .placements
+             .insert((image_id, placement.placement_id), info);
++        self.kitty_img.prototype_placement_buffers.insert(
++            (image_id, placement.placement_id),
++            self.screen.alt_screen_is_active,
++        );
++        // Metadata has its own bound because placements can outlive all retained cells.
++        let live = &self.kitty_img.placements;
++        self.kitty_img
++            .prototype_records
++            .retain(|key, _| live.contains_key(key));
++        if self.kitty_img.prototype_records.len() < 1024
++            || self
++                .kitty_img
++                .prototype_records
++                .contains_key(&(image_id, placement.placement_id))
++        {
++            self.kitty_img.prototype_records.insert((image_id, placement.placement_id), serde_json::json!({
++                "column":record_column,"row":record_row,"imageColumn":record_column,"imageRow":record_row,
++                "columns":info.cols,"rows":info.rows,
++                "isVirtual":placement.virtual_placement,
++                "parentImageId":placement.parent_image_id,"parentPlacementId":placement.parent_placement_id,
++                "parentOffsetH":placement.parent_offset_h,"parentOffsetV":placement.parent_offset_v,
++                "zIndex":placement.z_index.unwrap_or(0),
++                "pixelOffsetX":placement.x_offset.unwrap_or(0),"pixelOffsetY":placement.y_offset.unwrap_or(0)}));
++        }
++        let placements = &self.kitty_img.placements;
++        self.kitty_img
++            .prototype_placement_buffers
++            .retain(|key, _| placements.contains_key(key));
++        self.prototype_update_kitty_records(false);
+         log::trace!(
+             "record placement for {} (image_number {:?}) {:?}",
+             image_id,
+@@ -142,19 +509,56 @@
+             placement.placement_id
+         );
+ 
++        if requested_identity && image_id != 0 && matches!(verbosity, KittyImageVerbosity::Verbose)
++        {
++            let mut response = match image_number {
++                Some(number) => format!("\x1b_Gi={image_id},I={number}"),
++                None => format!("\x1b_Gi={image_id}"),
++            };
++            if let Some(placement_id) = requested_placement {
++                response.push_str(&format!(",p={placement_id}"));
++            }
++            response.push_str(";OK\x1b\\");
++            self.writer
++                .write_all(response.as_bytes())
++                .context("write Kitty placement acknowledgement")?;
++            self.writer
++                .flush()
++                .context("flush Kitty placement acknowledgement")?;
++        }
+         Ok(())
+     }
+ 
+     fn kitty_img_inner(&mut self, img: KittyImage) -> anyhow::Result<()> {
+-        match self
+-            .coalesce_kitty_accumulation(img)
+-            .context("coalesce_kitty_accumulation")?
+-        {
++        let source = self.kitty_img.accumulator.first().unwrap_or(&img);
++        let verbosity = source.verbosity();
++        let (image_id, image_number) = match source {
++            KittyImage::TransmitData { transmit, .. }
++            | KittyImage::TransmitDataAndDisplay { transmit, .. } => {
++                (transmit.image_id, transmit.image_number)
++            }
++            _ => (None, None),
++        };
++        let coalesced = match self.coalesce_kitty_accumulation(img) {
++            Ok(value) => value,
++            Err(error) => {
++                log::debug!("invalid Kitty transfer: {:#}", error);
++                self.kitty_send_response(
++                    verbosity,
++                    false,
++                    image_id,
++                    image_number,
++                    "EINVAL: bad payload".into(),
++                );
++                return Ok(());
++            }
++        };
++        match coalesced {
+             KittyImage::TransmitData {
+                 transmit,
+                 verbosity,
+             } => {
+-                self.kitty_img_transmit(transmit, verbosity)?;
++                self.prototype_transmit_checked(transmit, verbosity, verbosity);
+                 Ok(())
+             }
+             KittyImage::TransmitDataAndDisplay {
+@@ -164,8 +568,23 @@
+             } => {
+                 log::trace!("TransmitDataAndDisplay {:#?} {:#?}", transmit, placement);
+                 let image_number = transmit.image_number;
+-                let image_id = self.kitty_img_transmit(transmit, verbosity)?;
+-                self.kitty_img_place(Some(image_id), image_number, placement, verbosity)
++                let reply_image_id = transmit.image_id;
++                // Combined transmit-and-place has one acknowledgement, after placement.
++                let image_id = match self.prototype_transmit_checked(
++                    transmit,
++                    KittyImageVerbosity::Quiet,
++                    verbosity,
++                ) {
++                    Some(id) => id,
++                    None => return Ok(()),
++                };
++                self.kitty_img_place(
++                    Some(image_id),
++                    image_number,
++                    placement,
++                    verbosity,
++                    reply_image_id,
++                )
+             }
+             _ => anyhow::bail!("impossible KittImage variant"),
+         }
+@@ -236,39 +655,21 @@
+                 placement,
+                 verbosity,
+             } => {
+-                self.kitty_img_place(image_id, image_number, placement, verbosity)?;
+-            }
+-            KittyImage::Delete {
+-                what:
+-                    KittyImageDelete::ByImageId {
++                if image_id.is_some() && image_number.is_some() {
++                    self.kitty_send_response(
++                        verbosity,
++                        false,
+                         image_id,
+-                        placement_id,
+-                        delete,
+-                    },
+-                verbosity,
+-            } => {
+-                log::trace!(
+-                    "remove a placement: image_id {} placement_id {:?} delete {} verb {:?}",
+-                    image_id,
+-                    placement_id,
+-                    delete,
+-                    verbosity
+-                );
+-
+-                self.kitty_remove_placement(image_id, placement_id);
+-
+-                if delete {
+-                    self.kitty_img.remove_data_for_id(image_id);
+-                }
+-            }
+-            KittyImage::Delete {
+-                what: KittyImageDelete::All { delete },
+-                verbosity: _,
+-            } => {
+-                self.kitty_remove_all_placements(delete);
+-            }
+-            KittyImage::Delete { what, verbosity } => {
+-                log::warn!("unhandled KittyImage::Delete {:?} {:?}", what, verbosity);
++                        None,
++                        "EINVAL: i and I are mutually exclusive".into(),
++                    );
++                } else {
++                    self.kitty_img_place(image_id, image_number, placement, verbosity, image_id)?;
++                }
++            }
++            KittyImage::Delete { what, verbosity: _ } => {
++                self.kitty_img.accumulator.clear();
++                self.prototype_delete_selection(what);
+             }
+             KittyImage::TransmitFrame {
+                 transmit,
+@@ -295,21 +696,42 @@
+         placement_id: Option<u32>,
+         info: PlacementInfo,
+     ) {
++        let _ = info;
+         let seqno = self.seqno;
+-        let screen = self.screen_mut();
+-        let range =
+-            screen.stable_range(&(info.first_row..info.first_row + info.rows as StableRowIndex));
+-        for idx in range {
+-            let line = screen.line_mut(idx);
+-            for c in line.cells_mut() {
+-                c.attrs_mut()
+-                    .detach_image_with_placement(image_id, placement_id);
+-            }
+-            line.update_last_change_seqno(seqno);
++        for screen in [&mut self.screen.screen, &mut self.screen.alt_screen] {
++            for row in 0..screen.scrollback_rows() {
++                let line = screen.line_mut(row);
++                for cell in line.cells_mut() {
++                    cell.attrs_mut()
++                        .detach_image_with_placement(image_id, placement_id);
++                }
++                line.update_last_change_seqno(seqno);
++            }
+         }
+     }
+ 
+     fn kitty_remove_placement(&mut self, image_id: u32, placement_id: Option<u32>) {
++        self.kitty_img.prototype_requests.retain(|key, _| {
++            key.0 != image_id || (placement_id.is_some() && key.1 != placement_id)
++        });
++
++        self.kitty_img.prototype_layout_dirty = true;
++        self.kitty_img.prototype_projection_states.retain(|key, _| {
++            key.0 != image_id || (placement_id.is_some() && key.1 != placement_id)
++        });
++        self.kitty_img.prototype_projection_errors.retain(|key| {
++            key.0 != image_id || (placement_id.is_some() && key.1 != placement_id)
++        });
++
++        self.kitty_img.prototype_relative_data.retain(|key, _| {
++            key.0 != image_id || (placement_id.is_some() && key.1 != placement_id)
++        });
++        self.kitty_img.prototype_records.retain(|key, _| {
++            key.0 != image_id || (placement_id.is_some() && key.1 != placement_id)
++        });
++        self.kitty_img.prototype_placement_buffers.retain(|key, _| {
++            key.0 != image_id || (placement_id.is_some() && key.1 != placement_id)
++        });
+         if placement_id.is_some() {
+             if let Some(info) = self.kitty_img.placements.remove(&(image_id, placement_id)) {
+                 log::trace!("removed placement {} {:?}", image_id, placement_id);
+@@ -338,6 +760,13 @@
+     }
+ 
+     pub(crate) fn kitty_remove_all_placements(&mut self, delete: bool) {
++        self.kitty_img.prototype_relative_data.clear();
++        self.kitty_img.prototype_requests.clear();
++        self.kitty_img.prototype_projection_states.clear();
++        self.kitty_img.prototype_layout_dirty = true;
++        self.kitty_img.prototype_projection_errors.clear();
++        self.kitty_img.prototype_records.clear();
++        self.kitty_img.prototype_placement_buffers.clear();
+         for ((image_id, p), info) in std::mem::take(&mut self.kitty_img.placements).into_iter() {
+             self.kitty_remove_placement_from_model(image_id, p, info);
+         }
+@@ -372,7 +801,7 @@
+ 
+         match (image_id, image_no) {
+             (Some(id), Some(no)) => {
+-                write!(self.writer, "\x1b_GI={},i={};{}\x1b\\", no, id, message).ok();
++                write!(self.writer, "\x1b_Gi={},I={};{}\x1b\\", id, no, message).ok();
+             }
+             (Some(id), None) => {
+                 write!(self.writer, "\x1b_Gi={};{}\x1b\\", id, message).ok();
+@@ -745,22 +1174,6 @@
+         transmit: KittyImageTransmit,
+     ) -> anyhow::Result<(u32, Option<u32>, ImageDataType)> {
+         log::trace!("transmit {:?}", transmit);
+-        let (id, no) = match (transmit.image_id, transmit.image_number) {
+-            (Some(_), Some(_)) => {
+-                // TODO: send an EINVAL error back here
+-                anyhow::bail!("cannot use both i= and I= in the same request");
+-            }
+-            (None, None) => {
+-                // Assume image id 0
+-                (0, None)
+-            }
+-            (Some(id), None) => (id, None),
+-            (None, Some(no)) => {
+-                let id = self.kitty_img.max_image_id + 1;
+-                self.kitty_img.number_to_id.insert(no, id);
+-                (id, Some(no))
+-            }
+-        };
+ 
+         let data = transmit
+             .data
+@@ -819,6 +1232,27 @@
+             }
+         };
+ 
++        let (id, no) = match (transmit.image_id, transmit.image_number) {
++            (Some(_), Some(_)) => {
++                // TODO: send an EINVAL error back here
++                anyhow::bail!("cannot use both i= and I= in the same request");
++            }
++            (None, None) => {
++                // Assume image id 0
++                (0, None)
++            }
++            (Some(id), None) => (id, None),
++            (None, Some(no)) => {
++                let mut id = self.kitty_img.prototype_next_image.max(1);
++                while self.kitty_img.id_to_data.contains_key(&id) {
++                    id = id.wrapping_add(1).max(1);
++                }
++                self.kitty_img.prototype_next_image = id.wrapping_add(1).max(1);
++                self.kitty_img.number_to_id.insert(no, id);
++                (id, Some(no))
++            }
++        };
++
+         Ok((id, no, img))
+     }
+ 
+@@ -827,15 +1261,23 @@
+         transmit: KittyImageTransmit,
+         verbosity: KittyImageVerbosity,
+     ) -> anyhow::Result<u32> {
++        let requested_identity = transmit.image_id.is_some() || transmit.image_number.is_some();
+         let (image_id, image_number, img) = self.kitty_img_transmit_inner(transmit)?;
+         self.kitty_img.max_image_id = self.kitty_img.max_image_id.max(image_id);
+ 
+         let img = self
+             .raw_image_to_image_data(img)
+             .context("storing image data")?;
++        if self.kitty_img.id_to_data.contains_key(&image_id) {
++            self.prototype_delete_selection(KittyImageDelete::ByImageId {
++                image_id,
++                placement_id: None,
++                delete: false,
++            });
++        }
+         self.kitty_img.record_id_to_data(image_id, img);
+ 
+-        if image_number.is_some() {
++        if requested_identity {
+             self.kitty_send_response(
+                 verbosity,
+                 true,
+@@ -855,7 +1297,12 @@
+             let mut data = vec![];
+             let mut trans;
+             let place;
+-            let final_verbosity = img.verbosity();
++            let final_verbosity = self
++                .kitty_img
++                .accumulator
++                .first()
++                .map(|v| v.verbosity())
++                .unwrap_or_else(|| img.verbosity());
+ 
+             self.kitty_img.accumulator.push(img);
+ 
+@@ -889,23 +1336,25 @@
+                 }
+             }
+ 
+-            let mut b64_decoded = vec![];
+-            for mut data in data.into_iter() {
+-                match &mut data {
+-                    KittyImageData::DirectBin(b) => {
+-                        b64_decoded.append(b);
++            let b64_decoded = if data.iter().all(|v| matches!(v, KittyImageData::Direct(_))) {
++                let mut text = String::new();
++                for item in data {
++                    if let KittyImageData::Direct(chunk) = item {
++                        text.push_str(&chunk);
+                     }
+-                    KittyImageData::Direct(b) => {
+-                        if !b.is_empty() {
+-                            b64_decoded.append(&mut data.load_data()?);
+-                        }
++                }
++                KittyImageData::Direct(text).load_data()?
++            } else {
++                let mut bytes = Vec::new();
++                for item in data {
++                    match item {
++                        KittyImageData::DirectBin(mut chunk) => bytes.append(&mut chunk),
++                        KittyImageData::Direct(_) => bytes.append(&mut item.load_data()?),
++                        _ => anyhow::bail!("non-direct Kitty transfer chunk"),
+                     }
+-                    data => {
+-                        anyhow::bail!("expected data chunks to be Direct data, found {:#?}", data)
+-                    }
+-                }
+-            }
+-
++                }
++                bytes
++            };
+             trans.data = KittyImageData::DirectBin(b64_decoded);
+ 
+             if let Some(placement) = place {
+@@ -977,3 +1426,15 @@
+     }
+     Ok(())
+ }
++
++impl KittyImageState {
++    pub(super) fn prototype_is_empty(&self) -> bool {
++        self.accumulator.is_empty()
++            && self.id_to_data.is_empty()
++            && self.placements.is_empty()
++            && self.number_to_id.is_empty()
++            && self.max_image_id == 0
++    }
++}
++
++include!("prototype-kitty.rs");
+--- a/term/src/terminalstate/mod.rs
++++ b/term/src/terminalstate/mod.rs
+@@ -10,7 +10,6 @@
+ use std::collections::HashMap;
+ use std::io::{BufWriter, Write};
+ use std::num::NonZeroUsize;
+-use std::sync::mpsc::{channel, Sender};
+ use std::sync::Arc;
+ use terminfo::{Database, Value};
+ use termwiz::input::KeyboardEncoding;
+@@ -140,12 +139,15 @@
+ 
+ #[derive(Debug, Clone)]
+ pub(crate) struct SavedCursor {
+-    position: CursorPosition,
+-    wrap_next: bool,
++    pub(crate) position: CursorPosition,
++    pub(crate) wrap_next: bool,
+     pen: CellAttributes,
+     dec_origin_mode: bool,
+     g0_charset: CharSet,
+     g1_charset: CharSet,
++    prototype_wrap: bool,
++    prototype_reverse_wrap: bool,
++    prototype_margin: bool,
+     // TODO: selective_erase when supported
+ }
+ 
+@@ -254,6 +256,9 @@
+ /// Manages the state for the terminal
+ pub struct TerminalState {
+     config: Arc<dyn TerminalConfiguration>,
++    prototype_last_print: [Option<(usize, StableRowIndex, usize, usize)>; 2],
++    prototype_image_requests: std::collections::HashMap<([u8;32],usize,usize),serde_json::Value>,
++    prototype_image_request_overflow: bool,
+ 
+     screen: ScreenOrAlt,
+     /// The current set of attributes in effect for the next
+@@ -367,7 +372,7 @@
+     term_program: String,
+     term_version: String,
+ 
+-    writer: BufWriter<ThreadedWriter>,
++    writer: BufWriter<Box<dyn std::io::Write + Send>>,
+ 
+     image_cache: lru::LruCache<[u8; 32], Arc<ImageData>>,
+     sixel_scrolls_right: bool,
+@@ -441,72 +446,6 @@
+     color_map
+ }
+ 
+-/// This struct implements a writer that sends the data across
+-/// to another thread so that the write side of the terminal
+-/// processing never blocks.
+-///
+-/// This is important for example when processing large pastes into
+-/// vim.  In that scenario, we can fill up the data pending
+-/// on vim's input buffer, while it is busy trying to send
+-/// output to the terminal.  A deadlock is reached because
+-/// send_paste blocks on the writer, but it is unable to make
+-/// progress until we're able to read the output from vim.
+-///
+-/// We either need input or output to be non-blocking.
+-/// Output seems safest because we want to be able to exert
+-/// back-pressure when there is a lot of data to read,
+-/// and we're in control of the write side, which represents
+-/// input from the interactive user, or pastes.
+-struct ThreadedWriter {
+-    sender: Sender<WriterMessage>,
+-}
+-
+-enum WriterMessage {
+-    Data(Vec<u8>),
+-    Flush,
+-}
+-
+-impl ThreadedWriter {
+-    fn new(mut writer: Box<dyn std::io::Write + Send>) -> Self {
+-        let (sender, receiver) = channel::<WriterMessage>();
+-
+-        std::thread::spawn(move || {
+-            while let Ok(msg) = receiver.recv() {
+-                match msg {
+-                    WriterMessage::Data(buf) => {
+-                        if writer.write(&buf).is_err() {
+-                            break;
+-                        }
+-                    }
+-                    WriterMessage::Flush => {
+-                        if writer.flush().is_err() {
+-                            break;
+-                        }
+-                    }
+-                }
+-            }
+-        });
+-
+-        Self { sender }
+-    }
+-}
+-
+-impl std::io::Write for ThreadedWriter {
+-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+-        self.sender
+-            .send(WriterMessage::Data(buf.to_vec()))
+-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::BrokenPipe, err))?;
+-        Ok(buf.len())
+-    }
+-
+-    fn flush(&mut self) -> std::io::Result<()> {
+-        self.sender
+-            .send(WriterMessage::Flush)
+-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::BrokenPipe, err))?;
+-        Ok(())
+-    }
+-}
+-
+ impl TerminalState {
+     /// Constructs the terminal state.
+     /// You generally want the `Terminal` struct rather than this one;
+@@ -518,7 +457,7 @@
+         term_version: &str,
+         writer: Box<dyn std::io::Write + Send>,
+     ) -> TerminalState {
+-        let writer = BufWriter::new(ThreadedWriter::new(writer));
++        let writer = BufWriter::new(writer);
+         let seqno = 1;
+         let screen = ScreenOrAlt::new(size, &config, seqno, config.bidi_mode());
+ 
+@@ -528,6 +467,9 @@
+ 
+         TerminalState {
+             config,
++            prototype_last_print: [None, None],
++            prototype_image_requests: std::collections::HashMap::new(),
++            prototype_image_request_overflow: false,
+             screen,
+             pen: CellAttributes::default(),
+             cursor: CursorPosition::default(),
+@@ -970,29 +912,39 @@
+     /// We need to resize both the primary and alt screens, adjusting
+     /// the cursor positions of both accordingly.
+     pub fn resize(&mut self, size: TerminalSize) {
++        let image_geometry_changed = self.pixel_width / self.screen().physical_cols.max(1)
++            != size.pixel_width / size.cols.max(1)
++            || self.pixel_height / self.screen().physical_rows.max(1)
++                != size.pixel_height / size.rows.max(1);
++        if size.cols == self.screen().physical_cols && size.rows == self.screen().physical_rows {
++            // Native text resize is a no-op at the same dimensions, including pending wrap.
++            self.pixel_width = size.pixel_width;
++            self.pixel_height = size.pixel_height;
++            self.dpi = size.dpi;
++            if image_geometry_changed {
++                self.reproject_kitty_on_both_screens();
++            }
++            return;
++        }
+         self.increment_seqno();
+-        let (cursor_main, cursor_alt) = if self.screen.alt_screen_is_active {
++        let (mut cursor_main, mut cursor_alt) = if self.screen.alt_screen_is_active {
+             (
+-                self.screen
+-                    .screen
+-                    .saved_cursor
+-                    .as_ref()
+-                    .map(|s| s.position)
+-                    .unwrap_or_else(CursorPosition::default),
++                self.screen.screen.prototype_cursor,
+                 self.cursor,
+             )
+         } else {
+             (
+                 self.cursor,
+-                self.screen
+-                    .alt_screen
+-                    .saved_cursor
+-                    .as_ref()
+-                    .map(|s| s.position)
+-                    .unwrap_or_else(CursorPosition::default),
++                self.screen.alt_screen.prototype_cursor,
+             )
+         };
+ 
++        // SwiftTerm stores pending wrap as a cursor one column beyond the line.
++        // A resize clamps that logical position to the new viewport and clears wrap.
++        if self.wrap_next {
++            if self.screen.alt_screen_is_active { cursor_alt.x += 1; }
++            else { cursor_main.x += 1; }
++        }
+         let (adjusted_cursor_main, adjusted_cursor_alt) = self.screen.resize(
+             size,
+             cursor_main,
+@@ -1007,30 +959,36 @@
+         self.dpi = size.dpi;
+         self.tabs.resize(size.cols);
+ 
++        self.screen.screen.prototype_cursor = adjusted_cursor_main;
++        self.screen.alt_screen.prototype_cursor = adjusted_cursor_alt;
+         if self.screen.alt_screen_is_active {
+             self.set_cursor_pos(
+                 &Position::Absolute(adjusted_cursor_alt.x as i64),
+                 &Position::Absolute(adjusted_cursor_alt.y),
+             );
+ 
+-            if let Some(saved) = self.screen.screen.saved_cursor.as_mut() {
+-                saved.position.x = adjusted_cursor_main.x;
+-                saved.position.y = adjusted_cursor_main.y;
+-                saved.position.seqno = self.seqno;
+-                saved.wrap_next = false;
+-            }
+         } else {
+             self.set_cursor_pos(
+                 &Position::Absolute(adjusted_cursor_main.x as i64),
+                 &Position::Absolute(adjusted_cursor_main.y),
+             );
+-            if let Some(saved) = self.screen.alt_screen.saved_cursor.as_mut() {
+-                saved.position.x = adjusted_cursor_alt.x;
+-                saved.position.y = adjusted_cursor_alt.y;
+-                saved.position.seqno = self.seqno;
+-                saved.wrap_next = false;
+-            }
+-        }
++        }
++        if image_geometry_changed {
++            self.reproject_kitty_on_both_screens();
++        } else {
++            self.prototype_update_kitty_records(false);
++        }
+     }
+ 
++    fn reproject_kitty_on_both_screens(&mut self) {
++        for screen in [&mut self.screen.screen, &mut self.screen.alt_screen] {
++            screen.prototype_image_epoch = screen.prototype_image_epoch.wrapping_add(1);
++        }
++        let alternate = self.screen.alt_screen_is_active;
++        self.screen.alt_screen_is_active = !alternate;
++        self.prototype_update_kitty_records(false);
++        self.screen.alt_screen_is_active = alternate;
++        self.prototype_update_kitty_records(false);
++    }
++
+     pub fn get_size(&self) -> TerminalSize {
+@@ -1167,7 +1125,7 @@
+ 
+     fn scroll_up(&mut self, num_rows: usize) {
+         let seqno = self.seqno;
+-        let blank_attr = self.pen.clone_sgr_only();
++        let blank_attr = self.prototype_erase_attribute();
+         let top_and_bottom_margins = self.top_and_bottom_margins.clone();
+         let left_and_right_margins = self.left_and_right_margins.clone();
+         let bidi_mode = self.get_bidi_mode();
+@@ -1178,12 +1136,13 @@
+             seqno,
+             blank_attr,
+             bidi_mode,
+-        )
++        );
++        self.prototype_update_kitty_records(false);
+     }
+ 
+     fn scroll_down(&mut self, num_rows: usize) {
+         let seqno = self.seqno;
+-        let blank_attr = self.pen.clone_sgr_only();
++        let blank_attr = self.prototype_erase_attribute();
+         let top_and_bottom_margins = self.top_and_bottom_margins.clone();
+         let left_and_right_margins = self.left_and_right_margins.clone();
+         let bidi_mode = self.get_bidi_mode();
+@@ -1194,7 +1153,8 @@
+             seqno,
+             blank_attr,
+             bidi_mode,
+-        )
++        );
++        self.prototype_update_kitty_records(false);
+     }
+ 
+     /// Defined by FinalTermSemanticPrompt; a fresh-line is a NOP if the
+@@ -1298,6 +1258,7 @@
+     }
+ 
+     fn set_hyperlink(&mut self, link: Option<Hyperlink>) {
++        if link.is_none() { self.prototype_close_link_boundary(); }
+         self.pen.set_hyperlink(match link {
+             Some(hyperlink) => Some(Arc::new(hyperlink)),
+             None => None,
+@@ -1390,9 +1351,9 @@
+                 self.top_and_bottom_margins = 0..self.screen().physical_rows as i64;
+                 self.left_and_right_margins = 0..self.screen().physical_cols;
+                 self.left_and_right_margin_mode = false;
+-                self.screen.activate_alt_screen(self.seqno);
++                self.prototype_switch_buffer(true);
+                 self.screen.saved_cursor().take();
+-                self.screen.activate_primary_screen(self.seqno);
++                self.prototype_switch_buffer(false);
+                 self.screen.saved_cursor().take();
+                 self.kitty_remove_all_placements(true);
+ 
+@@ -1797,7 +1758,7 @@
+                 DecPrivateModeCode::EnableAlternateScreen,
+             )) => {
+                 if !self.screen.is_alt_screen_active() {
+-                    self.screen.activate_alt_screen(self.seqno);
++                    self.prototype_switch_buffer(true);
+                     self.pen = CellAttributes::default();
+                 }
+             }
+@@ -1807,7 +1768,8 @@
+                 if self.screen.is_alt_screen_active() {
+                     self.pen = CellAttributes::default();
+                     self.erase_in_display(EraseInDisplay::EraseDisplay);
+-                    self.screen.activate_primary_screen(self.seqno);
++                    self.prototype_switch_buffer(false);
++                    self.prototype_clear_alt_buffer();
+                 }
+             }
+ 
+@@ -1815,7 +1777,7 @@
+                 DecPrivateModeCode::EnableAlternateScreen,
+             )) => {
+                 if self.screen.is_alt_screen_active() {
+-                    self.screen.activate_primary_screen(self.seqno);
++                    self.prototype_switch_buffer(false);
+                     self.pen = CellAttributes::default();
+                 }
+             }
+@@ -2010,10 +1972,11 @@
+             Mode::SetDecPrivateMode(DecPrivateMode::Code(
+                 DecPrivateModeCode::ClearAndEnableAlternateScreen,
+             )) => {
++                // Repeated 1049 entry saves the active buffer cursor too.
++                self.dec_save_cursor();
+                 if !self.screen.is_alt_screen_active() {
+-                    self.dec_save_cursor();
+-                    self.screen.activate_alt_screen(self.seqno);
+-                    self.set_cursor_pos(&Position::Absolute(0), &Position::Absolute(0));
++                    self.prototype_switch_buffer(true);
++                    // Native SwiftTerm carries the normal cursor into the alternate buffer.
+                     self.pen = CellAttributes::default();
+                     self.erase_in_display(EraseInDisplay::EraseDisplay);
+                 }
+@@ -2022,7 +1985,8 @@
+                 DecPrivateModeCode::ClearAndEnableAlternateScreen,
+             )) => {
+                 if self.screen.is_alt_screen_active() {
+-                    self.screen.activate_primary_screen(self.seqno);
++                    self.prototype_switch_buffer(false);
++                    self.prototype_clear_alt_buffer();
+                     self.dec_restore_cursor();
+                 }
+             }
+@@ -2225,6 +2189,7 @@
+     }
+ 
+     fn erase_in_display(&mut self, erase: EraseInDisplay) {
++        let full_display = matches!(&erase, EraseInDisplay::EraseDisplay);
+         let seqno = self.seqno;
+         let cy = self.cursor.y;
+         let pen = self.pen.clone_sgr_only();
+@@ -2252,6 +2217,11 @@
+             for y in row_range {
+                 screen.clear_line(y, col_range.clone(), &pen, seqno, bidi_mode);
+                 let line_idx = screen.phys_row(y);
++                if full_display {
++                    // Native erase resets the incoming continuation flag too.
++                    if line_idx == 0 { screen.prototype_first_wrapped = false; }
++                    else { screen.line_mut(line_idx - 1).set_last_cell_was_wrapped(false, seqno); }
++                }
+                 screen.line_mut(line_idx).set_single_width(seqno);
+             }
+         }
+@@ -2726,6 +2696,9 @@
+             dec_origin_mode: self.dec_origin_mode,
+             g0_charset: self.g0_charset,
+             g1_charset: self.g1_charset,
++            prototype_wrap: self.dec_auto_wrap,
++            prototype_reverse_wrap: self.reverse_wraparound_mode,
++            prototype_margin: self.left_and_right_margin_mode,
+         };
+         debug!(
+             "saving cursor {:?} is_alt={}",
+@@ -2748,23 +2721,30 @@
+                 dec_origin_mode: false,
+                 g0_charset: CharSet::Ascii,
+                 g1_charset: CharSet::Ascii,
++                prototype_wrap: false,
++                prototype_reverse_wrap: false,
++                prototype_margin: false,
+             });
+         debug!(
+             "restore cursor {:?} is_alt={}",
+             saved,
+             self.screen.is_alt_screen_active()
+         );
+-        let x = saved.position.x;
++        let x = (saved.position.x + usize::from(saved.wrap_next)).min(self.screen().physical_cols - 1);
+         let y = saved.position.y;
+         // Disable origin mode so that we can set the cursor position directly
+         self.dec_origin_mode = false;
+         self.set_cursor_pos(&Position::Absolute(x as i64), &Position::Absolute(y));
+         self.cursor.shape = saved.position.shape;
+-        self.wrap_next = saved.wrap_next;
++        // Native restore clamps the saved logical column and clears pending wrap.
++        self.wrap_next = false;
+         self.pen = saved.pen;
+         self.dec_origin_mode = saved.dec_origin_mode;
+         self.g0_charset = saved.g0_charset;
+         self.g1_charset = saved.g1_charset;
++        self.dec_auto_wrap = saved.prototype_wrap;
++        self.reverse_wraparound_mode = saved.prototype_reverse_wrap;
++        self.left_and_right_margin_mode = saved.prototype_margin;
+         self.shift_out = false;
+         self.newline_mode = false;
+     }
+@@ -2884,3 +2864,5 @@
+             .unwrap_or(self.keyboard_encoding)
+     }
+ }
++
++include!("prototype-checkpoint.rs");
+--- a/term/src/terminalstate/performer.rs
++++ b/term/src/terminalstate/performer.rs
+@@ -133,6 +133,7 @@
+ 
+         for g in Graphemes::new(text) {
+             let g = self.remap_grapheme(g);
++            if self.state.prototype_combine(g) { continue; }
+ 
+             let mut print_width = grapheme_column_width(g, Some(&self.unicode_version));
+             if print_width == 0 {
+@@ -222,6 +223,7 @@
+             );
+             self.screen_mut()
+                 .set_cell_grapheme(x, y, g, print_width, pen, seqno);
++            self.state.prototype_record_print(x, y);
+ 
+             if !wrappable {
+                 self.cursor.x += print_width;
+@@ -557,7 +559,8 @@
+             }
+             CSI::Keyboard(Keyboard::PopKittyState(n)) => {
+                 for _ in 0..n {
+-                    self.screen_mut().keyboard_stack.pop();
++                    let stack = &mut self.screen_mut().keyboard_stack;
++                    if stack.len()>1 { stack.pop(); } else { *stack = vec![KeyboardEncoding::Xterm]; }
+                 }
+             }
+             CSI::Keyboard(Keyboard::QueryKittySupport) => {
+@@ -677,6 +680,10 @@
+             // reset graphic rendition, erase all positions, move active position to first
+             // character position of first line.
+             Esc::Code(EscCode::FullReset) => {
++                self.kitty_img = Default::default();
++                self.prototype_image_requests.clear();
++                self.prototype_image_request_overflow = false;
++                self.prototype_last_print = [None, None];
+                 let seqno = self.seqno;
+                 self.pen = Default::default();
+                 self.cursor = Default::default();
+--- /dev/null
++++ b/term/src/terminalstate/prototype-checkpoint.rs
+@@ -0,0 +1,360 @@
++use base64::Engine;
++use std::convert::TryFrom;
++use serde_json::{json, Value as BridgeValue};
++include!("prototype-graphics.rs");
++
++fn bridge_color(c: crate::color::ColorAttribute) -> BridgeValue {
++    use crate::color::ColorAttribute::*;
++    match c {
++        Default => json!([2, 0, 0, 0]),
++        PaletteIndex(i) => json!([0, i, 0, 0]),
++        TrueColorWithPaletteFallback(c, _) | TrueColorWithDefaultFallback(c) => {
++            let (r, g, b, _) = c.to_srgb_u8(); json!([1, r, g, b])
++        }
++    }
++}
++
++fn bridge_attribute(a: &CellAttributes) -> anyhow::Result<BridgeValue> {
++    use crate::{Intensity, Underline};
++    let underline = match a.underline() {
++        Underline::None => 0, Underline::Single => 1,
++        _ => anyhow::bail!("unsupported underline variant"),
++    };
++    let style: u8 = if a.intensity() == Intensity::Bold {1} else {0}
++        | if underline != 0 {2} else {0}
++        | if a.blink() != crate::Blink::None {4} else {0}
++        | if a.reverse() {8} else {0}
++        | if a.invisible() {16} else {0}
++        | if a.intensity() == Intensity::Half {32} else {0}
++        | if a.italic() {64} else {0}
++        | if a.strikethrough() {128} else {0};
++    anyhow::ensure!(!a.overline(), "unsupported overline");
++    anyhow::ensure!(a.hyperlink().map_or(true, |h| h.params().is_empty()), "unsupported hyperlink parameters");
++    Ok(json!({"fg": bridge_color(a.foreground()), "bg": bridge_color(a.background()),
++        "style":style,"underline":underline,
++        "underlineColor":bridge_color(a.underline_color()),
++        "link":a.hyperlink().map(|h|format!(";{}", h.uri()))}))
++}
++
++fn bridge_saved(saved: &Option<SavedCursor>) -> anyhow::Result<BridgeValue> {
++    match saved {
++        None => Ok(BridgeValue::Null),
++        Some(s) => {
++            anyhow::ensure!(s.g0_charset == CharSet::Ascii && s.g1_charset == CharSet::Ascii,
++                "unsupported saved charset");
++            Ok(json!({"x":s.position.x,"y":s.position.y,"wrapNext":s.wrap_next,
++                "origin":s.dec_origin_mode,"pen":bridge_attribute(&s.pen)?,
++                "wrap":s.prototype_wrap,"reverseWrap":s.prototype_reverse_wrap,"margin":s.prototype_margin}))
++        }
++    }
++}
++
++fn bridge_keyboard(screen: &Screen) -> anyhow::Result<BridgeValue> {
++    anyhow::ensure!(screen.keyboard_stack.len() <= 128, "keyboard stack limit");
++    let flags: Vec<u16> = screen.keyboard_stack.iter().map(|encoding| match encoding {
++        KeyboardEncoding::Xterm => Ok(0), KeyboardEncoding::Kitty(flags) => Ok(flags.bits()),
++        _ => Err(anyhow::anyhow!("unsupported keyboard encoding")),
++    }).collect::<anyhow::Result<_>>()?;
++    Ok(json!({"flags":flags.last().copied().unwrap_or(0), "stack":if flags.is_empty() {&flags[..]} else {&flags[..flags.len()-1]}}))
++}
++
++// Match the native checkpoint cell codec and leave its eight MiB metadata reserve.
++const CHECKPOINT_CELL_PAYLOAD_BYTES: usize = 24 * 1024 * 1024;
++const CHECKPOINT_CELL_BUDGET: usize = CHECKPOINT_CELL_PAYLOAD_BYTES / 23;
++
++#[derive(Debug)]
++pub(crate) struct CheckpointCapacity(pub(crate) &'static str);
++
++impl std::fmt::Display for CheckpointCapacity {
++    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        f.write_str(self.0)
++    }
++}
++
++impl std::error::Error for CheckpointCapacity {}
++
++fn checkpoint_capacity(condition: bool, diagnostic: &'static str) -> anyhow::Result<()> {
++    if condition { Ok(()) } else { Err(CheckpointCapacity(diagnostic).into()) }
++}
++
++#[derive(Default)]
++struct BridgeCells {
++    allocated: usize,
++    packed_bytes: usize,
++    attribute_bytes: usize,
++    attributes: Vec<BridgeValue>,
++    ids: HashMap<String, u32>,
++    previous_attribute: Option<(CellAttributes, u32)>,
++}
++
++impl BridgeCells {
++    fn intern_attribute(&mut self, attribute: &CellAttributes) -> anyhow::Result<u32> {
++        if let Some((previous, id)) = &self.previous_attribute {
++            if previous == attribute {
++                return Ok(*id);
++            }
++        }
++        let value = bridge_attribute(attribute)?;
++        let key = serde_json::to_string(&value)?;
++        let id = match self.ids.get(&key) {
++            Some(id) => *id,
++            None => {
++                self.attribute_bytes += key.len();
++                checkpoint_capacity(self.attribute_bytes <= 8 * 1024 * 1024, "checkpoint attributes exceed 8 MiB")?;
++                let id = u32::try_from(self.attributes.len())?;
++                self.ids.insert(key, id);
++                self.attributes.push(value);
++                id
++            }
++        };
++        self.previous_attribute = Some((attribute.clone(), id));
++        Ok(id)
++    }
++
++    fn line(&mut self, line: &crate::Line, columns: usize) -> anyhow::Result<String> {
++        const HEADER: usize = 13;
++        self.allocated += columns;
++        checkpoint_capacity(self.allocated <= CHECKPOINT_CELL_BUDGET, "checkpoint allocated cell limit")?;
++        let mut bytes = Vec::new();
++        let mut previous: Option<(usize, usize, u16, u32)> = None;
++        for cell in line.visible_cells() {
++            let text = cell.str().as_bytes();
++            let attribute = self.intern_attribute(cell.attrs())?;
++            let column = cell.cell_index();
++            if let Some((offset, prior_column, count, prior_attribute)) = previous {
++                if cell.width() == 1 && prior_attribute == attribute
++                    && prior_column + usize::from(count) == column
++                    && &bytes[offset + HEADER..] == text
++                {
++                    let count = count + 1;
++                    bytes[offset+2..offset+4].copy_from_slice(&count.to_be_bytes());
++                    previous = Some((offset, prior_column, count, attribute));
++                    continue;
++                }
++            }
++            let geometry = (u16::try_from(column)?, u8::try_from(cell.width())?);
++            let offset = bytes.len();
++            self.packed_bytes += HEADER + text.len();
++            checkpoint_capacity(self.packed_bytes <= 24 * 1024 * 1024, "checkpoint encoded cells exceed the byte budget")?;
++            bytes.extend(geometry.0.to_be_bytes());
++            bytes.extend(1u16.to_be_bytes());
++            bytes.extend(attribute.to_be_bytes());
++            bytes.push(geometry.1);
++            bytes.extend(u32::try_from(text.len())?.to_be_bytes());
++            bytes.extend(text);
++            previous = (cell.width() == 1).then_some((offset, column, 1, attribute));
++        }
++        Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
++    }
++}
++
++fn bridge_screen(screen: &Screen, normal: bool, margins: [usize;4], first: usize, scrollback: usize, cells: &mut BridgeCells,
++    graphics: &mut BridgeGraphics, cell_width: usize, cell_height: usize,
++    requests: &std::collections::HashMap<([u8;32],usize,usize),BridgeValue>,
++    kitty_requests: &std::collections::HashMap<(u32,Option<u32>),BridgeValue>) -> anyhow::Result<BridgeValue> {
++    let count = screen.scrollback_rows();
++    anyhow::ensure!(count <= screen.physical_rows + if normal {scrollback} else {0}, "checkpoint line limit");
++    let first_wrapped = if first == 0 {
++        screen.prototype_first_wrapped
++    } else {
++        screen.lines_in_phys_range(first-1..first).first().is_some_and(|line| line.last_cell_was_wrapped())
++    };
++    let lines = screen.lines_in_phys_range(first..count);
++    let mut output = Vec::new();
++    for line in lines {
++        anyhow::ensure!(!line.is_double_width() && !line.is_double_height_top()
++            && !line.is_double_height_bottom(), "unsupported line render mode");
++        let width = line.len().max(screen.physical_cols);
++        // Reflow can leave a blank normal row at its old width. Its styles
++        // and image cells still belong to the line and must survive a checkpoint.
++        anyhow::ensure!(width <= 1000, "checkpoint stored column limit");
++        let packed = cells.line(&line, width)?;
++        output.push(json!({"wrapped":line.last_cell_was_wrapped(),"cells":packed,
++            "width":line.len().max(screen.physical_cols),"images":graphics.row(&line,cell_width,cell_height,requests,kitty_requests)?}));
++    }
++    Ok(json!({"lines":output,"firstWrapped":first_wrapped,"cursor":[screen.prototype_cursor.x, screen.prototype_cursor.y],"saved":bridge_saved(&screen.saved_cursor)?,"margins":margins,
++        "defaultSavedY":screen.prototype_unsaved_y}))
++}
++
++impl TerminalState {
++    pub(crate) fn prototype_store_image_request(&mut self, hash: [u8;32], width: usize, height: usize, request: BridgeValue) {
++        let mut referenced: std::collections::HashSet<[u8;32]> = self.image_cache.iter().map(|(key,_)|*key).collect();
++        referenced.extend(self.kitty_img.prototype_relative_hashes());
++        for screen in [&self.screen.screen,&self.screen.alt_screen] {
++            for line in screen.lines_in_phys_range(0..screen.scrollback_rows()) {
++                for cell in line.visible_cells() { for image in cell.attrs().images().unwrap_or_default() {
++                    referenced.insert(image.image_data().hash());
++                }}
++            }
++        }
++        self.prototype_image_requests.retain(|key,_|referenced.contains(&key.0));
++        if self.prototype_image_requests.len()>=64 && !self.prototype_image_requests.contains_key(&(hash,width,height)) {
++            self.prototype_image_request_overflow = true;
++        } else { self.prototype_image_requests.insert((hash,width,height),request); }
++    }
++    pub(crate) fn prototype_sixel_hls(hue: usize, lightness: usize, saturation: usize) -> RgbColor {
++        let l = lightness.min(100) as f64;
++        let s = saturation.min(100) as f64;
++        let delta = s*(1.0-(2.0*l/100.0-1.0).abs())/2.0;
++        let lo = l-delta; let hi = l+delta;
++        let h = ((hue.min(360)+240)%360) as f64;
++        let (r,g,b) = match h as usize/60 {
++            0 => (hi,lo+(hi-lo)*h/60.0,lo), 1 => (lo+(hi-lo)*(120.0-h)/60.0,hi,lo),
++            2 => (lo,hi,lo+(hi-lo)*(h-120.0)/60.0), 3 => (lo,lo+(hi-lo)*(240.0-h)/60.0,hi),
++            4 => (lo+(hi-lo)*(h-240.0)/60.0,lo,hi), _ => (hi,lo,lo+(hi-lo)*(360.0-h)/60.0),
++        };
++        let byte = |v:f64| ((v.clamp(0.0,100.0) as usize)*255/100) as u8;
++        RgbColor::new_8bpc(byte(r),byte(g),byte(b))
++    }
++
++    pub(crate) fn prototype_erase_attribute(&self) -> CellAttributes {
++        let mut result = CellAttributes::default();
++        result.set_background(self.pen.background());
++        result
++    }
++
++    pub(crate) fn prototype_close_link_boundary(&mut self) {
++        let Some(link) = self.pen.hyperlink().cloned() else { return; };
++        // SwiftTerm retains the closing cursor cell as part of a closed link.
++        // Preserve that existing client behavior instead of dropping its payload.
++        let x = self.cursor.x.min(self.screen().physical_cols - 1);
++        let y = self.cursor.y;
++        let physical = self.screen().phys_row(y);
++        let previous = if x > 0 {
++            self.screen().lines_in_phys_range(physical..physical+1).first().map(|line|
++                line.visible_cells().any(|c| c.cell_index()+c.width()==x && c.attrs().hyperlink()==Some(&link))).unwrap_or(false)
++        } else { false };
++        if !previous { return; }
++        let mut cell = self.screen_mut().get_cell(x,y).cloned().unwrap_or_else(Cell::blank);
++        cell.attrs_mut().set_hyperlink(Some(link));
++        let seqno = self.seqno;
++        self.screen_mut().set_cell(x,y,&cell,seqno);
++    }
++
++    pub(crate) fn prototype_clear_alt_buffer(&mut self) {
++        // Native Buffer.clear resets live content and margins but keeps saved state.
++        let mut cleared = Screen::new(self.get_size(), &self.config, false, self.seqno, self.get_bidi_mode());
++        std::mem::swap(&mut cleared.saved_cursor, &mut self.screen.alt_screen.saved_cursor);
++        std::mem::swap(&mut cleared.keyboard_stack, &mut self.screen.alt_screen.keyboard_stack);
++        cleared.prototype_unsaved_y = self.screen.alt_screen.prototype_unsaved_y;
++        self.screen.alt_screen = cleared;
++        self.prototype_last_print[1] = None;
++    }
++
++    pub(crate) fn prototype_switch_buffer(&mut self, alternate: bool) {
++        if !alternate && self.screen.alt_screen_is_active { self.prototype_clear_alt_kitty(); }
++        let margins = [self.top_and_bottom_margins.start as usize,self.top_and_bottom_margins.end as usize,
++            self.left_and_right_margins.start,self.left_and_right_margins.end];
++        let mut live_cursor = self.cursor;
++        if self.wrap_next { live_cursor.x += 1; }
++        if self.screen.alt_screen_is_active {
++            self.screen.alt_screen.prototype_margins = margins;
++            self.screen.alt_screen.prototype_cursor = live_cursor;
++        } else {
++            self.screen.screen.prototype_margins = margins;
++            self.screen.screen.prototype_cursor = live_cursor;
++        }
++        if alternate {self.screen.activate_alt_screen(self.seqno);} else {self.screen.activate_primary_screen(self.seqno);}
++        let margins = if alternate {self.screen.alt_screen.prototype_margins} else {self.screen.screen.prototype_margins};
++        self.top_and_bottom_margins = margins[0] as i64..margins[1] as i64;
++        self.left_and_right_margins = margins[2]..margins[3];
++    }
++    pub(crate) fn prototype_record_print(&mut self, x: usize, y: VisibleRowIndex) {
++        let screen = self.screen();
++        let stable = screen.phys_to_stable_row_index(screen.phys_row(y));
++        self.prototype_last_print[usize::from(self.screen.alt_screen_is_active)] =
++            Some((x, stable, screen.physical_cols, screen.physical_rows));
++    }
++
++    pub(crate) fn prototype_combine(&mut self, text: &str) -> bool {
++        if text.is_ascii() { return false; }
++        let Some((x, stable, cols, rows)) = self.prototype_last_print[usize::from(self.screen.alt_screen_is_active)] else { return false; };
++        let screen = self.screen();
++        if cols != screen.physical_cols || rows != screen.physical_rows { return false; }
++        let Some(physical) = screen.stable_row_to_phys(stable) else { return false; };
++        let lines = screen.lines_in_phys_range(physical..physical+1);
++        let Some(line) = lines.first() else { return false; };
++        let Some(cell) = line.visible_cells().find(|c|c.cell_index() == x) else { return false; };
++        let joined = format!("{}{}", cell.str(), text);
++        if finl_unicode::grapheme_clusters::Graphemes::new(&joined).count() != 1 { return false; }
++        let width = cell.width();
++        let attrs = cell.attrs().clone();
++        let y = physical as i64 - self.screen().phys_row(0) as i64;
++        let seqno = self.seqno;
++        self.screen_mut().set_cell_grapheme(x, y, &joined, width, attrs, seqno);
++        true
++    }
++
++    fn prototype_last_storage(&self, alternate: bool, first: usize) -> BridgeValue {
++        let screen = if alternate {&self.screen.alt_screen} else {&self.screen.screen};
++        match self.prototype_last_print[usize::from(alternate)] {
++            Some((x, stable, cols, rows)) => match screen.stable_row_to_phys(stable) {
++                Some(y) if y >= first => json!([x,y-first,cols,rows]), _ => BridgeValue::Null },
++            None => BridgeValue::Null
++        }
++    }
++
++    pub(crate) fn checkpoint_normal_rows(&self) -> (usize, usize) {
++        let main = &self.screen.screen;
++        let alt = &self.screen.alt_screen;
++        let alt_cells: usize = alt.lines_in_phys_range(0..alt.scrollback_rows()).iter()
++            .map(|line| line.len().max(alt.physical_cols)).sum();
++        let cell_budget = CHECKPOINT_CELL_PAYLOAD_BYTES.saturating_sub(self.kitty_img.checkpoint_cache_bytes()) / 23;
++        let normal_rows = cell_budget.saturating_sub(alt_cells) / main.physical_cols;
++        (main.physical_rows, main.scrollback_rows().min(normal_rows.max(main.physical_rows)))
++    }
++
++    pub fn prototype_checkpoint_state(&self, normal_count: usize) -> anyhow::Result<BridgeValue> {
++        anyhow::ensure!((2..=1000).contains(&self.screen.physical_cols)
++            && (1..=1000).contains(&self.screen.physical_rows), "checkpoint dimension limit");
++        anyhow::ensure!(self.palette.is_none(), "unsupported dynamic palette");
++        anyhow::ensure!(self.g0_charset == CharSet::Ascii && self.g1_charset == CharSet::Ascii
++            && !self.shift_out, "unsupported charset");
++        anyhow::ensure!(self.keyboard_encoding == KeyboardEncoding::Xterm, "unsupported keyboard encoding");
++        let omitted = self.screen.screen.scrollback_rows().saturating_sub(normal_count);
++        let normal_positions = self.prototype_kitty_positions(false);
++        let alternate_positions = self.prototype_kitty_positions(true);
++        let kitty = self.kitty_img.prototype_checkpoint(omitted, &normal_positions, &alternate_positions)?;
++        anyhow::ensure!(!self.reverse_video_mode && !self.enable_conpty_quirks
++            && self.modify_other_keys.is_none() && !self.dec_ansi_mode
++            && self.unicode_version_stack.is_empty() && self.bidi_enabled.is_none()
++            && self.bidi_hint.is_none(), "unsupported extended terminal state");
++        anyhow::ensure!(self.pen.hyperlink().is_none(), "unsupported open hyperlink");
++        let scrollback = self.config.scrollback_size();
++        let mut cells = BridgeCells::default();
++        let mut graphics = BridgeGraphics::default();
++        let active_margins = [self.top_and_bottom_margins.start as usize,self.top_and_bottom_margins.end as usize,
++            self.left_and_right_margins.start,self.left_and_right_margins.end];
++        let cell_width = self.pixel_width/self.screen.physical_cols;
++        let cell_height = self.pixel_height/self.screen.physical_rows;
++        let normal = bridge_screen(&self.screen.screen, true, if !self.screen.alt_screen_is_active {active_margins} else {self.screen.screen.prototype_margins}, omitted, scrollback, &mut cells, &mut graphics,cell_width,cell_height,&self.prototype_image_requests,self.kitty_img.prototype_placement_requests())?;
++        let alternate = bridge_screen(&self.screen.alt_screen, false, if self.screen.alt_screen_is_active {active_margins} else {self.screen.alt_screen.prototype_margins}, 0, scrollback, &mut cells, &mut graphics,cell_width,cell_height,&self.prototype_image_requests,self.kitty_img.prototype_placement_requests())?;
++        let relative = self.kitty_img.prototype_relative_resources(&mut graphics,cell_height)?;
++        let mut kitty = kitty;
++        kitty["relativeResources"] = json!(relative);
++        Ok(json!({"scrollback":scrollback,"omittedScrollbackLines":omitted,"attributes":cells.attributes,"columns":self.screen.physical_cols,"rows":self.screen.physical_rows,
++            "normal":normal,"alternate":alternate,"graphics":graphics.resources.into_values().collect::<Vec<_>>(),
++            "cellPixels":[cell_width,cell_height],
++            "kitty":kitty,
++            "alternateActive":self.screen.alt_screen_is_active,
++            "lastStorage":[self.prototype_last_storage(false,omitted),self.prototype_last_storage(true,0)],
++            "keyboard":[bridge_keyboard(&self.screen.screen)?,bridge_keyboard(&self.screen.alt_screen)?],
++            "cursor":[self.cursor.x,self.cursor.y],"wrapNext":self.wrap_next,
++            "cursorStyle":match self.cursor.shape { CursorShape::Default|CursorShape::BlinkingBlock=>0,
++                CursorShape::SteadyBlock=>1,CursorShape::BlinkingUnderline=>2,CursorShape::SteadyUnderline=>3,
++                CursorShape::BlinkingBar=>4,CursorShape::SteadyBar=>5 },
++            "pen":bridge_attribute(&self.pen)?,"title":self.title,"iconTitle":self.icon_title,
++            "tabs":self.tabs.tabs,"tabWidth":self.tabs.tab_width,
++            "margins":[self.top_and_bottom_margins.start,self.top_and_bottom_margins.end,
++                self.left_and_right_margins.start,self.left_and_right_margins.end],
++            "modes":{"applicationCursor":self.application_cursor_keys,"applicationKeypad":self.application_keypad,
++                "origin":self.dec_origin_mode,"margin":self.left_and_right_margin_mode,"insert":self.insert,
++                "wrap":self.dec_auto_wrap,"reverseWrap":self.reverse_wraparound_mode,
++                "paste":self.bracketed_paste,"focus":self.focus_tracking,"cursorHidden":!self.cursor_visible,
++                "newline":self.newline_mode,"mouse":if self.any_event_mouse {4} else if self.button_event_mouse {3}
++                    else if self.mouse_tracking {2} else {0},
++                "mouseProtocol":match self.mouse_encoding {MouseEncoding::X10=>0,MouseEncoding::Utf8=>1,
++                    MouseEncoding::SGR=>2,MouseEncoding::SgrPixels=>4}},
++            "directory":self.current_dir.as_ref().map(|u|u.as_str())}))
++    }
++}
+--- /dev/null
++++ b/term/src/terminalstate/prototype-graphics.rs
+@@ -0,0 +1,197 @@
++const CHECKPOINT_IMAGE_BYTES: usize = 24 * 1024 * 1024;
++const CHECKPOINT_SOURCE_PIXELS: usize = 16 * 1024 * 1024;
++const CHECKPOINT_PLACEMENT_RASTER: usize = 8 * 1024 * 1024;
++const CHECKPOINT_RETAINED_RASTER: usize = 12 * 1024 * 1024;
++
++// Retained resources are read from actual image cells, not from output history.
++#[derive(Default)]
++struct BridgeGraphics {
++    resources: std::collections::BTreeMap<String, BridgeValue>,
++    decoded_bytes: usize,
++    stored_bytes: usize,
++    raster_bytes: usize,
++}
++
++impl BridgeGraphics {
++    fn reserve(
++        &mut self, source: (usize, usize), stored_bytes: usize,
++        display: (usize, usize), cell_height: usize,
++    ) -> anyhow::Result<()> {
++        let (width, height) = source;
++        anyhow::ensure!(width > 0 && height > 0 && width <= 10_000 && height <= 10_000
++            && width * height <= CHECKPOINT_SOURCE_PIXELS, "checkpoint image dimensions");
++        let (width, height) = display;
++        let rows = height.div_ceil(cell_height);
++        let raster = width * rows * cell_height * 4;
++        checkpoint_capacity(rows <= 2048 && raster <= CHECKPOINT_PLACEMENT_RASTER,
++            "checkpoint image placement raster limit")?;
++        self.raster_bytes += raster + rows * 4096;
++        self.decoded_bytes += source.0 * source.1 * 4;
++        self.stored_bytes += stored_bytes;
++        checkpoint_capacity(self.resources.len() < 2048
++            && self.decoded_bytes <= CHECKPOINT_SOURCE_PIXELS * 4
++            && self.stored_bytes <= CHECKPOINT_IMAGE_BYTES
++            && self.raster_bytes <= CHECKPOINT_RETAINED_RASTER,
++            "checkpoint image resource limit")
++    }
++
++    fn row(
++        &mut self,
++        line: &wezterm_surface::Line,
++        cell_width: usize,
++        cell_height: usize,
++        requests: &std::collections::HashMap<([u8; 32], usize, usize), BridgeValue>,
++        kitty_requests: &std::collections::HashMap<(u32, Option<u32>), BridgeValue>,
++    ) -> anyhow::Result<Vec<BridgeValue>> {
++        let mut placements = std::collections::BTreeMap::new();
++        for cell in line.visible_cells() {
++            for img in cell.attrs().images().unwrap_or_default() {
++                let tl = img.top_left();
++                let br = img.bottom_right();
++                let (left, top, right, bottom) = img.padding();
++                anyhow::ensure!(
++                    (img.image_id().is_some() || (left == 0 && top == 0))
++                        && cell_width > right as usize
++                        && cell_height > bottom as usize,
++                    "unsupported image padding"
++                );
++                let dx = br.x.into_inner() - tl.x.into_inner();
++                let dy = br.y.into_inner() - tl.y.into_inner();
++                anyhow::ensure!(dx > 0.0 && dy > 0.0, "invalid image texture range");
++                let display_width =
++                    ((cell_width - right as usize) as f64 / dx as f64).round() as usize;
++                let display_height =
++                    ((cell_height - bottom as usize) as f64 / dy as f64).round() as usize;
++                anyhow::ensure!(
++                    (1..=65_535).contains(&display_width) && (1..=65_535).contains(&display_height) && display_width.div_ceil(cell_width) <= 4096,
++                    "image display limit"
++                );
++                let column_offset = (tl.x.into_inner() as f64 * display_width as f64
++                    / cell_width as f64)
++                    .round() as usize;
++                let stripe = (tl.y.into_inner() as f64 * display_height as f64 / cell_height as f64)
++                    .round() as usize;
++                let column = cell.cell_index() as i64 - column_offset as i64;
++                anyhow::ensure!(
++                    column >= 0 || img.image_id().is_some(),
++                    "image origin clipped"
++                );
++                if img.image_id().is_some() {
++                    anyhow::ensure!(
++                        img.placement_id().is_some(),
++                        "unsupported automatic Kitty placement identity"
++                    );
++                }
++                let request = if let Some(id) = img.image_id() {
++                    kitty_requests.get(&(id, img.placement_id()))
++                } else {
++                    requests.get(&(img.image_data().hash(), display_width, display_height))
++                };
++                anyhow::ensure!(
++                    img.image_id().is_none() || request.is_some(),
++                    "missing Kitty request identity"
++                );
++                let key = Self::request_key(
++                    img.image_data().hash(),
++                    display_width,
++                    display_height,
++                    request,
++                )?;
++                if !self.resources.contains_key(&key) {
++                    use wezterm_cell::image::ImageDataType;
++                    let data = img.image_data().data();
++                    let (rgba, encoded, width, height) = match &*data {
++                        ImageDataType::Rgba8 { data, width, height, .. } => {
++                            let (w, h) = (*width as usize, *height as usize);
++                            anyhow::ensure!(w.checked_mul(h).and_then(|pixels| pixels.checked_mul(4)) == Some(data.len()),
++                                "invalid image resource dimensions");
++                            (data.as_slice(), &[] as &[u8], w, h)
++                        }
++                        ImageDataType::EncodedFile(bytes) => {
++                            let reader = ::image::ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format()?;
++                            let (w, h) = reader.into_dimensions()?;
++                            (&[] as &[u8], bytes.as_slice(), w as usize, h as usize)
++                        }
++                        _ => anyhow::bail!("unsupported animated or leased image resource"),
++                    };
++                    self.reserve((width, height), rgba.len() + encoded.len(),
++                        (display_width, display_height), cell_height)?;
++                    anyhow::ensure!(
++                        encoded.is_empty() || request.is_some(),
++                        "image request metadata limit"
++                    );
++                    let base64 = &base64::engine::general_purpose::STANDARD;
++                    self.resources.insert(key.clone(),json!({"key":key,"rgba":base64.encode(rgba),"encoded":base64.encode(encoded),"width":width,"height":height,
++                        "displayWidth":display_width,"displayHeight":display_height,
++                        "request":request}));
++                }
++                let placement_key = (
++                    key.clone(),
++                    column,
++                    stripe,
++                    img.image_id(),
++                    img.placement_id(),
++                    img.z_index(),
++                );
++                placements.entry(placement_key).or_insert_with(||json!({"resource":key,"column":column,"stripe":stripe,
++                    "imageId":img.image_id(),"placementId":img.placement_id(),"zIndex":img.z_index()}));
++            }
++        }
++        Ok(placements.into_values().collect())
++    }
++}
++
++impl BridgeGraphics {
++    fn relative_resource(
++        &mut self,
++        image: &std::sync::Arc<wezterm_surface::change::ImageData>,
++        width: usize,
++        height: usize,
++        request: &BridgeValue,
++        cell_height: usize,
++    ) -> anyhow::Result<String> {
++        let key = Self::request_key(image.hash(), width, height, Some(request))?;
++        if !self.resources.contains_key(&key) {
++            anyhow::ensure!(
++                (1..=65_535).contains(&width) && (1..=65_535).contains(&height),
++                "relative resource limit"
++            );
++            let data = image.data();
++            match &*data {
++                wezterm_cell::image::ImageDataType::Rgba8 {
++                    data,
++                    width: source_width,
++                    height: source_height,
++                    ..
++                } => {
++                    self.reserve((*source_width as usize, *source_height as usize), data.len(),
++                        (width, height), cell_height)?;
++                    let rgba = base64::engine::general_purpose::STANDARD.encode(data);
++                    self.resources.insert(key.clone(),json!({"key":key,"rgba":rgba,"encoded":"","width":source_width,"height":source_height,
++                        "displayWidth":width,"displayHeight":height,"request":request}));
++                }
++                _ => anyhow::bail!("unsupported relative resource"),
++            }
++        }
++        Ok(key)
++    }
++}
++
++impl BridgeGraphics {
++    fn request_key(
++        hash: [u8; 32],
++        width: usize,
++        height: usize,
++        request: Option<&BridgeValue>,
++    ) -> anyhow::Result<String> {
++        let encoded = serde_json::to_vec(&request)?;
++        let request_hash = wezterm_cell::image::ImageDataType::hash_bytes(&encoded);
++        Ok(format!(
++            "{}-{}-{}-{}",
++            hex::encode(hash),
++            width,
++            height,
++            hex::encode(request_hash)
++        ))
++    }
++}
+--- /dev/null
++++ b/term/src/terminalstate/prototype-kitty.rs
+@@ -0,0 +1,982 @@
++use base64::Engine;
++use super::{CHECKPOINT_IMAGE_BYTES, CHECKPOINT_RETAINED_RASTER};
++// Only in-progress direct transfers are rebuilt from bounded semantic records.
++impl KittyImageState {
++    pub(super) fn checkpoint_cache_bytes(&self) -> usize {
++        self.id_to_data.values().fold(0usize, |bytes, image| {
++            match &*image.data() {
++                ImageDataType::Rgba8 { data, .. } => bytes.saturating_add(data.len()),
++                _ => bytes,
++            }
++        })
++    }
++
++    pub(super) fn prototype_checkpoint(
++        &self,
++        omitted: usize,
++        normal_positions: &HashMap<(u32, Option<u32>), (usize, usize)>,
++        alternate_positions: &HashMap<(u32, Option<u32>), (usize, usize)>,
++    ) -> anyhow::Result<serde_json::Value> {
++        anyhow::ensure!(
++            self.prototype_projection_errors.is_empty(),
++            "Kitty relative projection failed"
++        );
++        anyhow::ensure!(
++            self.id_to_data.len() <= 2048 && self.number_to_id.len() <= 2048,
++            "Kitty cache count limit"
++        );
++        let mut images = Vec::new();
++        let mut total = 0;
++        for (id, image) in &self.id_to_data {
++            anyhow::ensure!(*id != 0, "unsupported anonymous Kitty image identity");
++            let data = image.data();
++            match &*data {
++                ImageDataType::Rgba8 {
++                    data,
++                    width,
++                    height,
++                    ..
++                } => {
++                    total += data.len();
++                    anyhow::ensure!(total <= CHECKPOINT_IMAGE_BYTES, "Kitty cache byte limit");
++                    images.push(
++                        serde_json::json!({"id":id,"rgba":base64::engine::general_purpose::STANDARD.encode(data),"width":width,"height":height}),
++                    );
++                }
++                _ => anyhow::bail!("unsupported Kitty cache format"),
++            }
++        }
++        images.sort_by_key(|image| image["id"].as_u64());
++        let mut numbers: Vec<_> = self
++            .number_to_id
++            .iter()
++            .map(|(number, id)| serde_json::json!({"number":number,"id":id}))
++            .collect();
++        numbers.sort_by_key(|number| number["number"].as_u64());
++        anyhow::ensure!(self.accumulator.len() <= 128, "Kitty pending chunk limit");
++        let mut commands = Vec::new();
++        let mut bytes = 0;
++        for image in &self.accumulator {
++            let transmit = match image {
++                KittyImage::TransmitData { transmit, .. } => transmit,
++                KittyImage::TransmitDataAndDisplay {
++                    transmit,
++                    placement,
++                    ..
++                } => {
++                    let _ = placement;
++                    transmit
++                }
++                _ => anyhow::bail!("unsupported pending Kitty action"),
++            };
++            anyhow::ensure!(
++                transmit.more_data_follows
++                    && matches!(
++                        transmit.data,
++                        KittyImageData::Direct(_) | KittyImageData::DirectBin(_)
++                    ),
++                "unsupported pending Kitty transmission"
++            );
++            let command = format!("{image}\x1b\\").into_bytes();
++            bytes += command.len();
++            anyhow::ensure!(bytes <= 16384, "Kitty pending byte limit");
++            commands.push(command);
++        }
++        anyhow::ensure!(self.placements.len() <= 1024, "Kitty placement count limit");
++        let mut placement_buffers = Vec::new();
++        for key in self.placements.keys() {
++            let alternate = self
++                .prototype_placement_buffers
++                .get(key)
++                .ok_or_else(|| anyhow::anyhow!("missing Kitty placement buffer"))?;
++            let mut record = self
++                .prototype_records
++                .get(key)
++                .ok_or_else(|| anyhow::anyhow!("missing Kitty placement record"))?
++                .clone();
++            if !record["parentImageId"].is_number() {
++                let positions = if *alternate { alternate_positions } else { normal_positions };
++                if let Some((row, column)) = positions.get(key) {
++                    record["row"] = (*row).into();
++                    record["column"] = (*column).into();
++                }
++            }
++            anyhow::ensure!(
++                key.1.is_some(),
++                "unsupported automatic Kitty placement identity"
++            );
++            for field in ["column", "imageColumn"] {
++                anyhow::ensure!(
++                    record[field].as_i64().map_or(false, |n| {
++                        if record["parentImageId"].is_number() {
++                            (-68_719_478_000..=68_719_478_000).contains(&n)
++                        } else {
++                            (0..=1000).contains(&n)
++                        }
++                    }),
++                    "Kitty placement column limit"
++                );
++            }
++            for field in ["row", "imageRow"] {
++                anyhow::ensure!(
++                    record[field].as_i64().map_or(false, |n| {
++                        if record["parentImageId"].is_number() {
++                            (-68_719_478_000..=68_719_478_000).contains(&n)
++                        } else {
++                            (0..=101_000).contains(&n)
++                        }
++                    }),
++                    "Kitty placement row limit"
++                );
++            }
++            if !alternate {
++                // The original records stay attached to the live buffer. Rebase only the snapshot.
++                for field in ["row", "imageRow"] {
++                    let row = record[field].as_i64().ok_or_else(|| anyhow::anyhow!("missing Kitty row"))?;
++                    record[field] = (row - omitted as i64).into();
++                }
++            }
++            for field in ["columns", "rows"] {
++                anyhow::ensure!(
++                    record[field]
++                        .as_u64()
++                        .map_or(false, |n| (if record["isVirtual"].as_bool() == Some(true) {
++                            0
++                        } else {
++                            1
++                        }..=2048)
++                            .contains(&n)),
++                    "Kitty placement dimension limit"
++                );
++            }
++            for field in ["pixelOffsetX", "pixelOffsetY"] {
++                anyhow::ensure!(
++                    record[field].as_u64().map_or(false, |n| n <= 1024),
++                    "Kitty placement offset limit"
++                );
++            }
++            record["id"] = serde_json::json!(key.0);
++            record["placement"] = serde_json::json!(key.1);
++            record["alternate"] = serde_json::json!(alternate);
++            placement_buffers.push(record);
++        }
++        placement_buffers.sort_by_key(|p| (p["id"].as_u64(), p["placement"].as_u64()));
++        Ok(
++            serde_json::json!({"nextImageId":self.prototype_next_image.max(1),"nextPlacementId":self.prototype_next_placement.max(1),"pendingCommands":commands,"images":images,"numbers":numbers,"placementBuffers":placement_buffers}),
++        )
++    }
++}
++
++impl TerminalState {
++    pub(crate) fn prototype_clear_alt_kitty(&mut self) {
++        let keys: Vec<_> = self
++            .kitty_img
++            .placements
++            .keys()
++            .filter(|key| self.kitty_img.prototype_placement_buffers.get(key) == Some(&true))
++            .copied()
++            .collect();
++        for (id, placement) in keys {
++            self.kitty_remove_placement(id, placement);
++            self.kitty_img
++                .prototype_placement_buffers
++                .remove(&(id, placement));
++        }
++        let unused: Vec<_> = self
++            .kitty_img
++            .id_to_data
++            .keys()
++            .filter(|id| !self.kitty_img.placements.keys().any(|key| key.0 == **id))
++            .copied()
++            .collect();
++        for id in unused {
++            self.kitty_img.remove_data_for_id(id);
++        }
++        let cached = &self.kitty_img.id_to_data;
++        self.kitty_img
++            .number_to_id
++            .retain(|_, id| cached.contains_key(id));
++    }
++}
++
++impl TerminalState {
++    pub fn prototype_relative_projections(&self) -> u64 {
++        self.kitty_img.prototype_projection_count
++    }
++
++    pub(super) fn prototype_kitty_positions(
++        &self,
++        alternate: bool,
++    ) -> HashMap<(u32, Option<u32>), (usize, usize)> {
++        if self.kitty_img.prototype_records.is_empty() {
++            return HashMap::new();
++        }
++        let mut positions = HashMap::new();
++        let screen = if alternate { &self.screen.alt_screen } else { &self.screen.screen };
++        for (row, line) in screen
++            .lines_in_phys_range(0..screen.scrollback_rows())
++            .iter()
++            .enumerate()
++        {
++            for cell in line.visible_cells() {
++                for image in cell.attrs().images().unwrap_or_default() {
++                    if let Some(id) = image.image_id() {
++                        let key = (id, image.placement_id());
++                        if self.kitty_img.prototype_placement_buffers.get(&key)
++                            == Some(&alternate)
++                        {
++                            positions.entry(key).or_insert((row, cell.cell_index()));
++                        }
++                    }
++                }
++            }
++        }
++        positions
++    }
++
++    pub(crate) fn prototype_update_kitty_records(&mut self, refresh_roots: bool) {
++        if self.kitty_img.prototype_updating_placement
++            || self.kitty_img.prototype_records.is_empty()
++        {
++            return;
++        }
++        let alternate = self.screen.alt_screen_is_active;
++        if !refresh_roots && !self.kitty_img.prototype_records.iter().any(|(key, record)| {
++            record["parentImageId"].is_number()
++                && self.kitty_img.prototype_placement_buffers.get(key) == Some(&alternate)
++        }) {
++            return;
++        }
++        let epoch = self.screen().prototype_image_epoch;
++        let dirty = self.kitty_img.prototype_layout_dirty
++            || self.kitty_img.prototype_cached_screen != Some(alternate)
++            || self.kitty_img.prototype_cached_epoch != epoch;
++        if !dirty && self.kitty_img.prototype_virtual_roots.is_empty() {
++            return;
++        }
++        if dirty {
++            let positions = self.prototype_kitty_positions(alternate);
++            self.kitty_img.prototype_positioned_roots = positions.keys().copied().collect();
++            for (key, (row, column)) in positions {
++                if let Some(record) = self.kitty_img.prototype_records.get_mut(&key) {
++                    if record["parentImageId"].is_number() {
++                        continue;
++                    }
++                    record["row"] = row.into();
++                    record["column"] = column.into();
++                }
++            }
++            self.kitty_img.prototype_active_relative = self
++                .kitty_img
++                .prototype_records
++                .iter()
++                .filter(|(key, r)| {
++                    r["parentImageId"].is_number()
++                        && r["parentPlacementId"].is_number()
++                        && self.kitty_img.prototype_placement_buffers.get(key) == Some(&alternate)
++                })
++                .map(|(k, _)| *k)
++                .collect();
++            self.kitty_img.prototype_virtual_roots.clear();
++            for key in &self.kitty_img.prototype_active_relative {
++                if let Some(root) = self.prototype_root_key(*key) {
++                    if self
++                        .kitty_img
++                        .prototype_records
++                        .get(&root)
++                        .and_then(|r| r["isVirtual"].as_bool())
++                        == Some(true)
++                    {
++                        self.kitty_img.prototype_virtual_roots.insert(root);
++                    }
++                }
++            }
++            self.kitty_img.prototype_layout_dirty = false;
++            self.kitty_img.prototype_cached_screen = Some(alternate);
++            self.kitty_img.prototype_cached_epoch = epoch;
++        }
++        if self.kitty_img.prototype_active_relative.is_empty() {
++            return;
++        }
++        self.kitty_img.prototype_virtual_origins =
++            self.prototype_scan_virtual_positions(&self.kitty_img.prototype_virtual_roots);
++        let keys = self.kitty_img.prototype_active_relative.clone();
++        for key in keys {
++            let positioned = self.prototype_root_key(key).map_or(false, |root| {
++                if self
++                    .kitty_img
++                    .prototype_records
++                    .get(&root)
++                    .and_then(|r| r["isVirtual"].as_bool())
++                    == Some(true)
++                {
++                    self.kitty_img.prototype_virtual_origins.contains_key(&root)
++                } else {
++                    self.kitty_img.prototype_positioned_roots.contains(&root)
++                }
++            });
++            let result = self
++                .prototype_parent_position(key, true)
++                .and_then(|desired| {
++                    let state = PrototypeProjectionState {
++                        row: desired.0,
++                        column: desired.1,
++                        rows: self.screen().scrollback_rows(),
++                        columns: self.screen().physical_cols,
++                        epoch,
++                        positioned,
++                    };
++                    if self.kitty_img.prototype_projection_states.get(&key) == Some(&state)
++                        && !self.kitty_img.prototype_projection_errors.contains(&key)
++                    {
++                        return Ok(());
++                    }
++                    self.prototype_project_relative(key, desired, positioned)?;
++                    self.kitty_img
++                        .prototype_projection_states
++                        .insert(key, state);
++                    Ok(())
++                });
++            if let Err(error) = result {
++                self.kitty_img.prototype_projection_errors.insert(key);
++                log::error!("Kitty projection: {:#}", error);
++            } else {
++                self.kitty_img.prototype_projection_errors.remove(&key);
++            }
++        }
++    }
++
++    fn prototype_root_key(&self, mut key: (u32, Option<u32>)) -> Option<(u32, Option<u32>)> {
++        let mut visited = HashSet::new();
++        while visited.len() <= 32 && visited.insert(key) {
++            let record = self.kitty_img.prototype_records.get(&key)?;
++            match record["parentImageId"]
++                .as_u64()
++                .zip(record["parentPlacementId"].as_u64())
++            {
++                Some((id, placement)) => {
++                    key = (
++                        u32::try_from(id).ok()?,
++                        Some(u32::try_from(placement).ok()?),
++                    )
++                }
++                None => return Some(key),
++            }
++        }
++        None
++    }
++}
++
++impl TerminalState {
++    fn prototype_parent_error(&self, image_id: u32, p: &KittyImagePlacement) -> Option<String> {
++        if p.parent_offset_h < i32::MIN as i64
++            || p.parent_offset_h > i32::MAX as i64
++            || p.parent_offset_v < i32::MIN as i64
++            || p.parent_offset_v > i32::MAX as i64
++        {
++            return Some("EINVAL: parent offset out of range".into());
++        }
++        if p.columns.map_or(false, |v| v > 2048) || p.rows.map_or(false, |v| v > 2048) {
++            return Some("EINVAL: placement dimensions out of range".into());
++        }
++
++        if p.virtual_placement && (p.parent_image_id.is_some() || p.parent_placement_id.is_some()) {
++            return Some("EINVAL: virtual placement cannot refer to parent".into());
++        }
++        if p.parent_image_id.is_some() != p.parent_placement_id.is_some() {
++            return Some("EINVAL: incomplete parent reference".into());
++        }
++        let (parent_image, parent_placement) = match (p.parent_image_id, p.parent_placement_id) {
++            (Some(i), Some(j)) => (i, j),
++            _ => return None,
++        };
++        let parent = (parent_image, Some(parent_placement));
++        if !self.kitty_img.placements.contains_key(&parent) {
++            return Some("ENOPARENT: parent placement not found".into());
++        }
++        if self.kitty_img.prototype_placement_buffers.get(&parent)
++            != Some(&self.screen.alt_screen_is_active)
++        {
++            return Some("ENOPARENT: parent placement not in current buffer".into());
++        }
++        let child = (image_id, p.placement_id);
++        let mut current = Some(parent);
++        let mut seen = HashSet::new();
++        let mut depth = 0;
++        while let Some(key) = current {
++            if key == child || !seen.insert(key) {
++                return Some("ECYCLE: cyclic placement reference".into());
++            }
++            depth += 1;
++            if depth > 32 {
++                return Some("ETOODEEP: placement chain limit".into());
++            }
++            current = self.kitty_img.prototype_records.get(&key).and_then(|r| {
++                r["parentImageId"]
++                    .as_u64()
++                    .zip(r["parentPlacementId"].as_u64())
++                    .map(|(i, j)| (i as u32, Some(j as u32)))
++            });
++        }
++        // Replacing a placement retains its descendants on the same screen.
++        // Their new depth includes the ancestors validated above.
++        if self.kitty_img.prototype_placement_buffers.get(&child)
++            == Some(&self.screen.alt_screen_is_active)
++        {
++            let mut children = HashMap::<_, Vec<_>>::new();
++            for (key, record) in &self.kitty_img.prototype_records {
++                if self.kitty_img.prototype_placement_buffers.get(key)
++                    != Some(&self.screen.alt_screen_is_active)
++                {
++                    continue;
++                }
++                if let Some((image, placement)) = record["parentImageId"]
++                    .as_u64()
++                    .zip(record["parentPlacementId"].as_u64())
++                {
++                    children
++                        .entry((image as u32, Some(placement as u32)))
++                        .or_default()
++                        .push(*key);
++                }
++            }
++            let mut pending = vec![(child, depth)];
++            while let Some((key, depth)) = pending.pop() {
++                if !seen.insert(key) {
++                    return Some("ECYCLE: cyclic placement reference".into());
++                }
++                if depth > 32 {
++                    return Some("ETOODEEP: placement chain limit".into());
++                }
++                if let Some(children) = children.get(&key) {
++                    pending.extend(children.iter().map(|child| (*child, depth + 1)));
++                }
++            }
++        }
++        None
++    }
++
++    fn prototype_parent_position(
++        &self,
++        key: (u32, Option<u32>),
++        use_virtual_cache: bool,
++    ) -> anyhow::Result<(i64, i64)> {
++        let mut cursor = key;
++        let mut offset = (0i64, 0i64);
++        let mut seen = HashSet::new();
++        loop {
++            anyhow::ensure!(
++                seen.len() <= 32 && seen.insert(cursor),
++                "invalid Kitty parent graph"
++            );
++            let r = self
++                .kitty_img
++                .prototype_records
++                .get(&cursor)
++                .ok_or_else(|| anyhow::anyhow!("missing parent record"))?;
++            if r["isVirtual"].as_bool() == Some(true) {
++                let position = if use_virtual_cache {
++                    self.kitty_img
++                        .prototype_virtual_origins
++                        .get(&cursor)
++                        .copied()
++                } else {
++                    self.prototype_virtual_position(cursor)
++                };
++                if let Some((row, col)) = position {
++                    return Ok((row + offset.0, col + offset.1));
++                }
++            }
++            if let Some((i, j)) = r["parentImageId"]
++                .as_u64()
++                .zip(r["parentPlacementId"].as_u64())
++            {
++                offset.0 += r["parentOffsetV"].as_i64().unwrap_or(0);
++                offset.1 += r["parentOffsetH"].as_i64().unwrap_or(0);
++                cursor = (u32::try_from(i)?, Some(u32::try_from(j)?));
++            } else {
++                let row = r["row"]
++                    .as_i64()
++                    .ok_or_else(|| anyhow::anyhow!("invalid parent row"))?;
++                let col = r["column"]
++                    .as_i64()
++                    .ok_or_else(|| anyhow::anyhow!("invalid parent column"))?;
++                return Ok((row + offset.0, col + offset.1));
++            }
++        }
++    }
++
++    fn prototype_delete_keys(
++        &mut self,
++        roots: HashSet<(u32, Option<u32>)>,
++        delete: bool,
++        extra: Vec<u32>,
++    ) {
++        let mut removed = roots.clone();
++        loop {
++            let mut added = false;
++            for (key, r) in &self.kitty_img.prototype_records {
++                if let Some((i, j)) = r["parentImageId"]
++                    .as_u64()
++                    .zip(r["parentPlacementId"].as_u64())
++                {
++                    if removed.contains(&(i as u32, Some(j as u32))) && removed.insert(*key) {
++                        added = true;
++                    }
++                }
++            }
++            if !added {
++                break;
++            }
++        }
++        let descendant_images: HashSet<_> = removed.difference(&roots).map(|key| key.0).collect();
++        for (i, p) in &removed {
++            self.kitty_remove_placement(*i, *p);
++            self.kitty_img.prototype_records.remove(&(*i, *p));
++            self.kitty_img.prototype_placement_buffers.remove(&(*i, *p));
++        }
++        let mut free = descendant_images;
++        if delete {
++            free.extend(removed.iter().map(|key| key.0));
++            free.extend(extra);
++        }
++        for i in free {
++            if !self.kitty_img.placements.keys().any(|key| key.0 == i) {
++                self.kitty_img.remove_data_for_id(i);
++                self.kitty_img.number_to_id.retain(|_, id| *id != i);
++            }
++        }
++    }
++}
++
++impl TerminalState {
++    fn prototype_delete_selection(&mut self, what: KittyImageDelete) {
++        self.prototype_update_kitty_records(true);
++        let history = self
++            .screen()
++            .scrollback_rows()
++            .saturating_sub(self.screen().physical_rows) as i64;
++        let current = self.screen.alt_screen_is_active;
++        let mut roots = HashSet::new();
++        let mut free_data = false;
++        for (key, r) in &self.kitty_img.prototype_records {
++            let left = r["column"].as_i64().unwrap_or(0);
++            let top = r["row"].as_i64().unwrap_or(0);
++            let width = r["columns"].as_i64().unwrap_or(1).max(1);
++            let height = r["rows"].as_i64().unwrap_or(1).max(1);
++            let z = r["zIndex"].as_i64().unwrap_or(0);
++            let col_hit = |x: i64| x >= left && x < left + width;
++            let row_hit = |y: i64| y >= top && y < top + height;
++            let active = self.kitty_img.prototype_placement_buffers.get(key) == Some(&current);
++            let geometric = !matches!(
++                &what,
++                KittyImageDelete::ByImageId { .. }
++                    | KittyImageDelete::ByImageNumber { .. }
++                    | KittyImageDelete::ByImageIdRange { .. }
++            );
++            if geometric && r["isVirtual"].as_bool() == Some(true) {
++                continue;
++            }
++            let hit = match &what {
++                KittyImageDelete::ByImageIdRange {
++                    min_id,
++                    max_id,
++                    delete,
++                } => {
++                    free_data = *delete;
++                    key.0 >= (*min_id).min(*max_id) && key.0 <= (*min_id).max(*max_id)
++                }
++                KittyImageDelete::ByImageId {
++                    image_id,
++                    placement_id,
++                    delete,
++                } => {
++                    free_data = *delete;
++                    key.0 == *image_id && (placement_id.is_none() || key.1 == *placement_id)
++                }
++                KittyImageDelete::ByImageNumber {
++                    image_number,
++                    placement_id,
++                    delete,
++                } => {
++                    free_data = *delete;
++                    self.kitty_img.number_to_id.get(image_number) == Some(&key.0)
++                        && (placement_id.is_none() || key.1 == *placement_id)
++                }
++                KittyImageDelete::All { delete } => {
++                    free_data = *delete;
++                    active
++                        && left < self.screen().physical_cols as i64
++                        && left + width > 0
++                        && top < history + self.screen().physical_rows as i64
++                        && top + height > history
++                }
++                KittyImageDelete::AtCursorPosition { delete } => {
++                    free_data = *delete;
++                    active && col_hit(self.cursor.x as i64) && row_hit(history + self.cursor.y)
++                }
++                KittyImageDelete::DeleteAt { x, y, delete } => {
++                    free_data = *delete;
++                    active && col_hit(*x as i64 - 1) && row_hit(history + *y as i64 - 1)
++                }
++                KittyImageDelete::DeleteAtZ {
++                    x,
++                    y,
++                    z: level,
++                    delete,
++                } => {
++                    free_data = *delete;
++                    active
++                        && z == *level as i64
++                        && col_hit(*x as i64 - 1)
++                        && row_hit(history + *y as i64 - 1)
++                }
++                KittyImageDelete::DeleteColumn { x, delete } => {
++                    free_data = *delete;
++                    active && col_hit(*x as i64 - 1)
++                }
++                KittyImageDelete::DeleteRow { y, delete } => {
++                    free_data = *delete;
++                    active && row_hit(history + *y as i64 - 1)
++                }
++                KittyImageDelete::DeleteZ { z: level, delete } => {
++                    free_data = *delete;
++                    z == *level as i64
++                }
++                KittyImageDelete::AnimationFrames { .. } => false,
++            };
++            if hit {
++                roots.insert(*key);
++            }
++        }
++        // Uppercase deletion also releases an unplaced cache entry.
++        let extra = match &what {
++            KittyImageDelete::ByImageId { image_id, .. } => vec![*image_id],
++            KittyImageDelete::ByImageNumber { image_number, .. } => self
++                .kitty_img
++                .number_to_id
++                .get(image_number)
++                .copied()
++                .into_iter()
++                .collect(),
++            KittyImageDelete::ByImageIdRange { min_id, max_id, .. } => self
++                .kitty_img
++                .id_to_data
++                .keys()
++                .filter(|id| **id >= (*min_id).min(*max_id) && **id <= (*min_id).max(*max_id))
++                .copied()
++                .collect(),
++            _ => Vec::new(),
++        };
++        free_data |= match what {
++            KittyImageDelete::ByImageIdRange { delete, .. }
++            | KittyImageDelete::ByImageId { delete, .. }
++            | KittyImageDelete::ByImageNumber { delete, .. }
++            | KittyImageDelete::All { delete }
++            | KittyImageDelete::AtCursorPosition { delete }
++            | KittyImageDelete::DeleteAt { delete, .. }
++            | KittyImageDelete::DeleteAtZ { delete, .. }
++            | KittyImageDelete::DeleteColumn { delete, .. }
++            | KittyImageDelete::DeleteRow { delete, .. }
++            | KittyImageDelete::DeleteZ { delete, .. }
++            | KittyImageDelete::AnimationFrames { delete } => delete,
++        };
++        self.prototype_delete_keys(roots, free_data, extra);
++    }
++}
++
++const PROTOTYPE_KITTY_DIACRITICS: &[u32] = &[
++    0x0305, 0x030D, 0x030E, 0x0310, 0x0312, 0x033D, 0x033E, 0x033F, 0x0346, 0x034A, 0x034B, 0x034C,
++    0x0350, 0x0351, 0x0352, 0x0357, 0x035B, 0x0363, 0x0364, 0x0365, 0x0366, 0x0367, 0x0368, 0x0369,
++    0x036A, 0x036B, 0x036C, 0x036D, 0x036E, 0x036F, 0x0483, 0x0484, 0x0485, 0x0486, 0x0487, 0x0592,
++    0x0593, 0x0594, 0x0595, 0x0597, 0x0598, 0x0599, 0x059C, 0x059D, 0x059E, 0x059F, 0x05A0, 0x05A1,
++    0x05A8, 0x05A9, 0x05AB, 0x05AC, 0x05AF, 0x05C4, 0x0610, 0x0611, 0x0612, 0x0613, 0x0614, 0x0615,
++    0x0616, 0x0617, 0x0657, 0x0658, 0x0659, 0x065A, 0x065B, 0x065D, 0x065E, 0x06D6, 0x06D7, 0x06D8,
++    0x06D9, 0x06DA, 0x06DB, 0x06DC, 0x06DF, 0x06E0, 0x06E1, 0x06E2, 0x06E4, 0x06E7, 0x06E8, 0x06EB,
++    0x06EC, 0x0730, 0x0732, 0x0733, 0x0735, 0x0736, 0x073A, 0x073D, 0x073F, 0x0740, 0x0741, 0x0743,
++    0x0745, 0x0747, 0x0749, 0x074A, 0x07EB, 0x07EC, 0x07ED, 0x07EE, 0x07EF, 0x07F0, 0x07F1, 0x07F3,
++    0x0816, 0x0817, 0x0818, 0x0819, 0x081B, 0x081C, 0x081D, 0x081E, 0x081F, 0x0820, 0x0821, 0x0822,
++    0x0823, 0x0825, 0x0826, 0x0827, 0x0829, 0x082A, 0x082B, 0x082C, 0x082D, 0x0951, 0x0953, 0x0954,
++    0x0F82, 0x0F83, 0x0F86, 0x0F87, 0x135D, 0x135E, 0x135F, 0x17DD, 0x193A, 0x1A17, 0x1A75, 0x1A76,
++    0x1A77, 0x1A78, 0x1A79, 0x1A7A, 0x1A7B, 0x1A7C, 0x1B6B, 0x1B6D, 0x1B6E, 0x1B6F, 0x1B70, 0x1B71,
++    0x1B72, 0x1B73, 0x1CD0, 0x1CD1, 0x1CD2, 0x1CDA, 0x1CDB, 0x1CE0, 0x1DC0, 0x1DC1, 0x1DC3, 0x1DC4,
++    0x1DC5, 0x1DC6, 0x1DC7, 0x1DC8, 0x1DC9, 0x1DCB, 0x1DCC, 0x1DD1, 0x1DD2, 0x1DD3, 0x1DD4, 0x1DD5,
++    0x1DD6, 0x1DD7, 0x1DD8, 0x1DD9, 0x1DDA, 0x1DDB, 0x1DDC, 0x1DDD, 0x1DDE, 0x1DDF, 0x1DE0, 0x1DE1,
++    0x1DE2, 0x1DE3, 0x1DE4, 0x1DE5, 0x1DE6, 0x1DFE, 0x20D0, 0x20D1, 0x20D4, 0x20D5, 0x20D6, 0x20D7,
++    0x20DB, 0x20DC, 0x20E1, 0x20E7, 0x20E9, 0x20F0, 0x2CEF, 0x2CF0, 0x2CF1, 0x2DE0, 0x2DE1, 0x2DE2,
++    0x2DE3, 0x2DE4, 0x2DE5, 0x2DE6, 0x2DE7, 0x2DE8, 0x2DE9, 0x2DEA, 0x2DEB, 0x2DEC, 0x2DED, 0x2DEE,
++    0x2DEF, 0x2DF0, 0x2DF1, 0x2DF2, 0x2DF3, 0x2DF4, 0x2DF5, 0x2DF6, 0x2DF7, 0x2DF8, 0x2DF9, 0x2DFA,
++    0x2DFB, 0x2DFC, 0x2DFD, 0x2DFE, 0x2DFF, 0xA66F, 0xA67C, 0xA67D, 0xA6F0, 0xA6F1, 0xA8E0, 0xA8E1,
++    0xA8E2, 0xA8E3, 0xA8E4, 0xA8E5, 0xA8E6, 0xA8E7, 0xA8E8, 0xA8E9, 0xA8EA, 0xA8EB, 0xA8EC, 0xA8ED,
++    0xA8EE, 0xA8EF, 0xA8F0, 0xA8F1, 0xAAB0, 0xAAB2, 0xAAB3, 0xAAB7, 0xAAB8, 0xAABE, 0xAABF, 0xAAC1,
++    0xFE20, 0xFE21, 0xFE22, 0xFE23, 0xFE24, 0xFE25, 0xFE26, 0x10A0F, 0x10A38, 0x1D185, 0x1D186,
++    0x1D187, 0x1D188, 0x1D189, 0x1D1AA, 0x1D1AB, 0x1D1AC, 0x1D1AD, 0x1D242, 0x1D243, 0x1D244,
++];
++
++impl TerminalState {
++    fn prototype_scan_virtual_positions(
++        &self,
++        keys: &HashSet<(u32, Option<u32>)>,
++    ) -> HashMap<(u32, Option<u32>), (i64, i64)> {
++        fn color(c: crate::color::ColorAttribute) -> u32 {
++            use crate::color::ColorAttribute::*;
++            match c {
++                Default => 0,
++                PaletteIndex(i) => i as u32,
++                TrueColorWithPaletteFallback(c, _) | TrueColorWithDefaultFallback(c) => {
++                    let (r, g, b, _) = c.to_srgb_u8();
++                    ((r as u32) << 16) | ((g as u32) << 8) | b as u32
++                }
++            }
++        }
++        let mut result: HashMap<(u32, Option<u32>), (i64, i64)> = HashMap::new();
++        if keys.is_empty() {
++            return result;
++        }
++        let mut by_image: HashMap<u32, Vec<(u32, Option<u32>)>> = HashMap::new();
++        for (key, r) in &self.kitty_img.prototype_records {
++            if r["isVirtual"].as_bool() == Some(true)
++                && self.kitty_img.prototype_placement_buffers.get(key)
++                    == Some(&self.screen.alt_screen_is_active)
++            {
++                by_image.entry(key.0).or_default().push(*key);
++            }
++        }
++        for variants in by_image.values_mut() {
++            variants.sort();
++        }
++        for (row, line) in self
++            .screen()
++            .lines_in_phys_range(0..self.screen().scrollback_rows())
++            .iter()
++            .enumerate()
++        {
++            let mut previous: Option<(usize, usize, usize, u32, u32, u32)> = None;
++            for cell in line.visible_cells() {
++                let col = cell.cell_index();
++                if col >= self.screen().physical_cols {
++                    break;
++                }
++                let mut chars = cell.str().chars();
++                if chars.next() != Some('\u{10eeee}') {
++                    previous = None;
++                    continue;
++                }
++                let marks: Vec<_> = chars
++                    .filter_map(|c| {
++                        PROTOTYPE_KITTY_DIACRITICS
++                            .iter()
++                            .position(|v| *v == c as u32)
++                    })
++                    .collect();
++                let fg = color(cell.attrs().foreground());
++                let ul = color(cell.attrs().underline_color());
++                let adjacent = previous.filter(|p| p.0 + 1 == col && p.4 == fg && p.5 == ul);
++                let pr = marks
++                    .first()
++                    .copied()
++                    .unwrap_or_else(|| adjacent.map_or(0, |p| p.1));
++                let pc = marks
++                    .get(1)
++                    .copied()
++                    .unwrap_or_else(|| adjacent.filter(|p| p.1 == pr).map_or(0, |p| p.2 + 1));
++                let msb = marks
++                    .get(2)
++                    .copied()
++                    .map(|n| n.min(255) as u32)
++                    .unwrap_or_else(|| {
++                        adjacent
++                            .filter(|p| p.1 == pr && (marks.len() < 2 || p.2 + 1 == pc))
++                            .map_or(0, |p| p.3)
++                    });
++                previous = Some((col, pr, pc, msb, fg, ul));
++                let id = fg | (msb << 24);
++                let selected = by_image
++                    .get(&id)
++                    .and_then(|variants| {
++                        variants.iter().find(|key| {
++                            if ul != 0 && key.1 != Some(ul) {
++                                return false;
++                            }
++                            self.kitty_img
++                                .prototype_records
++                                .get(key)
++                                .map_or(false, |r| {
++                                    r["columns"].as_u64().map_or(false, |n| n > pc as u64)
++                                        && r["rows"].as_u64().map_or(false, |n| n > pr as u64)
++                                })
++                        })
++                    })
++                    .copied();
++                if let Some(key) = selected.filter(|key| keys.contains(key)) {
++                    result
++                        .entry(key)
++                        .and_modify(|point| {
++                            point.0 = point.0.min(row as i64);
++                            point.1 = point.1.min(col as i64);
++                        })
++                        .or_insert((row as i64, col as i64));
++                }
++            }
++        }
++        result
++    }
++
++    fn prototype_virtual_position(&self, key: (u32, Option<u32>)) -> Option<(i64, i64)> {
++        self.prototype_scan_virtual_positions(&[key].iter().copied().collect())
++            .get(&key)
++            .copied()
++    }
++}
++
++impl KittyImageState {
++    pub(super) fn prototype_relative_hashes(&self) -> Vec<[u8; 32]> {
++        self.prototype_relative_data
++            .values()
++            .map(|(image, _, _)| image.hash())
++            .collect()
++    }
++    pub(super) fn prototype_relative_resources(
++        &self,
++        graphics: &mut BridgeGraphics,
++        cell_height: usize,
++    ) -> anyhow::Result<Vec<serde_json::Value>> {
++        let mut result = Vec::new();
++        let mut raster_cost = 0usize;
++        for (key, (image, width, height)) in &self.prototype_relative_data {
++            raster_cost = raster_cost
++                .checked_add(width * height * 4 + height.div_ceil(cell_height) * 4096)
++                .ok_or_else(|| anyhow::anyhow!("relative raster budget overflow"))?;
++            anyhow::ensure!(raster_cost <= CHECKPOINT_RETAINED_RASTER, "Kitty relative raster byte limit");
++            let request = self
++                .prototype_requests
++                .get(key)
++                .ok_or_else(|| anyhow::anyhow!("missing relative request identity"))?;
++            let resource = graphics.relative_resource(image, *width, *height, request, cell_height)?;
++            result.push(serde_json::json!({"id":key.0,"placement":key.1,"resource":resource}));
++        }
++        result.sort_by_key(|r| (r["id"].as_u64(), r["placement"].as_u64()));
++        Ok(result)
++    }
++}
++
++impl TerminalState {
++    fn prototype_project_relative(
++        &mut self,
++        key: (u32, Option<u32>),
++        desired: (i64, i64),
++        positioned: bool,
++    ) -> anyhow::Result<()> {
++        self.kitty_img.prototype_projection_count =
++            self.kitty_img.prototype_projection_count.wrapping_add(1);
++        use ordered_float::NotNan;
++        use wezterm_cell::image::ImageCell;
++        use wezterm_surface::TextureCoordinate;
++        let (data, width, height) = self
++            .kitty_img
++            .prototype_relative_data
++            .get(&key)
++            .ok_or_else(|| anyhow::anyhow!("missing relative resource"))?
++            .clone();
++        let cw = self.pixel_width / self.screen().physical_cols;
++        let ch = self.pixel_height / self.screen().physical_rows;
++        anyhow::ensure!(
++            cw > 0 && ch > 0 && width > 0 && height > 0 && width <= 2048 && height <= 2048,
++            "relative projection geometry"
++        );
++        let rows = height.div_ceil(ch) as i64;
++        let cols = width.div_ceil(cw) as i64;
++        let record = self
++            .kitty_img
++            .prototype_records
++            .get_mut(&key)
++            .ok_or_else(|| anyhow::anyhow!("missing relative record"))?;
++        record["row"] = desired.0.into();
++        record["column"] = desired.1.into();
++        record["imageRow"] = desired.0.into();
++        record["imageColumn"] = desired.1.into();
++        record["rows"] = rows.into();
++        record["columns"] = cols.into();
++        let z = record["zIndex"].as_i64().unwrap_or(0) as i32;
++        let left = record["pixelOffsetX"].as_u64().unwrap_or(0) as u16;
++        let top = record["pixelOffsetY"].as_u64().unwrap_or(0) as u16;
++        let seqno = self.seqno;
++        let screen = self.screen_mut();
++        for row in 0..screen.scrollback_rows() {
++            for cell in screen.line_mut(row).cells_mut() {
++                cell.attrs_mut().detach_image_with_placement(key.0, key.1);
++            }
++        }
++        if !positioned {
++            return Ok(());
++        }
++        for row in desired.0.max(0)..(desired.0 + rows).min(screen.scrollback_rows() as i64) {
++            for col in desired.1.max(0)..(desired.1 + cols).min(screen.physical_cols as i64) {
++                let x = (col - desired.1) as f32 * cw as f32 / width as f32;
++                let y = (row - desired.0) as f32 * ch as f32 / height as f32;
++                let image = ImageCell::with_z_index(
++                    TextureCoordinate::new(NotNan::new(x)?, NotNan::new(y)?),
++                    TextureCoordinate::new(
++                        NotNan::new(x + cw as f32 / width as f32)?,
++                        NotNan::new(y + ch as f32 / height as f32)?,
++                    ),
++                    Arc::clone(&data),
++                    z,
++                    left,
++                    top,
++                    0,
++                    0,
++                    Some(key.0),
++                    key.1,
++                );
++                let line = screen.line_mut(row as usize);
++                let mut cell = line
++                    .cells_mut()
++                    .get(col as usize)
++                    .cloned()
++                    .unwrap_or_else(wezterm_cell::Cell::blank);
++                cell.attrs_mut().attach_image(Box::new(image));
++                line.set_cell_clearing_image_placements(col as usize, cell, seqno);
++            }
++        }
++        Ok(())
++    }
++}
++
++impl TerminalState {
++    fn prototype_transmit_checked(
++        &mut self,
++        transmit: KittyImageTransmit,
++        success: KittyImageVerbosity,
++        failure: KittyImageVerbosity,
++    ) -> Option<u32> {
++        let id = transmit.image_id;
++        let number = transmit.image_number;
++        if id.is_some() && number.is_some() {
++            self.kitty_send_response(
++                failure,
++                false,
++                id,
++                None,
++                "EINVAL: i and I are mutually exclusive".into(),
++            );
++            return None;
++        }
++        match self.kitty_img_transmit(transmit, success) {
++            Ok(value) => Some(value),
++            Err(error) => {
++                log::debug!("invalid Kitty image: {:#}", error);
++                self.kitty_send_response(failure, false, id, number, "EINVAL: bad payload".into());
++                None
++            }
++        }
++    }
++}
++
++impl KittyImageState {
++    pub(super) fn prototype_placement_requests(
++        &self,
++    ) -> &HashMap<(u32, Option<u32>), serde_json::Value> {
++        &self.prototype_requests
++    }
++}
+--- a/term/src/terminalstate/sixel.rs
++++ b/term/src/terminalstate/sixel.rs
+@@ -90,16 +90,7 @@
+                     // go from sixel red to standard hsl red.
+                     // Negative values wrap around the circle.
+                     // https://github.com/wezterm/wezterm/issues/775
+-                    let angle = (*hue_angle as f64) - 120.0;
+-                    let angle = if angle < 0. { 360.0 + angle } else { angle };
+-                    let c = csscolorparser::Color::from_hsla(
+-                        angle,
+-                        *saturation as f64 / 100.,
+-                        *lightness as f64 / 100.,
+-                        1.,
+-                    );
+-                    let [r, g, b, _] = c.to_rgba8();
+-                    color_map.insert(*color_number, RgbColor::new_8bpc(r, g, b));
++                    color_map.insert(*color_number, Self::prototype_sixel_hls(*hue_angle as usize,*lightness as usize,*saturation as usize));
+                 }
+ 
+                 SixelData::SelectColorMapEntry(n) => {
+--- a/vtparse/src/lib.rs
++++ b/vtparse/src/lib.rs
+@@ -444,6 +444,8 @@
+ }
+ 
+ impl VTParser {
++    pub fn prototype_is_ground(&self) -> bool { self.state == State::Ground }
++
+     #[allow(clippy::new_without_default)]
+     pub fn new() -> Self {
+         let param_indices = [0usize; MAX_OSC];
+--- a/wezterm-escape-parser/src/apc.rs
++++ b/wezterm-escape-parser/src/apc.rs
+@@ -321,8 +321,8 @@
+ mod win {
+     use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+     use windows_sys::Win32::System::Memory::{
+-        FILE_MAP_ALL_ACCESS, MEMORY_BASIC_INFORMATION, MEMORY_MAPPED_VIEW_ADDRESS, MapViewOfFile,
+-        OpenFileMappingW, UnmapViewOfFile, VirtualQuery,
++        MapViewOfFile, OpenFileMappingW, UnmapViewOfFile, VirtualQuery, FILE_MAP_ALL_ACCESS,
++        MEMORY_BASIC_INFORMATION, MEMORY_MAPPED_VIEW_ADDRESS,
+     };
+ 
+     struct HandleWrapper {
+@@ -591,6 +591,11 @@
+ 
+ #[derive(Debug, Clone, PartialEq, Eq)]
+ pub struct KittyImagePlacement {
++    pub virtual_placement: bool,
++    pub parent_image_id: Option<u32>,
++    pub parent_placement_id: Option<u32>,
++    pub parent_offset_h: i64,
++    pub parent_offset_v: i64,
+     /// source rectangle bounds.
+     /// Default is whole image.
+     /// x=...
+@@ -625,15 +630,20 @@
+ impl KittyImagePlacement {
+     fn from_keys(keys: &BTreeMap<&str, &str>) -> Option<Self> {
+         Some(Self {
++            virtual_placement: geti::<u32>(keys, "U").unwrap_or(0) == 1,
++            parent_image_id: geti(keys, "P"),
++            parent_placement_id: geti(keys, "Q"),
++            parent_offset_h: geti(keys, "H").unwrap_or(0),
++            parent_offset_v: geti(keys, "V").unwrap_or(0),
+             x: geti(keys, "x"),
+             y: geti(keys, "y"),
+             w: geti(keys, "w"),
+             h: geti(keys, "h"),
+             x_offset: geti(keys, "X"),
+             y_offset: geti(keys, "Y"),
+-            columns: geti(keys, "c"),
+-            rows: geti(keys, "r"),
+-            placement_id: geti(keys, "p"),
++            columns: geti(keys, "c").filter(|n| *n != 0),
++            rows: geti(keys, "r").filter(|n| *n != 0),
++            placement_id: geti(keys, "p").filter(|n| *n != 0),
+             do_not_move_cursor: match get(keys, "C") {
+                 None | Some("0") => false,
+                 Some("1") => true,
+@@ -644,6 +654,17 @@
+     }
+ 
+     fn to_keys(&self, keys: &mut BTreeMap<&'static str, String>) {
++        if self.virtual_placement {
++            keys.insert("U", "1".into());
++        }
++        set(keys, "P", &self.parent_image_id);
++        set(keys, "Q", &self.parent_placement_id);
++        if self.parent_offset_h != 0 {
++            keys.insert("H", self.parent_offset_h.to_string());
++        }
++        if self.parent_offset_v != 0 {
++            keys.insert("V", self.parent_offset_v.to_string());
++        }
+         set(keys, "x", &self.x);
+         set(keys, "y", &self.y);
+         set(keys, "w", &self.w);
+@@ -667,6 +688,11 @@
+ /// the data is available to be placed again.
+ #[derive(Debug, Clone, PartialEq, Eq)]
+ pub enum KittyImageDelete {
++    ByImageIdRange {
++        min_id: u32,
++        max_id: u32,
++        delete: bool,
++    },
+     /// d='a' or d='A'.
+     /// Delete all placements on visible screen
+     All { delete: bool },
+@@ -735,15 +761,20 @@
+         let d = d.chars().next()?;
+         let delete = d.is_ascii_uppercase();
+         match d {
++            'r' | 'R' => Some(Self::ByImageIdRange {
++                min_id: geti(keys, "x")?,
++                max_id: geti(keys, "y")?,
++                delete,
++            }),
+             'a' | 'A' => Some(Self::All { delete }),
+             'i' | 'I' => Some(Self::ByImageId {
+                 image_id: geti(keys, "i")?,
+-                placement_id: geti(keys, "p"),
++                placement_id: geti(keys, "p").filter(|n| *n != 0),
+                 delete,
+             }),
+             'n' | 'N' => Some(Self::ByImageNumber {
+                 image_number: geti(keys, "I")?,
+-                placement_id: geti(keys, "p"),
++                placement_id: geti(keys, "p").filter(|n| *n != 0),
+                 delete,
+             }),
+             'c' | 'C' => Some(Self::AtCursorPosition { delete }),
+@@ -781,6 +812,15 @@
+         }
+ 
+         match self {
++            Self::ByImageIdRange {
++                min_id,
++                max_id,
++                delete,
++            } => {
++                keys.insert("d", d('r', delete));
++                keys.insert("x", min_id.to_string());
++                keys.insert("y", max_id.to_string());
++            }
+             Self::All { delete } => {
+                 keys.insert("d", d('a', delete));
+             }
+@@ -818,7 +858,7 @@
+                 keys.insert("y", y.to_string());
+             }
+             Self::DeleteAtZ { x, y, z, delete } => {
+-                keys.insert("d", d('p', delete));
++                keys.insert("d", d('q', delete));
+                 keys.insert("x", x.to_string());
+                 keys.insert("y", y.to_string());
+                 keys.insert("z", z.to_string());
+@@ -1142,7 +1182,7 @@
+                 verbosity,
+                 placement,
+             } => {
+-                keys.insert("a", "Q".to_string());
++                keys.insert("a", "T".to_string());
+                 verbosity.to_keys(keys);
+                 placement.to_keys(keys);
+                 transmit.to_keys(keys);
+--- a/wezterm-escape-parser/src/parser/mod.rs
++++ b/wezterm-escape-parser/src/parser/mod.rs
+@@ -76,6 +76,8 @@
+ }
+ 
+ impl Parser {
++    pub fn prototype_is_ground(&self) -> bool { self.state_machine.prototype_is_ground() }
++
+     pub fn new() -> Self {
+         Self {
+             state_machine: VTParser::new(),

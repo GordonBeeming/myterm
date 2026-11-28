@@ -20,6 +20,13 @@ enum SessionHostInstallation {
     /// verified against the same requirement as the bundled helper before it is ever returned.
     nonisolated static func stableHelper(for bundled: URL, namespace: URL,
                                          verifier: SessionHostServerAuthentication) throws -> URL {
+        try stableHelper(for: bundled, namespace: namespace, verifier: verifier,
+                         directoryName: directoryName, executableName: executableName)
+    }
+
+    nonisolated static func stableHelper(for bundled: URL, namespace: URL,
+                                         verifier: SessionHostServerAuthentication,
+                                         directoryName: String, executableName: String) throws -> URL {
         try verifier.validateExecutable(bundled)
         // An ad-hoc development helper has no team identity, so it pins its controller by finding
         // the app bundle around it. Moving it would lose that app. Ad-hoc builds already pin one

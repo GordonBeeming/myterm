@@ -84,6 +84,7 @@ final class CompanionHostModel {
         let connectionID: UUID
         let peer: PairedPeer
         var helloChannel: SecureRelayChannel
+        let helloEpoch: UUID
         let clientHello: HelloParameters
         let hostHello: HelloParameters
         var applicationChannel: SecureRelayChannel?
@@ -94,11 +95,12 @@ final class CompanionHostModel {
         let outboundQueue = CompanionConnectionWorkQueue(limits: .outbound)
         let browserQueue = CompanionConnectionWorkQueue(limits: .browser)
 
-        init(connectionID: UUID, peer: PairedPeer, helloChannel: SecureRelayChannel,
+        init(connectionID: UUID, peer: PairedPeer, helloChannel: SecureRelayChannel, helloEpoch: UUID,
              clientHello: HelloParameters, hostHello: HelloParameters) {
             self.connectionID = connectionID
             self.peer = peer
             self.helloChannel = helloChannel
+            self.helloEpoch = helloEpoch
             self.clientHello = clientHello
             self.hostHello = hostHello
         }
@@ -114,10 +116,11 @@ final class CompanionHostModel {
     private(set) var locallyPausedSessions: Set<TerminalSessionID> = []
 
     private weak var appModel: AppModel?
-    private let channel: MyTermChannel
+    let channel: MyTermChannel
     private let configuration: CompanionConfigurationStore
     private let secrets: any SecretStore
     private let identityStore: CompanionHostIdentityStore
+    private let workerLinkStore: CompanionWorkerLinkStore
     private let tokenStore: TokenStore
     private let notificationGrantStore: CompanionNotificationGrantStore
     private let pushJournalStore: CompanionPushJournalStore
@@ -128,6 +131,7 @@ final class CompanionHostModel {
     private let jitter: @Sendable () -> Double
     private let now: @Sendable () -> Date
     private let pairingRotation: CompanionPairingRotation
+    private let makeWorkerClient: @Sendable (RelayEndpoint) -> CloudflareRelayClient
     private let makeHTTPClient: @Sendable (RelayEndpoint) -> RelayHTTPClient
     private let makeTransport: @Sendable (RelayEndpoint, UUID, RelayRole) -> RelayWebSocketClient
     private var identity: CompanionHostIdentity?
@@ -143,7 +147,11 @@ final class CompanionHostModel {
     /// Where uploads are filed, so Settings can offer to open it.
     private(set) var diagnosticsDirectory: URL?
     private var httpClient: RelayHTTPClient?
-    private var transport: RelayWebSocketClient?
+    private var transport: (any CompanionRelayTransport)?
+    private var workerLink: CompanionWorkerLink?
+    private var workerPairing: (ticket: PairingTicket, endpointID: String)?
+    private var workerPairingExpiry: Task<Void, Never>?
+    private var workerApprovalID: UUID?
     /// Long enough to collapse an agent's burst of activity reports, short enough that a change
     /// still reads as immediate on the phone.
     static let snapshotCoalescingWindow: Duration = .milliseconds(150)
@@ -179,7 +187,14 @@ final class CompanionHostModel {
 
     var relayText: String
     private(set) var status: CompanionConnectionStatus
+    private(set) var requiresRelayEnrollment = false
     private(set) var hasLinkedRelay: Bool
+    private(set) var usesWorkerRelay: Bool
+    private(set) var isApprovingWorkerDevice = false
+    private(set) var workerApproval: String?
+    private(set) var workerApprovalQRCode: NSImage?
+    private(set) var workerApprovalError: String?
+    private(set) var pairedDeviceError: String?
     private(set) var pairedPeers: [PairedPeer] = []
     private(set) var pairingQRCode: NSImage?
     private(set) var pairingRefreshesAt: Date?
@@ -203,6 +218,9 @@ final class CompanionHostModel {
         secrets injectedSecrets: (any SecretStore)? = nil,
         authenticationSession: CompanionAuthenticationSession? = nil,
         defaults: UserDefaults = .standard,
+        makeWorkerClient: @escaping @Sendable (RelayEndpoint) -> CloudflareRelayClient = {
+            CloudflareRelayClient(relay: $0)
+        },
         makeHTTPClient: @escaping @Sendable (RelayEndpoint) -> RelayHTTPClient = {
             RelayHTTPClient(endpoint: $0)
         },
@@ -217,64 +235,71 @@ final class CompanionHostModel {
         self.jitter = jitter
         self.now = now
         pairingRotation = CompanionPairingRotation(sleep: pairingSleep)
+        self.makeWorkerClient = makeWorkerClient
         self.makeHTTPClient = makeHTTPClient
         self.makeTransport = makeTransport
+        connectionLogDefaults = defaults
         self.authenticationSession = authenticationSession ?? CompanionAuthenticationSession()
         configuration = CompanionConfigurationStore(
             channel: channel,
             namespace: storageNamespace,
             defaults: defaults
         )
-        let savedRelay = configuration.relayText
+        let savedReference = try? configuration.loadAuthReference()
+        let savedRelay = savedReference?.usesWorker == true
+            ? savedReference?.relay.canonicalOrigin ?? configuration.relayText : configuration.relayText
         relayText = savedRelay
-        let linkedRelay = (try? configuration.loadAuthReference()) != nil
+        let linkedRelay = savedReference != nil
         hasLinkedRelay = linkedRelay
+        usesWorkerRelay = savedReference?.usesWorker == true
         status = savedRelay.isEmpty ? .notConfigured : linkedRelay ? .disconnected : .signedOut
         let service = "\(channel.bundleIdentifier).companion.\(storageNamespace)"
         let secrets = injectedSecrets ?? KeychainSecretStore(
             service: service, authenticationUI: Self.credentialAuthenticationUI(for: channel))
         self.secrets = secrets
         identityStore = CompanionHostIdentityStore(secrets: secrets)
+        workerLinkStore = CompanionWorkerLinkStore(secrets: secrets,
+            authorityDirectory: appModel.companionWorkerAuthorityDirectory)
         tokenStore = TokenStore(secrets: secrets)
         notificationGrantStore = CompanionNotificationGrantStore(secrets: secrets)
-        // Uploads land beside the channel's own state. Absent when the support directory cannot be
-        // resolved, in which case an upload is refused rather than written somewhere arbitrary.
-        let diagnosticsFolder = (try? AppModel.applicationSupportDirectory()).map { support in
-            CompanionDiagnosticsStore.directory(applicationSupportDirectory: support,
-                                                channelName: channel.displayName)
-        }
+        let diagnosticsFolder = appModel.companionDiagnosticsDirectory
         diagnosticsDirectory = diagnosticsFolder
-        diagnosticsStore = diagnosticsFolder.map(CompanionDiagnosticsStore.init(directory:))
+        diagnosticsStore = CompanionDiagnosticsStore(directory: diagnosticsFolder)
         pushJournalStore = CompanionPushJournalStore(secrets: secrets)
         // Filed beside what the phones send, so one folder holds both ends of a connection.
-        let ownLog = diagnosticsFolder?.appending(path: "mac-connection.log", directoryHint: .notDirectory)
+        let ownLog = diagnosticsFolder.appending(path: "mac-connection.log", directoryHint: .notDirectory)
         Task {
             await CompanionConnectionLog.shared.configure(fileURL: ownLog)
             // Read when it is applied rather than captured now: the Settings toggle can turn
             // collection off while this is still waiting, and a stale capture would turn it back on.
             await CompanionConnectionLog.shared.setEnabled(
-                UserDefaults.standard.bool(forKey: Self.collectConnectionLogKey))
+                defaults.bool(forKey: Self.collectConnectionLogKey))
         }
     }
 
     /// Off by default, like the companion's own collection: this records connection lifecycle, and
     /// nobody should be paying for it until something needs explaining.
     static let collectConnectionLogKey = "collectCompanionConnectionLog"
+    let connectionLogDefaults: UserDefaults
 
     private(set) var isSigningIn = false
     private var signInTask: Task<Void, Never>?
     private var signInAttemptID: UUID?
     private var signInRecovery: (reason: CompanionSignInRequirement, connectionEnabled: Bool)?
-    private var signInNotice: String?
+    private var keepsCurrentRelayDuringSignIn = false
+    private(set) var signInNotice: String?
 
-    func signIn(bootstrapURLText: String? = nil) {
+    func signIn(relayAddress: String? = nil, bootstrapURLText: String? = nil,
+                discoverProtocol: Bool = false, registerWorkerAccount: Bool = false) {
         guard !isSigningIn, status != .connecting else { return }
         if case .signInRequired(let reason) = status {
             signInRecovery = (reason, configuration.connectionEnabled)
         } else {
             signInRecovery = nil
         }
-        disconnect()
+        keepsCurrentRelayDuringSignIn = (hasLinkedRelay || status == .connected)
+            && (relayAddress != nil || bootstrapURLText != nil)
+        if !keepsCurrentRelayDuringSignIn { disconnect() }
         if let recovery = signInRecovery { configuration.connectionEnabled = recovery.connectionEnabled }
         isSigningIn = true
         let id = UUID()
@@ -286,9 +311,11 @@ final class CompanionHostModel {
                     signInTask = nil
                     signInAttemptID = nil
                     signInRecovery = nil
+                    keepsCurrentRelayDuringSignIn = false
                 }
             }
-            await runSignIn(bootstrapURLText: bootstrapURLText)
+            await runSignIn(relayAddress: relayAddress, bootstrapURLText: bootstrapURLText,
+                            discoverProtocol: discoverProtocol, registerWorkerAccount: registerWorkerAccount)
         }
     }
 
@@ -300,12 +327,13 @@ final class CompanionHostModel {
         signInTask = nil
         authenticationSession.cancel()
         isSigningIn = false
-        disconnect()
+        if !keepsCurrentRelayDuringSignIn { disconnect() }
         if let recovery {
             configuration.connectionEnabled = recovery.connectionEnabled
             status = .signInRequired(recovery.reason)
         }
         signInRecovery = nil
+        keepsCurrentRelayDuringSignIn = false
     }
 
     func connect() {
@@ -342,13 +370,17 @@ final class CompanionHostModel {
         reauthenticationTask = nil
         if let transport { Task { await transport.disconnect() } }
         transport = nil
+        workerLink = nil
+        pairedDeviceError = nil
+        tokenManager = nil
+        httpClient = nil
         relayAcknowledgedExpiry = nil
         clearConnectedPeers()
         status = .disconnected
     }
 
     func beginPairing() {
-        guard !isPairingModeActive else { return }
+        guard !usesWorkerRelay, !isPairingModeActive else { return }
         isPairingModeActive = true
         pairingModeID = UUID()
         Task { await createPairingTicket() }
@@ -411,14 +443,110 @@ final class CompanionHostModel {
         isPairingModeActive = false
         pairingModeID = nil
         pairingRotation.cancel()
-        let ticketID = activeTicket?.ticketID
+        workerPairingExpiry?.cancel()
+        workerPairingExpiry = nil
+        workerApprovalID = nil
+        workerApproval = nil
+        workerApprovalQRCode = nil
+        workerApprovalError = nil
+        let ticketID = activeTicket?.ticketID ?? workerPairing?.ticket.ticketID
+        if let endpointID = workerPairing?.endpointID, let link = workerLink {
+            Task { await revokeIncompleteWorkerPairing(endpointID, link: link) }
+        }
         activeTicket = nil
+        workerPairing = nil
         pairingQRCode = nil
         pairingRefreshesAt = nil
         pairingExpiresAt = nil
         cancelPendingPairingApproval()
-        if let ticketID {
-            Task { await pairingRegistry?.cancel(ticketID: ticketID) }
+        if let ticketID, let registry = pairingRegistry {
+            Task { await registry.cancel(ticketID: ticketID) }
+        }
+    }
+
+    func approveWorkerDevice(requestCode: String) {
+        guard status == .connected, let link = workerLink, let identity, let registry = pairingRegistry,
+              !isApprovingWorkerDevice, workerPairing == nil, let generation = connectionFence.generation else { return }
+        let approvalID = UUID()
+        workerApprovalID = approvalID
+        isApprovingWorkerDevice = true
+        workerApprovalError = nil
+        Task { [self] in
+            defer {
+                isApprovingWorkerDevice = false
+                if workerApprovalID == approvalID {
+                    workerApprovalID = nil
+                }
+            }
+            var issuedTicket: PairingTicket?
+            var admittingEndpointID: String?
+            do {
+                let request = try RelayAdmissionRequest(code: requestCode)
+                let endpoint = link.relay
+                let account = try link.account
+                try request.verify(relay: endpoint, accountID: account.id, now: now())
+                guard !pairedPeers.contains(where: { $0.workerEndpointID == request.endpointID }) else {
+                    throw RemoteError.replayedMessage
+                }
+                let standard = request.signingKey.replacingOccurrences(of: "-", with: "+")
+                    .replacingOccurrences(of: "_", with: "/")
+                guard let publicKey = Data(base64Encoded: standard + "=") else { throw RemoteError.invalidMessage }
+                admittingEndpointID = request.endpointID
+                let route = try await makeWorkerClient(endpoint).admit(
+                    account: account, approvingKey: link.approverRoute,
+                    endpointPublicKey: publicKey, kind: .client, relayEnabled: true
+                )
+                try requireConnectionGeneration(generation)
+                guard workerApprovalID == approvalID, route == request.endpointID else { throw RemoteError.wrongPeer }
+                let ticket = try await registry.begin(
+                    relay: endpoint, hostID: identity.hostID, hostName: Host.current().localizedName ?? channel.displayName,
+                    hostPublicKey: identity.agreementKey.publicKey, now: now()
+                )
+                issuedTicket = ticket
+                try requireConnectionGeneration(generation)
+                guard workerApprovalID == approvalID else { throw CancellationError() }
+                let scheme = channel == .production ? "myterm-companion" : "myterm-companion-dev"
+                let serverKey = try Curve25519.Signing.PublicKey(rawRepresentation: link.serverRoute.publicKey)
+                let approval = try RelayAdmissionApproval(request: request, relay: endpoint,
+                    accountID: account.id, anchor: account.anchor, serverSigningKey: serverKey,
+                    approver: link.approver, pairingURL: ticket.qrURL(scheme: scheme), now: now())
+                workerPairing = (ticket, route)
+                workerApproval = approval.code
+                workerApprovalQRCode = try? Self.qrImage(for: approval.code)
+                workerPairingExpiry = Task { [weak self] in
+                    do { try await Task.sleep(for: .seconds(300)) }
+                    catch { return }
+                    guard let self, self.workerPairing?.ticket.ticketID == ticket.ticketID else { return }
+                    self.cancelPairing()
+                }
+            } catch {
+                if let issuedTicket { await registry.cancel(ticketID: issuedTicket.ticketID) }
+                if let admittingEndpointID { await revokeIncompleteWorkerPairing(admittingEndpointID, link: link) }
+                guard workerApprovalID == approvalID, connectionFence.accepts(generation) else { return }
+                workerApprovalError = error.localizedDescription
+            }
+        }
+    }
+
+    private func revokeIncompleteWorkerPairing(_ endpointID: String, link: CompanionWorkerLink) async {
+        do {
+            try await makeWorkerClient(link.relay).revoke(account: link.account, key: link.approverRoute,
+                                                        targetEndpointID: endpointID)
+        } catch RemoteError.server(status: 400) {
+            // The relay may never have received the original admission request.
+        } catch {
+            logger.error("Could not revoke an incomplete device approval: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    func copyWorkerApproval() throws {
+        guard let workerPairing, workerPairing.ticket.expiresAt > now(), let workerApproval else {
+            throw RemoteError.expiredPairing
+        }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        guard pasteboard.setString(workerApproval, forType: .string) else {
+            throw CocoaError(.fileWriteUnknown)
         }
     }
 
@@ -588,7 +716,8 @@ final class CompanionHostModel {
         workspaceDidChange()
     }
 
-    private func runSignIn(bootstrapURLText: String?) async {
+    private func runSignIn(relayAddress: String?, bootstrapURLText: String?,
+                           discoverProtocol: Bool, registerWorkerAccount: Bool) async {
         var stage = SignInStage.setupLink
         var callbackFailure: AuthorizationCallbackValidationFailure?
         do {
@@ -598,8 +727,19 @@ final class CompanionHostModel {
                     ? nil : try Self.parseBootstrapLink(raw)
             }
             stage = .relayEndpoint
-            let endpoint = try enrollment?.endpoint ?? configuredEndpoint()
-            if enrollment != nil { relayText = endpoint.canonicalOrigin }
+            let endpoint = try enrollment?.endpoint ?? configuredEndpoint(address: relayAddress)
+            let workerClient = makeWorkerClient(endpoint)
+            let useWorker: Bool
+            if discoverProtocol || registerWorkerAccount {
+                useWorker = try await workerClient.supportsNativeRelay()
+            } else {
+                useWorker = usesWorkerRelay
+            }
+            if registerWorkerAccount && !useWorker { throw RemoteError.unsupportedVersion }
+            #if !DEBUG && !MYTERM_RUST_WORKSPACES
+            if useWorker { throw RemoteError.unsupportedVersion }
+            #endif
+            try Task.checkCancellation()
             let redirectScheme = channel.authenticationCallbackScheme
             stage = .callbackConfiguration
             let redirect = try validatedURL("\(redirectScheme)://companion-auth/callback")
@@ -613,6 +753,14 @@ final class CompanionHostModel {
                     deviceName: deviceName,
                     deviceKind: "host"
                 )
+            } else if registerWorkerAccount {
+                let login = try attempt.loginURL(deviceName: deviceName, deviceKind: "host")
+                guard var registration = URLComponents(url: login, resolvingAgainstBaseURL: false) else {
+                    throw RemoteError.invalidEndpoint
+                }
+                registration.path = "/auth/register"
+                guard let url = registration.url else { throw RemoteError.invalidEndpoint }
+                authorizationURL = url
             } else {
                 authorizationURL = try attempt.loginURL(deviceName: deviceName, deviceKind: "host")
             }
@@ -638,6 +786,13 @@ final class CompanionHostModel {
                 throw RemoteError.invalidCallback
             }
             stage = .tokenExchange
+            if useWorker {
+                let session = try await workerClient.exchange(attempt: attempt, callback: callback)
+                try Task.checkCancellation()
+                stage = .connection
+                try await linkWorkerRelay(client: workerClient, session: session)
+                return
+            }
             let client = makeHTTPClient(endpoint)
             let record = try await RelayAuthenticator(client: client, store: tokenStore).exchange(
                 attempt: attempt,
@@ -645,14 +800,17 @@ final class CompanionHostModel {
             )
             try Task.checkCancellation()
             stage = .persistence
-            configuration.relayText = endpoint.canonicalOrigin
-            relayText = endpoint.canonicalOrigin
             try configuration.saveAuthReference(CompanionAuthReference(
                 relay: endpoint,
                 accountID: record.accountID,
                 deviceID: record.deviceID
             ))
+            if keepsCurrentRelayDuringSignIn { disconnect() }
+            configuration.relayText = endpoint.canonicalOrigin
+            relayText = endpoint.canonicalOrigin
             hasLinkedRelay = true
+            usesWorkerRelay = false
+            requiresRelayEnrollment = false
             clearSignInNotice()
             configuration.connectionEnabled = true
             reconnectAttempt = 0
@@ -670,8 +828,139 @@ final class CompanionHostModel {
                 configuration.connectionEnabled = recovery.connectionEnabled
                 status = .signInRequired(recovery.reason)
                 presentSignInNotice(message)
+            } else if keepsCurrentRelayDuringSignIn {
+                presentSignInNotice(message)
             } else {
                 status = .failed(message)
+            }
+        }
+    }
+
+    private struct PreparedWorkerConnection {
+        let link: CompanionWorkerLink
+        let identity: CompanionHostIdentity
+        let registry: PairingRegistry
+        let pairedPeers: [PairedPeer]
+        let transport: CloudflareCompanionTransport
+        let events: AsyncThrowingStream<RelayTransportEvent, Error>
+        let ready: RelayTransportEvent
+    }
+
+    private func linkWorkerRelay(client: CloudflareRelayClient, session: CloudflareRelayClient.Session) async throws {
+        #if DEBUG || MYTERM_RUST_WORKSPACES
+        guard let executable = LocalRustWorkspaceTerminalEngine.bundledExecutable else {
+            throw AccountEnrollmentError.localAuthorityFailed
+        }
+        let endpoint = client.relay
+        let link = try await workerLinkStore.prepare(relay: endpoint, accountID: session.accountId,
+                                                     authorityExecutable: executable)
+        try Task.checkCancellation()
+        let account = try link.account
+        let approver = try link.approverRoute
+        do {
+            // A successful signed action proves this local genesis previously committed.
+            _ = try await client.connectTicket(account: account, key: approver)
+        } catch RemoteError.authenticationRequired {
+            try await client.establish(account: account, key: approver, signedIn: session)
+        }
+        try Task.checkCancellation()
+        _ = try await client.admit(account: account, approvingKey: approver,
+                                  endpointPublicKey: link.serverRoute.publicKey, kind: .server, relayEnabled: true)
+        try Task.checkCancellation()
+        let identity = try await identityStore.loadOrCreate()
+        if status == .connected, workerLink?.relay == endpoint, workerLink?.accountID == session.accountId {
+            clearSignInNotice()
+            return
+        }
+
+        let prepared = try await prepareWorkerConnection(link: link, identity: identity)
+        let reference = CompanionAuthReference(relay: endpoint, accountID: session.accountId,
+                                               deviceID: identity.hostID, usesWorker: true)
+        do {
+            try Task.checkCancellation()
+            try configuration.saveAuthReference(reference)
+        } catch {
+            await prepared.transport.disconnect()
+            throw error
+        }
+        disconnect()
+        configuration.relayText = endpoint.canonicalOrigin
+        relayText = endpoint.canonicalOrigin
+        configuration.connectionEnabled = true
+        hasLinkedRelay = true
+        usesWorkerRelay = true
+        requiresRelayEnrollment = false
+        signInRecovery = nil
+        clearSignInNotice()
+        installWorkerConnection(prepared, reference: reference, generation: connectionFence.begin())
+        #else
+        throw RemoteError.unsupportedVersion
+        #endif
+    }
+
+    private func prepareWorkerConnection(link: CompanionWorkerLink, identity: CompanionHostIdentity) async throws
+        -> PreparedWorkerConnection {
+        let registry = PairingRegistry(persistence: PairedPeerStore(
+            secrets: secrets, relay: link.relay, hostID: identity.hostID,
+            accountID: link.accountID
+        ))
+        try await registry.restorePeers()
+        let pairedPeers = await registry.pairedPeers()
+        let transport = try CloudflareCompanionTransport(relay: link.relay, account: link.account,
+                                                         key: link.serverRoute, hostID: identity.hostID, role: .host)
+        do {
+            let events = try await transport.connect(accessToken: "")
+            let ready = try await withThrowingTaskGroup(of: RelayTransportEvent.self) { group in
+                group.addTask {
+                    guard let first = try await events.first(where: { _ in true }), case .ready = first else {
+                        throw RemoteError.disconnected
+                    }
+                    return first
+                }
+                group.addTask {
+                    try await Task.sleep(for: .seconds(15))
+                    throw RemoteError.timedOut
+                }
+                defer { group.cancelAll() }
+                guard let ready = try await group.next() else { throw RemoteError.disconnected }
+                return ready
+            }
+            return PreparedWorkerConnection(link: link, identity: identity, registry: registry, pairedPeers: pairedPeers,
+                                            transport: transport, events: events, ready: ready)
+        } catch {
+            await transport.disconnect()
+            throw error
+        }
+    }
+
+    private func installWorkerConnection(_ prepared: PreparedWorkerConnection,
+                                         reference: CompanionAuthReference, generation: UUID) {
+        workerLink = prepared.link
+        identity = prepared.identity
+        pairingRegistry = prepared.registry
+        pairedPeers = prepared.pairedPeers
+        notificationGrants = [:]
+        transport = prepared.transport
+        listen(to: prepared.events, endpoint: reference.relay, reference: reference,
+               generation: generation, initialEvent: prepared.ready)
+    }
+
+    private func listen(to events: AsyncThrowingStream<RelayTransportEvent, Error>,
+                        endpoint: RelayEndpoint, reference: CompanionAuthReference, generation: UUID,
+                        initialEvent: RelayTransportEvent? = nil) {
+        transportTask = Task { [weak self] in
+            do {
+                if let initialEvent {
+                    await self?.handleTransportEvent(initialEvent, endpoint: endpoint,
+                                                     reference: reference, generation: generation)
+                }
+                for try await event in events {
+                    guard let self else { return }
+                    await self.handleTransportEvent(event, endpoint: endpoint, reference: reference, generation: generation)
+                }
+                self?.transportEnded(error: nil, generation: generation)
+            } catch {
+                self?.transportEnded(error: error, generation: generation)
             }
         }
     }
@@ -697,6 +986,29 @@ final class CompanionHostModel {
             guard let reference = savedReference,
                   reference.relay == endpoint else {
                 requireSignIn(.credentialsUnavailable, generation: generation, allowSignIn: allowSignIn)
+                return
+            }
+            if reference.usesWorker == true {
+                guard let link = try await workerLinkStore.load(relay: endpoint, accountID: reference.accountID) else {
+                    requireSignIn(.credentialsUnavailable, generation: generation, allowSignIn: allowSignIn)
+                    return
+                }
+                let identity = try await identityStore.loadOrCreate()
+                guard identity.hostID == reference.deviceID else { throw RemoteError.wrongPeer }
+                let prepared = try await prepareWorkerConnection(link: link, identity: identity)
+                do { try requireConnectionGeneration(generation) }
+                catch {
+                    await prepared.transport.disconnect()
+                    throw error
+                }
+                installWorkerConnection(prepared, reference: reference, generation: generation)
+                return
+            }
+            if let preset = endpoint.hostedRelay, preset != .development,
+               (try? await makeWorkerClient(endpoint).supportsNativeRelay()) == true {
+                try requireConnectionGeneration(generation)
+                requiresRelayEnrollment = true
+                status = .signedOut
                 return
             }
             let partition = TokenPartition(
@@ -750,22 +1062,7 @@ final class CompanionHostModel {
             pairingRegistry = registry
             self.transport = transport
             status = .connecting
-            transportTask = Task { [weak self] in
-                do {
-                    for try await event in events {
-                        guard let self else { return }
-                        await self.handleTransportEvent(
-                            event,
-                            endpoint: endpoint,
-                            reference: reference,
-                            generation: generation
-                        )
-                    }
-                    self?.transportEnded(error: nil, generation: generation)
-                } catch {
-                    self?.transportEnded(error: error, generation: generation)
-                }
-            }
+            listen(to: events, endpoint: endpoint, reference: reference, generation: generation)
             reauthenticationTask?.cancel()
             reauthenticationTask = Task { [weak self] in
                 await self?.keepAuthenticationCurrent(transport: transport,
@@ -805,7 +1102,8 @@ final class CompanionHostModel {
             Task { await CompanionConnectionLog.shared.record(category: "connection", "connected") }
         case .peer(let peer):
             if !peer.transportOnline {
-                removeConnection(peer.connectionID)
+                if usesWorkerRelay { removeWorkerPeer(peer.connectionID) }
+                else { removeConnection(peer.connectionID) }
             }
         case .authenticated(let authenticated):
             relayAcknowledgedExpiry = Date(timeIntervalSince1970: TimeInterval(authenticated.expiresAt))
@@ -816,6 +1114,7 @@ final class CompanionHostModel {
                 category: "connection", "token refresh not accepted",
                 detail: "retrying before expiry") }
         case .application(let connectionID, let payload):
+            guard let incomingTransport = transport else { return }
             do {
                 let queue: CompanionConnectionWorkQueue
                 if let existing = workQueues[connectionID] {
@@ -825,8 +1124,14 @@ final class CompanionHostModel {
                     queue = CompanionConnectionWorkQueue()
                     workQueues[connectionID] = queue
                 }
-                try queue.enqueue(cost: payload.count) { [weak self] in
+                try queue.enqueue(cost: payload.count) { [weak self, weak queue] in
                     guard let self, self.connectionFence.accepts(generation) else { return }
+                    defer {
+                        if self.usesWorkerRelay, let queue, !queue.hasPendingOperations,
+                           self.workQueues[connectionID] === queue {
+                            self.workQueues.removeValue(forKey: connectionID)
+                        }
+                    }
                     do {
                         try await self.processApplicationPayload(
                             payload,
@@ -835,12 +1140,22 @@ final class CompanionHostModel {
                             reference: reference,
                             generation: generation
                         )
+                        try self.requireConnectionGeneration(generation)
                     } catch {
+                        guard self.connectionFence.accepts(generation) else { return }
                         await self.disconnectConnection(connectionID)
+                        if self.usesWorkerRelay {
+                            do { try await incomingTransport.discardApplication(from: connectionID) }
+                            catch { await incomingTransport.disconnect() }
+                        }
+                        return
                     }
+                    do { try await incomingTransport.acknowledgeApplication(from: connectionID) }
+                    catch { await incomingTransport.disconnect() }
                 }
             } catch {
                 await disconnectConnection(connectionID)
+                if usesWorkerRelay { await incomingTransport.disconnect() }
             }
         }
     }
@@ -862,12 +1177,10 @@ final class CompanionHostModel {
             )
         case .pairingResponse:
             throw RemoteError.invalidMessage
-        case .encryptedFrame:
+        case .encryptedFrame(let encrypted):
             try await handleEncryptedFrame(
-                payload,
-                connectionID: connectionID,
-                endpoint: endpoint,
-                reference: reference
+                payload, encrypted: encrypted, connectionID: connectionID,
+                endpoint: endpoint, reference: reference, generation: generation
             )
         }
     }
@@ -888,6 +1201,15 @@ final class CompanionHostModel {
             hostID: identity.hostID,
             hostIdentity: identity.agreementKey
         )
+        let approvedWorkerEndpoint: String?
+        if usesWorkerRelay {
+            guard let workerPairing, workerPairing.ticket.ticketID == proposal.ticketID,
+                  try CloudflareCompanionTransport.connectionID(for: workerPairing.endpointID) == connectionID
+            else { throw RemoteError.wrongPeer }
+            approvedWorkerEndpoint = workerPairing.endpointID
+        } else {
+            approvedWorkerEndpoint = nil
+        }
         if isPairingModeActive {
             pairingRotation.cancel()
         }
@@ -896,8 +1218,10 @@ final class CompanionHostModel {
             response = try await registry.authorize(
                 proposal,
                 hostPublicKey: identity.agreementKey.publicKey.x963Representation,
-                hostNotificationSigningPublicKey: identity.notificationSigningKey.publicKey.x963Representation
+                hostNotificationSigningPublicKey: identity.notificationSigningKey.publicKey.x963Representation,
+                workerEndpointID: approvedWorkerEndpoint
             ) { [weak self] proposal in
+                if approvedWorkerEndpoint != nil { return true }
                 guard let self else { return false }
                 return await self.requestPairingApproval(
                     proposal,
@@ -909,7 +1233,8 @@ final class CompanionHostModel {
             await resumePairingModeAfterAttempt()
             throw error
         }
-        guard connectionFence.accepts(generation) else {
+        guard connectionFence.accepts(generation),
+              approvedWorkerEndpoint == nil || workerPairing?.ticket.ticketID == proposal.ticketID else {
             if response.approved {
                 do { _ = try await registry.revoke(deviceID: proposal.clientDeviceID) }
                 catch {
@@ -928,10 +1253,23 @@ final class CompanionHostModel {
             clientPublicKey: clientKey
         )
         guard let transport else { throw RemoteError.disconnected }
-        try await transport.send(
-            destinationConnectionID: connectionID,
-            payload: RelayApplicationPacket.pairingResponse(sealedResponse).encoded()
-        )
+        let payload = try RelayApplicationPacket.pairingResponse(sealedResponse).encoded()
+        if response.approved, let approvedWorkerEndpoint, let link = workerLink {
+            // The peer is durably paired. Expiring the handoff must leave its route admitted.
+            workerPairing = nil
+            cancelPairing()
+            do {
+                try await transport.send(destinationConnectionID: connectionID, payload: payload)
+            } catch {
+                do { _ = try await registry.revoke(deviceID: proposal.clientDeviceID) }
+                catch { logger.error("Incomplete pairing rollback failed: \(error.localizedDescription, privacy: .public)") }
+                await revokeIncompleteWorkerPairing(approvedWorkerEndpoint, link: link)
+                if connectionFence.accepts(generation) { pairedPeers = await registry.pairedPeers() }
+                throw error
+            }
+            return
+        }
+        try await transport.send(destinationConnectionID: connectionID, payload: payload)
         if response.approved {
             cancelPairing()
         } else {
@@ -962,12 +1300,18 @@ final class CompanionHostModel {
 
     private func handleEncryptedFrame(
         _ packet: Data,
+        encrypted: Data,
         connectionID: UUID,
         endpoint: RelayEndpoint,
-        reference: CompanionAuthReference
+        reference: CompanionAuthReference,
+        generation: UUID
     ) async throws {
         guard let identity else { throw RemoteError.authenticationRequired }
-        if let peer = peersByConnection[connectionID] {
+        let existingPeer = peersByConnection[connectionID]
+        let workerBinding = usesWorkerRelay ? try EncryptedEnvelope.decode(encrypted, relay: endpoint).binding : nil
+        // Worker route IDs survive a client reconnect. A new hello establishes a new app epoch.
+        let isNewHello = workerBinding?.purpose == .hello && workerBinding?.epoch != existingPeer?.helloEpoch
+        if let peer = existingPeer, !isNewHello {
             if let application = peer.applicationChannel {
                 let message = try await application.open(packet)
                 try await handleApplicationMessage(message, from: peer)
@@ -1025,26 +1369,31 @@ final class CompanionHostModel {
             return
         }
 
-        let outer = try RelayApplicationPacket.decode(packet)
-        guard case .encryptedFrame(let encrypted) = outer else { throw RemoteError.invalidMessage }
-        let envelope = try EncryptedEnvelope.decode(encrypted, relay: endpoint)
+        let binding = try workerBinding ?? EncryptedEnvelope.decode(encrypted, relay: endpoint).binding
         try CompanionHostSecurity.validateInitialHelloBinding(
-            envelope.binding,
+            binding,
             endpoint: endpoint,
             accountID: reference.accountID,
             hostID: identity.hostID
         )
         guard let registry = pairingRegistry,
               let paired = await registry.pairedPeers().first(where: {
-                  $0.deviceID == envelope.binding.senderID
-              }) else { throw RemoteError.wrongPeer }
+                  $0.deviceID == binding.senderID
+              }),
+              existingPeer == nil || existingPeer?.peer.deviceID == paired.deviceID else { throw RemoteError.wrongPeer }
+        if usesWorkerRelay {
+            guard let endpointID = paired.workerEndpointID,
+                  try CloudflareCompanionTransport.connectionID(for: endpointID) == connectionID else {
+                throw RemoteError.wrongPeer
+            }
+        }
         let clientKey = try P256.KeyAgreement.PublicKey(x963Representation: paired.publicKey)
         let outboundBinding = ChannelBinding(
             relay: endpoint,
             accountID: reference.accountID,
             hostID: identity.hostID,
             runtimeID: nil,
-            epoch: envelope.binding.epoch,
+            epoch: binding.epoch,
             senderID: identity.hostID,
             recipientID: paired.deviceID,
             purpose: .hello,
@@ -1054,7 +1403,7 @@ final class CompanionHostModel {
             identity: identity.agreementKey,
             pinnedPeer: clientKey,
             outboundBinding: outboundBinding,
-            inboundBinding: envelope.binding
+            inboundBinding: binding
         )
         let message = try await helloChannel.open(packet)
         guard case .hello(let metadata, let clientHello) = message,
@@ -1073,10 +1422,19 @@ final class CompanionHostModel {
                            RemoteBrowserRequest.capability, RemoteBrowserCookiePullRequest.capability,
                            CompanionBrowserMode.settingsCapability, RemoteImageAbortPayload.capability]
         )
+        try requireConnectionGeneration(generation)
+        if let existingPeer, peersByConnection[connectionID] === existingPeer {
+            let outboundQueue = existingPeer.outboundQueue
+            removeConnection(connectionID, cancelWorkQueues: false)
+            await outboundQueue.cancelAndWaitForCurrentOperation()
+            try Task.checkCancellation()
+            try requireConnectionGeneration(generation)
+        }
         let peer = PeerConnection(
             connectionID: connectionID,
             peer: paired,
             helloChannel: helloChannel,
+            helloEpoch: binding.epoch,
             clientHello: clientHello,
             hostHello: hostHello
         )
@@ -1182,7 +1540,7 @@ final class CompanionHostModel {
             logger.error(
                 "Attach failed for one session: \(error.localizedDescription, privacy: .public)")
             send(.error(messageMetadata, ErrorParameters(code: Self.attachRetryableCode,
-                 message: "This terminal could not be restored. Reopen it to try again.",
+                 message: "The terminal isn’t ready. Check it on the Mac, then retry.",
                  retryable: true)), to: peer)
         }
     }
@@ -1474,6 +1832,7 @@ final class CompanionHostModel {
             case .browserCookiePush:
                 result = try await handleBrowserCookiePush(metadata: metadata, command: command, peer: peer)
             case .notificationRegister:
+                guard !usesWorkerRelay else { throw RemoteError.unsupportedVersion }
                 guard command.payload.count <= 256 * 1_024 else { throw RemoteError.messageTooLarge }
                 let grant = try JSONDecoder().decode(
                     NotificationGrantRegistration.self,
@@ -1483,6 +1842,7 @@ final class CompanionHostModel {
                 notificationGrants[peer.peer.deviceID] = grant
                 result = nil
             case .notificationRevoke:
+                guard !usesWorkerRelay else { throw RemoteError.unsupportedVersion }
                 _ = try JSONDecoder().decode(RemoteEmptyPayload.self, from: command.payload)
                 try await notificationGrantStore.remove(deviceID: peer.peer.deviceID)
                 notificationGrants.removeValue(forKey: peer.peer.deviceID)
@@ -1506,7 +1866,7 @@ final class CompanionHostModel {
                 result = nil
             default:
                 guard let appModel else { throw RemoteError.offline }
-                result = try appModel.performCompanionCommand(metadata: metadata, command: command)
+                result = try await appModel.performCompanionCommandAwaitingTerminalStop(metadata: metadata, command: command)
                 workspaceRevision &+= 1
                 for connection in peersByConnection.values { connection.browserSessions.prune(model: appModel) }
             }
@@ -1713,7 +2073,7 @@ final class CompanionHostModel {
         // counted twice or lost.
         peer.attachingSessions[target.sessionID] = []
         let transferID = UUID()
-        let chunkSize = 512 * 1_024
+        let chunkSize = usesWorkerRelay ? 32 * 1_024 : 512 * 1_024
         let count = max(1, Int(ceil(Double(checkpoint.bytes.count) / Double(chunkSize))))
         // The size is the number worth having: a checkpoint large enough to occupy the main actor
         // is what stops this process answering the relay's heartbeat, and nothing recorded it.
@@ -2215,14 +2575,32 @@ final class CompanionHostModel {
     }
 
     private func revokePeer(_ peer: PairedPeer) async {
-        do { _ = try await pairingRegistry?.revoke(deviceID: peer.deviceID) }
-        catch { status = .failed(error.localizedDescription) }
+        guard let registry = pairingRegistry else { return }
+        pairedDeviceError = nil
+        let generation = connectionFence.generation
+        let worker = usesWorkerRelay
+        do {
+            if worker {
+                guard let link = workerLink, let target = peer.workerEndpointID else {
+                    throw RemoteError.disconnected
+                }
+                try await makeWorkerClient(link.relay).revoke(account: link.account, key: link.approverRoute,
+                                                             targetEndpointID: target)
+            }
+            _ = try await registry.revoke(deviceID: peer.deviceID)
+        } catch {
+            if connectionFence.generation == generation { pairedDeviceError = error.localizedDescription }
+            return
+        }
+        guard connectionFence.generation == generation else { return }
         pairedPeers.removeAll { $0.deviceID == peer.deviceID }
-        notificationGrants.removeValue(forKey: peer.deviceID)
-        do { try await notificationGrantStore.remove(deviceID: peer.deviceID) }
-        catch { logger.error("Notification grant cleanup failed: \(error.localizedDescription, privacy: .public)") }
-        do { try await pushJournalStore.remove(deviceID: peer.deviceID) }
-        catch { logger.error("Push journal cleanup failed: \(error.localizedDescription, privacy: .public)") }
+        if !worker {
+            notificationGrants.removeValue(forKey: peer.deviceID)
+            do { try await notificationGrantStore.remove(deviceID: peer.deviceID) }
+            catch { logger.error("Notification grant cleanup failed: \(error.localizedDescription, privacy: .public)") }
+            do { try await pushJournalStore.remove(deviceID: peer.deviceID) }
+            catch { logger.error("Push journal cleanup failed: \(error.localizedDescription, privacy: .public)") }
+        }
         let connections = peersByConnection.values.filter { $0.peer.deviceID == peer.deviceID }
         for connection in connections {
             await disconnectConnection(connection.connectionID)
@@ -2264,10 +2642,20 @@ final class CompanionHostModel {
         for sessionID in affectedSessions { updateRemoteCapture(sessionID: sessionID) }
     }
 
+    private func removeWorkerPeer(_ connectionID: UUID) {
+        // The relay still expects a disposition for every queued delivery on this socket.
+        peersByConnection[connectionID]?.outboundQueue.cancel()
+        removeConnection(connectionID, cancelWorkQueues: false)
+    }
+
     private func disconnectConnection(
         _ connectionID: UUID,
         drainOutbound: Bool = true
     ) async {
+        if usesWorkerRelay {
+            removeWorkerPeer(connectionID)
+            return
+        }
         // This method normally runs on the connection's own serial queue. Cancelling that queue
         // before the relay request would cancel this task too, leaving the rejected socket open.
         // Remove trust and leases immediately, then stop the drained queue after the best-effort
@@ -2334,17 +2722,21 @@ final class CompanionHostModel {
     private func transportEnded(error: Error?, generation: UUID) {
         Self.connectionLogger.error(
             "host transport ended: \(error?.localizedDescription ?? "closed", privacy: .public)")
-        reauthenticationTask?.cancel()
-        reauthenticationTask = nil
         // Below the fence: an old transport finishing after its replacement started would
         // otherwise log a close that did not end the connection anyone is using.
         guard connectionFence.accepts(generation) else { return }
+        reauthenticationTask?.cancel()
+        reauthenticationTask = nil
         let reason = error?.localizedDescription ?? "closed"
         Task { await CompanionConnectionLog.shared.record(
             category: "connection", "transport ended", detail: reason) }
         cancelPairing()
         transportTask = nil
         transport = nil
+        workerLink = nil
+        pairedDeviceError = nil
+        tokenManager = nil
+        httpClient = nil
         relayAcknowledgedExpiry = nil
         clearConnectedPeers()
         if let error { status = .failed(error.localizedDescription) }
@@ -2613,8 +3005,8 @@ final class CompanionHostModel {
         }
     }
 
-    private func configuredEndpoint() throws -> RelayEndpoint {
-        let trimmed = relayText.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func configuredEndpoint(address: String? = nil) throws -> RelayEndpoint {
+        let trimmed = (address ?? relayText).trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: trimmed) else { throw RemoteError.invalidEndpoint }
         return try RelayEndpoint(url)
     }
@@ -2630,8 +3022,8 @@ final class CompanionHostModel {
               let fragment = origin.fragment,
               let components = URLComponents(string: "?\(fragment)"),
               let items = components.queryItems,
-              items.filter({ ["bootstrap_token", "enrollment_token"].contains($0.name) }).count == 1,
-              let token = items.first(where: { ["bootstrap_token", "enrollment_token"].contains($0.name) })?.value,
+              items.filter({ ["bootstrap_token", "enrollment_token", "invitation"].contains($0.name) }).count == 1,
+              let token = items.first(where: { ["bootstrap_token", "enrollment_token", "invitation"].contains($0.name) })?.value,
               !token.isEmpty else {
             throw RemoteError.invalidMessage
         }
@@ -2660,7 +3052,7 @@ final class CompanionHostModel {
         )
     }
 
-    private func requireTransport() throws -> RelayWebSocketClient {
+    private func requireTransport() throws -> any CompanionRelayTransport {
         guard let transport else { throw RemoteError.disconnected }
         return transport
     }
@@ -2671,8 +3063,12 @@ final class CompanionHostModel {
     }
 
     private static func qrImage(for url: URL) throws -> NSImage {
+        try qrImage(for: url.absoluteString)
+    }
+
+    private static func qrImage(for text: String) throws -> NSImage {
         let filter = CIFilter.qrCodeGenerator()
-        filter.message = Data(url.absoluteString.utf8)
+        filter.message = Data(text.utf8)
         filter.correctionLevel = "M"
         guard let output = filter.outputImage?.transformed(by: CGAffineTransform(scaleX: 8, y: 8)) else {
             throw RemoteError.invalidMessage

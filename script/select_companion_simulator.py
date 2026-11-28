@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import re
 import sys
 
 DUO = "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo"
@@ -42,7 +43,13 @@ def select(inventory, family, sdk_version):
         devices = [device for device in runtime.get("supportedDeviceTypes", [])
                    if device.get("productFamily") == product and device.get("identifier")]
         if family == "iPhone":
-            devices = [device for device in devices if device["identifier"] != DUO]
+            devices = [device for device in devices
+                       if device["identifier"] != DUO and not device["name"].endswith(" Pro Max")]
+            pros = [(int(match[1]), device) for device in devices
+                    if (match := re.fullmatch(r"iPhone (\d+) Pro", device["name"]))]
+            if pros:
+                _, chosen = max(pros, key=lambda pair: pair[0])
+                return runtime["identifier"], chosen["identifier"]
         elif family == "iPhoneDuo":
             devices = [device for device in devices if device["identifier"] == DUO]
         if devices:

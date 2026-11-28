@@ -33,10 +33,9 @@ on:
 
 # Every job selects the same Xcode explicitly. The image default moves on GitHub's schedule,
 # so without a pin the compiler that builds and signs a release could change without a commit.
-# Keep this in step with the companion jobs in companion.yml. The xcode-27 image is still a
-# public preview, so a runner shortage or an image change shows up here first.
+# Keep this in step with the Apple jobs in companion.yml.
 env:
-  DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
+  DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
 
 jobs:
   build-and-test:
@@ -48,6 +47,11 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ inputs.source_sha || github.sha }}
+
+      - name: Install the pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: '1.99.1'
 
       - name: Install Go for the relay integration test
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -140,8 +144,28 @@ jobs:
           done
           test "$missing" -eq 0
 
+  verify-rust-workspaces:
+    runs-on: xcode-27
+    name: Verify Local Rust Terminal
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+
+      - name: Install the pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: '1.99.1'
+
+      - name: Install the matching Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
+
+      - name: Verify Rust PTYs and native SwiftTerm checkpoint import
+        run: bash Services/terminal-state/check.sh
+
   release:
-    needs: [build-and-test, verify-bundle]
+    needs: [build-and-test, verify-bundle, verify-rust-workspaces]
     if: inputs.beta_version != '' || (github.event_name == 'release' && !github.event.release.prerelease)
     runs-on: xcode-27
     name: Sign, Notarize & Release
@@ -218,6 +242,7 @@ jobs:
             VERSION="${VERSION}" \
             BUILD="${{ inputs.build_number || github.run_number }}" \
             DISTRIBUTION=1 \
+            RUST_WORKSPACES=1 \
             CODESIGN_IDENTITY="${CODESIGN_IDENTITY}"
 
       - name: Verify application signature
@@ -226,7 +251,7 @@ jobs:
           codesign --verify --strict --verbose=2 dist/myterm.app/Contents/MacOS/MyTermSessionHost
           test -x dist/myterm.app/Contents/MacOS/MyTermUpdateAgent
           codesign --verify --strict --verbose=2 dist/myterm.app/Contents/MacOS/MyTermUpdateAgent
-          codesign --verify --deep --strict --verbose=2 dist/myterm.app
+          bash script/verify_rust_workspace_bundle.sh dist/myterm.app com.gordonbeeming.myterm
           codesign -dvvv --entitlements :- dist/myterm.app
           plutil -lint dist/myterm.app/Contents/Info.plist
 

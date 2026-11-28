@@ -778,9 +778,10 @@ public class EscapeSequenceParser {
                 if let d = dcsHandler {
                     if ~dcs != 0 {
                         d.put (data: data[dcs..<i])
-                        d.unhook ()
-                        dcsHandler = nil
                     }
+                    // The terminating chunk may contain no additional payload.
+                    d.unhook ()
+                    dcsHandler = nil
                 }
                 if code == 0x1b {
                     transition |= ParserState.escape.rawValue

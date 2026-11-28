@@ -35,11 +35,15 @@ final class ChannelConfigurationStoreTests: XCTestCase {
         overrides.webLinkDestination = settings.webLinkDestination
         overrides.newSessionWorkingDirectory = settings.newSessionWorkingDirectory
         let folder = WorkspaceFolder(title: "Folder", settingsOverrides: overrides)
-        let terminal = Tab(content: .terminal(TerminalSession(agentSession:
-            try XCTUnwrap(AgentSessionHandle(agent: "codex", sessionID: "test-session")))))
+        let terminals = try [ClaudeConfiguration.standard, .directory(URL(fileURLWithPath: "/tmp/claude-test"))]
+            .map { configuration in
+                Tab(content: .terminal(TerminalSession(agentSession: try XCTUnwrap(
+                    AgentSessionHandle(agent: "claude", sessionID: "test-session", claudeConfiguration: configuration)
+                ))))
+            }
         let browser = Tab(content: .browser(BrowserSession(url: URL(string: "https://example.com")!,
             profile: BrowserDataProfile(scope: .workspace, persistentStoreID: UUID()))))
-        let first = TabGroup(tabs: [terminal, browser])
+        let first = TabGroup(tabs: terminals + [browser])
         let workspace = Workspace(title: "Nested", layout: .split(id: SplitNodeID(), orientation: .horizontal,
             children: [.group(first), .group(TabGroup())], weights: [0.5, 0.5]), folderID: folder.id,
             settingsOverrides: overrides)

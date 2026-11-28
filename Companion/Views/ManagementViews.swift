@@ -1,6 +1,7 @@
 @preconcurrency import AVFoundation
 import MyTermCore
 import MyTermRemote
+import MyTermUI
 import SwiftUI
 
 struct AddHostView: View {
@@ -11,34 +12,87 @@ struct AddHostView: View {
     @State private var isPairing = false
     @State private var pairingTask: Task<Void, Never>?
     @State private var errorMessage: String?
+    @State private var selectedRelay = AppConfiguration.defaultHostedRelay.origin
+    @State private var customRelay = ""
+    @State private var workerEnrollment: WorkerEnrollmentAttempt?
+
+    private var enrollmentRelay: String {
+        (selectedRelay.isEmpty ? customRelay : selectedRelay).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Pairing") {
-                    Menu {
-                        Button("Scan QR code", systemImage: "qrcode.viewfinder") {
+                Section {
+                    if let workerEnrollment {
+                        ShareLink(item: workerEnrollment.request.code) {
+                            Label("Share approval request", systemImage: "square.and.arrow.up")
+                        }
+                        Button("Scan Mac approval", systemImage: "qrcode.viewfinder") {
                             showingScanner = true
                         }
                         PasteButton(payloadType: String.self) { values in
-                            guard let value = values.first else { return }
-                            startPairing(value)
+                            if let value = values.first { startPairing(value) }
                         }
-                    } label: {
-                        Label(isPairing ? "Pairing…" : "Pair Mac", systemImage: "qrcode.viewfinder")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
+                        .accessibilityLabel("Paste Mac approval")
+                        Button("Start over") { self.workerEnrollment = nil }
+                    } else {
+                        LabeledContent("Relay") {
+                            Picker("Relay", selection: $selectedRelay) {
+                                ForEach(AppConfiguration.hostedRelays, id: \.origin) { relay in
+                                    Text(relay.title).tag(relay.origin)
+                                }
+                                Text("Self-hosted").tag("")
+                            }
+                            .labelsHidden()
+                            .accessibilityIdentifier("pairing-relay-picker")
+                        }
+                        if selectedRelay.isEmpty {
+                            TextField("Relay address", text: $customRelay, prompt: Text("https://"))
+                                .textContentType(.URL)
+                                .keyboardType(.URL)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                        }
+                        Button("Sign in with a passkey") { startWorkerEnrollment() }
+                            .disabled(enrollmentRelay.isEmpty)
                     }
-                    .disabled(isPairing)
-                    .accessibilityIdentifier("pair-mac")
-                    if isPairing { ProgressView("Complete sign-in and approve this phone on your Mac.") }
+                } header: {
+                    Text(workerEnrollment == nil ? "Use your relay account" : "Device approval")
+                        .foregroundStyle(Theme.textSecondary)
+                } footer: {
+                    Text(workerEnrollment == nil
+                         ? "On your Mac, find your relay in Settings → Companion."
+                         : "Share the request with your Mac. Approve it there, then scan or paste the approval here.")
+                        .foregroundStyle(Theme.textSecondary)
                 }
-                Section {
-                    Text("Show the pairing code in MyTerm on your Mac. Sign in with your passkey if asked, then approve this phone on the Mac.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                .disabled(isPairing)
+                if workerEnrollment == nil {
+                    Section {
+                        Menu {
+                            Button("Scan QR code", systemImage: "qrcode.viewfinder") { showingScanner = true }
+                            PasteButton(payloadType: String.self) { values in
+                                if let value = values.first { startPairing(value) }
+                            }
+                        } label: {
+                            Label("Use a pairing code", systemImage: "qrcode.viewfinder")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                        }
+                        .disabled(isPairing)
+                        .accessibilityIdentifier("pair-mac")
+                    } footer: {
+                        Text("Use this if MyTerm on your Mac shows a pairing code.")
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                }
+                if isPairing {
+                    Section {
+                        ProgressView(workerEnrollment == nil ? "Signing in…" : "Pairing with your Mac…")
+                    }
                 }
             }
+            .tint(Theme.accent)
             .navigationTitle("Add Mac")
             .toolbar { Button("Cancel", role: .cancel) {
                 pairingTask?.cancel()
@@ -59,7 +113,7 @@ struct AddHostView: View {
                         showingScanner = false
                         errorMessage = message
                     }
-                    .navigationTitle("Scan pairing code")
+                    .navigationTitle(workerEnrollment == nil ? "Scan pairing code" : "Scan Mac approval")
                     .toolbar {
                         Button("Cancel", role: .cancel) {
                             scannedCode = nil
@@ -80,8 +134,31 @@ struct AddHostView: View {
         pairingTask = Task { await pair(value) }
     }
 
+    private func startWorkerEnrollment() {
+        guard !isPairing else { return }
+        isPairing = true
+        let relay = enrollmentRelay
+        pairingTask = Task {
+            defer { isPairing = false }
+            do { workerEnrollment = try await services.beginWorkerEnrollment(origin: relay) }
+            catch is CancellationError { return }
+            catch { errorMessage = error.localizedDescription }
+        }
+    }
+
     private func pair(_ value: String) async {
         guard !isPairing else { return }
+        if let workerEnrollment {
+            isPairing = true
+            defer { isPairing = false }
+            do {
+                _ = try await services.finishWorkerEnrollment(workerEnrollment, approvalCode: value)
+                dismiss()
+            } catch is CancellationError {
+                return
+            } catch { errorMessage = error.localizedDescription }
+            return
+        }
         guard let url = URL(string: value.trimmingCharacters(in: .whitespacesAndNewlines)) else {
             errorMessage = invalidPairingMessage
             return
@@ -102,7 +179,7 @@ struct AddHostView: View {
     }
 
     private var invalidPairingMessage: String {
-        "This pairing code is invalid or expired. Scan the current code shown by MyTerm on your Mac."
+        "This pairing code expired or is invalid. Show a new code in MyTerm’s Companion settings on your Mac."
     }
 }
 
@@ -111,6 +188,7 @@ struct HostActionsView: View {
     let scene: SceneModel
     let connectionID: SavedConnectionID
     @Environment(\.dismiss) private var dismiss
+    @FocusState private var isAliasFocused: Bool
     @State private var alias = ""
     @State private var aliasRejected = false
 
@@ -121,6 +199,9 @@ struct HostActionsView: View {
                     Section("Mac") {
                         TextField("Name", text: $alias, prompt: Text(host.name))
                             .accessibilityIdentifier("machine-alias")
+                            .focused($isAliasFocused)
+                            .contentShape(Rectangle())
+                            .simultaneousGesture(TapGesture().onEnded { isAliasFocused = true })
                             .onSubmit { commitAlias() }
                         if aliasRejected {
                             Text("That name is too long. Keep it to \(MachinePreferencesStore.aliasByteLimit) bytes or fewer — emoji and accented letters each take several.")
@@ -144,20 +225,24 @@ struct HostActionsView: View {
                             Task { await scene.connect(to: host, services: services) }
                             dismiss()
                         }
-                        Button("Sign in again") {
-                            Task {
-                                do {
-                                    try await services.signInAgain(for: host)
-                                    await scene.connect(to: host, services: services)
-                                    dismiss()
-                                } catch { services.errorMessage = error.localizedDescription }
+                        if !services.usesWorkerRelay(host) {
+                            Button("Sign in again") {
+                                Task {
+                                    do {
+                                        try await services.signInAgain(for: host)
+                                        await scene.connect(to: host, services: services)
+                                        dismiss()
+                                    } catch { services.errorMessage = error.localizedDescription }
+                                }
                             }
                         }
                         Button("Remove pairing", role: .destructive) {
                             Task {
-                                await scene.disconnect()
-                                await scene.browserProfileStores.removeStores(hostID: host.hostID)
+                                await scene.disconnect(ifConnectedTo: host.connectionID)
                                 await services.remove(host)
+                                if !services.savedHosts.contains(where: { $0.hostID == host.hostID }) {
+                                    await scene.browserProfileStores.removeStores(hostID: host.hostID)
+                                }
                                 dismiss()
                             }
                         }
@@ -205,7 +290,7 @@ struct CompanionSettingsView: View {
                         Text(style.title).tag(style.rawValue)
                     }
                 }
-                Text("Adaptive panes mirrors the Mac layout on wider screens and uses a terminal picker on narrow screens. This setting applies only to this device.")
+                Text("Adaptive panes use the Mac layout when space allows.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -224,9 +309,6 @@ struct CompanionSettingsView: View {
                     }
                     .disabled(services.notificationEnrollment.isWorking)
                 }
-            }
-            Section("Connections") {
-                Text("Each app window connects independently. Returning to the foreground reloads the latest terminal screen before input is enabled.")
             }
             Section("Diagnostics") {
                 NavigationLink("Connection diagnostics") { DiagnosticsView(scene: scene) }

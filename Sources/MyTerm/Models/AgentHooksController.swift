@@ -153,10 +153,20 @@ final class AgentHooksController {
 
     var isInstalled: Bool { state == .installed }
 
+    private var canManageHooks: Bool {
+        #if MYTERM_RUST_RELEASE_REHEARSAL
+        state = .failed("Agent hook configuration is shared with the installed app.")
+        return false
+        #else
+        return true
+        #endif
+    }
+
     /// Reads what is installed. A hook MyTerm wrote with an earlier text is reinstalled, so a
     /// guard added later reaches a settings file the user set up before it existed. A current set
     /// with a hook missing was edited by hand, and is left as the person left it.
     func refresh() {
+        guard canManageHooks else { return }
         do {
             let settings = try readSettings()
             let staleCallback = try target.callbackSettingsURL.map { try AgentStatusCallback.needsRefresh(at: $0) } ?? false
@@ -173,6 +183,7 @@ final class AgentHooksController {
     }
 
     func install(preservingCallbackState: Bool = false) {
+        guard canManageHooks else { return }
         do {
             try withConfigurationRollback {
                 var settings = try readSettings()
@@ -207,6 +218,7 @@ final class AgentHooksController {
     }
 
     func remove() {
+        guard canManageHooks else { return }
         do {
             try withConfigurationRollback {
                 var settings = try readSettings()

@@ -178,6 +178,34 @@ final class ApplicationUpdateTests: XCTestCase {
         XCTAssertLessThan(started.duration(to: .now), .seconds(12))
     }
 
+    func testIncomingRustBundleCannotPassConfigurationPreflightWithoutItsSignedServer() throws {
+        let plan = try fixture()
+        let binaries = plan.staged.appendingPathComponent("Contents/MacOS")
+        try FileManager.default.createDirectory(at: binaries, withIntermediateDirectories: true)
+        let agent = binaries.appendingPathComponent("MyTermUpdateAgent")
+        let product = Bundle(for: ApplicationUpdateTests.self).bundleURL.deletingLastPathComponent()
+            .appendingPathComponent("MyTermUpdateAgent")
+        try FileManager.default.copyItem(at: product, to: agent)
+        let arguments = ["--verify-configuration", plan.configurationDirectory.path, ApplicationUpdate.bundleIdentifier, "current"]
+        let plist = plan.staged.appendingPathComponent("Contents/Info.plist")
+        let workspace = plan.configurationDirectory.appendingPathComponent("workspace-state.json")
+        let original = try Data(contentsOf: workspace)
+        XCTAssertNoThrow(try ApplicationUpdate.run(agent.path, arguments))
+
+        let info: [String: Any] = ["CFBundleIdentifier": ApplicationUpdate.bundleIdentifier, "MyTermRustWorkspaces": true]
+        try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0).write(to: plist)
+        XCTAssertThrowsError(try ApplicationUpdate.run(agent.path, arguments)) { error in
+            XCTAssertTrue(error.localizedDescription.contains("does not contain an executable local Rust server"))
+        }
+
+        let unrelatedExecutable = binaries.appendingPathComponent("myterm-local-terminal")
+        try FileManager.default.copyItem(at: URL(fileURLWithPath: "/bin/sh"), to: unrelatedExecutable)
+        XCTAssertThrowsError(try ApplicationUpdate.run(agent.path, arguments)) { error in
+            XCTAssertTrue(error.localizedDescription.contains("local Rust server signature could not be verified"))
+        }
+        XCTAssertEqual(try Data(contentsOf: workspace), original)
+    }
+
     /// The exit watcher observes the actual process event rather than treating permissions as exit.
     func testExitWatcherObservesChildAndDoesNotAcceptATimeout() throws {
         let child = Process()

@@ -27,11 +27,18 @@ extension AppModel {
 
     func insertBrowserContext(_ text: String, screenshot: Data?,
                               target: BrowserContextTerminalTarget,
-                              artifactRoot: URL = FileManager.default.temporaryDirectory) throws {
+                              artifactRoot: URL? = nil) throws {
         guard browserContextTargets(in: target.workspaceID).contains(target),
               let session = terminalSessions[target.sessionID] else {
             throw BrowserContextDeliveryError.targetUnavailable
         }
+        #if MYTERM_RUST_RELEASE_REHEARSAL
+        let artifactRoot = artifactRoot ?? browserContextArtifactDirectory
+        try FileManager.default.createDirectory(at: artifactRoot, withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o700])
+        #else
+        let artifactRoot = artifactRoot ?? FileManager.default.temporaryDirectory
+        #endif
         BrowserContextArtifacts.pruneExpired(in: artifactRoot)
         var body = text
         var imageURL: URL?

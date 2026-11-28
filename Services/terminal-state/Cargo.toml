@@ -1,0 +1,12 @@
+[package]
+name = "myterm-terminal-state"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+wezterm-term = { path = ".engine/wezterm/term" }
+
+[dev-dependencies]
+base64 = "0.22"
+serde_json = "1"

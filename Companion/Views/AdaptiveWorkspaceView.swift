@@ -129,7 +129,7 @@ struct AdaptiveWorkspaceView: View {
             }
             ToolbarItemGroup(placement: .primaryAction) {
                 HideKeyboardButton()
-                Button(showTerminalKeys ? "Hide terminal keys" : "Show terminal keys", systemImage: "keyboard") {
+                Button(showTerminalKeys ? "Hide terminal keys" : "Show terminal keys", systemImage: "command") {
                     showTerminalKeys.toggle()
                 }
                 .accessibilityIdentifier("toggle-terminal-keys")

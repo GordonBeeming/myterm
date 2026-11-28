@@ -1,4 +1,5 @@
 import AppKit
+import SwiftTerm
 import XCTest
 @testable import MyTermPlatform
 
@@ -7,6 +8,15 @@ private final class FocusableTerminalTestView: NSView {
 }
 
 final class TerminalSessionConfigurationTests: XCTestCase {
+    @MainActor
+    func testTerminalBackingColorFollowsConfiguredAppearance() throws {
+        let view = TerminalView(frame: CGRect(x: 0, y: 0, width: 600, height: 400))
+        let color = NSColor(srgbRed: 0.19, green: 0.37, blue: 0.51, alpha: 1)
+        view.nativeBackgroundColor = color
+        let background = try XCTUnwrap(view.layer?.backgroundColor)
+        XCTAssertEqual(NSColor(cgColor: background)?.usingColorSpace(.sRGB), color)
+    }
+
     @MainActor
     func testUnsupportedShellWarnsWithoutSendingTheSavedCommand() async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: "myterm-custom-shell-\(UUID())")

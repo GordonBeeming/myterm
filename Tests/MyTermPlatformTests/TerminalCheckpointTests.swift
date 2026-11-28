@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 @testable import SwiftTerm
 import XCTest
@@ -121,7 +122,7 @@ final class TerminalCheckpointTests: XCTestCase {
         XCTAssertEqual(try restored.exportCheckpoint(), try view.terminal.exportCheckpoint())
     }
 
-    func testRetainedAlternateStorageBoundsStillRejectWithoutMutation() throws {
+    func testRetainedStorageBoundsStillRejectWithoutMutation() throws {
         let original = terminal(columns: 8, rows: 4)
         original.feed(text: "\u{1B}[?47hseed\u{1B}[?47l")
         let before = try original.exportCheckpoint()
@@ -129,7 +130,9 @@ final class TerminalCheckpointTests: XCTestCase {
         let control = try PropertyListSerialization.data(fromPropertyList: root, format: .binary, options: 0)
         try original.importCheckpoint(control)
         XCTAssertEqual(try original.exportCheckpoint(), before)
-        for (bufferName, width) in [("alternateBuffer", 7), ("alternateBuffer", 4_097), ("normalBuffer", 12)] {
+        let invalidWidths = [("alternateBuffer", 7), ("alternateBuffer", 4_097),
+                             ("normalBuffer", 7), ("normalBuffer", 4_097)]
+        for (bufferName, width) in invalidWidths {
             var envelope = root
             var state = try XCTUnwrap(envelope["state"] as? [String: Any])
             var buffer = try XCTUnwrap(state[bufferName] as? [String: Any])
@@ -252,6 +255,155 @@ final class TerminalCheckpointTests: XCTestCase {
         XCTAssertEqual(delegate.writes.count, 2)
         view.feed(text: "\u{1B}[6n")
         XCTAssertEqual(delegate.writes.count, 3)
+    }
+
+    @MainActor
+    func testServerOwnedResponsesDoNotSuppressNativeMouseOrFocusInput() throws {
+        let view = TerminalView(frame: CGRect(x: 0, y: 0, width: 640, height: 480))
+        let delegate = ViewDelegate()
+        view.terminalDelegate = delegate
+        view.sendsTerminalResponses = false
+
+        view.feed(text: "\u{1B}[?1000h\u{1B}[?1006h\u{1B}[?1004h\u{1B}[6n")
+        XCTAssertTrue(delegate.writes.isEmpty, "Mode-enable focus and cursor reports are parser replies")
+
+        let click = try XCTUnwrap(NSEvent.mouseEvent(
+            with: .leftMouseDown, location: NSPoint(x: 2, y: 478), modifierFlags: [],
+            timestamp: 0, windowNumber: 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 1
+        ))
+        view.mouseDown(with: click)
+        XCTAssertTrue(view.becomeFirstResponder())
+        XCTAssertTrue(view.resignFirstResponder())
+        XCTAssertEqual(delegate.writes.map { String(decoding: $0, as: UTF8.self) },
+                       ["\u{1B}[<0;1;1M", "\u{1B}[I", "\u{1B}[O"])
+
+        view.acceptsUserInput = false
+        view.mouseDown(with: click)
+        XCTAssertTrue(view.becomeFirstResponder())
+        view.send(txt: "input")
+        XCTAssertEqual(delegate.writes.count, 3)
+    }
+
+    @MainActor
+    func testNativeKittyPlacementRetainsItsLargerRasterBudget() {
+        let view = TerminalView(frame: CGRect(x: 0, y: 0, width: 640, height: 480))
+        let delegate = ViewDelegate()
+        view.terminalDelegate = delegate
+        let cell = view.imageRenderingGeometry.cellSize
+        let columns = max(1, Int(900 / cell.width))
+        let rows = max(1, Int(900 / cell.height))
+
+        view.feed(text: "\u{1B}_Ga=T,f=32,s=1,v=1,i=42,c=\(columns),r=\(rows);/wAA/w==\u{1B}\\")
+        XCTAssertTrue(view.terminal.buffer.hasAnyImages, "The roughly 3 MiB placement fits the native 8 MiB raster budget")
+        XCTAssertEqual(delegate.writes.map { String(decoding: $0, as: UTF8.self) }, ["\u{1B}_Gi=42;OK\u{1B}\\"])
+    }
+
+    @MainActor
+    func testKittyPlacementUsesHostMeasurementsWithADifferentViewerFont() throws {
+        let frame = CGRect(x: 0, y: 0, width: 640, height: 480)
+        let host = TerminalView(frame: frame)
+        let viewer = TerminalView(frame: frame)
+        host.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        viewer.font = .monospacedSystemFont(ofSize: 26, weight: .regular)
+        var hostGeometry = host.imageRenderingGeometry
+        hostGeometry.displayScale = viewer.imageRenderingGeometry.displayScale == 1 ? 2 : 1
+        XCTAssertNotEqual(viewer.imageRenderingGeometry.cellSize, hostGeometry.cellSize)
+        XCTAssertNotEqual(viewer.imageRenderingGeometry.displayScale, hostGeometry.displayScale)
+        host.authoritativeImageGeometry = hostGeometry
+        viewer.authoritativeImageGeometry = hostGeometry
+        host.applyTerminalGeometry(columns: 80, rows: 24)
+        viewer.applyTerminalGeometry(columns: 80, rows: 24)
+        let image = "\u{1B}_Ga=T,f=32,s=1,v=1,i=42,c=8,r=4;/wAA/w==\u{1B}\\tail"
+        host.feed(text: image)
+        viewer.feed(text: image)
+        let hostState = try kittyCheckpoint(host)
+        let viewState = try kittyCheckpoint(viewer)
+        let expected = hostState.normalBuffer.lines.flatMap(\.images)
+        XCTAssertEqual(expected.count, 4)
+        let encoder = PropertyListEncoder()
+        XCTAssertEqual(try encoder.encode(viewState.normalBuffer.lines.flatMap(\.images)),
+                       try encoder.encode(expected))
+        XCTAssertEqual(viewState.normalBuffer.x, hostState.normalBuffer.x)
+        XCTAssertEqual(viewState.normalBuffer.y, hostState.normalBuffer.y)
+    }
+
+    @MainActor
+    func testKittyScrollingPutsKeepOnlyResidentPlacementRecords() throws {
+        let view = TerminalView(frame: CGRect(x: 0, y: 0, width: 640, height: 480))
+        let delegate = ViewDelegate()
+        view.terminalDelegate = delegate
+        view.changeScrollback(1_250)
+        view.feed(text: "\u{1B}[?47h\u{1B}_Ga=T,f=32,s=1,v=1,i=8,p=60000,c=1,r=1;/wAA/w==\u{1B}\\\u{1B}[?47l")
+        view.feed(text: "\u{1B}_Ga=t,f=32,s=1,v=1,i=7;/wAA/w==\u{1B}\\")
+        view.feed(text: "\u{1B}_Ga=p,i=7,p=61000,U=1,c=1,r=1;\u{1B}\\")
+        XCTAssertTrue(delegate.writes.allSatisfy { String(decoding: $0, as: UTF8.self).contains(";OK") },
+                      "Setup replies: \(delegate.writes.map { String(decoding: $0, as: UTF8.self) })")
+        delegate.writes.removeAll()
+
+        for _ in 0..<1_300 {
+            view.feed(text: "\r\u{1B}_Ga=p,i=7,c=1,r=1;\u{1B}\\")
+        }
+        XCTAssertEqual(delegate.writes.count, 1_300)
+        let firstFailure = delegate.writes.map { String(decoding: $0, as: UTF8.self) }.first { !$0.contains(";OK") }
+        XCTAssertNil(firstFailure)
+        let longer = try kittyCheckpoint(view)
+        XCTAssertGreaterThan(longer.kitty.placements.filter { !$0.isAlternateBuffer }.count, 1_024)
+
+        view.changeScrollback(12)
+        let shorter = try kittyCheckpoint(view)
+        let normalKeys = Set(shorter.normalBuffer.lines.flatMap(\.images).compactMap(\.placementId))
+        XCTAssertEqual(Set(shorter.kitty.placements.filter { !$0.isAlternateBuffer && !$0.isVirtual }.map(\.placementId)), normalKeys)
+        XCTAssertGreaterThan(normalKeys.count, 12, "Visible placements and retained normal scrollback both survive")
+        XCTAssertTrue(shorter.kitty.placements.contains { $0.isAlternateBuffer && $0.placementId == 60_000 })
+        XCTAssertTrue(shorter.kitty.placements.contains { $0.isVirtual && $0.placementId == 61_000 })
+    }
+
+    @MainActor
+    func testEvictedKittyCacheDataDoesNotLeaveDanglingPlacementRecords() throws {
+        let view = TerminalView(frame: CGRect(x: 0, y: 0, width: 640, height: 480))
+        view.terminal.options.kittyImageCacheLimitBytes = 4
+        view.feed(text: "\u{1B}_Ga=T,f=32,s=1,v=1,i=1,p=10,c=1,r=1;/wAA/w==\u{1B}\\")
+        XCTAssertEqual(try kittyCheckpoint(view).kitty.placements.map(\.imageId), [1])
+
+        view.terminal.options.kittyImageCacheLimitBytes = 0
+        view.feed(text: "\u{1B}_Ga=T,f=32,s=1,v=1,i=2,p=20,c=1,r=1;/wAA/w==\u{1B}\\")
+        let state = try kittyCheckpoint(view)
+        XCTAssertTrue(state.kitty.images.isEmpty)
+        XCTAssertTrue(state.kitty.placements.isEmpty)
+        XCTAssertEqual(Set(state.normalBuffer.lines.flatMap(\.images).compactMap(\.imageId)), [1, 2])
+    }
+
+    @MainActor
+    func testWideRelativeKittyStripeRoundTripsThroughNativeCheckpoint() throws {
+        let size = CGSize(width: 640, height: 480)
+        let geometry = TerminalImageGeometry(cellSize: CGSize(width: 8, height: 16),
+                                             viewportSize: size, displayScale: 1)
+        let view = TerminalView(frame: CGRect(origin: .zero, size: size))
+        view.authoritativeImageGeometry = geometry
+        view.feed(text: "\u{1B}_Ga=T,f=32,s=1,v=1,i=1,p=1,c=1,r=1;/wAA/w==\u{1B}\\")
+        view.feed(text: "\u{1B}_Ga=T,f=32,s=1,v=1,i=2,p=1,P=1,Q=1,H=1,c=600,r=1;/wAA/w==\u{1B}\\")
+        let key = KittyPlacementKey(imageId: 2, placementId: 1)
+        let original = try XCTUnwrap(view.terminal.kittyGraphicsState.relativeStripes[key]?.first)
+        XCTAssertEqual(original.pixelWidth, 4_800)
+
+        let encoded = try view.terminal.exportCheckpoint()
+        let restored = TerminalView(frame: CGRect(origin: .zero, size: size))
+        restored.authoritativeImageGeometry = geometry
+        try restored.terminal.importCheckpoint(encoded)
+        try restored.invalidateAfterCheckpointImport()
+        let stripe = try XCTUnwrap(restored.terminal.kittyGraphicsState.relativeStripes[key]?.first)
+        XCTAssertEqual(stripe.pixelWidth, 4_800)
+        XCTAssertEqual(stripe.pixelHeight, original.pixelHeight)
+        let checkpoint = try kittyCheckpoint(restored)
+        let images = try XCTUnwrap(checkpoint.kitty.relativeImages)
+        let saved = try XCTUnwrap(images.first { $0.imageId == 2 && $0.placementId == 1 }?.images.first)
+        XCTAssertEqual(saved.pixelWidth, 4_800)
+        XCTAssertEqual(NSBitmapImageRep(data: saved.data)?.pixelsWide, 4_800)
+    }
+
+    @MainActor
+    private func kittyCheckpoint(_ view: TerminalView) throws -> TerminalCheckpointState {
+        try PropertyListDecoder().decode(TerminalCheckpointEnvelope.self, from: view.terminal.exportCheckpoint()).state
     }
 
     @MainActor

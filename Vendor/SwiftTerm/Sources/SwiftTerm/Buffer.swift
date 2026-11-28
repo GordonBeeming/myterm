@@ -422,6 +422,7 @@ public final class Buffer {
     
     public func resize (newCols : Int, newRows : Int)
     {
+        if marginRight == cols - 1 && marginLeft == 0 { marginRight = newCols - 1 }
         if marginRight > newCols - 1 {
             marginRight = newCols - 1
         }
@@ -430,6 +431,11 @@ public final class Buffer {
         }
         let newMaxLength = getCorrectBufferLength(newRows)
         if newMaxLength > lines.maxLength {
+            lines.maxLength = newMaxLength
+        }
+        if lines.count == 0 {
+            // Unused alternate buffers must obey the same no-history capacity as
+            // populated buffers, including when resized before their first use.
             lines.maxLength = newMaxLength
         }
         if lines.count > 0 {
@@ -441,7 +447,7 @@ public final class Buffer {
                 // calls makeEmpty), making resize O(scrollback capacity). Empty slots
                 // are created on demand at the buffer's current cols, so they never
                 // need resizing here.
-                for i in 0..<lines.count {
+                for i in 0..<lines.count where lines[i].count < newCols {
                     lines [i].resize (cols: newCols, fillData: CharData.Null)
                 }
 
@@ -696,18 +702,16 @@ public final class Buffer {
             // Check if this row is wrapped
             var i = y
             i = i + 1
-            var nextLine = lines [i]
-            if !nextLine.isWrapped {
+            if !lines[i].isWrapped {
                 continue
             }
 
             // Check how many lines it's wrapped for
             var wrappedLines : [BufferLine] = []
             wrappedLines.append (lines [y])
-            while i < lines.count && nextLine.isWrapped {
-                wrappedLines.append (nextLine)
+            while i < lines.count && lines[i].isWrapped {
+                wrappedLines.append (lines[i])
                 i += 1
-                nextLine = lines [i]
             }
 
             // If these lines contain the cursor don't touch them, the program will handle fixing up wrapped
@@ -716,22 +720,26 @@ public final class Buffer {
                 y += wrappedLines.count - 1
                 continue
             }
+            // A restored checkpoint can retain columns beyond the viewport.
+            // Reflow copies only the old viewport width on intermediate rows.
+            if wrappedLines.contains(where: { $0.count > newCols || $0.getTrimmedLength() > oldCols }) {
+                y += wrappedLines.count - 1
+                continue
+            }
 
             // Copy buffer data to new locations
             var destLineIndex = 0
-            var destCol = getWrappedLineTrimmedLength (lines, destLineIndex, oldCols)
+            var destCol = getWrappedLineTrimmedLength (wrappedLines, destLineIndex, oldCols)
             var srcLineIndex = 1
             var srcCol = 0
-            while srcLineIndex < wrappedLines.count {
+            while srcLineIndex < wrappedLines.count && destLineIndex < wrappedLines.count {
                 let srcTrimmedTineLength = getWrappedLineTrimmedLength (wrappedLines, srcLineIndex, oldCols)
                 let srcRemainingCells = srcTrimmedTineLength - srcCol
                 let destRemainingCells = newCols - destCol
                 let cellsToCopy = min (srcRemainingCells, destRemainingCells)
 
-                if destLineIndex < wrappedLines.count {
-                    wrappedLines [destLineIndex].copyFrom (wrappedLines [srcLineIndex], srcCol: srcCol,
-                                                           dstCol: destCol, len: cellsToCopy)
-                }
+                wrappedLines [destLineIndex].copyFrom (wrappedLines [srcLineIndex], srcCol: srcCol,
+                                                       dstCol: destCol, len: cellsToCopy)
 
                 destCol += cellsToCopy;
                 if destCol == newCols {
@@ -746,7 +754,7 @@ public final class Buffer {
                 }
 
                 // Make sure the last cell isn't wide, if it is copy it to the current dest
-                if destCol == 0 && destLineIndex != 0 {
+                if destCol == 0 && destLineIndex > 0 && destLineIndex < wrappedLines.count {
                     if wrappedLines [destLineIndex - 1].getWidth(index: newCols - 1) == 2 {
                         wrappedLines [destLineIndex].copyFrom (wrappedLines [destLineIndex - 1], srcCol: newCols - 1, dstCol: destCol, len: 1)
                         destCol += 1
@@ -757,7 +765,9 @@ public final class Buffer {
             }
 
             // Clear out remaining cells or fragments could remain;
-            wrappedLines [destLineIndex].replaceCells (start: destCol, end: newCols, fillData: nullChar)
+            if destLineIndex < wrappedLines.count {
+                wrappedLines [destLineIndex].replaceCells (start: destCol, end: newCols, fillData: nullChar)
+            }
 
             // Work backwards and remove any rows at the end that only contain null cells
             var countToRemove = 0
@@ -1341,8 +1351,7 @@ extension Buffer {
         buffer.setupLinesCallbacks()
         for lineSnapshot in snapshot.lines {
             let line = try BufferLine.restore(from: lineSnapshot, hyperlinkAtoms: &hyperlinkAtoms)
-            guard line.count >= snapshot.columns,
-                  snapshot.scrollback == nil || line.count == snapshot.columns else {
+            guard line.count >= snapshot.columns else {
                 throw TerminalCheckpointError.corrupt("line width does not match its buffer")
             }
             buffer._lines.push(line)

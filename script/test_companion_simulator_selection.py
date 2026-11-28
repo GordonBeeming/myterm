@@ -25,6 +25,16 @@ CATALOG = {"runtimes": [
 
 
 class SimulatorSelectionTests(unittest.TestCase):
+    def test_regular_phone_prefers_newest_pro_and_excludes_pro_max(self):
+        catalog = copy.deepcopy(CATALOG)
+        phones = catalog["runtimes"][1]["supportedDeviceTypes"]
+        phones.extend({"name": "iPhone " + model, "productFamily": "iPhone",
+                       "identifier": "phone-" + model.replace(" ", "-")}
+                      for model in ["16 Pro", "17 Pro", "18 Pro Max"])
+        self.assertEqual(select(catalog, "iPhone", "27.2")[1], "phone-17-Pro")
+        phones[:] = [device for device in phones if not device["name"].endswith(" Pro")]
+        self.assertEqual(select(catalog, "iPhone", "27.2")[1], PHONE)
+
     def test_device_limited_minor_does_not_hide_regular_phone_or_tablet(self):
         for family, device, suffix in [("iPhone", PHONE, "27-0"), ("iPad", PAD, "27-0"),
                                        ("iPhoneDuo", DUO, "27-1")]:

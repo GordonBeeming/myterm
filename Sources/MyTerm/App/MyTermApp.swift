@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import MyTermCore
 import MyTermUpdating
 import MyTermPlatform
@@ -14,6 +15,13 @@ struct MyTermApp: App {
 
     /// Create the startup coordinator and hand it to the application delegate.
     init() {
+        #if MYTERM_RUST_RELEASE_REHEARSAL
+        do { try RustReleaseRehearsalProfile.configure() }
+        catch {
+            FileHandle.standardError.write(Data("MyTerm Rust release rehearsal: \(error.localizedDescription)\n".utf8))
+            exit(EXIT_FAILURE)
+        }
+        #endif
         let startup = MyTermStartup()
         _startup = State(initialValue: startup)
         applicationDelegate.connect(startup: startup)
@@ -48,6 +56,20 @@ struct MyTermApp: App {
         .windowResizability(.contentMinSize)
         // The main scene owns the Global Settings command and its scope selection.
         .commandsRemoved()
+
+        #if DEBUG && MYTERM_LOCAL_RUST_TERMINAL && !MYTERM_RUST_WORKSPACES
+        Window("Local Rust Terminal", id: LocalRustTerminalView.windowID) {
+            if let executable = LocalRustTerminalView.bundledExecutable {
+                LocalRustTerminalView(namespace: startup.localRustTerminalNamespace, executable: executable)
+                    .frame(minWidth: 580, minHeight: 340)
+            } else {
+                Text("The local Rust server executable is missing from this development bundle.")
+                    .padding()
+            }
+        }
+        .defaultSize(width: 860, height: 530)
+        .commandsRemoved()
+        #endif
     }
 }
 
@@ -120,6 +142,17 @@ final class MyTermApplicationDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        #if DEBUG && MYTERM_RUST_WORKSPACES
+        // Capture both appearances without changing the user's system appearance.
+        let arguments = ProcessInfo.processInfo.arguments
+        if let flag = arguments.firstIndex(of: "--qa-appearance"), flag + 1 < arguments.count {
+            switch arguments[flag + 1] {
+            case "light": NSApp.appearance = NSAppearance(named: .aqua)
+            case "dark": NSApp.appearance = NSAppearance(named: .darkAqua)
+            default: break
+            }
+        }
+        #endif
         // A restart or shut down can stop terminal helpers before this app is asked to quit.
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.willPowerOffNotification, object: nil, queue: .main
@@ -357,6 +390,25 @@ final class MyTermStartup {
     let coordinator: SingleInstanceCoordinator
     private(set) var lease: SingleInstanceLease?
     private let supportDirectory: URL
+    #if (DEBUG && MYTERM_LOCAL_RUST_TERMINAL) || MYTERM_RUST_WORKSPACES
+    var localRustTerminalNamespace: URL {
+        supportDirectory.appendingPathComponent(MyTermChannel.active.displayName, isDirectory: true)
+            .appendingPathComponent("rust-terminal", isDirectory: true)
+    }
+    #endif
+
+    private func makeAppModel() throws -> AppModel {
+        #if MYTERM_RUST_WORKSPACES
+        let engine = LocalRustWorkspaceTerminalEngine(
+            namespace: localRustTerminalNamespace.appendingPathComponent("workspaces", isDirectory: true),
+            executable: LocalRustWorkspaceTerminalEngine.bundledExecutable
+        )
+        return try AppModel(channel: MyTermChannel.active, applicationSupportDirectory: supportDirectory, terminalEngine: engine)
+        #else
+        return try AppModel(channel: MyTermChannel.active, applicationSupportDirectory: supportDirectory)
+        #endif
+    }
+
     private var startupTrial: ApplicationUpdatePlan?
     private var didConfirmStartup = false
     private var pendingUpdateNoticeURL: URL?
@@ -491,12 +543,22 @@ final class MyTermStartup {
     /// Resolve this installation’s profile and acquire ownership before constructing its application model.
     init() {
         let channel = MyTermChannel.active
-        if let override = ProcessInfo.processInfo.environment["MYTERM_APPLICATION_SUPPORT_DIRECTORY"], !override.isEmpty {
-            supportDirectory = URL(fileURLWithPath: override, isDirectory: true).standardizedFileURL
+        let applicationSupportOverride = ProcessInfo.processInfo.environment["MYTERM_APPLICATION_SUPPORT_DIRECTORY"]
+            .flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0, isDirectory: true).standardizedFileURL }
+        let baseSupportDirectory: URL
+        if let applicationSupportOverride {
+            baseSupportDirectory = applicationSupportOverride
         } else {
-            supportDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
+            baseSupportDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
                 .first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
         }
+        #if DEBUG && MYTERM_RUST_WORKSPACES
+        supportDirectory = baseSupportDirectory.appendingPathComponent("MyTerm Rust Workspaces Development", isDirectory: true)
+        setenv("MYTERM_USER_DEFAULTS_SUITE",
+               MyTermChannel.rustWorkspacePreferencesDomain(applicationSupportOverride: applicationSupportOverride), 1)
+        #else
+        supportDirectory = baseSupportDirectory
+        #endif
         coordinator = SingleInstanceCoordinator(configuration: SingleInstanceConfiguration(
             profile: channel.bundleIdentifier,
             directory: supportDirectory.appendingPathComponent(channel.displayName, isDirectory: true)
@@ -572,17 +634,19 @@ final class MyTermStartup {
                     hookFailures.append("Could not refresh \(target.displayName) hooks: \(message)")
                 }
             }
+            #if !MYTERM_RUST_RELEASE_REHEARSAL
             BrowserContextArtifacts.pruneExpired()
+            #endif
             let instance: AppModel
             if releaseChannel == .stable {
                 let config = ChannelConfigurationStore(directory: directory, preferencesDomain: preferencesDomain)
                 let (loaded, notice) = try config.loadStable {
-                    try AppModel(channel: MyTermChannel.active, applicationSupportDirectory: supportDirectory)
+                    try makeAppModel()
                 }
                 instance = loaded
                 if let notice { updateNotices.append(notice) }
             } else {
-                instance = try AppModel(channel: MyTermChannel.active, applicationSupportDirectory: supportDirectory)
+                instance = try makeAppModel()
             }
             let notices = updateNotices + hookFailures
             if !notices.isEmpty { instance.errorDescription = notices.joined(separator: "\n") }

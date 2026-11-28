@@ -28,5 +28,22 @@ final class ReflowTests {
         t.resize(cols: 3, rows: 10)
         #expect(Bool(true))
     }
+
+    @Test func wideningPreservesHiddenColumnsInRestoredWrappedRows() {
+        let options = TerminalOptions(cols: 8, rows: 5, scrollback: 5)
+        let headless = HeadlessTerminal(queue: SwiftTermTests.queue, options: options) { _ in }
+        let terminal = headless.terminal!
+        terminal.buffer.y = 3
+        let line = terminal.buffer.lines[1]
+        line.isWrapped = true
+        line.resize(cols: 16, fillData: .Null)
+        let marker = terminal.makeCharData(attribute: CharData.defaultAttr, char: "X")
+        line[15] = marker
+
+        terminal.resize(cols: 12, rows: 5)
+
+        #expect(terminal.buffer.lines[1].count == 16)
+        #expect(terminal.buffer.lines[1][15].code == marker.code)
+    }
 }
 #endif

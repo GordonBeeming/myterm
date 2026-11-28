@@ -1,0 +1,33 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "myterm-relay-local",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-27",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "upload_source_maps": true,
+  "observability": { "enabled": false },
+  "vars": {
+    "RELAY_CHANNEL": "local",
+    "RELAY_ORIGIN": "http://localhost:8787",
+    "RELAY_RP_ID": "localhost",
+    "RELAY_REGISTRATION": "invitation",
+    "RELAY_REVISION": "local"
+  },
+  "secrets": { "required": ["RELAY_OPERATOR_BOOTSTRAP"] },
+  "d1_databases": [
+    { "binding": "ACCOUNT_DB", "database_name": "myterm-relay-local", "database_id": "00000000-0000-4000-8000-000000000001" }
+  ],
+  "r2_buckets": [
+    { "binding": "SECURITY_CONTROL", "bucket_name": "myterm-relay-local-security-control" }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "ACCOUNT_ROUTER", "class_name": "AccountRouter" }
+    ]
+  },
+  "migrations": [
+    { "tag": "account-router-v1", "new_sqlite_classes": ["AccountRouter"] }
+  ]
+}

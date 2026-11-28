@@ -186,11 +186,11 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
      */
     public weak var terminalDelegate: TerminalViewDelegate?
 
-    /// Controls forwarding of automatic emulator replies (device status, cursor reports,
-    /// and similar responses). User keyboard and mouse input still uses `send(data:)`.
+    /// Controls forwarding of automatic emulator replies such as device status and cursor reports.
+    /// Keyboard input and native mouse and focus reports are governed by `acceptsUserInput`.
     public var sendsTerminalResponses: Bool = true
 
-    /// Controls user-originated keyboard and mouse writes through `send(data:)`.
+    /// Controls user-originated keyboard, mouse, and focus writes.
     public var acceptsUserInput: Bool = true
 
     /// Controls terminal-grid changes caused by native view geometry changes.
@@ -672,7 +672,23 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
     func setupOptions ()
     {
         setupOptions (width: getEffectiveWidth (size: bounds.size), height: bounds.height)
-        layer?.backgroundColor = nativeBackgroundColor.cgColor
+        updateBackgroundLayer()
+    }
+
+    private func updateBackgroundLayer() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = nativeBackgroundColor.cgColor
+        }
+    }
+
+    override open func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        guard _nativeBg != nil, _nativeFg != nil else { return }
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            nativeForegroundColor = _nativeFg
+            nativeBackgroundColor = _nativeBg
+        }
+        needsDisplay = true
     }
 
     /// This controls whether the backspace should send ^? or ^H, the default is ^?
@@ -707,7 +723,10 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
             if settingBg { return }
             settingBg = true
             _nativeBg = newValue
-            terminal.backgroundColor = nativeBackgroundColor.getTerminalColor ()
+            effectiveAppearance.performAsCurrentDrawingAppearance {
+                terminal.backgroundColor = newValue.getTerminalColor()
+            }
+            updateBackgroundLayer()
             settingBg = false
         }
     }

@@ -123,3 +123,28 @@ private func requestBody(_ request: URLRequest) throws -> Data {
     #expect(try await identity.loadOrCreate() == first)
     #expect(!relayLoginDeviceIDs.contains(first))
 }
+
+@Test func pairedPeersKeepLegacyStorageAndSeparateRelayAccounts() async throws {
+    let secrets = MemorySecretStore()
+    let relay = try RelayEndpoint(#require(URL(string: "https://relay.example.test")))
+    let hostID = UUID()
+    let accountID = UUID()
+    let peer = PairedPeer(deviceID: UUID(), name: "iPhone",
+                          publicKey: P256.KeyAgreement.PrivateKey().publicKey.x963Representation,
+                          notificationSigningPublicKey: P256.Signing.PrivateKey().publicKey.x963Representation,
+                          pairedAt: Date())
+    let legacyMaterial = "\(relay.canonicalOrigin)|\(hostID.uuidString.lowercased())|paired-peers"
+    let legacyKey = "peers-" + Data(SHA256.hash(data: Data(legacyMaterial.utf8))).base64URL
+    try secrets.write(JSONEncoder().encode([peer]), account: legacyKey)
+
+    let legacy = PairedPeerStore(secrets: secrets, relay: relay, hostID: hostID)
+    let worker = PairedPeerStore(secrets: secrets, relay: relay, hostID: hostID, accountID: accountID)
+    let other = PairedPeerStore(secrets: secrets, relay: relay, hostID: hostID, accountID: UUID())
+    #expect(try await legacy.loadPeers() == [peer])
+    #expect(try await worker.loadPeers().isEmpty)
+    try await worker.save(peer)
+    #expect(try await worker.loadPeers() == [peer])
+    #expect(try await other.loadPeers().isEmpty)
+    try await worker.remove(deviceID: peer.deviceID)
+    #expect(try await legacy.loadPeers() == [peer])
+}

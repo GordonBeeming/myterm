@@ -455,7 +455,6 @@ private struct WorkspaceSidebar: View {
     @State private var activeDragItem: SidebarDragItem?
     @State private var dropPreview: SidebarDropPreview?
     @State private var pendingPreviewClose: UUID?
-    @State private var isUnfiledHeaderDropTargeted = false
     @State private var isUnfiledDropTargeted = false
 
     private var previewedWorkspaces: [Workspace] {
@@ -504,36 +503,15 @@ private struct WorkspaceSidebar: View {
                 )
             }
 
-            if !ungroupedWorkspaces.isEmpty {
-                Section {
-                    ForEach(ungroupedWorkspaces) { workspace in
-                        WorkspaceSidebarRow(
-                            model: model,
-                            workspace: workspace,
-                            rowHeight: sidebarRowHeight,
-                            indentation: 0,
-                            activeDragItem: $activeDragItem,
-                            dropSession: dropSession
-                        )
-                    }
-                } header: {
-                    Text("UNFILED")
-                        .font(Theme.Font.ui(11.5, weight: .semibold))
-                        .tracking(0.8)
-                        .foregroundStyle(Theme.textTertiary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                        .background(
-                            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .fill(isUnfiledHeaderHighlighted ? Color.accentColor.opacity(0.12) : .clear)
-                        )
-                        .dropDestination(for: SidebarDragItem.self) { items, _ in
-                            moveWorkspaces(items, to: nil)
-                        } isTargeted: {
-                            isUnfiledHeaderDropTargeted = $0
-                            if $0 { applyDropFeedback(.none) }
-                        }
-                }
+            ForEach(ungroupedWorkspaces) { workspace in
+                WorkspaceSidebarRow(
+                    model: model,
+                    workspace: workspace,
+                    rowHeight: sidebarRowHeight,
+                    indentation: 0,
+                    activeDragItem: $activeDragItem,
+                    dropSession: dropSession
+                )
             }
         }
         .listStyle(.sidebar)
@@ -595,7 +573,7 @@ private struct WorkspaceSidebar: View {
             .overlay(alignment: .top) { Theme.hairline.frame(height: 1) }
             .overlay {
                 if isUnfiledDropTargeted && acceptsActiveDragItem(in: nil) {
-                    Label("Move to Unfiled", systemImage: "tray")
+                    Label("Move to top level", systemImage: "tray")
                         .font(.callout)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
@@ -726,10 +704,6 @@ private struct WorkspaceSidebar: View {
         model.moveWorkspace(sourceID, to: folderID)
         activeDragItem = nil
         return true
-    }
-
-    private var isUnfiledHeaderHighlighted: Bool {
-        isUnfiledHeaderDropTargeted && acceptsActiveDragItem(in: nil)
     }
 
     private func acceptsActiveDragItem(in folderID: WorkspaceFolderID?) -> Bool {
@@ -929,7 +903,7 @@ private struct WorkspaceSidebarRow: View {
             }
             Divider()
             Menu("Move to Folder") {
-                Button("Unfiled") { model.moveWorkspace(workspace.id, to: nil) }
+                Button("Top level") { model.moveWorkspace(workspace.id, to: nil) }
                 Divider()
                 ForEach(model.folders) { folder in
                     Button(folder.title) { model.moveWorkspace(workspace.id, to: folder.id) }

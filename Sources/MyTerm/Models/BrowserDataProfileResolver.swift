@@ -28,16 +28,18 @@ struct ProjectDirectoryResolver {
 }
 
 struct BrowserDataProfileResolver {
-    private let channel: MyTermChannel
+    private let namespace: String
     private let projectDirectoryResolver: ProjectDirectoryResolver
     private let homeDirectory: URL
 
     init(
         channel: MyTermChannel,
+        isolatedProfile: String? = nil,
         projectDirectoryResolver: ProjectDirectoryResolver = ProjectDirectoryResolver(),
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
     ) {
-        self.channel = channel
+        namespace = isolatedProfile.map { "\(channel.bundleIdentifier)|isolated|\($0)" }
+            ?? channel.bundleIdentifier
         self.projectDirectoryResolver = projectDirectoryResolver
         self.homeDirectory = homeDirectory.standardizedFileURL
     }
@@ -93,8 +95,8 @@ struct BrowserDataProfileResolver {
     }
 
     private func persistentStoreID(for key: String) -> UUID {
-        let namespace = "\(channel.bundleIdentifier)|browser-data-profile|\(key)"
-        let digest = Array(SHA256.hash(data: Data(namespace.utf8)))
+        let storeName = "\(namespace)|browser-data-profile|\(key)"
+        let digest = Array(SHA256.hash(data: Data(storeName.utf8)))
         let bytes = digest.prefix(16).enumerated().map { index, byte -> UInt8 in
             switch index {
             case 6:

@@ -113,35 +113,83 @@ private actor CredentialCatalog {
     }
 }
 
-private actor HostCatalog {
+struct WorkerHostRoute: Codable, Equatable, Sendable {
+    let anchor: String
+    let endpointPrivateKey: Data
+    let serverSigningKey: Data
+
+    func transport(relay: RelayEndpoint, accountID: UUID, hostID: UUID) throws -> CloudflareCompanionTransport {
+        let account = try CloudflareRelayAccount(id: accountID, anchor: anchor)
+        let key = try CloudflareRelayEndpointKey(rawRepresentation: endpointPrivateKey)
+        _ = try Curve25519.Signing.PublicKey(rawRepresentation: serverSigningKey)
+        let serverEndpointID = SHA256.hash(data: serverSigningKey).map { String(format: "%02x", $0) }.joined()
+        return try CloudflareCompanionTransport(relay: relay, account: account, key: key,
+                                                hostID: hostID, role: .client,
+                                                hostEndpointID: serverEndpointID)
+    }
+}
+
+actor HostCatalog {
+    struct Record: Codable, Sendable {
+        let host: SavedHostDescriptor
+        let worker: WorkerHostRoute?
+
+        private enum CodingKeys: String, CodingKey { case worker }
+
+        init(host: SavedHostDescriptor, worker: WorkerHostRoute?) {
+            self.host = host
+            self.worker = worker
+        }
+
+        init(from decoder: any Decoder) throws {
+            host = try SavedHostDescriptor(from: decoder)
+            try host.validate()
+            worker = try decoder.container(keyedBy: CodingKeys.self).decodeIfPresent(WorkerHostRoute.self, forKey: .worker)
+        }
+
+        func encode(to encoder: any Encoder) throws {
+            try host.encode(to: encoder)
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encodeIfPresent(worker, forKey: .worker)
+        }
+    }
+
     private let secrets: any SecretStore
     private let account = "saved-hosts-v1"
 
     init(secrets: any SecretStore) { self.secrets = secrets }
 
-    func load() throws -> [SavedHostDescriptor] {
-        guard let data = try secrets.read(account: account) else { return [] }
-        do {
-            let hosts = try JSONDecoder().decode([SavedHostDescriptor].self, from: data)
-            for host in hosts { try host.validate() }
-            return hosts.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-        } catch let error as RemoteError { throw error }
-        catch { throw RemoteError.invalidResponse }
+    func workerRoute(for host: SavedHostDescriptor) throws -> WorkerHostRoute? {
+        try load().first { $0.host.connectionID == host.connectionID }?.worker
     }
 
-    func save(_ host: SavedHostDescriptor) throws {
-        var hosts = try load()
-        hosts.removeAll { $0.relay == host.relay && $0.accountID == host.accountID && $0.hostID == host.hostID }
-        hosts.append(host)
-        try secrets.write(try JSONEncoder().encode(hosts), account: account)
+    func save(_ host: SavedHostDescriptor, worker: WorkerHostRoute? = nil) throws {
+        var records = try load()
+        records.removeAll { $0.host.connectionID == host.connectionID }
+        records.append(Record(host: host, worker: worker))
+        try secrets.write(try JSONEncoder().encode(records), account: account)
     }
 
     func remove(_ host: SavedHostDescriptor) throws {
-        var hosts = try load()
-        hosts.removeAll { $0.relay == host.relay && $0.accountID == host.accountID && $0.hostID == host.hostID }
-        if hosts.isEmpty { try secrets.delete(account: account) }
-        else { try secrets.write(try JSONEncoder().encode(hosts), account: account) }
+        var records = try load()
+        records.removeAll { $0.host.connectionID == host.connectionID }
+        if records.isEmpty { try secrets.delete(account: account) }
+        else { try secrets.write(try JSONEncoder().encode(records), account: account) }
     }
+
+    func load() throws -> [Record] {
+        guard let data = try secrets.read(account: account) else { return [] }
+        do { return try JSONDecoder().decode([Record].self, from: data) }
+        catch let error as RemoteError { throw error }
+        catch { throw RemoteError.invalidResponse }
+    }
+}
+
+struct WorkerEnrollmentAttempt: Sendable {
+    let relay: RelayEndpoint
+    let accountID: UUID
+    let request: RelayAdmissionRequest
+    fileprivate let signingKey: Curve25519.Signing.PrivateKey
 }
 
 @MainActor
@@ -149,6 +197,14 @@ private actor HostCatalog {
 final class CompanionServices {
     private static let logger = Logger(subsystem: AppConfiguration.bundleIdentifier,
                                        category: "SignIn")
+    private struct RelayEnrollmentRequired: LocalizedError {
+        var errorDescription: String? { "This relay has upgraded. Use Add Mac to pair again." }
+    }
+    private struct WorkerProbe {
+        let id: UUID
+        let route: WorkerHostRoute
+        let task: Task<Void, Error>
+    }
     private let secrets: any SecretStore
     private let tokenStore: TokenStore
     private let credentialCatalog: CredentialCatalog
@@ -159,6 +215,9 @@ final class CompanionServices {
     private let browserAuthentication = BrowserAuthenticationSession()
     private var tokenManagers: [TokenPartition: RelayTokenManager] = [:]
     private var loadTask: Task<Void, Never>?
+    private var workerSlots: [SavedConnectionID: WorkerConnectionSlot] = [:]
+    private var workerProbes: [SavedConnectionID: WorkerProbe] = [:]
+    private var workerHosts: Set<SavedConnectionID> = []
 
     private(set) var savedHosts: [SavedHostDescriptor] = []
     private(set) var hostStatuses: [SavedConnectionID: ConnectionPhase] = [:]
@@ -249,7 +308,7 @@ final class CompanionServices {
             return
         }
         do {
-            savedHosts = try await hostCatalog.load()
+            try await reloadHosts()
             let sharedSecrets = KeychainSecretStore(
                 service: "\(AppConfiguration.bundleIdentifier).push",
                 accessGroup: AppConfiguration.sharedKeychainGroup,
@@ -263,6 +322,88 @@ final class CompanionServices {
         catch { errorMessage = error.localizedDescription }
         isLoading = false
         await refreshHostStatuses()
+    }
+
+    private func reloadHosts() async throws {
+        let records = try await hostCatalog.load()
+        workerHosts = Set(records.compactMap { $0.worker == nil ? nil : $0.host.connectionID })
+        savedHosts = records.map(\.host).sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    func usesWorkerRelay(_ host: SavedHostDescriptor) -> Bool {
+        workerHosts.contains(host.connectionID)
+    }
+
+    func connection(for host: SavedHostDescriptor) async throws -> CompanionHostConnection {
+        if let probe = workerProbes[host.connectionID] {
+            // Let a status check relinquish the endpoint before opening an interactive socket.
+            _ = await probe.task.result
+            try Task.checkCancellation()
+        }
+        let worker = try await hostCatalog.workerRoute(for: host)
+        return try await makeConnection(for: host, worker: worker)
+    }
+
+    private func makeConnection(for host: SavedHostDescriptor, worker: WorkerHostRoute?) async throws -> CompanionHostConnection {
+        let identity = try await identity()
+        if let worker {
+            guard host.clientDeviceID == identity.localDeviceID else { throw RemoteError.wrongPeer }
+            let connectionID = host.connectionID
+            let slot = workerSlots[connectionID] ?? WorkerConnectionSlot()
+            workerSlots[connectionID] = slot
+            let transport = try worker.transport(relay: host.relay, accountID: host.accountID, hostID: host.hostID)
+            return CompanionHostConnection(host: host, transport: transport, identity: identity, workerSlot: slot)
+        }
+        try await checkLegacyRelay(host.relay)
+        return CompanionHostConnection(host: host, tokenManager: try await tokenManager(for: host),
+                                       identity: identity)
+    }
+
+    func beginWorkerEnrollment(origin: String, deviceName: String = UIDevice.current.name) async throws -> WorkerEnrollmentAttempt {
+        guard let url = URL(string: origin.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            throw RemoteError.invalidEndpoint
+        }
+        let relay = try RelayEndpoint(url)
+        let client = CloudflareRelayClient(relay: relay)
+        guard try await client.supportsNativeRelay() else { throw RemoteError.unsupportedVersion }
+        guard let redirect = URL(string: "\(AppConfiguration.urlScheme)://auth/callback") else {
+            throw RemoteError.invalidCallback
+        }
+        let attempt = try SignInAttempt(relay: relay, redirectURI: redirect)
+        let callback = try await browserAuthentication.authenticate(
+            url: try attempt.loginURL(deviceName: deviceName, deviceKind: "client"),
+            callbackScheme: AppConfiguration.urlScheme
+        )
+        let session = try await client.exchange(attempt: attempt, callback: callback)
+        try Task.checkCancellation()
+        let signingKey = Curve25519.Signing.PrivateKey()
+        return WorkerEnrollmentAttempt(
+            relay: relay, accountID: session.accountId,
+            request: try RelayAdmissionRequest(relay: relay, accountID: session.accountId, signer: signingKey),
+            signingKey: signingKey
+        )
+    }
+
+    func finishWorkerEnrollment(_ attempt: WorkerEnrollmentAttempt, approvalCode: String) async throws -> SavedHostDescriptor {
+        let approval = try RelayAdmissionApproval(code: approvalCode.trimmingCharacters(in: .whitespacesAndNewlines))
+        let pins = try approval.verify(request: attempt.request, relay: attempt.relay, accountID: attempt.accountID)
+        guard let pairingURL = pins.pairingURL,
+              let serverSigningKey = Data(base64URL: pins.serverSigningKey) else {
+            throw RemoteError.invalidMessage
+        }
+        let ticket = try PairingTicket.decode(qrURL: pairingURL)
+        guard ticket.relay == attempt.relay else { throw RemoteError.wrongPeer }
+        let worker = WorkerHostRoute(anchor: pins.anchor, endpointPrivateKey: attempt.signingKey.rawRepresentation,
+                                     serverSigningKey: serverSigningKey)
+        let identity = try await identity()
+        let transport = try worker.transport(relay: attempt.relay, accountID: attempt.accountID, hostID: ticket.hostID)
+        let host = try await PairingCoordinator.pair(ticket: ticket, accountID: attempt.accountID,
+                                                     identity: identity, transport: transport)
+        try Task.checkCancellation()
+        try await hostCatalog.save(host, worker: worker)
+        try await reloadHosts()
+        await refreshHostStatuses()
+        return host
     }
 
     func identity() async throws -> CompanionIdentity {
@@ -353,10 +494,18 @@ final class CompanionServices {
     }
 
     func signInAgain(for host: SavedHostDescriptor) async throws {
+        try await checkLegacyRelay(host.relay)
         let record = try await signIn(relay: host.relay)
         guard record.accountID == host.accountID else {
             throw RemoteError.wrongPeer
         }
+    }
+
+    private func checkLegacyRelay(_ relay: RelayEndpoint) async throws {
+        guard let preset = relay.hostedRelay, preset != .development else { return }
+        let upgraded = try? await CloudflareRelayClient(relay: relay).supportsNativeRelay()
+        try Task.checkCancellation()
+        if upgraded == true { throw RelayEnrollmentRequired() }
     }
 
     func cancelSignIn() {
@@ -377,7 +526,7 @@ final class CompanionServices {
             tokenManager: try tokenManager(for: record), identity: identity
         )
         try await hostCatalog.save(host)
-        savedHosts = try await hostCatalog.load()
+        try await reloadHosts()
         if notificationEnrollment.isEnabled { await setNotificationsEnabled(true) }
         await refreshHostStatuses()
         return host
@@ -428,23 +577,26 @@ final class CompanionServices {
 
     func remove(_ host: SavedHostDescriptor) async {
         do {
-            let sharedSecrets = KeychainSecretStore(
-                service: "\(AppConfiguration.bundleIdentifier).push",
-                accessGroup: AppConfiguration.sharedKeychainGroup,
-                accessibility: .notificationExtension
-            )
-            let scopeID = try await LocalDeviceIDStore(
-                secrets: sharedSecrets, account: "push-scope-id-v1"
-            ).loadOrCreate()
-            try await notificationEnrollment.revoke(host: host, scopeID: scopeID) {
-                [weak self] host, grant, registering in
-                guard let self else { throw RemoteError.disconnected }
-                try await self.updateNotificationGrant(host: host, grant: grant,
-                                                       registering: registering)
+            if !usesWorkerRelay(host) {
+                let sharedSecrets = KeychainSecretStore(
+                    service: "\(AppConfiguration.bundleIdentifier).push",
+                    accessGroup: AppConfiguration.sharedKeychainGroup,
+                    accessibility: .notificationExtension
+                )
+                let scopeID = try await LocalDeviceIDStore(
+                    secrets: sharedSecrets, account: "push-scope-id-v1"
+                ).loadOrCreate()
+                try await notificationEnrollment.revoke(host: host, scopeID: scopeID) {
+                    [weak self] host, grant, registering in
+                    guard let self else { throw RemoteError.disconnected }
+                    try await self.updateNotificationGrant(host: host, grant: grant,
+                                                           registering: registering)
+                }
             }
             try await hostCatalog.remove(host)
-            savedHosts = try await hostCatalog.load()
-            hostStatuses.removeValue(forKey: SavedConnectionID(host))
+            try await reloadHosts()
+            hostStatuses.removeValue(forKey: host.connectionID)
+            await workerSlots.removeValue(forKey: host.connectionID)?.disconnect()
             // Only here. Pruning against a freshly loaded host list would erase the user's aliases
             // any time the keychain read failed once.
             machinePreferencesStore.forget(SavedConnectionID(host))
@@ -455,30 +607,67 @@ final class CompanionServices {
 
     func refreshHostStatuses() async {
         let hosts = savedHosts
-        for host in hosts { hostStatuses[SavedConnectionID(host)] = .connecting }
+        for host in hosts where !usesWorkerRelay(host) || hostStatuses[host.connectionID] == nil {
+            hostStatuses[host.connectionID] = .connecting
+        }
         for start in stride(from: 0, to: hosts.count, by: 4) {
             let end = min(start + 4, hosts.count)
-            await withTaskGroup(of: (SavedConnectionID, ConnectionPhase).self) { group in
+            await withTaskGroup(of: (SavedConnectionID, WorkerHostRoute?, ConnectionPhase?).self) { group in
                 for host in hosts[start..<end] {
                     group.addTask { [weak self] in
-                        guard let self else { return (SavedConnectionID(host), .disconnected) }
+                        guard let self else { return (host.connectionID, nil, nil) }
+                        let worker: WorkerHostRoute?
+                        do { worker = try await self.hostCatalog.workerRoute(for: host) }
+                        catch { return (host.connectionID, nil, .failed(error.localizedDescription)) }
                         do {
-                            try await self.probe(host)
-                            return (SavedConnectionID(host), .online)
+                            try await self.probe(host, worker: worker)
+                            return (host.connectionID, worker, .online)
+                        } catch is CancellationError {
+                            return (host.connectionID, worker, nil)
+                        } catch WorkerConnectionError.inUse {
+                            return (host.connectionID, worker, nil)
                         } catch {
-                            return (SavedConnectionID(host), .failed(error.localizedDescription))
+                            return (host.connectionID, worker, .failed(error.localizedDescription))
                         }
                     }
                 }
-                for await (id, phase) in group { hostStatuses[id] = phase }
+                for await (id, worker, phase) in group {
+                    if let phase, let current = savedHosts.first(where: { $0.connectionID == id }),
+                       (try? await hostCatalog.workerRoute(for: current)) == worker {
+                        hostStatuses[id] = phase
+                    }
+                }
             }
         }
     }
 
-    private func probe(_ host: SavedHostDescriptor) async throws {
-        let connection = CompanionHostConnection(
-            host: host, tokenManager: try await tokenManager(for: host), identity: try await identity()
-        )
+    private func probe(_ host: SavedHostDescriptor, worker: WorkerHostRoute?) async throws {
+        guard let worker else {
+            try await Self.probeConnection(makeConnection(for: host, worker: nil))
+            return
+        }
+        let id = host.connectionID
+        while true {
+            guard try await hostCatalog.workerRoute(for: host) == worker else { throw CancellationError() }
+            guard let existing = workerProbes[id] else { break }
+            if existing.route == worker {
+                try await existing.task.value
+                return
+            }
+            existing.task.cancel()
+            _ = await existing.task.result
+            if workerProbes[id]?.id == existing.id { workerProbes.removeValue(forKey: id) }
+        }
+        let probeID = UUID()
+        let task = Task { @MainActor in
+            try await Self.probeConnection(makeConnection(for: host, worker: worker))
+        }
+        workerProbes[id] = WorkerProbe(id: probeID, route: worker, task: task)
+        defer { if workerProbes[id]?.id == probeID { workerProbes.removeValue(forKey: id) } }
+        try await task.value
+    }
+
+    private static func probeConnection(_ connection: CompanionHostConnection) async throws {
         let events = try await connection.connect()
         do {
             try await withThrowingTaskGroup(of: Void.self) { group in
@@ -513,7 +702,7 @@ final class CompanionServices {
                 secrets: sharedSecrets, account: "push-scope-id-v1"
             ).loadOrCreate()
             await notificationEnrollment.setEnabled(
-                enabled, hosts: savedHosts, scopeID: scopeID
+                enabled, hosts: savedHosts.filter { !usesWorkerRelay($0) }, scopeID: scopeID
             ) { [weak self] host, grant, registering in
                 guard let self else { throw RemoteError.disconnected }
                 try await self.updateNotificationGrant(host: host, grant: grant,
@@ -557,9 +746,7 @@ final class CompanionServices {
     private func updateNotificationGrant(host: SavedHostDescriptor,
                                          grant: NotificationGrantRegistration,
                                          registering: Bool) async throws {
-        let connection = CompanionHostConnection(
-            host: host, tokenManager: try await tokenManager(for: host), identity: try await identity()
-        )
+        let connection = try await connection(for: host)
         let events = try await connection.connect()
         do {
             for try await event in events {

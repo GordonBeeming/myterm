@@ -316,7 +316,7 @@ struct WorkspaceActionsView: View {
                         }
                         Button("Apply color") { Task { await applyWorkspaceColor() } }
                         Picker("Folder", selection: $destinationFolderID) {
-                            Text("Unfiled").tag("")
+                            Text("Top level").tag("")
                             ForEach(scene.projection?.folders ?? [], id: \.id) { folder in
                                 Text(folder.title).tag(folder.id.rawValue.uuidString)
                             }

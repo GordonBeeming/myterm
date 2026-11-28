@@ -401,7 +401,7 @@ Open `Companion/MyTermCompanion.xcodeproj` in Xcode, select the `MyTermCompanion
 
 Pair each newly configured Mac. Complete both environments after a fresh setup; in an isolated prod setup, pair only the new prod connection:
 
-1. In the connected Mac's Companion settings, choose **Start Pair Mode**.
+1. In the connected Mac's Companion settings, choose **Show pairing code**.
 2. In the phone app, choose **Add Mac** and scan its QR code.
 3. Complete passkey sign-in for that relay.
 4. Approve **Pair this phone?** on the Mac.

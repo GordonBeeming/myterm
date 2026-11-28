@@ -390,6 +390,53 @@ public enum ApplicationUpdate {
         guard try containsArm64(app.appendingPathComponent("Contents/MacOS/myterm")) else {
             throw invalid("The update does not contain the required Apple silicon executable.")
         }
+        try verifyRustWorkspaceServer(app, info: info)
+    }
+
+    /// The installed updater may predate Rust workspaces. Its existing configuration check
+    /// invokes the candidate's own agent, so that handoff must also enforce the bundle contract.
+    public static func verifyRustWorkspaceServer(besideAgent agent: URL) throws {
+        let binaries = agent.deletingLastPathComponent()
+        let contents = binaries.deletingLastPathComponent()
+        let app = contents.deletingLastPathComponent()
+        guard binaries.lastPathComponent == "MacOS", contents.lastPathComponent == "Contents",
+              app.pathExtension == "app" else { return }
+        let data = try Data(contentsOf: contents.appendingPathComponent("Info.plist"))
+        guard let info = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
+            throw invalid("The staged app's Info.plist could not be read.")
+        }
+        try verifyRustWorkspaceServer(app.resolvingSymlinksInPath(), info: info)
+    }
+
+    private static func verifyRustWorkspaceServer(_ app: URL, info: [String: Any]) throws {
+        // Earlier releases have no marker and must still be eligible for compatible rollback.
+        guard let marker = info["MyTermRustWorkspaces"] else { return }
+        guard let enabled = marker as? NSNumber, CFGetTypeID(enabled) == CFBooleanGetTypeID(),
+              enabled.boolValue, let appIdentifier = info["CFBundleIdentifier"] as? String,
+              [bundleIdentifier, bundleIdentifier + ".rust-rehearsal"].contains(appIdentifier) else {
+            throw invalid("The staged app's local Rust server declaration is invalid.")
+        }
+        let server = app.appendingPathComponent("Contents/MacOS/myterm-local-terminal")
+        let files = FileManager.default
+        guard files.isExecutableFile(atPath: server.path),
+              server.standardizedFileURL == server.resolvingSymlinksInPath(),
+              try files.attributesOfItem(atPath: server.path)[.type] as? FileAttributeType == .typeRegular else {
+            throw invalid("The staged app does not contain an executable local Rust server.")
+        }
+        do { try verifySignature(server, identifier: appIdentifier + ".local-terminal") }
+        catch { throw invalid("The staged app's local Rust server signature could not be verified. \(error.localizedDescription)") }
+        guard try containsArm64(server) else {
+            throw invalid("The staged app's local Rust server does not support Apple silicon.")
+        }
+        var code: SecStaticCode?
+        var information: CFDictionary?
+        guard SecStaticCodeCreateWithPath(server as CFURL, [], &code) == errSecSuccess, let code,
+              SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &information) == errSecSuccess,
+              let info = information as? [String: Any],
+              let flags = info[kSecCodeInfoFlags as String] as? NSNumber,
+              flags.uint32Value & SecCodeSignatureFlags.runtime.rawValue != 0 else {
+            throw invalid("The staged app's local Rust server lacks the hardened runtime.")
+        }
     }
 
     /// Only an owner-private staging folder beside this app may supply an installation handoff.

@@ -91,6 +91,22 @@ final class BrowserDataProfilesTests: XCTestCase {
         )
     }
 
+    func testIsolatedDevelopmentProfilesKeepSeparateAppWideAndProjectStores() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(directory) }
+        let workspace = workspace(workingDirectory: directory, folderID: nil)
+        let ordinary = BrowserDataProfileResolver(channel: .development)
+        let isolated = BrowserDataProfileResolver(channel: .development, isolatedProfile: "local-rust-workspaces")
+        let other = BrowserDataProfileResolver(channel: .development, isolatedProfile: "another-worktree")
+
+        for scope in [BrowserDataScope.appWide, .projectDirectory] {
+            let profile = isolated.resolve(scope: scope, workspace: workspace)
+            XCTAssertEqual(profile, isolated.resolve(scope: scope, workspace: workspace))
+            XCTAssertNotEqual(profile, ordinary.resolve(scope: scope, workspace: workspace))
+            XCTAssertNotEqual(profile, other.resolve(scope: scope, workspace: workspace))
+        }
+    }
+
     func testFolderScopeSharesAProfileWithinAFolderAndAcrossUnfolderedWorkspaces() throws {
         let directory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(directory) }

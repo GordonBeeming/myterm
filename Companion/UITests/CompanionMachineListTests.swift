@@ -143,8 +143,16 @@ final class CompanionMachineListTests: XCTestCase {
         app.buttons["Manage Mac"].tap()
 
         let alias = app.textFields["machine-alias"]
-        XCTAssertTrue(alias.waitForExistence(timeout: 3))
+        guard alias.wait(for: \.isHittable, toEqual: true, timeout: 10) else {
+            return XCTFail("The Mac name field must be available for editing.")
+        }
+        let focusedAlias = app.textFields.matching(NSPredicate(format: "hasKeyboardFocus == 1"))
+            .matching(identifier: "machine-alias").firstMatch
         alias.tap()
+        if !focusedAlias.waitForExistence(timeout: 3) { alias.tap() }
+        guard focusedAlias.waitForExistence(timeout: 5) else {
+            return XCTFail("Tapping the Mac name field must give it keyboard focus.")
+        }
         alias.typeText("blastoise · prod")
         app.buttons["Done"].tap()
 

@@ -85,9 +85,7 @@ enum DiagnosticsUploadOutcome: Equatable {
         case .sent(let bytes):
             "Sent \(bytes.formatted(.byteCount(style: .file))) to the Mac."
         case .notConnected:
-            // Named for the device, because the old wording read as a claim about the Mac itself
-            // and Settings is reachable from the Mac list before any Mac has been opened here.
-            "This \(UIDevice.current.localizedModel) has no Mac open. Open one, then send."
+            "Open a Mac, then send from its Settings."
         case .nothingRecorded:
             "Nothing recorded yet, so there is nothing to send."
         case .failed(let reason):
@@ -542,12 +540,8 @@ final class SceneModel {
         if let previousConnection { await previousConnection.disconnect() }
         guard connectionGeneration == generation else { return }
         do {
-            let tokenManager = try await services.tokenManager(for: host)
+            let connection = try await services.connection(for: host)
             guard connectionGeneration == generation else { return }
-            let identity = try await services.identity()
-            guard connectionGeneration == generation else { return }
-            let connection = CompanionHostConnection(host: host, tokenManager: tokenManager,
-                                                     identity: identity)
             self.connection = connection
             let events = try await connection.connect()
             guard connectionGeneration == generation else {
@@ -582,6 +576,11 @@ final class SceneModel {
         activeHost = nil
         clearSelectionAndNavigation()
         await stopConnection()
+    }
+
+    func disconnect(ifConnectedTo connectionID: SavedConnectionID) async {
+        guard activeHost?.connectionID == connectionID else { return }
+        await disconnect()
     }
 
     func prepareNavigation(replacing previous: SavedConnectionID?,
@@ -1585,6 +1584,7 @@ final class TerminalSurfaceState {
     var route: TerminalRoute
     var isFollowingOutput = true
     var followOutputRevision = 0
+    var showsHorizontalScrollHint = false
     var bracketedPasteMode = false
     @ObservationIgnored var viewport: TerminalViewportState?
 

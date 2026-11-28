@@ -139,7 +139,11 @@ final class UpdateController {
         self.bundleURL = bundleURL
         self.configurationDirectory = configurationDirectory ?? FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/myterm", isDirectory: true)
+        #if MYTERM_RUST_RELEASE_REHEARSAL
+        self.preferencesDomain = baseSuite
+        #else
         self.preferencesDomain = channel.bundleIdentifier
+        #endif
         self.now = now
         self.runUpgrade = runUpgrade ?? Self.runHeadlessUpgrade
         self.readInstalledVersion = installedVersion ?? {
@@ -168,7 +172,11 @@ final class UpdateController {
         } else {
             self.upgradeRoute = upgradeRoute ?? Self.detectUpgradeRoute(bundleURL: bundleURL)
         }
+        #if MYTERM_RUST_RELEASE_REHEARSAL
+        automaticallyChecks = false
+        #else
         automaticallyChecks = root.object(forKey: Self.automaticChecksKey) as? Bool ?? true
+        #endif
         lastCheckedAt = defaults.object(forKey: Self.lastCheckedAtKey) as? Date
         skippedVersion = defaults.string(forKey: Self.skippedVersionKey).flatMap(AppVersion.init)
         // Only the check timestamp used to survive a relaunch, so a known update went quiet until

@@ -8,6 +8,10 @@
 //
 
 import Foundation
+#if canImport(ImageIO)
+import ImageIO
+import CoreGraphics
+#endif
 
 enum TerminalCheckpointLimits {
     static let encodedBytes = 32 * 1024 * 1024
@@ -19,6 +23,7 @@ enum TerminalCheckpointLimits {
     static let parserParameters = 4_096
     static let stringBytes = 1 * 1024 * 1024
     static let imageBytes = 24 * 1024 * 1024
+    static let maximumRasterDimension = 8_192
     static let keyboardStack = 16
 }
 
@@ -488,6 +493,12 @@ struct CheckpointKittyPending: Codable {
     var base64Payload: [UInt8]
 }
 
+struct CheckpointKittyRelativeImages: Codable {
+    var imageId: UInt32
+    var placementId: UInt32
+    var images: [CheckpointImage]
+}
+
 struct CheckpointKittyState: Codable {
     var images: [CheckpointKittyImage]
     var imageNumbers: [CheckpointKittyNumber]
@@ -497,6 +508,7 @@ struct CheckpointKittyState: Codable {
     var placements: [CheckpointKittyPlacement]
     var totalImageBytes: Int
     var nextImageAccessTick: UInt64
+    var relativeImages: [CheckpointKittyRelativeImages]? = nil
 }
 
 protocol TerminalCheckpointImageExporting: TerminalImage {
@@ -659,6 +671,7 @@ extension Terminal {
         guard kittyPlacementContext == nil else {
             throw TerminalCheckpointError.corrupt("checkpoint requested during image placement")
         }
+        compactDiscardedKittyPlacements()
         let state = try makeCheckpointState()
         try state.validate()
         let encoder = PropertyListEncoder()
@@ -680,6 +693,7 @@ extension Terminal {
         guard kittyPlacementContext == nil else {
             throw TerminalCheckpointError.corrupt("checkpoint requested during image placement")
         }
+        compactDiscardedKittyPlacements()
         // Non-reflowing alternate lines retain offscreen cells after narrowing.
         // Budget their actual storage, not the current viewport width.
         let alternateCells = (0..<altBuffer.lines.count).reduce(0) { $0 + altBuffer.lines[$1].count }
@@ -939,6 +953,75 @@ extension TerminalCheckpointState {
             throw TerminalCheckpointError.corrupt("Kitty references are invalid")
         }
 
+        let placements = Dictionary(uniqueKeysWithValues: kitty.placements.map {
+            (KittyPlacementKey(imageId: $0.imageId, placementId: $0.placementId), $0)
+        })
+        for record in kitty.placements {
+            guard (-68_719_478_000...68_719_478_000).contains(record.column),
+                  (-68_719_478_000...68_719_478_000).contains(record.row),
+                  (0...4096).contains(record.columns), (0...4096).contains(record.rows),
+                  record.isVirtual || (record.columns>0 && record.rows>0),
+                  (record.parentImageId == nil) == (record.parentPlacementId == nil),
+                  !record.isVirtual || record.parentImageId == nil,
+                  (Int(Int32.min)...Int(Int32.max)).contains(record.parentOffsetH),
+                  (Int(Int32.min)...Int(Int32.max)).contains(record.parentOffsetV) else {
+                throw TerminalCheckpointError.corrupt("Kitty parent metadata is invalid")
+            }
+            var current = record
+            var seen = Set([KittyPlacementKey(imageId: record.imageId, placementId: record.placementId)])
+            var depth = 0
+            while let id = current.parentImageId, let placement = current.parentPlacementId {
+                let key = KittyPlacementKey(imageId: id, placementId: placement)
+                depth += 1
+                guard depth <= 32, seen.insert(key).inserted,
+                      let parent = placements[key], parent.isAlternateBuffer == record.isAlternateBuffer else {
+                    throw TerminalCheckpointError.corrupt("Kitty parent graph is invalid")
+                }
+                current = parent
+            }
+        }
+
+        let relative = kitty.relativeImages ?? []
+        guard relative.count <= 128 else { throw TerminalCheckpointError.corrupt("Kitty relative cache limit") }
+        var relativeKeys = Set<KittyPlacementKey>()
+        var relativeDecodedBytes = 0
+        for item in relative {
+            let key = KittyPlacementKey(imageId: item.imageId, placementId: item.placementId)
+            guard relativeKeys.insert(key).inserted, let owner = placements[key], owner.parentImageId != nil,
+                  item.images.count == owner.rows, item.images.count <= 2048 else {
+                throw TerminalCheckpointError.corrupt("Kitty relative cache owner")
+            }
+            for image in item.images {
+                guard image.isKitty, image.imageId == item.imageId, image.placementId == item.placementId,
+                      image.column == owner.column, image.kittyColumn == owner.column, image.kittyRow == owner.row,
+                      image.kittyColumns == owner.columns, image.kittyRows == owner.rows, image.zIndex == owner.zIndex,
+                      image.pixelOffsetX == owner.pixelOffsetX, image.pixelOffsetY == owner.pixelOffsetY,
+                      (1...TerminalCheckpointLimits.maximumRasterDimension).contains(image.pixelWidth),
+                      (1...TerminalCheckpointLimits.maximumRasterDimension).contains(image.pixelHeight) else {
+                    throw TerminalCheckpointError.corrupt("Kitty relative cache image")
+                }
+                imageBytes += image.data.count
+#if canImport(ImageIO)
+                guard let source = CGImageSourceCreateWithData(image.data as CFData,
+                        [kCGImageSourceShouldCache: false] as CFDictionary),
+                      CGImageSourceGetCount(source) == 1,
+                      let properties = CGImageSourceCopyPropertiesAtIndex(source,0,nil) as? [CFString: Any],
+                      let width = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue,
+                      let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue,
+                      (1...TerminalCheckpointLimits.maximumRasterDimension).contains(width),
+                      (1...TerminalCheckpointLimits.maximumRasterDimension).contains(height) else {
+                    throw TerminalCheckpointError.corrupt("Kitty relative PNG dimensions")
+                }
+                relativeDecodedBytes += width*height*4
+                guard relativeDecodedBytes <= TerminalCheckpointLimits.imageBytes,
+                      CGImageSourceCreateImageAtIndex(source,0,[kCGImageSourceShouldCache: true] as CFDictionary) != nil else {
+                    throw TerminalCheckpointError.corrupt("Kitty relative PNG decode limit")
+                }
+#endif
+            }
+        }
+        guard imageBytes <= TerminalCheckpointLimits.imageBytes else { throw TerminalCheckpointError.corrupt("Kitty relative cache byte limit") }
+
         var graphemeIndexes = Set<Int32>()
         for entry in graphemes {
             guard entry.index > Int32(CharData.maxRune),
@@ -975,11 +1058,10 @@ extension TerminalCheckpointState {
             )
         }
         for line in buffer.lines {
-            // Buffer.resize preserves the hidden right-hand cells of alternate
-            // lines. Normal scrollback reflows and still requires exact width.
+            // A row can retain cells to the right of the viewport. Bounds
+            // and byte counts apply to its stored width in either buffer.
             guard line.cellCount >= columns,
                   line.cellCount <= TerminalCheckpointLimits.columns,
-                  expectedScrollback == nil || line.cellCount == columns,
                   line.cellData.count == line.cellCount * CheckpointCellCodec.encodedCellBytes else {
                 throw TerminalCheckpointError.corrupt("line storage width is invalid for its buffer")
             }
@@ -987,7 +1069,8 @@ extension TerminalCheckpointState {
             cellCount += line.cellCount
             for image in line.images {
                 guard image.pixelWidth > 0, image.pixelHeight > 0,
-                      image.column >= 0, image.column < line.cellCount else {
+                      (image.column >= 0 || (image.isKitty && image.kittyColumns > 0 && image.column > -image.kittyColumns)),
+                      image.column < line.cellCount else {
                     throw TerminalCheckpointError.corrupt("line image geometry is invalid")
                 }
                 imageBytes += image.data.count
@@ -1019,10 +1102,18 @@ extension Terminal {
             CheckpointPosition(column: !isCurrentBufferAlternate && $0.start.row < omitted ? 0 : $0.start.col,
                                row: isCurrentBufferAlternate ? $0.start.row : max(0, $0.start.row - omitted))
         }
-        var kitty = kittyGraphicsState.makeCheckpoint()
+        var kitty = try kittyGraphicsState.makeCheckpoint()
         if omitted > 0 {
             for index in kitty.placements.indices where !kitty.placements[index].isAlternateBuffer {
                 kitty.placements[index].row -= omitted
+            }
+            if var relative = kitty.relativeImages {
+                for index in relative.indices where kitty.placements.first(where: {
+                    $0.imageId == relative[index].imageId && $0.placementId == relative[index].placementId
+                })?.isAlternateBuffer == false {
+                    for stripe in relative[index].images.indices { relative[index].images[stripe].kittyRow -= omitted }
+                }
+                kitty.relativeImages = relative
             }
         }
         return TerminalCheckpointState(

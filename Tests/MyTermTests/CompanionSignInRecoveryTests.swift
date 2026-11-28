@@ -161,6 +161,84 @@ final class CompanionSignInRecoveryTests: XCTestCase {
         try await wait { restored.needsSignIn }
     }
 
+    func testCancelledRelaySwitchLeavesTheConnectedRelayOnline() async throws {
+        let fixture = try fixture(browserCanStart: true)
+        try await fixture.host.installAuthenticatedSessionForTesting(fixture.record)
+        try await fixture.host.configurePairingForTesting(endpoint: fixture.record.relay)
+
+        fixture.host.signIn(relayAddress: "https://beta.example.test")
+        try await wait { fixture.browserStarts.count == 1 }
+        XCTAssertEqual(fixture.browserStarts.urls.first?.host, "beta.example.test")
+        XCTAssertEqual(fixture.host.status, .connected)
+
+        fixture.host.cancelSignIn()
+        XCTAssertEqual(fixture.host.status, .connected)
+        XCTAssertEqual(fixture.host.relayText, fixture.record.relay.canonicalOrigin)
+    }
+
+    func testFailedRelaySwitchReportsTheErrorAndLeavesTheConnectedRelayOnline() async throws {
+        let fixture = try fixture()
+        try await fixture.host.installAuthenticatedSessionForTesting(fixture.record)
+        try await fixture.host.configurePairingForTesting(endpoint: fixture.record.relay)
+
+        fixture.host.signIn(relayAddress: "https://beta.example.test")
+        try await wait { fixture.browserStarts.count == 1 && !fixture.host.isSigningIn }
+
+        XCTAssertEqual(fixture.host.status, .connected)
+        XCTAssertEqual(fixture.host.relayText, fixture.record.relay.canonicalOrigin)
+        XCTAssertNotNil(fixture.app.errorDescription)
+    }
+
+    func testCancelledWorkerAccountCreationKeepsTheSavedGoRelay() async throws {
+        let fixture = try fixture(browserCanStart: true, workerCapabilities: NativeWorkerCapabilitiesProtocol.self)
+        try await fixture.host.installAuthenticatedSessionForTesting(fixture.record)
+        try await fixture.host.configurePairingForTesting(endpoint: fixture.record.relay)
+
+        fixture.host.signIn(relayAddress: "https://worker.example.test", registerWorkerAccount: true)
+        try await wait { fixture.browserStarts.count == 1 }
+
+        let browserURL = try XCTUnwrap(fixture.browserStarts.urls.first)
+        XCTAssertEqual(browserURL.host, "worker.example.test")
+        XCTAssertEqual(browserURL.path, "/auth/register")
+        XCTAssertEqual(URLComponents(url: browserURL, resolvingAgainstBaseURL: false)?.queryItems?
+            .first { $0.name == "code_challenge_method" }?.value, "S256")
+        fixture.host.cancelSignIn()
+
+        XCTAssertEqual(fixture.host.status, .connected)
+        XCTAssertEqual(fixture.host.relayText, fixture.record.relay.canonicalOrigin)
+        XCTAssertFalse(fixture.host.usesWorkerRelay)
+    }
+
+    func testUnavailableWorkerDuringRelayDiscoveryLeavesTheGoRelayOnline() async throws {
+        let fixture = try fixture(browserCanStart: true, workerCapabilities: UnavailableWorkerCapabilitiesProtocol.self)
+        try await fixture.host.installAuthenticatedSessionForTesting(fixture.record)
+        try await fixture.host.configurePairingForTesting(endpoint: fixture.record.relay)
+
+        fixture.host.signIn(relayAddress: "https://worker.example.test", discoverProtocol: true)
+        try await wait { !fixture.host.isSigningIn }
+
+        XCTAssertEqual(fixture.browserStarts.count, 0)
+        XCTAssertEqual(fixture.host.status, .connected)
+        XCTAssertEqual(fixture.host.relayText, fixture.record.relay.canonicalOrigin)
+        XCTAssertNotNil(fixture.host.signInNotice)
+    }
+
+    func testSavedHostedRelayPromptsForEnrollmentAfterUpgradeWithoutClearingCredentials() async throws {
+        let fixture = try fixture(workerCapabilities: NativeWorkerCapabilitiesProtocol.self,
+                                  relayOrigin: MyTermHostedRelay.production.origin)
+        try await fixture.host.installAuthenticatedSessionForTesting(fixture.record)
+
+        fixture.host.startIfEnabled()
+        try await wait { fixture.host.requiresRelayEnrollment }
+
+        XCTAssertEqual(fixture.host.status, .signedOut)
+        XCTAssertTrue(fixture.host.hasLinkedRelay)
+        XCTAssertEqual(fixture.browserStarts.count, 0)
+        XCTAssertEqual(fixture.sleeps.count, 0)
+        let saved = try await TokenStore(secrets: fixture.secrets).load(partition: fixture.partition)
+        XCTAssertEqual(saved, fixture.record)
+    }
+
     func testHostRegistrationAuthorizationErrorDoesNotDiscardValidCredentials() async throws {
         let fixture = try fixture(forbiddenHost: true)
         try await fixture.host.installAuthenticatedSessionForTesting(fixture.record)
@@ -197,7 +275,10 @@ final class CompanionSignInRecoveryTests: XCTestCase {
         }
     }
 
-    private func fixture(expiry: Date = .distantFuture, browserCanStart: Bool = false, forbiddenHost: Bool = false) throws -> Fixture {
+    private func fixture(expiry: Date = .distantFuture, browserCanStart: Bool = false,
+                         forbiddenHost: Bool = false,
+                         workerCapabilities: URLProtocol.Type = UnavailableWorkerCapabilitiesProtocol.self,
+                         relayOrigin: String = "https://relay.example.test") throws -> Fixture {
         let directory = FileManager.default.temporaryDirectory.appending(path: "myterm-signin-recovery-\(UUID())")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         directories.append(directory)
@@ -216,13 +297,18 @@ final class CompanionSignInRecoveryTests: XCTestCase {
         let host = CompanionHostModel(appModel: app, channel: .development, storageNamespace: "recovery",
             sleep: { _ in sleeps.record(); throw CancellationError() },
             secrets: secrets, authenticationSession: authentication, defaults: defaults,
+            makeWorkerClient: { endpoint in
+                let configuration = URLSessionConfiguration.ephemeral
+                configuration.protocolClasses = [workerCapabilities]
+                return CloudflareRelayClient(relay: endpoint, session: URLSession(configuration: configuration))
+            },
             makeHTTPClient: { endpoint in
                 let configuration = URLSessionConfiguration.ephemeral
                 configuration.protocolClasses = forbiddenHost ? [ForbiddenHostProtocol.self] : [RejectedRefreshProtocol.self]
                 return RelayHTTPClient(endpoint: endpoint, session: URLSession(configuration: configuration))
             })
         hosts.append(host)
-        let relay = try RelayEndpoint(XCTUnwrap(URL(string: "https://relay.example.test")))
+        let relay = try RelayEndpoint(XCTUnwrap(URL(string: relayOrigin)))
         let record = TokenRecord(relay: relay, accountID: UUID(), deviceID: UUID(),
             accessToken: "test-access", refreshToken: "test-refresh", expiresAt: expiry)
         return Fixture(app: app, host: host, secrets: secrets, defaults: defaults, record: record,
@@ -261,6 +347,7 @@ private final class RecoverySleepRecorder: @unchecked Sendable {
 
 private class RejectedRefreshProtocol: URLProtocol, @unchecked Sendable {
     class var responseStatus: Int { 401 }
+    class var responseBody: String { #"{"error":"invalid_grant"}"# }
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
@@ -271,7 +358,7 @@ private class RejectedRefreshProtocol: URLProtocol, @unchecked Sendable {
             return
         }
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data(#"{"error":"invalid_grant"}"#.utf8))
+        client?.urlProtocol(self, didLoad: Data(Self.responseBody.utf8))
         client?.urlProtocolDidFinishLoading(self)
     }
     override func stopLoading() {}
@@ -279,4 +366,15 @@ private class RejectedRefreshProtocol: URLProtocol, @unchecked Sendable {
 
 private final class ForbiddenHostProtocol: RejectedRefreshProtocol, @unchecked Sendable {
     override class var responseStatus: Int { 403 }
+}
+
+private final class NativeWorkerCapabilitiesProtocol: RejectedRefreshProtocol, @unchecked Sendable {
+    override class var responseStatus: Int { 200 }
+    override class var responseBody: String {
+        #"{"protocol":1,"schema":2,"features":["native-passkey-pkce-v1","approved-endpoint-relay-v1","frame-flow-control-v1"]}"#
+    }
+}
+
+private final class UnavailableWorkerCapabilitiesProtocol: RejectedRefreshProtocol, @unchecked Sendable {
+    override class var responseStatus: Int { 503 }
 }

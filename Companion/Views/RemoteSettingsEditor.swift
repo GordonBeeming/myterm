@@ -192,7 +192,7 @@ struct RemoteSettingsEditor: View {
             .disabled(!supportsBrowserMode)
         } header: { Text("Browser") } footer: {
             if supportsBrowserMode {
-                Text("How browser tabs in this workspace open on every paired iPhone or iPad. Localhost and IP addresses always use Mac rendered.")
+                Text("Applies to all paired devices. Localhost and IP addresses always use Mac rendered.")
             } else {
                 Text("Update MyTerm on the connected Mac to change the browser mode from here.")
             }

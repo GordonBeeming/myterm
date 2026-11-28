@@ -1,12 +1,23 @@
 # iPhone and iPad companion
 
-The companion connects to running myterm apps through an HTTPS relay you operate. Each Mac owns its terminal processes and workspace state. Closing myterm, sleeping the Mac, or losing its connection makes that host unavailable. The relay does not run replacement shells.
+The companion connects to a running MyTerm app through a hosted or self-hosted HTTPS relay. Each Mac owns its terminal processes and workspace state. Closing MyTerm, sleeping the Mac, or losing its connection makes that host unavailable. The relay does not run replacement shells.
 
-The app supports iOS and iPadOS 26 or later. Builds use the iOS 27.1 SDK so iPhone Duo can fill the inner and outer displays, including the system's vertical navigation bars. The main Mac and workspace navigation uses a native split view, which collapses on the outer display and keeps its sidebar on the regular-width inner display. Custom terminal splits avoid active fold regions while preserving the Mac's saved proportions when the device is flat.
+The app supports iOS and iPadOS 26 or later. Builds use the iOS 27.1 SDK or newer so iPhone Duo can fill the inner and outer displays, including the system's vertical navigation bars. The main Mac and workspace navigation uses a native split view, which collapses on the outer display and keeps its sidebar on the regular-width inner display. Custom terminal splits avoid active fold regions while preserving the Mac's saved proportions when the device is flat.
+
+## Pair after a hosted relay upgrade
+
+The Mac can open workspaces and terminals before relay setup. Once your hosted relay upgrades, open **Settings → Companion** on your Mac and select your relay. Use **Create an account** for your first passkey on the new relay, or **Sign in** if you already created one. An account on the earlier relay cannot sign in to the replacement.
+
+1. On the iPhone or iPad, open **Add Mac**. Choose the same relay and select **Sign in with a passkey**.
+2. Share the approval request with your Mac. Paste it into **Pair a device** in MyTerm and select **Approve device**.
+3. Scan the approval in the Companion or paste it into the requesting device. Repeat with each iPhone or iPad.
+4. After the new connection works, remove the old pairing from **Manage Mac**. Browser data shared with the current pairing stays on the device.
+
+The existing self-hosted Go relay continues to use the legacy pairing QR code. Operators of the new Cloudflare relay can follow its [deployment guide](../Services/relay-cloudflare/README.md).
 
 ## Build and test
 
-Use Xcode 27.1 or newer with its matching Metal component. CI pins Xcode 27.1 on GitHub’s [xcode-27 runner](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md), which includes the iPhone Duo simulator and iOS 27.1 runtime. Check the selected installation with:
+Use Xcode 27.1 or newer with its matching Metal component. CI pins Xcode 27.2 on GitHub’s macOS 27 runner, which includes the iPhone Duo simulator and iOS 27.2 runtime. Check the selected installation with: [GitHub runner inventory](https://github.com/actions/runner-images/blob/xcode-27-arm64/20261123.0387/images/macos/xcode-27-arm64-Readme.md)
 
 ```sh
 bash script/verify_companion_toolchain.sh 27.1
@@ -41,7 +52,7 @@ COMPANION_DEVICE_FAMILY=iPhoneDuo bash script/test_companion.sh
 
 The native interoperability tests also require Go. They compile a temporary relay fixture before starting its readiness check; the service modules declare the minimum Go version.
 
-The simulator script chooses an installed runtime matching the selected Xcode SDK’s major version, creates a dedicated device, saves an `.xcresult` under `dist`, and deletes that device afterward. The Duo suite selects the iOS 27.1 runtime and iPhone Duo device type explicitly. `COMPANION_SIMULATOR_UDID` selects an existing device, which the script never deletes. Move previous result bundles before rerunning. Set `COMPANION_KEEP_SIMULATOR=1` when an automatically created device needs further inspection.
+The simulator script chooses an installed runtime matching the selected Xcode SDK’s major version, creates a dedicated device, saves an `.xcresult` under `dist`, and deletes that device afterward. The Duo suite selects the iPhone Duo device type and an eligible iOS 27 runtime. `COMPANION_SIMULATOR_UDID` selects an existing device, which the script never deletes. Move previous result bundles before rerunning. Set `COMPANION_KEEP_SIMULATOR=1` when an automatically created device needs further inspection.
 
 ### iPhone Duo screenshots
 
@@ -50,6 +61,12 @@ Apple accepts 1398 × 2034 or 2034 × 1398 pixels for the outer display, and 200
 The outer-display screenshot should show the compact terminal or Mac picker with every toolbar action reachable. The inner-display screenshot should show the Mac sidebar, workspace column, and terminal detail together. Also inspect book, tent, and Split View poses even though App Store Connect only needs outer and inner display images.
 
 Existing desktop validation remains `swift test --parallel`, `bash script/channel_isolation_test.sh`, and `make verify`. Use `--bundle` when running the desktop build script without launching the app. Normal launches now focus the existing healthy instance. Quit it explicitly before launching a rebuilt version.
+
+## Run for development
+
+Start the local Rust workspace build with `./run.sh --local-rust-workspaces`. Local tabs and splits work before you link a relay. To test a companion against this Mac, open **Settings → Companion**, select an existing relay you can sign in to, and continue. Choose **Self-hosted** to enter an address or **Use a setup link** if a relay operator sent you one.
+
+The app launch and the relay deployment are separate. Developers with access to an existing development or self-hosted relay can test pairing and terminal control with the companion. Developers without relay access can still work on local workspaces and run the companion's isolated simulator tests with `bash script/test_companion.sh`.
 
 ## Deploy a relay
 
@@ -80,7 +97,7 @@ The test credential authorizes a normal one-use PKCE code through `POST /v1/dev-
 
 ## Pair and use a Mac
 
-Connect the Mac to its relay and start Pair Mode in Companion settings. Scan that QR code in the phone app, or paste the pairing link when using a simulator. Complete relay sign-in, then approve the phone on the Mac.
+Connect the Mac to its relay and choose **Show pairing code** in Companion settings. Scan the code in the companion app, or paste the pairing link when using a simulator. Complete relay sign-in, then approve the device on the Mac.
 
 The QR code refreshes every 30 seconds; each code remains valid for 60 seconds so sign-in can finish across a refresh. The pairing ticket is generated and consumed on the Mac. The relay forwards encrypted pairing messages. Paired devices retain the peer's public keys and establish a fresh authenticated session on each connection.
 

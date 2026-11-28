@@ -48,49 +48,59 @@ public final class TerminalImageRenderer {
         self.geometry = geometry
     }
 
-    public func createImageFromBitmap(source: Terminal, bytes: inout [UInt8], width: Int, height: Int) {
-        guard width > 0, height > 0, width <= 8_192, height <= 8_192,
-              width * height <= Self.maximumSourcePixels, bytes.count == width * height * 4 else { return }
-        let rgbColorSpace = CGColorSpaceCreateDeviceRGB()
-        let bitmapInfo: CGBitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)
+    @discardableResult
+    public func createImageFromBitmap(source: Terminal, bytes: inout [UInt8], width: Int, height: Int) -> Bool {
+        let maxDimension = TerminalCheckpointLimits.maximumRasterDimension
+        guard (1...maxDimension).contains(width), (1...maxDimension).contains(height),
+              width * height <= Self.maximumSourcePixels, bytes.count == width * height * 4 else { return false }
+        guard let rgbColorSpace = CGColorSpace(name: CGColorSpace.sRGB) else { return false }
+        let bitmapInfo: CGBitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.last.rawValue)
         let pixelData = NSData(bytes: bytes, length: bytes.count)
         guard let providerRef: CGDataProvider = CGDataProvider(data: pixelData) else {
-            return
+            return false
         }
         guard let cgimage: CGImage = CGImage(
                 width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
                 bytesPerRow: width * 4, space: rgbColorSpace, bitmapInfo: bitmapInfo,
                 provider: providerRef, decode: nil, shouldInterpolate: true,
                 intent: .defaultIntent) else {
-            return
+            return false
         }
         
-        let image = TTImage (cgImage: cgimage, size: CGSize (width: width, height: height))
+        #if os(macOS)
+        // An explicit bitmap representation keeps source pixels independent of
+        // the display scale chosen for a lazy NSImage representation.
+        let image = TTImage(size: CGSize(width: width, height: height))
+        image.addRepresentation(NSBitmapImageRep(cgImage: cgimage))
+        #else
+        let image = TTImage(cgImage: cgimage, size: CGSize(width: width, height: height))
+        #endif
         if let context = terminal.kittyPlacementContext {
-            insertImage (image, width: context.widthRequest, height: context.heightRequest, preserveAspectRatio: context.preserveAspectRatio)
+            return insertImage (image, width: context.widthRequest, height: context.heightRequest, preserveAspectRatio: context.preserveAspectRatio)
         } else {
-            insertImage (image, width: CGFloat (width) > frame.width ? .percent(100) : .auto, height: .auto, preserveAspectRatio: true)
+            return insertImage (image, width: CGFloat (width) > frame.width ? .percent(100) : .auto, height: .auto, preserveAspectRatio: true)
         }
     }
    
-    public func createImage (source: Terminal, data: Data, width widthRequest: ImageSizeRequest, height heightRequest: ImageSizeRequest, preserveAspectRatio: Bool)
+    @discardableResult
+    public func createImage (source: Terminal, data: Data, width widthRequest: ImageSizeRequest, height heightRequest: ImageSizeRequest, preserveAspectRatio: Bool) -> Bool
     {
         guard let img = TTImage(data: data) else {
-            return
+            return false
         }
-        insertImage (img, width: widthRequest, height: heightRequest, preserveAspectRatio: preserveAspectRatio)
+        return insertImage (img, width: widthRequest, height: heightRequest, preserveAspectRatio: preserveAspectRatio)
     }
     
     // Inserts the specified image at the current buffer position (x, y) using the specified size requests
     // and aspect ratio request.   The insertion is done by adding slices of the image, one per line
     // to the buffer.
-    private func insertImage (_ image: TTImage, width widthRequest: ImageSizeRequest, height heightRequest: ImageSizeRequest, preserveAspectRatio: Bool)
+    private func insertImage (_ image: TTImage, width widthRequest: ImageSizeRequest, height heightRequest: ImageSizeRequest, preserveAspectRatio: Bool) -> Bool
     {
         guard image.size.width.isFinite, image.size.height.isFinite,
               image.size.width > 0, image.size.height > 0,
               cellDimension.width.isFinite, cellDimension.height.isFinite,
               cellDimension.width > 0, cellDimension.height > 0,
-              geometry.displayScale.isFinite, geometry.displayScale > 0 else { return }
+              geometry.displayScale.isFinite, geometry.displayScale > 0 else { return false }
         let buffer = terminal.buffer
         var img = image
         let displayScale = getImageScale ()
@@ -133,7 +143,7 @@ public final class TerminalImageRenderer {
         }
 
         if let sourcePixels = pixelSizeForImage(img) {
-            guard sourcePixels.width * sourcePixels.height <= CGFloat(Self.maximumSourcePixels) else { return }
+            guard sourcePixels.width * sourcePixels.height <= CGFloat(Self.maximumSourcePixels) else { return false }
         }
         let pixelSize = placementContext == nil ? nil : pixelSizeForImage(img)
         let widthImageSize: CGFloat
@@ -154,9 +164,10 @@ public final class TerminalImageRenderer {
         var width = getPixels (fromDim: widthRequest, regionSize: frame.width, imageSize: widthImageSize, cellSize: cellDimension.width)
         var height = getPixels (fromDim: heightRequest, regionSize: frame.height, imageSize: heightImageSize, cellSize: cellDimension.height)
         
+        let maxDimension = CGFloat(TerminalCheckpointLimits.maximumRasterDimension)
         guard width.isFinite, height.isFinite, width > 0, height > 0,
-              width <= 8_192, height <= 8_192,
-              width * height * 4 <= CGFloat(Self.maximumNewRasterBytes) else { return }
+              width <= maxDimension, height <= maxDimension,
+              width * height * 4 <= CGFloat(Self.maximumNewRasterBytes) else { return false }
         if preserveAspectRatio {
             switch (widthRequest, heightRequest) {
             case (.auto, .auto):
@@ -166,109 +177,110 @@ public final class TerminalImageRenderer {
             case (.auto, _):
                 width = (height * img.size.width) / img.size.height
             case (_, _):
-                img = scale (image: img, size: CGSize (width: width, height: height))
+                guard let scaled = scale(image:img,size:CGSize(width:width,height:height)) else { return false }
+                img = scaled
             }
         }
         
         let rowCount = ceil(height / cellDimension.height)
         let colCount = ceil(width / cellDimension.width)
-        guard width.isFinite, height.isFinite, rowCount.isFinite, colCount.isFinite,
-              rowCount > 0, rowCount <= CGFloat(Self.maximumStripes), colCount > 0, colCount <= 4_096 else { return }
+        guard width.isFinite, height.isFinite, width <= maxDimension, height <= maxDimension,
+              rowCount.isFinite, colCount.isFinite, rowCount > 0, rowCount <= CGFloat(Self.maximumStripes), colCount > 0, colCount <= 4_096 else { return false }
         let rows = Int(rowCount)
         let cols = Int(colCount)
         let stripeRasterBytes = ceil(width) * ceil(cellDimension.height) * 4 * CGFloat(rows)
         // Reserve per-stripe encoding/metadata overhead and room for the helper's Kitty cache.
         let proposedCost = stripeRasterBytes + CGFloat(rows * 4_096)
         guard stripeRasterBytes <= CGFloat(Self.maximumNewRasterBytes),
-              proposedCost <= CGFloat(Self.maximumRetainedStripeCost) else { return }
-        evictOldStripes(reserving: proposedCost)
-        let placementRow = buffer.y + buffer.yBase
-        let placementCol = buffer.x
-        if let context = placementContext,
-           let imageId = context.imageId,
-           let placementId = context.placementId {
-            terminal.registerKittyPlacement(imageId: imageId,
-                                            placementId: placementId,
-                                            parentImageId: context.parentImageId,
-                                            parentPlacementId: context.parentPlacementId,
-                                            parentOffsetH: context.parentOffsetH,
-                                            parentOffsetV: context.parentOffsetV,
-                                            pixelOffsetX: context.pixelOffsetX,
-                                            pixelOffsetY: context.pixelOffsetY,
-                                            col: placementCol,
-                                            row: placementRow,
-                                            cols: cols,
-                                            rows: rows,
-                                            zIndex: context.zIndex,
-                                            isVirtual: false)
+              proposedCost <= CGFloat(Self.maximumRetainedStripeCost) else { return false }
+        let placementRow = placementContext?.originRow ?? (buffer.y + buffer.yBase)
+        let placementCol = placementContext?.originColumn ?? buffer.x
+        let placementKey: KittyPlacementKey? = placementContext.flatMap { context in
+            context.imageId.flatMap { image in context.placementId.map { KittyPlacementKey(imageId:image,placementId:$0) } }
         }
-        
-        let stripeSize = CGSize (width: width, height: cellDimension.height)
-        var didScroll = false
+        if placementContext?.isRelative == true, let placementKey {
+            let cached = terminal.kittyGraphicsState.relativeStripes
+            let retainedCost = cached.filter { $0.key != placementKey }.values.reduce(CGFloat.zero) { total, images in
+                total + images.reduce(CGFloat.zero) { cost, image in
+                    cost + CGFloat(image.pixelWidth) * CGFloat(image.pixelHeight) * 4 + 4_096
+                }
+            }
+            guard cached[placementKey] != nil || cached.count < 128,
+                  retainedCost + proposedCost <= CGFloat(Self.maximumRetainedStripeCost) else { return false }
+        }
+        let stripeSize = CGSize(width:width,height:cellDimension.height)
         #if os(iOS) || os(visionOS)
         var srcY: CGFloat = 0
         #else
         var srcY: CGFloat = img.size.height
         #endif
-        
         let heightRatio = img.size.height/height
+        var prepared: [TerminalView.AppleImage] = []
+        prepared.reserveCapacity(rows)
         for _ in 0..<rows {
             #if os(macOS)
-            srcY -= cellDimension.height * heightRatio
+            srcY -= cellDimension.height*heightRatio
             #endif
-            guard let stripe = drawImageInStripe (image: img, srcY: srcY, width: width, srcHeight: cellDimension.height * heightRatio, dstHeight: cellDimension.height, size: stripeSize) else {
-                continue
-            }
+            guard let stripe = drawImageInStripe(image:img,srcY:srcY,width:width,
+                srcHeight:cellDimension.height*heightRatio,dstHeight:cellDimension.height,size:stripeSize) else { return false }
             #if os(iOS) || os(visionOS)
-            srcY += cellDimension.height * heightRatio
+            srcY += cellDimension.height*heightRatio
             #endif
-            
-            let attachedImage = TerminalView.AppleImage (image: stripe, width: Int (stripeSize.width), height: Int (cellDimension.height), onCol: terminal.buffer.x)
+            let image = TerminalView.AppleImage(image:stripe,width:Int(stripeSize.width),height:Int(cellDimension.height),onCol:placementCol)
             if let context = placementContext {
-                attachedImage.kittyIsKitty = true
-                attachedImage.kittyImageId = context.imageId
-                attachedImage.kittyImageNumber = context.imageNumber
-                attachedImage.kittyPlacementId = context.placementId
-                attachedImage.kittyZIndex = context.zIndex
-                attachedImage.kittyCol = placementCol
-                attachedImage.kittyRow = placementRow
-                attachedImage.kittyCols = cols
-                attachedImage.kittyRows = rows
-                attachedImage.kittyPixelOffsetX = context.pixelOffsetX
-                attachedImage.kittyPixelOffsetY = context.pixelOffsetY
+                image.kittyIsKitty = true; image.kittyImageId = context.imageId
+                image.kittyImageNumber = context.imageNumber; image.kittyPlacementId = context.placementId
+                image.kittyZIndex = context.zIndex; image.kittyCol = placementCol; image.kittyRow = placementRow
+                image.kittyCols = cols; image.kittyRows = rows
+                image.kittyPixelOffsetX = context.pixelOffsetX; image.kittyPixelOffsetY = context.pixelOffsetY
             }
-            
-            buffer.attachImage(attachedImage, toLineAt: buffer.y+buffer.yBase)
-
-            terminal.updateRange (buffer.y)
-
-            // The buffer.x position would have changed depending on the lineFeedMode (LNM)
-            // for image rendering, we want the x to remain the same
+            prepared.append(image)
+        }
+        evictOldStripes(reserving:proposedCost)
+        if let context = placementContext, let key = placementKey {
+            if context.replacesPlacement {
+                terminal.removeKittyPlacement(imageId: key.imageId, placementId: key.placementId)
+            }
+            if terminal.kittyGraphicsState.imagesById[key.imageId] != nil {
+                terminal.registerKittyPlacement(
+                    imageId: key.imageId, placementId: key.placementId,
+                    parentImageId: context.parentImageId, parentPlacementId: context.parentPlacementId,
+                    parentOffsetH: context.parentOffsetH, parentOffsetV: context.parentOffsetV,
+                    pixelOffsetX: context.pixelOffsetX, pixelOffsetY: context.pixelOffsetY,
+                    col: placementCol, row: placementRow, cols: cols, rows: rows,
+                    zIndex: context.zIndex, isVirtual: false
+                )
+            }
+        }
+        if placementContext?.isRelative == true, let key = placementKey {
+            terminal.kittyGraphicsState.relativeStripes[key] = prepared
+            for (offset,image) in prepared.enumerated() {
+                let target = placementRow+offset
+                if target>=0 && target<buffer.lines.count && placementCol<terminal.cols && placementCol+cols>0 {
+                    buffer.attachImage(image,toLineAt:target)
+                }
+            }
+            return true
+        }
+        var didScroll = false
+        for image in prepared {
+            buffer.attachImage(image,toLineAt:buffer.y+buffer.yBase)
+            terminal.updateRange(buffer.y)
             let savedX = buffer.x
             let previousYBase = buffer.yBase
-            let previousLinesTop = buffer.linesTop
+            let previousTop = buffer.linesTop
             terminal.cmdLineFeed()
-            if buffer.yBase != previousYBase || buffer.linesTop != previousLinesTop {
-                didScroll = true
-            }
+            if buffer.yBase != previousYBase || buffer.linesTop != previousTop { didScroll = true }
             buffer.x = savedX
         }
-        if didScroll {
-            terminal.updateFullScreen()
-        }
-        if let context = placementContext,
-           context.cursorPolicy == 0,
-           !context.isRelative {
-            let moveCols = max(1, cols)
-            let moveRows = max(1, rows)
-            let targetCol = placementCol + moveCols
-            let targetRow = placementRow + moveRows
-            buffer.x = targetCol
-            buffer.y = targetRow - buffer.yBase
+        if didScroll { terminal.updateFullScreen() }
+        if let context = placementContext, context.cursorPolicy == 0, !context.isRelative {
+            buffer.x = placementCol+max(1,cols)
+            buffer.y = placementRow+max(1,rows)-buffer.yBase
             terminal.restrictCursor()
         }
+        return true
     }
-    
 
     private func retainedStripeCost() -> CGFloat {
         var total: CGFloat = 0
@@ -304,19 +316,19 @@ public final class TerminalImageRenderer {
     }
 
     #if os(macOS)
-    func scale (image: NSImage, size: CGSize) -> NSImage {
+    func scale (image: NSImage, size: CGSize) -> NSImage? {
         
         guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil,
                 pixelsWide: max(1, Int(ceil(size.width))), pixelsHigh: max(1, Int(ceil(size.height))),
                 bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
                 colorSpaceName: .calibratedRGB, bytesPerRow: 0, bitsPerPixel: 0),
-              let context = NSGraphicsContext(bitmapImageRep: bitmap) else { return image }
+              let context = NSGraphicsContext(bitmapImageRep: bitmap) else { return nil }
         let scaledImg = TTImage(size: size)
         scaledImg.addRepresentation(bitmap)
         NSGraphicsContext.saveGraphicsState()
         defer { NSGraphicsContext.restoreGraphicsState() }
         NSGraphicsContext.current = context
-        let srcRatio = image.size.height/image.size.width
+        let srcRatio = image.size.width/image.size.height
         let scaledRatio = size.width/size.height
         let srcRect = CGRect(origin: CGPoint.zero, size: image.size)
         let dstRect: CGRect
@@ -356,10 +368,10 @@ public final class TerminalImageRenderer {
     }
     
     #else
-    func scale (image: UIImage, size: CGSize) -> UIImage {
+    func scale (image: UIImage, size: CGSize) -> UIImage? {
         UIGraphicsBeginImageContext(size)
         
-        let srcRatio = image.size.height/image.size.width
+        let srcRatio = image.size.width/image.size.height
         let scaledRatio = size.width/size.height
         
         let dstRect: CGRect
@@ -373,7 +385,7 @@ public final class TerminalImageRenderer {
         }
         image.draw (in: dstRect)
         
-        let ret = UIGraphicsGetImageFromCurrentImageContext() ?? image
+        let ret = UIGraphicsGetImageFromCurrentImageContext()
         UIGraphicsEndImageContext()
         return ret
     }
@@ -403,4 +415,23 @@ public final class TerminalImageRenderer {
 
     #endif
 }
+#endif
+
+
+#if canImport(CoreGraphics)
+extension TerminalView: KittyImageRendererDelegate {
+    func renderKittyImage(source: Terminal,payload: KittyGraphicsPayload) -> Bool {
+        guard let context = source.kittyPlacementContext else { return false }
+        let renderer = TerminalImageRenderer(terminal: source,
+                                             geometry: authoritativeImageGeometry ?? imageRenderingGeometry)
+        switch payload {
+        case .png(let data):
+            return renderer.createImage(source:source,data:data,width:context.widthRequest,
+                height:context.heightRequest,preserveAspectRatio:context.preserveAspectRatio)
+        case .rgba(var bytes,let width,let height):
+            return renderer.createImageFromBitmap(source:source,bytes:&bytes,width:width,height:height)
+        }
+    }
+}
+
 #endif

@@ -473,11 +473,13 @@ public actor PairedPeerStore: PairedPeerPersistence {
     private let secrets: any SecretStore
     private let relay: RelayEndpoint
     private let hostID: UUID
+    private let accountID: UUID?
 
-    public init(secrets: any SecretStore, relay: RelayEndpoint, hostID: UUID) {
+    public init(secrets: any SecretStore, relay: RelayEndpoint, hostID: UUID, accountID: UUID? = nil) {
         self.secrets = secrets
         self.relay = relay
         self.hostID = hostID
+        self.accountID = accountID
     }
 
     public func loadPeers() throws -> [PairedPeer] {
@@ -505,7 +507,9 @@ public actor PairedPeerStore: PairedPeerPersistence {
     }
 
     private var storageAccount: String {
-        let material = "\(relay.canonicalOrigin)|\(hostID.uuidString.lowercased())|paired-peers"
+        let hostScope = "\(relay.canonicalOrigin)|\(hostID.uuidString.lowercased())"
+        let material = accountID.map { "\(hostScope)|\($0.uuidString.lowercased())|paired-peers" }
+            ?? "\(hostScope)|paired-peers"
         return "peers-" + Data(SHA256.hash(data: Data(material.utf8))).base64URL
     }
 }

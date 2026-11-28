@@ -44,11 +44,19 @@ struct AttachedRouteRegistry {
 }
 
 actor CompanionHostConnection {
+    private static let maximumStaleFramesBeforeHello = 24
+
     private let host: SavedHostDescriptor
-    private let tokenManager: RelayTokenManager
+    private let tokenManager: RelayTokenManager?
+    private let configuredTransport: any CompanionRelayTransport
+    private let workerSlot: WorkerConnectionSlot?
+    private let connectionAttempt = UUID()
+    private var opened = false
+    private var closing = false
+    private var closeTask: Task<Void, Never>?
     private let identity: CompanionIdentity
     private let checkpointAssembler = CheckpointAssembler()
-    private var transport: RelayWebSocketClient?
+    private var transport: (any CompanionRelayTransport)?
     private var transportTask: Task<Void, Never>?
     private var reauthenticationTask: Task<Void, Never>?
     private var handshakeTimeout: Task<Void, Never>?
@@ -56,6 +64,7 @@ actor CompanionHostConnection {
     private var hostConnectionID: UUID?
     private var runtimeID: UUID?
     private var clientHello: HelloParameters?
+    private var discardedStaleFrames = 0
     private var helloChannel: SecureRelayChannel?
     private var applicationChannel: SecureRelayChannel?
     private var hostCapabilities: Set<String> = []
@@ -72,6 +81,17 @@ actor CompanionHostConnection {
         self.host = host
         self.tokenManager = tokenManager
         self.identity = identity
+        configuredTransport = RelayWebSocketClient(endpoint: host.relay, hostID: host.hostID, role: .client)
+        workerSlot = nil
+    }
+
+    init(host: SavedHostDescriptor, transport: any CompanionRelayTransport,
+         identity: CompanionIdentity, workerSlot: WorkerConnectionSlot) {
+        self.host = host
+        self.identity = identity
+        configuredTransport = transport
+        tokenManager = nil
+        self.workerSlot = workerSlot
     }
 
     deinit {
@@ -80,15 +100,30 @@ actor CompanionHostConnection {
     }
 
     func connect() async throws -> AsyncThrowingStream<CompanionConnectionEvent, Error> {
-        guard transportTask == nil else { throw RemoteError.invalidMessage }
-        let token = try await tokenManager.accessToken()
-        let transport = RelayWebSocketClient(endpoint: host.relay, hostID: host.hostID, role: .client)
-        let transportEvents = try await transport.connect(accessToken: token)
-        self.transport = transport
+        guard !opened, !closing else { throw RemoteError.invalidMessage }
+        opened = true
+        let transport = configuredTransport
+        try await workerSlot?.claim(connectionAttempt, connection: self)
+        guard !closing else {
+            await workerSlot?.release(connectionAttempt)
+            throw RemoteError.disconnected
+        }
+        let transportEvents: AsyncThrowingStream<RelayTransportEvent, Error>
+        do {
+            let token = try await tokenManager?.accessToken() ?? ""
+            guard !closing else { throw RemoteError.disconnected }
+            self.transport = transport
+            transportEvents = try await transport.connect(accessToken: token)
+            try Task.checkCancellation()
+            guard self.transport != nil else { throw RemoteError.disconnected }
+        } catch {
+            await close(error: error)
+            throw error
+        }
         let stream = AsyncThrowingStream<CompanionConnectionEvent, Error>(bufferingPolicy: .bufferingOldest(256)) {
             continuation in
             self.continuation = continuation
-            continuation.onTermination = { @Sendable _ in Task { await self.disconnect() } }
+            continuation.onTermination = { @Sendable [weak self] _ in Task { await self?.disconnect() } }
         }
         try emit(.phase(.connecting))
         transportTask = Task { [weak self] in
@@ -97,9 +132,9 @@ actor CompanionHostConnection {
                     guard let self else { return }
                     try await self.consume(event)
                 }
-                await self?.finish(error: RemoteError.disconnected)
+                await self?.close(error: RemoteError.disconnected)
             } catch {
-                await self?.finish(error: error)
+                await self?.close(error: error)
             }
         }
         handshakeTimeout = Task { [weak self] in
@@ -107,8 +142,10 @@ actor CompanionHostConnection {
             catch { return }
             await self?.expireHandshake()
         }
-        reauthenticationTask = Task { [weak self] in
-            await self?.keepAuthenticationCurrent()
+        if let tokenManager {
+            reauthenticationTask = Task { [weak self] in
+                await self?.keepAuthenticationCurrent(using: tokenManager)
+            }
         }
         return stream
     }
@@ -116,7 +153,7 @@ actor CompanionHostConnection {
     /// Keeps presenting a current access token so the relay keeps extending this connection.
     /// The relay expires a connection with the token it was opened on, so without this a live
     /// session is dropped on the token's schedule no matter how much traffic is flowing.
-    private func keepAuthenticationCurrent() async {
+    private func keepAuthenticationCurrent(using tokenManager: RelayTokenManager) async {
         while !Task.isCancelled {
             let expiry = await tokenManager.accessExpiry()
             // Wake with enough margin that the refresh and the round trip both fit.
@@ -135,16 +172,23 @@ actor CompanionHostConnection {
         }
     }
 
-    func disconnect() async {
-        transportTask?.cancel()
-        transportTask = nil
-        reauthenticationTask?.cancel()
-        reauthenticationTask = nil
-        handshakeTimeout?.cancel()
-        handshakeTimeout = nil
-        if let transport { await transport.disconnect() }
+    func disconnect() async { await close(error: nil) }
+
+    private func close(error: Error?) async {
+        if let closeTask {
+            await closeTask.value
+            return
+        }
+        closing = true
+        let activeTransport = transport
         transport = nil
-        finish(error: nil)
+        finish(error: error)
+        let task = Task { [workerSlot, connectionAttempt] in
+            await activeTransport?.disconnect()
+            await workerSlot?.release(connectionAttempt)
+        }
+        closeTask = task
+        await task.value
     }
 
     func attach(_ route: TerminalRoute,
@@ -311,17 +355,45 @@ actor CompanionHostConnection {
             // connection down now would only do that sooner and for no gain.
             break
         case .application(let source, let payload):
-            guard source == hostConnectionID else { throw RemoteError.wrongPeer }
+            guard source == hostConnectionID, let transport else { throw RemoteError.wrongPeer }
             let packet = try RelayApplicationPacket.decode(payload)
-            guard case .encryptedFrame = packet else { throw RemoteError.wrongPeer }
+            guard case .encryptedFrame(let encrypted) = packet else { throw RemoteError.wrongPeer }
             if let applicationChannel {
                 try await consumeApplication(try await applicationChannel.open(payload))
+                try await transport.acknowledgeApplication(from: source)
             } else if let helloChannel {
+                if workerSlot != nil, try shouldDiscardBeforeWorkerHello(encrypted) {
+                    try await transport.discardApplication(from: source)
+                    return
+                }
                 try await consumeHello(try await helloChannel.open(payload))
+                try await transport.acknowledgeApplication(from: source)
+                try await send(.workspaceRequest(MessageMetadata(requestID: UUID(), hostID: host.hostID,
+                                                                 runtimeID: runtimeID),
+                                                 WorkspaceRequestParameters()))
+                try emit(.phase(.online))
             } else {
                 throw RemoteError.authenticationRequired
             }
         }
+    }
+
+    private func shouldDiscardBeforeWorkerHello(_ encrypted: Data) throws -> Bool {
+        let binding = try EncryptedEnvelope.decode(encrypted, relay: host.relay).binding
+        guard binding.purpose == .application else { return false }
+        guard let clientHello, binding.epoch != clientHello.generation,
+              binding.direction == .hostToClient, binding.accountID == host.accountID,
+              binding.hostID == host.hostID, binding.senderID == host.hostID,
+              binding.recipientID == identity.localDeviceID else { throw RemoteError.wrongPeer }
+
+        // Replacing a Worker socket can route earlier application ciphertext to this endpoint
+        // before the Mac answers the new challenge. The header can only justify discarding the
+        // packet. It must never supply the new channel's epoch or advance its sequence.
+        guard discardedStaleFrames < Self.maximumStaleFramesBeforeHello else {
+            throw RemoteError.messageTooLarge
+        }
+        discardedStaleFrames += 1
+        return true
     }
 
     private func beginHello(connectionID: UUID) async throws {
@@ -391,10 +463,6 @@ actor CompanionHostConnection {
         self.helloChannel = nil
         handshakeTimeout?.cancel()
         handshakeTimeout = nil
-        try emit(.phase(.online))
-        try await send(.workspaceRequest(MessageMetadata(requestID: UUID(), hostID: host.hostID,
-                                                         runtimeID: runtimeID),
-                                         WorkspaceRequestParameters()))
     }
 
     private func consumeApplication(_ message: InnerMessage) async throws {
@@ -517,9 +585,7 @@ actor CompanionHostConnection {
 
     private func expireHandshake() async {
         guard applicationChannel == nil else { return }
-        let activeTransport = transport
-        finish(error: RemoteError.timedOut)
-        await activeTransport?.disconnect()
+        await close(error: RemoteError.timedOut)
     }
 
     private func finish(error: Error?) {
@@ -547,5 +613,36 @@ actor CompanionHostConnection {
         hostConnectionID = nil
         runtimeID = nil
         hostCapabilities.removeAll()
+    }
+}
+
+
+// The Worker replaces a live socket when the same endpoint opens another one.
+actor WorkerConnectionSlot {
+    private var current: UUID?
+    private weak var connection: CompanionHostConnection?
+
+    func claim(_ candidate: UUID, connection: CompanionHostConnection) throws {
+        guard self.connection == nil else { throw WorkerConnectionError.inUse }
+        current = candidate
+        self.connection = connection
+    }
+
+    func release(_ candidate: UUID) {
+        guard current == candidate else { return }
+        current = nil
+        connection = nil
+    }
+
+    func disconnect() async {
+        await connection?.disconnect()
+    }
+}
+
+enum WorkerConnectionError: LocalizedError {
+    case inUse
+
+    var errorDescription: String? {
+        "This Mac already has a connection open on this device."
     }
 }

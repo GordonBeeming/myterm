@@ -246,6 +246,22 @@ final class TerminalExperienceTests: XCTestCase {
         view.updateUiClosed()
     }
 
+    func testViewOnlyFontChangeKeepsTheAuthoritativeGridAndAllowsHorizontalScrolling() {
+        let view = makeView()
+        view.automaticallyResizesTerminal = false
+        view.applyTerminalGeometry(columns: 80, rows: 24)
+        view.font = .monospacedSystemFont(ofSize: 22, weight: .regular)
+        view.layoutIfNeeded()
+
+        let dimensions = view.getTerminal().getDims()
+        XCTAssertEqual(dimensions.cols, 80)
+        XCTAssertEqual(dimensions.rows, 24)
+        XCTAssertGreaterThan(view.contentSize.width, view.bounds.width)
+        view.setContentOffset(CGPoint(x: 100, y: view.contentOffset.y), animated: false)
+        view.followOutput()
+        XCTAssertEqual(view.captureViewport().horizontalOffset, 100, accuracy: 1)
+    }
+
     /// The gesture only reaches a scroll view that offers itself for it, so refusing it is what
     /// keeps a following pane at the bottom. This pins the behaviour the refusal protects.
     func testAScrollToTopOnAFollowingPaneWouldHaveLostTheBottom() {

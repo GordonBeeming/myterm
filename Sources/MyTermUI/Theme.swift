@@ -21,11 +21,12 @@ public enum Theme {
     public static let textStrong = adaptiveColor(dark: 0xF1F2F4, light: 0x0B0C0E)
     public static let textPrimary = adaptiveColor(dark: 0xE6E8EB, light: 0x17181B)
     public static let textSecondary = adaptiveColor(dark: 0x9CA2AB, light: 0x5B616B)
-    public static let textTertiary = adaptiveColor(dark: 0x7F8590, light: 0x737983)
+    public static let textTertiary = adaptiveColor(dark: 0x7F8590, light: 0x626872)
     public static let textDisabled = adaptiveColor(dark: 0x4B5058, light: 0xB2B6BD)
     public static let accent = adaptiveColor(dark: 0x8EA2FF, light: 0x4257D8)
-    public static let danger = adaptiveColor(dark: 0xFF9C9C, light: 0xC2383A)
-    public static let success = adaptiveColor(dark: 0x6FD3A0, light: 0x1F8F5A)
+    public static let onAccent = adaptiveColor(dark: 0x0B0C0E, light: 0xFFFFFF)
+    public static let danger = adaptiveColor(dark: 0xFF9C9C, light: 0xB53235)
+    public static let success = adaptiveColor(dark: 0x6FD3A0, light: 0x137243)
 
     public enum Radius {
         public static let chip: CGFloat = 7

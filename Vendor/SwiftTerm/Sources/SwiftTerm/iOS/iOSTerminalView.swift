@@ -161,11 +161,11 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         }
     }
 
-    /// Controls forwarding of automatic emulator replies (device status, cursor reports,
-    /// and similar responses). User keyboard and mouse input still uses `send(data:)`.
+    /// Controls forwarding of automatic emulator replies such as device status and cursor reports.
+    /// Keyboard input and native mouse and focus reports are governed by `acceptsUserInput`.
     public var sendsTerminalResponses: Bool = true
 
-    /// Controls user-originated keyboard and mouse writes through `send(data:)`.
+    /// Controls user-originated keyboard, mouse, and focus writes.
     public var acceptsUserInput: Bool = true {
         didSet {
             if didFinishSetup && oldValue != acceptsUserInput { mouseModeChanged(source: terminal) }

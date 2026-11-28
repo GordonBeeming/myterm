@@ -27,6 +27,9 @@ final class DefaultTerminalController {
     }
 
     func makeDefault() {
+        #if MYTERM_RUST_RELEASE_REHEARSAL
+        state = .failed("Default terminal registration is unavailable in the release rehearsal.")
+        #else
         guard state != .registering else { return }
         state = .registering
         let applicationURL = Bundle.main.bundleURL
@@ -49,6 +52,7 @@ final class DefaultTerminalController {
                 state = .failed(error.localizedDescription)
             }
         }
+        #endif
     }
 
     func refresh() {

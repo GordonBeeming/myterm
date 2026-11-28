@@ -103,6 +103,7 @@ struct SceneRootView: View {
             }
             .onChange(of: services.isLoading) { _, _ in offerAutoSelect() }
             .onChange(of: services.hostStatuses) { _, _ in offerAutoSelect() }
+            .onChange(of: services.savedHosts.map(\.connectionID)) { _, _ in offerAutoSelect() }
     }
 
     @ViewBuilder
@@ -166,7 +167,8 @@ struct SceneRootView: View {
     /// still the first thing shown. Runs at most once per scene, and never over a choice already
     /// made, so it cannot pull the user off a list they are using.
     private func offerAutoSelect() {
-        guard !hasOfferedAutoSelect, !services.isLoading, scene.selectedConnectionID == nil else { return }
+        guard !hasOfferedAutoSelect, !services.isLoading, !services.savedHosts.isEmpty,
+              scene.selectedConnectionID == nil else { return }
         switch MachineAutoSelection.choice(hosts: services.savedHosts,
                                            statuses: services.hostStatuses,
                                            isStarred: services.isStarred) {
@@ -200,8 +202,15 @@ private struct HostSidebar: View {
             if services.isLoading {
                 ProgressView("Loading Macs")
             } else if services.savedHosts.isEmpty {
-                ContentUnavailableView("No paired Macs", systemImage: "desktopcomputer",
-                                       description: Text("Scan the pairing code shown by MyTerm on your Mac."))
+                ContentUnavailableView {
+                    Label("No paired Macs", systemImage: "desktopcomputer")
+                } description: {
+                    Text("Open MyTerm Settings → Companion on your Mac to get started.")
+                } actions: {
+                    Button("Add Mac") { scene.sheet = .addHost }
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("add-mac")
+                }
             } else {
                 MachineSections(services: services, scene: scene, openConnection: openConnection)
             }
@@ -222,7 +231,7 @@ private struct MachineSections: View {
         let starred = services.savedHosts.filter { services.isStarred($0.connectionID) }
         let rest = services.savedHosts.filter { !services.isStarred($0.connectionID) }
         if starred.isEmpty {
-            Section("Macs") { rows(rest) }
+            rows(rest)
         } else {
             Section("Starred") { rows(starred) }
             if !rest.isEmpty { Section("All machines") { rows(rest) } }
@@ -236,6 +245,9 @@ private struct MachineSections: View {
                 openConnection(host.connectionID)
             }
                 .tag(host.connectionID)
+                .listRowBackground(
+                    scene.selectedConnectionID == host.connectionID ? Color.accentColor.opacity(0.12) : nil
+                )
                 .contextMenu {
                     starButton(for: host)
                     Button("Manage Mac") { scene.sheet = .hostActions(host.connectionID) }
@@ -274,12 +286,11 @@ private struct MachineRow: View {
             }
             .buttonStyle(.plain)
             Spacer(minLength: 8)
-            connectionIndicator
             Button {
                 services.setStarred(!starred, for: host.connectionID)
             } label: {
                 Image(systemName: starred ? "star.fill" : "star")
-                    .foregroundStyle(starred ? AnyShapeStyle(.yellow) : AnyShapeStyle(.secondary))
+                    .foregroundStyle(Color(uiColor: .label))
                     .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
@@ -297,49 +308,44 @@ private struct MachineRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(displayName)
                     .font(.headline)
+                    .foregroundStyle(Color(uiColor: .label))
                 // Only worth a line when it differs: otherwise it repeats what is directly above.
                 if displayName != host.name {
                     Text(host.name)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Text(host.relay.canonicalOrigin)
-                    .font(.caption)
-                    .monospaced()
-                    .foregroundStyle(.secondary)
+                Text(host.relay.hostedRelay.map { "\($0.title) relay" }
+                     ?? host.relay.url.host() ?? host.relay.canonicalOrigin)
                     .lineLimit(1)
-                    .truncationMode(.head)
+                    .truncationMode(.middle)
+                    .foregroundStyle(Color(uiColor: .label).opacity(0.82))
+                    .accessibilityLabel(host.relay.canonicalOrigin)
+                if let phase {
+                    Text(phase == .online ? "Reachable" : phase.title)
+                        .foregroundStyle(Color(uiColor: .label).opacity(0.82))
+                }
             }
+            .font(.caption)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(.rect)
     }
 
-    @ViewBuilder
-    private var connectionIndicator: some View {
-        let phase = scene.selectedConnectionID == host.connectionID
+    private var phase: ConnectionPhase? {
+        scene.selectedConnectionID == host.connectionID
             ? scene.connectionPhase
             : services.hostStatuses[host.connectionID]
-        switch phase {
-        case .online: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-        case .connecting, .transportOnline, .authenticating: ProgressView().controlSize(.small)
-        case .failed:
-            if scene.selectedConnectionID == host.connectionID {
-                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-            } else {
-                Image(systemName: "circle").foregroundStyle(.secondary)
-            }
-        case .disconnected: Image(systemName: "circle").foregroundStyle(.secondary)
-        case nil: EmptyView()
-        }
     }
 }
 
-@ToolbarContentBuilder
+@MainActor @ToolbarContentBuilder
 private func machineListToolbar(services: CompanionServices, scene: SceneModel) -> some ToolbarContent {
-    ToolbarItem(placement: .primaryAction) {
-        Button("Add Mac", systemImage: "plus") { scene.sheet = .addHost }
-            .accessibilityIdentifier("add-mac")
+    if !services.savedHosts.isEmpty {
+        ToolbarItem(placement: .primaryAction) {
+            Button("Add Mac", systemImage: "plus") { scene.sheet = .addHost }
+                .accessibilityIdentifier("add-mac")
+        }
     }
     ToolbarItem(placement: .primaryAction) {
         Button("Refresh Macs", systemImage: "arrow.clockwise") {
@@ -415,10 +421,8 @@ private struct WorkspaceColumn: View {
                             }
                         }
                     }
-                    Section("Unfiled") {
-                        ForEach(projection.workspaces.filter { $0.folderID == nil }, id: \.id) {
-                            workspaceRow($0)
-                        }
+                    ForEach(projection.workspaces.filter { $0.folderID == nil }, id: \.id) {
+                        workspaceRow($0)
                     }
                 }
             } else {
@@ -437,18 +441,26 @@ private struct WorkspaceColumn: View {
             }
         }
         .toolbar {
-            Button(showsSessionInbox ? "Show workspaces" : "Show inbox",
-                   systemImage: showsSessionInbox ? "rectangle.grid.1x2" : "tray") {
-                showsSessionInbox.toggle()
-            }
-            Button("Jump to a tab", systemImage: "magnifyingglass") { showsQuickJump = true }
-                .keyboardShortcut("p", modifiers: .command)
-            if scene.connectionPhase == .online {
-                Menu("Add folder or workspace", systemImage: "plus") {
-                    Button("Add workspace", systemImage: "terminal") { Task { await create(workspace: true) } }
-                    Button("Add folder", systemImage: "folder.badge.plus") { Task { await create(workspace: false) } }
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button(showsSessionInbox ? "Show workspaces" : "Show inbox",
+                       systemImage: showsSessionInbox ? "rectangle.grid.1x2" : "tray") {
+                    showsSessionInbox.toggle()
                 }
-                .disabled(isCreating)
+                Button("Jump to a tab", systemImage: "magnifyingglass") { showsQuickJump = true }
+                    .keyboardShortcut("p", modifiers: .command)
+                if scene.connectionPhase == .online {
+                    Menu("Add folder or workspace", systemImage: "plus") {
+                        Button("Add workspace", systemImage: "terminal") { Task { await create(workspace: true) } }
+                        Button("Add folder", systemImage: "folder.badge.plus") { Task { await create(workspace: false) } }
+                    }
+                    .disabled(isCreating)
+                }
+            }
+            if horizontalSizeClass == .compact {
+                ToolbarItem(placement: .bottomBar) {
+                    Button("Settings", systemImage: "gear") { scene.sheet = .settings }
+                        .accessibilityIdentifier("open-connected-settings")
+                }
             }
         }
         .onChange(of: scene.selectedWorkspaceID) { _, workspaceID in
