@@ -718,9 +718,16 @@ final class AppModel {
         }
     }
 
+    var needsProductionRelayBeforeStable: Bool {
+        updates.installedChannel == .beta && companionHost.isLinkedToBetaRelay
+    }
+
+    static let productionRelayBeforeStableMessage = "In Companion settings, choose Production and sign in or create an account there. Pair your devices again, then switch to Stable."
+
     /// Select the release feed and surface any failure to retire the previously staged update.
     func changeUpdateChannel(_ channel: UpdateCheck.Channel) {
         guard !updates.isPreparingRestart else { return }
+        guard channel != .stable || !needsProductionRelayBeforeStable else { return }
         cancelUpdateRestart()
         updateWindow?.close()
         updateWindow = nil
@@ -735,6 +742,10 @@ final class AppModel {
     /// Stage the selected release after checking the requested stable-configuration recovery choice.
     func prepareUpdate(_ release: AppRelease) async {
         updateRestartError = nil
+        if release.channel == .stable, needsProductionRelayBeforeStable {
+            updateRestartError = Self.productionRelayBeforeStableMessage
+            return
+        }
         do {
             guard !store.isPersistenceSuspended else {
                 throw NSError(domain: "MyTermUpdate", code: 2, userInfo: [NSLocalizedDescriptionKey: "Resolve the workspace recovery error before updating."])

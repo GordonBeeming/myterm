@@ -28,8 +28,15 @@ enum CompanionRelayChoice: Hashable, CaseIterable {
         switch (channel, release) {
         case (.development, _): [.development, .beta, .production, .selfHosted, .setupLink]
         case (.production, .beta): [.beta, .production, .selfHosted, .setupLink]
-        case (.production, .stable): [.production, .beta, .selfHosted, .setupLink]
+        case (.production, .stable): [.production, .selfHosted, .setupLink]
         }
+    }
+
+    static func unavailableMessage(for endpoint: RelayEndpoint, channel: MyTermChannel,
+                                   release: UpdateCheck.Channel) -> String? {
+        guard let hosted = endpoint.hostedRelay,
+              !choices(channel: channel, release: release).contains(where: { $0.origin == hosted.origin }) else { return nil }
+        return "The \(hosted.title) relay is unavailable on this release channel. Choose a relay listed in Companion settings."
     }
 
     static func initial(savedAddress: String, choices: [Self]) -> Self {

@@ -9,18 +9,20 @@ final class CompanionRelayChoiceTests: XCTestCase {
         let beta = CompanionRelayChoice.choices(channel: .production, release: .beta)
         let production = CompanionRelayChoice.choices(channel: .production, release: .stable)
 
-        XCTAssertEqual(development.first, .development)
-        XCTAssertEqual(beta.first, .beta)
-        XCTAssertEqual(production.first, .production)
-        XCTAssertTrue(beta.contains(.production))
-        XCTAssertTrue(production.contains(.beta))
-        for choices in [beta, production] {
-            XCTAssertFalse(choices.contains(.development))
-        }
-        for choices in [development, beta, production] {
-            XCTAssertTrue(choices.contains(.selfHosted))
-            XCTAssertTrue(choices.contains(.setupLink))
-        }
+        XCTAssertEqual(development, [.development, .beta, .production, .selfHosted, .setupLink])
+        XCTAssertEqual(beta, [.beta, .production, .selfHosted, .setupLink])
+        XCTAssertEqual(production, [.production, .selfHosted, .setupLink])
+    }
+
+    func testTypedHostedEndpointsFollowTheSameChannelPolicy() throws {
+        let beta = try RelayEndpoint(XCTUnwrap(URL(string: "https://MYTERM-RELAY-BETA.gordonbeeming.dev:443/")))
+        let development = try RelayEndpoint(XCTUnwrap(URL(string: MyTermHostedRelay.development.origin)))
+        let custom = try RelayEndpoint(XCTUnwrap(URL(string: "https://relay.example.com:8443")))
+        XCTAssertNotNil(CompanionRelayChoice.unavailableMessage(for: beta, channel: .production, release: .stable))
+        XCTAssertNil(CompanionRelayChoice.unavailableMessage(for: beta, channel: .production, release: .beta))
+        XCTAssertNil(CompanionRelayChoice.unavailableMessage(for: beta, channel: .development, release: .stable))
+        XCTAssertNotNil(CompanionRelayChoice.unavailableMessage(for: development, channel: .production, release: .beta))
+        XCTAssertNil(CompanionRelayChoice.unavailableMessage(for: custom, channel: .production, release: .stable))
     }
 
     func testSavedOriginTakesPrecedenceOverTheInstalledChannel() {

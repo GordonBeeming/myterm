@@ -358,6 +358,10 @@ final class CompanionHostModel {
         Task { await connectConfiguredRelay() }
     }
 
+    var isLinkedToBetaRelay: Bool {
+        hasLinkedRelay && (try? configuredEndpoint())?.hostedRelay == .beta
+    }
+
     func disconnect() {
         cancelPairing()
         configuration.connectionEnabled = false
@@ -728,6 +732,12 @@ final class CompanionHostModel {
             }
             stage = .relayEndpoint
             let endpoint = try enrollment?.endpoint ?? configuredEndpoint(address: relayAddress)
+            if let message = CompanionRelayChoice.unavailableMessage(for: endpoint, channel: channel,
+                                                                     release: Bundle.main.releaseChannel) {
+                if keepsCurrentRelayDuringSignIn { presentSignInNotice(message) }
+                else { status = .failed(message) }
+                return
+            }
             let workerClient = makeWorkerClient(endpoint)
             let useWorker: Bool
             if discoverProtocol || registerWorkerAccount {
@@ -977,6 +987,11 @@ final class CompanionHostModel {
         do {
             status = .connecting
             let endpoint = try configuredEndpoint()
+            if let message = CompanionRelayChoice.unavailableMessage(for: endpoint, channel: channel,
+                                                                     release: Bundle.main.releaseChannel) {
+                status = .failed(message)
+                return
+            }
             let savedReference: CompanionAuthReference?
             do { savedReference = try configuration.loadAuthReference() }
             catch let error as RemoteError where error == .invalidResponse || error == .wrongPeer {

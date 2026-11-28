@@ -25,6 +25,7 @@ struct SettingsView: View {
     @State private var section: SettingsSection = .general
     @State private var scopeWorkspaceID: WorkspaceID?
     @State private var scopeFolderID: WorkspaceFolderID?
+    @State private var showingProductionRelayRequirement = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -252,13 +253,25 @@ struct SettingsView: View {
             SettingsCard("Updates") {
                 Picker("Release channel", selection: Binding(
                     get: { model.updates.selectedChannel },
-                    set: { model.changeUpdateChannel($0) }
+                    set: { channel in
+                        if channel == .stable, model.needsProductionRelayBeforeStable {
+                            showingProductionRelayRequirement = true
+                        } else {
+                            model.changeUpdateChannel(channel)
+                        }
+                    }
                 )) {
                     ForEach(UpdateCheck.Channel.allCases, id: \.self) { channel in
                         Text(channel.title).tag(channel)
                     }
                 }
                 .disabled(model.updates.installation == .running || model.updates.isPreparingRestart)
+                .alert("Move to the Production relay first", isPresented: $showingProductionRelayRequirement) {
+                    Button("Companion Settings") { section = .companion }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text(AppModel.productionRelayBeforeStableMessage)
+                }
 
                 Toggle("Check for updates automatically", isOn: Binding(
                     get: { model.updates.automaticallyChecks },

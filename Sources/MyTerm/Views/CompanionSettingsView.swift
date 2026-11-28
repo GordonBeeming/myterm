@@ -53,12 +53,24 @@ struct CompanionSettingsView: View {
     }
 
     private var canSubmit: Bool {
-        guard !connectionInProgress, !connectionInput.isEmpty else { return false }
+        guard !connectionInProgress, !connectionInput.isEmpty, unavailableRelayMessage == nil else { return false }
         if selectedRelay == .selfHosted {
             guard let url = URL(string: connectionInput) else { return false }
             return (try? RelayEndpoint(url)) != nil
         }
         return true
+    }
+
+    private var unavailableRelayMessage: String? {
+        let endpoint: RelayEndpoint?
+        if selectedRelay == .setupLink {
+            endpoint = try? CompanionHostModel.parseBootstrapLink(connectionInput).endpoint
+        } else {
+            endpoint = URL(string: connectionInput).flatMap { try? RelayEndpoint($0) }
+        }
+        guard let endpoint else { return nil }
+        return CompanionRelayChoice.unavailableMessage(for: endpoint, channel: companion.channel,
+                                                       release: Bundle.main.releaseChannel)
     }
 
     private var availableWorkerRelay: Bool {
@@ -111,6 +123,9 @@ struct CompanionSettingsView: View {
                         }
                     }
 
+                    if let unavailableRelayMessage {
+                        Text(unavailableRelayMessage).font(Theme.Font.ui(12)).foregroundStyle(.red)
+                    }
                     Button(companion.isSigningIn ? "Waiting for sign-in…" : companion.status == .connecting ? "Connecting…" : selectedRelay == .setupLink ? "Open setup link" : "Sign in") {
                         if selectedRelay == .setupLink {
                             companion.signIn(bootstrapURLText: connectionInput, discoverProtocol: true)
@@ -257,7 +272,7 @@ struct CompanionSettingsView: View {
         .task(id: showsLinkForm ? RelayDiscovery(choice: selectedRelay, address: connectionInput) : nil) {
             let choice = selectedRelay
             let address = connectionInput
-            guard showsLinkForm, choice != .setupLink,
+            guard showsLinkForm, choice != .setupLink, unavailableRelayMessage == nil,
                   let url = URL(string: address), let endpoint = try? RelayEndpoint(url) else { return }
             do {
                 if choice == .selfHosted { try await Task.sleep(for: .milliseconds(600)) }
