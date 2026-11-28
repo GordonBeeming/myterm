@@ -28,6 +28,11 @@ def release(draft=False, assets=None, batch=None):
 
 
 class BetaReleaseTests(unittest.TestCase):
+    def test_new_beta_series_keeps_legacy_snapshot_versions(self):
+        for count, version in ((138, "0.0.138"), (139, "0.1.0"), (140, "0.1.1")):
+            with self.subTest(count=count), patch.object(beta_release, "git", return_value=str(count)):
+                self.assertEqual(beta_release.beta_version(SHA), version)
+
     def test_dispatch_accepts_the_api_no_content_response(self):
         """Workflow dispatch returns HTTP 204 rather than the JSON used by other endpoints."""
         response = MagicMock()

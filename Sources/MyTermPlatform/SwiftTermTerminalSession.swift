@@ -81,6 +81,8 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
     private var persistentConnection: PersistentTerminalConnection?
     #if DEBUG || MYTERM_RUST_WORKSPACES
     private var rustWorkspace: (backend: LocalRustWorkspaceBackend, paneID: UUID)?
+    private enum RustStartup { case restore, reattach, replace }
+    private var rustStartupRetry: RustStartup?
     public private(set) var rustRecovery: LocalRustWorkspaceRecovery?
     private var rustConnection: LocalRustTerminalConnection?
     private var rustShellPID: pid_t?
@@ -215,9 +217,8 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
     public func start() throws {
         guard !isRunning, persistentStartTask == nil else { return }
         #if DEBUG || MYTERM_RUST_WORKSPACES
-        if let rustWorkspace, let selection = try rustWorkspace.backend.selection(paneID: rustWorkspace.paneID) {
-            rustClientID = selection.clientID
-            rustRecovery?.action = .reattach
+        if rustWorkspace != nil {
+            try retireLegacyWorkspaceHost(then: .restore)
             return
         }
         #endif
@@ -363,6 +364,62 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
     }
 
     #if DEBUG || MYTERM_RUST_WORKSPACES
+    private func startRustWorkspace(_ startup: RustStartup) throws {
+        guard let rustWorkspace else { return }
+        switch startup {
+        case .restore:
+            if let selection = try rustWorkspace.backend.selection(paneID: rustWorkspace.paneID) {
+                rustClientID = selection.clientID
+                rustRecovery?.action = .reattach
+            } else {
+                try startNewProcess(runInitialCommand: true)
+            }
+        case .reattach:
+            guard let selection = try rustWorkspace.backend.selection(paneID: rustWorkspace.paneID) else {
+                throw LocalRustTerminalError.missingSession
+            }
+            startRustAttachment(selection: selection, launch: nil, startupFailure: nil, runInitialCommand: false)
+        case .replace:
+            try startNewProcess(runInitialCommand: false)
+        }
+        rustStartupRetry = nil
+    }
+
+    /// Retire this pane's authenticated legacy helper before a Rust shell can resume its agent.
+    private func retireLegacyWorkspaceHost(then startup: RustStartup) throws {
+        guard let identifier = configuration.continuityIdentifier,
+              let directory = configuration.continuityDirectory else {
+            try startRustWorkspace(startup)
+            return
+        }
+        let socket = PersistentTerminalConnection.socketDirectory(namespace: directory)
+            .appendingPathComponent(identifier.uuidString + ".sock")
+        guard FileManager.default.fileExists(atPath: socket.path) else {
+            try startRustWorkspace(startup)
+            return
+        }
+        pendingStartDisposition = .attach
+        terminal.setConnectionPending(true)
+        persistentStartTask = Task { @MainActor in
+            let result = await PersistentTerminalConnection.stopExistingAsync(identifier: identifier, namespace: directory,
+                environment: configuration.environment, helperURL: configuration.continuityHelperURL)
+            persistentStartTask = nil
+            terminal.setConnectionPending(false)
+            if pendingStartDisposition == .stop, let rustWorkspace {
+                stopRustWorkspace(rustWorkspace)
+            }
+            guard pendingStartDisposition == .attach else { return }
+            if case .failure(let error) = result {
+                rustStartupRetry = startup
+                rustRecovery?.action = .retryStartup
+                onEvent?(.failed(TerminalSessionFailure(message: "Could not stop the previous terminal session. \(error.localizedDescription)")))
+                return
+            }
+            do { try startRustWorkspace(startup) }
+            catch { onEvent?(.failed(TerminalSessionFailure(message: error.localizedDescription))) }
+        }
+    }
+
     func useRustWorkspaceBackend(_ backend: LocalRustWorkspaceBackend, paneID: UUID) {
         rustWorkspace = (backend, paneID)
         rustRecovery = LocalRustWorkspaceRecovery()
@@ -387,12 +444,12 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         do {
             switch action {
             case .reattach:
-                guard let selection = try rustWorkspace.backend.selection(paneID: rustWorkspace.paneID) else {
-                    throw LocalRustTerminalError.missingSession
-                }
-                startRustAttachment(selection: selection, launch: nil, startupFailure: nil, runInitialCommand: false)
+                try retireLegacyWorkspaceHost(then: .reattach)
             case .startNewShell:
-                try startNewProcess(runInitialCommand: false)
+                try retireLegacyWorkspaceHost(then: .replace)
+            case .retryStartup:
+                guard let rustStartupRetry else { return }
+                try retireLegacyWorkspaceHost(then: rustStartupRetry)
             case .takeControl:
                 guard let rustController, let rustConnection else { return }
                 try rustConnection.takeWorkspaceControl(observed: rustController)

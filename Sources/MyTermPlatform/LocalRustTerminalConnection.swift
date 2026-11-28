@@ -26,6 +26,8 @@ enum LocalRustTerminalError: LocalizedError {
 
 struct LocalRustTerminalEndpoint: Sendable {
     static let executableName = "myterm-local-terminal"
+    // The updater verifies the bundled filename. Use the readable name for the running copy.
+    private static let installedExecutableName = "MyTerm Terminal Server"
     static var appIdentifier: String {
         #if MYTERM_RUST_RELEASE_REHEARSAL
         "com.gordonbeeming.myterm.rust-rehearsal"
@@ -104,7 +106,7 @@ struct LocalRustTerminalEndpoint: Sendable {
         try SessionHostSocket.prepareDirectory(namespace)
         let executable = try SessionHostInstallation.stableHelper(
             for: bundledExecutable, namespace: namespace, verifier: verifier,
-            directoryName: "rust-terminal-servers", executableName: Self.executableName)
+            directoryName: "rust-terminal-servers", executableName: Self.installedExecutableName)
         let domain = "gui/\(getuid())"
         let service = "\(domain)/\(serviceLabel)"
         let plist = socketDirectory.appendingPathComponent("service.plist")

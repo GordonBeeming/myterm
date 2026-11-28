@@ -32,6 +32,20 @@ final class AppVersionTests: XCTestCase {
 }
 
 final class UpdateCheckTests: XCTestCase {
+    func testLegacyBetaOffersFirstBetaInNewVersionSeries() throws {
+        let data = Data("""
+        [{"tag_name":"v0.0.138-beta","draft":false,"prerelease":true,
+          "html_url":"https://github.com/GordonBeeming/myterm/releases/tag/v0.0.138-beta",
+          "assets":[{"name":"myterm-0.0.138-aarch64.dmg"}]},
+         {"tag_name":"v0.1.0-beta","draft":false,"prerelease":true,
+          "html_url":"https://github.com/GordonBeeming/myterm/releases/tag/v0.1.0-beta",
+          "assets":[{"name":"myterm-0.1.0-aarch64.dmg"}]}]
+        """.utf8)
+        let result = try UpdateCheck.availability(currentVersion: "0.0.138", latestReleaseJSON: data,
+                                                  channel: .beta, installedChannel: .beta)
+        XCTAssertEqual(result.release?.version, AppVersion("0.1.0"))
+    }
+
     /// The native installer requires both an immutable download URL and GitHub's digest.
     func testDigestlessBetaAssetHasNoVerifiedDownloadDescriptor() throws {
         let data = Data("""

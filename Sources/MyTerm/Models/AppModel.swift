@@ -704,6 +704,11 @@ final class AppModel {
     /// a check the user asked for always answers, including when there is nothing to report.
     func checkForUpdates() {
         Task { @MainActor in
+            if let updateWindow {
+                updateWindow.makeKeyAndOrderFront(nil)
+                await updates.check()
+                return
+            }
             switch await updates.check() {
             case .available(let release): presentUpdateAvailable(release)
             case .upToDate(let version): presentUpToDate(version)

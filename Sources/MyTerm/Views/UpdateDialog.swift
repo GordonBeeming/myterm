@@ -4,109 +4,74 @@ import MyTermCore
 /// A model-owned window keeps installation and a scheduled restart alive when other windows close.
 struct UpdateDialog: View {
     let model: AppModel
-    let release: AppRelease
     let close: () -> Void
+    @State private var release: AppRelease?
     @State private var advanced = false
 
+    init(model: AppModel, release: AppRelease, close: @escaping () -> Void) {
+        self.model = model
+        self.close = close
+        _release = State(initialValue: release)
+    }
+
     private var updates: UpdateController { model.updates }
-    private var installation: UpdateController.Installation { updates.installation(for: release) }
+    private var installation: UpdateController.Installation { release.map { updates.installation(for: $0) } ?? .ready }
+    private var isChecking: Bool { updates.status == .checking }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Label("Update available — \(AppBuildDisplay.version(release.version.description, channel: release.channel))", systemImage: "arrow.down.circle")
-                    .font(.title2)
-                Text("You’re running \(AppBuildDisplay.installed(updates.currentVersion, channel: updates.installedChannel, build: Bundle.main.buildVersionString)). The \(release.channel.title) update is verified before installation.")
-                    .foregroundStyle(.secondary)
-
-                installationStatus
-                if updates.isPreparingRestart { ProgressView("Verifying update before restart…") }
-
-                if updates.needsStableConfigurationChoice {
-                    Picker("When returning to stable", selection: Binding(
-                        get: { updates.stableConfigurationChoice }, set: { updates.stableConfigurationChoice = $0 }
-                    )) {
-                        Text("Restore last stable configuration").tag(ChannelConfigurationStore.StableChoice.restoreStable)
-                            .disabled(!updates.hasStableConfiguration)
-                        Text("Try current beta configuration").tag(ChannelConfigurationStore.StableChoice.tryBeta)
-                    }
-                    .disabled(installation == .running)
-                    if updates.hasStableConfiguration {
-                        Text("If stable cannot load the beta configuration, it restores your last stable snapshot and explains what happened. The beta configuration is preserved as a backup.")
-                            .font(.callout).foregroundStyle(.secondary)
-                    }
-                    if !updates.hasStableConfiguration {
-                        Text("This beta installation has no stable snapshot. The incoming stable app must be able to read the current configuration before installation; automatic fallback to a previous stable configuration is unavailable.")
-                            .foregroundStyle(.orange)
-                    }
-                }
-
-                DisclosureGroup("Advanced", isExpanded: $advanced) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Restart when every hook-connected agent has finished its turn. Agents waiting for input keep the restart paused. Agents without hooks cannot report whether they’re idle.")
-                            .font(.callout).foregroundStyle(.secondary)
-                        let count = model.updateRestartBlockingAgentCount
-                        Text("\(count) \(count == 1 ? "agent" : "agents") still working or waiting for input.")
-                        if let warning = model.updateRestartRecoveryWarning {
-                            Text(warning).foregroundStyle(.orange)
-                        }
-                        if installation == .installed {
-                            Button(model.waitsToRestartAfterUpdate ? "Cancel Scheduled Restart" : "Restart When Agents Are Idle") {
-                                if model.waitsToRestartAfterUpdate { model.cancelUpdateRestart() }
-                                else { model.waitToRestartAfterUpdate() }
-                            }
-                            .disabled(!model.waitsToRestartAfterUpdate && model.updateRestartRecoveryWarning != nil)
-                        }
-                        if !updates.installationOutput.isEmpty {
-                            ScrollView {
-                                Text(updates.installationOutput)
-                                    .font(.system(.caption, design: .monospaced))
-                                    .textSelection(.enabled)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .frame(height: 180)
-                            .padding(8)
-                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
-                            .accessibilityLabel("Update log")
-                        }
-                    }.padding(.top, 8)
-                }
-                if installation == .installed, let warning = model.updateRestartRecoveryWarning {
-                    Text(warning).font(.callout).foregroundStyle(.orange)
-                }
-                if let error = model.updateRestartError {
-                    Text(error).foregroundStyle(.red).textSelection(.enabled)
-                }
-                if installation != .installed, updates.canRestartAfterUpdate,
-                   let installed = updates.verifiedInstalledVersion {
-                    HStack {
-                        Text("Version \(AppBuildDisplay.version(installed.description, channel: updates.stagedUpdate?.channel ?? updates.installedChannel)) is ready to restart.").font(.callout)
-                        Button("Restart Installed Update") { model.restartAfterUpdate() }
-                    }
-                }
-                HStack {
-                    Link("Release Notes", destination: release.releaseURL)
-                    if installation != .installed {
-                        Button("Skip This Version") {
-                            updates.skip(release)
-                            close()
-                        }
-                        .disabled(installation == .running)
+                HStack(alignment: .firstTextBaseline) {
+                    if let release {
+                        Label("Update available — \(AppBuildDisplay.version(release.version.description, channel: release.channel))", systemImage: "arrow.down.circle")
+                            .font(.title2)
+                    } else if case .upToDate = updates.status {
+                        Label("myterm is up to date", systemImage: "checkmark.circle")
+                            .font(.title2)
+                    } else {
+                        Text("Check for updates").font(.title2)
                     }
                     Spacer()
-                    Button("Later", action: close)
+                    if installation != .running, !updates.canRestartAfterUpdate, !updates.isPreparingRestart {
+                        Button(isChecking ? "Checking…" : "Check Again") {
+                            Task { await updates.check() }
+                        }
+                        .disabled(isChecking)
+                        .fixedSize()
+                    }
+                }
+                Text("You’re running \(AppBuildDisplay.installed(updates.currentVersion, channel: updates.installedChannel, build: Bundle.main.buildVersionString)).")
+                    .foregroundStyle(.secondary)
+                if case .failed(let reason) = updates.status {
+                    Text(reason).foregroundStyle(.red).textSelection(.enabled)
+                }
+
+                if release != nil { releaseDetails }
+                HStack {
+                    if let release {
+                        Link("Release Notes", destination: release.releaseURL)
+                        if installation != .installed {
+                            Button("Skip This Version") {
+                                updates.skip(release)
+                                close()
+                            }
+                            .disabled(installation == .running || isChecking)
+                        }
+                    }
+                    Spacer()
+                    Button(release == nil ? "Close" : "Later", action: close)
                         .keyboardShortcut(.cancelAction)
                         .disabled(installation == .running || model.waitsToRestartAfterUpdate || updates.isPreparingRestart)
                     if installation == .installed {
                         Button("Restart Now") { model.restartAfterUpdate() }
                             .keyboardShortcut(.defaultAction)
                             .disabled(updates.isPreparingRestart)
-                    } else {
+                    } else if let release {
                         Button(installation == .ready ? "Update Now" : "Try Again") {
                             Task { await model.prepareUpdate(release) }
                         }
                         .keyboardShortcut(.defaultAction)
-                        .disabled(installation == .running || (updates.needsStableConfigurationChoice && updates.stableConfigurationChoice == .restoreStable && !updates.hasStableConfiguration))
+                        .disabled(isChecking || installation == .running || (updates.needsStableConfigurationChoice && updates.stableConfigurationChoice == .restoreStable && !updates.hasStableConfiguration))
                     }
                 }
             }
@@ -114,12 +79,88 @@ struct UpdateDialog: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(minWidth: 568, minHeight: 300)
+        .onChange(of: updates.status) { _, status in
+            guard installation != .running, !updates.canRestartAfterUpdate else { return }
+            switch status {
+            case .available(let latest): release = latest
+            case .upToDate: release = nil
+            case .idle, .checking, .failed: break
+            }
+        }
+    }
+
+    @ViewBuilder private var releaseDetails: some View {
+        installationStatus
+        if updates.isPreparingRestart { ProgressView("Verifying update before restart…") }
+
+        if updates.needsStableConfigurationChoice {
+            Picker("When returning to stable", selection: Binding(
+                get: { updates.stableConfigurationChoice }, set: { updates.stableConfigurationChoice = $0 }
+            )) {
+                Text("Restore last stable configuration").tag(ChannelConfigurationStore.StableChoice.restoreStable)
+                    .disabled(!updates.hasStableConfiguration)
+                Text("Try current beta configuration").tag(ChannelConfigurationStore.StableChoice.tryBeta)
+            }
+            .disabled(installation == .running)
+            if updates.hasStableConfiguration {
+                Text("If stable cannot load the beta configuration, it restores your last stable snapshot and explains what happened. The beta configuration is preserved as a backup.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            if !updates.hasStableConfiguration {
+                Text("This beta installation has no stable snapshot. The incoming stable app must be able to read the current configuration before installation; automatic fallback to a previous stable configuration is unavailable.")
+                    .foregroundStyle(.orange)
+            }
+        }
+
+        DisclosureGroup("Advanced", isExpanded: $advanced) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Restart when every hook-connected agent has finished its turn. Agents waiting for input keep the restart paused. Agents without hooks cannot report whether they’re idle.")
+                    .font(.callout).foregroundStyle(.secondary)
+                let count = model.updateRestartBlockingAgentCount
+                Text("\(count) \(count == 1 ? "agent" : "agents") still working or waiting for input.")
+                if let warning = model.updateRestartRecoveryWarning {
+                    Text(warning).foregroundStyle(.orange)
+                }
+                if installation == .installed {
+                    Button(model.waitsToRestartAfterUpdate ? "Cancel Scheduled Restart" : "Restart When Agents Are Idle") {
+                        if model.waitsToRestartAfterUpdate { model.cancelUpdateRestart() }
+                        else { model.waitToRestartAfterUpdate() }
+                    }
+                    .disabled(!model.waitsToRestartAfterUpdate && model.updateRestartRecoveryWarning != nil)
+                }
+                if !updates.installationOutput.isEmpty {
+                    ScrollView {
+                        Text(updates.installationOutput)
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(height: 180)
+                    .padding(8)
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+                    .accessibilityLabel("Update log")
+                }
+            }.padding(.top, 8)
+        }
+        if installation == .installed, let warning = model.updateRestartRecoveryWarning {
+            Text(warning).font(.callout).foregroundStyle(.orange)
+        }
+        if let error = model.updateRestartError {
+            Text(error).foregroundStyle(.red).textSelection(.enabled)
+        }
+        if installation != .installed, updates.canRestartAfterUpdate,
+           let installed = updates.verifiedInstalledVersion {
+            HStack {
+                Text("Version \(AppBuildDisplay.version(installed.description, channel: updates.stagedUpdate?.channel ?? updates.installedChannel)) is ready to restart.").font(.callout)
+                Button("Restart Installed Update") { model.restartAfterUpdate() }
+            }
+        }
     }
 
     @ViewBuilder private var installationStatus: some View {
         switch installation {
         case .ready:
-            Text("Your workspace is saved before restart. Persistent terminal sessions keep running and reconnect after the update.")
+            Text("Your workspace is saved before restart. Check the release notes for changes that affect running terminals.")
                 .font(.callout)
         case .running:
             HStack {
@@ -134,7 +175,7 @@ struct UpdateDialog: View {
             if model.waitsToRestartAfterUpdate {
                 Text("Waiting for agents to finish. You can keep using myterm, cancel the scheduled restart, or restart now.")
             } else {
-                Text("The verified update is applied after myterm quits. Persistent terminals continue running while the app restarts.")
+                Text("The verified update is applied after myterm quits.")
                     .font(.callout).foregroundStyle(.secondary)
             }
         case .failed(let reason):
