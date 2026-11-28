@@ -717,6 +717,9 @@ final class CompanionHostModel {
                 useWorker = usesWorkerRelay
             }
             if registerWorkerAccount && !useWorker { throw RemoteError.unsupportedVersion }
+            #if !DEBUG && !MYTERM_RUST_WORKSPACES
+            if useWorker { throw RemoteError.unsupportedVersion }
+            #endif
             try Task.checkCancellation()
             let redirectScheme = channel.authenticationCallbackScheme
             stage = .callbackConfiguration
@@ -825,6 +828,7 @@ final class CompanionHostModel {
     }
 
     private func linkWorkerRelay(client: CloudflareRelayClient, session: CloudflareRelayClient.Session) async throws {
+        #if DEBUG || MYTERM_RUST_WORKSPACES
         guard let executable = LocalRustWorkspaceTerminalEngine.bundledExecutable else {
             throw AccountEnrollmentError.localAuthorityFailed
         }
@@ -870,6 +874,9 @@ final class CompanionHostModel {
         signInRecovery = nil
         clearSignInNotice()
         installWorkerConnection(prepared, reference: reference, generation: connectionFence.begin())
+        #else
+        throw RemoteError.unsupportedVersion
+        #endif
     }
 
     private func prepareWorkerConnection(link: CompanionWorkerLink, identity: CompanionHostIdentity) async throws
