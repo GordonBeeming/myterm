@@ -74,6 +74,7 @@ pub(super) fn signing_key(path: &Path, create: bool) -> Result<SigningKey> {
             .as_slice()
             .try_into()
             .map_err(|_| Error::InvalidArtifact)?;
+        File::open(path.parent().ok_or(Error::UnsafeStateDirectory)?)?.sync_all()?;
         Ok(SigningKey::from_bytes(seed))
     }
 

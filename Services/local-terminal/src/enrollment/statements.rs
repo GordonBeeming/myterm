@@ -306,11 +306,14 @@ impl EnrollmentRequest {
     }
 
     fn validate(&self) -> Result<()> {
-        if !valid_id(&self.credential, 64)
-            || self.name.trim().is_empty()
-            || self.name.len() > 160
-            || self.name.chars().any(char::is_control)
-        {
+        if !valid_id(&self.credential, 64) {
+            return Err(Error::InvalidArtifact);
+        }
+        Self::validate_name(&self.name)
+    }
+
+    pub(super) fn validate_name(name: &str) -> Result<()> {
+        if name.trim().is_empty() || name.len() > 160 || name.chars().any(char::is_control) {
             return Err(Error::InvalidArtifact);
         }
         Ok(())

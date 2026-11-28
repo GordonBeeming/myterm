@@ -221,6 +221,7 @@ fn prepare_server(input: ProvisioningInput, directory: &Path) -> Result<Provisio
     if SigningIdentity::from_key(&holder) != credential.holder {
         return Err(Error::InvalidCredential);
     }
+    EnrollmentRequest::validate_name(&input.name)?;
     prepare_state_directory(directory)?;
     let server_path = directory.join("prepared-server.json");
     let binding_path = directory.join("provisioned-account.json");

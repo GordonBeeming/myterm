@@ -292,15 +292,29 @@ impl Authority {
                 )?;
                 let request_digest = enrollment.digest::<EnrollmentRequest>()?;
                 if let Some(existing) = admission_retry(&tx, &server, &request_digest)? {
+                    save_operation(&tx, &actor, &request.operation, &digest, &existing)?;
+                    tx.commit()?;
                     return Ok(existing);
                 }
-                let recorded: bool = tx.query_row(
-                    "SELECT EXISTS(SELECT 1 FROM credentials WHERE id = ?1)",
+                let (allocated, issuance): (Option<String>, Vec<u8>) = tx.query_row(
+                    "SELECT credentials.allocated, events.receipt FROM credentials \
+                     JOIN events ON events.sequence = credentials.issue_sequence WHERE credentials.id = ?1",
                     [&proposed.credential],
-                    |row| row.get(0),
-                )?;
-                if !recorded {
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                ).optional()?.ok_or(Error::InvalidCredential)?;
+                let issue: MembershipEvent =
+                    unpack(issuance)?.verify(&self.signer.verifying_key())?;
+                let MembershipOperation::Issue(credential) = issue.change else {
                     return Err(Error::InvalidCredential);
+                };
+                if allocated.is_some() {
+                    return Err(Error::CredentialConsumed);
+                }
+                if credential.mode == CredentialMode::SingleUse {
+                    tx.execute(
+                        "UPDATE credentials SET allocated = ?1 WHERE id = ?2",
+                        params![server, proposed.credential],
+                    )?;
                 }
                 admit(
                     &tx,

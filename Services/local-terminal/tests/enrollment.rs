@@ -1,7 +1,7 @@
 use ed25519_dalek::SigningKey;
 use myterm_local_terminal::enrollment::{
     AccountGenesis, Authority, CredentialMode, EnrollmentRequest, Error, HolderProof,
-    IssueCredential, Signed, SigningIdentity,
+    IssueCredential, ManagementRequest, MembershipOperation, Signed, SigningIdentity,
 };
 use rand::rngs::OsRng;
 
@@ -97,10 +97,82 @@ fn single_use_redemption_is_bound_to_one_identity_and_retries_after_restart() {
 }
 
 #[test]
-fn saturated_deployment_can_be_revoked_and_another_deployment_can_enroll() {
-    use myterm_local_terminal::enrollment::{
-        ManagementRequest, MembershipEvent, MembershipOperation,
+fn fresh_approval_consumes_a_single_use_credential_and_records_the_retry() {
+    let path = tempfile::tempdir().unwrap();
+    let directory = path.path().join("authority");
+    let first_client = SigningKey::generate(&mut OsRng);
+    let authority_signer = SigningKey::generate(&mut OsRng);
+    let holder = SigningKey::generate(&mut OsRng);
+    let genesis = Signed::sign(
+        &first_client,
+        &AccountGenesis::new(&first_client, &authority_signer, &mut OsRng),
+    )
+    .unwrap();
+    let account = AccountGenesis::anchor(&genesis).unwrap();
+    let mut authority =
+        Authority::open(&directory, &genesis, account.clone(), &authority_signer).unwrap();
+    let client = SigningIdentity::from_key(&first_client);
+    let issued = Signed::sign(
+        &first_client,
+        &IssueCredential {
+            account: account.clone(),
+            operation: "1".repeat(32),
+            creator: client.clone(),
+            holder: SigningIdentity::from_key(&holder),
+            mode: CredentialMode::SingleUse,
+            lifetime_seconds: None,
+        },
+    )
+    .unwrap();
+    let credential = authority.issue(&issued).unwrap();
+    let create_enrollment = || {
+        let server = SigningKey::generate(&mut OsRng);
+        let request = EnrollmentRequest::new(
+            account.clone(),
+            &credential,
+            &authority_signer.verifying_key(),
+            &server,
+            "Build server".into(),
+            false,
+        )
+        .unwrap();
+        Signed::sign(&server, &request).unwrap()
     };
+    let approval = |operation: String, enrollment: Signed| {
+        Signed::sign(
+            &first_client,
+            &ManagementRequest {
+                account: account.clone(),
+                operation,
+                actor: client.clone(),
+                change: MembershipOperation::FreshApprove(enrollment),
+            },
+        )
+        .unwrap()
+    };
+    let enrolled = create_enrollment();
+    let receipt = authority
+        .manage(&approval("2".repeat(32), enrolled.clone()))
+        .unwrap();
+    assert_eq!(
+        authority
+            .manage(&approval("3".repeat(32), enrolled))
+            .unwrap(),
+        receipt
+    );
+    assert!(matches!(
+        authority.manage(&approval("3".repeat(32), create_enrollment())),
+        Err(Error::IdentityConflict)
+    ));
+    assert!(matches!(
+        authority.manage(&approval("4".repeat(32), create_enrollment())),
+        Err(Error::CredentialConsumed)
+    ));
+}
+
+#[test]
+fn saturated_deployment_can_be_revoked_and_another_deployment_can_enroll() {
+    use myterm_local_terminal::enrollment::MembershipEvent;
     let started = std::time::Instant::now();
     let path = tempfile::tempdir().unwrap();
     let directory = path.path().join("authority");

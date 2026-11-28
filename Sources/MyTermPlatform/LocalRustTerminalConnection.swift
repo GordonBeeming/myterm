@@ -294,6 +294,7 @@ final class LocalRustTerminalConnection: Sendable {
             let initialControl = try Self.controller(control)
             let checkpoint = ready.count == 9 ? try connection.readCheckpoint() : nil
             try connection.clearTimeout(SO_RCVTIMEO)
+            try connection.clearTimeout(SO_SNDTIMEO)
             return WorkspaceAttachment(shellPID: shellPID, control: initialControl, checkpoint: checkpoint)
         }
     }
