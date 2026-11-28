@@ -26,8 +26,8 @@ type Socket = {
 
 type Challenge = { endpoint_id: string; purpose: string; expires_at: number };
 type ConnectTicket = { endpoint_id: string; expires_at: number };
-export type EndpointPurpose = "genesis" | "admit" | "connect" | "relay-setting";
-export const purposes = new Set<EndpointPurpose>(["genesis", "admit", "connect", "relay-setting"]);
+export type EndpointPurpose = "genesis" | "admit" | "revoke" | "connect" | "relay-setting";
+export const purposes = new Set<EndpointPurpose>(["genesis", "admit", "revoke", "connect", "relay-setting"]);
 
 function idBytes(id: string): Uint8Array {
   return Uint8Array.from({ length: 32 }, (_, offset) => Number.parseInt(id.slice(offset * 2, offset * 2 + 2), 16));
@@ -54,6 +54,10 @@ export class AccountRouter extends DurableObject<Env> {
         grace_deadline INTEGER
       ) STRICT;
       INSERT OR IGNORE INTO account_state(singleton) VALUES (1);
+      CREATE TABLE IF NOT EXISTS account_approver (
+        singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+        endpoint_id TEXT NOT NULL
+      ) STRICT;
       CREATE TABLE IF NOT EXISTS endpoints (
         id TEXT PRIMARY KEY,
         signing_key TEXT NOT NULL,
@@ -169,6 +173,7 @@ export class AccountRouter extends DurableObject<Env> {
         await this.ctx.storage.setAlarm(now + inactivity);
         this.ctx.storage.transactionSync(() => {
           this.sql.exec("INSERT INTO endpoints(id, signing_key, kind, relay_enabled) VALUES (?, ?, 'client', 1)", actor, key);
+          this.sql.exec("INSERT INTO account_approver(singleton, endpoint_id) VALUES (1, ?)", actor);
           this.sql.exec("UPDATE account_state SET anchor = ?, last_contact = ? WHERE singleton = 1", anchor, now);
         });
         return json({ anchor, endpointId: actor }, 201);
@@ -177,10 +182,18 @@ export class AccountRouter extends DurableObject<Env> {
       if (!endpoint || (!endpoint.relay_enabled && purpose !== "relay-setting")) {
         return error(401, "endpoint_unauthorized");
       }
+      if (purpose === "admit" || purpose === "revoke") {
+        const approver = this.sql.exec<{ endpoint_id: string }>(
+          "SELECT endpoint_id FROM account_approver WHERE singleton = 1",
+        ).toArray()[0];
+        if (approver?.endpoint_id !== actor) return error(403, "endpoint_approval_required");
+      }
 
       switch (purpose) {
         case "admit":
           return this.admit(body);
+        case "revoke":
+          return this.revoke(actor, body);
         case "connect":
           return this.createTicket(endpoint.id, now);
         case "relay-setting":
@@ -200,6 +213,7 @@ export class AccountRouter extends DurableObject<Env> {
     }
     const existing = this.endpoint(id);
     if (existing) {
+      if (existing.kind === "client" && !existing.relay_enabled) return error(409, "endpoint_revoked");
       if (existing.kind !== kind || existing.signing_key !== key) return error(409, "endpoint_already_admitted");
       return json({ endpointId: id });
     }
@@ -207,6 +221,20 @@ export class AccountRouter extends DurableObject<Env> {
       "INSERT INTO endpoints(id, signing_key, kind, relay_enabled) VALUES (?, ?, ?, ?)", id, key, kind, Number(enabled),
     );
     return json({ endpointId: id }, 201);
+  }
+
+  private revoke(approver: string, body: Record<string, unknown>): Response {
+    const id = body.targetEndpointId;
+    if (!endpointId(id) || id === approver || this.endpoint(id)?.kind !== "client") {
+      return error(400, "invalid_revocation");
+    }
+    this.ctx.storage.transactionSync(() => {
+      this.sql.exec("UPDATE endpoints SET relay_enabled = 0 WHERE id = ?", id);
+      this.sql.exec("DELETE FROM endpoint_challenges WHERE endpoint_id = ?", id);
+      this.sql.exec("DELETE FROM connect_tickets WHERE endpoint_id = ?", id);
+    });
+    this.closeSockets(this.ctx.getWebSockets(id), "endpoint access revoked");
+    return json({ endpointId: id });
   }
 
   private async createTicket(id: string, now: number): Promise<Response> {

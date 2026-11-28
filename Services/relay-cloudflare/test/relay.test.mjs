@@ -294,7 +294,36 @@ test("one MyTerm server routes authenticated ciphertext independently to two app
   const denied = nextWebSocketEvent(phoneSocket, "message");
   phoneSocket.send(Buffer.concat([Buffer.from(ipad.id, "hex"), randomBytes(16)]));
   assert.deepEqual(JSON.parse((await denied).data), { unavailable: ipad.id });
-  for (const socket of [serverSocket, phoneSocket, tabletSocket]) socket.close();
+
+  const unapproved = new Endpoint();
+  assert.equal((await action(relay, origin, accountId, anchor, iphone, "admit", {
+    targetEndpointId: unapproved.id, signingKey: unapproved.publicKey, kind: "client", relayEnabled: true,
+  })).status, 403);
+  assert.equal((await action(relay, origin, accountId, anchor, iphone, "revoke", {
+    targetEndpointId: ipad.id,
+  })).status, 403);
+
+  const reserved = await action(relay, origin, accountId, anchor, iphone, "connect", {});
+  assert.equal(reserved.status, 200);
+  const { ticket } = await reserved.json();
+  const closed = nextWebSocketEvent(phoneSocket, "close");
+  for (let attempt = 0; attempt < 2; attempt++) {
+    assert.equal((await action(relay, origin, accountId, anchor, owner, "revoke", {
+      targetEndpointId: iphone.id,
+    })).status, 200);
+  }
+  assert.equal((await closed).code, 4403);
+  assert.equal((await relay.dispatchFetch(`${origin}/v1/accounts/${accountId}/socket`, {
+    headers: { upgrade: "websocket", authorization: "Bearer " + ticket },
+  })).status, 401);
+  assert.equal((await post(relay, `/v1/accounts/${accountId}/endpoint-challenge`, {
+    endpointId: iphone.id, purpose: "connect",
+  })).status, 401);
+  assert.equal((await action(relay, origin, accountId, anchor, owner, "admit", {
+    targetEndpointId: iphone.id, signingKey: iphone.publicKey, kind: "client", relayEnabled: true,
+  })).status, 409);
+  await exchangeEncrypted(tabletSocket, serverSocket, ipad.id, server.id, tabletKey, phoneKey, "iPad remains paired");
+  for (const socket of [serverSocket, tabletSocket]) socket.close();
 });
 
 async function exchangeEncrypted(source, recipient, sourceId, destinationId, key, alternateKey, message) {

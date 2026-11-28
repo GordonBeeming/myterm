@@ -16,7 +16,7 @@ public struct CloudflareRelayAccount: Equatable, Sendable {
 
 public struct CloudflareRelayEndpointKey: Sendable {
     public enum Purpose: String, Sendable {
-        case genesis, admit, connect, liveness
+        case genesis, admit, revoke, connect, liveness
         case relaySetting = "relay-setting"
     }
 
@@ -172,6 +172,16 @@ public struct CloudflareRelayClient: Sendable {
         return reply
     }
 
+    public func revoke(account: CloudflareRelayAccount, key: CloudflareRelayEndpointKey,
+                       targetEndpointID: String) async throws {
+        guard CloudflareRelayFrame.isDigest(targetEndpointID), targetEndpointID != key.endpointID else {
+            throw RemoteError.invalidMessage
+        }
+        let body = RevokeRequest(endpointId: key.endpointID, targetEndpointId: targetEndpointID)
+        let reply: EndpointReply = try await act(.revoke, account: account, key: key, body: json(body))
+        guard reply.endpointId == targetEndpointID else { throw RemoteError.invalidResponse }
+    }
+
     private func act<Response: Decodable>(_ purpose: CloudflareRelayEndpointKey.Purpose,
                                           account: CloudflareRelayAccount, key: CloudflareRelayEndpointKey,
                                           body: Data, bearer: String? = nil) async throws -> Response {
@@ -252,6 +262,7 @@ public struct CloudflareRelayClient: Sendable {
     private struct GenesisRequest: Encodable { let endpointId: String; let anchor: String; let signingKey: String }
     private struct GenesisReply: Decodable { let anchor: String; let endpointId: String }
     private struct EndpointReply: Codable { let endpointId: String }
+    private struct RevokeRequest: Encodable { let endpointId: String; let targetEndpointId: String }
 
     private struct AdmitRequest: Encodable {
         let endpointId: String
