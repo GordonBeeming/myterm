@@ -94,7 +94,7 @@ final class PersistentTerminalRuntimeTests: XCTestCase {
     }
 
     @MainActor
-    func testRustReattachDoesNotStartANewShellWhenSelectionDisappears() throws {
+    func testRustStartupTriesTheSavedShellAndRetryDoesNotReplaceAMissingSelection() async throws {
         let namespace = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: namespace, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: namespace) }
@@ -102,20 +102,29 @@ final class PersistentTerminalRuntimeTests: XCTestCase {
         let selection = LocalRustWorkspaceBackend.Selection(sessionID: UUID(), clientID: UUID())
         let selectionFile = namespace.appendingPathComponent(identifier.uuidString + ".json")
         try JSONEncoder().encode(selection).write(to: selectionFile)
-        let engine = LocalRustWorkspaceTerminalEngine(namespace: namespace) { _ in
-            XCTFail("A missing selection must not connect to Rust or launch a new shell")
-            throw LocalRustTerminalError.missingSession
+        let engine = LocalRustWorkspaceTerminalEngine(namespace: namespace) { starting in
+            XCTAssertFalse(starting, "Restoring a saved shell must not launch a replacement or start its daemon")
+            throw LocalRustTerminalError.disconnected
         }
         let session = try XCTUnwrap(try engine.makeSession(configuration: .init(
             workingDirectory: namespace, continuityIdentifier: identifier
         )) as? SwiftTermTerminalSession)
         var failure: TerminalSessionFailure?
+        let attemptedRestore = expectation(description: "startup tried to reconnect to the saved shell")
         session.onEvent = { event in
-            if case .failed(let report) = event { failure = report }
+            if case .failed(let report) = event {
+                failure = report
+                if report.localizedDescription == LocalRustTerminalError.disconnected.localizedDescription {
+                    attemptedRestore.fulfill()
+                }
+            }
         }
 
         try session.start()
+        await fulfillment(of: [attemptedRestore], timeout: 6)
         XCTAssertEqual(session.rustRecovery?.action, .reattach)
+        XCTAssertEqual(try JSONDecoder().decode(LocalRustWorkspaceBackend.Selection.self,
+                                                from: Data(contentsOf: selectionFile)), selection)
         try FileManager.default.removeItem(at: selectionFile)
         session.performRustRecoveryAction()
 

@@ -121,6 +121,8 @@ final class LocalRustWorkspaceTests: XCTestCase {
         try await until("the companion close fixture has a foreground job") {
             companion.activeForegroundProcessName == "sleep"
         }
+        try split.sendRemoteInput(Data("/bin/sleep 30\r".utf8), generation: split.remoteGeneration)
+        try await until("the split has a foreground job") { split.activeForegroundProcessName == "sleep" }
         model.selectTab(splitTab.id, in: splitGroupID, focusContent: false)
 
         model.persistWorkspaceStore()
@@ -129,24 +131,31 @@ final class LocalRustWorkspaceTests: XCTestCase {
         let reopened = try AppModel(applicationSupportDirectory: directory, terminalEngine: engine,
                                     browserLauncherURL: browser, confirmClosingActiveProcesses: confirmation.confirm)
         let reopenedTab = try session(in: reopened, id: tabID)
-        XCTAssertFalse(reopenedTab.isRunning)
-        XCTAssertEqual(reopenedTab.rustRecovery?.action, .reattach)
-        reopenedTab.performRustRecoveryAction()
-        try await until("the explicit reattach settles") { !reopenedTab.isStarting }
-        if ProcessInfo.processInfo.environment["MYTERM_TEST_RUST_WORKSPACE_CHECKPOINT"] == "1" {
+        let savedSplit = try session(in: reopened, id: splitID)
+        let reopenedCompanion = try session(in: reopened, id: companionID)
+        try await until("all saved terminals attempt reattachment automatically") {
+            !reopenedTab.isStarting && !savedSplit.isStarting && !reopenedCompanion.isStarting
+        }
+        let restoresCheckpoints = ProcessInfo.processInfo.environment["MYTERM_TEST_RUST_WORKSPACE_CHECKPOINT"] == "1"
+        if restoresCheckpoints {
             XCTAssertTrue(reopenedTab.isRunning, String(describing: reopened.terminalNotices[tabID]))
+            XCTAssertNil(reopenedTab.rustRecovery?.action)
             XCTAssertTrue(reopenedTab.contentSnapshot(maximumCharacters: 5_000).contains("MT-CONFIG=3.2."))
             let reattachedPID = try await shellIdentity(reopenedTab, parent: daemon.processIdentifier)
             XCTAssertEqual(reattachedPID, originalPID)
+            XCTAssertTrue(savedSplit.isRunning)
+            XCTAssertNil(savedSplit.rustRecovery?.action)
+            XCTAssertEqual(savedSplit.activeForegroundProcessName, "sleep")
+            XCTAssertTrue(reopenedCompanion.isRunning)
+            XCTAssertNil(reopenedCompanion.rustRecovery?.action)
         } else {
             XCTAssertFalse(reopenedTab.isRunning)
             XCTAssertEqual(reopenedTab.rustRecovery?.action, .reattach)
+            XCTAssertFalse(savedSplit.isRunning)
+            XCTAssertEqual(savedSplit.rustRecovery?.action, .reattach)
             XCTAssertEqual(kill(originalPID, 0), 0, "An unavailable checkpoint must preserve the original shell")
         }
         XCTAssertEqual(reopened.selectedWorkspace.selectedTab?.terminalSession?.id, splitID)
-        let savedSplit = try session(in: reopened, id: splitID)
-        XCTAssertFalse(savedSplit.isRunning)
-        XCTAssertEqual(savedSplit.rustRecovery?.action, .reattach)
         XCTAssertTrue(reopened.shouldTerminateApplication())
         XCTAssertTrue(confirmation.prompts.isEmpty, "Quitting detaches the pane and keeps its shell")
         let unknownForeground = "Saved terminal shell (foreground activity unknown)"
@@ -154,8 +163,9 @@ final class LocalRustWorkspaceTests: XCTestCase {
             workspaceID: workspaceID, groupID: splitGroupID, tabID: companionTab.id
         )
         XCTAssertEqual(companionInfo.sessionID, companionID)
-        XCTAssertEqual(companionInfo.processNames, [unknownForeground])
-        XCTAssertTrue(try reopened.companionWorkspaceProcessNames(workspaceID).contains(unknownForeground))
+        let foreground = restoresCheckpoints ? "sleep" : unknownForeground
+        XCTAssertEqual(companionInfo.processNames, [foreground])
+        XCTAssertTrue(try reopened.companionWorkspaceProcessNames(workspaceID).contains(foreground))
         XCTAssertThrowsError(try reopened.closeCompanionTab(
             workspaceID: workspaceID, groupID: splitGroupID, tabID: companionTab.id
         )) { error in
@@ -181,7 +191,7 @@ final class LocalRustWorkspaceTests: XCTestCase {
 
         reopened.closeFocusedPaneOrTab()
         XCTAssertEqual(confirmation.prompts.last?.confirmButtonTitle, "Close Pane")
-        XCTAssertEqual(confirmation.prompts.last?.hasUnverifiedTerminals, true)
+        XCTAssertEqual(confirmation.prompts.last?.hasUnverifiedTerminals, !restoresCheckpoints)
         XCTAssertEqual(reopened.selectedWorkspace.selectedTab?.terminalSession?.id, splitID)
         XCTAssertTrue(FileManager.default.fileExists(atPath: closedSelection.path))
         XCTAssertEqual(kill(splitPID, 0), 0, "Cancelling must preserve the saved shell")
