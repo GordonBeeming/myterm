@@ -103,7 +103,7 @@ fi
 no_support_status=0
 MYTERM_APPLICATION_SUPPORT_DIRECTORY= "$RUN_SCRIPT" --rust-release-rehearsal > "$TEST_ROOT/missing-support.log" 2>&1 || no_support_status=$?
 [[ "$no_support_status" == 2 ]]
-rg -F "Set MYTERM_APPLICATION_SUPPORT_DIRECTORY" "$TEST_ROOT/missing-support.log" > /dev/null
+grep -Fq "Set MYTERM_APPLICATION_SUPPORT_DIRECTORY" "$TEST_ROOT/missing-support.log"
 
 cp "$ROOT_DIR/Packaging/Info.plist" "$TEST_ROOT/development.plist"
 cp "$ROOT_DIR/Packaging/Info.plist" "$TEST_ROOT/production.plist"
