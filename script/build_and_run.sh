@@ -257,6 +257,9 @@ cp "$ROOT_DIR/Packaging/Info.plist" "$INFO_PLIST"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$INFO_PLIST"
 /usr/libexec/PlistBuddy -c "Add :MyTermReleaseChannel string $RELEASE_CHANNEL" "$INFO_PLIST"
 /usr/libexec/PlistBuddy -c 'Add :MyTermChannelConfigurationVersion integer 1' "$INFO_PLIST"
+if [[ "$RUST_RELEASE_REHEARSAL" == "1" || "$SHIP_RUST_WORKSPACES" == "1" ]]; then
+  /usr/libexec/PlistBuddy -c 'Add :MyTermRustWorkspaces bool true' "$INFO_PLIST"
+fi
 if [[ "$RUST_RELEASE_REHEARSAL" == "1" ]]; then
   bash "$ROOT_DIR/script/configure_url_handlers.sh" development "$BUNDLE_ID" "$INFO_PLIST"
   /usr/libexec/PlistBuddy -c 'Set :CFBundleURLTypes:0:CFBundleURLSchemes:0 myterm-rust-rehearsal' "$INFO_PLIST"
