@@ -76,6 +76,7 @@ struct TerminalPaneView: View {
         switch action {
         case .reattach: "Reattach to Saved Shell"
         case .startNewShell: "Start New Shell"
+        case .retryStartup: "Retry Terminal Startup"
         case .takeControl: "Take Terminal Control"
         }
     }

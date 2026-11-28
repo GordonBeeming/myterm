@@ -10,6 +10,7 @@ render_configuration() {
   local app_profile="${4:-MyTerm App & Store}"
   local notification_profile="${5:-MyTerm Notification <Store>}"
   local api_key_id="${6:-KEY1234567}"
+  local release_version="${7:-0.1.0}"
   env \
     GITHUB_WORKSPACE="$ROOT_DIR" \
     RUNNER_TEMP="$TEST_ROOT" \
@@ -21,6 +22,7 @@ render_configuration() {
     APP_STORE_CONNECT_API_KEY_ID="$api_key_id" \
     APP_STORE_CONNECT_ISSUER_ID="00000000-0000-0000-0000-000000000000" \
     BUILD_NUMBER="$build_number" \
+    RELEASE_VERSION="$release_version" \
     MYTERM_PUSH_GATEWAY_ORIGIN="$push_origin" \
     bash "$ROOT_DIR/script/deploy_companion_testflight.sh" --render-only
 }
@@ -34,6 +36,7 @@ abort "notification profile missing" unless spec.dig("settings", "base", "MYTERM
 abort "app profile indirection missing" unless spec.dig("targets", "MyTermCompanion", "settings", "configs", "Release", "PROVISIONING_PROFILE_SPECIFIER") == "$(MYTERM_APP_PROVISIONING_PROFILE)"
 abort "notification profile indirection missing" unless spec.dig("targets", "MyTermNotificationService", "settings", "configs", "Release", "PROVISIONING_PROFILE_SPECIFIER") == "$(MYTERM_NOTIFICATION_PROVISIONING_PROFILE)"
 abort "team missing" unless spec.dig("settings", "base", "DEVELOPMENT_TEAM") == "TEAM123456"
+abort "release version missing" unless spec.dig("settings", "base", "MARKETING_VERSION") == "0.1.0"
 abort "push origin missing" unless spec.dig("settings", "base", "MYTERM_PUSH_GATEWAY_ORIGIN") == "https://push.example.test"
 abort "app package is not absolute" unless spec.dig("packages", "MyTerm", "path").start_with?("/")
 RUBY
@@ -48,6 +51,35 @@ if render_configuration "$TEST_ROOT/invalid-build" "0" "" >"$TEST_ROOT/invalid-b
   exit 1
 fi
 grep -F "BUILD_NUMBER must be a positive integer." "$TEST_ROOT/invalid-build.log" >/dev/null
+
+if render_configuration "$TEST_ROOT/invalid-version" "42" "" "App" "Notification" "KEY1234567" "0.1-beta" >"$TEST_ROOT/invalid-version.log" 2>&1; then
+  echo "The renderer accepted an invalid release version." >&2
+  exit 1
+fi
+grep -F "RELEASE_VERSION must have three numeric components." "$TEST_ROOT/invalid-version.log" >/dev/null
+
+python3 - "$TEST_ROOT/fixture.ipa" <<'PYTHON'
+import plistlib
+import sys
+import zipfile
+
+with zipfile.ZipFile(sys.argv[1], 'w') as archive:
+    for member, suffix in [('Info.plist', ''), ('PlugIns/Service.appex/Info.plist', '.notifications')]:
+        archive.writestr('Payload/MyTermCompanion.app/' + member, plistlib.dumps({
+            'CFBundleIdentifier': 'com.gordonbeeming.myterm.companion' + suffix,
+            'CFBundleShortVersionString': '0.1.0', 'CFBundleVersion': '42',
+        }))
+PYTHON
+(
+  source "$ROOT_DIR/script/deploy_companion_testflight.sh"
+  IPA_PATH="$TEST_ROOT/fixture.ipa"
+  RELEASE_VERSION=0.1.0 BUILD_NUMBER=42 verify_exported_versions
+  if RELEASE_VERSION=0.1.1 BUILD_NUMBER=42 verify_exported_versions >"$TEST_ROOT/incorrect-export.log" 2>&1; then
+    echo "The uploader accepted a mismatched release version." >&2
+    exit 1
+  fi
+  grep -F "Exported version or build does not match the Beta batch" "$TEST_ROOT/incorrect-export.log" >/dev/null
+)
 
 invalid_origin_index=0
 for invalid_origin in \

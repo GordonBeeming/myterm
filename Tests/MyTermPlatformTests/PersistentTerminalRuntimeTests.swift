@@ -5,6 +5,126 @@ import XCTest
 @testable import MyTermPlatform
 
 final class PersistentTerminalRuntimeTests: XCTestCase {
+    #if DEBUG
+    @MainActor
+    func testRustStartupRetiresOnlyTheRestoredPanesLegacyHost() async throws {
+        let helper = try Self.helperExecutable()
+        let identifier = UUID()
+        let otherIdentifier = UUID()
+        let namespace = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let path = try PersistentTerminalConnection.socketPath(identifier: identifier, namespace: namespace)
+        let otherPath = try PersistentTerminalConnection.socketPath(identifier: otherIdentifier, namespace: namespace)
+        defer { try? FileManager.default.removeItem(at: URL(fileURLWithPath: path).deletingLastPathComponent()) }
+        let environment = try PersistentTerminalTestEnvironment.make()
+        let hosts = [path, otherPath].map { socket -> Process in
+            let host = Process()
+            host.executableURL = helper
+            host.environment = ProcessInfo.processInfo.environment.merging(environment) { _, value in value }
+            host.arguments = [socket, "/bin/sh", NSTemporaryDirectory(), "80", "25", "-c", "sleep 20"]
+            host.standardOutput = FileHandle.nullDevice
+            host.standardError = FileHandle.nullDevice
+            return host
+        }
+        defer {
+            for host in hosts where host.isRunning { host.terminate(); host.waitUntilExit() }
+            try? FileManager.default.removeItem(at: namespace)
+        }
+        for host in hosts { try host.run() }
+        let deadline = Date().addingTimeInterval(4)
+        while ![path, otherPath].allSatisfy({ FileManager.default.fileExists(atPath: $0) }), Date() < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: otherPath))
+
+        let engine = LocalRustWorkspaceTerminalEngine(namespace: namespace) { _ in
+            XCTAssertFalse(FileManager.default.fileExists(atPath: path), "Retire the old helper before starting Rust")
+            XCTAssertTrue(FileManager.default.fileExists(atPath: otherPath), "Keep the other pane running")
+            throw LocalRustTerminalError.server("Test reached the Rust connection")
+        }
+        let session = try XCTUnwrap(try engine.makeSession(configuration: .init(
+            workingDirectory: FileManager.default.temporaryDirectory, environment: environment,
+            continuityIdentifier: identifier, continuityDirectory: namespace, continuityHelperURL: helper
+        )) as? SwiftTermTerminalSession)
+        let reachedRust = expectation(description: "the Rust startup reached its connection")
+        session.onEvent = { event in
+            if case .failed(let failure) = event, failure.localizedDescription == "Test reached the Rust connection" {
+                reachedRust.fulfill()
+            }
+        }
+        try session.start()
+        await fulfillment(of: [reachedRust], timeout: 8)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: path))
+        XCTAssertTrue(hosts[1].isRunning)
+    }
+
+    @MainActor
+    func testRustStartupWaitsForLegacyOwnershipAfterSocketIsGone() async throws {
+        let namespace = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let identifier = UUID()
+        let socket = try PersistentTerminalConnection.socketPath(identifier: identifier, namespace: namespace)
+        defer {
+            try? FileManager.default.removeItem(at: URL(fileURLWithPath: socket).deletingLastPathComponent())
+            try? FileManager.default.removeItem(at: namespace)
+        }
+        var ownership = try SessionHostSocket.acquireOwnership(path: socket + ".lock")
+        defer { if ownership >= 0 { close(ownership) } }
+        let engine = LocalRustWorkspaceTerminalEngine(namespace: namespace) { _ in
+            let probe = try SessionHostSocket.acquireOwnership(path: socket + ".lock")
+            close(probe)
+            throw LocalRustTerminalError.server("Test reached Rust after legacy exit")
+        }
+        let session = try XCTUnwrap(try engine.makeSession(configuration: .init(
+            workingDirectory: FileManager.default.temporaryDirectory,
+            continuityIdentifier: identifier, continuityDirectory: namespace
+        )) as? SwiftTermTerminalSession)
+        let reachedRust = expectation(description: "Rust starts after ownership is released")
+        session.onEvent = { event in
+            if case .failed(let failure) = event, failure.localizedDescription == "Test reached Rust after legacy exit" {
+                reachedRust.fulfill()
+            }
+        }
+        try session.start()
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertTrue(session.isStarting)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: namespace.appendingPathComponent(identifier.uuidString + ".json").path))
+        close(ownership)
+        ownership = -1
+        await fulfillment(of: [reachedRust], timeout: 6)
+    }
+
+    @MainActor
+    func testRustReattachDoesNotStartANewShellWhenSelectionDisappears() throws {
+        let namespace = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: namespace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: namespace) }
+        let identifier = UUID()
+        let selection = LocalRustWorkspaceBackend.Selection(sessionID: UUID(), clientID: UUID())
+        let selectionFile = namespace.appendingPathComponent(identifier.uuidString + ".json")
+        try JSONEncoder().encode(selection).write(to: selectionFile)
+        let engine = LocalRustWorkspaceTerminalEngine(namespace: namespace) { _ in
+            XCTFail("A missing selection must not connect to Rust or launch a new shell")
+            throw LocalRustTerminalError.missingSession
+        }
+        let session = try XCTUnwrap(try engine.makeSession(configuration: .init(
+            workingDirectory: namespace, continuityIdentifier: identifier
+        )) as? SwiftTermTerminalSession)
+        var failure: TerminalSessionFailure?
+        session.onEvent = { event in
+            if case .failed(let report) = event { failure = report }
+        }
+
+        try session.start()
+        XCTAssertEqual(session.rustRecovery?.action, .reattach)
+        try FileManager.default.removeItem(at: selectionFile)
+        session.performRustRecoveryAction()
+
+        XCTAssertEqual(failure?.localizedDescription, LocalRustTerminalError.missingSession.localizedDescription)
+        XCTAssertFalse(session.isStarting)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: selectionFile.path))
+    }
+    #endif
+
     func testExplicitStopReachesHostWithoutCreatingATerminalView() async throws {
         try await MainActor.run {
             let helper = try Self.helperExecutable()

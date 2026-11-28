@@ -12,6 +12,9 @@ import urllib.error
 import urllib.request
 
 
+LAST_LEGACY_BETA_COMMIT_COUNT = 138
+
+
 def github(path, payload=None):
     """Return API JSON; only a missing Git tag is an expected absence."""
     request = urllib.request.Request(
@@ -34,6 +37,14 @@ def github(path, payload=None):
 def git(*args):
     """Fail rather than retaining incomplete Git output for source identity checks."""
     return subprocess.check_output(["git", *args], text=True).strip()
+
+
+def beta_version(sha):
+    """Start the new architecture's beta series without renumbering old snapshots."""
+    count = int(git("rev-list", "--count", sha))
+    if count <= LAST_LEGACY_BETA_COMMIT_COUNT:
+        return f"0.0.{count}"
+    return f"0.1.{count - LAST_LEGACY_BETA_COMMIT_COUNT - 1}"
 
 
 def find_release(tag):
@@ -76,7 +87,7 @@ def reserve_source():
     commit = github(f"commits/{sha}")
     if not commit["commit"]["verification"]["verified"]:
         raise RuntimeError("Beta source must have a verified signature")
-    version = f"0.0.{git('rev-list', '--count', 'HEAD')}"
+    version = beta_version(sha)
     tag = f"v{version}-beta"
     if not verify_tag(tag, sha):
         try:
@@ -130,7 +141,7 @@ def prepare():
         git("merge-base", "--is-ancestor", sha, "HEAD")
         if not github(f"commits/{sha}")["commit"]["verification"]["verified"]:
             raise RuntimeError("Companion source must have a verified signature")
-        version = f"0.0.{git('rev-list', '--count', sha)}"
+        version = beta_version(sha)
         source = sha, version, f"v{version}-beta"
     else:
         source = reserve_source()

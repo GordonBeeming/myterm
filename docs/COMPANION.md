@@ -6,6 +6,8 @@ The app supports iOS and iPadOS 26 or later. Builds use the iOS 27.1 SDK or newe
 
 ## Pair after a hosted relay upgrade
 
+Development builds offer the Development, Beta and Production relays. The macOS Beta and TestFlight builds offer Beta and Production. Stable macOS offers Production. All builds also support self-hosted relays. Before switching a Mac linked to Beta over to Stable, sign in or create an account on the Production relay and pair your mobile devices there.
+
 The Mac can open workspaces and terminals before relay setup. Once your hosted relay upgrades, open **Settings → Companion** on your Mac and select your relay. Use **Create an account** for your first passkey on the new relay, or **Sign in** if you already created one. An account on the earlier relay cannot sign in to the replacement.
 
 1. On the iPhone or iPad, open **Add Mac**. Choose the same relay and select **Sign in with a passkey**.

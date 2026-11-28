@@ -95,6 +95,7 @@ jobs:
     uses: ./.github/workflows/companion.yml
     with:
       source_sha: ${{ needs.source.outputs.sha }}
+      release_version: ${{ needs.source.outputs.version }}
       build_number: ${{ needs.source.outputs.build_number }}
     secrets: inherit
 

@@ -10,7 +10,13 @@ extension AppModel {
             throw NSError(domain: "MyTermUpdate", code: 2, userInfo: [NSLocalizedDescriptionKey: "Resolve the workspace recovery error before updating."])
         }
         try store.save()
-        return try await updates.preparedRestartProcess(relaunch: relaunch)
+        let helper = try await updates.preparedRestartProcess(relaunch: relaunch)
+        if updates.stagedUpdate?.channel == .stable, needsProductionRelayBeforeStable {
+            throw NSError(domain: "MyTermUpdate", code: 3, userInfo: [
+                NSLocalizedDescriptionKey: Self.productionRelayBeforeStableMessage
+            ])
+        }
+        return helper
     }
 
     /// Reading a tab clears finished indicators, but working and unanswered questions survive.

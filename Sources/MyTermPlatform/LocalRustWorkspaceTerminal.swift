@@ -45,7 +45,7 @@ public final class LocalRustWorkspaceTerminalEngine: TerminalEngine {
 @Observable
 public final class LocalRustWorkspaceRecovery {
     public enum Action: Equatable {
-        case reattach, startNewShell, takeControl
+        case reattach, startNewShell, retryStartup, takeControl
     }
 
     public internal(set) var action: Action?
