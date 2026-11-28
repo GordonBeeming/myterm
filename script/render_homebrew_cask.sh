@@ -37,10 +37,10 @@ cask "myterm" do
 
   app "myterm.app"
 
-  zap trash: [
-    "~/Library/Application Support/myterm",
-    "~/Library/Preferences/com.gordonbeeming.myterm.plist",
-    "~/Library/WebKit/com.gordonbeeming.myterm",
-  ]
+  caveats do
+    <<~EOS
+      Uninstalling the app keeps your MyTerm configuration and local server data.
+    EOS
+  end
 end
 CASK

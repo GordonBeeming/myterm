@@ -23,9 +23,19 @@ MYTERM_APPLICATION_SUPPORT_DIRECTORY="$profile" MYTERM_RELEASE_CHANNEL=beta \
   ./run.sh --rust-release-rehearsal
 ```
 
-The rehearsal runs a signed Release build with a separate bundle ID and data location. It uses a fresh Rust server and leaves the installed app and its configuration in place. Use `--bundle` to build without launching. To rehearse the cask, keep the Homebrew prefix, its Caskroom and the app destination disposable. Upgrade from a published version, then verify both installed executables with `script/verify_rust_workspace_bundle.sh` and the rehearsal bundle ID. A local DMG can verify cask replacement and signatures. Gatekeeper launch and notarization require the distribution DMG.
+The rehearsal runs a signed Release build with a separate bundle ID and data location. It uses a fresh Rust server and leaves the installed app and its configuration in place. Use `--bundle` to build without launching.
 
-The macOS release workflow builds with `make bundle DISTRIBUTION=1 RUST_WORKSPACES=1`. That build keeps the production bundle ID and puts the signed Rust server inside `myterm.app`, which the existing cask replaces as a unit. The workflow verifies the app and server before notarization. Verify an installed release bundle using the production bundle ID.
+The macOS release workflow builds with `make bundle DISTRIBUTION=1 RUST_WORKSPACES=1`. It verifies the production app and its bundled Rust server before notarization. When a workspace starts the server, MyTerm copies the signed executable into its application support directory. The running server keeps that launch path across app upgrades.
+
+### Check the Homebrew upgrade and uninstall
+
+On an Apple silicon Mac with Homebrew and Python 3 installed, run the check with the previous stable DMG and a production-signed candidate DMG.
+
+```bash
+bash script/test_homebrew_upgrade.sh "$previous_version" "$previous_dmg" "$candidate_version" "$candidate_dmg"
+```
+
+The script installs into a disposable Homebrew prefix and app directory, checks the installed candidate's signatures, then checks that upgrade, uninstall, reinstall and `--zap` preserve the fixture files byte for byte. It prints the path to the retained logs. The check does not launch either app. Use the actual distribution DMG to verify notarization and Gatekeeper, and an isolated profile to check app launch, configuration migration and live terminal reattachment.
 
 ## Switching channels in the app
 
