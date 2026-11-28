@@ -1894,7 +1894,7 @@
                  self.cursor = Default::default();
 --- /dev/null
 +++ b/term/src/terminalstate/prototype-checkpoint.rs
-@@ -0,0 +1,360 @@
+@@ -0,0 +1,367 @@
 +use base64::Engine;
 +use std::convert::TryFrom;
 +use serde_json::{json, Value as BridgeValue};
@@ -1926,11 +1926,18 @@
 +        | if a.italic() {64} else {0}
 +        | if a.strikethrough() {128} else {0};
 +    anyhow::ensure!(!a.overline(), "unsupported overline");
-+    anyhow::ensure!(a.hyperlink().map_or(true, |h| h.params().is_empty()), "unsupported hyperlink parameters");
++    let link = a.hyperlink().map(|h| {
++        let mut parameters: Vec<_> = h.params().iter().collect();
++        parameters.sort_unstable();
++        let parameters = parameters.into_iter()
++            .map(|(key, value)| format!("{key}={value}"))
++            .collect::<Vec<_>>().join(":");
++        format!("{parameters};{}", h.uri())
++    });
 +    Ok(json!({"fg": bridge_color(a.foreground()), "bg": bridge_color(a.background()),
 +        "style":style,"underline":underline,
 +        "underlineColor":bridge_color(a.underline_color()),
-+        "link":a.hyperlink().map(|h|format!(";{}", h.uri()))}))
++        "link":link}))
 +}
 +
 +fn bridge_saved(saved: &Option<SavedCursor>) -> anyhow::Result<BridgeValue> {

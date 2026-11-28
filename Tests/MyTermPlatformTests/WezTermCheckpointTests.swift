@@ -22,6 +22,25 @@ final class WezTermCheckpointTests: XCTestCase {
     }
 
     @MainActor
+    func testImportsCheckpointWithOSC8HyperlinkParameters() throws {
+        guard let fixture = ProcessInfo.processInfo.environment["MYTERM_HYPERLINK_CHECKPOINT_FIXTURE"] else {
+            throw XCTSkip("Run Services/terminal-state/check.sh to exercise hyperlink checkpoint import")
+        }
+        let view = TerminalView(frame: CGRect(x: 0, y: 0, width: 180, height: 96))
+        view.authoritativeImageGeometry = TerminalImageGeometry(
+            cellSize: CGSize(width: 9, height: 16), viewportSize: CGSize(width: 180, height: 96), displayScale: 1
+        )
+        let checkpoint = try Data(contentsOf: URL(fileURLWithPath: fixture))
+
+        try view.importWezTermCheckpoint(checkpoint, expectedSequence: 1)
+
+        let terminal = view.getTerminal()
+        XCTAssertEqual(terminal.getCharacter(col: 0, row: 0), "l")
+        XCTAssertEqual(terminal.link(at: .screen(Position(col: 0, row: 0)), mode: .explicitOnly),
+                       "https://example.test/a;b")
+    }
+
+    @MainActor
     func testPTYSnapshotRestoresBothBuffersAndContinuesWithoutClientReplies() throws {
         let environment = ProcessInfo.processInfo.environment
         guard let fixture = environment["MYTERM_PTY_CHECKPOINT_FIXTURE"],
