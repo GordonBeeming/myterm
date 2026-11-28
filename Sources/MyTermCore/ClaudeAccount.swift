@@ -11,6 +11,41 @@ public enum ClaudeConfiguration: Codable, Hashable, Sendable {
     /// `CLAUDE_CONFIG_DIR` names this folder.
     case directory(URL)
 
+    private enum CodingKeys: String, CodingKey { case standard, directory }
+    private enum DirectoryKeys: String, CodingKey { case url = "_0" }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        guard container.allKeys.count == 1, let key = container.allKeys.first else {
+            throw DecodingError.dataCorrupted(.init(
+                codingPath: decoder.codingPath, debugDescription: "Expected one Claude configuration."
+            ))
+        }
+        decoder.recordKnownKeys([key])
+        let nested = try container.superDecoder(forKey: key)
+        let payload = try nested.container(keyedBy: DirectoryKeys.self)
+        switch key {
+        case .standard:
+            nested.recordKnownKeys([DirectoryKeys]())
+            self = .standard
+        case .directory:
+            let url = try payload.decode(URL.self, forKey: .url)
+            nested.recordKnownKeys([DirectoryKeys.url])
+            self = .directory(url)
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .standard:
+            _ = container.nestedContainer(keyedBy: DirectoryKeys.self, forKey: .standard)
+        case .directory(let url):
+            var payload = container.nestedContainer(keyedBy: DirectoryKeys.self, forKey: .directory)
+            try payload.encode(url, forKey: .url)
+        }
+    }
+
     /// The configuration a `CLAUDE_CONFIG_DIR` value names, read the way the hook reads it: unset or
     /// empty is the standard sign-in. Nil for a value the hook would not report, such as a relative
     /// path, so a doubtful reading never names an account.

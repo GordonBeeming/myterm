@@ -161,6 +161,34 @@ final class CompanionSignInRecoveryTests: XCTestCase {
         try await wait { restored.needsSignIn }
     }
 
+    func testCancelledRelaySwitchLeavesTheConnectedRelayOnline() async throws {
+        let fixture = try fixture(browserCanStart: true)
+        try await fixture.host.installAuthenticatedSessionForTesting(fixture.record)
+        try await fixture.host.configurePairingForTesting(endpoint: fixture.record.relay)
+
+        fixture.host.signIn(relayAddress: "https://beta.example.test")
+        try await wait { fixture.browserStarts.count == 1 }
+        XCTAssertEqual(fixture.browserStarts.urls.first?.host, "beta.example.test")
+        XCTAssertEqual(fixture.host.status, .connected)
+
+        fixture.host.cancelSignIn()
+        XCTAssertEqual(fixture.host.status, .connected)
+        XCTAssertEqual(fixture.host.relayText, fixture.record.relay.canonicalOrigin)
+    }
+
+    func testFailedRelaySwitchReportsTheErrorAndLeavesTheConnectedRelayOnline() async throws {
+        let fixture = try fixture()
+        try await fixture.host.installAuthenticatedSessionForTesting(fixture.record)
+        try await fixture.host.configurePairingForTesting(endpoint: fixture.record.relay)
+
+        fixture.host.signIn(relayAddress: "https://beta.example.test")
+        try await wait { fixture.browserStarts.count == 1 && !fixture.host.isSigningIn }
+
+        XCTAssertEqual(fixture.host.status, .connected)
+        XCTAssertEqual(fixture.host.relayText, fixture.record.relay.canonicalOrigin)
+        XCTAssertNotNil(fixture.app.errorDescription)
+    }
+
     func testHostRegistrationAuthorizationErrorDoesNotDiscardValidCredentials() async throws {
         let fixture = try fixture(forbiddenHost: true)
         try await fixture.host.installAuthenticatedSessionForTesting(fixture.record)

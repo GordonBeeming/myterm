@@ -120,9 +120,11 @@ struct SettingsView: View {
     private var settingsHeader: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(section.rawValue).font(Theme.Font.ui(20, weight: .semibold))
-            Text(section.isScoped ? settingsHeaderDescription : "Applies to the whole app.")
-                .font(Theme.Font.ui(12))
-                .foregroundStyle(Theme.textSecondary)
+            if section != .permissions {
+                Text(section.isScoped ? settingsHeaderDescription : "Applies to the whole app.")
+                    .font(Theme.Font.ui(12))
+                    .foregroundStyle(Theme.textSecondary)
+            }
             if section.isScoped {
                 HStack(spacing: 4) {
                     scopeButton(.global) { Text("Global") }
@@ -176,13 +178,13 @@ struct SettingsView: View {
     }
 
     private var updatesFootnote: String {
-        var lines = ["Checks GitHub for a newer release once a day. Updates install only when you choose Update Now."]
+        var lines = ["Checks for updates daily when automatic checks are on."]
         if let command = model.updates.upgradeCommand {
             lines.append("Updating runs `\(command)` in the update dialog. Restart immediately or wait for hook-connected agents to finish.")
         } else {
             lines.append(model.updates.supportsInAppInstallation
                 ? "Downloads are verified and staged before restart. Switching channels keeps your configuration; entering beta saves a stable rollback snapshot."
-                : "This copy cannot install updates directly, so updating opens the release page.")
+                : "Open the release page to install an available update.")
         }
         if let checked = model.updates.lastCheckedAt {
             lines.append("Last checked \(checked.formatted(date: .abbreviated, time: .shortened)).")
@@ -209,9 +211,6 @@ struct SettingsView: View {
                         .accessibilityLabel("Default terminal error: \(message)")
                 }
 
-                Text("This action applies to the whole app and is not inherited by folders or workspaces.")
-                    .font(Theme.Font.ui(12))
-                    .foregroundStyle(Theme.textSecondary)
             }
 
             SettingsCard("Links from other apps") {
@@ -223,7 +222,7 @@ struct SettingsView: View {
                     }
                 ))
 
-                Text("A script can open a terminal tab, and run a command in it, with a link such as myterm://new-tab?workspace=API&cwd=~/src&command=make%20test. MyTerm asks before it opens each link, because a web page can open one too.")
+                Text("Let scripts and websites request a terminal tab or command. MyTerm asks before opening each link.")
                     .font(Theme.Font.ui(12))
                     .foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -248,9 +247,6 @@ struct SettingsView: View {
                     }
                 }
 
-                Text("This setting applies to the whole app and is not inherited by folders or workspaces.")
-                    .font(Theme.Font.ui(12))
-                    .foregroundStyle(Theme.textSecondary)
             }
 
             SettingsCard("Updates") {
@@ -270,9 +266,11 @@ struct SettingsView: View {
                 ))
 
                 LabeledContent("Installed") {
-                    Text(AppBuildDisplay.installed(model.updates.currentVersion,
-                        channel: model.updates.installedChannel,
-                        build: Bundle.main.buildVersionString))
+                    Text(MyTermChannel.active == .development
+                        ? "\(model.updates.currentVersion) (Development)"
+                        : AppBuildDisplay.installed(model.updates.currentVersion,
+                            channel: model.updates.installedChannel,
+                            build: Bundle.main.buildVersionString))
                         .foregroundStyle(Theme.textSecondary)
                 }
 
@@ -305,9 +303,10 @@ struct SettingsView: View {
                 hookButton(for: antigravityHooks)
                 hookButton(for: grokHooks)
 
-                Text("Hooks report through the pane's terminal only inside MyTerm. Antigravity also uses a status callback to report permission dialogs; existing status scripts are preserved. Other tools' hooks are left alone, and removing restores the previous status configuration. MyTerm refreshes installed hooks at startup. Restart an agent session for changes to take effect.")
+                Text("Restart an agent session after installing or removing its hook. Removing a hook restores its previous settings.")
                     .font(Theme.Font.ui(12))
                     .foregroundStyle(Theme.textSecondary)
+                    .help("Hooks report activity from inside MyTerm. Antigravity also reports permission dialogs through its status callback.")
             }
 
             SettingsCard("When an agent needs you") {
@@ -333,7 +332,7 @@ struct SettingsView: View {
                 }
                 .disabled(!model.agentNotifications.isEnabled)
 
-                Text("A banner arrives only while MyTerm is not the app in front, and carries a swatch of the workspace's folder colour. Clicking it opens the tab. This applies to the whole app and is not inherited by folders or workspaces.")
+                Text("Banners appear while MyTerm is in the background. Select a banner to open its tab.")
                     .font(Theme.Font.ui(12))
                     .foregroundStyle(Theme.textSecondary)
 
@@ -342,7 +341,7 @@ struct SettingsView: View {
                     set: { isShown in model.updateGlobalSettings { $0.showsAgentNotificationBell = isShown } }
                 ))
 
-                Text("The list of tabs whose agent needs you is kept either way, so turning the bell back on shows what was missed.")
+                Text("MyTerm keeps the activity list when you hide the bell.")
                     .font(Theme.Font.ui(12))
                     .foregroundStyle(Theme.textSecondary)
             }
@@ -517,7 +516,7 @@ struct SettingsView: View {
 
     private var terminalSettings: some View {
         VStack(alignment: .leading, spacing: 24) {
-            SettingsCard("Text and colour") {
+            SettingsCard("Text and color") {
                 ScopedSettingRow(
                     model: model,
                     scope: scope,
@@ -552,6 +551,7 @@ struct SettingsView: View {
                         TextField("", value: value, format: .number.precision(.fractionLength(0)))
                             .frame(width: 48)
                             .multilineTextAlignment(.trailing)
+                            .modifier(SettingsFieldOutline())
                             .accessibilityLabel("Font size in points")
                     }
                 }
@@ -561,7 +561,7 @@ struct SettingsView: View {
                         .font(.custom(settings.fontPostScriptName, size: CGFloat(settings.fontSize)))
                         .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
                         .padding(.horizontal, 10)
-                        .background(Theme.paneGround, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .background(Theme.controlFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                         .accessibilityLabel("Terminal font preview")
 
                     if !TerminalFontCatalog.isAvailable(settings.fontPostScriptName) {
@@ -646,7 +646,7 @@ struct SettingsView: View {
                 }
             }
 
-            SettingsCard("Behaviour") {
+            SettingsCard("Behavior") {
                 ScopedSettingRow(
                     model: model,
                     scope: scope,
@@ -657,6 +657,7 @@ struct SettingsView: View {
                     TextField("Scrollback lines", value: value, format: .number)
                         .frame(width: 100)
                         .multilineTextAlignment(.trailing)
+                        .modifier(SettingsFieldOutline())
                 }
 
                 ScopedSettingRow(
@@ -723,7 +724,7 @@ struct SettingsView: View {
                     model: model,
                     scope: scope,
                     title: "Browser data",
-                    caption: "New browser tabs use this profile. Existing tabs keep their current profile.",
+                    caption: "New tabs use this scope for sign-ins and cookies. Existing tabs keep their current settings.",
                     global: \TerminalPreferences.browserDataScope,
                     override: \TerminalPreferencesOverrides.browserDataScope
                 ) { value in
@@ -740,7 +741,7 @@ struct SettingsView: View {
                     model: model,
                     scope: scope,
                     title: "Share sign-ins with companion",
-                    caption: "On by default. A paired iPhone or iPad browsing through this Mac reads and writes the same cookies as this profile, so signing in on either device signs you in on both. Turn it off to keep a workspace's sign-ins on this Mac; the companion still keeps its own separate sign-ins for the profile.",
+                    caption: "Paired devices can use signed-in accounts in this browser data scope. Turn off to keep sign-ins separate.",
                     global: \TerminalPreferences.sharesBrowserSignInsWithCompanion,
                     override: \TerminalPreferencesOverrides.sharesBrowserSignInsWithCompanion
                 ) { value in
@@ -752,7 +753,7 @@ struct SettingsView: View {
                     model: model,
                     scope: scope,
                     title: "Companion browser mode",
-                    caption: "How a paired iPhone or iPad shows browser tabs. Native proxy browses on the device through this Mac; Mac rendered streams the page this Mac draws. Localhost and IP addresses always use Mac rendered.",
+                    caption: "Native proxy loads pages on the paired device through this Mac. Mac rendered streams pages and always handles localhost and IP addresses.",
                     global: \TerminalPreferences.companionBrowserMode,
                     override: \TerminalPreferencesOverrides.companionBrowserMode
                 ) { value in
@@ -804,6 +805,7 @@ struct SettingsView: View {
                     model: model,
                     scope: scope,
                     title: "Browser file patterns",
+                    caption: "Enter one pattern per line.",
                     global: \TerminalPreferences.browserFilePatterns,
                     override: \TerminalPreferencesOverrides.browserFilePatterns
                 ) { value in
@@ -819,7 +821,7 @@ struct SettingsView: View {
                     model: model,
                     scope: scope,
                     title: "Run JavaScript in local pages",
-                    caption: "On by default. HTML files opened in MyTerm can run their scripts; turn this off to show them as static pages. Changing this reloads open local pages in the affected workspaces.",
+                    caption: "Let local HTML files run scripts. Changing this reloads open local pages.",
                     global: \TerminalPreferences.allowsLocalFileJavaScript,
                     override: \TerminalPreferencesOverrides.allowsLocalFileJavaScript
                 ) { value in
@@ -837,6 +839,7 @@ struct SettingsView: View {
                     TextField("Command", text: value)
                         .labelsHidden()
                         .frame(width: 260)
+                        .modifier(SettingsFieldOutline())
                         .accessibilityLabel("Command for opening text files")
                 }
 
@@ -908,6 +911,16 @@ struct SettingsView: View {
     }
 }
 
+struct SettingsFieldOutline: ViewModifier {
+    func body(content: Content) -> some View {
+        content.overlay {
+            RoundedRectangle(cornerRadius: 4)
+                .strokeBorder(Theme.textTertiary)
+                .allowsHitTesting(false)
+        }
+    }
+}
+
 private struct FilePatternsEditor: View {
     @Binding private var patterns: [String]
     @State private var draft: String
@@ -931,6 +944,11 @@ private struct FilePatternsEditor: View {
             .font(.system(.body, design: .monospaced))
             .multilineTextAlignment(.leading)
             .frame(width: 260, height: height)
+            .overlay {
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(isEditing ? Theme.accent : Theme.textTertiary)
+                    .allowsHitTesting(false)
+            }
             .accessibilityLabel(accessibilityLabel)
             .focused($isEditing)
             .onChange(of: draft) { _, newValue in
@@ -1336,8 +1354,7 @@ private struct CursorShapePicker: View {
     }
 
     private func preview(for shape: MyTermCore.TerminalCursorShape) -> some View {
-        // Blinks on the terminal's own half-second beat, and holds still when blinking is off,
-        // Reduce Motion is on, or the row is inherited and disabled.
+        // Keep each shape identifiable while showing the blink cadence.
         TimelineView(.periodic(from: .now, by: 0.53)) { context in
             let animates = blinks && !reduceMotion && isEnabled
             let visible = !animates || Int(context.date.timeIntervalSinceReferenceDate / 0.53).isMultiple(of: 2)
@@ -1345,12 +1362,12 @@ private struct CursorShapePicker: View {
                 Text("~ % ")
                     .foregroundStyle(Theme.textSecondary)
                 cursor(shape)
-                    .opacity(visible ? 1 : 0)
+                    .opacity(visible ? 1 : 0.56)
             }
             .font(.custom(fontName, size: 13))
             .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
             .padding(.horizontal, 8)
-            .background(Theme.paneGround, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .background(Theme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
         }
         .accessibilityHidden(true)
     }

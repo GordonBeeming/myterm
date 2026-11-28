@@ -145,11 +145,19 @@ extension TerminalView {
     {
         resetCaches()
         self.cellDimension = computeFontDimensions ()
-        if (frame.width > 0) && (frame.height > 0) {
+        #if os(iOS)
+        let fitsGridToView = !usesIndependentViewport || automaticallyResizesTerminal
+        #else
+        let fitsGridToView = true
+        #endif
+        if fitsGridToView && frame.width > 0 && frame.height > 0 {
             let newCols = Int(frame.width / cellDimension.width)
             let newRows = Int(frame.height / cellDimension.height)
             resize(cols: newCols, rows: newRows)
         }
+        #if os(iOS)
+        if !fitsGridToView { updateScroller() }
+        #endif
         updateCaretView()
         
         #if os(macOS)

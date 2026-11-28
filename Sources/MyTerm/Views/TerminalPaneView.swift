@@ -24,7 +24,7 @@ struct TerminalPaneView: View {
                     dismiss: { model.dismissTerminalNotice(sessionID: session.id) }
                 )
             }
-            #if DEBUG
+            #if DEBUG || MYTERM_RUST_WORKSPACES
             if let process = model.terminalSession(for: session.id) as? SwiftTermTerminalSession,
                let action = process.rustRecovery?.action {
                 Button(rustActionTitle(action)) {
@@ -71,7 +71,7 @@ struct TerminalPaneView: View {
         }
     }
 
-    #if DEBUG
+    #if DEBUG || MYTERM_RUST_WORKSPACES
     private func rustActionTitle(_ action: LocalRustWorkspaceRecovery.Action) -> String {
         switch action {
         case .reattach: "Reattach to Saved Shell"

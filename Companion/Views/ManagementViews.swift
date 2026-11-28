@@ -102,7 +102,7 @@ struct AddHostView: View {
     }
 
     private var invalidPairingMessage: String {
-        "This pairing code is invalid or expired. Scan the current code shown by MyTerm on your Mac."
+        "This pairing code expired or is invalid. Show a new code in MyTerm’s Companion settings on your Mac."
     }
 }
 
@@ -205,7 +205,7 @@ struct CompanionSettingsView: View {
                         Text(style.title).tag(style.rawValue)
                     }
                 }
-                Text("Adaptive panes mirrors the Mac layout on wider screens and uses a terminal picker on narrow screens. This setting applies only to this device.")
+                Text("Adaptive panes use the Mac layout when space allows.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -224,9 +224,6 @@ struct CompanionSettingsView: View {
                     }
                     .disabled(services.notificationEnrollment.isWorking)
                 }
-            }
-            Section("Connections") {
-                Text("Each app window connects independently. Returning to the foreground reloads the latest terminal screen before input is enabled.")
             }
             Section("Diagnostics") {
                 NavigationLink("Connection diagnostics") { DiagnosticsView(scene: scene) }

@@ -1058,11 +1058,10 @@ extension TerminalCheckpointState {
             )
         }
         for line in buffer.lines {
-            // Buffer.resize preserves the hidden right-hand cells of alternate
-            // lines. Normal scrollback reflows and still requires exact width.
+            // A row can retain cells to the right of the viewport. Bounds
+            // and byte counts apply to its stored width in either buffer.
             guard line.cellCount >= columns,
                   line.cellCount <= TerminalCheckpointLimits.columns,
-                  expectedScrollback == nil || line.cellCount == columns,
                   line.cellData.count == line.cellCount * CheckpointCellCodec.encodedCellBytes else {
                 throw TerminalCheckpointError.corrupt("line storage width is invalid for its buffer")
             }

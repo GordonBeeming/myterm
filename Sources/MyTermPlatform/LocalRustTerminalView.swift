@@ -10,13 +10,7 @@ import SwiftUI
 public struct LocalRustTerminalView: View {
     public static let windowID = "local-rust-terminal"
 
-    public static var bundledExecutable: URL? {
-        guard Bundle.main.bundleIdentifier == "com.gordonbeeming.myterm.dev",
-              let executable = Bundle.main.executableURL?.deletingLastPathComponent()
-                .appendingPathComponent(LocalRustTerminalEndpoint.executableName),
-              FileManager.default.isExecutableFile(atPath: executable.path) else { return nil }
-        return executable
-    }
+    public static var bundledExecutable: URL? { LocalRustTerminalEndpoint.bundledExecutable }
 
     private let namespace: URL
     private let executable: URL

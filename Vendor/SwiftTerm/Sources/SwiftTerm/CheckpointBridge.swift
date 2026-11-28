@@ -266,7 +266,7 @@ extension Terminal {
                 result.lastStorageColumns = storage[2]; result.lastStorageRows = storage[3]
             }
             result.lines = try source.lines.enumerated().map { index, line in
-                guard line.width >= s.columns, line.width <= 1000, !normal || line.width == s.columns else {
+                guard line.width >= s.columns, line.width <= 1000 else {
                     throw TerminalCheckpointError.corrupt("bridge stored width")
                 }
                 cellBudget += line.width

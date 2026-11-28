@@ -1866,7 +1866,7 @@
                  self.cursor = Default::default();
 --- /dev/null
 +++ b/term/src/terminalstate/prototype-checkpoint.rs
-@@ -0,0 +1,356 @@
+@@ -0,0 +1,358 @@
 +use base64::Engine;
 +use std::convert::TryFrom;
 +use serde_json::{json, Value as BridgeValue};
@@ -2034,7 +2034,9 @@
 +        anyhow::ensure!(!line.is_double_width() && !line.is_double_height_top()
 +            && !line.is_double_height_bottom(), "unsupported line render mode");
 +        let width = line.len().max(screen.physical_cols);
-+        anyhow::ensure!(width <= 1000 && (!normal || width == screen.physical_cols), "checkpoint stored column limit");
++        // Reflow can leave a blank normal row at its old width. Its styles
++        // and image cells still belong to the line and must survive a checkpoint.
++        anyhow::ensure!(width <= 1000, "checkpoint stored column limit");
 +        let packed = cells.line(&line, width)?;
 +        output.push(json!({"wrapped":line.last_cell_was_wrapped(),"cells":packed,
 +            "width":line.len().max(screen.physical_cols),"images":graphics.row(&line,cell_width,cell_height,requests,kitty_requests)?}));

@@ -50,6 +50,26 @@ public enum RemoteError: Error, LocalizedError, Equatable, Sendable {
     }
 }
 
+public enum MyTermHostedRelay: CaseIterable, Sendable {
+    case development, beta, production
+
+    public var title: String {
+        switch self {
+        case .development: "Development"
+        case .beta: "Beta"
+        case .production: "Production"
+        }
+    }
+
+    public var origin: String {
+        switch self {
+        case .development: "https://myterm-relay-dev.gordonbeeming.dev"
+        case .beta: "https://myterm-relay-beta.gordonbeeming.dev"
+        case .production: "https://myterm-relay.gordonbeeming.dev"
+        }
+    }
+}
+
 public struct RelayEndpoint: Hashable, Codable, Sendable {
     public let url: URL
 
@@ -76,6 +96,10 @@ public struct RelayEndpoint: Hashable, Codable, Sendable {
     }
 
     public var canonicalOrigin: String { url.absoluteString }
+
+    public var hostedRelay: MyTermHostedRelay? {
+        MyTermHostedRelay.allCases.first { $0.origin == canonicalOrigin }
+    }
 
     public func hasSameOrigin(as candidate: URL) -> Bool {
         guard let lhs = URLComponents(url: url, resolvingAgainstBaseURL: false),

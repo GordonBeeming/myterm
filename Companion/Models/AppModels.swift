@@ -85,9 +85,7 @@ enum DiagnosticsUploadOutcome: Equatable {
         case .sent(let bytes):
             "Sent \(bytes.formatted(.byteCount(style: .file))) to the Mac."
         case .notConnected:
-            // Named for the device, because the old wording read as a claim about the Mac itself
-            // and Settings is reachable from the Mac list before any Mac has been opened here.
-            "This \(UIDevice.current.localizedModel) has no Mac open. Open one, then send."
+            "Open a Mac, then send from its Settings."
         case .nothingRecorded:
             "Nothing recorded yet, so there is nothing to send."
         case .failed(let reason):
@@ -1585,6 +1583,7 @@ final class TerminalSurfaceState {
     var route: TerminalRoute
     var isFollowingOutput = true
     var followOutputRevision = 0
+    var showsHorizontalScrollHint = false
     var bracketedPasteMode = false
     @ObservationIgnored var viewport: TerminalViewportState?
 

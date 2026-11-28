@@ -672,7 +672,23 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
     func setupOptions ()
     {
         setupOptions (width: getEffectiveWidth (size: bounds.size), height: bounds.height)
-        layer?.backgroundColor = nativeBackgroundColor.cgColor
+        updateBackgroundLayer()
+    }
+
+    private func updateBackgroundLayer() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = nativeBackgroundColor.cgColor
+        }
+    }
+
+    override open func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        guard _nativeBg != nil, _nativeFg != nil else { return }
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            nativeForegroundColor = _nativeFg
+            nativeBackgroundColor = _nativeBg
+        }
+        needsDisplay = true
     }
 
     /// This controls whether the backspace should send ^? or ^H, the default is ^?
@@ -707,7 +723,10 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
             if settingBg { return }
             settingBg = true
             _nativeBg = newValue
-            terminal.backgroundColor = nativeBackgroundColor.getTerminalColor ()
+            effectiveAppearance.performAsCurrentDrawingAppearance {
+                terminal.backgroundColor = newValue.getTerminalColor()
+            }
+            updateBackgroundLayer()
             settingBg = false
         }
     }

@@ -447,7 +447,7 @@ public final class Buffer {
                 // calls makeEmpty), making resize O(scrollback capacity). Empty slots
                 // are created on demand at the buffer's current cols, so they never
                 // need resizing here.
-                for i in 0..<lines.count {
+                for i in 0..<lines.count where lines[i].count < newCols {
                     lines [i].resize (cols: newCols, fillData: CharData.Null)
                 }
 
@@ -1347,8 +1347,7 @@ extension Buffer {
         buffer.setupLinesCallbacks()
         for lineSnapshot in snapshot.lines {
             let line = try BufferLine.restore(from: lineSnapshot, hyperlinkAtoms: &hyperlinkAtoms)
-            guard line.count >= snapshot.columns,
-                  snapshot.scrollback == nil || line.count == snapshot.columns else {
+            guard line.count >= snapshot.columns else {
                 throw TerminalCheckpointError.corrupt("line width does not match its buffer")
             }
             buffer._lines.push(line)

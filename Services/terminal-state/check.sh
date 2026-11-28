@@ -12,6 +12,7 @@ export MYTERM_PENDING_GRAPHICS_CHECKPOINT_FIXTURE="$scratch/pending-graphics-che
 export MYTERM_RASTER_CHECKPOINT_FIXTURE="$scratch/raster-checkpoint.json"
 export MYTERM_BOUNDED_CHECKPOINT_FIXTURE="$scratch/bounded-history-checkpoint.json"
 export MYTERM_LARGE_GRAPHICS_CHECKPOINT_FIXTURE="$scratch/large-graphics-checkpoint.json"
+export MYTERM_RESIZE_CHECKPOINT_FIXTURE="$scratch/resize-checkpoint.json"
 python3 "$service/dependencies/prepare.py"
 export CARGO_TARGET_DIR="$service/target"
 cargo +1.99.1 test --locked --manifest-path "$service/Cargo.toml"

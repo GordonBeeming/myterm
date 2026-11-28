@@ -208,4 +208,27 @@ final class WezTermCheckpointTests: XCTestCase {
         XCTAssertTrue(images.allSatisfy { $0.pixelWidth == 324 && $0.pixelHeight == 16 })
         XCTAssertEqual(terminal.kittyGraphicsState.totalImageBytes, 320 * 240 * 4)
     }
+
+    @MainActor
+    func testNarrowCheckpointRetainsStyledNormalCellsAcrossPartialGrowth() throws {
+        guard let fixture = ProcessInfo.processInfo.environment["MYTERM_RESIZE_CHECKPOINT_FIXTURE"] else {
+            throw XCTSkip("Run Services/terminal-state/check.sh to exercise viewport resize import")
+        }
+        let checkpoint = try Data(contentsOf: URL(fileURLWithPath: fixture))
+        let view = TerminalView(frame: CGRect(x: 0, y: 0, width: 90, height: 96))
+        try view.importWezTermCheckpoint(checkpoint, expectedSequence: 12)
+        // MyTerm can forward the imported view using its native Swift checkpoint.
+        let terminal = Terminal(delegate: view)
+        try terminal.importCheckpoint(view.getTerminal().exportCheckpoint())
+        XCTAssertEqual(terminal.cols, 10)
+        XCTAssertEqual(terminal.getCharacter(col: 0, row: 1), "n")
+        XCTAssertEqual(terminal.getLine(row: 0)?.count, 20)
+
+        terminal.resize(cols: 15, rows: 6)
+        XCTAssertEqual(terminal.getLine(row: 0)?.count, 20)
+        terminal.resize(cols: 20, rows: 6)
+        let restored = try XCTUnwrap(terminal.getLine(row: 0))
+        XCTAssertEqual(restored[19].attribute.bg, .ansi256(code: 1))
+        XCTAssertEqual(terminal.getCharacter(col: 0, row: 1), "n")
+    }
 }

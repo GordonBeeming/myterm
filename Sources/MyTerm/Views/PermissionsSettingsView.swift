@@ -10,7 +10,7 @@ struct PermissionsSettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             Group {
-                Text("macOS treats programs you run in MyTerm as MyTerm, so a permission granted here applies to every pane. Nothing is requested until you click Grant or a program asks for it.")
+                Text("Permissions apply to every pane. macOS prompts when you request access here or a program asks for it.")
                     .font(Theme.Font.ui(12))
                     .foregroundStyle(Theme.textSecondary)
             }

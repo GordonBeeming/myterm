@@ -1,17 +1,18 @@
-#if DEBUG
+#if DEBUG || MYTERM_RUST_WORKSPACES
 import Foundation
 import MyTermContinuity
 import Observation
 
-/// The development workspace uses a dedicated local server and never falls back to a different terminal engine.
+/// A workspace’s saved shell belongs to its local server. Launch and recovery use that same authority.
 @MainActor
 public final class LocalRustWorkspaceTerminalEngine: TerminalEngine {
+    public static var bundledExecutable: URL? { LocalRustTerminalEndpoint.bundledExecutable }
     private let backend: LocalRustWorkspaceBackend
 
     public init(namespace: URL, executable: URL?) {
         let connect: LocalRustWorkspaceBackend.Connect = { starting in
             guard let executable else {
-                throw LocalRustTerminalError.launch("The Rust terminal server is missing from this development bundle.")
+                throw LocalRustTerminalError.launch("The Rust terminal server is missing from this app bundle.")
             }
             return try await LocalRustTerminalEndpoint(namespace: namespace, bundledExecutable: executable).connect(starting: starting)
         }

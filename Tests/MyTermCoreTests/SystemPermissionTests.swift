@@ -41,15 +41,15 @@ final class SystemPermissionTests: XCTestCase {
 
     func testPromptPermissionsOfferGrantOnlyBeforeMacOSHasAnswered() {
         let microphone = SystemPermission.microphone
-        XCTAssertEqual(microphone.requestButtonTitle(for: .notDetermined), "Grant")
-        XCTAssertEqual(microphone.requestButtonTitle(for: .notGranted), "Grant")
+        XCTAssertEqual(microphone.requestButtonTitle(for: .notDetermined), "Request access")
+        XCTAssertEqual(microphone.requestButtonTitle(for: .notGranted), "Request access")
         XCTAssertNil(microphone.requestButtonTitle(for: .granted))
         XCTAssertNil(microphone.requestButtonTitle(for: .denied))
     }
 
     func testProbePermissionsCanBeCheckedAgainOnceAnswered() {
         let downloads = SystemPermission.downloadsFolder
-        XCTAssertEqual(downloads.requestButtonTitle(for: .unknown), "Grant")
+        XCTAssertEqual(downloads.requestButtonTitle(for: .unknown), "Request access")
         XCTAssertEqual(downloads.requestButtonTitle(for: .denied), "Check Again")
         // A grant revoked in System Settings is only visible by probing again.
         XCTAssertEqual(downloads.requestButtonTitle(for: .granted), "Check Again")

@@ -14,6 +14,19 @@ Use **Beta → Run workflow** on `main` to retry a failed batch. An already publ
 
 Publishing a stable `vMAJOR.MINOR[.PATCH]` release runs only the macOS release pipeline and updates the stable Homebrew cask. It does not trigger another iPhone build. Beta releases do not become GitHub's latest stable release, and publishing them does not recursively start the release workflow.
 
+## Rehearse the Rust workspace upgrade locally
+
+Create a private directory outside macOS Application Support and put a separate copy of `myterm/workspace-state.json` and any configuration snapshots or inbox data inside it. Copy ordinary files. Use a dedicated test profile for sign-in and omit production credentials. Disable automatic agent session restoration in the rehearsal copy before opening it.
+
+```sh
+MYTERM_APPLICATION_SUPPORT_DIRECTORY="$profile" MYTERM_RELEASE_CHANNEL=beta \
+  ./run.sh --rust-release-rehearsal
+```
+
+The rehearsal runs a signed Release build with a separate bundle ID and data location. It uses a fresh Rust server and leaves the installed app and its configuration in place. Use `--bundle` to build without launching. To rehearse the cask, keep the Homebrew prefix, its Caskroom and the app destination disposable. Upgrade from a published version, then verify both installed executables with `script/verify_rust_workspace_bundle.sh` and the rehearsal bundle ID. A local DMG can verify cask replacement and signatures. Gatekeeper launch and notarization require the distribution DMG.
+
+The macOS release workflow builds with `make bundle DISTRIBUTION=1 RUST_WORKSPACES=1`. That build keeps the production bundle ID and puts the signed Rust server inside `myterm.app`, which the existing cask replaces as a unit. The workflow verifies the app and server before notarization. Verify an installed release bundle using the production bundle ID.
+
 ## Switching channels in the app
 
 An older Homebrew installation first updates to a stable release containing the selector. Subsequent updates download the selected channel's immutable DMG, verify its SHA-256, Developer ID identity, notarization tickets, app version and channel, and stage the app beside the installed bundle. The incoming signed helper checks configuration compatibility with its own decoder. The running app stays in place until it quits.

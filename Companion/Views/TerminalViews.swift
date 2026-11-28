@@ -1,5 +1,6 @@
 import MyTermCore
 import MyTermRemote
+import MyTermUI
 import PhotosUI
 import OSLog
 import SwiftTerm
@@ -151,27 +152,24 @@ struct TerminalScreen: View {
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 HideKeyboardButton()
-                Button(showTerminalKeys ? "Hide terminal keys" : "Show terminal keys", systemImage: "keyboard") {
+                Button(showTerminalKeys ? "Hide terminal keys" : "Show terminal keys", systemImage: "command") {
                     showTerminalKeys.toggle()
                 }
                 .accessibilityIdentifier("toggle-terminal-keys")
                 .accessibilityValue(showTerminalKeys ? "Shown" : "Hidden")
-                Menu("Text size", systemImage: "textformat.size") {
-                    Button("Larger") { adjustFont(by: 1) }
-                    Button("Smaller") { adjustFont(by: -1) }
-                    Button("Reset") { setFont(13) }
-                }
                 if horizontalSizeClass == .regular {
-                    Menu("Terminal", systemImage: "terminal") {
-                        ForEach(primaryTerminalChoices) { value in
-                            Button(value.title) { selectPrimary(value) }
+                    Menu("Terminal layout", systemImage: "rectangle.split.2x1") {
+                        Menu("Primary terminal") {
+                            ForEach(primaryTerminalChoices) { value in
+                                Button(value.title) { selectPrimary(value) }
+                            }
                         }
-                    }
-                    .disabled(primaryTerminalChoices.isEmpty)
-                    Menu("Second terminal", systemImage: "rectangle.split.2x1") {
-                        Button("Single terminal") { setSecondary(nil) }
-                        ForEach(otherTerminals) { value in
-                            Button(value.title) { setSecondary(value) }
+                        .disabled(primaryTerminalChoices.isEmpty)
+                        Menu("Second terminal") {
+                            Button("Single terminal") { setSecondary(nil) }
+                            ForEach(otherTerminals) { value in
+                                Button(value.title) { setSecondary(value) }
+                            }
                         }
                     }
                 }
@@ -218,15 +216,6 @@ struct TerminalScreen: View {
 
     private var primaryTerminalChoices: [TerminalRoute] {
         otherTerminals.filter { $0.workspaceID == route.workspaceID }
-    }
-
-    private func adjustFont(by amount: CGFloat) {
-        guard let state = scene.terminalStates[route.id] else { return }
-        state.fontSize = min(28, max(8, state.fontSize + amount))
-    }
-
-    private func setFont(_ value: CGFloat) {
-        scene.terminalStates[route.id]?.fontSize = value
     }
 
     private func setSecondary(_ value: TerminalRoute?) {
@@ -288,6 +277,20 @@ struct CompanionTerminalPane: View {
                     Task { await scene.refreshTerminal(currentRoute) }
                 }
                 .id(currentRoute.id)
+                .padding(.horizontal, 4)
+                .background(.black)
+                .overlay(alignment: .bottomLeading) {
+                    if state.showsHorizontalScrollHint && !state.isAwaitingCheckpoint {
+                        Label("Scroll sideways", systemImage: "arrow.left.and.right")
+                            .font(.caption)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(.black.opacity(0.92), in: Capsule())
+                            .padding(7)
+                            .allowsHitTesting(false)
+                    }
+                }
                 .overlay(alignment: .bottomTrailing) {
                     if !state.isFollowingOutput {
                         Button("Jump to live", systemImage: "arrow.down.to.line") {
@@ -321,46 +324,65 @@ private struct TerminalControlBar: View {
     let retry: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: state.ownsControl ? "keyboard.fill" : "eye")
-            Text(status)
-                .font(.footnote)
-                .lineLimit(1)
-            Spacer()
-            Button("Compose", systemImage: "square.and.pencil", action: compose)
-                .labelStyle(.iconOnly)
-                .accessibilityIdentifier("compose-terminal-text")
-            Button("Upload image", systemImage: "photo.badge.plus", action: uploadImage)
-                .labelStyle(.iconOnly)
-                .accessibilityIdentifier("upload-terminal-image")
+        VStack(alignment: .leading, spacing: 6) {
             if isStalled {
-                // A spinner here claimed something was happening when nothing was.
-                Button("Retry", systemImage: "arrow.clockwise", action: retry)
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .accessibilityIdentifier("retry-terminal-attach")
-            } else if state.isAwaitingCheckpoint {
-                ProgressView().controlSize(.small)
-            } else if state.isControlRequestPending {
-                ProgressView().controlSize(.small)
-            } else if state.ownsControl {
-                Button("Release") { request(.release) }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-            } else if state.controllerConnectionID == nil {
-                Button("Request control") { request(.acquire) }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+                Label(status, systemImage: "exclamationmark.circle")
+                    .font(.footnote)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 10) {
+                    Spacer()
+                    auxiliaryActions
+                    Button("Retry", systemImage: "arrow.clockwise", action: retry)
+                        .buttonStyle(.bordered)
+                        .tint(.primary)
+                        .controlSize(.small)
+                        .accessibilityIdentifier("retry-terminal-attach")
+                }
             } else {
-                Button("Take control") { request(.takeover) }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+                HStack(spacing: 10) {
+                    Label(status, systemImage: state.ownsControl ? "keyboard.fill" : "eye")
+                        .font(.footnote)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    auxiliaryActions
+                    if state.isAwaitingCheckpoint || state.isControlRequestPending {
+                        ProgressView().controlSize(.small)
+                    } else if state.ownsControl {
+                        Button("Release") { request(.release) }
+                            .buttonStyle(.bordered)
+                            .tint(.primary)
+                            .controlSize(.small)
+                    } else if state.controllerConnectionID == nil {
+                        controlAction("Request control", action: .acquire)
+                    } else {
+                        controlAction("Take control", action: .takeover)
+                    }
+                }
             }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
-        .background(.bar)
+        .background(Color(uiColor: .secondarySystemBackground))
         .accessibilityElement(children: .contain)
+    }
+
+    private func controlAction(_ title: String, action: ControlAction) -> some View {
+        Button { request(action) } label: { Text(title).foregroundStyle(Theme.onAccent) }
+            .buttonStyle(.borderedProminent)
+            .tint(Theme.accent)
+            .controlSize(.small)
+    }
+
+    @ViewBuilder private var auxiliaryActions: some View {
+        Button("Compose", systemImage: "square.and.pencil", action: compose)
+            .labelStyle(.iconOnly)
+            .tint(.primary)
+            .accessibilityIdentifier("compose-terminal-text")
+        Button("Upload image", systemImage: "photo.badge.plus", action: uploadImage)
+            .labelStyle(.iconOnly)
+            .tint(.primary)
+            .disabled(!state.ownsControl || state.isAwaitingCheckpoint || isStalled)
+            .accessibilityIdentifier("upload-terminal-image")
     }
 
     /// True when nothing is going to arrive without something being retried, which is when the bar
@@ -449,11 +471,11 @@ struct RemoteTerminalView: UIViewRepresentable {
         let gainedControl = !view.acceptsUserInput && state.ownsControl
         let gainedFocus = requestsKeyboardFocus && !context.coordinator.requestedFocus
         context.coordinator.requestedFocus = requestsKeyboardFocus
+        let acceptsControl = state.ownsControl && !state.isAwaitingCheckpoint
+        view.automaticallyResizesTerminal = acceptsControl
         if view.font.pointSize != state.fontSize {
             view.font = .monospacedSystemFont(ofSize: state.fontSize, weight: .regular)
         }
-        let acceptsControl = state.ownsControl && !state.isAwaitingCheckpoint
-        view.automaticallyResizesTerminal = acceptsControl
         // A view-only pane cannot reach the application, so its pans scroll the
         // local scrollback instead of being reported as wheel movement.
         view.allowMouseReporting = acceptsControl
@@ -613,6 +635,11 @@ struct RemoteTerminalView: UIViewRepresentable {
                 let state = self.parent.state
                 state.viewport = view.captureViewport()
                 if state.isFollowingOutput != view.followsOutput { state.isFollowingOutput = view.followsOutput }
+                let canScrollSideways = view.contentSize.width > view.bounds.width + 1
+                    && view.contentOffset.x < 1
+                if state.showsHorizontalScrollHint != canScrollSideways {
+                    state.showsHorizontalScrollHint = canScrollSideways
+                }
                 let bracketed = view.getTerminal().bracketedPasteMode
                 if state.bracketedPasteMode != bracketed { state.bracketedPasteMode = bracketed }
             }
@@ -824,6 +851,16 @@ struct TerminalActionsView: View {
                     }
                     Button("Close tab", role: .destructive) { Task { await close() } }
                 }
+                if let surface {
+                    Section("Text size") {
+                        Stepper("Text size: \(Int(surface.fontSize))", onIncrement: {
+                            surface.fontSize = min(28, surface.fontSize + 1)
+                        }, onDecrement: {
+                            surface.fontSize = max(8, surface.fontSize - 1)
+                        })
+                        Button("Reset text size") { surface.fontSize = 13 }
+                    }
+                }
                 Section("Paste image") {
                     TerminalImageUploadControls(scene: scene, route: route, isUploading: $isSendingImage)
                 }
@@ -913,6 +950,7 @@ final class ClipboardTerminalView: TerminalView {
     var onPasteImage: ((Data) -> Void)?
     var onToggleMaximise: (() -> Void)?
     var canMaximise = false
+    var clipboard: UIPasteboard = .general
 
     /// `TerminalView` is a `UIScrollView`, and UIKit rewinds the active scroll view to the top when
     /// the status bar is tapped. A tap anywhere near the title then threw the scrollback back to
@@ -951,9 +989,9 @@ final class ClipboardTerminalView: TerminalView {
 
     override func paste(_ sender: Any?) {
         guard acceptsUserInput else { return }
-        if let text = UIPasteboard.general.string, !text.isEmpty {
+        if let text = clipboard.string, !text.isEmpty {
             super.paste(sender)
-        } else if UIPasteboard.general.hasImages, let image = UIPasteboard.general.image,
+        } else if clipboard.hasImages, let image = clipboard.image,
            let data = image.pngData() {
             onPasteImage?(data)
         } else {

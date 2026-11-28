@@ -142,8 +142,10 @@ final class SceneStateTests: XCTestCase {
             UIColor.red.setFill()
             context.fill(CGRect(x: 0, y: 0, width: 2, height: 2))
         }
-        UIPasteboard.general.image = image
-        defer { UIPasteboard.general.items = [] }
+        let clipboard = UIPasteboard.withUniqueName()
+        defer { UIPasteboard.remove(withName: clipboard.name) }
+        view.clipboard = clipboard
+        clipboard.image = image
         var pasted: Data?
         view.onPasteImage = { pasted = $0 }
         view.acceptsUserInput = false
@@ -153,8 +155,8 @@ final class SceneStateTests: XCTestCase {
         view.paste(nil)
         XCTAssertTrue(pasted?.starts(with: [0x89, 0x50, 0x4e, 0x47]) == true)
         pasted = nil
-        UIPasteboard.general.items = [["public.utf8-plain-text": "text with a preview",
-                                      "public.png": try XCTUnwrap(image.pngData())]]
+        clipboard.items = [["public.utf8-plain-text": "text with a preview",
+                            "public.png": try XCTUnwrap(image.pngData())]]
         view.paste(nil)
         XCTAssertNil(pasted)
 

@@ -42,10 +42,15 @@ struct CompanionSessionNavigationView: View {
                                     item.tab.kind == .browser ? "globe" : "terminal")
                                 .frame(width: 26)
                             VStack(alignment: .leading, spacing: 3) {
-                                Text(item.tab.title).foregroundStyle(.primary)
+                                Text(inbox ? item.workspaceTitle : item.tab.title).foregroundStyle(.primary)
                                     .fontWeight(inbox && isUnread(item) ? .semibold : .regular)
-                                Text(item.subtitleWithFolderCount).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                                    .accessibilityLabel(item.accessibleSubtitle)
+                                if inbox {
+                                    Text([item.tab.title, item.tab.workingDirectory?.lastPathComponent]
+                                        .compactMap { $0 }.joined(separator: " · "))
+                                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                } else {
+                                    Text(item.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                }
                             }
                             Spacer()
                             if inbox, let status = status(for: item.tab.agentActivity) {
@@ -55,6 +60,11 @@ struct CompanionSessionNavigationView: View {
                     }
                     .accessibilityIdentifier("session-destination-\(item.id.rawValue)")
                     .accessibilityValue(inbox && isUnread(item) ? "Unread" : "")
+                    .accessibilityActions {
+                        if inbox {
+                            Button("Dismiss") { dismiss(item) }
+                        }
+                    }
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         if inbox {
                             Button("Dismiss", systemImage: "xmark", role: .destructive) {
@@ -78,17 +88,13 @@ struct CompanionSessionNavigationView: View {
                                            systemImage: inbox ? "tray" : "magnifyingglass")
                 }
             } header: {
-                if inbox {
+                if inbox && !items.isEmpty {
                     let count = items.filter(isUnread).count
-                    Text(count == 0 ? "All caught up" : "\(count) unread")
-                }
-            } footer: {
-                if inbox {
-                    Text("This Mac only. Newest attention first. A blue dot means unread. Swipe left to dismiss a row until the agent does something new. Choose another Mac to see its inbox.")
+                    Text(count == 0 ? "Recent" : "\(count) unread")
                 }
             }
         }
-        .searchable(text: $query, prompt: "Tabs, workspaces, folders or paths")
+        .searchable(text: $query, prompt: inbox ? "Search inbox" : "Search tabs")
         .accessibilityIdentifier(inbox ? "session-inbox" : "session-quick-jump")
     }
 

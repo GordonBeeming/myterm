@@ -4,11 +4,13 @@ import SwiftUI
 
 struct CompanionSettingsView: View {
     @Bindable var companion: CompanionHostModel
-    @State private var connectionInput = ""
+    @State private var customRelayAddress = ""
+    @State private var setupLink = ""
+    @State private var relayChoice: CompanionRelayChoice?
     @State private var isEditingConnection = false
-    @State private var previousRelay = ""
     @State private var pairingLinkCopyError: String?
     @State private var diagnosticsError: String?
+    @State private var deviceToRevoke: PairedPeer?
     @AppStorage(CompanionHostModel.collectConnectionLogKey) private var collectsConnectionLog = false
 
     init(companion: CompanionHostModel) {
@@ -22,30 +24,90 @@ struct CompanionSettingsView: View {
         !companion.hasLinkedRelay || isEditingConnection
     }
 
+    private var relayChoices: [CompanionRelayChoice] {
+        CompanionRelayChoice.choices(channel: companion.channel, release: Bundle.main.releaseChannel)
+    }
+
+    private var selectedRelay: CompanionRelayChoice {
+        relayChoice ?? CompanionRelayChoice.initial(savedAddress: companion.relayText, choices: relayChoices)
+    }
+
+    private var connectionInput: String {
+        let value = switch selectedRelay {
+        case .selfHosted: customRelayAddress
+        case .setupLink: setupLink
+        default: selectedRelay.origin ?? ""
+        }
+        return value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var connectionInProgress: Bool {
+        companion.isSigningIn || companion.status == .connecting
+    }
+
+    private var canSubmit: Bool {
+        guard !connectionInProgress, !connectionInput.isEmpty else { return false }
+        if selectedRelay == .selfHosted {
+            guard let url = URL(string: connectionInput) else { return false }
+            return (try? RelayEndpoint(url)) != nil
+        }
+        return true
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             if showsLinkForm {
                 SettingsCard("Link this Mac") {
-                    TextField("Relay address or setup link", text: $connectionInput,
-                              prompt: Text("Paste your relay address or setup link"))
-                        .textFieldStyle(.roundedBorder)
-                        .accessibilityLabel("Relay address or setup link")
-                        .disabled(companion.isSigningIn || companion.status == .connecting)
-
-                    Text("Use a setup link to create or recover your passkey. Otherwise, enter the relay address to sign in with an existing passkey.")
-                        .font(Theme.Font.ui(12))
-                        .foregroundStyle(Theme.textSecondary)
-
-                    Button(companion.isSigningIn ? "Waiting for sign-in…" : companion.status == .connecting ? "Connecting…" : "Continue") {
-                        let input = connectionInput.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if (try? CompanionHostModel.parseBootstrapLink(input)) != nil {
-                            companion.signIn(bootstrapURLText: input)
-                        } else {
-                            companion.relayText = input
-                            companion.signIn()
+                    Picker("Relay", selection: Binding(get: { selectedRelay }, set: { relayChoice = $0 })) {
+                        ForEach(relayChoices, id: \.self) { choice in
+                            Text(choice.title).tag(choice)
                         }
                     }
-                    .disabled(companion.isSigningIn || companion.status == .connecting || connectionInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .pickerStyle(.menu)
+                    .disabled(connectionInProgress)
+
+                    switch selectedRelay {
+                    case .selfHosted:
+                        LabeledContent("Relay address") {
+                            TextField("Relay address", text: $customRelayAddress, prompt: Text("https://relay.example.com"))
+                                .labelsHidden()
+                                .textFieldStyle(.roundedBorder)
+                                .modifier(SettingsFieldOutline())
+                                .disabled(connectionInProgress)
+                        }
+                    case .setupLink:
+                        LabeledContent("Setup link") {
+                            SecureField("Setup link", text: $setupLink, prompt: Text("Paste your setup link"))
+                                .labelsHidden()
+                                .textFieldStyle(.roundedBorder)
+                                .modifier(SettingsFieldOutline())
+                                .disabled(connectionInProgress)
+                        }
+                    default:
+                        if let origin = selectedRelay.origin {
+                            LabeledContent("Relay address") {
+                                Text(origin)
+                                    .font(Theme.Font.mono(12))
+                                    .foregroundStyle(Theme.textSecondary)
+                                    .textSelection(.enabled)
+                            }
+                        }
+                    }
+
+                    Button(companion.isSigningIn ? "Waiting for sign-in…" : companion.status == .connecting ? "Connecting…" : selectedRelay == .setupLink ? "Open setup link" : "Sign in") {
+                        if selectedRelay == .setupLink {
+                            companion.signIn(bootstrapURLText: connectionInput)
+                        } else {
+                            companion.signIn(relayAddress: connectionInput)
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!canSubmit)
+
+                    Text("After signing in, show a pairing code to connect a device.")
+                        .font(Theme.Font.ui(12))
+                        .foregroundStyle(Theme.textSecondary)
 
                     if companion.isSigningIn {
                         Button("Cancel sign-in", role: .cancel) { companion.cancelSignIn() }
@@ -53,8 +115,8 @@ struct CompanionSettingsView: View {
                         Button("Cancel connection", role: .cancel) { companion.disconnect() }
                     } else if companion.hasLinkedRelay && isEditingConnection {
                         Button("Cancel editing") {
-                            companion.relayText = previousRelay
-                            connectionInput = ""
+                            setupLink = ""
+                            loadRelaySelection()
                             isEditingConnection = false
                         }
                     }
@@ -74,16 +136,16 @@ struct CompanionSettingsView: View {
                             relayActions
                         }
                     }
-                    Text("Keep this Mac awake with MyTerm running so your phone can connect.")
+                    Text("Keep this Mac awake with MyTerm running so your devices can connect.")
                         .font(Theme.Font.ui(12))
                         .foregroundStyle(Theme.textSecondary)
                 }
             }
 
             if !showsLinkForm {
-                SettingsCard("Pair a phone") {
+                SettingsCard("Pair a device") {
                     HStack {
-                        Button("Start Pair Mode") { companion.beginPairing() }
+                        Button("Show pairing code") { companion.beginPairing() }
                             .disabled(
                                 companion.status != .connected
                                     || companion.pairingQRCode != nil
@@ -117,14 +179,15 @@ struct CompanionSettingsView: View {
                         }
                     }
 
-                    Text("The QR code refreshes every 30 seconds. Each one-use link remains valid for 60 seconds, so a scan can finish while the next code is shown. The relay never receives the secret. You must approve the phone on this Mac before it becomes trusted.")
+                    Text("Scan the code with the other device, then approve it on this Mac.")
                         .font(Theme.Font.ui(12))
                         .foregroundStyle(Theme.textSecondary)
+                        .help("The code refreshes every 30 seconds. Each one-use link remains valid for 60 seconds.")
                 }
 
-                SettingsCard("Paired phones", insetRows: false) {
+                SettingsCard("Paired devices", insetRows: false) {
                     if companion.pairedPeers.isEmpty {
-                        Text("No phones paired")
+                        Text("No devices paired")
                             .foregroundStyle(Theme.textSecondary)
                             .padding(16)
                     } else {
@@ -137,8 +200,9 @@ struct CompanionSettingsView: View {
                                         .foregroundStyle(Theme.textSecondary)
                                 }
                                 Spacer()
-                                Button("Revoke", role: .destructive) { companion.revoke(peer: peer) }
+                                Button("Revoke", role: .destructive) { deviceToRevoke = peer }
                                     .accessibilityLabel("Revoke \(peer.name)")
+                                    .help("Remove this device’s access to this Mac")
                             }
                             .padding(.vertical, 14)
                             .padding(.horizontal, 16)
@@ -193,17 +257,16 @@ struct CompanionSettingsView: View {
                 }
             }
         }
-        .onAppear {
-            if connectionInput.isEmpty { connectionInput = companion.relayText }
-        }
+        .onAppear { if relayChoice == nil { loadRelaySelection() } }
         .onChange(of: companion.status) { _, status in
             if status == .connected {
-                connectionInput = ""
+                setupLink = ""
+                loadRelaySelection()
                 isEditingConnection = false
             }
         }
         .alert(
-            "Pair this phone?",
+            "Pair this device?",
             isPresented: Binding(
                 get: { companion.pendingPairing != nil },
                 set: { if !$0 { companion.answerPairing(approved: false) } }
@@ -214,6 +277,19 @@ struct CompanionSettingsView: View {
             Button("Cancel", role: .cancel) { companion.answerPairing(approved: false) }
         } message: { prompt in
             Text("Allow \(prompt.deviceName) to access this Mac through the configured relay?")
+        }
+        .alert(
+            "Revoke device access?",
+            isPresented: Binding(
+                get: { deviceToRevoke != nil },
+                set: { if !$0 { deviceToRevoke = nil } }
+            ),
+            presenting: deviceToRevoke
+        ) { peer in
+            Button("Revoke", role: .destructive) { companion.revoke(peer: peer) }
+            Button("Cancel", role: .cancel) {}
+        } message: { peer in
+            Text("\(peer.name) will need to pair again to access this Mac.")
         }
         .alert("Diagnostics could not be opened", isPresented: Binding(
             get: { diagnosticsError != nil },
@@ -236,6 +312,12 @@ struct CompanionSettingsView: View {
         }
     }
 
+    private func loadRelaySelection() {
+        let selected = CompanionRelayChoice.initial(savedAddress: companion.relayText, choices: relayChoices)
+        relayChoice = selected
+        customRelayAddress = selected == .selfHosted ? companion.relayText : ""
+    }
+
     private var relayDetails: some View {
         VStack(alignment: .leading, spacing: 6) {
             statusLabel
@@ -249,8 +331,7 @@ struct CompanionSettingsView: View {
     private var relayActions: some View {
         HStack {
             Button("Change relay or recover passkey…") {
-                previousRelay = companion.relayText
-                connectionInput = companion.relayText
+                loadRelaySelection()
                 isEditingConnection = true
             }
             .disabled(companion.isSigningIn || companion.status == .connecting)
@@ -260,6 +341,7 @@ struct CompanionSettingsView: View {
                 Button("Cancel connection", role: .cancel) { companion.disconnect() }
             } else if companion.status == .connected {
                 Button("Disconnect") { companion.disconnect() }
+                    .help("Pause relay access for all paired devices until you reconnect")
             } else {
                 Button(companion.needsSignIn ? "Sign in again" : "Reconnect") { companion.connect() }
             }

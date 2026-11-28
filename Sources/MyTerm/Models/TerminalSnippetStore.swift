@@ -7,8 +7,9 @@ import Observation
 @Observable
 final class DesktopTerminalSnippetStore {
     static let shared: DesktopTerminalSnippetStore = {
-        #if DEBUG && MYTERM_RUST_WORKSPACES
-        if let defaults = UserDefaults(suiteName: "com.gordonbeeming.myterm.dev.rust-workspaces") {
+        #if (DEBUG && MYTERM_RUST_WORKSPACES) || MYTERM_RUST_RELEASE_REHEARSAL
+        if let suite = ProcessInfo.processInfo.environment["MYTERM_USER_DEFAULTS_SUITE"],
+           let defaults = UserDefaults(suiteName: suite) {
             return DesktopTerminalSnippetStore(defaults: defaults)
         }
         #endif

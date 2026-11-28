@@ -1,13 +1,15 @@
 import MyTermCore
 import MyTermRemote
+import MyTermUI
 import SwiftUI
+import UIKit
 
 struct TerminalComposerView: View {
     let scene: SceneModel
     let route: TerminalRoute
     @Bindable var draft: TerminalComposerDraft
     @Environment(\.dismiss) private var dismiss
-    @FocusState private var isEditing: Bool
+    @State private var isEditing = false
     @State private var snippetPicker: SnippetPickerPresentation?
     @State private var detent: PresentationDetent = .large
     @State private var pendingRepeat: ComposerInsertionRequest?
@@ -25,27 +27,30 @@ struct TerminalComposerView: View {
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 12) {
-                Text(route.title).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                Text(route.title).font(.subheadline)
+                    .foregroundStyle(Color(uiColor: .label).opacity(0.82))
+                    .lineLimit(1)
                 Button("Saved prompts and commands", systemImage: "text.badge.star") {
                     isEditing = false
                     snippetPicker = SnippetPickerPresentation()
                 }
                 .disabled(draft.isSending)
+                .tint(Theme.accent)
                 .accessibilityIdentifier("open-terminal-snippets")
-                TextEditor(text: $draft.text)
-                    .font(.system(.body, design: .monospaced))
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .focused($isEditing)
+                TerminalDraftEditor(
+                    text: $draft.text,
+                    focus: $isEditing,
+                    accessibilityLabel: "Terminal draft",
+                    accessibilityID: "terminal-draft"
+                )
                     .disabled(draft.isSending)
-                    .accessibilityLabel("Terminal draft")
-                    .accessibilityIdentifier("terminal-draft")
                     .overlay(alignment: .topLeading) {
                         if draft.text.isEmpty {
                             Text("Write a prompt or command…")
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(.secondary)
                                 .padding(.horizontal, 5).padding(.vertical, 8)
                                 .allowsHitTesting(false)
+                                .accessibilityHidden(true)
                         }
                     }
                 if let outcome = draft.currentInsertionOutcome {
@@ -54,7 +59,9 @@ struct TerminalComposerView: View {
                               systemImage: outcome == .transportSent ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                             .font(.headline)
                     }
-                    Text(outcome.message).font(.footnote).foregroundStyle(.secondary)
+                    Text(outcome.message).font(.footnote)
+                        .foregroundStyle(Color(uiColor: .label).opacity(0.82))
+                        .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("terminal-insertion-outcome")
                 }
                 if let warning = draft.persistenceErrorMessage {
@@ -85,12 +92,19 @@ struct TerminalComposerView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 HStack {
-                    Button("Insert into terminal") { insert(appendReturn: false) }
-                        .buttonStyle(.bordered)
-                        .accessibilityIdentifier("insert-terminal-draft")
-                    Button("Insert + Enter") { insert(appendReturn: true) }
-                        .buttonStyle(.borderedProminent)
-                        .accessibilityIdentifier("submit-terminal-draft")
+                    Button { insert(appendReturn: false) } label: {
+                        Text("Insert").foregroundStyle(Color(uiColor: .label))
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(Color(uiColor: .label))
+                    .accessibilityLabel("Insert into terminal")
+                    .accessibilityIdentifier("insert-terminal-draft")
+                    Button { insert(appendReturn: true) } label: {
+                        Text("Insert + Enter").foregroundStyle(Theme.onAccent)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Theme.accent)
+                    .accessibilityIdentifier("submit-terminal-draft")
                     if draft.isSending { ProgressView().controlSize(.small) }
                 }
                 .disabled(!canInsert)
@@ -102,8 +116,9 @@ struct TerminalComposerView: View {
                     .disabled(!canSend)
                     .accessibilityIdentifier("repeat-terminal-draft")
                 }
-                Text("After a successful send, Compose closes so you can check the terminal. Your draft stays saved. Edit it for a new message, or choose Insert again to resend.")
-                    .font(.caption).foregroundStyle(.secondary)
+                Text("Your draft stays saved after sending.")
+                    .font(.footnote)
+                    .foregroundStyle(Color(uiColor: .label).opacity(0.82))
             }
             .padding()
             .navigationTitle("Compose")
@@ -152,6 +167,68 @@ struct TerminalComposerView: View {
                 draft.finishInsertion(error: error)
             }
         }
+    }
+}
+
+private struct TerminalDraftEditor: UIViewRepresentable {
+    @Binding var text: String
+    var focus: Binding<Bool>? = nil
+    var accessibilityLabel: String
+    var accessibilityID: String
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeUIView(context: Context) -> UITextView {
+        let view = UITextView()
+        view.delegate = context.coordinator
+        view.font = UIFontMetrics(forTextStyle: .body).scaledFont(
+            for: .monospacedSystemFont(ofSize: 17, weight: .regular)
+        )
+        view.adjustsFontForContentSizeCategory = true
+        view.backgroundColor = .clear
+        view.textColor = .label
+        view.autocapitalizationType = .none
+        view.autocorrectionType = .no
+        view.spellCheckingType = .no
+        // Shell syntax must survive typing, cutting and pasting unchanged.
+        view.smartQuotesType = .no
+        view.smartDashesType = .no
+        view.smartInsertDeleteType = .no
+        view.accessibilityLabel = accessibilityLabel
+        view.accessibilityIdentifier = accessibilityID
+        return view
+    }
+
+    func updateUIView(_ view: UITextView, context: Context) {
+        let coordinator = context.coordinator
+        coordinator.text = $text
+        coordinator.focus = focus
+        if view.text != text { view.text = text }
+        view.isEditable = isEnabled
+        guard let focus, view.isFirstResponder != focus.wrappedValue else { return }
+        if focus.wrappedValue {
+            DispatchQueue.main.async { [weak view] in
+                guard focus.wrappedValue, let view, view.isEditable, view.window != nil else { return }
+                view.becomeFirstResponder()
+            }
+        } else {
+            view.resignFirstResponder()
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(text: $text, focus: focus) }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var text: Binding<String>
+        var focus: Binding<Bool>?
+
+        init(text: Binding<String>, focus: Binding<Bool>?) {
+            self.text = text
+            self.focus = focus
+        }
+
+        func textViewDidChange(_ textView: UITextView) { text.wrappedValue = textView.text }
+        func textViewDidBeginEditing(_ textView: UITextView) { focus?.wrappedValue = true }
+        func textViewDidEndEditing(_ textView: UITextView) { focus?.wrappedValue = false }
     }
 }
 
@@ -304,8 +381,9 @@ private struct CompanionSnippetEditor: View {
                     get: { snippet.workspaceID != nil },
                     set: { snippet.workspaceID = $0 ? route.workspaceID : nil }
                 ))
-                TextEditor(text: $snippet.text).font(.body.monospaced()).frame(minHeight: 200)
-                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                TerminalDraftEditor(text: $snippet.text, accessibilityLabel: "Saved text",
+                                    accessibilityID: "terminal-snippet-text")
+                    .frame(minHeight: 200)
                 if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
             }
             .disabled(isSaving)

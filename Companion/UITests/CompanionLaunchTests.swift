@@ -54,6 +54,35 @@ final class CompanionLaunchTests: XCTestCase {
     }
 
     @MainActor
+    func testDiagnosticsCollectionAndUploadAreSeparateOptIns() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-MyTermUITestIsolated", "1"]
+        app.launch()
+        if !app.buttons["open-settings"].waitForExistence(timeout: 5), app.buttons["Show Sidebar"].exists {
+            app.buttons["Show Sidebar"].tap()
+        }
+        app.buttons["open-settings"].tap()
+        app.buttons["open-diagnostics"].tap()
+
+        let collect = app.switches["collect-diagnostics"]
+        let send = app.switches["send-diagnostics-to-mac"]
+        XCTAssertTrue(collect.waitForExistence(timeout: 5))
+        XCTAssertEqual(collect.value as? String, "0")
+        XCTAssertFalse(send.isEnabled)
+
+        collect.switches.firstMatch.tap()
+        XCTAssertEqual(collect.value as? String, "1")
+        XCTAssertTrue(send.isEnabled)
+        XCTAssertEqual(send.value as? String, "0")
+
+        send.switches.firstMatch.tap()
+        XCTAssertTrue(app.buttons["send-diagnostics-now"].exists)
+        send.switches.firstMatch.tap()
+        collect.switches.firstMatch.tap()
+        XCTAssertFalse(send.isEnabled)
+    }
+
+    @MainActor
     private func attachScreenshot(_ app: XCUIApplication, name: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name

@@ -5,8 +5,18 @@ use std::os::fd::AsRawFd;
 use std::os::unix::net::UnixStream;
 use std::ptr;
 
+#[cfg(not(feature = "production"))]
 const APP_IDENTIFIER: &str = "com.gordonbeeming.myterm.dev";
+#[cfg(not(feature = "production"))]
 const SERVER_IDENTIFIER: &str = "com.gordonbeeming.myterm.dev.local-terminal";
+#[cfg(feature = "release-rehearsal")]
+const APP_IDENTIFIER: &str = "com.gordonbeeming.myterm.rust-rehearsal";
+#[cfg(feature = "release-rehearsal")]
+const SERVER_IDENTIFIER: &str = "com.gordonbeeming.myterm.rust-rehearsal.local-terminal";
+#[cfg(all(feature = "production", not(feature = "release-rehearsal")))]
+const APP_IDENTIFIER: &str = "com.gordonbeeming.myterm";
+#[cfg(all(feature = "production", not(feature = "release-rehearsal")))]
+const SERVER_IDENTIFIER: &str = "com.gordonbeeming.myterm.local-terminal";
 const SIGNING_INFORMATION: u32 = 1 << 1;
 const HARDENED_RUNTIME: i64 = 0x0001_0000;
 const UTF8: u32 = 0x0800_0100;
@@ -24,6 +34,12 @@ impl ClientAuthentication {
         let information = signing_information(&own)?;
         let team = unsafe { dictionary_value(information.as_ref(), kSecCodeInfoTeamIdentifier) };
         let team = team_identifier(team)?;
+        #[cfg(feature = "production")]
+        if team != "89DBN36T4T" {
+            return Err(untrusted(
+                "Unexpected Developer ID signing team for the local terminal server",
+            ));
+        }
         let own_requirement = requirement(SERVER_IDENTIFIER, &team)?;
         validate_code(&own, &own_requirement)?;
         validate_runtime(&information)?;
@@ -101,8 +117,13 @@ fn requirement(identifier: &str, team: &str) -> io::Result<OwnedCf> {
     if team.len() != 10 || !team.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
         return Err(untrusted("Invalid Apple signing team identifier"));
     }
+    let developer_id = if cfg!(feature = "production") {
+        " and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists"
+    } else {
+        ""
+    };
     let expression = string(&format!(
-        "anchor apple generic and identifier \"{identifier}\" and certificate leaf[subject.OU] = \"{team}\""
+        "anchor apple generic and identifier \"{identifier}\" and certificate leaf[subject.OU] = \"{team}\"{developer_id}"
     ))?;
     copy_security_object("create code signing requirement", |out| unsafe {
         SecRequirementCreateWithString(expression.as_ref(), 0, out)

@@ -110,10 +110,18 @@ public final class SessionHostClientAuthentication {
         if requiresHardenedRuntime { try Self.validateHardenedRuntime(peer) }
     }
 
-    static func signingRequirement(identifier: String, team: String, production: Bool) throws -> SecRequirement {
+    static func signingRequirement(identifier: String, team: String, production: Bool,
+                                   requiresDeveloperIDIntermediate: Bool = false) throws -> SecRequirement {
         let sessionHostIdentifiers = ["com.gordonbeeming.myterm", "com.gordonbeeming.myterm.dev",
                                       "com.gordonbeeming.myterm.session-host", "com.gordonbeeming.myterm.dev.session-host"]
-        #if DEBUG
+        #if MYTERM_RUST_RELEASE_REHEARSAL
+        let allowedIdentifiers = sessionHostIdentifiers + [
+            "com.gordonbeeming.myterm.rust-rehearsal",
+            "com.gordonbeeming.myterm.rust-rehearsal.local-terminal",
+        ]
+        #elseif MYTERM_PRODUCTION && MYTERM_RUST_WORKSPACES
+        let allowedIdentifiers = sessionHostIdentifiers + ["com.gordonbeeming.myterm.local-terminal"]
+        #elseif DEBUG
         let allowedIdentifiers = sessionHostIdentifiers + ["com.gordonbeeming.myterm.dev.local-terminal"]
         #else
         let allowedIdentifiers = sessionHostIdentifiers
@@ -124,6 +132,9 @@ public final class SessionHostClientAuthentication {
         }
         var expression = "anchor apple generic and identifier \"\(identifier)\" and certificate leaf[subject.OU] = \"\(team)\""
         if production { expression += " and certificate leaf[field.1.2.840.113635.100.6.1.13] exists" }
+        if requiresDeveloperIDIntermediate {
+            expression += " and certificate 1[field.1.2.840.113635.100.6.2.6] exists"
+        }
         var result: SecRequirement?
         guard SecRequirementCreateWithString(expression as CFString, [], &result) == errSecSuccess,
               let result else { throw SessionHostError.untrustedController }

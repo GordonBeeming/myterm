@@ -114,7 +114,7 @@ final class CompanionHostModel {
     private(set) var locallyPausedSessions: Set<TerminalSessionID> = []
 
     private weak var appModel: AppModel?
-    private let channel: MyTermChannel
+    let channel: MyTermChannel
     private let configuration: CompanionConfigurationStore
     private let secrets: any SecretStore
     private let identityStore: CompanionHostIdentityStore
@@ -262,16 +262,18 @@ final class CompanionHostModel {
     private var signInTask: Task<Void, Never>?
     private var signInAttemptID: UUID?
     private var signInRecovery: (reason: CompanionSignInRequirement, connectionEnabled: Bool)?
+    private var keepsCurrentRelayDuringSignIn = false
     private var signInNotice: String?
 
-    func signIn(bootstrapURLText: String? = nil) {
+    func signIn(relayAddress: String? = nil, bootstrapURLText: String? = nil) {
         guard !isSigningIn, status != .connecting else { return }
         if case .signInRequired(let reason) = status {
             signInRecovery = (reason, configuration.connectionEnabled)
         } else {
             signInRecovery = nil
         }
-        disconnect()
+        keepsCurrentRelayDuringSignIn = status == .connected && (relayAddress != nil || bootstrapURLText != nil)
+        if !keepsCurrentRelayDuringSignIn { disconnect() }
         if let recovery = signInRecovery { configuration.connectionEnabled = recovery.connectionEnabled }
         isSigningIn = true
         let id = UUID()
@@ -283,9 +285,10 @@ final class CompanionHostModel {
                     signInTask = nil
                     signInAttemptID = nil
                     signInRecovery = nil
+                    keepsCurrentRelayDuringSignIn = false
                 }
             }
-            await runSignIn(bootstrapURLText: bootstrapURLText)
+            await runSignIn(relayAddress: relayAddress, bootstrapURLText: bootstrapURLText)
         }
     }
 
@@ -297,12 +300,13 @@ final class CompanionHostModel {
         signInTask = nil
         authenticationSession.cancel()
         isSigningIn = false
-        disconnect()
+        if !keepsCurrentRelayDuringSignIn { disconnect() }
         if let recovery {
             configuration.connectionEnabled = recovery.connectionEnabled
             status = .signInRequired(recovery.reason)
         }
         signInRecovery = nil
+        keepsCurrentRelayDuringSignIn = false
     }
 
     func connect() {
@@ -585,7 +589,7 @@ final class CompanionHostModel {
         workspaceDidChange()
     }
 
-    private func runSignIn(bootstrapURLText: String?) async {
+    private func runSignIn(relayAddress: String?, bootstrapURLText: String?) async {
         var stage = SignInStage.setupLink
         var callbackFailure: AuthorizationCallbackValidationFailure?
         do {
@@ -595,8 +599,7 @@ final class CompanionHostModel {
                     ? nil : try Self.parseBootstrapLink(raw)
             }
             stage = .relayEndpoint
-            let endpoint = try enrollment?.endpoint ?? configuredEndpoint()
-            if enrollment != nil { relayText = endpoint.canonicalOrigin }
+            let endpoint = try enrollment?.endpoint ?? configuredEndpoint(address: relayAddress)
             let redirectScheme = channel.authenticationCallbackScheme
             stage = .callbackConfiguration
             let redirect = try validatedURL("\(redirectScheme)://companion-auth/callback")
@@ -642,13 +645,14 @@ final class CompanionHostModel {
             )
             try Task.checkCancellation()
             stage = .persistence
-            configuration.relayText = endpoint.canonicalOrigin
-            relayText = endpoint.canonicalOrigin
             try configuration.saveAuthReference(CompanionAuthReference(
                 relay: endpoint,
                 accountID: record.accountID,
                 deviceID: record.deviceID
             ))
+            if keepsCurrentRelayDuringSignIn { disconnect() }
+            configuration.relayText = endpoint.canonicalOrigin
+            relayText = endpoint.canonicalOrigin
             hasLinkedRelay = true
             clearSignInNotice()
             configuration.connectionEnabled = true
@@ -666,6 +670,8 @@ final class CompanionHostModel {
             if let recovery = signInRecovery {
                 configuration.connectionEnabled = recovery.connectionEnabled
                 status = .signInRequired(recovery.reason)
+                presentSignInNotice(message)
+            } else if keepsCurrentRelayDuringSignIn {
                 presentSignInNotice(message)
             } else {
                 status = .failed(message)
@@ -1179,7 +1185,7 @@ final class CompanionHostModel {
             logger.error(
                 "Attach failed for one session: \(error.localizedDescription, privacy: .public)")
             send(.error(messageMetadata, ErrorParameters(code: Self.attachRetryableCode,
-                 message: "This terminal could not be restored. Reopen it to try again.",
+                 message: "The terminal isn’t ready. Check it on the Mac, then retry.",
                  retryable: true)), to: peer)
         }
     }
@@ -2610,8 +2616,8 @@ final class CompanionHostModel {
         }
     }
 
-    private func configuredEndpoint() throws -> RelayEndpoint {
-        let trimmed = relayText.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func configuredEndpoint(address: String? = nil) throws -> RelayEndpoint {
+        let trimmed = (address ?? relayText).trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: trimmed) else { throw RemoteError.invalidEndpoint }
         return try RelayEndpoint(url)
     }

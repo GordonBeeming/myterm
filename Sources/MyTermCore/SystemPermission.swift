@@ -238,7 +238,7 @@ public enum SystemPermission: String, CaseIterable, Identifiable, Sendable {
         switch grantStyle {
         case .prompt:
             switch status {
-            case .notDetermined, .notGranted: "Grant"
+            case .notDetermined, .notGranted: "Request access"
             case .granted, .denied, .restricted, .unknown, .informational: nil
             }
         case .probe:
@@ -246,7 +246,7 @@ public enum SystemPermission: String, CaseIterable, Identifiable, Sendable {
             // decision. That's the only way to notice a grant revoked in System Settings, so it
             // stays available once macOS has answered either way.
             switch status {
-            case .unknown, .notDetermined: "Grant"
+            case .unknown, .notDetermined: "Request access"
             case .granted, .denied, .notGranted: "Check Again"
             case .restricted, .informational: nil
             }

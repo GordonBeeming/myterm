@@ -49,6 +49,11 @@ jobs:
         with:
           ref: ${{ inputs.source_sha || github.sha }}
 
+      - name: Install the pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: '1.99.1'
+
       - name: Install Go for the relay integration test
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
@@ -238,6 +243,7 @@ jobs:
             VERSION="${VERSION}" \
             BUILD="${{ inputs.build_number || github.run_number }}" \
             DISTRIBUTION=1 \
+            RUST_WORKSPACES=1 \
             CODESIGN_IDENTITY="${CODESIGN_IDENTITY}"
 
       - name: Verify application signature
@@ -246,7 +252,7 @@ jobs:
           codesign --verify --strict --verbose=2 dist/myterm.app/Contents/MacOS/MyTermSessionHost
           test -x dist/myterm.app/Contents/MacOS/MyTermUpdateAgent
           codesign --verify --strict --verbose=2 dist/myterm.app/Contents/MacOS/MyTermUpdateAgent
-          codesign --verify --deep --strict --verbose=2 dist/myterm.app
+          bash script/verify_rust_workspace_bundle.sh dist/myterm.app com.gordonbeeming.myterm
           codesign -dvvv --entitlements :- dist/myterm.app
           plutil -lint dist/myterm.app/Contents/Info.plist
 

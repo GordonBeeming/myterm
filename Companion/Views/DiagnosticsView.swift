@@ -51,10 +51,7 @@ struct DiagnosticsView: View {
                     }
                 }
             } footer: {
-                Text("Records connections, reconnects, terminal attachments and control changes on "
-                     + "this device. It never records what a terminal shows or anything you type. "
-                     + "Sending to the Mac files them beside its own data, where they are easier to "
-                     + "read than on this device.")
+                Text("Records connection and control events. Terminal content and input stay private.")
             }
 
             if !entries.isEmpty {
@@ -63,10 +60,15 @@ struct DiagnosticsView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(entry.message)
                                 .font(.callout)
-                            Text(entry.line)
-                                .font(.caption2.monospaced())
+                            Text(entry.at, format: .dateTime.hour().minute().second())
+                                .font(.caption.monospacedDigit())
                                 .foregroundStyle(.secondary)
-                                .lineLimit(2)
+                            if let detail = entry.detail {
+                                Text(detail)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
                         }
                     }
                 }

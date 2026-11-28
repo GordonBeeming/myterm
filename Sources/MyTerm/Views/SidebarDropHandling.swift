@@ -26,7 +26,7 @@ enum SidebarDragItem: Codable, Equatable, Sendable, Transferable {
 ///
 /// A workspace preview carries the destination folder and pinned band because a workspace row
 /// speaks for its own folder and band: dropping on it refiles and repins in the same move, and the
-/// preview shows that move as the row sliding across. Dropping into a folder row or onto Unfiled
+/// preview shows that move as the row sliding across. Dropping into a folder row or onto the top-level drop bar
 /// is not previewed; those targets highlight instead, because pulling the row out from under the
 /// pointer would take it away from the folder the user is aiming at.
 enum SidebarDropPreview: Equatable {
@@ -55,8 +55,8 @@ enum SidebarDropFeedback: Equatable {
 /// lets the preview follow the pointer between the upper and lower halves of a row.
 ///
 /// The live preview is deliberately built on the system drag session rather than a `DragGesture`
-/// like the tab strip uses: the same drag has to keep landing on folder rows, the Unfiled header
-/// and the Unfiled bar, all of which are ordinary drop destinations, and a `List` already animates
+/// like the tab strip uses: the same drag has to keep landing on folder rows and the top-level
+/// drop bar, which are ordinary drop destinations, and a `List` already animates
 /// row moves when its data changes inside `withAnimation`. Previewing is therefore only a matter
 /// of rendering the rows from a reordered copy of the model while the drag is in flight.
 struct SidebarRowDropDelegate: DropDelegate {

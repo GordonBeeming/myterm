@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
+[features]
+production = []
+release-rehearsal = ["production"]
+
 [dependencies]
 libc = "0.2"
 serde = { version = "1", features = ["derive"] }

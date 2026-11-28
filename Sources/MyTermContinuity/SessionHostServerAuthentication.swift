@@ -10,16 +10,16 @@ public final class SessionHostServerAuthentication {
     private let permitsTestLauncher: Bool
 
     public convenience init(environment: [String: String] = [:], helperURL: URL? = nil) throws {
-        try self.init(environment: environment, helperURL: helperURL, rustDevelopmentServer: false)
+        try self.init(environment: environment, helperURL: helperURL, rustTerminalServer: false)
     }
 
-    #if DEBUG
-    public static func localRustDevelopmentServer() throws -> SessionHostServerAuthentication {
-        try SessionHostServerAuthentication(environment: [:], helperURL: nil, rustDevelopmentServer: true)
+    #if DEBUG || MYTERM_RUST_WORKSPACES
+    public static func localRustTerminalServer() throws -> SessionHostServerAuthentication {
+        try SessionHostServerAuthentication(environment: [:], helperURL: nil, rustTerminalServer: true)
     }
     #endif
 
-    private init(environment: [String: String], helperURL: URL?, rustDevelopmentServer: Bool) throws {
+    private init(environment: [String: String], helperURL: URL?, rustTerminalServer: Bool) throws {
         var ownCode: SecCode?
         var ownStatic: SecStaticCode?
         var rawInfo: CFDictionary?
@@ -33,16 +33,38 @@ public final class SessionHostServerAuthentication {
             throw SessionHostError.untrustedHost
         }
         let production = identifier == "com.gordonbeeming.myterm"
-        #if DEBUG
-        if rustDevelopmentServer {
-            guard identifier == "com.gordonbeeming.myterm.dev",
-                  let team = info[kSecCodeInfoTeamIdentifier as String] as? String else {
+        #if DEBUG || MYTERM_RUST_WORKSPACES
+        if rustTerminalServer {
+            #if MYTERM_RUST_RELEASE_REHEARSAL
+            let expectedIdentifier = "com.gordonbeeming.myterm.rust-rehearsal"
+            #elseif MYTERM_PRODUCTION
+            let expectedIdentifier = "com.gordonbeeming.myterm"
+            #else
+            let expectedIdentifier = "com.gordonbeeming.myterm.dev"
+            #endif
+            #if MYTERM_PRODUCTION
+            let expectedTeam = "89DBN36T4T"
+            let usesDeveloperID = true
+            #else
+            let expectedTeam = info[kSecCodeInfoTeamIdentifier as String] as? String
+            let usesDeveloperID = false
+            #endif
+            guard identifier == expectedIdentifier,
+                  let team = info[kSecCodeInfoTeamIdentifier as String] as? String,
+                  team == expectedTeam else {
                 throw SessionHostError.untrustedHost
             }
+            let appRequirement = try SessionHostClientAuthentication.signingRequirement(
+                identifier: identifier, team: team, production: usesDeveloperID, requiresDeveloperIDIntermediate: usesDeveloperID)
+            guard SecCodeCheckValidity(ownCode, [], appRequirement) == errSecSuccess else {
+                throw SessionHostError.untrustedHost
+            }
+            try SessionHostClientAuthentication.validateHardenedRuntime(ownCode)
             permitsTestLauncher = false
             requiresHardenedRuntime = true
             requirement = try SessionHostClientAuthentication.signingRequirement(
-                identifier: identifier + ".local-terminal", team: team, production: false)
+                identifier: identifier + ".local-terminal", team: team, production: usesDeveloperID,
+                requiresDeveloperIDIntermediate: usesDeveloperID)
             return
         }
         #endif

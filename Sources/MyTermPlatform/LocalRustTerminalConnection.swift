@@ -1,4 +1,4 @@
-#if DEBUG
+#if DEBUG || MYTERM_RUST_WORKSPACES
 import CryptoKit
 import Darwin
 import Foundation
@@ -26,6 +26,24 @@ enum LocalRustTerminalError: LocalizedError {
 
 struct LocalRustTerminalEndpoint: Sendable {
     static let executableName = "myterm-local-terminal"
+    static var appIdentifier: String {
+        #if MYTERM_RUST_RELEASE_REHEARSAL
+        "com.gordonbeeming.myterm.rust-rehearsal"
+        #elseif MYTERM_PRODUCTION
+        "com.gordonbeeming.myterm"
+        #else
+        "com.gordonbeeming.myterm.dev"
+        #endif
+    }
+
+    static var bundledExecutable: URL? {
+        guard Bundle.main.bundleIdentifier == appIdentifier,
+              let executable = Bundle.main.executableURL?.deletingLastPathComponent()
+                .appendingPathComponent(executableName),
+              FileManager.default.isExecutableFile(atPath: executable.path) else { return nil }
+        return executable
+    }
+
     private static let serviceConnections = DispatchQueue(label: "myterm.rust-terminal.service", qos: .userInitiated)
     let namespace: URL
     let bundledExecutable: URL
@@ -38,7 +56,7 @@ struct LocalRustTerminalEndpoint: Sendable {
         self.bundledExecutable = bundledExecutable
         let hash = SHA256.hash(data: Data(namespace.resolvingSymlinksInPath().path.utf8))
             .prefix(12).map { String(format: "%02x", $0) }.joined()
-        serviceLabel = "com.gordonbeeming.myterm.dev.local-terminal.\(hash)"
+        serviceLabel = "\(Self.appIdentifier).local-terminal.\(hash)"
         socketDirectory = URL(fileURLWithPath: "/private/tmp/myterm-rust-\(getuid())-\(hash)", isDirectory: true)
     }
 
@@ -51,7 +69,7 @@ struct LocalRustTerminalEndpoint: Sendable {
     }
 
     private func connectOnWorker(starting: Bool) throws -> LocalRustTerminalConnection {
-        let verifier = try SessionHostServerAuthentication.localRustDevelopmentServer()
+        let verifier = try SessionHostServerAuthentication.localRustTerminalServer()
         try SessionHostSocket.prepareDirectory(socketDirectory)
         let path = socketDirectory.appendingPathComponent("terminal.sock").path
         if let connection = try existingConnection(path, verifier: verifier) { return connection }

@@ -21,7 +21,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
     public private(set) var isRunning = false
     public var isStarting: Bool { persistentStartTask != nil }
     public var survivesApplicationTermination: Bool {
-        #if DEBUG
+        #if DEBUG || MYTERM_RUST_WORKSPACES
         if rustWorkspace != nil { return rustConnection != nil && isRunning }
         #endif
         return persistentConnection != nil && isRunning
@@ -29,7 +29,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
     public var onEvent: (@MainActor (TerminalSessionEvent) -> Void)?
 
     public var activeForegroundProcessName: String? {
-        #if DEBUG
+        #if DEBUG || MYTERM_RUST_WORKSPACES
         if rustWorkspace != nil {
             guard isRunning, let shellPID = rustShellPID else { return nil }
             var info = proc_bsdinfo()
@@ -79,7 +79,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
     private var runtimeConfiguration: TerminalRuntimeConfiguration
     private let terminal: MyTermLocalProcessTerminalView
     private var persistentConnection: PersistentTerminalConnection?
-    #if DEBUG
+    #if DEBUG || MYTERM_RUST_WORKSPACES
     private var rustWorkspace: (backend: LocalRustWorkspaceBackend, paneID: UUID)?
     public private(set) var rustRecovery: LocalRustWorkspaceRecovery?
     private var rustConnection: LocalRustTerminalConnection?
@@ -99,7 +99,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
     }
     #endif
     private var attachedShellPID: pid_t? {
-        #if DEBUG
+        #if DEBUG || MYTERM_RUST_WORKSPACES
         if let rustShellPID { return rustShellPID }
         #endif
         return persistentConnection?.attachment.pid
@@ -182,7 +182,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         terminal.onAgentActivity = { [weak self] report in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                #if DEBUG
+                #if DEBUG || MYTERM_RUST_WORKSPACES
                 if self.rustWorkspace != nil, !self.isRunning { return }
                 #endif
                 self.onEvent?(.agentActivity(report))
@@ -214,7 +214,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
 
     public func start() throws {
         guard !isRunning, persistentStartTask == nil else { return }
-        #if DEBUG
+        #if DEBUG || MYTERM_RUST_WORKSPACES
         if let rustWorkspace, let selection = try rustWorkspace.backend.selection(paneID: rustWorkspace.paneID) {
             rustClientID = selection.clientID
             rustRecovery?.action = .reattach
@@ -284,7 +284,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
                 environment.removeValue(forKey: "MYTERM_STARTUP_PARENT_PID")
             }
         }
-        #if DEBUG
+        #if DEBUG || MYTERM_RUST_WORKSPACES
         if let rustWorkspace {
             let previous = try rustWorkspace.backend.selection(paneID: rustWorkspace.paneID)
             let selection = try rustWorkspace.backend.recordLaunch(paneID: rustWorkspace.paneID, replacing: previous)
@@ -362,7 +362,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         try finishStartup(startupFailure: startupFailure)
     }
 
-    #if DEBUG
+    #if DEBUG || MYTERM_RUST_WORKSPACES
     func useRustWorkspaceBackend(_ backend: LocalRustWorkspaceBackend, paneID: UUID) {
         rustWorkspace = (backend, paneID)
         rustRecovery = LocalRustWorkspaceRecovery()
@@ -766,7 +766,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
             return
         }
 
-        #if DEBUG
+        #if DEBUG || MYTERM_RUST_WORKSPACES
         if rustWorkspace != nil {
             resizeRustProcess(columns: columns, rows: rows)
             return
@@ -803,7 +803,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
             return
         }
         stopWorkingDirectoryPolling()
-        #if DEBUG
+        #if DEBUG || MYTERM_RUST_WORKSPACES
         if let rustWorkspace {
             let observed = rustController
             closeRustAttachment()
@@ -845,7 +845,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
             terminal.setConnectionPending(false)
             return
         }
-        #if DEBUG
+        #if DEBUG || MYTERM_RUST_WORKSPACES
         if rustWorkspace != nil {
             closeRustAttachment()
             return
@@ -893,7 +893,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
         // It is a no-op, not a terminal protocol message.
         guard !bytes.isEmpty else { return }
         guard isRunning else { throw TerminalRemoteSessionError.notRunning }
-        #if DEBUG
+        #if DEBUG || MYTERM_RUST_WORKSPACES
         if rustWorkspace != nil {
             guard rustMaySendInput, let rustConnection else { throw TerminalRemoteSessionError.unavailable }
             guard rustConnection.sendInput([UInt8](bytes)[...]) else { throw LocalRustTerminalError.backpressure }
@@ -1013,7 +1013,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
     public func apply(runtimeConfiguration: TerminalRuntimeConfiguration) {
         self.runtimeConfiguration = runtimeConfiguration
         terminal.apply(runtimeConfiguration: runtimeConfiguration)
-        #if DEBUG
+        #if DEBUG || MYTERM_RUST_WORKSPACES
         if rustWorkspace != nil { resizeRustToFit() }
         #endif
         if let connection = persistentConnection {
@@ -1124,7 +1124,7 @@ public final class SwiftTermTerminalSession: NSObject, TerminalProcessSession, T
 
     public func setRemoteControllerActive(_ active: Bool) {
         remoteControllerActive = active
-        #if DEBUG
+        #if DEBUG || MYTERM_RUST_WORKSPACES
         if rustWorkspace != nil {
             updateRustInputAvailability()
             terminal.setRemoteControlBanner(active: active) { [weak self] in

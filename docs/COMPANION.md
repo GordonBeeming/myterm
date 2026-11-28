@@ -51,6 +51,12 @@ The outer-display screenshot should show the compact terminal or Mac picker with
 
 Existing desktop validation remains `swift test --parallel`, `bash script/channel_isolation_test.sh`, and `make verify`. Use `--bundle` when running the desktop build script without launching the app. Normal launches now focus the existing healthy instance. Quit it explicitly before launching a rebuilt version.
 
+## Run for development
+
+Start the local Rust workspace build with `./run.sh --local-rust-workspaces`. Local tabs and splits work before you link a relay. To test a companion against this Mac, open **Settings → Companion**, select an existing relay you can sign in to, and continue. Choose **Self-hosted** to enter an address or **Use a setup link** if a relay operator sent you one.
+
+The app launch and the relay deployment are separate. Developers with access to an existing development or self-hosted relay can test pairing and terminal control with the companion. Developers without relay access can still work on local workspaces and run the companion's isolated simulator tests with `bash script/test_companion.sh`.
+
 ## Deploy a relay
 
 For dev and prod on one Linux server behind cloudflared, follow [the Cloudflare proxy setup guide](PROXY_SETUP.md). It covers containers, tunnel routes, passkeys, pairing, backups, and upgrades without managing certificates on the server.
@@ -80,7 +86,7 @@ The test credential authorizes a normal one-use PKCE code through `POST /v1/dev-
 
 ## Pair and use a Mac
 
-Connect the Mac to its relay and start Pair Mode in Companion settings. Scan that QR code in the phone app, or paste the pairing link when using a simulator. Complete relay sign-in, then approve the phone on the Mac.
+Connect the Mac to its relay and choose **Show pairing code** in Companion settings. Scan the code in the companion app, or paste the pairing link when using a simulator. Complete relay sign-in, then approve the device on the Mac.
 
 The QR code refreshes every 30 seconds; each code remains valid for 60 seconds so sign-in can finish across a refresh. The pairing ticket is generated and consumed on the Mac. The relay forwards encrypted pairing messages. Paired devices retain the peer's public keys and establish a fresh authenticated session on each connection.
 

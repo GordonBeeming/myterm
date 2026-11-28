@@ -260,7 +260,7 @@ final class AppModel {
         self.isApplicationActive = isApplicationActive
         self.makeCompanionHost = makeCompanionHost
         let isolatedBrowserProfile: String?
-        #if DEBUG
+        #if DEBUG || MYTERM_RUST_WORKSPACES
         isolatedBrowserProfile = terminalEngine is LocalRustWorkspaceTerminalEngine ? companionStorageNamespace : nil
         #else
         isolatedBrowserProfile = nil
@@ -463,6 +463,12 @@ final class AppModel {
             }
         }
     }
+
+    #if MYTERM_RUST_RELEASE_REHEARSAL
+    var browserContextArtifactDirectory: URL {
+        terminalContinuityDirectory.appending(path: "browser-context", directoryHint: .isDirectory)
+    }
+    #endif
 
     var companionDiagnosticsDirectory: URL {
         terminalContinuityDirectory.appending(path: "companion-diagnostics", directoryHint: .isDirectory)
@@ -2706,7 +2712,7 @@ final class AppModel {
             // the foreground poll that would have noticed an agent killed before it has stopped.
             // Markers are forwarded asynchronously, so one can still be queued behind this event;
             // dropping the callback keeps it from putting an agent back into a dead pane.
-            #if DEBUG
+            #if DEBUG || MYTERM_RUST_WORKSPACES
             if (terminalSessions[sessionID] as? SwiftTermTerminalSession)?.rustRecovery == nil {
                 terminalSessions[sessionID]?.onEvent = nil
             }
@@ -2881,7 +2887,7 @@ final class AppModel {
             let directory = terminalContinuityDirectory
             Task { @MainActor [weak self] in
                 do {
-                    #if DEBUG
+                    #if DEBUG || MYTERM_RUST_WORKSPACES
                     if let engine = self?.terminalEngine as? LocalRustWorkspaceTerminalEngine {
                         try await engine.stopExisting(paneID: sessionID.rawValue)
                         return
@@ -3197,7 +3203,7 @@ final class AppModel {
     }
 
     private func hasUnverifiedSavedRustShell(in tab: Tab) -> Bool {
-        #if DEBUG
+        #if DEBUG || MYTERM_RUST_WORKSPACES
         guard let sessionID = tab.terminalSession?.id,
               let rustEngine = terminalEngine as? LocalRustWorkspaceTerminalEngine else { return false }
         if let process = terminalSessions[sessionID] as? SwiftTermTerminalSession,

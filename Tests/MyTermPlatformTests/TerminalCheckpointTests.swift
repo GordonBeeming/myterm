@@ -122,7 +122,7 @@ final class TerminalCheckpointTests: XCTestCase {
         XCTAssertEqual(try restored.exportCheckpoint(), try view.terminal.exportCheckpoint())
     }
 
-    func testRetainedAlternateStorageBoundsStillRejectWithoutMutation() throws {
+    func testRetainedStorageBoundsStillRejectWithoutMutation() throws {
         let original = terminal(columns: 8, rows: 4)
         original.feed(text: "\u{1B}[?47hseed\u{1B}[?47l")
         let before = try original.exportCheckpoint()
@@ -130,7 +130,9 @@ final class TerminalCheckpointTests: XCTestCase {
         let control = try PropertyListSerialization.data(fromPropertyList: root, format: .binary, options: 0)
         try original.importCheckpoint(control)
         XCTAssertEqual(try original.exportCheckpoint(), before)
-        for (bufferName, width) in [("alternateBuffer", 7), ("alternateBuffer", 4_097), ("normalBuffer", 12)] {
+        let invalidWidths = [("alternateBuffer", 7), ("alternateBuffer", 4_097),
+                             ("normalBuffer", 7), ("normalBuffer", 4_097)]
+        for (bufferName, width) in invalidWidths {
             var envelope = root
             var state = try XCTUnwrap(envelope["state"] as? [String: Any])
             var buffer = try XCTUnwrap(state[bufferName] as? [String: Any])

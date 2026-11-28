@@ -201,3 +201,22 @@ fn checkpoint_restores_an_ordinary_kitty_image_above_256_kib(
     }
     Ok(())
 }
+
+#[test]
+fn resized_normal_checkpoint_retains_styled_spaces_and_visible_text(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut terminal = TerminalState::new(GEOMETRY)?;
+    terminal.advance(b"\x1b[41m\x1b[2K\x1b[0m\x1b[2;1Hnext")?;
+    terminal.resize(Geometry {
+        columns: 10,
+        ..GEOMETRY
+    })?;
+    let checkpoint = terminal.checkpoint(12)?;
+    let value: Value = from_slice(&checkpoint)?;
+    assert_eq!(value["state"]["columns"], 10);
+    assert_eq!(value["state"]["normal"]["lines"][0]["width"], 20);
+    if let Some(path) = std::env::var_os("MYTERM_RESIZE_CHECKPOINT_FIXTURE") {
+        std::fs::write(path, checkpoint)?;
+    }
+    Ok(())
+}

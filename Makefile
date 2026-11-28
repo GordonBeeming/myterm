@@ -3,6 +3,7 @@
 VERSION ?= 0.1.0
 BUILD ?= 1
 DISTRIBUTION ?= 0
+RUST_WORKSPACES ?= 0
 CODESIGN_IDENTITY ?= $(shell if [ "$(DISTRIBUTION)" = "1" ]; then pattern='Developer ID Application'; else pattern='Apple Development'; fi; security find-identity -v -p codesigning 2>/dev/null | awk -F '"' -v pattern="$$pattern" '$$0 ~ pattern {print $$2; exit}')
 APP_BUNDLE := dist/myterm.app
 INSTALL_BUNDLE ?= $(if $(wildcard /Applications/myterm.app),/Applications/myterm.app,$(HOME)/Applications/myterm.app)
@@ -23,6 +24,7 @@ bundle:
 	MYTERM_VERSION="$(VERSION)" \
 	MYTERM_BUILD="$(BUILD)" \
 	MYTERM_DISTRIBUTION="$(DISTRIBUTION)" \
+	MYTERM_SHIP_RUST_WORKSPACES="$(RUST_WORKSPACES)" \
 	CODESIGN_IDENTITY="$(CODESIGN_IDENTITY)" \
 	./script/build_and_run.sh --prod --bundle
 
