@@ -21,10 +21,48 @@ enum ClaudeProcessConfiguration {
     static func configuration(belowShell shellProcessID: pid_t) -> ClaudeConfiguration? {
         guard shellProcessID > 1, let foregroundGroup = terminalForegroundGroup(of: shellProcessID),
               let claude = outermostClaude(below: shellProcessID, inGroup: foregroundGroup) else { return nil }
-        return ClaudeConfiguration(environmentValue: claude.environment["CLAUDE_CONFIG_DIR"])
+        return ClaudeConfiguration(environmentValue: claude.arguments.environment["CLAUDE_CONFIG_DIR"])
     }
 
-    private static func outermostClaude(below root: pid_t, inGroup group: pid_t) -> ProcessArguments? {
+    /// Recover a missed hook from the running foreground Claude process's PID-indexed record.
+    static func conversation(belowShell shellProcessID: pid_t) -> AgentSessionHandle? {
+        guard shellProcessID > 1, let group = terminalForegroundGroup(of: shellProcessID),
+              let claude = outermostClaude(below: shellProcessID, inGroup: group),
+              let process = bsdInfo(of: claude.pid),
+              let configuration = ClaudeConfiguration(environmentValue: claude.arguments.environment["CLAUDE_CONFIG_DIR"])
+        else { return nil }
+        let root: URL
+        switch configuration {
+        case .standard: root = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude")
+        case .directory(let directory): root = directory
+        }
+        let record = root.appendingPathComponent("sessions/\(claude.pid).json")
+        let started = Date(timeIntervalSince1970: Double(process.pbi_start_tvsec) + Double(process.pbi_start_tvusec) / 1_000_000)
+        guard let properties = try? record.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .contentModificationDateKey]),
+              properties.isRegularFile == true, properties.isSymbolicLink != true,
+              let modified = properties.contentModificationDate, modified >= started else { return nil }
+        guard let handle = try? FileHandle(forReadingFrom: record) else { return nil }
+        defer { try? handle.close() }
+        guard let data = try? handle.read(upToCount: 64 * 1_024 + 1),
+              let current = bsdInfo(of: claude.pid), current.pbi_start_tvsec == process.pbi_start_tvsec,
+              current.pbi_start_tvusec == process.pbi_start_tvusec else { return nil }
+        return conversation(from: data, pid: claude.pid, configuration: configuration)
+    }
+
+    static func conversation(from data: Data, pid: pid_t, configuration: ClaudeConfiguration) -> AgentSessionHandle? {
+        struct Record: Decodable {
+            let pid: pid_t
+            let sessionId: String
+            let cwd: String
+        }
+        guard data.count <= 64 * 1_024, let record = try? JSONDecoder().decode(Record.self, from: data),
+              record.pid == pid, UUID(uuidString: record.sessionId) != nil, record.cwd.hasPrefix("/") else { return nil }
+        return AgentSessionHandle(agent: "claude", sessionID: record.sessionId,
+                                  workingDirectory: URL(fileURLWithPath: record.cwd, isDirectory: true),
+                                  claudeConfiguration: configuration)
+    }
+
+    private static func outermostClaude(below root: pid_t, inGroup group: pid_t) -> (pid: pid_t, arguments: ProcessArguments)? {
         var level = [root]
         var inspected = 0
         for _ in 0..<maximumDepth {
@@ -35,7 +73,7 @@ enum ClaudeProcessConfiguration {
                     guard inspected <= maximumProcesses else { return nil }
                     if processGroup(of: child) == group, let arguments = arguments(of: child),
                        arguments.isClaude {
-                        return arguments
+                        return (child, arguments)
                     }
                     next.append(child)
                 }

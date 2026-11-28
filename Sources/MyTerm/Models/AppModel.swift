@@ -3053,6 +3053,12 @@ final class AppModel {
         terminalSnapshotTasks.removeValue(forKey: sessionID)?.cancel()
         guard let process = terminalSessions[sessionID] else { return }
         let output = process.contentSnapshot(maximumCharacters: TerminalSession.maximumRecentTextBytes)
+        if let terminal = tab(workspaceID: workspaceID, tabGroupID: tabGroupID, tabID: tabID)?.terminalSession,
+           terminal.agentSession == nil,
+           let recovered = (process as? SwiftTermTerminalSession)?.foregroundClaudeConversation {
+            updateAgentSession(recovered, workspaceID: workspaceID, tabGroupID: tabGroupID,
+                               tabID: tabID, current: terminal.agentSession)
+        }
         perform {
             try store.updateTerminalRecentText(
                 workspaceID: workspaceID,
