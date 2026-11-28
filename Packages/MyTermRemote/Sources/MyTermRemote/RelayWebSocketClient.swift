@@ -15,7 +15,20 @@ public enum RelayTransportEvent: Equatable, Sendable {
     case application(sourceConnectionID: UUID, payload: Data)
 }
 
-public actor RelayWebSocketClient {
+public protocol CompanionRelayTransport: Actor {
+    func connect(accessToken: String) async throws -> AsyncThrowingStream<RelayTransportEvent, Error>
+    func send(destinationConnectionID: UUID, payload: Data) async throws
+    func reauthenticate(accessToken: String) async throws
+    func ping() async throws
+    func acknowledgeApplication(from connectionID: UUID) async throws
+    func disconnect() async
+}
+
+extension CompanionRelayTransport {
+    public func acknowledgeApplication(from connectionID: UUID) async throws {}
+}
+
+public actor RelayWebSocketClient: CompanionRelayTransport {
     private static let logger = Logger(subsystem: "com.gordonbeeming.myterm",
                                        category: "relay-transport")
     private let endpoint: RelayEndpoint

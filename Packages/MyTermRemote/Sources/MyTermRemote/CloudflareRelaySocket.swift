@@ -91,6 +91,16 @@ public actor CloudflareRelaySocket {
 
     public func disconnect() { end() }
 
+    public func ping() async throws {
+        guard let socket, ready else { throw RemoteError.disconnected }
+        try await withCheckedThrowingContinuation { (completion: CheckedContinuation<Void, Error>) in
+            socket.sendPing { error in
+                if let error { completion.resume(throwing: error) }
+                else { completion.resume() }
+            }
+        }
+    }
+
     private func endIfCurrent(_ attempt: UUID) {
         if generation == attempt { end() }
     }
